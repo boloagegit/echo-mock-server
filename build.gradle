@@ -176,6 +176,9 @@ tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
     }
 }
 
+// 測試程式碼不需要 SpotBugs 靜態分析
+spotbugsTest.enabled = false
+
 // Build Fat Jar
 tasks.named('bootJar') {
     archiveBaseName = 'echo-server'
