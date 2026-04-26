@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Echo - Login</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" href="/webjars/bootstrap-icons/font/bootstrap-icons.min.css">
+    <style>
+        /* 登入頁專用衍生變數（基於 theme.css 共用變數） */
+        :root{--input-bg:var(--bg);--card-alpha:rgba(22,27,34,0.9);--shadow:rgba(0,0,0,0.5);--shape-color:rgba(var(--primary-rgb),0.08);--grid-color:rgba(var(--primary-rgb),0.03);--gradient-top:rgba(var(--primary-rgb),0.15);--gradient-corner:rgba(var(--muted-rgb),0.08);--footer-bg:rgba(0,0,0,0.2);--btn-hover-shadow:rgba(var(--primary-rgb),0.5);--logo-bg:rgba(var(--primary-rgb),0.2);--logo-border:rgba(var(--primary-rgb),0.25);--logo-glow:rgba(var(--primary-rgb),0.2);--logo-glow-hover:rgba(var(--primary-rgb),0.15);--logo-outer:var(--primary);--shimmer:rgba(255,255,255,0.1)}
+        :root[data-theme="light"]{--input-bg:var(--bg);--card-alpha:rgba(255,255,255,0.92);--shadow:rgba(0,0,0,0.12);--footer-bg:rgba(0,0,0,0.03);--shimmer:rgba(255,255,255,0.2)}
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1rem;position:relative;overflow:hidden}
+        
+        /* 背景動畫 */
+        .bg-gradient{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 0%,var(--gradient-top) 0%,transparent 50%),radial-gradient(ellipse at 80% 80%,var(--gradient-corner) 0%,transparent 40%);pointer-events:none}
+        .bg-grid{position:fixed;inset:0;background-image:linear-gradient(var(--grid-color) 1px,transparent 1px),linear-gradient(90deg,var(--grid-color) 1px,transparent 1px);background-size:50px 50px;pointer-events:none}
+        .floating-shapes{position:fixed;inset:0;overflow:hidden;pointer-events:none}
+        .shape{position:absolute;border-radius:50%;background:var(--shape-color);filter:blur(40px);animation:float 20s ease-in-out infinite}
+        .shape:nth-child(1){width:300px;height:300px;top:-100px;left:-100px;animation-delay:0s}
+        .shape:nth-child(2){width:200px;height:200px;bottom:-50px;right:-50px;animation-delay:-5s}
+        .shape:nth-child(3){width:150px;height:150px;top:50%;left:80%;animation-delay:-10s}
+        @keyframes float{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(30px,30px) scale(1.1)}}
+        
+        /* 登入卡片 */
+        .login-card{background:var(--card-alpha);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:16px;width:100%;max-width:380px;overflow:hidden;position:relative;z-index:1;box-shadow:0 25px 50px -12px var(--shadow)}
+        .login-header{padding:2.5rem 2rem 1.5rem;text-align:center;position:relative}
+        .login-header::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:200px;height:1px;background:linear-gradient(90deg,transparent,var(--primary),transparent)}
+        
+        /* Logo 動畫 */
+        .login-logo{width:72px;height:72px;background:linear-gradient(135deg,var(--logo-bg),rgba(139,92,246,0.08));border:1px solid var(--logo-border);border-radius:20px;display:flex;align-items:center;justify-content:center;margin:0 auto 1.25rem;position:relative;animation:pulse 3s ease-in-out infinite}
+        .login-logo::before{content:'';position:absolute;inset:-2px;border-radius:22px;background:linear-gradient(135deg,var(--logo-outer),transparent);opacity:0.3;z-index:-1;filter:blur(8px)}
+        .login-logo svg{animation:iconPulse 3s ease-in-out infinite}
+        @keyframes pulse{0%,100%{box-shadow:0 0 0 0 var(--logo-glow)}50%{box-shadow:0 0 20px 5px var(--logo-glow-hover)}}
+        @keyframes iconPulse{0%,100%{opacity:1}50%{opacity:0.7}}
+        
+        .login-header h1{font-size:1.5rem;font-weight:600;margin-bottom:0.5rem;background:linear-gradient(135deg,var(--text),var(--muted));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+        .login-header p{color:var(--muted);font-size:14px}
+        
+        .login-body{padding:1.5rem 2rem 2rem}
+        .form-group{margin-bottom:1.25rem}
+        .form-label{display:block;font-size:13px;font-weight:500;margin-bottom:0.5rem;color:var(--text)}
+        .input-wrapper{position:relative}
+        .input-wrapper i{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:16px;transition:color 0.2s}
+        .form-control{width:100%;padding:0.875rem 1rem 0.875rem 44px;font-size:14px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;color:var(--text);transition:all 0.2s}
+        .form-control:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 4px rgba(var(--primary-rgb),0.1)}
+        .form-control:focus + i,.input-wrapper:focus-within i{color:var(--primary)}
+        .form-control::placeholder{color:var(--muted)}
+        
+        .remember-row{display:flex;align-items:center;justify-content:space-between}
+        .remember-check{display:flex;align-items:center;gap:0.5rem}
+        .remember-check input{width:18px;height:18px;accent-color:var(--primary);cursor:pointer}
+        .remember-check label{font-size:13px;color:var(--muted);cursor:pointer}
+        
+        .btn{width:100%;padding:0.875rem 1rem;font-size:14px;font-weight:600;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:0.5rem;transition:all 0.2s;position:relative;overflow:hidden}
+        .btn-primary{background:linear-gradient(135deg,var(--primary),rgba(var(--primary-rgb),0.8));color:#fff;margin-top:0.5rem}
+        .btn-primary:hover{transform:translateY(-2px);box-shadow:0 10px 20px -10px var(--btn-hover-shadow)}
+        .btn-primary:active{transform:translateY(0)}
+        .btn-primary::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent,var(--shimmer),transparent);transform:translateX(-100%);transition:transform 0.5s}
+        .btn-primary:hover::before{transform:translateX(100%)}
+        
+        .alert{padding:0.875rem 1rem;border-radius:10px;font-size:13px;margin-bottom:1.25rem;display:flex;align-items:center;gap:0.75rem;animation:shake 0.5s ease-in-out}
+        .alert-danger{background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.2);color:var(--danger)}
+        @keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-5px)}40%,80%{transform:translateX(5px)}}
+        
+        .login-footer{padding:1.25rem 2rem;border-top:1px solid var(--border);text-align:center;background:var(--footer-bg)}
+        .login-footer p{color:var(--muted);font-size:12px;margin:0}
+        
+        /* 忘記密碼連結 */
+        .forgot-link{color:var(--primary);font-size:13px;text-decoration:none;cursor:pointer;transition:opacity 0.2s}
+        .forgot-link:hover{opacity:0.8}
+
+        /* 忘記密碼表單 */
+        .forgot-section{display:none}
+        .forgot-section.active{display:block}
+        .forgot-title{font-size:1.1rem;font-weight:600;margin-bottom:1rem;color:var(--text);text-align:center}
+        .forgot-success{padding:1rem;border-radius:10px;font-size:13px;background:rgba(63,185,80,0.1);border:1px solid rgba(63,185,80,0.2);color:var(--success,#3fb950);text-align:center;margin-bottom:1rem}
+        .forgot-back{display:inline-block;color:var(--primary);font-size:13px;text-decoration:none;cursor:pointer;margin-top:0.5rem}
+        .forgot-back:hover{opacity:0.8}
+        .btn-secondary{background:var(--input-bg);border:1px solid var(--border);color:var(--text);margin-top:0.5rem}
+        .btn-secondary:hover{border-color:var(--primary);background:rgba(var(--primary-rgb),0.05)}
+
+        /* LDAP 提示 */
+        .ldap-hint{display:none;color:var(--muted);font-size:12px;text-align:center;margin-top:0.75rem}
+
+        /* 註冊表單 */
+        .register-section{display:none}
+        .register-section.active{display:block}
+        .register-error{padding:0.875rem 1rem;border-radius:10px;font-size:13px;background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.2);color:var(--danger);margin-bottom:1rem;text-align:center}
+        .register-link{display:none;margin-top:0.5rem}
+
+        /* 響應式 */
+        @media(max-width:480px){.login-card{border-radius:12px;margin:0 0.5rem}.login-header{padding:2rem 1.5rem 1.25rem}.login-body{padding:1.25rem 1.5rem 1.5rem}}
+    </style>
+</head>
+<body>
+    <div class="bg-gradient"></div>
+    <div class="bg-grid"></div>
+    <div class="floating-shapes">
+        <div class="shape"></div>
+        <div class="shape"></div>
+        <div class="shape"></div>
+    </div>
+    
+    <div class="login-card">
+        <div class="login-header">
+            <div class="login-logo"><svg viewBox="0 0 24 24" width="36" height="36"><g fill="none" stroke="var(--logo-outer)" stroke-width="2" stroke-linecap="round"><path d="M6 17a8 8 0 0 1 0-10" opacity=".5"/><path d="M9 15a5 5 0 0 1 0-6" opacity=".75"/><circle cx="12" cy="12" r="1.5" fill="var(--logo-outer)" stroke="none"/><path d="M15 9a5 5 0 0 1 0 6" opacity=".75"/><path d="M18 7a8 8 0 0 1 0 10" opacity=".5"/></g></svg></div>
+            <h1>Echo Mock Server</h1>
+            <p data-i18n="login.subtitle">請登入以管理模擬規則</p>
+        </div>
+        
+        <div class="login-body">
+            <div id="error-alert" class="alert alert-danger" style="display:none">
+                <i class="bi bi-exclamation-circle"></i>
+                <span data-i18n="login.errorMsg">帳號或密碼錯誤</span>
+            </div>
+            
+            <form action="/api/auth/login" method="POST">
+                <div class="form-group">
+                    <label class="form-label" data-i18n="login.username">帳號</label>
+                    <div class="input-wrapper">
+                        <input type="text" class="form-control" name="username" autocomplete="off" data-i18n-placeholder="login.usernamePlaceholder" placeholder="請輸入帳號" required autofocus>
+                        <i class="bi bi-person"></i>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="login.password">密碼</label>
+                    <div class="input-wrapper">
+                        <input type="password" class="form-control" name="password" autocomplete="off" data-i18n-placeholder="login.passwordPlaceholder" placeholder="請輸入密碼" required>
+                        <i class="bi bi-lock"></i>
+                    </div>
+                </div>
+                <div class="form-group remember-row">
+                    <div class="remember-check">
+                        <input type="checkbox" name="remember-me" id="remember-me" checked>
+                        <label for="remember-me" data-i18n="login.rememberMe">記住我</label>
+                    </div>
+                    <a id="forgot-link" class="forgot-link" data-i18n="login.forgotPassword">忘記密碼？</a>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-box-arrow-in-right"></i> <span data-i18n="login.submit">登入</span>
+                </button>
+                <div class="ldap-hint" id="ldap-hint" data-i18n="login.ldapHint">公司員工請使用 AD 帳號登入，外部廠商請使用管理員提供的帳號。</div>
+                <div class="register-link" id="register-link"><button type="button" class="btn btn-secondary"><i class="bi bi-person-plus"></i> <span data-i18n="login.register">申請帳號</span></button></div>
+            </form>
+
+            <!-- 忘記密碼表單 -->
+            <div id="forgot-section" class="forgot-section">
+                <div class="forgot-title" data-i18n="login.forgotPasswordTitle">忘記密碼</div>
+                <div id="forgot-success" class="forgot-success" style="display:none">
+                    <span data-i18n="login.forgotPasswordSuccess">已送出請求，請聯繫管理員協助重設密碼。</span>
+                    <br>
+                    <a id="forgot-back-success" class="forgot-back" data-i18n="login.forgotPasswordBack">返回登入</a>
+                </div>
+                <div id="forgot-form-fields">
+                    <div class="form-group">
+                        <div class="input-wrapper">
+                            <input type="text" class="form-control" id="forgot-username" autocomplete="off" data-i18n-placeholder="login.forgotPasswordUsername" placeholder="請輸入您的帳號" required>
+                            <i class="bi bi-person"></i>
+                        </div>
+                    </div>
+                    <button type="button" id="forgot-submit" class="btn btn-primary">
+                        <i class="bi bi-send"></i> <span data-i18n="login.forgotPasswordSubmit">送出請求</span>
+                    </button>
+                    <button type="button" id="forgot-back" class="btn btn-secondary">
+                        <span data-i18n="login.forgotPasswordBack">返回登入</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 自助註冊表單 -->
+            <div id="register-section" class="register-section">
+                <div class="forgot-title" data-i18n="login.registerTitle">申請帳號</div>
+                <div id="register-success" class="forgot-success" style="display:none">
+                    <span data-i18n="login.registerSuccess">帳號已建立，您現在可以登入了。</span>
+                    <br>
+                    <a id="register-back-success" class="forgot-back" data-i18n="login.registerBack">返回登入</a>
+                </div>
+                <div id="register-error" class="register-error" style="display:none"></div>
+                <div id="register-form-fields">
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="login.username">帳號</label>
+                        <div class="input-wrapper">
+                            <input type="text" class="form-control" id="register-username" autocomplete="off" data-i18n-placeholder="login.registerUsername" placeholder="請輸入帳號" required>
+                            <i class="bi bi-person"></i>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="login.password">密碼</label>
+                        <div class="input-wrapper">
+                            <input type="password" class="form-control" id="register-password" autocomplete="off" data-i18n-placeholder="login.registerPassword" placeholder="請輸入密碼" required>
+                            <i class="bi bi-lock"></i>
+                        </div>
+                    </div>
+                    <button type="button" id="register-submit" class="btn btn-primary">
+                        <i class="bi bi-person-plus"></i> <span data-i18n="login.registerSubmit">建立帳號</span>
+                    </button>
+                    <button type="button" id="register-back" class="btn btn-secondary">
+                        <span data-i18n="login.registerBack">返回登入</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="login-footer">
+            <p>Echo Mock Server</p>
+        </div>
+    </div>
+    
+    <script>
+        (function() {
+            // Theme
+            var t = localStorage.getItem('theme') || 'dark';
+            var effective = t === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : t;
+            document.documentElement.setAttribute('data-theme', effective);
+            document.documentElement.style.colorScheme = effective;
+
+            // Error alert
+            if (window.location.search.includes('error')) {
+                document.getElementById('error-alert').style.display = 'flex';
+            }
+
+            // i18n - lightweight locale swap for login page
+            var stored = localStorage.getItem('echo_locale');
+            var locale = stored || (navigator.language.startsWith('zh') ? 'zh-TW' : 'en');
+            if (locale !== 'zh-TW') {
+                fetch('/i18n/' + locale + '.json').then(function(r) { return r.json(); }).then(function(msgs) {
+                    var login = msgs.login;
+                    if (!login) return;
+                    document.title = login.title || document.title;
+                    document.querySelectorAll('[data-i18n]').forEach(function(el) {
+                        var key = el.getAttribute('data-i18n').split('.')[1];
+                        if (login[key]) el.textContent = login[key];
+                    });
+                    document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) {
+                        var key = el.getAttribute('data-i18n-placeholder').split('.')[1];
+                        if (login[key]) el.placeholder = login[key];
+                    });
+                }).catch(function() {});
+            }
+
+            // --- Forgot Password Flow ---
+            var loginForm = document.querySelector('form');
+            var forgotSection = document.getElementById('forgot-section');
+            var forgotLink = document.getElementById('forgot-link');
+            var forgotBack = document.getElementById('forgot-back');
+            var forgotBackSuccess = document.getElementById('forgot-back-success');
+            var forgotSubmit = document.getElementById('forgot-submit');
+            var forgotUsername = document.getElementById('forgot-username');
+            var forgotSuccess = document.getElementById('forgot-success');
+            var forgotFormFields = document.getElementById('forgot-form-fields');
+            var errorAlert = document.getElementById('error-alert');
+
+            function showForgot() {
+                loginForm.style.display = 'none';
+                forgotSection.classList.add('active');
+                errorAlert.style.display = 'none';
+                forgotSuccess.style.display = 'none';
+                forgotFormFields.style.display = 'block';
+                forgotUsername.value = '';
+                forgotUsername.focus();
+            }
+
+            function showLogin() {
+                forgotSection.classList.remove('active');
+                loginForm.style.display = 'block';
+            }
+
+            forgotLink.addEventListener('click', showForgot);
+            forgotBack.addEventListener('click', showLogin);
+            forgotBackSuccess.addEventListener('click', showLogin);
+
+            forgotSubmit.addEventListener('click', function() {
+                var username = forgotUsername.value.trim();
+                if (!username) {
+                    forgotUsername.focus();
+                    return;
+                }
+                forgotSubmit.disabled = true;
+                fetch('/api/admin/builtin-users/forgot-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ username: username })
+                }).then(function() {
+                    forgotFormFields.style.display = 'none';
+                    forgotSuccess.style.display = 'block';
+                }).catch(function() {
+                    forgotFormFields.style.display = 'none';
+                    forgotSuccess.style.display = 'block';
+                }).finally(function() {
+                    forgotSubmit.disabled = false;
+                });
+            });
+
+            // --- LDAP Hint ---
+            fetch('/api/admin/status', { headers: { 'Accept': 'application/json' } }).then(function(r) { return r.json(); }).then(function(data) {
+                if (data.ldapEnabled) {
+                    document.getElementById('ldap-hint').style.display = 'block';
+                }
+                if (data.selfRegistrationEnabled) {
+                    document.getElementById('register-link').style.display = 'block';
+                }
+            }).catch(function() {});
+
+            // --- Self Registration Flow ---
+            var registerSection = document.getElementById('register-section');
+            var registerLink = document.getElementById('register-link');
+            var registerBack = document.getElementById('register-back');
+            var registerBackSuccess = document.getElementById('register-back-success');
+            var registerSubmitBtn = document.getElementById('register-submit');
+            var registerUsernameInput = document.getElementById('register-username');
+            var registerPasswordInput = document.getElementById('register-password');
+            var registerSuccess = document.getElementById('register-success');
+            var registerError = document.getElementById('register-error');
+            var registerFormFields = document.getElementById('register-form-fields');
+
+            function showRegister() {
+                loginForm.style.display = 'none';
+                forgotSection.classList.remove('active');
+                registerSection.classList.add('active');
+                errorAlert.style.display = 'none';
+                registerSuccess.style.display = 'none';
+                registerError.style.display = 'none';
+                registerFormFields.style.display = 'block';
+                registerUsernameInput.value = '';
+                registerPasswordInput.value = '';
+                registerUsernameInput.focus();
+            }
+
+            function showLoginFromRegister() {
+                registerSection.classList.remove('active');
+                loginForm.style.display = 'block';
+            }
+
+            registerLink.addEventListener('click', showRegister);
+            registerBack.addEventListener('click', showLoginFromRegister);
+            registerBackSuccess.addEventListener('click', showLoginFromRegister);
+
+            // 錯誤碼對應翻譯（使用已載入的 locale 訊息）
+            var registerErrorMessages = {
+                'zh-TW': {
+                    'USERNAME_EXISTS': '帳號已存在',
+                    'USERNAME_LENGTH': '帳號長度須為 3-50 字元',
+                    'PASSWORD_TOO_SHORT': '密碼長度至少 6 字元',
+                    'SELF_REGISTRATION_DISABLED': '自助註冊功能未啟用'
+                },
+                'en': {
+                    'USERNAME_EXISTS': 'Username already exists',
+                    'USERNAME_LENGTH': 'Username must be 3-50 characters',
+                    'PASSWORD_TOO_SHORT': 'Password must be at least 6 characters',
+                    'SELF_REGISTRATION_DISABLED': 'Self-registration is disabled'
+                }
+            };
+            var regErrors = registerErrorMessages[locale] || registerErrorMessages['en'];
+
+            registerSubmitBtn.addEventListener('click', function() {
+                var username = registerUsernameInput.value.trim();
+                var password = registerPasswordInput.value;
+                if (!username) { registerUsernameInput.focus(); return; }
+                if (!password) { registerPasswordInput.focus(); return; }
+                registerSubmitBtn.disabled = true;
+                registerError.style.display = 'none';
+                fetch('/api/admin/builtin-users/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ username: username, password: password })
+                }).then(function(r) {
+                    if (r.ok) {
+                        registerFormFields.style.display = 'none';
+                        registerSuccess.style.display = 'block';
+                    } else {
+                        return r.json().then(function(body) {
+                            var code = body.error;
+                            registerError.textContent = regErrors[code] || code || 'Registration failed';
+                            registerError.style.display = 'block';
+                        });
+                    }
+                }).catch(function() {
+                    registerError.textContent = regErrors['NETWORK_ERROR'] || 'Network error';
+                    registerError.style.display = 'block';
+                }).finally(function() {
+                    registerSubmitBtn.disabled = false;
+                });
+            });
+        })();
+    </script>
+</body>
+</html>

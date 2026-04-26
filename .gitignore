@@ -1,0 +1,106 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+# Kiro
+.kiro/
+
+# Claude
+.claude/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+*.swp
+*~
+.factorypath
+*.launch
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+._*
+
+# H2 Database files
+*.db
+*.trace.db
+*.lock.db
+mockdb.*
+backups/
+
+# Logs
+*.log
+*.log.gz
+logs/
+
+# Runtime
+*.pid
+*.seed
+hs_err_pid*
+replay_pid*
+
+# Java
+*.class
+
+# Spring Boot
+spring-shell.log
+
+# Test output
+test-output/
+out/
+bin/
+
+# A11y tests
+a11y-tests/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+package-lock.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.env
+.venv/
+venv/
+
+# Lombok
+.lombok/
+
+# Python
+__pycache__/
+*.pyc
+# Docker
+*.pid
+
+# Misc
+*.bak
+*.tmp
+*.orig
+*.rej
+bundles/
+data/
+libs/*.jar
+.jqwik-database
+AGENTS.md
+screenshots/
+__files/
+mappings/

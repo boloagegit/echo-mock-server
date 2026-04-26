@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!-- Lombok 產生的 getter/builder（entity, dto） -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+        <Class name="~com\.echo\.entity\..*"/>
+    </Match>
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+        <Class name="~com\.echo\.dto\..*"/>
+    </Match>
+
+    <!-- Spring 建構子注入：Bean 是 singleton，不需要防禦性複製 -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+        <Method name="&lt;init&gt;"/>
+        <Class name="~com\.echo\.(service|jms|protocol|config|pipeline|controller|agent)\..*"/>
+    </Match>
+
+    <!-- Spring 注入的欄位會被誤報為未初始化 -->
+    <Match>
+        <Bug pattern="UWF_UNWRITTEN_FIELD,NP_UNWRITTEN_FIELD"/>
+    </Match>
+
+    <!-- Lombok @Builder 產生的內部類別 -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+        <Class name="~.*\$.*Builder.*"/>
+    </Match>
+
+    <!-- record-like 內部類別（TemplateContext, MatchDetail 等）用於短生命週期資料傳遞 -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+        <Class name="~com\.echo\.service\.ResponseTemplateService\$TemplateContext"/>
+    </Match>
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+        <Class name="~com\.echo\.service\.ConditionMatcher\$MatchDetail"/>
+    </Match>
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP"/>
+        <Class name="~com\.echo\.service\.ConditionMatcher\$PreparedBody"/>
+    </Match>
+
+    <!-- ProtocolHandlerRegistry.getAllHandlers() 回傳 Spring 注入的 handler 清單，僅內部使用 -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP"/>
+        <Class name="com.echo.protocol.ProtocolHandlerRegistry"/>
+        <Method name="getAllHandlers"/>
+    </Match>
+
+    <!-- RequestLogService 刻意暴露 memoryBuffer/bufferSize 供 LogAgent 寫入 -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP"/>
+        <Class name="com.echo.service.RequestLogService"/>
+        <Method name="~get(MemoryBuffer|BufferSize)"/>
+    </Match>
+
+    <!-- 刻意使用 catch(Exception) 處理 XML/JSON 解析的多種例外 -->
+    <Match>
+        <Bug pattern="REC_CATCH_EXCEPTION"/>
+        <Class name="com.echo.service.ResponseTemplateService"/>
+    </Match>
+    <Match>
+        <Bug pattern="REC_CATCH_EXCEPTION"/>
+        <Class name="com.echo.service.RuleAuditService"/>
+        <Method name="hasActualChanges"/>
+    </Match>
+
+    <!-- OpenAPI 匯入：uri/url 格式刻意回傳相同預設值 -->
+    <Match>
+        <Bug pattern="DB_DUPLICATE_BRANCHES"/>
+        <Class name="com.echo.service.OpenApiImportService"/>
+    </Match>
+</FindBugsFilter>

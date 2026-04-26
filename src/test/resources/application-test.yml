@@ -1,0 +1,41 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+
+  h2:
+    console:
+      enabled: false
+
+echo:
+  admin:
+    username: admin
+    password: "{noop}admin"
+  jms:
+    enabled: true
+    port: 0
+  ldap:
+    enabled: false
+  backup:
+    enabled: false
+  cleanup:
+    enabled: false
+  env-label: TEST
+  request-log:
+    store: memory
+    max-records: 1000
+  agent:
+    log:
+      flush-interval-seconds: 1
+      batch-size: 1
+
+logging:
+  level:
+    com.echo: DEBUG

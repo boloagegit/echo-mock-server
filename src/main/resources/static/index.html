@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Echo Mock Server</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/webjars/bootstrap/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/webjars/bootstrap-icons/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/webjars/codemirror/lib/codemirror.css">
+    <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="app" v-cloak>
+    <div class="top-loader" v-if="loading.rules||loading.logs||loading.audit||loading.responses||loading.accounts"></div>
+    <div class="layout">
+        <sidebar-nav
+            :page="page" @update:page="page=$event"
+            :sidebar-collapsed="sidebarCollapsed" @update:sidebar-collapsed="sidebarCollapsed=$event"
+            :mobile-menu="mobileMenu" @update:mobile-menu="mobileMenu=$event"
+            :env-label="envLabel" :is-admin="isAdmin" :is-logged-in="isLoggedIn"
+            :status="status" :jms-enabled="jmsEnabled" :locale="locale"
+            :theme-icon="themeIcon" :theme-label="themeLabel"
+            :density="density" :density-icon="densityIcon" :density-label="densityLabel"
+            :help-seen="helpSeen"
+            @show-help="showPriorityHelp=true" @toggle-theme="toggleTheme" @toggle-density="toggleDensity"
+            @start-tour="startTour"
+            @switch-locale="switchLocale" @login="login" @logout="logout"
+        ></sidebar-nav>
+        <div class="mobile-overlay" v-if="mobileMenu" @click="mobileMenu=false"></div>
+        <main class="main" @click="mobileMenu=false">
+            <button class="mobile-menu-btn" @click.stop="mobileMenu=!mobileMenu"><i class="bi bi-list"></i></button>
+            <!-- Rules Page -->
+            <rules-page v-if="page==='rules'"
+                :rules="rules" :loading="loading" :status="status"
+                :jms-enabled="jmsEnabled" :is-logged-in="isLoggedIn"
+                :http-label="httpLabel" :jms-label="jmsLabel"
+                :rule-filter="ruleFilter" :rule-sort="ruleSort"
+                :rule-view-mode="ruleViewMode"
+                :paged-rules="pagedRules" :rule-total-pages="ruleTotalPages"
+                :rule-page="rulePage" :rule-page-size="rulePageSize"
+                :batch-select-mode="batchSelectMode" :selected-rules="selectedRules"
+                :rule-filter-chips="ruleFilterChips"
+                :show-dbl-click-hint="showDblClickHint"
+                :rule-preview-expanded="rulePreviewExpanded"
+                :rule-preview-loading="rulePreviewLoading"
+                :rule-preview-cache="rulePreviewCache"
+                :show-data-dropdown="showDataDropdown"
+                :expanded-tag-groups="expandedTagGroups"
+                :expanded-tag-subgroups="expandedTagSubgroups"
+                :tag-keys="tagKeys" :rules-by-tag="rulesByTag"
+                :rules-by-tag-group="rulesByTagGroup"
+                :filtered-rules="filteredRules"
+                :get-group-limit="getGroupLimit"
+                :rule-sort-icon="ruleSortIcon"
+                @load-rules="loadRules($event)"
+                @open-create="openCreate" @toggle-batch-select="batchSelectMode=!batchSelectMode;selectedRules=[]"
+                @batch-protect="batchProtect($event)" @delete-selected="deleteSelectedRules"
+                @export-rules="exportRules();showDataDropdown=false"
+                @show-import="showImportModal=true;showDataDropdown=false"
+                @update:rule-filter="ruleFilter=$event" @update:rule-sort="ruleSort=$event"
+                @update:rule-view-mode="ruleViewMode=$event"
+                @update:rule-page="rulePage=$event" @update:rule-page-size="rulePageSize=$event"
+                @update:batch-select-mode="batchSelectMode=$event"
+                @update:selected-rules="selectedRules=$event"
+                @toggle-rule-sort="toggleRuleSort($event)"
+                @toggle-select-all="toggleSelectAll($event)"
+                @toggle-enabled="toggleEnabled($event)"
+                @open-edit="openEdit($event)" @copy-rule="copyRule($event)"
+                @delete-rule="deleteRule($event)"
+                @export-rule-json="exportRuleJson($event)"
+                @remove-rule-chip="removeRuleChip($event)"
+                @clear-rule-filters="clearRuleFilters"
+                @toggle-rule-preview="toggleRulePreview($event)"
+                @handle-rule-row-click="handleRuleRowClick($event)"
+                @dismiss-dblclick-hint="dismissDblClickHint"
+                @go-to-responses="page='responses';responseFilter=String($event)"
+                @clip-copy="clipCopy($event)" @extend-rule="extendRule($event)"
+                @toggle-data-dropdown="toggleDataDropdown"
+                @toggle-tag-group="toggleTagGroup($event)"
+                @toggle-tag-subgroup="toggleTagSubgroup($event)"
+                @show-more-group="showMoreGroup($event)"
+                @show-all-group="(key, total) => showAllGroup(key, total)"
+            ></rules-page>
+
+            <!-- Stats Page -->
+            <stats-page v-if="page==='stats'"
+                :logs="logs" :log-summary="logSummary" :loading="loading"
+                :log-filter="logFilter" :log-sort="logSort"
+                :log-page="logPage" :log-page-size="logPageSize"
+                :paged-logs="pagedLogs" :total-pages="totalPages"
+                :log-filter-chips="logFilterChips"
+                :jms-enabled="jmsEnabled" :http-label="httpLabel" :jms-label="jmsLabel"
+                :rules="rules" :auto-refresh="autoRefresh"
+                :log-detail-expanded="logDetailExpanded"
+                :detect-mode="detectMode"
+                @load-logs="loadLogs($event)" @update:log-filter="logFilter=$event"
+                @update:log-sort="logSort=$event" @update:log-page="logPage=$event"
+                @update:log-page-size="logPageSize=$event"
+                @toggle-sort="toggleSort($event)" @toggle-match-chain="toggleMatchChain($event)"
+                @toggle-log-detail="(item, idx) => toggleLogDetail(item, idx)"
+                @go-to-rule="goToRule($event)" @toggle-auto-refresh="toggleAutoRefresh()"
+                @remove-log-chip="removeLogChip($event)" @clear-log-filters="clearLogFilters"
+                @clip-copy="clipCopy($event)"
+                @create-rule-from-log="createRuleFromLog($event)"
+            ></stats-page>
+
+            <!-- Audit Page -->
+            <audit-page v-if="page==='audit'"
+                :audit-logs="auditLogs" :loading="loading" :selected-audit="selectedAudit"
+                :audit-filter="auditFilter" :audit-sort="auditSort"
+                :audit-page="auditPage" :audit-page-size="auditPageSize"
+                :paged-audit="pagedAudit" :audit-total-pages="auditTotalPages"
+                :audit-truncated="auditTruncated" :audit-filter-chips="auditFilterChips"
+                :is-admin="isAdmin" :status="status"
+                :get-audit-changes="getAuditChanges"
+                :get-audit-change-count="getAuditChangeCount"
+                :get-audit-target="getAuditTarget"
+                :get-audit-description="getAuditDescription"
+                :get-audit-protocol="getAuditProtocol"
+                @load-audit="loadAudit($event)" @update:selected-audit="selectedAudit=$event"
+                @update:audit-filter="auditFilter=$event" @update:audit-page="auditPage=$event"
+                @update:audit-page-size="auditPageSize=$event"
+                @toggle-audit-sort="toggleAuditSort($event)" @delete-all-audit="deleteAllAudit"
+                @remove-audit-chip="removeAuditChip($event)" @clear-audit-filters="clearAuditFilters"
+                @go-to-rule="goToRule($event)" @go-to-response="goToResponse($event)"
+                @debounced-load-audit="debouncedLoadAudit()"
+            ></audit-page>
+
+            <!-- Responses Page -->
+            <responses-page v-if="page==='responses'"
+                :response-summary="responseSummary" :loading="loading"
+                :is-logged-in="isLoggedIn" :response-filter="responseFilter"
+                :response-sort="responseSort"
+                :paged-response-summary="pagedResponseSummary"
+                :response-filter-chips="responseFilterChips"
+                :response-usage-filter="responseUnusedOnly"
+                :response-content-type-filter="responseContentTypeFilter"
+                :batch-select-response-mode="batchSelectResponseMode"
+                :selected-responses="selectedResponses"
+                :show-response-data-dropdown="showResponseDataDropdown"
+                :status="status"
+                :response-page="responsePage"
+                :response-page-size="responsePageSize"
+                :response-total-pages="responseTotalPages"
+                @load-responses="loadResponseSummary($event)"
+                @open-response-modal="openResponseModal($event)"
+                @delete-response="(id, usage) => deleteResponse(id, usage)"
+                @update:response-filter="responseFilter=$event"
+                @update:batch-select-response-mode="batchSelectResponseMode=$event"
+                @update:selected-responses="selectedResponses=$event"
+                @update:response-usage-filter="responseUnusedOnly=$event"
+                @update:response-content-type-filter="responseContentTypeFilter=$event"
+                @update:response-page="responsePage=$event"
+                @update:response-page-size="responsePageSize=Number($event);responsePage=1"
+                @toggle-response-sort="toggleResponseSort($event)"
+                @toggle-select-all-responses="toggleSelectAllResponses($event)"
+                @export-responses="exportResponses();showResponseDataDropdown=false"
+                @import-responses="importResponses($event)"
+                @delete-selected-responses="deleteSelectedResponses"
+                @toggle-response-rules="toggleResponseRules($event)"
+                @toggle-response-data-dropdown="toggleResponseDataDropdown"
+                @trigger-response-import="triggerResponseImport2()"
+                @remove-response-chip="removeResponseChip($event)"
+                @clear-response-filters="clearResponseFilters"
+                @go-to-rule="page='rules';ruleFilter.keyword=$event"
+                @extend-response="extendResponse($event)"
+            ></responses-page>
+
+
+            <!-- Accounts Page -->
+            <accounts-page v-if="page==='accounts'"
+                :accounts="accountsCtx" :loading="loading"
+            ></accounts-page>
+
+            <!-- Settings Page -->
+            <settings-page v-if="page==='settings'"
+                :status="status" :is-admin="isAdmin" :is-logged-in="isLoggedIn"
+                :loading="loading" :backup-status="backupStatus" :jms-enabled="jmsEnabled"
+                @trigger-backup="triggerBackup"
+                @delete-all-rules="deleteAllRules"
+                @delete-all-responses="deleteAllResponses"
+                @delete-orphan-responses="deleteOrphanResponses"
+                @delete-all-audit="deleteAllAuditLogs"
+                @delete-all-logs="deleteAllLogs"
+                @refresh-status="loadStatus"
+            ></settings-page>
+        </main>
+    </div>
+
+    <!-- Priority Help Modal -->
+    <priority-help-modal
+        :show="showPriorityHelp" :help-tab="helpTab"
+        @close="showPriorityHelp=false" @update:help-tab="helpTab=$event"
+    ></priority-help-modal>
+
+    <!-- Response Edit Modal -->
+    <response-edit-modal
+        :show="showResponseModal" :editing="editingResponse"
+        :form="responseForm" :maximized="responseModalMaximized"
+        :sse-events="responseSseEvents" :sse-preview="responseSsePreview"
+        :response-form-formatted="responseFormFormatted"
+        @close="showResponseModal=false"
+        @save="saveResponse"
+        @update:form="Object.assign(responseForm, $event)"
+        @update:maximized="responseModalMaximized=$event"
+        @update:sse-events="responseSseEvents=$event"
+        @toggle-format="toggleResponseFormFormat"
+    ></response-edit-modal>
+
+    <!-- Create/Edit Modal -->
+    <rule-edit-modal
+        :show="showModal" :editing="editing" :form="form" :conditions="conditions"
+        :form-errors="formErrors" :can-save="canSave" :saving="saving" :maximized="ruleModalMaximized"
+        :show-catch-all-warning="showCatchAllWarning" :catch-all-confirmed="catchAllConfirmed"
+        :show-body-condition-warning="showBodyConditionWarning"
+        :jms-enabled="jmsEnabled" :http-label="httpLabel" :jms-label="jmsLabel"
+        :response-summary="responseSummary" :filtered-response-picker="filteredResponsePicker"
+        :response-picker-search="responsePickerSearch" :response-dropdown-open="responseDropdownOpen"
+        :response-picker-sse-only="responsePickerSseOnly"
+        :sse-events="sseEvents" :sse-preview="ssePreview"
+        :test-expanded="testExpanded" :test-params="testParams" :test-result="testResult"
+        :test-loading="testLoading" :test-sse-events="testSseEvents" :test-sse-mode="testSseMode"
+        :preview-response-body="previewResponseBody" :preview-editing="previewEditing"
+        :preview-edit-body="previewEditBody" :preview-response-usage-count="previewResponseUsageCount"
+        :preview-saving="previewSaving" :preview-formatted="previewFormatted"
+        :edit-formatted="editFormatted" :new-tag="newTag" :new-header="newHeader"
+        @close="closeModal" @save="(close) => saveRule(close)"
+        @update:catch-all-confirmed="catchAllConfirmed=$event"
+        @update:maximized="ruleModalMaximized=$event"
+        @set-protocol="setProtocol($event)"
+        @on-response-mode-change="onResponseModeChange()"
+        @add-condition="conditions.push({type:'body',field:'',value:'',operator:'='})"
+        @remove-condition="conditions.splice($event,1)"
+        @add-tag="addTag" @remove-tag="removeTag($event)"
+        @add-header="addHeader" @remove-header="removeHeader($event)"
+        @update:test-expanded="testExpanded=$event"
+        @run-test="runTest" @stop-sse-test="stopSseTest" @generate-test-data="generateTestData"
+        @add-sse-event="addSseEvent" @remove-sse-event="removeSseEvent($event)"
+        @update:response-picker-search="responsePickerSearch=$event"
+        @update:response-dropdown-open="responseDropdownOpen=$event"
+        @update:response-picker-sse-only="responsePickerSseOnly=$event"
+        @toggle-preview-editing="togglePreviewEditing"
+        @save-preview-response="savePreviewResponse"
+        @toggle-preview-format="togglePreviewFormat"
+        @toggle-edit-format="toggleEditFormat"
+        @go-to-responses="page='responses';showModal=false;responseFilter=String($event)"
+        @clear-response-selection="form.responseId=null;sseEvents=[{event:'',data:'',id:'',delayMs:0,type:'normal'}]"
+        @reorder-sse-events="sseEvents=$event"
+        @apply-template="applyTemplate($event)"
+    ></rule-edit-modal>
+
+    <import-modal :show="showImportModal" :import-format="importFormat" :import-file="importFile" :import-file-name="importFileName" @close="showImportModal=false" @update:import-format="importFormat=$event;importFile=null;importFileName=''" @handle-file="handleImportFile($event)" @do-import="doImport"></import-modal>
+
+    <openapi-preview-modal :show="showOpenApiPreview" :title="openApiPreviewTitle" :version="openApiPreviewVersion" :rules="openApiPreviewRules" :loading="openApiImporting" @close="showOpenApiPreview=false" @confirm="confirmOpenApiImport"></openapi-preview-modal>
+
+    <!-- Tour Overlay -->
+    <div v-if="tourActive" class="tour-overlay">
+        <div class="tour-highlight" :style="tourHighlightStyle"></div>
+        <div class="tour-tooltip" :style="tourTooltipStyle">
+            <div class="tour-tooltip-title">
+                <i class="bi bi-lightbulb" style="color:var(--warning)"></i>
+                {{tourSteps[tourStep]?.title}}
+            </div>
+            <div class="tour-tooltip-body">{{tourSteps[tourStep]?.body}}</div>
+            <div class="tour-tooltip-footer">
+                <span class="tour-tooltip-steps">{{tourStep + 1}} / {{tourSteps.length}}</span>
+                <div class="tour-tooltip-actions">
+                    <button v-if="tourStep > 0" class="btn btn-xs btn-secondary" @click="prevStep">{{t('tour.prev')}}</button>
+                    <button class="btn btn-xs btn-secondary" @click="skipTour">{{t('tour.skip')}}</button>
+                    <button class="btn btn-xs btn-primary" @click="nextStep">{{tourStep < tourSteps.length - 1 ? t('tour.next') : t('tour.finish')}}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Force Change Password Modal -->
+    <div v-if="showForceChangePassword" class="modal-overlay">
+        <div class="modal-box" style="max-width:420px">
+            <div class="modal-header">
+                <h3>{{t('accounts.changePassword.title')}}</h3>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom:1rem;color:var(--muted)">{{t('accounts.changePassword.description')}}</p>
+                <div class="form-group" style="margin-bottom:1rem">
+                    <label class="form-label">{{t('accounts.changePassword.oldPassword')}}</label>
+                    <input v-model="forceChangePwdForm.oldPassword" type="password" class="form-control" :placeholder="t('accounts.changePassword.oldPasswordPlaceholder')" @keydown.enter="submitForceChangePassword">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">{{t('accounts.changePassword.newPassword')}}</label>
+                    <input v-model="forceChangePwdForm.newPassword" type="password" class="form-control" :placeholder="t('accounts.changePassword.newPasswordPlaceholder')" @keydown.enter="submitForceChangePassword">
+                </div>
+                <div v-if="forceChangePwdError" style="margin-top:0.75rem;color:var(--danger);font-size:13px">{{forceChangePwdError}}</div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" @click="submitForceChangePassword" :disabled="forceChangePwdSubmitting || !forceChangePwdForm.oldPassword || !forceChangePwdForm.newPassword">{{t('accounts.changePassword.submit')}}</button>
+            </div>
+        </div>
+    </div>
+
+    <confirm-modal :confirm-state="confirmState"></confirm-modal>
+
+    <toast-container :toasts="toasts" @dismiss="dismissToast"></toast-container>
+</div>
+<script src="/webjars/vue/dist/vue.global.prod.js"></script>
+<script src="/webjars/codemirror/lib/codemirror.js"></script>
+<script src="/webjars/codemirror/mode/javascript/javascript.js"></script>
+<script src="/webjars/codemirror/mode/xml/xml.js"></script>
+<script src="/utils.js"></script>
+<!-- Composables (載入順序：utils.js → composables → components → app.js) -->
+<script src="/composables/useI18n.js"></script>
+<script src="/composables/useToast.js"></script>
+<script src="/composables/useAuth.js"></script>
+<script src="/composables/useTheme.js"></script>
+<script src="/composables/useTour.js"></script>
+<script src="/composables/useEditor.js"></script>
+<script src="/composables/useStats.js"></script>
+<script src="/composables/useAudit.js"></script>
+<script src="/composables/useResponses.js"></script>
+<script src="/composables/useRules.js"></script>
+<script src="/composables/useRuleForm.js"></script>
+<script src="/composables/useAccounts.js"></script>
+<script src="/composables/useRouter.js"></script>
+<script src="/components/SidebarNav.js"></script>
+<script src="/components/ToastContainer.js"></script>
+<script src="/components/ConfirmModal.js"></script>
+<script src="/components/ImportModal.js"></script>
+<script src="/components/OpenApiPreviewModal.js"></script>
+<script src="/components/AuditPage.js"></script>
+<script src="/components/StatsPage.js"></script>
+<script src="/components/ResponseEditModal.js"></script>
+<script src="/components/ResponsesPage.js"></script>
+<script src="/components/SettingsPage.js"></script>
+<script src="/components/PriorityHelpModal.js"></script>
+<script src="/components/RulesPage.js"></script>
+<script src="/components/RuleGroupRow.js"></script>
+<script src="/components/AccountsPage.js"></script>
+<script src="/components/RuleEditModal.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

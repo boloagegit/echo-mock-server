@@ -1,0 +1,218 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.13'
+    id 'io.spring.dependency-management' version '1.1.7'
+    id 'jacoco'
+    id 'com.github.spotbugs' version '6.4.8'
+    id 'net.ltgt.errorprone' version '4.4.0'
+}
+
+group = 'com.echo'
+version = {
+    try {
+        def stdout = new ByteArrayOutputStream()
+        exec {
+            commandLine 'git', 'describe', '--tags', '--abbrev=0'
+            standardOutput = stdout
+            errorOutput = new ByteArrayOutputStream()
+            ignoreExitValue = true
+        }
+        def tag = stdout.toString().trim()
+        tag ? tag.replaceFirst(/^v/, '') : '0.0.0-SNAPSHOT'
+    } catch (Exception e) {
+        '0.0.0-SNAPSHOT'
+    }
+}()
+description = 'Enterprise-grade dual-protocol mock server for HTTP and JMS'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Spring Boot Web with Undertow (exclude Tomcat)
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-undertow'
+    implementation 'org.apache.httpcomponents.client5:httpclient5'
+    modules {
+        module('org.springframework.boot:spring-boot-starter-tomcat') {
+            replacedBy('org.springframework.boot:spring-boot-starter-undertow', 'Use Undertow instead of Tomcat')
+        }
+    }
+
+    // Data & Persistence
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    runtimeOnly 'com.h2database:h2'
+    // runtimeOnly 'com.oracle.database.jdbc:ojdbc11'  # 未來支援 Oracle
+
+    // Monitoring & Actuator
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // Caching with Caffeine
+    implementation 'org.springframework.boot:spring-boot-starter-cache'
+    implementation 'com.github.ben-manes.caffeine:caffeine'
+
+    // JSON Path for WireMock-style matching
+    implementation 'com.jayway.jsonpath:json-path:2.10.0'
+
+    // Handlebars for Response Templating
+    implementation 'com.github.jknack:handlebars:4.5.0'
+
+    // Excel parsing with Apache POI
+    implementation 'org.apache.poi:poi-ooxml:5.5.1'
+
+    // OpenAPI/Swagger spec parsing
+    implementation 'io.swagger.parser.v3:swagger-parser:2.1.39'
+
+    // Security & LDAP
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-data-ldap'
+    implementation 'org.springframework.security:spring-security-ldap'
+
+    // Messaging with Artemis
+    implementation 'org.springframework.boot:spring-boot-starter-artemis'
+    implementation 'org.apache.activemq:artemis-jms-server'
+
+    // TIBCO EMS (optional - place tibjms.jar in libs/)
+    compileOnly files('libs/tibjms.jar')
+
+    // WebJars for Intranet-friendly Frontend (NO CDN)
+    implementation 'org.webjars:webjars-locator-core'
+    implementation 'org.webjars.npm:vue:3.5.31'
+    implementation 'org.webjars.npm:bootstrap:5.3.8'
+    implementation 'org.webjars.npm:bootstrap-icons:1.13.1'
+    implementation 'org.webjars.npm:codemirror:5.65.20'
+
+    // Feign (compileOnly - for MockRedirectClient reference code)
+    compileOnly 'io.github.openfeign:feign-core:13.6.1'
+    testImplementation 'io.github.openfeign:feign-core:13.6.1'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // Error Prone (compile-time only, does NOT affect runtime)
+    errorprone 'com.google.errorprone:error_prone_core:2.42.0'
+
+    // Testing
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation 'com.unboundid:unboundid-ldapsdk:7.0.4'
+    testImplementation 'net.jqwik:jqwik:1.9.3'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    finalizedBy jacocoTestReport
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}
+
+jacoco {
+    toolVersion = "0.8.14"
+}
+
+// SpotBugs 靜態分析
+import com.github.spotbugs.snom.Confidence
+import com.github.spotbugs.snom.Effort
+import net.ltgt.gradle.errorprone.CheckSeverity
+
+// Error Prone 編譯期檢查（僅編譯階段，不影響 runtime）
+tasks.withType(JavaCompile).configureEach {
+    options.errorprone {
+        disableWarningsInGeneratedCode = true
+        // Lombok 產生的程式碼會觸發的誤報
+        check('DefaultCharset', CheckSeverity.OFF)
+        // 避免與 Spring 慣例衝突的檢查
+        check('ImmutableEnumChecker', CheckSeverity.OFF)
+        check('MutablePublicArray', CheckSeverity.OFF)
+        // Mock Server 內部使用，String.split 在已知分隔符下行為明確
+        check('StringSplitter', CheckSeverity.OFF)
+        // 此專案為單機部署，LocalDateTime.now() 使用系統時區是刻意設計
+        check('JavaTimeDefaultTimeZone', CheckSeverity.OFF)
+        // Handlebars helper 需要 java.util.Date
+        check('JavaUtilDate', CheckSeverity.OFF)
+    }
+}
+
+// 測試程式碼放寬 Error Prone 檢查
+tasks.named('compileTestJava').configure {
+    options.errorprone {
+        check('MissingSummary', CheckSeverity.OFF)
+        check('JUnitAmbiguousTestClass', CheckSeverity.OFF)
+    }
+}
+
+spotbugs {
+    ignoreFailures = false
+    effort = Effort.valueOf('MAX')
+    reportLevel = Confidence.valueOf('MEDIUM')
+    excludeFilter = file('config/spotbugs-exclude.xml')
+}
+
+tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
+    reports {
+        html.required = true
+        xml.required = false
+    }
+}
+
+// Build Fat Jar
+tasks.named('bootJar') {
+    archiveBaseName = 'echo-server'
+    archiveVersion = version
+    manifest {
+        attributes(
+            'Implementation-Title': 'Echo Mock Server',
+            'Implementation-Version': version
+        )
+    }
+}
+
+// 開發時直接從 src 讀取靜態資源，修改後瀏覽器重整即可生效
+bootRun {
+    sourceResources sourceSets.main
+}
+
+// 快速啟動指令
+tasks.register('dev') {
+    group = 'application'
+    description = 'Run in dev mode (no login required)'
+    doFirst {
+        bootRun.configure {
+            args = ['--spring.profiles.active=dev']
+        }
+    }
+    finalizedBy 'bootRun'
+}
+
+// 快速測試指令
+tasks.register('t') {
+    group = 'verification'
+    description = 'Run all tests (shortcut)'
+    dependsOn 'test'
+}
+
+task runJmsTest(type: JavaExec) {
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.echo.jms.ManualJmsTest'
+}

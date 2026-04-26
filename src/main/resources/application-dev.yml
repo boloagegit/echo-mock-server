@@ -1,0 +1,12 @@
+# Dev Profile - 開發環境覆蓋設定
+# 啟動方式: ./gradlew dev 或 --spring.profiles.active=dev
+
+echo:
+  env-label: DEV
+  jms:
+    enabled: true
+    alias: ESB
+  http:
+    alias: 外部 API
+  builtin-account:
+    self-registration: true

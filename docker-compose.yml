@@ -1,0 +1,26 @@
+services:
+  echo:
+    build: .
+    image: echo-mock-server:latest
+    container_name: echo
+    ports:
+      - "8080:8080"   # HTTP
+      - "61616:61616" # JMS Artemis
+    environment:
+      - ECHO_ADMIN_USERNAME=${ECHO_ADMIN_USERNAME:-admin}       # ⚠️ 生產環境請替換
+      - ECHO_ADMIN_PASSWORD=${ECHO_ADMIN_PASSWORD:-admin}       # ⚠️ 生產環境請替換，支援 bcrypt hash
+      - ECHO_REMEMBER_ME_KEY=${ECHO_REMEMBER_ME_KEY:-change-me} # ⚠️ 生產環境請替換
+      - ECHO_ENV_LABEL=DOCKER
+      - TZ=Asia/Taipei
+    volumes:
+      - echo-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/mock/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  echo-data:

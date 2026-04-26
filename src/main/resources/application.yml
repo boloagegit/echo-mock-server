@@ -1,0 +1,133 @@
+server:
+  port: 8080
+  undertow:
+    threads:
+      worker: 32        # Undertow worker threads，可用環境變數 SERVER_UNDERTOW_THREADS_WORKER 覆蓋
+  servlet:
+    session:
+      timeout: 180d  # Session 180 天 (約半年) 過期
+      cookie:
+        max-age: 180d  # Cookie 也設定 180 天
+
+spring:
+  web:
+    resources:
+      cache:
+        period: 0  # 開發環境不快取靜態資源
+  application:
+    name: echo
+
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.ldap.LdapAutoConfiguration
+
+  # H2 Database
+  datasource:
+    url: jdbc:h2:file:./mockdb;AUTO_RECONNECT=TRUE;TRACE_LEVEL_FILE=0
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+    hikari:
+      maximum-pool-size: 15       # 預設 10，給 cache evict 風暴留餘量
+      minimum-idle: 3             # 平時少佔記憶體（預設 = max）
+      connection-timeout: 10000   # 10 秒快速 fail（預設 30 秒）
+      idle-timeout: 120000        # 2 分鐘回收閒置連線（預設 10 分鐘）
+      max-lifetime: 1800000       # 30 分鐘強制回收
+
+  h2:
+    console:
+      enabled: true               # ⚠️ 生產環境建議設為 false 或限制存取
+      path: /h2-console
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+
+  # Caffeine Cache
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=10000,expireAfterWrite=43200s
+
+  # Artemis - 由 echo.jms 設定控制，此區塊保留供 Spring Boot 自動配置
+  artemis:
+    mode: embedded
+
+# Echo 自訂配置
+echo:
+  env-label:                    # 環境別名（如 DEV、SIT、UAT），可用環境變數 ECHO_ENV_LABEL 覆蓋
+  remember-me:
+    key: echo-remember-me-secret  # ⚠️ 生產環境請務必替換！可用環境變數 ECHO_REMEMBER_ME_KEY 覆蓋
+    validity: 180d                # Remember Me cookie 有效期，可用環境變數 ECHO_REMEMBER_ME_VALIDITY 覆蓋
+  admin:
+    username: admin             # ⚠️ 預設帳號，生產環境請替換。可用環境變數 ECHO_ADMIN_USERNAME 覆蓋
+    password: "{bcrypt}$2a$10$cGp.LHC3zCORJIgwLvh6qehSMWZV27KbwI0VravTWP51EkxvbkEmm"  # ⚠️ 預設密碼 admin，生產環境請替換。可用環境變數 ECHO_ADMIN_PASSWORD 覆蓋
+  storage:
+    mode: database  # database 或 file
+    file-path: ./data/rules.json  # file 模式時的路徑
+  cache:
+    body:
+      max-size-mb: 50          # Response body 快取上限 (MB)，512MB heap 下不宜過大
+      threshold-kb: 5120      # 超過此大小的 body 不快取 (KB) - 5MB
+      expire-minutes: 720     # 快取過期時間 (分鐘) - 12 小時
+    sync-interval-ms: 5000    # 多實例 cache 同步間隔 (毫秒)
+  jms:
+    enabled: false
+    alias:                     # JMS 協定顯示別名，可用環境變數 ECHO_JMS_ALIAS 覆蓋
+    port: 61616              # Artemis 監聽埠 (外部服務連線 tcp://localhost:61616)
+    username: admin          # ⚠️ 預設帳密，生產環境請替換。可用環境變數 ECHO_JMS_USERNAME / ECHO_JMS_PASSWORD 覆蓋
+    password: admin
+    concurrency: "10-30"     # JMS listener 並發數 (min-max)，可用環境變數 ECHO_JMS_CONCURRENCY 覆蓋
+    queue: ECHO.REQUEST      # Echo 監聽的 Source Queue（外部服務送訊息到此 Queue）
+    endpoint-field: ServiceName  # 從訊息 body 提取端點識別欄位（XML element / JSON key）
+    target:
+      enabled: false         # true 時啟用轉發到目標 JMS Server
+      type: tibco            # artemis | tibco
+      server-url: tcp://esb-server:7222  # ⚠️ 範例位址，請替換為實際 JMS Server
+      username: admin
+      password: changeme       # ⚠️ 範例佔位符，請透過環境變數 ECHO_JMS_TARGET_PASSWORD 覆蓋
+      timeout-seconds: 30
+      queue: TARGET.REQUEST  # 目標 JMS Server 上的 Queue（轉發目的地）
+  http:
+    alias: HTTP     # HTTP 協定顯示名稱
+  stats:
+    retention-days: 7  # 統計資料保留天數
+  request-log:
+    store: database    # memory 或 database
+    max-records: 10000 # 最大記錄數
+  audit:
+    retention-days: 30  # 審計記錄保留天數
+  cleanup:
+    enabled: true           # 啟用定時清除
+    cron: "0 0 3 * * *"     # 每天凌晨 3 點執行
+    rule-retention-days: 180  # 規則保留天數 (預設半年)
+    response-retention-days: 180  # 回應保留天數
+  backup:
+    enabled: true             # 啟用 H2 自動備份 (僅 H2 Embedded 模式)
+    cron: "0 0 3 * * *"       # 每天凌晨 3 點執行
+    path: ./backups           # 備份目錄
+    retention-days: 7         # 備份保留天數
+    on-shutdown: true         # 應用關閉時備份
+  agent:
+    log:
+      queue-capacity: 3000           # LogAgent 佇列容量
+      batch-size: 50                # 批次大小觸發閾值
+      flush-interval-seconds: 5     # 時間觸發間隔（秒）
+    analysis:
+      enabled: true                 # 啟用匹配鏈分析（near-miss / shadowed 偵測）
+  builtin-account:
+    self-registration: false  # 設為 true 允許未登入使用者自行申請帳號
+  ldap:
+    enabled: false  # 設為 true 啟用 LDAP 認證
+    url: ldap://ldap.example.com:389
+    base-dn: dc=example,dc=com
+    user-pattern: uid={0},ou=users
+
+logging:
+  file:
+    path: ${LOGGING_FILE_PATH:./logs}  # 預設 ./logs，可用環境變數覆蓋
+  level:
+    root: WARN
+    com.echo: INFO

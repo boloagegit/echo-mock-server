@@ -1,0 +1,58 @@
+/**
+ * theme.css - 共用主題變數
+ * 供 index.html (主站) 與 login.html (登入頁) 共用。
+ */
+
+/* 深色主題（預設） */
+:root {
+    color-scheme: dark;
+    --bg: #0d1117;
+    --card: #161b22;
+    --border: #30363d;
+    --border2: #3d4a5c;
+    --primary: #818cf8;
+    --primary-rgb: 129, 140, 248;
+    --success: #3fb950;
+    --success-rgb: 63, 185, 80;
+    --warning: #f0b429;
+    --warning-rgb: 240, 180, 41;
+    --danger: #f85149;
+    --danger-rgb: 248, 81, 73;
+    --danger-text: #ff8882;
+    --text: #e6edf3;
+    --muted: #9ca3af;
+    --muted-rgb: 139, 148, 158;
+    --purple: #a371f7;
+    --purple-rgb: 163, 113, 247;
+    --hover: #21262d;
+    --code-bg: #1f2428;
+    --btn-primary: #4f46e5;
+    --btn-primary-rgb: 79, 70, 229;
+}
+
+/* 淺色主題 */
+:root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #ffffff;
+    --card: #f6f8fa;
+    --border: #d0d7de;
+    --border2: #b8c4d4;
+    --primary: #3730a3;
+    --primary-rgb: 55, 48, 163;
+    --success: #166534;
+    --success-rgb: 22, 101, 52;
+    --warning: #854d0e;
+    --warning-rgb: 133, 77, 14;
+    --danger: #cf222e;
+    --danger-rgb: 207, 34, 46;
+    --danger-text: #b91c28;
+    --text: #24292f;
+    --muted: #4b5563;
+    --muted-rgb: 75, 85, 99;
+    --purple: #6d28d9;
+    --purple-rgb: 109, 40, 217;
+    --hover: #f3f4f6;
+    --code-bg: #eef1f5;
+    --btn-primary: #4f46e5;
+    --btn-primary-rgb: 79, 70, 229;
+}
