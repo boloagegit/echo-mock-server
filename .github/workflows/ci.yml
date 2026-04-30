@@ -41,7 +41,7 @@ jobs:
 
       - name: Upload Test Report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report-jdk${{ matrix.jdk-version }}
           path: build/reports/tests/test/
@@ -49,7 +49,7 @@ jobs:
 
       - name: Upload Coverage Report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report-jdk${{ matrix.jdk-version }}
           path: build/reports/jacoco/test/html/
@@ -57,7 +57,7 @@ jobs:
 
       - name: Upload SpotBugs Report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: spotbugs-report-jdk${{ matrix.jdk-version }}
           path: build/reports/spotbugs/
@@ -65,7 +65,7 @@ jobs:
 
       - name: Upload JAR
         if: success() && matrix.jdk-version == 17
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: echo-server-jar
           path: build/libs/echo-server-*.jar
