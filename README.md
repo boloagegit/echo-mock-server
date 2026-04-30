@@ -1,5 +1,7 @@
 # Echo Mock Server
 
+[![CI](https://github.com/boloagegit/echo-mock-server/actions/workflows/ci.yml/badge.svg)](https://github.com/boloagegit/echo-mock-server/actions/workflows/ci.yml)
+[![Docker](https://github.com/boloagegit/echo-mock-server/actions/workflows/push-docker.yml/badge.svg)](https://github.com/boloagegit/echo-mock-server/actions/workflows/push-docker.yml)
 ![Java 17](https://img.shields.io/badge/Java-17-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-green) ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 
 [中文版 README](README_zh-TW.md)

@@ -1,0 +1,76 @@
+version: 1
+labels:
+  # --- Conventional Commit title matching ---
+  - label: "Bugfix"
+    title: '^fix(\([^)]*\))?:|^fix:.*'
+
+  - label: "enhancement"
+    title: '^feat(\([^)]*\))?:|^feat:.*'
+
+  - label: "build"
+    title: '^build(\([^)]*\))?:|^build:.*'
+
+  - label: "chore"
+    title: '^chore(\([^)]*\))?:|^chore:.*'
+
+  - label: "ci"
+    title: '^ci(\([^)]*\))?:|^ci:.*'
+
+  - label: "perf"
+    title: '^perf(\([^)]*\))?:|^perf:.*'
+
+  - label: "refactor"
+    title: '^refactor(\([^)]*\))?:|^refactor:.*'
+
+  - label: "revert"
+    title: '^revert(\([^)]*\))?:|^revert:.*'
+
+  - label: "style"
+    title: '^style(\([^)]*\))?:|^style:.*'
+
+  - label: "Documentation"
+    title: '^docs(\([^)]*\))?:|^docs:.*'
+
+  - label: "dependencies"
+    title: '^deps(\([^)]*\))?:|^deps:.*'
+
+  # --- File path matching ---
+  - label: "Java"
+    files:
+      - 'src/main/java/.*.java'
+
+  - label: "Back End"
+    files:
+      - 'src/main/java/com/echo/controller/.*'
+      - 'src/main/java/com/echo/service/.*'
+      - 'src/main/java/com/echo/config/.*'
+      - 'src/main/resources/.*'
+
+  - label: "JMS"
+    files:
+      - 'src/main/java/com/echo/jms/.*'
+
+  - label: "Security"
+    files:
+      - 'src/main/java/com/echo/config/Security.*'
+
+  - label: "Docker"
+    files:
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+
+  - label: "Documentation"
+    files:
+      - '.*.md'
+
+  - label: "ci"
+    files:
+      - '.github/.*'
+
+  - label: "Gradle"
+    files:
+      - 'gradle/.*'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - 'build.gradle'
+      - 'settings.gradle'
