@@ -65,7 +65,7 @@ dependencies {
     implementation 'com.github.ben-manes.caffeine:caffeine'
 
     // JSON Path for WireMock-style matching
-    implementation 'com.jayway.jsonpath:json-path:2.10.0'
+    implementation 'com.jayway.jsonpath:json-path:3.0.0'
 
     // Handlebars for Response Templating
     implementation 'com.github.jknack:handlebars:4.5.0'
