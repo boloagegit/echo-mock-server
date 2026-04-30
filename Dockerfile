@@ -1,4 +1,4 @@
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:25-jre
 
 LABEL maintainer="Echo Mock Server"
 LABEL description="Enterprise Mock Server for HTTP and JMS"
