@@ -1,0 +1,124 @@
+name: Bug Report
+description: File a bug report.
+title: "[Bug]: "
+labels:
+  - Bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Bug Report
+
+        Thanks for taking the time to fill out this bug report!
+
+        Please fill out the following sections to help us understand the issue you are facing.
+
+  - type: dropdown
+    id: installation-method
+    attributes:
+      label: Installation Method
+      description: |
+        How are you running Echo Mock Server?
+      options:
+        - Docker
+        - Local (java -jar)
+        - Gradle (./gradlew bootRun)
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    validations:
+      required: true
+    attributes:
+      label: The Problem
+      description: |
+        Describe the issue you are experiencing. Tell us what you were trying to do and what happened.
+      placeholder: Provide a detailed description of the issue.
+
+  - type: markdown
+    attributes:
+      value: |
+        ## Environment
+
+  - type: input
+    id: version
+    validations:
+      required: true
+    attributes:
+      label: Echo Version
+      placeholder: e.g., 2025.05.01
+      description: What version of Echo Mock Server has the issue?
+
+  - type: input
+    id: java-version
+    attributes:
+      label: Java Version
+      placeholder: e.g., 17.0.11
+      description: What Java version are you using?
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      placeholder: e.g., macOS 15, Ubuntu 24.04, Windows 11
+
+  - type: markdown
+    attributes:
+      value: |
+        ## Steps to Reproduce
+
+  - type: textarea
+    id: steps
+    validations:
+      required: true
+    attributes:
+      label: Steps to Reproduce
+      description: |
+        Provide the steps to reproduce the issue.
+      placeholder: |
+        1. Start the server with ...
+        2. Send a request to ...
+        3. Observe ...
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+
+  - type: markdown
+    attributes:
+      value: |
+        ## Logs
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Log Output
+      description: |
+        Provide any log output that might help diagnose the issue.
+      render: txt
+
+  - type: textarea
+    id: additional-info
+    attributes:
+      label: Additional Information
+      description: |
+        Any additional context, screenshots, or configuration that might help.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: No Duplicate Issue
+      description: |
+        Please confirm that you have searched for similar issues.
+      options:
+        - label: I have verified that there are no existing issues related to my problem.
+          required: true

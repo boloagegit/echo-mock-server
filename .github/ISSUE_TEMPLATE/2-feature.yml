@@ -1,0 +1,64 @@
+name: Feature Request
+description: Submit a new feature request.
+title: "[Feature Request]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Feature Request
+
+        Thank you for taking the time to suggest a new feature!
+
+        Please fill out the following sections to help us understand your idea.
+
+  - type: textarea
+    id: feature-description
+    validations:
+      required: true
+    attributes:
+      label: Feature Description
+      description: |
+        Describe the feature you would like to see. What should it do and what problem does it solve?
+      placeholder: Provide a detailed description of the desired feature.
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case
+      description: |
+        Why is this feature needed? Describe the scenario where this would be useful.
+      placeholder: Describe why this feature is important.
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Suggested Implementation
+      description: |
+        If you have ideas about how this could be implemented, describe them here. This is optional.
+      placeholder: Describe how this feature might be implemented.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: |
+        Any alternative solutions or workarounds you've considered.
+
+  - type: textarea
+    id: additional-info
+    attributes:
+      label: Additional Information
+      description: |
+        Any additional context, mockups, or references that support your request.
+
+  - type: checkboxes
+    id: search-confirmation
+    attributes:
+      label: No Duplicate Feature Request
+      description: |
+        Please confirm that you have searched for similar feature requests.
+      options:
+        - label: I have verified that there are no existing feature requests similar to mine.
+          required: true
