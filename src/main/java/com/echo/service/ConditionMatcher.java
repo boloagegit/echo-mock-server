@@ -57,6 +57,19 @@ public class ConditionMatcher {
     private static final int MAX_JSON_SIZE = 10 * 1024 * 1024; // 10MB
     private static final int MAX_REGEX_INPUT_LENGTH = 10000;
 
+    /** 單一欄位值長度上限，超過則跳過比對（防止 base64 等大值拖慢匹配） */
+    private final int maxFieldValueLength;
+
+    /** 預設建構子，使用 2MB 上限（供測試及非 Spring 環境使用） */
+    public ConditionMatcher() {
+        this(2 * 1024 * 1024);
+    }
+
+    public ConditionMatcher(
+            @org.springframework.beans.factory.annotation.Value("${echo.matcher.max-field-value-length:2097152}") int maxFieldValueLength) {
+        this.maxFieldValueLength = maxFieldValueLength;
+    }
+
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Cache<String, Pattern> patternCache = Caffeine.newBuilder()
             .maximumSize(500)
@@ -515,7 +528,12 @@ public class ConditionMatcher {
         try {
             NodeList nodes = findXmlNodes(parsed.field(), doc);
             for (int i = 0; i < nodes.getLength(); i++) {
-                if (matchValue(parsed, nodes.item(i).getTextContent().trim())) {
+                String text = nodes.item(i).getTextContent().trim();
+                if (text.length() > maxFieldValueLength) {
+                    log.debug("Skipping XPath match: node value too large ({} chars), condition: {}", text.length(), condition);
+                    continue;
+                }
+                if (matchValue(parsed, text)) {
                     return true;
                 }
             }
@@ -530,7 +548,12 @@ public class ConditionMatcher {
         try {
             NodeList nodes = findXmlNodes(parsed.field(), doc);
             for (int i = 0; i < nodes.getLength(); i++) {
-                if (matchValue(parsed, nodes.item(i).getTextContent().trim())) {
+                String text = nodes.item(i).getTextContent().trim();
+                if (text.length() > maxFieldValueLength) {
+                    log.debug("Skipping XML match: node value too large ({} chars), condition: {}", text.length(), condition);
+                    continue;
+                }
+                if (matchValue(parsed, text)) {
                     return true;
                 }
             }
@@ -564,6 +587,10 @@ public class ConditionMatcher {
                 return parsed.op() == Op.NOT_EQUAL;
             }
             String actual = node.isTextual() ? node.asText() : node.toString();
+            if (actual.length() > maxFieldValueLength) {
+                log.debug("Skipping match: field value too large ({} chars), condition: {}", actual.length(), condition);
+                return false;
+            }
             return matchValue(parsed, actual);
         } catch (Exception e) {
             return false;
@@ -575,6 +602,10 @@ public class ConditionMatcher {
             var parsed = parseCondition(condition);
             Object result = JsonPath.read(body, parsed.field);
             String actual = result != null ? result.toString() : null;
+            if (actual != null && actual.length() > maxFieldValueLength) {
+                log.debug("Skipping JsonPath match: value too large ({} chars), condition: {}", actual.length(), condition);
+                return false;
+            }
             return matchValue(parsed, actual);
         } catch (PathNotFoundException e) {
             return false;

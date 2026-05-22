@@ -1,6 +1,7 @@
 server:
   port: 8080
   undertow:
+    max-http-post-size: 10485760  # 10MB，允許帶 base64 圖片的大 request 進入
     threads:
       worker: 32        # Undertow worker threads，可用環境變數 SERVER_UNDERTOW_THREADS_WORKER 覆蓋
   servlet:
@@ -117,6 +118,8 @@ echo:
       flush-interval-seconds: 5     # 時間觸發間隔（秒）
     analysis:
       enabled: true                 # 啟用匹配鏈分析（near-miss / shadowed 偵測）
+  matcher:
+    max-field-value-length: 2097152  # 單一欄位值長度上限 (bytes)，超過跳過比對，預設 2MB
   builtin-account:
     self-registration: false  # 設為 true 允許未登入使用者自行申請帳號
   ldap:
