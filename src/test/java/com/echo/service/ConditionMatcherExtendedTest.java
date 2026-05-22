@@ -186,4 +186,69 @@ class ConditionMatcherExtendedTest {
     void cleanup_shouldNotThrow() {
         matcher.cleanup();
     }
+
+    // ========== maxFieldValueLength 防呆測試 ==========
+
+    @Test
+    void jsonPrepared_fieldValueTooLarge_shouldReturnFalse() {
+        // 使用小閾值的 matcher 來測試
+        ConditionMatcher smallMatcher = new ConditionMatcher(100);
+        String largeValue = "x".repeat(200);
+        String json = "{\"userId\":\"U001\",\"image\":\"" + largeValue + "\"}";
+        PreparedBody prepared = smallMatcher.prepareBody(json);
+
+        // image 欄位超過 100 字元，應該跳過
+        assertThat(smallMatcher.matchesPrepared("image=something", null, null, prepared, null, null)).isFalse();
+        // userId 欄位正常大小，應該正常匹配
+        assertThat(smallMatcher.matchesPrepared("userId=U001", null, null, prepared, null, null)).isTrue();
+    }
+
+    @Test
+    void jsonPath_fieldValueTooLarge_shouldReturnFalse() {
+        ConditionMatcher smallMatcher = new ConditionMatcher(100);
+        String largeValue = "x".repeat(200);
+        String json = "{\"data\":{\"image\":\"" + largeValue + "\",\"id\":\"A1\"}}";
+        PreparedBody prepared = smallMatcher.prepareBody(json);
+
+        // JsonPath 取到的值超過閾值
+        assertThat(smallMatcher.matchesPrepared("$.data.image=something", null, null, prepared, null, null)).isFalse();
+        // 正常欄位
+        assertThat(smallMatcher.matchesPrepared("$.data.id=A1", null, null, prepared, null, null)).isTrue();
+    }
+
+    @Test
+    void xmlPrepared_nodeValueTooLarge_shouldReturnFalse() {
+        ConditionMatcher smallMatcher = new ConditionMatcher(100);
+        String largeValue = "x".repeat(200);
+        String xml = "<root><image>" + largeValue + "</image><id>A1</id></root>";
+        PreparedBody prepared = smallMatcher.prepareBody(xml);
+
+        // XML 節點值超過閾值
+        assertThat(smallMatcher.matchesPrepared("image=something", null, null, prepared, null, null)).isFalse();
+        // 正常節點
+        assertThat(smallMatcher.matchesPrepared("id=A1", null, null, prepared, null, null)).isTrue();
+    }
+
+    @Test
+    void xpathPrepared_nodeValueTooLarge_shouldReturnFalse() {
+        ConditionMatcher smallMatcher = new ConditionMatcher(100);
+        String largeValue = "x".repeat(200);
+        String xml = "<root><image>" + largeValue + "</image><id>A1</id></root>";
+        PreparedBody prepared = smallMatcher.prepareBody(xml);
+
+        // XPath 取到的值超過閾值
+        assertThat(smallMatcher.matchesPrepared("//image=something", null, null, prepared, null, null)).isFalse();
+        // 正常 XPath
+        assertThat(smallMatcher.matchesPrepared("//id=A1", null, null, prepared, null, null)).isTrue();
+    }
+
+    @Test
+    void defaultMatcher_2MB_shouldAllowNormalFields() {
+        // 預設 matcher (2MB 閾值) 對正常欄位不受影響
+        String json = "{\"userId\":\"U001\",\"name\":\"test\"}";
+        PreparedBody prepared = matcher.prepareBody(json);
+
+        assertThat(matcher.matchesPrepared("userId=U001", null, null, prepared, null, null)).isTrue();
+        assertThat(matcher.matchesPrepared("name=test", null, null, prepared, null, null)).isTrue();
+    }
 }
