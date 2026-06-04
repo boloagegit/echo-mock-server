@@ -34,11 +34,9 @@ public class RuleAuditLog {
     private Action action;
 
     @Lob
-    @Column(columnDefinition = "CLOB")
     private String beforeJson;
 
     @Lob
-    @Column(columnDefinition = "CLOB")
     private String afterJson;
 
     @Column(nullable = false)

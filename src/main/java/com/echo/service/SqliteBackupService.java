@@ -6,7 +6,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -23,15 +22,21 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Stream;
 
+/**
+ * SQLite 備份服務
+ * <p>
+ * SQLite 在 WAL mode 下可以安全地直接 copy 檔案作為 hot backup。
+ * 不需要 SHUTDOWN COMPACT，SQLite 的 VACUUM 是 atomic 的。
+ */
 @Service
 @ConditionalOnProperty(name = "echo.backup.enabled", havingValue = "true")
-@ConditionalOnExpression("'${spring.datasource.url:}'.contains(':h2:')")
-public class H2BackupService implements BackupService {
+@ConditionalOnExpression("'${spring.datasource.url:}'.contains(':sqlite:')")
+public class SqliteBackupService implements BackupService {
 
-    private static final Logger log = LoggerFactory.getLogger(H2BackupService.class);
+    private static final Logger log = LoggerFactory.getLogger(SqliteBackupService.class);
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
-    private final JdbcTemplate jdbcTemplate;
+    private final javax.sql.DataSource dataSource;
 
     @Value("${echo.backup.path:./backups}")
     private String backupPath;
@@ -42,41 +47,13 @@ public class H2BackupService implements BackupService {
     @Value("${echo.backup.on-shutdown:true}")
     private boolean backupOnShutdown;
 
-    public H2BackupService(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public SqliteBackupService(javax.sql.DataSource dataSource) {
+        this.dataSource = dataSource;
     }
 
     @Scheduled(cron = "${echo.backup.cron:0 0 3 * * *}")
     public void scheduledBackup() {
         backup("scheduled");
-        compact();
-    }
-
-    /**
-     * 執行 SHUTDOWN COMPACT 回收 H2 已刪除資料的磁碟空間。
-     * H2 會關閉並重寫檔案，HikariCP 自動重建連線。
-     */
-    public CompactResult compact() {
-        try {
-            long sizeBefore = Files.size(Path.of(dbFilePath()));
-            jdbcTemplate.execute("SHUTDOWN COMPACT");
-            long sizeAfter = Files.size(Path.of(dbFilePath()));
-            log.info("H2 compact completed: {} MB -> {} MB",
-                    sizeBefore / 1024 / 1024, sizeAfter / 1024 / 1024);
-            return new CompactResult(sizeBefore, sizeAfter);
-        } catch (Exception e) {
-            log.warn("H2 compact failed (will retry next cycle): {}", e.getMessage());
-            return null;
-        }
-    }
-
-    public record CompactResult(long sizeBefore, long sizeAfter) {}
-
-    @Value("${echo.backup.db-file-path:./mockdb.mv.db}")
-    private String dbFilePath = "./mockdb.mv.db";
-
-    String dbFilePath() {
-        return dbFilePath;
     }
 
     @PreDestroy
@@ -94,17 +71,22 @@ public class H2BackupService implements BackupService {
                 Files.createDirectories(dir);
             }
 
-            String filename = "echo-" + LocalDate.now().format(DATE_FORMAT) + ".zip";
-            Path filePath = dir.resolve(filename);
+            String filename = "echo-" + LocalDate.now().format(DATE_FORMAT) + ".sqlite";
+            Path target = dir.resolve(filename);
 
-            // H2 BACKUP TO 指令
-            jdbcTemplate.execute("BACKUP TO '" + filePath.toAbsolutePath() + "'");
-            log.info("H2 backup completed: {} (trigger: {})", filename, trigger);
+            // 使用 SQLite Online Backup API（透過 JDBC）
+            // 這會產生一個包含所有已 commit 資料的完整一致性快照
+            // 比 file copy 安全：file copy 可能漏掉 WAL 中未 checkpoint 的資料
+            try (var conn = dataSource.getConnection();
+                 var stmt = conn.createStatement()) {
+                stmt.executeUpdate("backup to '" + target.toAbsolutePath() + "'");
+            }
+            log.info("SQLite backup completed: {} (trigger: {})", filename, trigger);
 
             cleanOldBackups();
             return filename;
         } catch (Exception e) {
-            log.error("H2 backup failed", e);
+            log.error("SQLite backup failed", e);
             throw new RuntimeException("Backup failed: " + e.getMessage(), e);
         }
     }
@@ -119,10 +101,10 @@ public class H2BackupService implements BackupService {
             LocalDate cutoff = LocalDate.now().minusDays(retentionDays);
 
             try (Stream<Path> files = Files.list(dir)) {
-                files.filter(p -> p.getFileName().toString().matches("echo-\\d{4}-\\d{2}-\\d{2}\\.zip"))
+                files.filter(p -> p.getFileName().toString().matches("echo-\\d{4}-\\d{2}-\\d{2}\\.sqlite"))
                         .filter(p -> {
                             String name = p.getFileName().toString();
-                            String dateStr = name.substring(5, 15); // echo-YYYY-MM-DD.zip
+                            String dateStr = name.substring(5, 15);
                             LocalDate fileDate = LocalDate.parse(dateStr, DATE_FORMAT);
                             return fileDate.isBefore(cutoff);
                         })
@@ -149,7 +131,7 @@ public class H2BackupService implements BackupService {
             }
 
             try (Stream<Path> files = Files.list(dir)) {
-                return files.filter(p -> p.getFileName().toString().matches("echo-\\d{4}-\\d{2}-\\d{2}\\.zip"))
+                return files.filter(p -> p.getFileName().toString().matches("echo-\\d{4}-\\d{2}-\\d{2}\\.sqlite"))
                         .map(p -> {
                             try {
                                 return new BackupFile(

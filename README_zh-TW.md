@@ -28,13 +28,13 @@
 - **規則保護** - 標記規則為受保護，防止被自動清除
 - **規則展延** - 延長規則/回應的保留期限，避免被定時清除
 - **孤兒清理** - 偵測並清除未被任何規則使用的孤兒回應
-- **自動備份** - H2 資料庫排程備份、關機備份、手動觸發備份
+- **自動備份** - SQLite 資料庫排程備份、關機備份、手動觸發備份
 - **狀態機場景** - WireMock 風格狀態機，模擬多步驟流程（如訂單→付款→確認）
 - **故障注入** - 模擬連線重置、空回應，用於韌性測試
 - **假資料產生** - 內建假資料 helpers（姓名、email、電話、地址等），產生擬真回應
 - **規則測試** - 在管理介面直接測試規則匹配結果
 - **靜態分析** - SpotBugs 靜態程式碼分析
-- **零外部依賴** - 內嵌 H2 資料庫、Caffeine 快取
+- **零外部依賴** - 內嵌 SQLite 資料庫、Caffeine 快取
 - **內網友善** - 前端使用 WebJars，無需 CDN
 - **環境識別** - 協定別名、環境標籤，多環境部署一目了然
 
@@ -93,7 +93,41 @@ JVM 參數在 Dockerfile 中設定（預設 `-Xms256m -Xmx512m`），可透過 d
 | 管理介面 | http://localhost:8080/ | Mock 規則管理 |
 | 登入頁面 | http://localhost:8080/login.html | 使用者登入 |
 | Mock 端點 | http://localhost:8080/mock/** | 攔截 HTTP 請求 |
-| H2 Console | http://localhost:8080/h2-console | 資料庫管理 |
+| — | — | SQLite 以檔案管理（不需要 Web Console） |
+
+## 從 H2 升級
+
+> **重大變更**：自本版本起，預設資料庫從 H2 改為 SQLite。
+
+**全新安裝** – 不需任何操作，預設使用 SQLite。
+
+**既有 H2 使用者** – 選擇以下方式之一：
+
+1. **繼續使用 H2**（不需遷移）：
+   ```bash
+   ./gradlew bootRun --args='--spring.profiles.active=h2'
+   ```
+
+2. **遷移到 SQLite**（建議）：
+   ```bash
+   # 1. 停止 Echo
+   # 2. 使用 H2 Shell 匯出資料
+   java -cp ~/.gradle/caches/**/h2-*.jar org.h2.tools.Shell \
+     -url "jdbc:h2:file:./mockdb;ACCESS_MODE_DATA=r" -user sa -password "" \
+     -sql "CALL CSVWRITE('./http_rules.csv', 'SELECT * FROM HTTP_RULES')"
+   # 對以下表重複：JMS_RULES, RESPONSES, BUILTIN_USERS, RULE_AUDIT_LOGS
+
+   # 3. 刪除舊 DB 並啟動 Echo（自動建立 SQLite）
+   rm mockdb.mv.db
+   ./gradlew dev
+   # JPA ddl-auto=update 會自動建立 schema
+
+   # 4. 透過 Admin UI 重新建立規則，或用 CSV 匯入
+   ```
+
+3. **全新開始** – 直接刪除 `mockdb.mv.db` 重啟，系統會自動建立新的 SQLite 資料庫。
+
+**為什麼換 SQLite？** H2 embedded mode 在非正常關閉時（kill -9、OOM kill、斷電）容易發生 chunk 損壞。SQLite 使用 WAL mode 的 atomic commit 機制，即使 crash 也能保證資料庫完整性。
 
 ## 規則匹配優先順序
 
@@ -348,7 +382,7 @@ echo:
     rule-retention-days: 180    # 規則保留天數
     response-retention-days: 180 # 回應保留天數
   backup:
-    enabled: true               # 啟用 H2 自動備份
+    enabled: true               # 啟用 SQLite 自動備份
     cron: "0 0 3 * * *"         # 每天凌晨 3 點執行
     path: ./backups             # 備份目錄
     retention-days: 7           # 備份保留天數
@@ -670,7 +704,7 @@ python3 scripts/test-match-scenarios.py
 |------|------|
 | Framework | Spring Boot 3.5.13 |
 | Web Server | Undertow |
-| Database | H2 (Embedded) |
+| Database | SQLite (WAL mode) |
 | Cache | Caffeine |
 | Messaging | Artemis (Embedded) |
 | Security | Spring Security |

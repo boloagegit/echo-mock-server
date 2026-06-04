@@ -70,12 +70,12 @@ public class HttpRule extends BaseRule {
     private String headerCondition;
 
     /** 是否啟用 SSE（Server-Sent Events）模式 */
-    @Column(name = "sse_enabled", nullable = false, columnDefinition = "boolean default false")
+    @Column(name = "sse_enabled", nullable = false)
     @lombok.Builder.Default
     private Boolean sseEnabled = false;
 
     /** SSE 事件序列是否循環播放 */
-    @Column(name = "sse_loop_enabled", nullable = false, columnDefinition = "boolean default false")
+    @Column(name = "sse_loop_enabled", nullable = false)
     @lombok.Builder.Default
     private Boolean sseLoopEnabled = false;
 

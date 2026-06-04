@@ -40,14 +40,26 @@ public interface RequestLogRepository extends JpaRepository<RequestLog, Long> {
     @Query("DELETE FROM RequestLog r WHERE r.requestTime < :cutoffTime")
     int deleteByRequestTimeBefore(@Param("cutoffTime") LocalDateTime cutoffTime);
 
-    /** 刪除最舊的 N 筆記錄 */
+    /** 查詢最舊的 N 筆記錄 ID（供刪除用） */
+    @Query("SELECT r.id FROM RequestLog r ORDER BY r.requestTime ASC")
+    List<Long> findOldestIds(Pageable pageable);
+
+    /** 批次刪除指定 ID */
     @Modifying
     @Transactional
-    @Query("DELETE FROM RequestLog r WHERE r.id IN (SELECT r2.id FROM RequestLog r2 ORDER BY r2.requestTime ASC LIMIT :limit)")
-    int deleteOldest(@Param("limit") int limit);
+    @Query("DELETE FROM RequestLog r WHERE r.id IN :ids")
+    int deleteByIds(@Param("ids") List<Long> ids);
 
-    /** 依時間區間統計 (用於流量圖) */
-    @Query("SELECT FUNCTION('MINUTE', r.requestTime), COUNT(r) FROM RequestLog r " +
-           "WHERE r.requestTime >= :startTime GROUP BY FUNCTION('MINUTE', r.requestTime)")
-    List<Object[]> countByMinute(@Param("startTime") LocalDateTime startTime);
+    /** 刪除最舊的 N 筆記錄（先查 ID 再刪除） */
+    default int deleteOldest(int limit) {
+        List<Long> ids = findOldestIds(Pageable.ofSize(limit));
+        if (ids.isEmpty()) {
+            return 0;
+        }
+        return deleteByIds(ids);
+    }
+
+    /** 依時間區間查詢 (用於流量圖，由呼叫端在 Java 層做分鐘分組) */
+    @Query("SELECT r.requestTime FROM RequestLog r WHERE r.requestTime >= :startTime ORDER BY r.requestTime")
+    List<LocalDateTime> findRequestTimesSince(@Param("startTime") LocalDateTime startTime);
 }

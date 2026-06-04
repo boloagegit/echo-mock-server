@@ -28,8 +28,8 @@ public interface HttpRuleRepository extends JpaRepository<HttpRule, String> {
     int deleteByResponseId(Long responseId);
 
     @Modifying
-    @Query("DELETE FROM HttpRule r WHERE COALESCE(r.extendedAt, r.createdAt) < :cutoff AND r.isProtected = false")
-    int deleteExpiredRules(@Param("cutoff") LocalDateTime cutoff);
+    @Query("DELETE FROM HttpRule r WHERE COALESCE(r.extendedAt, r.createdAt) < :cutoff AND r.isProtected = :notProtected")
+    int deleteExpiredRules(@Param("cutoff") LocalDateTime cutoff, @Param("notProtected") boolean notProtected);
 
     /** 按 responseId 分組計數 */
     @Query("SELECT r.responseId, COUNT(r) FROM HttpRule r WHERE r.responseId IS NOT NULL GROUP BY r.responseId")

@@ -21,7 +21,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DataJpaTest
 @AutoConfigureTestDatabase
 @TestPropertySource(properties = {
-    "spring.jpa.hibernate.ddl-auto=create-drop"
+    "spring.jpa.hibernate.ddl-auto=create-drop",
+    "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
+    "spring.datasource.url=jdbc:h2:mem:builtinuser-test;DB_CLOSE_DELAY=-1",
+    "spring.datasource.driver-class-name=org.h2.Driver"
 })
 class BuiltinUserTest {
 

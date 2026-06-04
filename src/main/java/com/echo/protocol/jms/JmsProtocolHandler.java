@@ -141,7 +141,7 @@ public class JmsProtocolHandler extends AbstractProtocolHandler {
 
     @Override
     public int deleteExpiredRules(LocalDateTime cutoff) {
-        return repository.deleteExpiredRules(cutoff);
+        return repository.deleteExpiredRules(cutoff, false);
     }
 
     @Override

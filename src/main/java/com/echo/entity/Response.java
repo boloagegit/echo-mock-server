@@ -31,8 +31,7 @@ import java.time.LocalDateTime;
 public class Response {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "response_seq")
-    @SequenceGenerator(name = "response_seq", sequenceName = "response_sequence", allocationSize = 1)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     /** 樂觀鎖版本號 */
@@ -48,7 +47,6 @@ public class Response {
      */
     @Lob
     @Basic(fetch = FetchType.LAZY)
-    @Column(columnDefinition = "CLOB")
     private String body;
 
     /** 
