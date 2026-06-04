@@ -34,13 +34,13 @@ An enterprise-grade dual-protocol mock server supporting HTTP and JMS, designed 
 - **Rule Protection** – Mark rules as protected to prevent automatic cleanup
 - **Rule Extension** – Extend retention period for rules/responses to avoid scheduled cleanup
 - **Orphan Cleanup** – Detect and remove orphan responses not used by any rule
-- **Auto Backup** – Scheduled H2 database backup, shutdown backup, and manual trigger
+- **Auto Backup** – Scheduled SQLite database backup, shutdown backup, and manual trigger
 - **Stateful Scenarios** – WireMock-style state machine for simulating multi-step workflows (e.g., order → payment → confirmation)
 - **Fault Injection** – Simulate connection reset and empty response for resilience testing
 - **Faker Data** – Built-in fake data helpers (name, email, phone, address, etc.) for realistic mock responses
 - **Rule Testing** – Test rule matching directly from the admin UI
 - **Static Analysis** – SpotBugs code analysis
-- **Zero External Dependencies** – Embedded H2 database and Caffeine cache
+- **Zero External Dependencies** – Embedded SQLite database and Caffeine cache
 - **Intranet Friendly** – Frontend uses WebJars, no CDN required
 - **Environment Identification** – Protocol aliases and environment labels for easy multi-environment deployment
 
@@ -99,7 +99,41 @@ JVM options are set in the Dockerfile (default `-Xms256m -Xmx512m`). Override by
 | Admin UI | http://localhost:8080/ | Mock rule management |
 | Login Page | http://localhost:8080/login.html | User login |
 | Mock Endpoint | http://localhost:8080/mock/** | Intercept HTTP requests |
-| H2 Console | http://localhost:8080/h2-console | Database management |
+| — | — | SQLite DB managed via file (no web console needed) |
+
+## Upgrading from H2
+
+> **Breaking Change**: The default database has been changed from H2 to SQLite starting from this version.
+
+**New installations** – No action needed. SQLite is used by default.
+
+**Existing H2 users** – Choose one of the following:
+
+1. **Keep using H2** (no migration needed):
+   ```bash
+   ./gradlew bootRun --args='--spring.profiles.active=h2'
+   ```
+
+2. **Migrate to SQLite** (recommended):
+   ```bash
+   # 1. Stop Echo
+   # 2. Export data from H2 using H2 Shell
+   java -cp ~/.gradle/caches/**/h2-*.jar org.h2.tools.Shell \
+     -url "jdbc:h2:file:./mockdb;ACCESS_MODE_DATA=r" -user sa -password "" \
+     -sql "CALL CSVWRITE('./http_rules.csv', 'SELECT * FROM HTTP_RULES')"
+   # Repeat for: JMS_RULES, RESPONSES, BUILTIN_USERS, RULE_AUDIT_LOGS
+
+   # 3. Delete old DB and start Echo (auto-creates SQLite)
+   rm mockdb.mv.db
+   ./gradlew dev
+   # JPA ddl-auto=update will create the schema
+
+   # 4. Import CSV via H2 Shell → SQLite (or re-create rules via Admin UI)
+   ```
+
+3. **Start fresh** – Delete `mockdb.mv.db` and restart. A new SQLite database will be created automatically.
+
+**Why SQLite?** H2 embedded mode is prone to chunk corruption on abnormal shutdown (kill -9, OOM kill, power loss). SQLite uses atomic commit with WAL mode, guaranteeing database integrity even after crashes.
 
 ## Rule Matching Priority
 
@@ -354,7 +388,7 @@ echo:
     rule-retention-days: 180    # Rule retention days
     response-retention-days: 180 # Response retention days
   backup:
-    enabled: true               # Enable H2 auto backup
+    enabled: true               # Enable SQLite auto backup
     cron: "0 0 3 * * *"         # Daily at 3 AM
     path: ./backups             # Backup directory
     retention-days: 7           # Backup retention days
@@ -676,7 +710,7 @@ python3 scripts/test-match-scenarios.py
 |----------|-----------|
 | Framework | Spring Boot 3.5.13 |
 | Web Server | Undertow |
-| Database | H2 (Embedded) |
+| Database | SQLite (WAL mode) |
 | Cache | Caffeine |
 | Messaging | Artemis (Embedded) |
 | Security | Spring Security |

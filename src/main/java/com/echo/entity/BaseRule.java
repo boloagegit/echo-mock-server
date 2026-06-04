@@ -77,7 +77,7 @@ public abstract class BaseRule {
     private Boolean enabled = true;
 
     /** 是否保護此規則（不被自動清除） */
-    @Column(name = "is_protected", nullable = false, columnDefinition = "boolean default false")
+    @Column(name = "is_protected", nullable = false)
     @lombok.Builder.Default
     private Boolean isProtected = false;
 

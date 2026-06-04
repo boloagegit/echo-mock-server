@@ -72,4 +72,11 @@
         <Bug pattern="DB_DUPLICATE_BRANCHES"/>
         <Class name="com.echo.service.OpenApiImportService"/>
     </Match>
+
+    <!-- SqliteBackupService: backup path is internally generated, not user input -->
+    <Match>
+        <Bug pattern="SQL_NONCONSTANT_STRING_PASSED_TO_EXECUTE"/>
+        <Class name="com.echo.service.SqliteBackupService"/>
+        <Method name="backup"/>
+    </Match>
 </FindBugsFilter>

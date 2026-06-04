@@ -14,7 +14,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
 @TestPropertySource(properties = {
-    "spring.jpa.hibernate.ddl-auto=create-drop"
+    "spring.jpa.hibernate.ddl-auto=create-drop",
+    "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
+    "spring.datasource.url=jdbc:h2:mem:httprule-test;DB_CLOSE_DELAY=-1",
+    "spring.datasource.driver-class-name=org.h2.Driver"
 })
 class HttpRuleRepositoryTest {
 
@@ -61,7 +64,7 @@ class HttpRuleRepositoryTest {
         
         // When: 執行清除
         LocalDateTime cutoff = LocalDateTime.now().minusDays(180);
-        int deleted = httpRuleRepository.deleteExpiredRules(cutoff);
+        int deleted = httpRuleRepository.deleteExpiredRules(cutoff, false);
         
         // Then: 只有未保護的規則被刪除
         assertThat(deleted).isEqualTo(1);
@@ -85,7 +88,7 @@ class HttpRuleRepositoryTest {
         
         // When: 執行清除（cutoff = 180 天前）
         LocalDateTime cutoff = LocalDateTime.now().minusDays(180);
-        int deleted = httpRuleRepository.deleteExpiredRules(cutoff);
+        int deleted = httpRuleRepository.deleteExpiredRules(cutoff, false);
         
         // Then: 新規則不會被刪除
         assertThat(deleted).isEqualTo(0);
@@ -119,7 +122,7 @@ class HttpRuleRepositoryTest {
         
         // When: 執行清除
         LocalDateTime cutoff = LocalDateTime.now().minusDays(180);
-        int deleted = httpRuleRepository.deleteExpiredRules(cutoff);
+        int deleted = httpRuleRepository.deleteExpiredRules(cutoff, false);
         
         // Then: 展延過的規則不會被刪除
         assertThat(deleted).isEqualTo(0);

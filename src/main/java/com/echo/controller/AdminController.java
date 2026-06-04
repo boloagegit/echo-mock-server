@@ -19,7 +19,7 @@ import com.echo.service.RequestLogService;
 import com.echo.service.RuleAuditService;
 import com.echo.service.ExcelImportService;
 import com.echo.service.OpenApiImportService;
-import com.echo.service.H2BackupService;
+import com.echo.service.BackupService;
 import com.echo.service.CacheInvalidationService;
 import com.echo.service.ContentTypeConstraints;
 import com.echo.service.ResponseContentValidatorRegistry;
@@ -87,7 +87,7 @@ public class AdminController {
     private final RequestLogService requestLogService;
     private final Optional<RuleAuditService> ruleAuditService;
     private final Optional<com.echo.jms.JmsConnectionManager> jmsConnectionManager;
-    private final Optional<H2BackupService> h2BackupService;
+    private final Optional<BackupService> backupService;
     private final ExcelImportService excelImportService;
     private final OpenApiImportService openApiImportService;
     private final Optional<CacheInvalidationService> cacheInvalidationService;
@@ -262,23 +262,18 @@ public class AdminController {
         result.put("cron", backupCron);
         result.put("path", backupPath);
         result.put("retentionDays", backupRetentionDays);
-        result.put("files", h2BackupService.map(H2BackupService::listBackups).orElse(List.of()));
+        result.put("files", backupService.map(BackupService::listBackups).orElse(List.of()));
         return ResponseEntity.ok(result);
     }
 
     @PostMapping("/backup")
     public ResponseEntity<?> triggerBackup() {
-        return h2BackupService
+        return backupService
                 .map(svc -> {
                     String filename = svc.backup("manual");
-                    H2BackupService.CompactResult compact = svc.compact();
                     Map<String, Object> result = new HashMap<>();
                     result.put("success", true);
                     result.put("filename", filename);
-                    if (compact != null) {
-                        result.put("compactBefore", compact.sizeBefore());
-                        result.put("compactAfter", compact.sizeAfter());
-                    }
                     return ResponseEntity.ok(result);
                 })
                 .orElse(ResponseEntity.badRequest().body(Map.of("error", "Backup not enabled")));
