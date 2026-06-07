@@ -70,7 +70,7 @@ dependencies {
     implementation 'com.jayway.jsonpath:json-path:2.10.0'
 
     // Handlebars for Response Templating
-    implementation 'com.github.jknack:handlebars:4.5.0'
+    implementation 'com.github.jknack:handlebars:4.5.1'
 
     // Excel parsing with Apache POI
     implementation 'org.apache.poi:poi-ooxml:5.5.1'
