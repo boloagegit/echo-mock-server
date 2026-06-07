@@ -1,145 +1,70 @@
-# Labels are automatically synced by the manage-label workflow.
-# See: .github/workflows/manage-label.yml
+# Echo Mock Server - GitHub Labels
+# Synced by .github/workflows/manage-labels.yml
 
-# --- Type ---
-- name: "Bug"
+# === Type ===
+- name: "bug"
+  color: "d73a4a"
   description: "Something isn't working"
-  color: "EB9CA6"
-
-- name: "Bugfix"
-  description: "Pull requests that fix bugs"
-  color: "FF9E1F"
 
 - name: "enhancement"
+  color: "a2eeef"
   description: "New feature or request"
-  color: "A0EEEE"
 
-- name: "question"
-  description: "Further information is requested"
-  color: "D97EE5"
-
-- name: "duplicate"
-  description: "This issue or pull request already exists"
-  color: "CDD1D5"
-
-- name: "invalid"
-  description: "This doesn't seem right"
-  color: "E5E566"
-
-- name: "wontfix"
-  description: "This will not be worked on"
-  color: "FFFFFF"
-
-# --- Area ---
-- name: "Back End"
-  description: "Issues or pull requests related to back-end / Java code"
-  color: "20CE6C"
-
-- name: "API"
-  description: "API-related issues or pull requests"
-  color: "FFFF00"
-
-- name: "Docker"
-  description: "Pull requests that update Docker code"
-  color: "1FCEFF"
-
-- name: "Security"
-  description: "Security-related issues or pull requests"
-  color: "000000"
-
-- name: "JMS"
-  description: "JMS messaging related issues"
-  color: "8B5CF6"
-
-- name: "Documentation"
+- name: "documentation"
+  color: "0075ca"
   description: "Improvements or additions to documentation"
-  color: "35ABFF"
-
-# --- Process ---
-- name: "good first issue"
-  description: "Good for newcomers"
-  color: "C1B8FF"
-
-- name: "help wanted"
-  description: "Extra attention is needed"
-  color: "00E6C4"
-
-- name: "more-info-needed"
-  description: "More information is needed from the reporter"
-  color: "00E4F8"
-
-- name: "Stale"
-  description: "Issues that have become inactive"
-  color: "000000"
-
-# --- Priority ---
-- name: "Priority: Critical"
-  description: "Highest priority — must fix immediately"
-  color: "000000"
-
-- name: "Priority: High"
-  description: "High priority"
-  color: "FF0000"
-
-- name: "Priority: Medium"
-  description: "Medium priority"
-  color: "FFFF00"
-
-- name: "Priority: Low"
-  description: "Low priority"
-  color: "00FF00"
-
-# --- CI/Build ---
-- name: "dependencies"
-  description: "Pull requests that update a dependency file"
-  color: "5AA8FC"
-
-- name: "github-actions"
-  description: "Pull requests that update GitHub Actions code"
-  color: "999999"
-
-- name: "Gradle"
-  description: "Pull requests that update Gradle code"
-  color: "FF9E1F"
-
-- name: "Java"
-  description: "Pull requests that update Java code"
-  color: "FF9E1F"
-
-- name: "build"
-  description: "Changes that affect the build system or external dependencies"
-  color: "1E90FF"
-
-- name: "ci"
-  description: "Changes to CI configuration files and scripts"
-  color: "4682B4"
-
-# --- Conventional Commits ---
-- name: "chore"
-  description: "Routine tasks or maintenance"
-  color: "FFD700"
-
-- name: "perf"
-  description: "Changes that improve performance"
-  color: "FF69B4"
 
 - name: "refactor"
-  description: "Code changes that neither fix a bug nor add a feature"
-  color: "9932CC"
+  color: "d4c5f9"
+  description: "Code improvement without changing behavior"
 
-- name: "revert"
-  description: "Reverts a previous commit"
-  color: "DC143C"
+- name: "chore"
+  color: "ededed"
+  description: "Maintenance tasks, CI, dependencies"
 
-- name: "style"
-  description: "Changes that do not affect the meaning of the code (formatting, etc.)"
-  color: "FFA500"
+# === Priority ===
+- name: "priority:high"
+  color: "e11d48"
+  description: "Needs immediate attention"
 
-# --- Release ---
-- name: "break-change"
-  description: "This PR introduces a breaking change"
-  color: "FF0000"
+- name: "priority:medium"
+  color: "fbca04"
+  description: "Should be addressed soon"
 
-- name: "ignore-for-release"
-  description: "Exclude from release notes"
-  color: "EDEDED"
+- name: "priority:low"
+  color: "0e8a16"
+  description: "Nice to have, no rush"
+
+# === Status ===
+- name: "wontfix"
+  color: "ffffff"
+  description: "This will not be worked on"
+
+- name: "duplicate"
+  color: "cfd3d7"
+  description: "This issue or pull request already exists"
+
+- name: "good first issue"
+  color: "7057ff"
+  description: "Good for newcomers"
+
+- name: "help wanted"
+  color: "008672"
+  description: "Extra attention is needed"
+
+# === Area ===
+- name: "area:http"
+  color: "1d76db"
+  description: "HTTP mock protocol"
+
+- name: "area:jms"
+  color: "5319e7"
+  description: "JMS mock protocol"
+
+- name: "area:ui"
+  color: "f9d0c4"
+  description: "Frontend / Vue.js UI"
+
+- name: "area:api"
+  color: "bfd4f2"
+  description: "Backend REST API"
