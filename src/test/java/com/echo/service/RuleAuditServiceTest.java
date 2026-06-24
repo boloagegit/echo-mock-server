@@ -11,6 +11,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -92,22 +93,27 @@ class RuleAuditServiceTest {
 
     @Test
     void getAuditLogs_shouldReturnLogs() {
-        when(repository.findByRuleIdOrderByTimestampDesc(eq("uuid-1"), any()))
-                .thenReturn(List.of(new RuleAuditLog()));
+        Object[] row = new Object[]{1L, "uuid-1", RuleAuditLog.Action.CREATE, "admin", LocalDateTime.now(), true, false};
+        when(repository.findSummaryByRuleId(eq("uuid-1"), any()))
+                .thenReturn(Collections.singletonList(row));
 
         List<RuleAuditLog> logs = service.getAuditLogs("uuid-1", 10);
 
         assertThat(logs).hasSize(1);
+        assertThat(logs.get(0).getRuleId()).isEqualTo("uuid-1");
+        assertThat(logs.get(0).getAction()).isEqualTo(RuleAuditLog.Action.CREATE);
     }
 
     @Test
     void getAllAuditLogs_shouldReturnLogs() {
-        when(repository.findAllByOrderByTimestampDesc(any()))
-                .thenReturn(List.of(new RuleAuditLog()));
+        Object[] row = new Object[]{1L, "uuid-1", RuleAuditLog.Action.UPDATE, "admin", LocalDateTime.now(), true, true};
+        when(repository.findAllSummary(any()))
+                .thenReturn(Collections.singletonList(row));
 
         List<RuleAuditLog> logs = service.getAllAuditLogs(10);
 
         assertThat(logs).hasSize(1);
+        assertThat(logs.get(0).getRuleId()).isEqualTo("uuid-1");
     }
 
     @Test

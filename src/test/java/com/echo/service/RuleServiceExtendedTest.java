@@ -1,7 +1,6 @@
 package com.echo.service;
 
 import com.echo.config.CacheConfig;
-import com.echo.entity.HttpRule;
 import com.echo.protocol.ProtocolHandlerRegistry;
 import com.echo.repository.ResponseRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -150,12 +149,8 @@ class RuleServiceExtendedTest {
 
     @Test
     void findIdsByTag_shouldMatchTagPattern() {
-        HttpRule rule1 = HttpRule.builder().id("r1").matchKey("/api").method("GET")
-                .tags("{\"env\":\"prod\",\"team\":\"A\"}").build();
-        HttpRule rule2 = HttpRule.builder().id("r2").matchKey("/api2").method("GET")
-                .tags("{\"env\":\"dev\"}").build();
-
-        when(protocolHandlerRegistry.findAllRules()).thenReturn(List.of(rule1, rule2));
+        when(protocolHandlerRegistry.findIdsByTagPattern("%\"env\":\"prod\"%"))
+                .thenReturn(List.of("r1"));
 
         List<String> result = ruleService.findIdsByTag("env", "prod");
 
@@ -164,10 +159,8 @@ class RuleServiceExtendedTest {
 
     @Test
     void findIdsByTag_shouldReturnEmpty_whenNoMatch() {
-        HttpRule rule = HttpRule.builder().id("r1").matchKey("/api").method("GET")
-                .tags("{\"env\":\"dev\"}").build();
-
-        when(protocolHandlerRegistry.findAllRules()).thenReturn(List.of(rule));
+        when(protocolHandlerRegistry.findIdsByTagPattern("%\"env\":\"prod\"%"))
+                .thenReturn(List.of());
 
         List<String> result = ruleService.findIdsByTag("env", "prod");
 
@@ -175,14 +168,13 @@ class RuleServiceExtendedTest {
     }
 
     @Test
-    void findIdsByTag_shouldSkipNullTags() {
-        HttpRule rule = HttpRule.builder().id("r1").matchKey("/api").method("GET")
-                .tags(null).build();
-
-        when(protocolHandlerRegistry.findAllRules()).thenReturn(List.of(rule));
+    void findIdsByTag_shouldDelegateToRegistry() {
+        when(protocolHandlerRegistry.findIdsByTagPattern("%\"env\":\"prod\"%"))
+                .thenReturn(List.of("r1", "r2"));
 
         List<String> result = ruleService.findIdsByTag("env", "prod");
 
-        assertThat(result).isEmpty();
+        assertThat(result).containsExactly("r1", "r2");
+        verify(protocolHandlerRegistry).findIdsByTagPattern("%\"env\":\"prod\"%");
     }
 }

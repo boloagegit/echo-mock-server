@@ -53,4 +53,8 @@ public interface HttpRuleRepository extends JpaRepository<HttpRule, String> {
     @Modifying
     @Query("UPDATE HttpRule r SET r.extendedAt = :extendedAt WHERE r.id IN :ids")
     int extendByIds(@Param("ids") List<String> ids, @Param("extendedAt") LocalDateTime extendedAt);
+
+    /** 依標籤 pattern 查詢規則 ID（避免全表載入） */
+    @Query("SELECT r.id FROM HttpRule r WHERE r.tags LIKE :pattern ESCAPE '\\'")
+    List<String> findIdsByTagPattern(@Param("pattern") String pattern);
 }

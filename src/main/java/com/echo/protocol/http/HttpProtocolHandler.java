@@ -247,6 +247,11 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
         return dto.getMethod() + " " + dto.getMatchKey();
     }
 
+    @Override
+    public List<String> findIdsByTagPattern(String pattern) {
+        return repository.findIdsByTagPattern(pattern);
+    }
+
     private String generateRuleDescription(RuleDto dto) {
         StringBuilder sb = new StringBuilder();
         sb.append(dto.getMethod()).append(" ").append(dto.getMatchKey());

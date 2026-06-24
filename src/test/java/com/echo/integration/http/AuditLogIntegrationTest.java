@@ -48,7 +48,6 @@ class AuditLogIntegrationTest extends BaseIntegrationTest {
         assertThat(audits).isNotEmpty();
         assertThat(audits.get(0).get("action")).isEqualTo("CREATE");
         assertThat(audits.get(0).get("ruleId")).isEqualTo(rule.getId());
-        assertThat(audits.get(0).get("afterJson")).isNotNull();
     }
 
     @Test
@@ -68,8 +67,7 @@ class AuditLogIntegrationTest extends BaseIntegrationTest {
                 .filter(a -> "UPDATE".equals(a.get("action")))
                 .findFirst().orElse(null);
         assertThat(updateAudit).isNotNull();
-        assertThat(updateAudit.get("beforeJson")).isNotNull();
-        assertThat(updateAudit.get("afterJson")).isNotNull();
+        assertThat(updateAudit.get("operator")).isNotNull();
     }
 
     @Test
@@ -89,7 +87,7 @@ class AuditLogIntegrationTest extends BaseIntegrationTest {
                 .filter(a -> ruleId.equals(a.get("ruleId")) && "DELETE".equals(a.get("action")))
                 .findFirst().orElse(null);
         assertThat(deleteAudit).isNotNull();
-        assertThat(deleteAudit.get("beforeJson")).isNotNull();
+        assertThat(deleteAudit.get("operator")).isNotNull();
     }
 
     @Test

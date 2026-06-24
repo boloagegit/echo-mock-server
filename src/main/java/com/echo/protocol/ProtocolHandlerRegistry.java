@@ -146,6 +146,15 @@ public class ProtocolHandlerRegistry {
     }
 
     /**
+     * 依標籤 pattern 查詢規則 ID（跨協定，避免全表載入）
+     */
+    public List<String> findIdsByTagPattern(String pattern) {
+        return handlers.stream()
+                .flatMap(h -> h.findIdsByTagPattern(pattern).stream())
+                .toList();
+    }
+
+    /**
      * 將 Rule 轉換為 DTO（自動找對應的 Handler）
      */
     public RuleDto toDto(BaseRule rule, Response response, boolean includeBody) {

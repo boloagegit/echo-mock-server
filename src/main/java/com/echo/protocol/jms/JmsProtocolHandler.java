@@ -193,6 +193,11 @@ public class JmsProtocolHandler extends AbstractProtocolHandler {
         return "JMS: " + (dto.getMatchKey() != null ? dto.getMatchKey() : "規則");
     }
 
+    @Override
+    public List<String> findIdsByTagPattern(String pattern) {
+        return repository.findIdsByTagPattern(pattern);
+    }
+
     private FaultType parseFaultType(String value) {
         if (value == null || value.isBlank()) {
             return FaultType.NONE;
