@@ -333,7 +333,7 @@ public class AdminController {
                         return ResponseEntity.ok(result.dto);
                     } catch (ObjectOptimisticLockingFailureException e) {
                         return ResponseEntity.status(HttpStatus.CONFLICT)
-                                .body(Map.of("error", "Rule was modified by another user. Please refresh and try again."));
+                                .body(Map.of("error", "OPTIMISTIC_LOCK_CONFLICT"));
                     }
                 })
                 .orElse(ResponseEntity.notFound().build());

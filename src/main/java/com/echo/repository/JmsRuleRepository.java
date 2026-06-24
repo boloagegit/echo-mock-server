@@ -16,9 +16,6 @@ public interface JmsRuleRepository extends JpaRepository<JmsRule, String> {
     @Query("SELECT r FROM JmsRule r WHERE (r.queueName = :queue OR r.queueName = '*') AND r.enabled = true ORDER BY r.id")
     List<JmsRule> findByQueueNameOrWildcard(@Param("queue") String queueName);
 
-    @Query("SELECT r FROM JmsRule r WHERE r.description LIKE %:keyword% OR r.queueName LIKE %:keyword% ORDER BY r.id DESC")
-    List<JmsRule> searchByKeyword(@Param("keyword") String keyword);
-
     List<JmsRule> findAllByOrderByIdDesc();
 
     int countByResponseId(Long responseId);

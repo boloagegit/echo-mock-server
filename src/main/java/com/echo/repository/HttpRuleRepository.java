@@ -16,9 +16,6 @@ public interface HttpRuleRepository extends JpaRepository<HttpRule, String> {
     @Query("SELECT r FROM HttpRule r WHERE (r.targetHost = :host OR r.targetHost IS NULL OR r.targetHost = '' OR r.matchKey = '*') AND r.enabled = true ORDER BY r.id")
     List<HttpRule> findByTargetHostOrWildcard(@Param("host") String host);
 
-    @Query("SELECT r FROM HttpRule r WHERE r.description LIKE %:keyword% OR r.matchKey LIKE %:keyword% ORDER BY r.id DESC")
-    List<HttpRule> searchByKeyword(@Param("keyword") String keyword);
-
     List<HttpRule> findAllByOrderByIdDesc();
 
     int countByResponseId(Long responseId);
