@@ -144,6 +144,7 @@ public class ResponseTemplateService {
         handlebars.registerHelper("randomValue", (Helper<Object>) (context, options) -> {
             String type = options.hash("type", "ALPHANUMERIC");
             int length = options.hash("length", 8);
+            length = Math.min(length, 10000);
 
             return switch (type.toUpperCase(Locale.ROOT)) {
                 case "UUID" -> UUID.randomUUID().toString();
@@ -188,7 +189,19 @@ public class ResponseTemplateService {
         // {{#if (matches str regex)}}
         handlebars.registerHelper("matches", (Helper<Object>) (str, options) -> {
             String regex = options.param(0, "");
-            return toString(str).matches(".*" + regex + ".*");
+            String input = toString(str);
+            if (regex.length() > 200 || input.length() > 10000) {
+                return false;
+            }
+            try {
+                CharSequence wrapped = new InterruptibleCharSequence(input, 1000);
+                return java.util.regex.Pattern.compile(".*" + regex + ".*")
+                        .matcher(wrapped).matches();
+            } catch (InterruptibleCharSequence.RegexTimeoutException e) {
+                return false;
+            } catch (Exception e) {
+                return false;
+            }
         });
 
         // Phase 2: 字串處理
@@ -200,7 +213,7 @@ public class ResponseTemplateService {
             if (s.isEmpty()) {
                 return Collections.emptyList();
             }
-            return Arrays.asList(s.split(delimiter));
+            return Arrays.asList(s.split(java.util.regex.Pattern.quote(delimiter)));
         });
 
         // {{size collection}}

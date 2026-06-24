@@ -56,6 +56,8 @@ public class ConditionMatcher {
     private static final int MAX_XML_SIZE = 10 * 1024 * 1024; // 10MB
     private static final int MAX_JSON_SIZE = 10 * 1024 * 1024; // 10MB
     private static final int MAX_REGEX_INPUT_LENGTH = 10000;
+    private static final int MAX_REGEX_PATTERN_LENGTH = 200;
+    private static final long REGEX_TIMEOUT_MS = 1000;
 
     /** 單一欄位值長度上限，超過則跳過比對（防止 base64 等大值拖慢匹配） */
     private final int maxFieldValueLength;
@@ -683,6 +685,10 @@ public class ConditionMatcher {
     }
 
     private boolean safeRegexMatch(String pattern, String input) {
+        if (pattern.length() > MAX_REGEX_PATTERN_LENGTH) {
+            log.warn("Regex pattern too long: {} chars (max {})", pattern.length(), MAX_REGEX_PATTERN_LENGTH);
+            return false;
+        }
         if (input.length() > MAX_REGEX_INPUT_LENGTH) {
             log.warn("Input too long for regex match: {} chars", input.length());
             return false;
@@ -698,7 +704,11 @@ public class ConditionMatcher {
                     return false;
                 }
             }
-            return compiledPattern.matcher(input).matches();
+            CharSequence wrapped = new InterruptibleCharSequence(input, REGEX_TIMEOUT_MS);
+            return compiledPattern.matcher(wrapped).matches();
+        } catch (InterruptibleCharSequence.RegexTimeoutException e) {
+            log.warn("Regex match timed out: pattern={}", pattern);
+            return false;
         } catch (Exception e) {
             log.warn("Regex match failed: {}", e.getMessage());
             return false;
