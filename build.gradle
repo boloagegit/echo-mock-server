@@ -203,8 +203,10 @@ tasks.register('dev') {
     group = 'application'
     description = 'Run in dev mode (no login required)'
     doFirst {
+        // dev task 預設激活 dev profile，DB 使用 application.yml 的預設 H2
+        // 如需 SQLite: ./gradlew bootRun --args='--spring.profiles.active=dev,sqlite'
         bootRun.configure {
-            args = ['--spring.profiles.active=dev']
+            args = ["--spring.profiles.active=dev"]
         }
     }
     finalizedBy 'bootRun'

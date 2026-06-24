@@ -22,19 +22,27 @@ spring:
     exclude:
       - org.springframework.boot.autoconfigure.ldap.LdapAutoConfiguration
 
-  # SQLite Database (預設，穩定不怕 crash)
+  # Database: 預設 H2 Embedded，啟用 sqlite profile 可覆蓋
+  # 切換方式: --spring.profiles.active=sqlite 或 SPRING_PROFILES_ACTIVE=sqlite
   datasource:
-    url: jdbc:sqlite:./mockdb.sqlite?journal_mode=WAL&busy_timeout=10000&synchronous=NORMAL&foreign_keys=ON
-    driver-class-name: org.sqlite.JDBC
+    url: jdbc:h2:file:./mockdb;AUTO_RECONNECT=TRUE;DB_CLOSE_ON_EXIT=FALSE;WRITE_DELAY=100;TRACE_LEVEL_FILE=0
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
     hikari:
-      maximum-pool-size: 3        # SQLite 單寫者，3 連線足夠 (1 writer + 2 reader)
-      minimum-idle: 1
-      connection-timeout: 15000   # 必須 > busy_timeout，避免 pool 比 SQLite 先放棄
-      idle-timeout: 600000        # 10 分鐘（SQLite in-process，不需頻繁回收）
-      max-lifetime: 0             # 不限制（SQLite 無 server 端 timeout）
+      maximum-pool-size: 15
+      minimum-idle: 3
+      connection-timeout: 10000
+      idle-timeout: 120000
+      max-lifetime: 1800000
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
 
   jpa:
-    database-platform: org.hibernate.community.dialect.SQLiteDialect
+    database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
       ddl-auto: update
     show-sql: false
