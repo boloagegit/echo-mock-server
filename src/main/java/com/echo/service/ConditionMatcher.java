@@ -512,7 +512,7 @@ public class ConditionMatcher {
         }
         if (condition.startsWith("//")) {
             if (prepared.xmlDoc != null) {
-                return matchXPathPrepared(condition, prepared.xmlDoc);
+                return matchXmlNodesPrepared(condition, prepared.xmlDoc);
             }
             return matchXPath(condition, prepared.raw);
         }
@@ -520,39 +520,19 @@ public class ConditionMatcher {
             return matchJsonPrepared(condition, prepared.jsonNode);
         }
         if (prepared.xmlDoc != null) {
-            return matchXmlPrepared(condition, prepared.xmlDoc);
+            return matchXmlNodesPrepared(condition, prepared.xmlDoc);
         }
         return prepared.raw != null && prepared.raw.contains(condition);
     }
 
-    private boolean matchXPathPrepared(String condition, Document doc) {
+    private boolean matchXmlNodesPrepared(String condition, Document doc) {
         var parsed = parseCondition(condition);
         try {
             NodeList nodes = findXmlNodes(parsed.field(), doc);
             for (int i = 0; i < nodes.getLength(); i++) {
                 String text = nodes.item(i).getTextContent().trim();
                 if (text.length() > maxFieldValueLength) {
-                    log.debug("Skipping XPath match: node value too large ({} chars), condition: {}", text.length(), condition);
-                    continue;
-                }
-                if (matchValue(parsed, text)) {
-                    return true;
-                }
-            }
-            return false;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private boolean matchXmlPrepared(String condition, Document doc) {
-        var parsed = parseCondition(condition);
-        try {
-            NodeList nodes = findXmlNodes(parsed.field(), doc);
-            for (int i = 0; i < nodes.getLength(); i++) {
-                String text = nodes.item(i).getTextContent().trim();
-                if (text.length() > maxFieldValueLength) {
-                    log.debug("Skipping XML match: node value too large ({} chars), condition: {}", text.length(), condition);
+                    log.debug("Skipping XML/XPath match: node value too large ({} chars), condition: {}", text.length(), condition);
                     continue;
                 }
                 if (matchValue(parsed, text)) {

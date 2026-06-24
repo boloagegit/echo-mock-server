@@ -94,6 +94,9 @@ public class ProtocolHandlerRegistry {
      * 批次更新啟用狀態（跨協定）
      */
     public int updateEnabled(List<String> ids, boolean enabled) {
+        if (ids.isEmpty()) {
+            return 0;
+        }
         return handlers.stream()
                 .mapToInt(h -> h.updateEnabled(ids, enabled))
                 .sum();
@@ -103,6 +106,9 @@ public class ProtocolHandlerRegistry {
      * 批次更新保護狀態（跨協定）
      */
     public int updateProtected(List<String> ids, boolean isProtected) {
+        if (ids.isEmpty()) {
+            return 0;
+        }
         return handlers.stream()
                 .mapToInt(h -> h.updateProtected(ids, isProtected))
                 .sum();
@@ -112,6 +118,9 @@ public class ProtocolHandlerRegistry {
      * 批次展延規則（跨協定）
      */
     public int extendRules(List<String> ids, LocalDateTime extendedAt) {
+        if (ids.isEmpty()) {
+            return 0;
+        }
         return handlers.stream()
                 .mapToInt(h -> h.extendRules(ids, extendedAt))
                 .sum();
