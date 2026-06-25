@@ -1,0 +1,323 @@
+package com.echo.config;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+
+/**
+ * H2SchemaMigration 整合測試
+ * <p>
+ * 模擬真實場景：舊 H2 資料庫使用 SEQUENCE 策略建表，
+ * 切換到 IDENTITY 策略後，migration 必須能：
+ * <ol>
+ *   <li>偵測到欄位不是 IDENTITY</li>
+ *   <li>自動 ALTER COLUMN + RESTART WITH max(id)+1</li>
+ *   <li>既有資料完整保留</li>
+ *   <li>新 insert 使用 default 關鍵字能正常運作</li>
+ * </ol>
+ */
+class H2SchemaMigrationTest {
+
+    private DriverManagerDataSource dataSource;
+    private JdbcTemplate jdbcTemplate;
+    private H2SchemaMigration migration;
+
+    /** 用於 file-based 測試的暫存路徑 */
+    private java.nio.file.Path tempDbDir;
+
+    @BeforeEach
+    void setUp() {
+        dataSource = new DriverManagerDataSource();
+        dataSource.setDriverClassName("org.h2.Driver");
+        dataSource.setUrl("jdbc:h2:mem:migration_test;DB_CLOSE_DELAY=-1");
+        dataSource.setUsername("sa");
+        dataSource.setPassword("");
+
+        jdbcTemplate = new JdbcTemplate(dataSource);
+        migration = new H2SchemaMigration(dataSource, jdbcTemplate);
+    }
+
+    @AfterEach
+    void tearDown() {
+        jdbcTemplate.execute("DROP ALL OBJECTS");
+        // 清理 file-based DB 暫存檔
+        if (tempDbDir != null) {
+            try {
+                java.nio.file.Files.walk(tempDbDir)
+                        .sorted(java.util.Comparator.reverseOrder())
+                        .map(java.nio.file.Path::toFile)
+                        .forEach(java.io.File::delete);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("舊 SEQUENCE schema + 既有資料 → migration 後 IDENTITY insert 正常")
+    void shouldMigrateSequenceSchemaToIdentity() throws Exception {
+        // Arrange: 模擬舊 schema（SEQUENCE 策略建出的表，id 沒有 IDENTITY）
+        jdbcTemplate.execute("""
+                CREATE SEQUENCE response_sequence START WITH 1 INCREMENT BY 1
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE responses (
+                    id BIGINT NOT NULL PRIMARY KEY,
+                    version BIGINT,
+                    description VARCHAR(255),
+                    body CLOB,
+                    body_size INTEGER,
+                    content_type VARCHAR(20),
+                    created_at TIMESTAMP,
+                    updated_at TIMESTAMP,
+                    extended_at TIMESTAMP
+                )
+                """);
+
+        // 用 SEQUENCE 插入 3 筆既有資料（模擬舊版本運行時的狀態）
+        jdbcTemplate.execute("INSERT INTO responses (id, version, description, body, body_size) " +
+                "VALUES (NEXT VALUE FOR response_sequence, 0, 'Response A', '{\"a\":1}', 7)");
+        jdbcTemplate.execute("INSERT INTO responses (id, version, description, body, body_size) " +
+                "VALUES (NEXT VALUE FOR response_sequence, 0, 'Response B', '{\"b\":2}', 7)");
+        jdbcTemplate.execute("INSERT INTO responses (id, version, description, body, body_size) " +
+                "VALUES (NEXT VALUE FOR response_sequence, 0, 'Response C', '{\"c\":3}', 7)");
+
+        // 確認 migration 前，使用 default 會失敗
+        assertThatCode(() -> jdbcTemplate.execute(
+                "INSERT INTO responses (id, version, description, body_size) VALUES (default, 0, 'should fail', 0)"))
+                .as("Before migration, 'default' keyword should fail on non-IDENTITY column")
+                .isInstanceOf(Exception.class);
+
+        // Act: 執行 migration
+        migration.run(null);
+
+        // Assert 1: 既有資料完整保留
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM responses", Integer.class);
+        assertThat(count).isEqualTo(3);
+
+        // Assert 2: 既有資料內容正確
+        String desc = jdbcTemplate.queryForObject(
+                "SELECT description FROM responses WHERE id = 1", String.class);
+        assertThat(desc).isEqualTo("Response A");
+
+        // Assert 3: 新 insert 使用 IDENTITY（Hibernate 產生的 SQL 格式）能正常運作
+        assertThatCode(() -> jdbcTemplate.execute(
+                "INSERT INTO responses (id, version, description, body_size) VALUES (default, 0, 'New Response', 10)"))
+                .doesNotThrowAnyException();
+
+        // Assert 4: 新 ID 從 max+1 開始（既有最大 ID 是 3，新的應該是 4）
+        Long newId = jdbcTemplate.queryForObject(
+                "SELECT id FROM responses WHERE description = 'New Response'", Long.class);
+        assertThat(newId).isEqualTo(4L);
+    }
+
+    @Test
+    @DisplayName("已經是 IDENTITY schema → migration 跳過，不影響既有資料")
+    void shouldSkipWhenAlreadyIdentity() throws Exception {
+        // Arrange: 表已經是 IDENTITY（新建 DB 的情況）
+        jdbcTemplate.execute("""
+                CREATE TABLE responses (
+                    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+                    version BIGINT,
+                    description VARCHAR(255),
+                    body CLOB,
+                    body_size INTEGER,
+                    content_type VARCHAR(20),
+                    created_at TIMESTAMP,
+                    updated_at TIMESTAMP,
+                    extended_at TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute(
+                "INSERT INTO responses (version, description, body_size) VALUES (0, 'Existing', 5)");
+
+        // Act: migration 應該偵測到已是 IDENTITY 而跳過
+        migration.run(null);
+
+        // Assert: 資料不受影響，insert 正常
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM responses", Integer.class);
+        assertThat(count).isEqualTo(1);
+
+        jdbcTemplate.execute(
+                "INSERT INTO responses (id, version, description, body_size) VALUES (default, 0, 'Another', 3)");
+
+        Long maxId = jdbcTemplate.queryForObject("SELECT MAX(id) FROM responses", Long.class);
+        assertThat(maxId).isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("空表（無既有資料）→ migration 後 IDENTITY 從 1 開始")
+    void shouldHandleEmptyTable() throws Exception {
+        // Arrange: 舊 schema 但沒有資料
+        jdbcTemplate.execute("""
+                CREATE TABLE responses (
+                    id BIGINT NOT NULL PRIMARY KEY,
+                    version BIGINT,
+                    description VARCHAR(255),
+                    body CLOB,
+                    body_size INTEGER,
+                    content_type VARCHAR(20),
+                    created_at TIMESTAMP,
+                    updated_at TIMESTAMP,
+                    extended_at TIMESTAMP
+                )
+                """);
+
+        // Act
+        migration.run(null);
+
+        // Assert: insert 正常，ID 從 1 開始
+        jdbcTemplate.execute(
+                "INSERT INTO responses (id, version, description, body_size) VALUES (default, 0, 'First', 5)");
+
+        Long id = jdbcTemplate.queryForObject(
+                "SELECT id FROM responses WHERE description = 'First'", Long.class);
+        assertThat(id).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("非 H2 資料庫（如 SQLite）→ migration 完全不執行")
+    void shouldSkipForNonH2Database() throws Exception {
+        // Arrange: 模擬 SQLite（用 SingleConnectionDataSource 確保同一連線）
+        var sqliteDs = new org.springframework.jdbc.datasource.SingleConnectionDataSource(
+                "jdbc:sqlite::memory:", "sa", "", true);
+
+        JdbcTemplate sqliteJdbc = new JdbcTemplate(sqliteDs);
+        H2SchemaMigration sqliteMigration = new H2SchemaMigration(sqliteDs, sqliteJdbc);
+
+        // SQLite 建表
+        sqliteJdbc.execute("""
+                CREATE TABLE responses (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    version INTEGER,
+                    description TEXT,
+                    body TEXT,
+                    body_size INTEGER
+                )
+                """);
+        sqliteJdbc.execute(
+                "INSERT INTO responses (version, description, body_size) VALUES (0, 'SQLite row', 10)");
+
+        // Act: 不應該對 SQLite 做任何事
+        assertThatCode(() -> sqliteMigration.run(null)).doesNotThrowAnyException();
+
+        // Assert: SQLite 資料不受影響
+        Integer count = sqliteJdbc.queryForObject("SELECT COUNT(*) FROM responses", Integer.class);
+        assertThat(count).isEqualTo(1);
+
+        sqliteDs.destroy();
+    }
+
+    @Test
+    @DisplayName("端到端：真實 H2 檔案資料庫 - 舊 SEQUENCE schema → 關閉 → 重開 → migration → insert 成功")
+    void endToEnd_realFileBasedH2_migrationWorks() throws Exception {
+        // === Phase 1: 模擬「舊版本應用」建立 H2 file DB 並寫入資料 ===
+        tempDbDir = java.nio.file.Files.createTempDirectory("h2_migration_e2e");
+        String dbPath = tempDbDir.resolve("mockdb").toString();
+        String jdbcUrl = "jdbc:h2:file:" + dbPath + ";AUTO_RECONNECT=TRUE";
+
+        // 用舊 schema 建表（SEQUENCE 策略，id 沒有 IDENTITY）
+        var oldDs = new DriverManagerDataSource(jdbcUrl, "sa", "");
+        oldDs.setDriverClassName("org.h2.Driver");
+        var oldJdbc = new JdbcTemplate(oldDs);
+
+        oldJdbc.execute("CREATE SEQUENCE response_sequence START WITH 1 INCREMENT BY 1");
+        oldJdbc.execute("""
+                CREATE TABLE responses (
+                    id BIGINT NOT NULL PRIMARY KEY,
+                    version BIGINT,
+                    description VARCHAR(255),
+                    body CLOB,
+                    body_size INTEGER,
+                    content_type VARCHAR(20),
+                    created_at TIMESTAMP,
+                    updated_at TIMESTAMP,
+                    extended_at TIMESTAMP
+                )
+                """);
+
+        // 插入 5 筆資料（模擬生產環境累積的資料）
+        for (int i = 1; i <= 5; i++) {
+            oldJdbc.execute(String.format(
+                    "INSERT INTO responses (id, version, description, body, body_size, content_type, created_at, updated_at) " +
+                            "VALUES (NEXT VALUE FOR response_sequence, 0, 'Response %d', '{\"data\":%d}', %d, 'TEXT', NOW(), NOW())",
+                    i, i, 8 + i));
+        }
+
+        // 驗證舊資料寫入成功
+        Integer oldCount = oldJdbc.queryForObject("SELECT COUNT(*) FROM responses", Integer.class);
+        assertThat(oldCount).isEqualTo(5);
+
+        // 關閉舊連線（模擬停止舊版本應用）
+        oldJdbc.execute("SHUTDOWN");
+
+        // === Phase 2: 模擬「新版本應用」啟動 — migration 自動修復 ===
+        var newDs = new DriverManagerDataSource(jdbcUrl, "sa", "");
+        newDs.setDriverClassName("org.h2.Driver");
+        var newJdbc = new JdbcTemplate(newDs);
+        var fileMigration = new H2SchemaMigration(newDs, newJdbc);
+
+        // 確認 migration 前，default 插入會失敗
+        assertThatCode(() -> newJdbc.execute(
+                "INSERT INTO responses (id, version, description, body_size) VALUES (default, 0, 'fail', 0)"))
+                .isInstanceOf(Exception.class);
+
+        // 執行 migration
+        fileMigration.run(null);
+
+        // === Phase 3: 驗證結果 ===
+
+        // 既有 5 筆資料完整保留
+        Integer newCount = newJdbc.queryForObject("SELECT COUNT(*) FROM responses", Integer.class);
+        assertThat(newCount).isEqualTo(5);
+
+        // 每筆資料內容正確
+        for (int i = 1; i <= 5; i++) {
+            String desc = newJdbc.queryForObject(
+                    "SELECT description FROM responses WHERE id = ?", String.class, (long) i);
+            assertThat(desc).isEqualTo("Response " + i);
+        }
+
+        // 新 insert（使用 Hibernate IDENTITY 產生的 SQL 格式）成功
+        newJdbc.execute(
+                "INSERT INTO responses (id, version, description, body, body_size, content_type, created_at, updated_at) " +
+                        "VALUES (default, 0, 'New after migration', '{\"new\":true}', 12, 'TEXT', NOW(), NOW())");
+
+        // 新 ID 是 6（max 5 + 1）
+        Long newId = newJdbc.queryForObject(
+                "SELECT id FROM responses WHERE description = 'New after migration'", Long.class);
+        assertThat(newId).isEqualTo(6L);
+
+        // 連續 insert 第二筆，ID 是 7
+        newJdbc.execute(
+                "INSERT INTO responses (id, version, description, body_size) VALUES (default, 0, 'Second new', 5)");
+        Long secondId = newJdbc.queryForObject(
+                "SELECT id FROM responses WHERE description = 'Second new'", Long.class);
+        assertThat(secondId).isEqualTo(7L);
+
+        // 總共 7 筆
+        Integer totalCount = newJdbc.queryForObject("SELECT COUNT(*) FROM responses", Integer.class);
+        assertThat(totalCount).isEqualTo(7);
+
+        // === Phase 4: 模擬第二次啟動 — migration 不應重複執行 ===
+        fileMigration.run(null);  // 再跑一次
+
+        // 資料不變，ID sequence 沒有被 reset
+        Integer stillSeven = newJdbc.queryForObject("SELECT COUNT(*) FROM responses", Integer.class);
+        assertThat(stillSeven).isEqualTo(7);
+
+        // 第三筆新 insert，ID 繼續遞增（8）
+        newJdbc.execute(
+                "INSERT INTO responses (id, version, description, body_size) VALUES (default, 0, 'Third after re-migration', 3)");
+        Long thirdId = newJdbc.queryForObject(
+                "SELECT id FROM responses WHERE description = 'Third after re-migration'", Long.class);
+        assertThat(thirdId).isEqualTo(8L);
+
+        newJdbc.execute("SHUTDOWN");
+    }
+}
