@@ -7,6 +7,7 @@
     "settings": "Settings",
     "help": "Help",
     "guestMode": "Guest Mode",
+    "changePassword": "Change Password",
     "logout": "Logout",
     "login": "Login",
     "accounts": "Account Management"
@@ -51,6 +52,7 @@
     "collapsePreview": "Collapse Preview",
     "expandPreview": "Expand Preview",
     "quickCopy": "Quick Copy",
+    "history": "Change History",
     "viewResponse": "View Response",
     "edit": "Edit",
     "delete": "Delete",

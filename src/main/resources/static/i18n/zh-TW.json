@@ -7,6 +7,7 @@
     "settings": "系統設定",
     "help": "說明",
     "guestMode": "訪客模式",
+    "changePassword": "修改密碼",
     "logout": "登出",
     "login": "登入",
     "accounts": "帳號管理"
@@ -51,6 +52,7 @@
     "collapsePreview": "收合預覽",
     "expandPreview": "展開預覽",
     "quickCopy": "快速複製",
+    "history": "變更歷史",
     "viewResponse": "查看回應",
     "edit": "編輯",
     "delete": "刪除",

@@ -37,7 +37,7 @@ const useAudit = (deps) => {
         if (auditFilter.value.operator) arr = arr.filter(l => l.operator?.includes(auditFilter.value.operator));
         if (auditFilter.value.keyword) {
             const kw = auditFilter.value.keyword.toLowerCase();
-            arr = arr.filter(l => (l.beforeJson || '').toLowerCase().includes(kw) || (l.afterJson || '').toLowerCase().includes(kw));
+            arr = arr.filter(l => (l.ruleId || '').toLowerCase().includes(kw) || (l.beforeJson || '').toLowerCase().includes(kw) || (l.afterJson || '').toLowerCase().includes(kw));
         }
         return arr;
     });

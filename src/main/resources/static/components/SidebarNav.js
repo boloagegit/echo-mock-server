@@ -25,7 +25,7 @@ const SidebarNav = {
   emits: [
     'update:page', 'update:sidebarCollapsed', 'update:mobileMenu',
     'show-help', 'toggle-theme', 'toggle-density', 'switch-locale',
-    'login', 'logout', 'start-tour'
+    'login', 'logout', 'start-tour', 'change-password'
   ],
   inject: ['t'],
   template: /* html */`
@@ -95,6 +95,9 @@ const SidebarNav = {
         <div v-else class="nav-user nav-guest">
           <div class="user-avatar"><i class="bi bi-person"></i></div>
           <span class="nav-text nav-user-name">{{t('sidebar.guestMode')}}</span>
+        </div>
+        <div v-if="isLoggedIn && status?.isBuiltinUser" class="nav-item" @click="$emit('change-password')">
+          <i class="bi bi-key"></i><span class="nav-text">{{t('sidebar.changePassword')}}</span>
         </div>
         <div v-if="isLoggedIn" class="nav-item" @click="$emit('logout')">
           <i class="bi bi-box-arrow-left"></i><span class="nav-text">{{t('sidebar.logout')}}</span>
