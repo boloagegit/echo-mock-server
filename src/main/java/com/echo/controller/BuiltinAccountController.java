@@ -12,9 +12,11 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.persistence.OptimisticLockException;
 import jakarta.servlet.http.HttpServletRequest;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -35,19 +37,14 @@ public class BuiltinAccountController {
 
     /** 公開端點速率限制：每個 IP 每分鐘最多 10 次 */
     private static final int RATE_LIMIT = 10;
-    private static final long RATE_WINDOW_MS = 60_000;
-    private final ConcurrentHashMap<String, long[]> rateLimitMap = new ConcurrentHashMap<>();
+    private final Cache<String, AtomicInteger> rateLimitCache = Caffeine.newBuilder()
+            .expireAfterWrite(1, TimeUnit.MINUTES)
+            .maximumSize(10000)
+            .build();
 
     private boolean isRateLimited(String ip) {
-        long now = System.currentTimeMillis();
-        long[] window = rateLimitMap.compute(ip, (k, v) -> {
-            if (v == null || now - v[1] > RATE_WINDOW_MS) {
-                return new long[]{1, now};
-            }
-            v[0]++;
-            return v;
-        });
-        return window[0] > RATE_LIMIT;
+        AtomicInteger counter = rateLimitCache.get(ip, k -> new AtomicInteger(0));
+        return counter.incrementAndGet() > RATE_LIMIT;
     }
 
     @GetMapping
