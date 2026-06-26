@@ -218,11 +218,26 @@ public class RuleAuditService {
     }
 
     public List<RuleAuditLog> getAuditLogs(String ruleId, int limit) {
-        return repository.findByRuleIdOrderByTimestampDesc(ruleId, PageRequest.of(0, limit));
+        return repository.findSummaryByRuleId(ruleId, PageRequest.of(0, limit)).stream()
+                .map(this::mapSummaryRow)
+                .toList();
     }
 
     public List<RuleAuditLog> getAllAuditLogs(int limit) {
-        return repository.findAllByOrderByTimestampDesc(PageRequest.of(0, limit));
+        return repository.findAllSummary(PageRequest.of(0, limit)).stream()
+                .map(this::mapSummaryRow)
+                .toList();
+    }
+
+    /** Maps Object[] from findSummaryByRuleId/findAllSummary: [id, ruleId, action, operator, timestamp] */
+    private RuleAuditLog mapSummaryRow(Object[] row) {
+        return RuleAuditLog.builder()
+                .id((Long) row[0])
+                .ruleId((String) row[1])
+                .action((RuleAuditLog.Action) row[2])
+                .operator((String) row[3])
+                .timestamp((LocalDateTime) row[4])
+                .build();
     }
 
     @Transactional

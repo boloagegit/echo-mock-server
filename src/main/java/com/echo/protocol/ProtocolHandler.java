@@ -125,4 +125,9 @@ public interface ProtocolHandler {
      * 產生規則描述（用於自動建立 Response）
      */
     String generateDescription(RuleDto dto);
+
+    /**
+     * 依標籤 pattern 查詢規則 ID（避免全表載入）
+     */
+    List<String> findIdsByTagPattern(String pattern);
 }

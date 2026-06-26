@@ -1,24 +1,3 @@
-# H2 Embedded 模式 (啟用方式: --spring.profiles.active=h2)
-# 注意：H2 Embedded 有非正常關閉導致 chunk 損壞的風險
-spring:
-  datasource:
-    url: jdbc:h2:file:./mockdb;AUTO_RECONNECT=TRUE;DB_CLOSE_ON_EXIT=FALSE;WRITE_DELAY=100;TRACE_LEVEL_FILE=0
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
-    hikari:
-      maximum-pool-size: 15
-      minimum-idle: 3
-      connection-timeout: 10000
-      idle-timeout: 120000
-      max-lifetime: 1800000
-
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
-
-  jpa:
-    database-platform: org.hibernate.dialect.H2Dialect
-    hibernate:
-      ddl-auto: update
+# H2 Embedded 模式 (已為預設，此檔案保留供明確指定時使用)
+# H2 設定已移至 application.yml 作為預設值
+# 如需覆蓋 H2 連線參數可在此調整

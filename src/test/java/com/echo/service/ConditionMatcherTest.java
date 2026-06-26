@@ -280,6 +280,23 @@ class ConditionMatcherTest {
     }
 
     @Test
+    void operator_matches_shouldRejectTooLongPattern() {
+        String longPattern = "a".repeat(201);
+        String body = "{\"value\":\"test\"}";
+        assertThat(matcher.matches("value~=" + longPattern, body)).isFalse();
+    }
+
+    @Test
+    void operator_matches_shouldNotHangOnCatastrophicBacktracking() {
+        // (.*a){25} causes catastrophic backtracking even on modern JVMs
+        String evilPattern = "(.*a){25}";
+        String input = "a".repeat(25) + "b";
+        String body = "{\"value\":\"" + input + "\"}";
+        // Should return false (timeout) rather than hang
+        assertThat(matcher.matches("value~=" + evilPattern, body)).isFalse();
+    }
+
+    @Test
     void operator_notEqual_shouldMatch() {
         String body = "{\"status\":\"active\"}";
         assertThat(matcher.matches("status!=inactive", body)).isTrue();

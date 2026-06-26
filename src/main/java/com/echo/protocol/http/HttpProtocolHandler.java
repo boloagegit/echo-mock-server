@@ -220,31 +220,27 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
 
     @Override
     public int updateEnabled(List<String> ids, boolean enabled) {
-        if (ids.isEmpty()) {
-            return 0;
-        }
         return repository.updateEnabledByIds(ids, enabled);
     }
 
     @Override
     public int updateProtected(List<String> ids, boolean isProtected) {
-        if (ids.isEmpty()) {
-            return 0;
-        }
         return repository.updateProtectedByIds(ids, isProtected);
     }
 
     @Override
     public int extendRules(List<String> ids, LocalDateTime extendedAt) {
-        if (ids.isEmpty()) {
-            return 0;
-        }
         return repository.extendByIds(ids, extendedAt);
     }
 
     @Override
     public String generateDescription(RuleDto dto) {
         return dto.getMethod() + " " + dto.getMatchKey();
+    }
+
+    @Override
+    public List<String> findIdsByTagPattern(String pattern) {
+        return repository.findIdsByTagPattern(pattern);
     }
 
     private String generateRuleDescription(RuleDto dto) {

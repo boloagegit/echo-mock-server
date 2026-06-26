@@ -56,6 +56,8 @@ public class ConditionMatcher {
     private static final int MAX_XML_SIZE = 10 * 1024 * 1024; // 10MB
     private static final int MAX_JSON_SIZE = 10 * 1024 * 1024; // 10MB
     private static final int MAX_REGEX_INPUT_LENGTH = 10000;
+    private static final int MAX_REGEX_PATTERN_LENGTH = 200;
+    private static final long REGEX_TIMEOUT_MS = 1000;
 
     /** 單一欄位值長度上限，超過則跳過比對（防止 base64 等大值拖慢匹配） */
     private final int maxFieldValueLength;
@@ -510,7 +512,7 @@ public class ConditionMatcher {
         }
         if (condition.startsWith("//")) {
             if (prepared.xmlDoc != null) {
-                return matchXPathPrepared(condition, prepared.xmlDoc);
+                return matchXmlNodesPrepared(condition, prepared.xmlDoc);
             }
             return matchXPath(condition, prepared.raw);
         }
@@ -518,39 +520,19 @@ public class ConditionMatcher {
             return matchJsonPrepared(condition, prepared.jsonNode);
         }
         if (prepared.xmlDoc != null) {
-            return matchXmlPrepared(condition, prepared.xmlDoc);
+            return matchXmlNodesPrepared(condition, prepared.xmlDoc);
         }
         return prepared.raw != null && prepared.raw.contains(condition);
     }
 
-    private boolean matchXPathPrepared(String condition, Document doc) {
+    private boolean matchXmlNodesPrepared(String condition, Document doc) {
         var parsed = parseCondition(condition);
         try {
             NodeList nodes = findXmlNodes(parsed.field(), doc);
             for (int i = 0; i < nodes.getLength(); i++) {
                 String text = nodes.item(i).getTextContent().trim();
                 if (text.length() > maxFieldValueLength) {
-                    log.debug("Skipping XPath match: node value too large ({} chars), condition: {}", text.length(), condition);
-                    continue;
-                }
-                if (matchValue(parsed, text)) {
-                    return true;
-                }
-            }
-            return false;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private boolean matchXmlPrepared(String condition, Document doc) {
-        var parsed = parseCondition(condition);
-        try {
-            NodeList nodes = findXmlNodes(parsed.field(), doc);
-            for (int i = 0; i < nodes.getLength(); i++) {
-                String text = nodes.item(i).getTextContent().trim();
-                if (text.length() > maxFieldValueLength) {
-                    log.debug("Skipping XML match: node value too large ({} chars), condition: {}", text.length(), condition);
+                    log.debug("Skipping XML/XPath match: node value too large ({} chars), condition: {}", text.length(), condition);
                     continue;
                 }
                 if (matchValue(parsed, text)) {
@@ -683,6 +665,10 @@ public class ConditionMatcher {
     }
 
     private boolean safeRegexMatch(String pattern, String input) {
+        if (pattern.length() > MAX_REGEX_PATTERN_LENGTH) {
+            log.warn("Regex pattern too long: {} chars (max {})", pattern.length(), MAX_REGEX_PATTERN_LENGTH);
+            return false;
+        }
         if (input.length() > MAX_REGEX_INPUT_LENGTH) {
             log.warn("Input too long for regex match: {} chars", input.length());
             return false;
@@ -698,7 +684,11 @@ public class ConditionMatcher {
                     return false;
                 }
             }
-            return compiledPattern.matcher(input).matches();
+            CharSequence wrapped = new InterruptibleCharSequence(input, REGEX_TIMEOUT_MS);
+            return compiledPattern.matcher(wrapped).matches();
+        } catch (InterruptibleCharSequence.RegexTimeoutException e) {
+            log.warn("Regex match timed out: pattern={}", pattern);
+            return false;
         } catch (Exception e) {
             log.warn("Regex match failed: {}", e.getMessage());
             return false;

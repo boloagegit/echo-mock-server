@@ -62,4 +62,14 @@ public interface RequestLogRepository extends JpaRepository<RequestLog, Long> {
     /** 依時間區間查詢 (用於流量圖，由呼叫端在 Java 層做分鐘分組) */
     @Query("SELECT r.requestTime FROM RequestLog r WHERE r.requestTime >= :startTime ORDER BY r.requestTime")
     List<LocalDateTime> findRequestTimesSince(@Param("startTime") LocalDateTime startTime);
+
+    /** 摘要投影查詢（排除 LOB 欄位：requestBody, responseBody, matchChain） */
+    @Query("SELECT r.id, r.ruleId, r.protocol, r.method, r.endpoint, r.matched, " +
+           "r.responseTimeMs, r.matchTimeMs, r.clientIp, r.requestTime, r.targetHost, " +
+           "r.proxyStatus, r.proxyError, r.responseStatus, " +
+           "CASE WHEN r.requestBody IS NOT NULL AND r.requestBody <> '' THEN true ELSE false END, " +
+           "CASE WHEN r.responseBody IS NOT NULL AND r.responseBody <> '' THEN true ELSE false END, " +
+           "CASE WHEN r.matchChain IS NOT NULL AND r.matchChain <> '' THEN true ELSE false END " +
+           "FROM RequestLog r ORDER BY r.requestTime DESC")
+    List<Object[]> findSummaryProjections(Pageable pageable);
 }

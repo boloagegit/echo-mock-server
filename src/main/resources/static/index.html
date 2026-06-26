@@ -27,6 +27,7 @@
             @show-help="showPriorityHelp=true" @toggle-theme="toggleTheme" @toggle-density="toggleDensity"
             @start-tour="startTour"
             @switch-locale="switchLocale" @login="login" @logout="logout"
+            @change-password="showForceChangePassword=true"
         ></sidebar-nav>
         <div class="mobile-overlay" v-if="mobileMenu" @click="mobileMenu=false"></div>
         <main class="main" @click="mobileMenu=false">
@@ -69,6 +70,7 @@
                 @toggle-enabled="toggleEnabled($event)"
                 @open-edit="openEdit($event)" @copy-rule="copyRule($event)"
                 @delete-rule="deleteRule($event)"
+                @show-rule-history="auditFilter.keyword=$event.id; page='audit'; loadAudit(true)"
                 @export-rule-json="exportRuleJson($event)"
                 @remove-rule-chip="removeRuleChip($event)"
                 @clear-rule-filters="clearRuleFilters"

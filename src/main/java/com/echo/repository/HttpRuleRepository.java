@@ -16,9 +16,6 @@ public interface HttpRuleRepository extends JpaRepository<HttpRule, String> {
     @Query("SELECT r FROM HttpRule r WHERE (r.targetHost = :host OR r.targetHost IS NULL OR r.targetHost = '' OR r.matchKey = '*') AND r.enabled = true ORDER BY r.id")
     List<HttpRule> findByTargetHostOrWildcard(@Param("host") String host);
 
-    @Query("SELECT r FROM HttpRule r WHERE r.description LIKE %:keyword% OR r.matchKey LIKE %:keyword% ORDER BY r.id DESC")
-    List<HttpRule> searchByKeyword(@Param("keyword") String keyword);
-
     List<HttpRule> findAllByOrderByIdDesc();
 
     int countByResponseId(Long responseId);
@@ -53,4 +50,8 @@ public interface HttpRuleRepository extends JpaRepository<HttpRule, String> {
     @Modifying
     @Query("UPDATE HttpRule r SET r.extendedAt = :extendedAt WHERE r.id IN :ids")
     int extendByIds(@Param("ids") List<String> ids, @Param("extendedAt") LocalDateTime extendedAt);
+
+    /** 依標籤 pattern 查詢規則 ID（避免全表載入） */
+    @Query("SELECT r.id FROM HttpRule r WHERE r.tags LIKE :pattern ESCAPE '\\'")
+    List<String> findIdsByTagPattern(@Param("pattern") String pattern);
 }

@@ -45,7 +45,7 @@ const RulesPage = {
     'update:ruleViewMode', 'update:rulePage', 'update:rulePageSize',
     'update:batchSelectMode', 'update:selectedRules',
     'toggle-rule-sort', 'toggle-select-all', 'toggle-enabled',
-    'open-edit', 'copy-rule', 'delete-rule', 'export-rule-json',
+    'open-edit', 'copy-rule', 'delete-rule', 'export-rule-json', 'show-rule-history',
     'remove-rule-chip', 'clear-rule-filters',
     'toggle-rule-preview', 'handle-rule-row-click',
     'dismiss-dblclick-hint',
@@ -245,7 +245,7 @@ const RulesPage = {
                 <th class="col-hide-sm" style="width:72px">{{t('rules.thEnabled')}}</th>
                 <th class="col-hide-md" style="width:56px;cursor:pointer" @click="$emit('toggle-rule-sort', 'priority')">{{t('rules.thPriority')}} <i class="bi" :class="ruleSortIcon('priority')"></i></th>
                 <th class="col-hide-md" style="width:96px;cursor:pointer" @click="$emit('toggle-rule-sort', 'createdAt')">{{t('rules.thCreatedAt')}} <i class="bi" :class="ruleSortIcon('createdAt')"></i></th>
-                <th class="col-actions col-actions-3">{{t('rules.thActions')}}</th>
+                <th class="col-actions col-actions-4">{{t('rules.thActions')}}</th>
             </tr></thead>
             <tbody>
                 <template v-for="r in pagedRules" :key="r.id">
@@ -287,9 +287,10 @@ const RulesPage = {
                         <span class="sub-info" :title="fmtTime(r.createdAt,false)">{{fmtTime(r.createdAt)}}</span>
                         <span v-if="!r.isProtected && daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays) != null" class="badge" :class="daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays) <= 7 ? 'badge-warning' : 'badge-muted'" style="margin-left:4px">{{t('rules.daysLeft', {days: daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays)})}}</span>
                     </td>
-                    <td class="col-actions col-actions-3">
+                    <td class="col-actions col-actions-4">
                         <div style="display:flex;gap:0.25rem">
                             <button class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('toggle-rule-preview', r)" :title="rulePreviewExpanded[r.id]?t('rules.collapsePreview'):t('rules.expandPreview')"><i class="bi" :class="rulePreviewExpanded[r.id]?'bi-chevron-up':'bi-chevron-down'"></i></button>
+                            <button class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('show-rule-history', r)" :title="t('rules.history')"><i class="bi bi-clock-history"></i></button>
                             <button class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('copy-rule', r)" :title="t('rules.quickCopy')" :disabled="!isLoggedIn"><i class="bi bi-copy"></i></button>
                             <button class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('open-edit', r)" :title="t('rules.edit')" :disabled="!isLoggedIn"><i class="bi bi-pencil"></i></button>
                         </div>
@@ -399,7 +400,7 @@ const RulesPage = {
                         <th class="col-hide-sm" style="width:72px">{{t('rules.thEnabled')}}</th>
                         <th class="col-hide-md" style="width:56px">{{t('rules.thPriority')}}</th>
                         <th class="col-hide-md" style="width:96px">{{t('rules.thCreatedAt')}}</th>
-                        <th class="col-actions col-actions-3">{{t('rules.thActions')}}</th>
+                        <th class="col-actions col-actions-4">{{t('rules.thActions')}}</th>
                     </tr></thead>
                     <tbody>
                         <rule-group-row v-for="r in rulesByTagGroup['_untagged'].slice(0, getGroupLimit('_untagged'))" :key="r.id"
@@ -442,7 +443,7 @@ const RulesPage = {
                                 <th class="col-hide-sm" style="width:72px">{{t('rules.thEnabled')}}</th>
                                 <th class="col-hide-md" style="width:56px">{{t('rules.thPriority')}}</th>
                                 <th class="col-hide-md" style="width:96px">{{t('rules.thCreatedAt')}}</th>
-                                <th class="col-actions col-actions-3">{{t('rules.thActions')}}</th>
+                                <th class="col-actions col-actions-4">{{t('rules.thActions')}}</th>
                             </tr></thead>
                             <tbody>
                                 <rule-group-row v-for="r in rulesByTag[key+'='+val].slice(0, getGroupLimit(key+'='+val))" :key="r.id"

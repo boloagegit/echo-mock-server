@@ -393,6 +393,7 @@ tr.rule-row.disabled td { color: var(--muted) }
 .col-actions-1 { width: 52px }
 .col-actions-2 { width: 68px }
 .col-actions-3 { width: 96px }
+.col-actions-4 { width: 122px }
 .col-actions-5 { width: 140px }
 
 /* Responsive table columns - hide on smaller screens */

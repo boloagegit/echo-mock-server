@@ -167,11 +167,16 @@ public class RuleService {
      * 依標籤查詢規則 ID
      */
     public List<String> findIdsByTag(String key, String value) {
-        String pattern = "\"" + key + "\":\"" + value + "\"";
-        return protocolHandlerRegistry.findAllRules().stream()
-                .filter(r -> r.getTags() != null && matchesTag(r.getTags(), pattern))
-                .map(BaseRule::getId)
-                .toList();
+        String escapedKey = escapeLikePattern(key);
+        String escapedValue = escapeLikePattern(value);
+        String pattern = "%\"" + escapedKey + "\":\"" + escapedValue + "\"%";
+        return protocolHandlerRegistry.findIdsByTagPattern(pattern);
+    }
+
+    private String escapeLikePattern(String input) {
+        return input.replace("\\", "\\\\")
+                    .replace("%", "\\%")
+                    .replace("_", "\\_");
     }
 
     /**
@@ -185,16 +190,4 @@ public class RuleService {
                 .map(Response::getId).collect(Collectors.toSet());
     }
 
-    private boolean matchesTag(String tags, String pattern) {
-        int idx = tags.indexOf(pattern);
-        if (idx < 0) {
-            return false;
-        }
-        int endIdx = idx + pattern.length();
-        if (endIdx >= tags.length()) {
-            return true;
-        }
-        char next = tags.charAt(endIdx);
-        return next == ',' || next == '}' || next == ' ';
-    }
 }

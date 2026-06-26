@@ -374,8 +374,8 @@ public class RequestLogService {
         if (configService.isRequestLogMemoryMode()) {
             stream = memoryBuffer.stream().map(this::toSummaryFromEntry);
         } else {
-            stream = requestLogRepository.findAllByOrderByRequestTimeDesc(PageRequest.of(0, maxRecords))
-                    .stream().map(this::toSummaryFromEntity);
+            stream = requestLogRepository.findSummaryProjections(PageRequest.of(0, maxRecords))
+                    .stream().map(this::toSummaryFromProjection);
         }
 
         // 篩選
@@ -533,25 +533,25 @@ public class RequestLogService {
                 .build();
     }
 
-    private LogSummaryEntry toSummaryFromEntity(RequestLog log) {
+    private LogSummaryEntry toSummaryFromProjection(Object[] row) {
         return LogSummaryEntry.builder()
-                .id(log.getId())
-                .ruleId(log.getRuleId())
-                .protocol(log.getProtocol())
-                .method(log.getMethod())
-                .endpoint(log.getEndpoint())
-                .matched(log.isMatched())
-                .responseTimeMs(log.getResponseTimeMs())
-                .matchTimeMs(log.getMatchTimeMs())
-                .clientIp(log.getClientIp())
-                .requestTime(log.getRequestTime())
-                .targetHost(log.getTargetHost())
-                .proxyStatus(log.getProxyStatus())
-                .proxyError(log.getProxyError())
-                .responseStatus(log.getResponseStatus())
-                .hasRequestBody(log.getRequestBody() != null && !log.getRequestBody().isBlank())
-                .hasResponseBody(log.getResponseBody() != null && !log.getResponseBody().isBlank())
-                .hasMatchChain(log.getMatchChain() != null && !log.getMatchChain().isBlank())
+                .id((Long) row[0])
+                .ruleId((String) row[1])
+                .protocol((Protocol) row[2])
+                .method((String) row[3])
+                .endpoint((String) row[4])
+                .matched(Boolean.TRUE.equals(row[5]))
+                .responseTimeMs(row[6] != null ? ((Number) row[6]).intValue() : 0)
+                .matchTimeMs(row[7] != null ? ((Number) row[7]).intValue() : null)
+                .clientIp((String) row[8])
+                .requestTime((LocalDateTime) row[9])
+                .targetHost((String) row[10])
+                .proxyStatus(row[11] != null ? ((Number) row[11]).intValue() : null)
+                .proxyError((String) row[12])
+                .responseStatus(row[13] != null ? ((Number) row[13]).intValue() : null)
+                .hasRequestBody(Boolean.TRUE.equals(row[14]))
+                .hasResponseBody(Boolean.TRUE.equals(row[15]))
+                .hasMatchChain(Boolean.TRUE.equals(row[16]))
                 .build();
     }
 

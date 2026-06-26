@@ -16,9 +16,6 @@ public interface JmsRuleRepository extends JpaRepository<JmsRule, String> {
     @Query("SELECT r FROM JmsRule r WHERE (r.queueName = :queue OR r.queueName = '*') AND r.enabled = true ORDER BY r.id")
     List<JmsRule> findByQueueNameOrWildcard(@Param("queue") String queueName);
 
-    @Query("SELECT r FROM JmsRule r WHERE r.description LIKE %:keyword% OR r.queueName LIKE %:keyword% ORDER BY r.id DESC")
-    List<JmsRule> searchByKeyword(@Param("keyword") String keyword);
-
     List<JmsRule> findAllByOrderByIdDesc();
 
     int countByResponseId(Long responseId);
@@ -53,4 +50,8 @@ public interface JmsRuleRepository extends JpaRepository<JmsRule, String> {
     @Modifying
     @Query("UPDATE JmsRule r SET r.extendedAt = :extendedAt WHERE r.id IN :ids")
     int extendByIds(@Param("ids") List<String> ids, @Param("extendedAt") LocalDateTime extendedAt);
+
+    /** 依標籤 pattern 查詢規則 ID（避免全表載入） */
+    @Query("SELECT r.id FROM JmsRule r WHERE r.tags LIKE :pattern ESCAPE '\\'")
+    List<String> findIdsByTagPattern(@Param("pattern") String pattern);
 }
