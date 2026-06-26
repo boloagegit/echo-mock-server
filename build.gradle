@@ -95,7 +95,7 @@ dependencies {
     implementation 'org.webjars.npm:vue:3.5.31'
     implementation 'org.webjars.npm:bootstrap:5.3.8'
     implementation 'org.webjars.npm:bootstrap-icons:1.13.1'
-    implementation 'org.webjars.npm:codemirror:5.65.20'
+    implementation 'org.webjars.npm:codemirror:6.65.7'
 
     // Feign (compileOnly - for MockRedirectClient reference code)
     compileOnly 'io.github.openfeign:feign-core:13.12'
