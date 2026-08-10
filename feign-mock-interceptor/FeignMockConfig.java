@@ -28,7 +28,7 @@ public class FeignMockConfig {
             }
             template.header("X-Original-Host", originalHost);
             
-            // 保留 base path (如 /gateway)，與 template 的 path 組合
+            // 保留 base path (如 /csiw)，與 template 的 path 組合
             String basePath = uri.getPath();
             if (basePath == null || basePath.equals("/")) {
                 basePath = "";

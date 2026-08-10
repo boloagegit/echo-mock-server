@@ -1,8 +1,8 @@
 /**
  * useAudit - 修訂記錄 Composable
  *
- * 管理修訂記錄（audit logs）的載入、篩選、排序、分頁，
- * 以及變更比對、格式化顯示等功能。
+ * 管理修訂記錄（audit logs）的伺服器分頁、篩選、排序，
+ * 以及單筆明細 lazy load、變更比對與格式化顯示。
  *
  * @param {Object} deps - 依賴物件
  * @param {Function} deps.showToast - Toast 通知函式（來自 useToast）
@@ -12,7 +12,7 @@
  * @returns {{ auditLogs: Ref, selectedAudit: Ref, auditFilter: Ref, auditSort: Ref, auditPage: Ref, auditPageSize: Ref, filteredAudit: ComputedRef, sortedAudit: ComputedRef, pagedAudit: ComputedRef, auditTotalPages: ComputedRef, auditTruncated: ComputedRef, toggleAuditSort: Function, auditSortIcon: Function, onAuditPageSizeChange: Function, loadAudit: Function, debouncedLoadAudit: Function, deleteAllAuditLogs: Function, AUDIT_FIELD_LABELS: Function, AUDIT_HIDDEN_FIELDS: Set, fieldLabel: Function, formatFieldValue: Function, formatAuditJson: Function, getAuditChanges: Function, getAuditTarget: Function, getAuditDescription: Function, getAuditProtocol: Function, getAuditChangeCount: Function, escapeHtml: Function, auditFilterChips: ComputedRef, removeAuditChip: Function, clearAuditFilters: Function }}
  */
 const useAudit = (deps) => {
-    const { ref, computed } = Vue;
+    const { ref, computed, watch } = Vue;
     const { showToast, showConfirm, t, requireLogin } = deps;
 
     // --- 資料快取機制 ---
@@ -28,44 +28,37 @@ const useAudit = (deps) => {
     const savedAuditSort = JSON.parse(localStorage.getItem('auditSort') || 'null');
     const auditSort = ref(savedAuditSort || { field: 'timestamp', asc: false });
     const auditPage = ref(1);
-    const auditPageSize = ref(20);
+    const auditPageSize = ref(parseInt(localStorage.getItem('auditPageSize')) || 20);
+    const auditTotalElements = ref(0);
+    const serverTotalPages = ref(0);
+    let listRequestSequence = 0;
+    let listAbortController = null;
+
+    const detailCache = {};
+    const detailCacheOrder = [];
+    const DETAIL_CACHE_LIMIT = 100;
+    const cacheDetail = (id, detail) => {
+        if (!detailCache[id]) { detailCacheOrder.push(id); }
+        detailCache[id] = detail;
+        while (detailCacheOrder.length > DETAIL_CACHE_LIMIT) {
+            delete detailCache[detailCacheOrder.shift()];
+        }
+    };
 
     // --- 篩選、排序、分頁 ---
-    const filteredAudit = computed(() => {
-        let arr = auditLogs.value;
-        if (auditFilter.value.action) arr = arr.filter(l => l.action === auditFilter.value.action);
-        if (auditFilter.value.operator) arr = arr.filter(l => l.operator?.includes(auditFilter.value.operator));
-        if (auditFilter.value.keyword) {
-            const kw = auditFilter.value.keyword.toLowerCase();
-            arr = arr.filter(l => (l.ruleId || '').toLowerCase().includes(kw) || (l.beforeJson || '').toLowerCase().includes(kw) || (l.afterJson || '').toLowerCase().includes(kw));
-        }
-        return arr;
-    });
-
-    const sortedAudit = computed(() => {
-        const arr = [...filteredAudit.value];
-        const { field, asc } = auditSort.value;
-        arr.sort((a, b) => {
-            let va = a[field], vb = b[field];
-            if (va == null) return 1; if (vb == null) return -1;
-            return asc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
-        });
-        return arr;
-    });
-
-    const pagedAudit = computed(() => {
-        const start = (auditPage.value - 1) * auditPageSize.value;
-        return sortedAudit.value.slice(start, start + auditPageSize.value);
-    });
-
-    const auditTotalPages = computed(() => Math.ceil(filteredAudit.value.length / auditPageSize.value) || 1);
-    const auditTruncated = computed(() => auditLogs.value.length >= 1000);
+    // 列表已由後端完成篩選、排序與分頁；保留 computed 名稱相容既有畫面。
+    const filteredAudit = computed(() => auditLogs.value);
+    const sortedAudit = computed(() => auditLogs.value);
+    const pagedAudit = computed(() => auditLogs.value);
+    const auditTotalPages = computed(() => Math.max(1, serverTotalPages.value));
+    const auditTruncated = computed(() => false);
 
     /** 切換排序欄位/方向 */
     const toggleAuditSort = (field) => {
         if (auditSort.value.field === field) auditSort.value.asc = !auditSort.value.asc;
         else { auditSort.value.field = field; auditSort.value.asc = false; }
         localStorage.setItem('auditSort', JSON.stringify(auditSort.value));
+        auditPage.value = 1;
     };
 
     /** 取得排序圖示 class */
@@ -74,24 +67,113 @@ const useAudit = (deps) => {
         : 'bi-arrow-down-up';
 
     /** 每頁筆數變更 */
-    const onAuditPageSizeChange = () => { auditPage.value = 1; };
-
-    // --- 載入與刪除 ---
-    const loadAudit = async (force) => {
-        if (!force && !shouldLoad()) return;
-        deps.loading.value.audit = true;
-        const r = await apiCall('/api/admin/audit?limit=1000', {}, { errorMsg: t('toast.auditLoadFailed') });
-        if (r && r.ok) { auditLogs.value = await r.json(); auditPage.value = 1; selectedAudit.value = null; markLoaded(); }
-        deps.loading.value.audit = false;
+    const onAuditPageSizeChange = () => {
+        localStorage.setItem('auditPageSize', auditPageSize.value);
+        auditPage.value = 1;
     };
 
-    const debouncedLoadAudit = debounce(() => loadAudit(true), 300);
+    // --- 載入與刪除 ---
+    const buildAuditQuery = () => {
+        const params = new URLSearchParams();
+        params.set('page', String(Math.max(0, auditPage.value - 1)));
+        params.set('size', String(auditPageSize.value));
+        params.set('sort', auditSort.value.field);
+        params.set('direction', auditSort.value.asc ? 'asc' : 'desc');
+        if (auditFilter.value.action) { params.set('action', auditFilter.value.action); }
+        const operator = (auditFilter.value.operator || '').trim();
+        const keyword = (auditFilter.value.keyword || '').trim();
+        if (operator) { params.set('operator', operator); }
+        if (keyword) { params.set('keyword', keyword); }
+        return '/api/admin/audit?' + params.toString();
+    };
+
+    const hydrateCachedDetails = (items) => {
+        items.forEach(item => {
+            if (detailCache[item.id]) { Object.assign(item, detailCache[item.id], { _detailLoaded: true }); }
+        });
+        return items;
+    };
+
+    const loadAuditPage = async () => {
+        const requestId = ++listRequestSequence;
+        if (listAbortController) { listAbortController.abort(); }
+        const abortController = new AbortController();
+        listAbortController = abortController;
+        deps.loading.value.audit = true;
+        try {
+            const r = await apiCall(buildAuditQuery(), { signal: abortController.signal }, { silent: true });
+            if (requestId !== listRequestSequence) { return false; }
+            if (r && r.ok) {
+                const data = await r.json();
+                if (requestId !== listRequestSequence) { return false; }
+                auditLogs.value = hydrateCachedDetails(data.results || []);
+                auditTotalElements.value = Number(data.totalElements || 0);
+                serverTotalPages.value = Number(data.totalPages || 0);
+                selectedAudit.value = null;
+                if (auditPage.value > auditTotalPages.value) { auditPage.value = auditTotalPages.value; }
+                markLoaded();
+            }
+            return !!(r && r.ok);
+        } finally {
+            if (requestId === listRequestSequence) {
+                if (listAbortController === abortController) { listAbortController = null; }
+                deps.loading.value.audit = false;
+            }
+        }
+    };
+
+    const loadAudit = async (force) => {
+        if (!force && !shouldLoad()) return;
+        debouncedLoadAudit.cancel();
+        await loadAuditPage();
+    };
+
+    const debouncedLoadAudit = debounce(() => loadAuditPage(), 300);
+
+    watch(auditFilter, () => {
+        auditPage.value = 1;
+        debouncedLoadAudit();
+    }, { deep: true });
+    watch(auditSort, () => {
+        auditPage.value = 1;
+        debouncedLoadAudit();
+    }, { deep: true });
+    watch(auditPage, () => debouncedLoadAudit());
+    watch(auditPageSize, () => {
+        localStorage.setItem('auditPageSize', auditPageSize.value);
+        auditPage.value = 1;
+        debouncedLoadAudit();
+    });
+
+    const toggleAuditDetail = async (log) => {
+        if (selectedAudit.value === log.id) {
+            selectedAudit.value = null;
+            return;
+        }
+        selectedAudit.value = log.id;
+        if (log._detailLoaded) { return; }
+        if (detailCache[log.id]) {
+            Object.assign(log, detailCache[log.id], { _detailLoaded: true });
+            return;
+        }
+        log._detailLoading = true;
+        try {
+            const r = await apiCall('/api/admin/audit?detailId=' + encodeURIComponent(log.id), {}, { silent: true });
+            if (r && r.ok) {
+                const detail = await r.json();
+                cacheDetail(log.id, detail);
+                Object.assign(log, detail, { _detailLoaded: true });
+            }
+        } finally {
+            log._detailLoading = false;
+        }
+    };
 
     const deleteAllAuditLogs = async () => {
         if (!await requireLogin()) return;
         if (!await showConfirm({ title: t('confirm.deleteAllAudit'), message: t('confirm.deleteAllAuditMsg'), confirmText: t('confirm.deleteAll'), danger: true, requireInput: 'DELETE', inputLabel: t('confirm.deleteAllAuditInputLabel') })) return;
         const r = await apiCall('/api/admin/audit/all', { method: 'DELETE' }, { errorMsg: t('toast.deleteAllAuditFailed') });
-        if (r && r.ok) { const d = await r.json(); showToast(t('toast.deleteAllAuditSuccess', {count: d.deleted}), 'success'); loadAudit(); }
+        if (r && r.ok) { const d = await r.json(); showToast(t('toast.deleteAllAuditSuccess', {count: d.deleted}), 'success'); loadAudit(true); }
     };
 
     // --- 欄位標籤與格式化 ---
@@ -163,6 +245,7 @@ const useAudit = (deps) => {
     const escapeHtml = (s) => s?.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') || '';
 
     const getAuditTarget = (log) => {
+        if (!log.beforeJson && !log.afterJson) { return t('auditValues.expandForDetail'); }
         try {
             const o = JSON.parse(log.afterJson || log.beforeJson);
             if (log.ruleId && log.ruleId.startsWith('response-')) { return o.description || t('auditValues.unknown'); }
@@ -171,6 +254,7 @@ const useAudit = (deps) => {
     };
 
     const getAuditDescription = (log) => {
+        if (!log.beforeJson && !log.afterJson) { return ''; }
         try {
             const o = JSON.parse(log.afterJson || log.beforeJson);
             if (log.ruleId && log.ruleId.startsWith('response-')) { return o.contentType ? t('auditValues.typePrefix') + o.contentType : ''; }
@@ -180,6 +264,7 @@ const useAudit = (deps) => {
 
     const getAuditProtocol = (log) => {
         if (log.ruleId && log.ruleId.startsWith('response-')) { return 'RESP'; }
+        if (!log.beforeJson && !log.afterJson) { return ''; }
         try { const o = JSON.parse(log.afterJson || log.beforeJson); return o.protocol || ''; } catch (e) { return ''; }
     };
 
@@ -210,6 +295,7 @@ const useAudit = (deps) => {
         auditSort,
         auditPage,
         auditPageSize,
+        auditTotalElements,
         filteredAudit,
         sortedAudit,
         pagedAudit,
@@ -220,6 +306,7 @@ const useAudit = (deps) => {
         onAuditPageSizeChange,
         loadAudit,
         debouncedLoadAudit,
+        toggleAuditDetail,
         deleteAllAuditLogs,
         AUDIT_FIELD_LABELS,
         AUDIT_HIDDEN_FIELDS,

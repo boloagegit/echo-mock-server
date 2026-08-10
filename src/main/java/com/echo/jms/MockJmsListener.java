@@ -45,7 +45,7 @@ public class MockJmsListener {
             String body = extractBody(message);
             String queue = jmsProperties.getQueue();
 
-            log.info("JMS request received on queue: {}", queue);
+            log.debug("JMS request received on queue: {}", queue);
 
             // 一次性 parse body，後續 endpoint 提取與規則匹配共用
             ConditionMatcher.PreparedBody prepared = conditionMatcher.prepareBody(body);

@@ -3,7 +3,7 @@ plugins {
     id 'org.springframework.boot' version '3.5.13'
     id 'io.spring.dependency-management' version '1.1.7'
     id 'jacoco'
-    id 'com.github.spotbugs' version '6.4.8'
+    id 'com.github.spotbugs' version '6.5.1'
     id 'net.ltgt.errorprone' version '5.1.0'
 }
 
@@ -45,6 +45,11 @@ dependencies {
     // Spring Boot Web with Undertow (exclude Tomcat)
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-undertow'
+    // Reactive outbound HTTP only; the application server remains Spring MVC + Undertow.
+    implementation 'io.projectreactor.netty:reactor-netty-http'
+    // Keep Reactor's asynchronous DNS resolver accurate on both Apple Silicon and Intel Macs.
+    runtimeOnly(group: 'io.netty', name: 'netty-resolver-dns-native-macos', classifier: 'osx-aarch_64')
+    runtimeOnly(group: 'io.netty', name: 'netty-resolver-dns-native-macos', classifier: 'osx-x86_64')
     implementation 'org.apache.httpcomponents.client5:httpclient5'
     modules {
         module('org.springframework.boot:spring-boot-starter-tomcat') {
@@ -177,7 +182,6 @@ tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
         xml.required = false
     }
 }
-
 // 測試程式碼不需要 SpotBugs 靜態分析
 spotbugsTest.enabled = false
 
@@ -222,4 +226,12 @@ tasks.register('t') {
 task runJmsTest(type: JavaExec) {
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'com.echo.jms.ManualJmsTest'
+}
+
+// 由 scripts/migrate-h2-to-sqlite.py 呼叫；連線資訊一律透過環境變數傳入。
+tasks.register('migrateH2ToSqlite', JavaExec) {
+    group = 'application'
+    description = 'Migrate and verify an offline H2 database into a staged SQLite database'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.echo.migration.H2ToSqliteMigrator'
 }

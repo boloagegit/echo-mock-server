@@ -41,9 +41,19 @@ class H2BackupServiceExtendedTest {
     }
 
     @Test
-    void scheduledBackup_shouldCallBackup() {
+    void scheduledBackup_shouldBackupWithoutShuttingDownDatabase() {
         backupService.scheduledBackup();
-        verify(jdbcTemplate, times(2)).execute(anyString()); // backup + compact
+        verify(jdbcTemplate).execute(startsWith("BACKUP TO"));
+        verify(jdbcTemplate, never()).execute(eq("SHUTDOWN COMPACT"));
+    }
+
+    @Test
+    void h2SqlPath_shouldNormalizeSeparatorsAndEscapeApostrophes() {
+        String sqlPath = H2BackupService.h2SqlPath(Path.of("C:\\Echo User's Data\\backups\\echo.zip"));
+
+        assertThat(sqlPath)
+                .doesNotContain("\\")
+                .contains("Echo User''s Data/backups/echo.zip");
     }
 
     @Test

@@ -10,7 +10,7 @@ const fmtTime = (t, short = true) => { if (!t) return ''; return short ? t.subst
 const shortId = id => id && id.length > 8 ? id.substring(0, 8) : id;
 const daysLeft = (createdAt, extendedAt, retentionDays) => { if (!retentionDays) return null; const baseDate = extendedAt || createdAt; if (!baseDate) return null; const d = Math.ceil((new Date(baseDate).getTime() + retentionDays * 86400000 - Date.now()) / 86400000); return d > 0 ? d : 0; };
 const fmtSize = bytes => { if (!bytes) return '0 B'; if (bytes < 1024) return bytes + ' B'; if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'; return (bytes / 1024 / 1024).toFixed(2) + ' MB'; };
-const reasonText = r => { const map = {match: _t('reasonText.match'), disabled: _t('reasonText.disabled'), condition_not_match: _t('reasonText.condition_not_match'), fallback: _t('reasonText.fallback'), skipped: _t('reasonText.skipped'), 'near-miss': _t('reasonText.nearMiss'), shadowed: _t('reasonText.shadowed'), mismatch: _t('reasonText.mismatch'), scenario_state_mismatch: _t('reasonText.scenarioStateMismatch')}; return map[r] || r; };
+const reasonText = r => { const map = {match: _t('reasonText.match'), disabled: _t('reasonText.disabled'), condition_not_match: _t('reasonText.condition_not_match'), fallback: _t('reasonText.fallback'), skipped: _t('reasonText.skipped'), 'near-miss': _t('reasonText.nearMiss'), shadowed: _t('reasonText.shadowed'), mismatch: _t('reasonText.mismatch')}; return map[r] || r; };
 const condCount = r => { const b = (r.bodyCondition||'').split(';').filter(x=>x); const q = (r.queryCondition||'').split(';').filter(x=>x); const h = (r.headerCondition||'').split(';').filter(x=>x); return b.length + q.length + h.length; };
 const condTooltip = r => { const parts = []; (r.bodyCondition||'').split(';').filter(x=>x).forEach(c => parts.push(c)); (r.queryCondition||'').split(';').filter(x=>x).forEach(c => parts.push('?' + c)); (r.headerCondition||'').split(';').filter(x=>x).forEach(c => parts.push('@' + c)); return parts.join('\n'); };
 const condTags = r => { const tags = []; (r.bodyCondition||'').split(';').filter(x=>x).forEach(c => { const t = c.trim(); const label = t.startsWith('$.') ? 'JsonPath' : /^\//.test(t) ? 'XPath' : 'Body'; tags.push({t:'body',v:c,label}); }); (r.queryCondition||'').split(';').filter(x=>x).forEach(c => tags.push({t:'query',v:c,label:'Query'})); (r.headerCondition||'').split(';').filter(x=>x).forEach(c => tags.push({t:'header',v:c,label:'Header'})); return tags; };
@@ -23,6 +23,50 @@ const debounce = (fn, delay = 300) => {
     const debounced = (...args) => { if (timer) { clearTimeout(timer); } timer = setTimeout(() => { fn(...args); timer = null; }, delay); };
     debounced.cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
     return debounced;
+};
+
+// Dialog accessibility primitives shared by modal components.
+const getDialogFocusable = dialog => Array.from(dialog?.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+) || []).filter(node => !node.hidden && node.getAttribute('aria-hidden') !== 'true');
+const makeOverlaySiblingsInert = overlay => {
+    const parent = overlay?.parentElement;
+    if (!parent) { return []; }
+    const state = Array.from(parent.children).filter(node => node !== overlay).map(node => ({
+        node,
+        inert: node.inert,
+        ariaHidden: node.getAttribute('aria-hidden')
+    }));
+    state.forEach(({ node }) => {
+        node.inert = true;
+        node.setAttribute('aria-hidden', 'true');
+    });
+    return state;
+};
+const restoreOverlaySiblings = state => {
+    (state || []).forEach(({ node, inert, ariaHidden }) => {
+        node.inert = inert;
+        if (ariaHidden == null) { node.removeAttribute('aria-hidden'); }
+        else { node.setAttribute('aria-hidden', ariaHidden); }
+    });
+};
+const trapDialogFocus = (event, dialog) => {
+    if (event.key !== 'Tab') { return; }
+    const focusable = getDialogFocusable(dialog);
+    if (!focusable.length) {
+        event.preventDefault();
+        dialog?.focus?.();
+        return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && (document.activeElement === first || !dialog?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+    }
 };
 const deserializeSseEvents = (jsonStr) => {
     const defaultEvent = () => ({ event: '', data: '', id: '', delayMs: 0, type: 'normal' });
@@ -71,6 +115,7 @@ const apiCall = async (url, opt = {}, config = {}) => {
         }
         return r;
     } catch (e) {
+        if (e && e.name === 'AbortError') { return null; }
         if (!silent) { _showToast(_t('toast.networkError'), 'error'); }
         console.warn('API call failed:', url, e);
         return null;

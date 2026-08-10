@@ -85,9 +85,6 @@ venv/
 # Lombok
 .lombok/
 
-# Python
-__pycache__/
-*.pyc
 # Docker
 *.pid
 
@@ -104,3 +101,4 @@ AGENTS.md
 screenshots/
 __files/
 mappings/
+/artifacts/

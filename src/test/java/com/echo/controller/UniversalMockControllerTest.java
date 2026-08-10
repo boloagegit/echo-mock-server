@@ -18,9 +18,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.context.request.ServletWebRequest;
+import org.springframework.web.context.request.async.DeferredResultProcessingInterceptor;
 
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -48,12 +52,19 @@ class UniversalMockControllerTest {
     @Mock
     private HttpMockPipeline httpMockPipeline;
 
+    @Mock
+    private HttpServletResponse httpServletResponse;
+
     @InjectMocks
     private UniversalMockController controller;
 
     @SuppressWarnings("unchecked")
-    private ResponseEntity<String> getResult(
-            org.springframework.web.context.request.async.DeferredResult<ResponseEntity<String>> deferredResult) throws Exception {
+    private ResponseEntity<String> getResult(Object controllerResult) throws Exception {
+        if (controllerResult instanceof ResponseEntity<?> response) {
+            return (ResponseEntity<String>) response;
+        }
+        var deferredResult = (org.springframework.web.context.request.async.DeferredResult<ResponseEntity<String>>)
+                controllerResult;
         long deadline = System.currentTimeMillis() + 5000;
         while (!deferredResult.hasResult()) {
             if (System.currentTimeMillis() > deadline) {
@@ -135,14 +146,20 @@ class UniversalMockControllerTest {
     // ==================== Tests ====================
 
     @Test
+    void requestTimeoutAllowsDefaultPoolConnectAndReadTimeoutsToFinishFirst() {
+        assertThat(ReflectionTestUtils.getField(controller, "requestTimeoutMs")).isEqualTo(40_000L);
+    }
+
+    @Test
     void shouldReturnMockResponse_whenRuleExists() throws Exception {
-        when(httpMockPipeline.execute(any(MockRequest.class)))
-                .thenReturn(matchedResult(200, "{\"status\":\"ok\"}", 0));
+        when(httpMockPipeline.executeAsync(any(MockRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(
+                        matchedResult(200, "{\"status\":\"ok\"}", 0)));
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/mock/api/test");
         request.addHeader("X-Original-Host", "api.example.com");
 
-        var result = getResult(controller.handleRequest(request, new MockHttpServletResponse(), null));
+        var result = getResult(controller.handleRequest(request, httpServletResponse, null));
 
         assertThat(result.getStatusCode().value()).isEqualTo(200);
         assertThat(result.getBody()).contains("status");
@@ -150,28 +167,30 @@ class UniversalMockControllerTest {
 
     @Test
     void shouldReturn404_whenNoRuleFound() throws Exception {
-        when(httpMockPipeline.execute(any(MockRequest.class)))
-                .thenReturn(unmatchedResult(404, "No matching rule found"));
+        when(httpMockPipeline.executeAsync(any(MockRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(
+                        unmatchedResult(404, "No matching rule found")));
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/mock/unknown");
 
-        var result = getResult(controller.handleRequest(request, new MockHttpServletResponse(), null));
+        var result = getResult(controller.handleRequest(request, httpServletResponse, null));
 
         assertThat(result.getStatusCode().value()).isEqualTo(404);
     }
 
     @Test
     void shouldDelegateToPipeline_whenNoRuleFound() throws Exception {
-        when(httpMockPipeline.execute(any(MockRequest.class)))
-                .thenReturn(unmatchedResult(404, "No matching rule found"));
+        when(httpMockPipeline.executeAsync(any(MockRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(
+                        unmatchedResult(404, "No matching rule found")));
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/mock/unknown");
         request.setRemoteAddr("192.168.1.1");
 
-        getResult(controller.handleRequest(request, new MockHttpServletResponse(), null));
+        getResult(controller.handleRequest(request, httpServletResponse, null));
 
         ArgumentCaptor<MockRequest> captor = ArgumentCaptor.forClass(MockRequest.class);
-        verify(httpMockPipeline).execute(captor.capture());
+        verify(httpMockPipeline).executeAsync(captor.capture());
 
         MockRequest mockRequest = captor.getValue();
         assertThat(mockRequest.getProtocol()).isEqualTo(Protocol.HTTP);
@@ -182,29 +201,30 @@ class UniversalMockControllerTest {
 
     @Test
     void shouldUseDefaultHost_whenHeaderMissing() throws Exception {
-        when(httpMockPipeline.execute(any(MockRequest.class)))
-                .thenReturn(matchedResult(200, "{}", 0));
+        when(httpMockPipeline.executeAsync(any(MockRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(matchedResult(200, "{}", 0)));
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/mock/test");
 
-        var result = getResult(controller.handleRequest(request, new MockHttpServletResponse(), null));
+        var result = getResult(controller.handleRequest(request, httpServletResponse, null));
 
         assertThat(result.getStatusCode().value()).isEqualTo(200);
 
         ArgumentCaptor<MockRequest> captor = ArgumentCaptor.forClass(MockRequest.class);
-        verify(httpMockPipeline).execute(captor.capture());
+        verify(httpMockPipeline).executeAsync(captor.capture());
         assertThat(captor.getValue().getTargetHost()).isEqualTo("default");
     }
 
     @Test
     void shouldApplyDelay_whenDelayMsSet() throws Exception {
-        when(httpMockPipeline.execute(any(MockRequest.class)))
-                .thenReturn(matchedResult(200, "{}", 100));
+        when(httpMockPipeline.executeAsync(any(MockRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(matchedResult(200, "{}", 100)));
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/mock/test");
         long start = System.currentTimeMillis();
 
-        var deferredResult = controller.handleRequest(request, new MockHttpServletResponse(), null);
+        var deferredResult = (org.springframework.web.context.request.async.DeferredResult<?>)
+                controller.handleRequest(request, httpServletResponse, null);
         while (!deferredResult.hasResult()) {
             Thread.sleep(10);
         }
@@ -215,63 +235,68 @@ class UniversalMockControllerTest {
 
     @Test
     void shouldReturnJsonContentType_forJsonResponse() throws Exception {
-        when(httpMockPipeline.execute(any(MockRequest.class)))
-                .thenReturn(matchedResult(200, "{\"key\":\"value\"}", 0));
+        when(httpMockPipeline.executeAsync(any(MockRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(
+                        matchedResult(200, "{\"key\":\"value\"}", 0)));
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/mock/test");
 
-        var result = getResult(controller.handleRequest(request, new MockHttpServletResponse(), null));
+        var result = getResult(controller.handleRequest(request, httpServletResponse, null));
 
         assertThat(result.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_JSON);
     }
 
     @Test
     void shouldReturnXmlContentType_forXmlResponse() throws Exception {
-        when(httpMockPipeline.execute(any(MockRequest.class)))
-                .thenReturn(matchedResult(200, "<root><data>test</data></root>", 0));
+        when(httpMockPipeline.executeAsync(any(MockRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(
+                        matchedResult(200, "<root><data>test</data></root>", 0)));
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/mock/test");
 
-        var result = getResult(controller.handleRequest(request, new MockHttpServletResponse(), null));
+        var result = getResult(controller.handleRequest(request, httpServletResponse, null));
 
         assertThat(result.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_XML);
     }
 
     @Test
     void shouldReturnTextContentType_forPlainText() throws Exception {
-        when(httpMockPipeline.execute(any(MockRequest.class)))
-                .thenReturn(matchedResult(200, "plain text response", 0));
+        when(httpMockPipeline.executeAsync(any(MockRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(
+                        matchedResult(200, "plain text response", 0)));
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/mock/test");
 
-        var result = getResult(controller.handleRequest(request, new MockHttpServletResponse(), null));
+        var result = getResult(controller.handleRequest(request, httpServletResponse, null));
 
         assertThat(result.getHeaders().getContentType()).isEqualTo(MediaType.TEXT_PLAIN);
     }
 
     @Test
     void shouldReturnResponseBody_fromPipeline() throws Exception {
-        when(httpMockPipeline.execute(any(MockRequest.class)))
-                .thenReturn(matchedResult(200, "{\"shared\":true}", 0));
+        when(httpMockPipeline.executeAsync(any(MockRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(
+                        matchedResult(200, "{\"shared\":true}", 0)));
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/mock/test");
 
-        var result = getResult(controller.handleRequest(request, new MockHttpServletResponse(), null));
+        var result = getResult(controller.handleRequest(request, httpServletResponse, null));
 
         assertThat(result.getBody()).contains("shared");
-        verify(httpMockPipeline).execute(any(MockRequest.class));
+        verify(httpMockPipeline).executeAsync(any(MockRequest.class));
     }
 
     @Test
     void shouldReturnProxyResponse_whenForwardSuccess() throws Exception {
-        when(httpMockPipeline.execute(any(MockRequest.class)))
-                .thenReturn(forwardedResult(200, "proxy response"));
+        when(httpMockPipeline.executeAsync(any(MockRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(
+                        forwardedResult(200, "proxy response")));
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/mock/test");
         request.addHeader("X-Original-Host", "api.example.com");
         request.setRemoteAddr("192.168.1.1");
 
-        var result = getResult(controller.handleRequest(request, new MockHttpServletResponse(), null));
+        var result = getResult(controller.handleRequest(request, httpServletResponse, null));
 
         assertThat(result.getStatusCode().value()).isEqualTo(200);
         assertThat(result.getBody()).isEqualTo("proxy response");
@@ -279,31 +304,66 @@ class UniversalMockControllerTest {
 
     @Test
     void shouldReturn502_whenProxyFails() throws Exception {
-        when(httpMockPipeline.execute(any(MockRequest.class)))
-                .thenReturn(forwardedErrorResult(502, "Proxy error: Connection refused", "Connection refused"));
+        when(httpMockPipeline.executeAsync(any(MockRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(
+                        forwardedErrorResult(502, "Proxy error: Connection refused", "Connection refused")));
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/mock/test");
         request.addHeader("X-Original-Host", "api.example.com");
         request.setRemoteAddr("192.168.1.1");
 
-        var result = getResult(controller.handleRequest(request, new MockHttpServletResponse(), null));
+        var result = getResult(controller.handleRequest(request, httpServletResponse, null));
 
         assertThat(result.getStatusCode().value()).isEqualTo(502);
     }
 
     @Test
+    void shouldReturnDeferredResultBeforeDownstreamForwardCompletes() throws Exception {
+        CompletableFuture<PipelineResult> pendingForward = new CompletableFuture<>();
+        when(httpMockPipeline.executeAsync(any(MockRequest.class))).thenReturn(pendingForward);
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/mock/slow");
+
+        var deferredResult = (org.springframework.web.context.request.async.DeferredResult<?>)
+                controller.handleRequest(request, httpServletResponse, null);
+
+        assertThat(deferredResult.hasResult()).isFalse();
+        pendingForward.complete(forwardedResult(200, "completed later"));
+        ResponseEntity<String> response = getResult(deferredResult);
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(response.getBody()).isEqualTo("completed later");
+    }
+
+    @Test
+    void timeoutCancelsActivePipeline() throws Exception {
+        CompletableFuture<PipelineResult> pendingForward = new CompletableFuture<>();
+        when(httpMockPipeline.executeAsync(any(MockRequest.class))).thenReturn(pendingForward);
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/mock/slow");
+        var deferredResult = (org.springframework.web.context.request.async.DeferredResult<?>)
+                controller.handleRequest(request, httpServletResponse, null);
+        DeferredResultProcessingInterceptor interceptor = ReflectionTestUtils.invokeMethod(
+                deferredResult, "getLifecycleInterceptor");
+
+        assertThat(interceptor).isNotNull();
+        interceptor.handleTimeout(new ServletWebRequest(request), deferredResult);
+
+        assertThat(pendingForward).isCancelled();
+        ResponseEntity<String> response = getResult(deferredResult);
+        assertThat(response.getStatusCode().value()).isEqualTo(504);
+    }
+
+    @Test
     void shouldPassCorrectMockRequest_toPipeline() throws Exception {
-        when(httpMockPipeline.execute(any(MockRequest.class)))
-                .thenReturn(matchedResult(200, "{}", 0));
+        when(httpMockPipeline.executeAsync(any(MockRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(matchedResult(200, "{}", 0)));
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/mock/api/test");
         request.addHeader("X-Original-Host", "api.example.com");
         request.setRemoteAddr("10.0.0.1");
 
-        getResult(controller.handleRequest(request, new MockHttpServletResponse(), null));
+        getResult(controller.handleRequest(request, httpServletResponse, null));
 
         ArgumentCaptor<MockRequest> captor = ArgumentCaptor.forClass(MockRequest.class);
-        verify(httpMockPipeline).execute(captor.capture());
+        verify(httpMockPipeline).executeAsync(captor.capture());
 
         MockRequest mockRequest = captor.getValue();
         assertThat(mockRequest.getProtocol()).isEqualTo(Protocol.HTTP);
@@ -331,11 +391,12 @@ class UniversalMockControllerTest {
                 .delayMs(0)
                 .build();
 
-        when(httpMockPipeline.execute(any(MockRequest.class))).thenReturn(result);
+        when(httpMockPipeline.executeAsync(any(MockRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(result));
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/mock/test");
 
-        var response = getResult(controller.handleRequest(request, new MockHttpServletResponse(), null));
+        var response = getResult(controller.handleRequest(request, httpServletResponse, null));
 
         assertThat(response.getHeaders().getFirst("X-Custom")).isEqualTo("test-value");
     }

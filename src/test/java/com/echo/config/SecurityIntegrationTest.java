@@ -7,13 +7,19 @@ import com.echo.entity.Protocol;
 import com.echo.service.HttpRuleService;
 import com.echo.service.JmsRuleService;
 import com.echo.service.RuleService;
+import com.echo.service.RuleQueryService;
 import com.echo.service.RequestLogService;
 import com.echo.service.RuleAuditService;
+import com.echo.service.IssueReportService;
+import com.echo.service.RuleApplyMapper;
+import com.echo.service.RuleApplyContractService;
+import com.echo.service.RuleApplyPersistenceSynchronizer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
@@ -24,14 +30,17 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AdminController.class)
-@Import({SecurityConfig.class, LdapConfig.class})
+@Import({SecurityConfig.class, LdapConfig.class, RuleApplyContractService.class})
+@TestPropertySource(properties = "echo.features.bulk-import-export-enabled=true")
 class SecurityIntegrationTest {
 
     @Autowired
@@ -39,6 +48,10 @@ class SecurityIntegrationTest {
 
     @MockitoBean
     private RuleService ruleService;
+
+    @MockitoBean
+    @SuppressWarnings("UnusedVariable") // required for Spring context
+    private RuleQueryService ruleQueryService;
 
     @MockitoBean
     private com.echo.protocol.ProtocolHandlerRegistry protocolHandlerRegistry;
@@ -66,9 +79,6 @@ class SecurityIntegrationTest {
     private com.echo.service.ExcelImportService excelImportService;
 
     @MockitoBean
-    private com.echo.service.OpenApiImportService openApiImportService;
-
-    @MockitoBean
     @SuppressWarnings("UnusedVariable") // required for Spring context
     private com.echo.service.ResponseContentValidatorRegistry responseContentValidatorRegistry;
 
@@ -85,11 +95,51 @@ class SecurityIntegrationTest {
     private CacheManager cacheManager;
 
     @MockitoBean
+    @SuppressWarnings("UnusedVariable") // required for Spring context
+    private IssueReportService issueReportService;
+
+    @MockitoBean
+    @SuppressWarnings("UnusedVariable") // required for Spring context
+    private RuleApplyMapper ruleApplyMapper;
+
+    @MockitoBean
+    @SuppressWarnings("UnusedVariable") // required for Spring context
+    private RuleApplyPersistenceSynchronizer ruleApplyPersistenceSynchronizer;
+
+    @MockitoBean
+    @SuppressWarnings("UnusedVariable") // required for Spring context
+    private com.echo.service.OpenApiImportService openApiImportService;
+
+    @MockitoBean
+    @SuppressWarnings("UnusedVariable") // required for Spring context
     private com.echo.service.ScenarioService scenarioService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // ========== 匯出 API ==========
+
+    @Test
+    void pagedRules_shouldReturn200_whenNotAuthenticated() throws Exception {
+        when(ruleQueryService.query(any())).thenReturn(new RuleQueryService.RuleQueryResult(
+                List.of(), 0, 20, 0, 0));
+
+        mockMvc.perform(get("/api/admin/rules/page").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void groupedRules_shouldReturn200_whenNotAuthenticated() throws Exception {
+        when(ruleQueryService.queryGroupSummary(any())).thenReturn(
+                new RuleQueryService.RuleGroupSummary(java.util.Map.of(), java.util.Map.of(), 0));
+        when(ruleQueryService.queryGroup(any(), any(), isNull(), anyInt())).thenReturn(
+                new RuleQueryService.RuleGroupContent(List.of(), 0));
+
+        mockMvc.perform(get("/api/admin/rules/groups").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/admin/rules/group").param("key", "_untagged")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+    }
 
     @Test
     void exportRules_shouldReturn401_whenNotAuthenticated() throws Exception {
@@ -243,6 +293,31 @@ class SecurityIntegrationTest {
         when(protocolHandlerRegistry.findAllRules()).thenReturn(List.of());
         mockMvc.perform(get("/api/admin/rules").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void applyRule_shouldReturn401_whenNotAuthenticated() throws Exception {
+        mockMvc.perform(post("/api/admin/rules/apply")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void applyRule_shouldReachValidation_whenUser() throws Exception {
+        mockMvc.perform(post("/api/admin/rules/apply")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void ruleManifest_shouldReturn401_whenNotAuthenticated() throws Exception {
+        mockMvc.perform(get("/api/admin/rules/997a9b59-e57a-4777-9522-580cf38a5422/manifest"))
+                .andExpect(status().isUnauthorized());
     }
 
     // ========== 批次啟用/停用 API ==========

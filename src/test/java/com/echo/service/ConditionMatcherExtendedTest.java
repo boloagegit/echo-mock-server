@@ -107,6 +107,44 @@ class ConditionMatcherExtendedTest {
     }
 
     @Test
+    void jsonPathPrepared_shouldReuseParsedTreeAndPathResult() {
+        String json = "{\"items\":[{\"sku\":\"ABC-123\",\"quantity\":2}]}";
+        PreparedBody prepared = matcher.prepareBody(json);
+
+        assertThat(matcher.matchesPrepared(
+                "$.items[0].sku=ABC-123;$.items[0].sku*=ABC",
+                null, null, prepared, null, null)).isTrue();
+        assertThat(matcher.matchesPreparedWithDetail(
+                "$.items[0].sku=WRONG", null, null,
+                prepared, null, null).getResults())
+                .singleElement()
+                .satisfies(result -> assertThat(result.getDetail()).contains("actual $.items[0].sku=ABC-123"));
+
+        assertThat(prepared.cachedJsonPathCount()).isEqualTo(1);
+    }
+
+    @Test
+    void jsonPathPrepared_shouldPreserveOperatorsAndValueTypes() {
+        String json = """
+                {"name":"Alice","active":true,"count":3,"nothing":null,
+                 "tags":["gold","vip"],"profile":{"tier":"gold"},
+                 "items":[{"sku":"A1"},{"sku":"B2"}]}
+                """;
+        PreparedBody prepared = matcher.prepareBody(json);
+
+        assertThat(matcher.matchesPrepared("$.name~=A.*", null, null, prepared, null, null)).isTrue();
+        assertThat(matcher.matchesPrepared("$.active=true", null, null, prepared, null, null)).isTrue();
+        assertThat(matcher.matchesPrepared("$.count!=4", null, null, prepared, null, null)).isTrue();
+        assertThat(matcher.matchesPrepared("$.tags*=vip", null, null, prepared, null, null)).isTrue();
+        assertThat(matcher.matchesPrepared("$.tags=[\"gold\",\"vip\"]", null, null, prepared, null, null)).isTrue();
+        assertThat(matcher.matchesPrepared("$.profile={\"tier\":\"gold\"}", null, null, prepared, null, null)).isTrue();
+        assertThat(matcher.matchesPrepared("$.items[*].sku=[\"A1\",\"B2\"]", null, null, prepared, null, null)).isTrue();
+        assertThat(matcher.matchesPrepared("$.nothing!=anything", null, null, prepared, null, null)).isTrue();
+        assertThat(matcher.matchesPrepared("$.nothing=null", null, null, prepared, null, null)).isFalse();
+        assertThat(matcher.matchesPrepared("$.missing!=anything", null, null, prepared, null, null)).isFalse();
+    }
+
+    @Test
     void queryPrepared_notEqual_nullParam_shouldMatch() {
         assertThat(matcher.matchesPrepared(
                 null, "missing!=value", null,

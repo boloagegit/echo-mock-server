@@ -447,6 +447,24 @@ class LogAgentTest {
         verify(requestLogRepository, times(2)).saveAll(any());
     }
 
+    // ==================== Background Throughput Budget Tests ====================
+
+    @Test
+    void calculateThrottleNanos_shouldLimitBackgroundWriteRate() {
+        long delay = LogAgent.calculateThrottleNanos(
+                50, 5_000_000L, 1_000);
+
+        assertThat(delay).isEqualTo(45_000_000L);
+    }
+
+    @Test
+    void calculateThrottleNanos_shouldNotDelaySlowBatchTwice() {
+        long delay = LogAgent.calculateThrottleNanos(
+                50, 75_000_000L, 1_000);
+
+        assertThat(delay).isZero();
+    }
+
     // ==================== getName Test ====================
 
     @Test

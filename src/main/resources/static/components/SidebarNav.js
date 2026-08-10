@@ -20,7 +20,8 @@ const SidebarNav = {
     density: String,
     densityIcon: String,
     densityLabel: String,
-    helpSeen: Boolean
+    helpSeen: Boolean,
+    openIssueCount: Number
   },
   emits: [
     'update:page', 'update:sidebarCollapsed', 'update:mobileMenu',
@@ -50,41 +51,44 @@ const SidebarNav = {
       </div>
       <div class="sidebar-nav">
         <div class="nav-section">WORKSPACE</div>
-        <div class="nav-item" :class="{active: page==='rules'}" @click="$emit('update:page', 'rules'); $emit('update:mobileMenu', false)">
+        <button type="button" class="nav-item" :class="{active: page==='rules'}" @click="$emit('update:page', 'rules'); $emit('update:mobileMenu', false)">
           <i class="bi bi-list-ul"></i><span class="nav-text">{{t('sidebar.rules')}}</span>
-        </div>
-        <div class="nav-item" :class="{active: page==='responses'}" @click="$emit('update:page', 'responses'); $emit('update:mobileMenu', false)">
+        </button>
+        <button type="button" class="nav-item" :class="{active: page==='responses'}" @click="$emit('update:page', 'responses'); $emit('update:mobileMenu', false)">
           <i class="bi bi-file-earmark-text"></i><span class="nav-text">{{t('sidebar.responses')}}</span>
-        </div>
-        <div class="nav-item" :class="{active: page==='stats'}" @click="$emit('update:page', 'stats'); $emit('update:mobileMenu', false)">
+        </button>
+        <button type="button" class="nav-item" :class="{active: page==='stats'}" @click="$emit('update:page', 'stats'); $emit('update:mobileMenu', false)">
           <i class="bi bi-clock-history"></i><span class="nav-text">{{t('sidebar.stats')}}</span>
-        </div>
-        <div class="nav-item" :class="{active: page==='audit'}" @click="$emit('update:page', 'audit'); $emit('update:mobileMenu', false)">
+        </button>
+        <button type="button" class="nav-item" :class="{active: page==='audit'}" @click="$emit('update:page', 'audit'); $emit('update:mobileMenu', false)">
           <i class="bi bi-journal-text"></i><span class="nav-text">{{t('sidebar.audit')}}</span>
-        </div>
-        <div v-if="isAdmin" class="nav-item" :class="{active: page==='accounts'}" @click="$emit('update:page', 'accounts'); $emit('update:mobileMenu', false)">
+        </button>
+        <button type="button" v-if="isLoggedIn" class="nav-item" :class="{active: page==='issues'}" @click="$emit('update:page', 'issues'); $emit('update:mobileMenu', false)">
+          <i class="bi bi-flag"></i><span class="nav-text">{{t('sidebar.issues')}}</span>
+          <span v-if="openIssueCount>0" class="nav-badge">{{openIssueCount}}</span>
+        </button>
+        <button type="button" v-if="isAdmin" class="nav-item" :class="{active: page==='accounts'}" @click="$emit('update:page', 'accounts'); $emit('update:mobileMenu', false)">
           <i class="bi bi-people"></i><span class="nav-text">{{t('sidebar.accounts')}}</span>
-        </div>
-        <div v-if="isAdmin" class="nav-item" :class="{active: page==='settings'}" @click="$emit('update:page', 'settings'); $emit('update:mobileMenu', false)">
+        </button>
+        <button type="button" v-if="isAdmin" class="nav-item" :class="{active: page==='settings'}" @click="$emit('update:page', 'settings'); $emit('update:mobileMenu', false)">
           <i class="bi bi-gear"></i><span class="nav-text">{{t('sidebar.settings')}}</span>
-        </div>
+        </button>
 
         <div class="nav-divider" style="margin-top:auto"></div>
         <div class="nav-section">PREFERENCES</div>
 
-        <div class="nav-item" @click="helpSeen ? $emit('show-help') : $emit('start-tour')" :title="t('sidebar.help')">
+        <button type="button" class="nav-item" @click="helpSeen ? $emit('show-help') : $emit('start-tour')" :title="t('sidebar.help')">
           <i class="bi bi-question-circle"></i><span class="nav-text">{{t('sidebar.help')}}</span>
-          <span v-if="!helpSeen" class="pulse-dot"></span>
-        </div>
-        <div class="nav-item" @click="$emit('toggle-density')" :title="densityLabel">
+        </button>
+        <button type="button" class="nav-item" @click="$emit('toggle-density')" :title="densityLabel">
           <i class="bi" :class="densityIcon"></i><span class="nav-text">{{densityLabel}}</span>
-        </div>
-        <div class="nav-item" @click="$emit('toggle-theme')">
+        </button>
+        <button type="button" class="nav-item" @click="$emit('toggle-theme')">
           <i class="bi" :class="themeIcon"></i><span class="nav-text">{{themeLabel}}</span>
-        </div>
-        <div class="nav-item" @click="$emit('switch-locale')">
+        </button>
+        <button type="button" class="nav-item" @click="$emit('switch-locale')">
           <i class="bi bi-translate"></i><span class="nav-text">{{locale==='zh-TW' ? '中' : 'EN'}}</span>
-        </div>
+        </button>
 
         <div class="nav-divider"></div>
 
@@ -96,15 +100,15 @@ const SidebarNav = {
           <div class="user-avatar"><i class="bi bi-person"></i></div>
           <span class="nav-text nav-user-name">{{t('sidebar.guestMode')}}</span>
         </div>
-        <div v-if="isLoggedIn && status?.isBuiltinUser" class="nav-item" @click="$emit('change-password')">
+        <button type="button" v-if="isLoggedIn && status?.isBuiltinUser" class="nav-item" @click="$emit('change-password')">
           <i class="bi bi-key"></i><span class="nav-text">{{t('sidebar.changePassword')}}</span>
-        </div>
-        <div v-if="isLoggedIn" class="nav-item" @click="$emit('logout')">
+        </button>
+        <button type="button" v-if="isLoggedIn" class="nav-item" @click="$emit('logout')">
           <i class="bi bi-box-arrow-left"></i><span class="nav-text">{{t('sidebar.logout')}}</span>
-        </div>
-        <div v-else class="nav-item" @click="$emit('login')">
+        </button>
+        <button type="button" v-else class="nav-item" @click="$emit('login')">
           <i class="bi bi-box-arrow-in-right"></i><span class="nav-text">{{t('sidebar.login')}}</span>
-        </div>
+        </button>
       </div>
     </aside>
   `

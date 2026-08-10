@@ -136,9 +136,7 @@ public class JmsMockPipeline extends AbstractMockPipeline<JmsRule> {
 
     @Override
     protected MockResponse forward(MockRequest request) {
-        JmsProperties.Target target = jmsProperties.getTarget();
-        log.info("No rule matched, forwarding to target JMS: {} queue: {}",
-                target.getServerUrl(), target.getQueue());
+        log.debug("No rule matched, forwarding through the selected outbound JMS connection");
 
         String responseBody = targetForwarder.forward(request.getBody(), null);
 
@@ -158,16 +156,13 @@ public class JmsMockPipeline extends AbstractMockPipeline<JmsRule> {
 
     @Override
     protected boolean shouldForward(MockRequest request) {
-        JmsProperties.Target target = jmsProperties.getTarget();
-        return target.isEnabled()
-                && target.getServerUrl() != null
-                && !target.getServerUrl().isBlank();
+        return targetForwarder.hasActiveTarget();
     }
 
     @Override
     protected MockResponse handleNoMatch(MockRequest request) {
         String queueName = jmsProperties.getQueue();
-        log.warn("No JMS rule matched for queue: {}", queueName);
+        log.debug("No JMS rule matched for queue: {}", queueName);
 
         return MockResponse.builder()
                 .status(200)

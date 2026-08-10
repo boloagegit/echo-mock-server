@@ -463,4 +463,22 @@ class ConditionMatcherDetailTest {
         assertThat(detail.passedCount()).isEqualTo(1);
         assertThat(detail.score()).isEqualTo("1/2");
     }
+
+    @Test
+    void requestTimePredicateOutcomesCanBeReusedByBackgroundAnalysis() {
+        PreparedBody requestPrepared = matcher.prepareBody("{\"status\":\"OPEN\"}");
+        assertThat(matcher.matchesPrepared("status=OPEN", null, null,
+                requestPrepared, null, null)).isTrue();
+        assertThat(requestPrepared.getMatchOutcomesSnapshot())
+                .containsEntry("body:status=OPEN", true);
+
+        PreparedBody backgroundPrepared = matcher.prepareBody(
+                "{\"status\":\"OPEN\"}", requestPrepared.getMatchOutcomesSnapshot());
+        ConditionDetail detail = matcher.matchesPreparedWithDetail(
+                "status=OPEN", null, null, backgroundPrepared, null, null);
+
+        assertThat(detail.isOverallMatch()).isTrue();
+        assertThat(detail.getResults()).singleElement()
+                .extracting(ConditionMatcher.ConditionResult::isPassed).isEqualTo(true);
+    }
 }

@@ -196,16 +196,32 @@ class JmsTargetForwarderExtendedTest {
         ReflectionTestUtils.setField(forwarder, "targetConnection", mockConnection);
 
         // 第一次 reset
-        java.lang.reflect.Method resetMethod = JmsTargetForwarder.class.getDeclaredMethod("resetConnection");
+        java.lang.reflect.Method resetMethod = JmsTargetForwarder.class
+                .getDeclaredMethod("resetConnection", String.class);
         resetMethod.setAccessible(true);
-        resetMethod.invoke(forwarder);
+        resetMethod.invoke(forwarder, new Object[]{null});
 
         assertThat(ReflectionTestUtils.getField(forwarder, "targetConnection")).isNull();
 
         // 第二次 reset（已經是 null）
-        resetMethod.invoke(forwarder);
+        resetMethod.invoke(forwarder, new Object[]{null});
 
         verify(mockConnection, times(1)).close();
+    }
+
+    @Test
+    void staleForwardFailureMustNotResetNewlySelectedConnection() throws Exception {
+        ReflectionTestUtils.setField(forwarder, "activeTargetKey", "db:2:0");
+        ReflectionTestUtils.setField(forwarder, "targetConnection", mockConnection);
+        java.lang.reflect.Method resetMethod = JmsTargetForwarder.class
+                .getDeclaredMethod("resetConnection", String.class);
+        resetMethod.setAccessible(true);
+
+        resetMethod.invoke(forwarder, "db:1:0");
+
+        assertThat(ReflectionTestUtils.getField(forwarder, "targetConnection"))
+                .isSameAs(mockConnection);
+        verify(mockConnection, never()).close();
     }
 
     @Test

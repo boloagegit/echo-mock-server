@@ -6,7 +6,10 @@ import net.jqwik.api.constraints.IntRange;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -28,6 +31,8 @@ class AbstractBatchAgentPropertyTest {
     static class TestBatchAgent extends AbstractBatchAgent<String> {
 
         private final CopyOnWriteArrayList<List<String>> batchCalls = new CopyOnWriteArrayList<>();
+        private volatile CountDownLatch processStarted;
+        private volatile CountDownLatch releaseProcess;
 
         TestBatchAgent(int queueCapacity, int batchSize, int flushIntervalSeconds) {
             super(queueCapacity, batchSize, flushIntervalSeconds);
@@ -46,6 +51,16 @@ class AbstractBatchAgentPropertyTest {
         @Override
         protected void processBatch(List<String> batch) {
             batchCalls.add(new ArrayList<>(batch));
+            if (processStarted != null) {
+                processStarted.countDown();
+            }
+            if (releaseProcess != null) {
+                try {
+                    releaseProcess.await(3, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
         }
 
         @Override
@@ -144,8 +159,7 @@ class AbstractBatchAgentPropertyTest {
                 agent.submit("task-" + i);
             }
 
-            // After submitting exactly batchSize items, processBatch should have been called
-            assertThat(agent.getBatchCalls()).isNotEmpty();
+            assertThat(awaitUntil(() -> !agent.getBatchCalls().isEmpty(), 2_000)).isTrue();
             assertThat(agent.totalProcessedItems()).isGreaterThanOrEqualTo(1);
         } finally {
             agent.shutdown();
@@ -166,12 +180,15 @@ class AbstractBatchAgentPropertyTest {
             @ForAll @IntRange(min = 1, max = 50) int capacity,
             @ForAll @IntRange(min = 1, max = 30) int extraSubmissions) {
 
-        // batchSize larger than capacity to prevent flush from draining
-        TestBatchAgent agent = new TestBatchAgent(capacity, capacity + extraSubmissions + 1, 60);
+        TestBatchAgent agent = new TestBatchAgent(capacity, 1, 60);
+        agent.processStarted = new CountDownLatch(1);
+        agent.releaseProcess = new CountDownLatch(1);
         agent.start();
 
         try {
-            // Fill queue to capacity
+            // Occupy the only consumer, then fill the bounded queue deterministically.
+            agent.submit("blocking-task");
+            assertThat(agent.processStarted.await(2, TimeUnit.SECONDS)).isTrue();
             for (int i = 0; i < capacity; i++) {
                 agent.submit("task-" + i);
             }
@@ -184,7 +201,11 @@ class AbstractBatchAgentPropertyTest {
             }
 
             assertThat(agent.getStats().getDroppedCount()).isEqualTo(extraSubmissions);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(e);
         } finally {
+            agent.releaseProcess.countDown();
             agent.shutdown();
         }
     }
@@ -219,5 +240,21 @@ class AbstractBatchAgentPropertyTest {
 
         // All submitted items should have been processed (via flush during submit or final flush)
         assertThat(agent.getStats().getProcessedCount()).isEqualTo(actualItems);
+    }
+
+    private static boolean awaitUntil(BooleanSupplier condition, long timeoutMs) {
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+        while (System.nanoTime() < deadline) {
+            if (condition.getAsBoolean()) {
+                return true;
+            }
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return condition.getAsBoolean();
     }
 }

@@ -1,12 +1,16 @@
 package com.echo.pipeline;
 
 import com.echo.entity.HttpRule;
+import com.echo.entity.HttpRuleAction;
+import com.echo.entity.HttpForwardTargetMode;
 import com.echo.service.ConditionMatcher;
 import com.echo.service.HttpRuleService;
+import com.echo.service.HttpOutboundForwarder;
 import com.echo.service.MatchChainEntry;
 import com.echo.service.RequestLogService;
 import com.echo.service.ResponseTemplateService;
 import com.echo.service.RuleService;
+import com.echo.util.CancellableStages;
 import com.echo.service.ScenarioService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -15,9 +19,12 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Collections;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -30,7 +37,7 @@ import java.util.Map;
  * <ul>
  *   <li>候選規則查詢：委派給 {@link HttpRuleService}</li>
  *   <li>回應建構：模板渲染 + 自訂 HTTP headers</li>
- *   <li>轉發：使用 {@link RestTemplate} proxy 轉發</li>
+ *   <li>轉發：委派給非阻塞 HTTP outbound client</li>
  * </ul>
  */
 @Component
@@ -44,18 +51,34 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
     private final HttpRuleService httpRuleService;
     private final ResponseTemplateService templateService;
     private final RestTemplate restTemplate;
+    private final HttpOutboundForwarder outboundForwarder;
 
+    @Autowired
     public HttpMockPipeline(ConditionMatcher conditionMatcher,
                             RuleService ruleService,
                             RequestLogService requestLogService,
                             HttpRuleService httpRuleService,
                             ResponseTemplateService templateService,
                             RestTemplate restTemplate,
+                            HttpOutboundForwarder outboundForwarder,
                             ScenarioService scenarioService) {
         super(conditionMatcher, ruleService, requestLogService, scenarioService);
         this.httpRuleService = httpRuleService;
         this.templateService = templateService;
         this.restTemplate = restTemplate;
+        this.outboundForwarder = outboundForwarder;
+    }
+
+    /** Test-compatible constructor retaining the legacy direct forwarding seam. */
+    public HttpMockPipeline(ConditionMatcher conditionMatcher,
+                            RuleService ruleService,
+                            RequestLogService requestLogService,
+                            HttpRuleService httpRuleService,
+                            ResponseTemplateService templateService,
+                            RestTemplate restTemplate,
+                            HttpOutboundForwarder outboundForwarder) {
+        this(conditionMatcher, ruleService, requestLogService, httpRuleService,
+                templateService, restTemplate, outboundForwarder, null);
     }
 
     @Override
@@ -92,13 +115,46 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
 
     @Override
     protected MockResponse forward(MockRequest request) {
+        if (outboundForwarder != null) {
+            var defaultForward = outboundForwarder.forwardDefault(request);
+            if (defaultForward.isPresent()) {
+                return defaultForward.get();
+            }
+        }
+
+        if (!hasOriginalHost(request)) {
+            return handleNoMatch(request);
+        }
+
+        return forwardToOriginalHost(request);
+    }
+
+    @Override
+    protected CompletionStage<MockResponse> forwardAsync(MockRequest request) {
+        if (outboundForwarder == null) {
+            return CompletableFuture.completedFuture(forward(request));
+        }
+        return CancellableStages.thenCompose(
+                outboundForwarder.forwardDefaultAsync(request), defaultForward -> {
+            if (defaultForward.isPresent()) {
+                return CompletableFuture.completedFuture(defaultForward.orElseThrow());
+            }
+            if (!hasOriginalHost(request)) {
+                return CompletableFuture.completedFuture(handleNoMatch(request));
+            }
+            return outboundForwarder.forwardOriginalHostAsync(request, false);
+        });
+    }
+
+    /** Legacy X-Original-Host forwarding used only when no default profile exists. */
+    private MockResponse forwardToOriginalHost(MockRequest request) {
         String targetHost = request.getTargetHost();
         String url = "https://" + targetHost + request.getPath();
         if (request.getQueryString() != null && !request.getQueryString().isEmpty()) {
             url += "?" + request.getQueryString();
         }
 
-        log.info("Proxy forwarding to: {} {}", request.getMethod(), url);
+        log.debug("Proxy forwarding to: {} {}", request.getMethod(), url);
 
         try {
             HttpHeaders headers = new HttpHeaders();
@@ -117,7 +173,7 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
 
             ResponseEntity<String> response = restTemplate.exchange(url, httpMethod, entity, String.class);
 
-            log.info("Proxy response: status={}", response.getStatusCode());
+            log.debug("Proxy response: status={}", response.getStatusCode());
             int statusCode = response.getStatusCode().value();
 
             return MockResponse.builder()
@@ -128,7 +184,7 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
                     .build();
 
         } catch (Exception e) {
-            log.error("Proxy error: {}", e.getMessage());
+            log.debug("Proxy error: {}", e.getMessage());
             String errorMsg = e.getMessage();
             if (errorMsg != null && errorMsg.length() > 255) {
                 errorMsg = errorMsg.substring(0, 255);
@@ -146,6 +202,10 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
 
     @Override
     protected boolean shouldForward(MockRequest request) {
+        return outboundForwarder != null || hasOriginalHost(request);
+    }
+
+    private boolean hasOriginalHost(MockRequest request) {
         return request.getTargetHost() != null && !DEFAULT_HOST.equals(request.getTargetHost());
     }
 
@@ -157,6 +217,45 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
                 .matched(false)
                 .forwarded(false)
                 .build();
+    }
+
+    @Override
+    protected boolean shouldForwardMatchedRule(HttpRule rule, MockRequest request) {
+        return HttpRuleAction.FORWARD.equals(rule.getAction());
+    }
+
+    @Override
+    protected MockResponse forwardMatchedRule(HttpRule rule, MockRequest request) {
+        HttpForwardTargetMode mode = rule.getForwardTargetMode() == null
+                ? HttpForwardTargetMode.ORIGINAL_HOST : rule.getForwardTargetMode();
+        if (mode == HttpForwardTargetMode.ORIGINAL_HOST) {
+            if (hasOriginalHost(request)) return forwardToOriginalHost(request);
+            return MockResponse.builder().status(502)
+                    .body("Proxy error: X-Original-Host is required for this forwarding rule")
+                    .matched(true).forwarded(true)
+                    .proxyError("X-Original-Host is required for this forwarding rule").build();
+        }
+        if (outboundForwarder == null) {
+            return MockResponse.builder().status(502).body("Proxy error: HTTP profile forwarder unavailable")
+                    .matched(true).forwarded(true).proxyError("HTTP profile forwarder unavailable").build();
+        }
+        return outboundForwarder.forward(request, rule.getHttpTargetConnectionId(),
+                mode == HttpForwardTargetMode.DEFAULT_CONNECTION);
+    }
+
+    @Override
+    protected CompletionStage<MockResponse> forwardMatchedRuleAsync(HttpRule rule,
+                                                                     MockRequest request) {
+        if (outboundForwarder == null) {
+            return CompletableFuture.completedFuture(forwardMatchedRule(rule, request));
+        }
+        HttpForwardTargetMode mode = rule.getForwardTargetMode() == null
+                ? HttpForwardTargetMode.ORIGINAL_HOST : rule.getForwardTargetMode();
+        if (mode == HttpForwardTargetMode.ORIGINAL_HOST) {
+            return outboundForwarder.forwardOriginalHostAsync(request, true);
+        }
+        return outboundForwarder.forwardAsync(request, rule.getHttpTargetConnectionId(),
+                mode == HttpForwardTargetMode.DEFAULT_CONNECTION);
     }
 
     @Override

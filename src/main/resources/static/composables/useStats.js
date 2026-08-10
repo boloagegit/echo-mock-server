@@ -32,47 +32,33 @@ const useStats = (deps) => {
     const logSort = ref(savedLogSort || { field: 'requestTime', asc: false });
     const logPage = ref(1);
     const logPageSize = ref(parseInt(localStorage.getItem('logPageSize')) || 20);
+    const logTotalElements = ref(0);
+    const serverTotalPages = ref(0);
+    let newestId = null;
+    let listRequestSequence = 0;
+    let lastFullRefresh = 0;
+    let listAbortController = null;
 
     // --- Detail cache: keyed by log.id ---
     const detailCache = {};
+    const detailCacheOrder = [];
+    const DETAIL_CACHE_LIMIT = 100;
+    const cacheDetail = (id, detail) => {
+        if (!detailCache[id]) { detailCacheOrder.push(id); }
+        detailCache[id] = detail;
+        while (detailCacheOrder.length > DETAIL_CACHE_LIMIT) {
+            delete detailCache[detailCacheOrder.shift()];
+        }
+    };
     // --- 展開狀態: keyed by log.id ---
     const logDetailExpanded = ref({});
 
     // --- 篩選、排序與分頁 ---
-    const filteredLogs = computed(() => {
-        return logs.value.filter(item => {
-            const log = item.log;
-            if (logFilter.value.protocol && log.protocol !== logFilter.value.protocol) { return false; }
-            if (logFilter.value.matched === 'true' && !log.matched) { return false; }
-            if (logFilter.value.matched === 'false' && log.matched) { return false; }
-            if (logFilter.value.endpoint) {
-                const kw = logFilter.value.endpoint.toLowerCase();
-                const searchText = [log.endpoint, log.targetHost, log.ruleId].filter(Boolean).join(' ').toLowerCase();
-                if (!searchText.includes(kw)) { return false; }
-            }
-            return true;
-        });
-    });
-
-    const sortedLogs = computed(() => {
-        const arr = [...filteredLogs.value];
-        const { field, asc } = logSort.value;
-        arr.sort((a, b) => {
-            let va = a.log[field], vb = b.log[field];
-            if (va == null) { return 1; }
-            if (vb == null) { return -1; }
-            if (typeof va === 'string') { return asc ? va.localeCompare(vb) : vb.localeCompare(va); }
-            return asc ? va - vb : vb - va;
-        });
-        return arr;
-    });
-
-    const pagedLogs = computed(() => {
-        const start = (logPage.value - 1) * logPageSize.value;
-        return sortedLogs.value.slice(start, start + logPageSize.value);
-    });
-
-    const totalPages = computed(() => Math.ceil(filteredLogs.value.length / logPageSize.value) || 1);
+    // 清單已由後端完成篩選、排序與分頁；保留這三個 computed 名稱以相容既有元件。
+    const filteredLogs = computed(() => logs.value);
+    const sortedLogs = computed(() => logs.value);
+    const pagedLogs = computed(() => logs.value);
+    const totalPages = computed(() => Math.max(1, serverTotalPages.value));
 
     /** 切換排序欄位/方向 */
     const toggleSort = (field) => {
@@ -83,6 +69,7 @@ const useStats = (deps) => {
             logSort.value.asc = false;
         }
         localStorage.setItem('logSort', JSON.stringify(logSort.value));
+        logPage.value = 1;
     };
 
     /** 取得排序圖示 class */
@@ -96,51 +83,101 @@ const useStats = (deps) => {
         logPage.value = 1;
     };
 
-    watch(logFilter, () => logPage.value = 1, { deep: true });
-
-    // --- 載入（列表只拿摘要） ---
-    const loadLogs = async (force) => {
-        if (!force && !shouldLoad()) { return; }
-        deps.loading.value.logs = true;
-
-        // 保留展開狀態（以 log.id 為 key）
-        const prevExpanded = { ...logDetailExpanded.value };
-
-        const [logsRes, summaryRes] = await Promise.all([
-            apiCall('/api/admin/logs', {}, { silent: true }),
-            apiCall('/api/admin/logs/summary', {}, { silent: true })
-        ]);
-        if (logsRes && logsRes.ok) {
-            const d = await logsRes.json();
-            const newResults = d.results || [];
-
-            // 還原展開狀態（以 log.id 為 key，不受排序/分頁影響）
-            const newExpanded = {};
-            newResults.forEach(item => {
-                const key = item.log.id;
-                if (key && prevExpanded[key]) {
-                    newExpanded[key] = true;
+    const hydrateCachedDetails = (items) => {
+        items.forEach(item => {
+            const key = item.log.id;
+            if (key && detailCache[key]) {
+                item._detail = detailCache[key];
+                if (item._detail.matchChain) {
+                    item.matchChainData = JSON.parse(item._detail.matchChain || '[]');
                 }
-                // 還原已快取的 detail
-                if (key && detailCache[key]) {
-                    item._detail = detailCache[key];
-                    if (item._detail.matchChain) {
-                        item.matchChainData = JSON.parse(item._detail.matchChain || '[]');
-                    }
-                }
-            });
-
-            logs.value = newResults;
-            logDetailExpanded.value = newExpanded;
-        }
-        if (summaryRes && summaryRes.ok) {
-            logSummary.value = await summaryRes.json();
-        }
-        markLoaded();
-        deps.loading.value.logs = false;
+            }
+        });
+        return items;
     };
 
-    const debouncedLoadLogs = debounce(() => loadLogs(true), 300);
+    const buildLogQuery = ({ afterId = null, size = logPageSize.value } = {}) => {
+        const params = new URLSearchParams();
+        params.set('page', afterId == null ? String(Math.max(0, logPage.value - 1)) : '0');
+        params.set('size', String(size));
+        params.set('sort', logSort.value.field);
+        params.set('direction', logSort.value.asc ? 'asc' : 'desc');
+        if (logFilter.value.protocol) { params.set('protocol', logFilter.value.protocol); }
+        if (logFilter.value.matched) { params.set('matched', logFilter.value.matched); }
+        const endpoint = (logFilter.value.endpoint || '').trim();
+        if (endpoint) { params.set('endpoint', endpoint); }
+        if (afterId != null) { params.set('afterId', String(afterId)); }
+        return '/api/admin/logs?' + params.toString();
+    };
+
+    const loadLogPage = async ({ showLoading = true } = {}) => {
+        const requestId = ++listRequestSequence;
+        if (listAbortController) { listAbortController.abort(); }
+        const abortController = new AbortController();
+        listAbortController = abortController;
+        if (showLoading) { deps.loading.value.logs = true; }
+        if (showLoading) { deps.loading.value.logsError = ''; }
+        try {
+            const response = await apiCall(buildLogQuery(), { signal: abortController.signal }, { silent: true });
+            if (requestId !== listRequestSequence) { return false; }
+            if (response && response.ok) {
+                const data = await response.json();
+                if (requestId !== listRequestSequence) { return false; }
+                const newResults = hydrateCachedDetails(data.results || []);
+                logs.value = newResults;
+                logTotalElements.value = Number(data.totalElements || 0);
+                serverTotalPages.value = Number(data.totalPages || 0);
+                logSummary.value = { ...logSummary.value, filteredRequests: logTotalElements.value };
+                newestId = data.newestId != null ? Number(data.newestId) : null;
+                if (logPage.value > totalPages.value) {
+                    logPage.value = totalPages.value;
+                }
+                markLoaded();
+                deps.loading.value.logsError = '';
+            } else if (showLoading) {
+                deps.loading.value.logsError = t('stats.loadFailed');
+            }
+            return !!(response && response.ok);
+        } finally {
+            if (requestId === listRequestSequence) {
+                if (listAbortController === abortController) { listAbortController = null; }
+                if (showLoading) { deps.loading.value.logs = false; }
+            }
+        }
+    };
+
+    const loadLogSummary = async () => {
+        const response = await apiCall('/api/admin/logs/summary', {}, { silent: true });
+        if (response && response.ok) {
+            logSummary.value = { ...(await response.json()), filteredRequests: logTotalElements.value };
+        }
+    };
+
+    // --- 載入（列表只拿當頁摘要，統計另行低頻刷新） ---
+    const loadLogs = async (force) => {
+        if (!force && !shouldLoad()) { return; }
+        debouncedLoadLogs.cancel();
+        await Promise.all([loadLogPage(), loadLogSummary()]);
+        lastFullRefresh = Date.now();
+    };
+
+    const debouncedLoadLogs = debounce(() => loadLogPage(), 300);
+
+    // 查詢條件變更後，只向後端查詢新的一頁，不再於瀏覽器掃描全部記錄。
+    watch(logFilter, () => {
+        logPage.value = 1;
+        debouncedLoadLogs();
+    }, { deep: true });
+    watch(logSort, () => {
+        logPage.value = 1;
+        debouncedLoadLogs();
+    }, { deep: true });
+    watch(logPage, () => debouncedLoadLogs());
+    watch(logPageSize, () => {
+        localStorage.setItem('logPageSize', logPageSize.value);
+        logPage.value = 1;
+        debouncedLoadLogs();
+    });
 
     // --- Lazy load detail ---
     const loadLogDetail = async (item) => {
@@ -159,21 +196,92 @@ const useStats = (deps) => {
             return;
         }
         item._detailLoading = true;
-        const res = await apiCall('/api/admin/logs/' + id + '/detail', {}, { silent: true });
-        if (res && res.ok) {
-            const detail = await res.json();
-            detailCache[id] = detail;
-            item._detail = detail;
-            if (detail.matchChain) {
-                item.matchChainData = JSON.parse(detail.matchChain || '[]');
+        item._detailError = false;
+        try {
+            const res = await apiCall('/api/admin/logs/' + id + '/detail', {}, { silent: true });
+            if (res && res.ok) {
+                const detail = await res.json();
+                cacheDetail(id, detail);
+                item._detail = detail;
+                if (detail.matchChain) {
+                    item.matchChainData = JSON.parse(detail.matchChain || '[]');
+                }
+            } else {
+                item._detailError = true;
             }
+        } finally {
+            item._detailLoading = false;
         }
-        item._detailLoading = false;
     };
 
     // --- 自動刷新 ---
     const autoRefresh = ref(false);
     let autoRefreshTimer = null;
+    let incrementalRefreshRunning = false;
+    const FULL_REFRESH_INTERVAL = 30000;
+    const INCREMENTAL_BATCH_SIZE = 200;
+
+    const currentQuerySignature = () => JSON.stringify({
+        filter: logFilter.value,
+        sort: logSort.value,
+        page: logPage.value,
+        size: logPageSize.value
+    });
+
+    const refreshIncrementally = async () => {
+        if (incrementalRefreshRunning) { return; }
+        incrementalRefreshRunning = true;
+        try {
+            // 每 30 秒做一次完整當頁同步，校正清理造成的總筆數變化並更新統計。
+            if (Date.now() - lastFullRefresh >= FULL_REFRESH_INTERVAL) {
+                await loadLogs(true);
+                return;
+            }
+
+            const canMergeIncrementally = logPage.value === 1
+                && logSort.value.field === 'requestTime'
+                && !logSort.value.asc
+                && newestId != null;
+            if (!canMergeIncrementally) {
+                await loadLogPage({ showLoading: false });
+                return;
+            }
+
+            const signature = currentQuerySignature();
+            const response = await apiCall(
+                buildLogQuery({ afterId: newestId, size: INCREMENTAL_BATCH_SIZE }),
+                {}, { silent: true });
+            if (!response || !response.ok || signature !== currentQuerySignature()) { return; }
+
+            const data = await response.json();
+            if (signature !== currentQuerySignature()) { return; }
+            const newResults = hydrateCachedDetails(data.results || []);
+            const available = Number(data.totalElements || 0);
+            // 兩次輪詢間若湧入超過單批上限，直接重查當頁，避免遺漏中間記錄。
+            if (available > newResults.length) {
+                await loadLogPage({ showLoading: false });
+                return;
+            }
+            if (!newResults.length) { return; }
+
+            const merged = new Map();
+            [...newResults, ...logs.value].forEach(item => merged.set(item.log.id, item));
+            logs.value = [...merged.values()]
+                .sort((a, b) => {
+                    const byTime = String(b.log.requestTime || '').localeCompare(String(a.log.requestTime || ''));
+                    return byTime || Number(b.log.id || 0) - Number(a.log.id || 0);
+                })
+                .slice(0, logPageSize.value);
+            logTotalElements.value += newResults.length;
+            serverTotalPages.value = Math.ceil(logTotalElements.value / logPageSize.value);
+            logSummary.value = { ...logSummary.value, filteredRequests: logTotalElements.value };
+            if (data.newestId != null) {
+                newestId = Math.max(newestId, Number(data.newestId));
+            }
+        } finally {
+            incrementalRefreshRunning = false;
+        }
+    };
 
     const toggleAutoRefresh = () => {
         autoRefresh.value = !autoRefresh.value;
@@ -181,7 +289,7 @@ const useStats = (deps) => {
             resetActivity();
             autoRefreshTimer = setInterval(() => {
                 if (!deps.loading.value.logs) {
-                    loadLogs(true);
+                    refreshIncrementally();
                 }
             }, 5000);
             startIdleCheck();
@@ -237,12 +345,17 @@ const useStats = (deps) => {
         }
     };
 
-    // --- 行內詳細展開（以 log.id 為 key） ---
+    // --- 詳情 Inspector（單一選取，以 log.id 為 key） ---
     const toggleLogDetail = async (item) => {
         const key = item.log.id;
         if (!key) { return; }
         const wasExpanded = !!logDetailExpanded.value[key];
-        logDetailExpanded.value = { ...logDetailExpanded.value, [key]: !wasExpanded };
+        if (wasExpanded && item._detailError) {
+            await loadLogDetail(item);
+            logDetailExpanded.value = { ...logDetailExpanded.value };
+            return;
+        }
+        logDetailExpanded.value = wasExpanded ? {} : { [key]: true };
         if (!wasExpanded) {
             await loadLogDetail(item);
             // 重新觸發 watch（detail 載入完成後）
@@ -292,6 +405,7 @@ const useStats = (deps) => {
         logSort,
         logPage,
         logPageSize,
+        logTotalElements,
         filteredLogs,
         sortedLogs,
         pagedLogs,

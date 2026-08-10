@@ -11,9 +11,13 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.RequiredArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -229,6 +233,55 @@ public class RuleAuditService {
                 .toList();
     }
 
+    /** 查詢修訂記錄摘要；完整 JSON 由 getAuditDetail() 單筆載入。 */
+    public AuditQueryResult queryAuditSummary(AuditQueryFilter filter) {
+        int pageNumber = Math.max(0, filter.getPage() != null ? filter.getPage() : 0);
+        int pageSize = Math.max(1, Math.min(filter.getSize() != null ? filter.getSize() : 20, 100));
+        String sortField = normalizeSortField(filter.getSortField());
+        Sort.Direction direction = "asc".equalsIgnoreCase(filter.getSortDirection())
+                ? Sort.Direction.ASC : Sort.Direction.DESC;
+        Sort sort = Sort.by(direction, sortField).and(Sort.by(direction, "id"));
+
+        Page<Object[]> resultPage = repository.findSummaryPage(
+                filter.getAction(), normalizeFilter(filter.getOperator()),
+                normalizeFilter(filter.getKeyword()), PageRequest.of(pageNumber, pageSize, sort));
+
+        return AuditQueryResult.builder()
+                .results(resultPage.getContent().stream().map(this::mapAuditSummaryRow).toList())
+                .page(pageNumber)
+                .size(pageSize)
+                .totalElements(resultPage.getTotalElements())
+                .totalPages(resultPage.getTotalPages())
+                .build();
+    }
+
+    public RuleAuditLog getAuditDetail(long id) {
+        return repository.findById(id).orElse(null);
+    }
+
+    private String normalizeSortField(String field) {
+        return switch (field == null ? "" : field) {
+            case "action", "operator", "ruleId" -> field;
+            default -> "timestamp";
+        };
+    }
+
+    private String normalizeFilter(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private AuditSummary mapAuditSummaryRow(Object[] row) {
+        return AuditSummary.builder()
+                .id(((Number) row[0]).longValue())
+                .ruleId((String) row[1])
+                .action((RuleAuditLog.Action) row[2])
+                .operator((String) row[3])
+                .timestamp((LocalDateTime) row[4])
+                .hasBeforeJson(Boolean.TRUE.equals(row[5]))
+                .hasAfterJson(Boolean.TRUE.equals(row[6]))
+                .build();
+    }
+
     /** Maps Object[] from findSummaryByRuleId/findAllSummary: [id, ruleId, action, operator, timestamp] */
     private RuleAuditLog mapSummaryRow(Object[] row) {
         return RuleAuditLog.builder()
@@ -238,6 +291,40 @@ public class RuleAuditService {
                 .operator((String) row[3])
                 .timestamp((LocalDateTime) row[4])
                 .build();
+    }
+
+    @Getter
+    @Builder
+    public static class AuditQueryFilter {
+        private RuleAuditLog.Action action;
+        private String operator;
+        private String keyword;
+        private Integer page;
+        private Integer size;
+        private String sortField;
+        private String sortDirection;
+    }
+
+    @Getter
+    @Builder
+    public static class AuditSummary {
+        private Long id;
+        private String ruleId;
+        private RuleAuditLog.Action action;
+        private String operator;
+        private LocalDateTime timestamp;
+        private boolean hasBeforeJson;
+        private boolean hasAfterJson;
+    }
+
+    @Getter
+    @Builder
+    public static class AuditQueryResult {
+        private List<AuditSummary> results;
+        private int page;
+        private int size;
+        private long totalElements;
+        private int totalPages;
     }
 
     @Transactional

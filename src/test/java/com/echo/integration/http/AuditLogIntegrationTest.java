@@ -105,6 +105,34 @@ class AuditLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    @DisplayName("11.5.1 修訂摘要分頁不含 JSON，單筆明細保留完整內容")
+    void pagedAuditSummary_andLazyDetail() {
+        RuleDto rule = createHttpRule("/api/audit-detail", "GET", "{\"ok\":true}");
+        rule.setDescription("lazy-detail-description");
+        updateRule(rule.getId(), rule);
+
+        ResponseEntity<Map> pageResponse = adminClient().getForEntity(
+                "/api/admin/audit?page=0&size=1&action=UPDATE&keyword=" + rule.getId(), Map.class);
+
+        assertThat(pageResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(pageResponse.getBody()).isNotNull();
+        assertThat(pageResponse.getBody().get("totalElements")).isEqualTo(1);
+        List<Map<String, Object>> results = (List<Map<String, Object>>) pageResponse.getBody().get("results");
+        assertThat(results).singleElement().satisfies(summary -> {
+            assertThat(summary).containsEntry("ruleId", rule.getId());
+            assertThat(summary).containsEntry("hasBeforeJson", true);
+            assertThat(summary).doesNotContainKeys("beforeJson", "afterJson");
+        });
+
+        Number auditId = (Number) results.get(0).get("id");
+        ResponseEntity<Map> detailResponse = adminClient().getForEntity(
+                "/api/admin/audit?detailId=" + auditId.longValue(), Map.class);
+        assertThat(detailResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(detailResponse.getBody().get("beforeJson").toString()).contains("/api/audit-detail");
+        assertThat(detailResponse.getBody().get("afterJson").toString()).contains("lazy-detail-description");
+    }
+
+    @Test
     @DisplayName("11.6 清除全部審計日誌")
     void deleteAllAuditLogs() {
         createHttpRule("/api/audit-clear", "GET", "{\"ok\":true}");

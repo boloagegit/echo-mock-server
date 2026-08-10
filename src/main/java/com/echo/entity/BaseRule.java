@@ -39,7 +39,7 @@ public abstract class BaseRule {
     @Version
     private Long version;
 
-    /** 
+    /**
      * Body 匹配條件
      * <p>格式：field=value;field2=value2
      * <p>支援 JSONPath 或 XPath 表達式
@@ -47,7 +47,7 @@ public abstract class BaseRule {
     @Lob
     private String bodyCondition;
 
-    /** 
+    /**
      * 關聯的回應 ID
      * <p>必須設定，指向 Response 表的回應內容
      */
@@ -98,7 +98,7 @@ public abstract class BaseRule {
     /** 展延時間（用於計算自動清除日期） */
     private LocalDateTime extendedAt;
 
-    /** 
+    /**
      * 故障注入類型
      * <p>匹配成功後根據此欄位決定回應行為
      * @see FaultType

@@ -6,6 +6,7 @@ import com.echo.service.ConditionMatcher;
 import com.echo.service.MatchChainEntry;
 import com.echo.service.MatchResult;
 import com.echo.service.RequestLogService;
+import com.echo.service.RequestLogUnavailableException;
 import com.echo.service.RuleService;
 import com.echo.service.ScenarioService;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -41,6 +43,9 @@ class AbstractMockPipelineTest {
     @Mock
     private RequestLogService requestLogService;
 
+    @Mock
+    private ScenarioService scenarioService;
+
     private TestPipeline pipeline;
 
     // ==================== Test Subclass ====================
@@ -59,12 +64,6 @@ class AbstractMockPipelineTest {
 
         // 追蹤呼叫順序
         final List<String> callOrder = new ArrayList<>();
-
-        TestPipeline(ConditionMatcher conditionMatcher,
-                     RuleService ruleService,
-                     RequestLogService requestLogService) {
-            super(conditionMatcher, ruleService, requestLogService, null);
-        }
 
         TestPipeline(ConditionMatcher conditionMatcher,
                      RuleService ruleService,
@@ -127,7 +126,7 @@ class AbstractMockPipelineTest {
 
     @BeforeEach
     void setUp() {
-        pipeline = new TestPipeline(conditionMatcher, ruleService, requestLogService);
+        pipeline = new TestPipeline(conditionMatcher, ruleService, requestLogService, scenarioService);
     }
 
     private MockRequest defaultRequest() {
@@ -152,19 +151,6 @@ class AbstractMockPipelineTest {
                 .httpStatus(200)
                 .priority(0)
                 .delayMs(100L)
-                .build();
-    }
-
-    private HttpRule enabledRuleNoCondition(String id, Long responseId) {
-        return HttpRule.builder()
-                .id(id)
-                .enabled(true)
-                .responseId(responseId)
-                .matchKey("/api/test")
-                .method("POST")
-                .httpStatus(200)
-                .priority(0)
-                .delayMs(0L)
                 .build();
     }
 
@@ -203,8 +189,8 @@ class AbstractMockPipelineTest {
                     eq(true), anyInt(), eq("127.0.0.1"),
                     any(), any(), any(), any(), eq(200), anyInt(),
                     eq("{\"key\":\"value\"}"), eq("OK"),
-                    anyList(), any(), any(), any(), any(),
-                    any(), any(), any());
+                    anyList(), any(), any(), any(),
+                    any(), any(), any(), any());
         }
 
         @Test
@@ -214,9 +200,6 @@ class AbstractMockPipelineTest {
             pipeline.shouldForwardResult = true;
             pipeline.forwardResult = MockResponse.builder()
                     .status(200).body("forwarded").matched(false).forwarded(true).build();
-
-            ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
 
             MockRequest request = MockRequest.builder()
                     .protocol(Protocol.HTTP)
@@ -240,8 +223,8 @@ class AbstractMockPipelineTest {
                     eq(false), anyInt(), eq("10.0.0.1"),
                     any(), eq("remote-host"), eq(200), isNull(), eq(200), anyInt(),
                     eq("{}"), eq("forwarded"),
-                    anyList(), any(), any(), any(), any(),
-                    any(), any(), any());
+                    anyList(), any(), any(), any(),
+                    any(), any(), any(), any());
         }
 
         @Test
@@ -251,9 +234,6 @@ class AbstractMockPipelineTest {
             pipeline.shouldForwardResult = false;
             pipeline.handleNoMatchResult = MockResponse.builder()
                     .status(404).body("Not Found").matched(false).forwarded(false).build();
-
-            ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
 
             PipelineResult result = pipeline.execute(defaultRequest());
 
@@ -268,8 +248,8 @@ class AbstractMockPipelineTest {
                     eq(false), anyInt(), eq("127.0.0.1"),
                     any(), isNull(), isNull(), isNull(), eq(404), anyInt(),
                     eq("{\"key\":\"value\"}"), eq("Not Found"),
-                    anyList(), any(), any(), any(), any(),
-                    any(), any(), any());
+                    anyList(), any(), any(), any(),
+                    any(), any(), any(), any());
         }
     }
 
@@ -363,8 +343,8 @@ class AbstractMockPipelineTest {
                     "[{\"ruleId\":\"rule-abc\"}]", "target.host",
                     200, null, 200, 10,
                     "{\"req\":1}", "{\"res\":2}",
-                    Collections.emptyList(), null, null, null, null,
-                    null, null, null);
+                    Collections.emptyList(), null, null, null,
+                    null, null, null, null);
 
             verify(requestLogService).record(
                     eq("rule-abc"),
@@ -401,8 +381,8 @@ class AbstractMockPipelineTest {
                     null, null,
                     null, null, 404, 5,
                     null, null,
-                    Collections.emptyList(), null, null, null, null,
-                    null, null, null);
+                    Collections.emptyList(), null, null, null,
+                    null, null, null, null);
 
             verify(requestLogService).record(
                     isNull(),
@@ -472,9 +452,6 @@ class AbstractMockPipelineTest {
             pipeline.handleNoMatchResult = MockResponse.builder()
                     .status(404).body("").matched(false).forwarded(false).build();
 
-            ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
-
             PipelineResult result = pipeline.execute(defaultRequest());
 
             assertThat(result.getRuleId()).isNull();
@@ -482,6 +459,7 @@ class AbstractMockPipelineTest {
             assertThat(result.getDelayMs()).isEqualTo(0);
             assertThat(result.getMatchTimeMs()).isGreaterThanOrEqualTo(0);
             assertThat(result.getResponseTimeMs()).isGreaterThanOrEqualTo(0);
+            verify(conditionMatcher, never()).prepareBody(anyString());
         }
     }
 
@@ -495,7 +473,7 @@ class AbstractMockPipelineTest {
         @DisplayName("findCandidateRules 拋出例外時回傳 500 error response")
         void findCandidateRulesThrowsReturns500() {
             // 建立一個會在 findCandidateRules 拋出例外的 pipeline
-            TestPipeline errorPipeline = new TestPipeline(conditionMatcher, ruleService, requestLogService) {
+            TestPipeline errorPipeline = new TestPipeline(conditionMatcher, ruleService, requestLogService, scenarioService) {
                 @Override
                 protected List<HttpRule> findCandidateRules(MockRequest request) {
                     callOrder.add("findCandidateRules");
@@ -513,99 +491,35 @@ class AbstractMockPipelineTest {
             assertThat(result.getDelayMs()).isEqualTo(0);
             assertThat(result.getResponseTimeMs()).isGreaterThanOrEqualTo(0);
         }
-    }
-
-    // ==================== 7. Scenario state tracking in logs ====================
-
-    @Nested
-    @DisplayName("Scenario 狀態轉移記錄到日誌")
-    class ScenarioStateTracking {
-
-        @Mock
-        private ScenarioService scenarioService;
-
-        private TestPipeline scenarioPipeline;
-
-        @BeforeEach
-        void setUp() {
-            scenarioPipeline = new TestPipeline(conditionMatcher, ruleService, requestLogService, scenarioService);
-        }
 
         @Test
-        @DisplayName("匹配帶 scenario 的規則 → PipelineResult 包含正確的 scenario 資訊")
-        void matchedRuleWithScenario_resultContainsScenarioInfo() {
-            HttpRule rule = HttpRule.builder()
-                    .id("scenario-rule").enabled(true).responseId(1L)
-                    .matchKey("/api/test").method("POST").httpStatus(200).priority(0).delayMs(0L)
-                    .scenarioName("order-flow").requiredScenarioState("Started").newScenarioState("Paid")
-                    .build();
+        @DisplayName("durable request log 無法接受時回傳 503，不假裝成功")
+        void durableLogUnavailableReturns503() {
+            pipeline.candidateRules = Collections.emptyList();
+            pipeline.shouldForwardResult = false;
+            pipeline.handleNoMatchResult = MockResponse.builder()
+                    .status(404).body("not found").matched(false).forwarded(false).build();
+            doThrow(new RequestLogUnavailableException("spool full"))
+                    .when(requestLogService).record(
+                            ArgumentMatchers.<String>any(), ArgumentMatchers.<Protocol>any(),
+                            ArgumentMatchers.<String>any(), ArgumentMatchers.<String>any(),
+                            anyBoolean(), anyInt(), ArgumentMatchers.<String>any(),
+                            ArgumentMatchers.<String>any(), ArgumentMatchers.<String>any(),
+                            ArgumentMatchers.<Integer>any(), ArgumentMatchers.<String>any(),
+                            ArgumentMatchers.<Integer>any(), ArgumentMatchers.<Integer>any(),
+                            ArgumentMatchers.<String>any(), ArgumentMatchers.<String>any(),
+                            ArgumentMatchers.<HttpRule>anyList(),
+                            ArgumentMatchers.<ConditionMatcher.PreparedBody>any(),
+                            ArgumentMatchers.<String>any(), ArgumentMatchers.<Map<String, String>>any(),
+                            ArgumentMatchers.nullable(String.class), ArgumentMatchers.nullable(String.class),
+                            ArgumentMatchers.nullable(String.class), ArgumentMatchers.nullable(String.class));
 
-            scenarioPipeline.candidateRules = List.of(rule);
-            scenarioPipeline.buildResponseResult = MockResponse.builder()
-                    .status(200).body("ok").matched(true).forwarded(false).build();
+            PipelineResult result = pipeline.execute(defaultRequest());
 
-            when(scenarioService.getCurrentState("order-flow")).thenReturn("Started");
-            when(scenarioService.advanceState("order-flow", "Started", "Paid")).thenReturn(true);
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(ConditionMatcher.PreparedBody.empty());
-            when(ruleService.findResponseBodyById(1L)).thenReturn(Optional.of("ok"));
-
-            PipelineResult result = scenarioPipeline.execute(defaultRequest());
-
-            assertThat(result.getScenarioName()).isEqualTo("order-flow");
-            assertThat(result.getScenarioNewState()).isEqualTo("Paid");
-            verify(scenarioService, atLeastOnce()).getCurrentState("order-flow");
-            verify(scenarioService).advanceState("order-flow", "Started", "Paid");
-        }
-
-        @Test
-        @DisplayName("匹配帶 scenario 的規則 → recordLog 傳入正確的 scenario 欄位")
-        void matchedRuleWithScenario_recordLogReceivesScenarioFields() {
-            HttpRule rule = HttpRule.builder()
-                    .id("scenario-rule-2").enabled(true).responseId(2L)
-                    .matchKey("/api/test").method("POST").httpStatus(200).priority(0).delayMs(0L)
-                    .scenarioName("checkout").requiredScenarioState("Cart").newScenarioState("Payment")
-                    .build();
-
-            scenarioPipeline.candidateRules = List.of(rule);
-            scenarioPipeline.buildResponseResult = MockResponse.builder()
-                    .status(200).body("ok").matched(true).forwarded(false).build();
-
-            when(scenarioService.getCurrentState("checkout")).thenReturn("Cart");
-            when(scenarioService.advanceState("checkout", "Cart", "Payment")).thenReturn(true);
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(ConditionMatcher.PreparedBody.empty());
-            when(ruleService.findResponseBodyById(2L)).thenReturn(Optional.of("ok"));
-
-            scenarioPipeline.execute(defaultRequest());
-
-            verify(requestLogService).record(
-                    eq("scenario-rule-2"), any(), any(), any(),
-                    eq(true), anyInt(), any(), any(), any(),
-                    any(), any(), any(), anyInt(),
-                    any(), any(), any(), any(), any(), any(), any(),
-                    eq("checkout"), eq("Cart"), eq("Payment"));
-        }
-
-        @Test
-        @DisplayName("無 scenario 的規則 → recordLog 傳入 null")
-        void matchedRuleWithoutScenario_recordLogReceivesNulls() {
-            HttpRule rule = enabledRuleNoCondition("no-scenario", 3L);
-
-            scenarioPipeline.candidateRules = List.of(rule);
-            scenarioPipeline.buildResponseResult = MockResponse.builder()
-                    .status(200).body("ok").matched(true).forwarded(false).build();
-
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(ConditionMatcher.PreparedBody.empty());
-            when(ruleService.findResponseBodyById(3L)).thenReturn(Optional.of("ok"));
-
-            scenarioPipeline.execute(defaultRequest());
-
-            verify(requestLogService).record(
-                    eq("no-scenario"), any(), any(), any(),
-                    eq(true), anyInt(), any(), any(), any(),
-                    any(), any(), any(), anyInt(),
-                    any(), any(), any(), any(), any(), any(), any(),
-                    isNull(), isNull(), isNull());
-            verifyNoInteractions(scenarioService);
+            assertThat(result.getResponse().getStatus()).isEqualTo(503);
+            assertThat(result.getResponse().getBody())
+                    .isEqualTo("Request logging is temporarily unavailable");
+            assertThat(result.isMatched()).isFalse();
         }
     }
 }

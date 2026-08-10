@@ -86,7 +86,6 @@ public class OpenApiImportService {
         String version = openAPI.getInfo() != null ? openAPI.getInfo().getVersion() : "";
 
         List<RuleDto> rules = new ArrayList<>();
-
         if (openAPI.getPaths() != null) {
             openAPI.getPaths().forEach((path, pathItem) ->
                     extractOperations(path, pathItem, rules));
@@ -128,7 +127,6 @@ public class OpenApiImportService {
 
         ApiResponses responses = operation.getResponses();
         if (responses != null && !responses.isEmpty()) {
-            // 優先找 200 或 201
             if (responses.get("200") != null) {
                 statusCode = "200";
                 bestResponse = responses.get("200");
@@ -136,7 +134,6 @@ public class OpenApiImportService {
                 statusCode = "201";
                 bestResponse = responses.get("201");
             } else {
-                // 找第一個 2xx
                 for (Map.Entry<String, ApiResponse> entry : responses.entrySet()) {
                     if (entry.getKey().startsWith("2")) {
                         statusCode = entry.getKey();
@@ -144,7 +141,6 @@ public class OpenApiImportService {
                         break;
                     }
                 }
-                // 都沒有就取第一個
                 if (bestResponse == null) {
                     Map.Entry<String, ApiResponse> first = responses.entrySet().iterator().next();
                     statusCode = first.getKey();

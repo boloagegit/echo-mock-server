@@ -4,6 +4,8 @@ import com.echo.dto.RuleDto;
 import com.echo.entity.BaseRule;
 import com.echo.entity.FaultType;
 import com.echo.entity.HttpRule;
+import com.echo.entity.HttpRuleAction;
+import com.echo.entity.HttpForwardTargetMode;
 import com.echo.entity.Protocol;
 import com.echo.entity.Response;
 import com.echo.protocol.AbstractProtocolHandler;
@@ -66,6 +68,10 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
                 .sseEnabled(r.getSseEnabled())
                 .sseLoopEnabled(r.getSseLoopEnabled())
                 .responseContentType(ContentTypeConstraints.infer(Protocol.HTTP, r.getSseEnabled()).name())
+                .action(r.getAction() == null ? HttpRuleAction.MOCK.name() : r.getAction().name())
+                .forwardTargetMode(r.getForwardTargetMode() == null
+                        ? HttpForwardTargetMode.ORIGINAL_HOST.name() : r.getForwardTargetMode().name())
+                .httpTargetConnectionId(r.getHttpTargetConnectionId())
                 .faultType(r.getFaultType() != null ? r.getFaultType().name() : "NONE")
                 .scenarioName(r.getScenarioName())
                 .requiredScenarioState(r.getRequiredScenarioState())
@@ -81,6 +87,9 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
         return HttpRule.builder()
                 .id(dto.getId())
                 .version(dto.getVersion())
+                .action(parseAction(dto.getAction()))
+                .forwardTargetMode(parseForwardTargetMode(dto.getForwardTargetMode()))
+                .httpTargetConnectionId(dto.getHttpTargetConnectionId())
                 .targetHost(dto.getTargetHost())
                 .matchKey(dto.getMatchKey())
                 .method(dto.getMethod())
@@ -105,6 +114,16 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
                 .newScenarioState(dto.getNewScenarioState())
                 .createdAt(dto.getCreatedAt()) // 保留建立時間
                 .build();
+    }
+
+    private static HttpRuleAction parseAction(String value) {
+        return value == null || value.isBlank()
+                ? HttpRuleAction.MOCK : HttpRuleAction.valueOf(value.toUpperCase(java.util.Locale.ROOT));
+    }
+
+    private static HttpForwardTargetMode parseForwardTargetMode(String value) {
+        return value == null || value.isBlank() ? HttpForwardTargetMode.ORIGINAL_HOST
+                : HttpForwardTargetMode.valueOf(value.toUpperCase(java.util.Locale.ROOT));
     }
 
     @Override
@@ -138,19 +157,35 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
      */
     public List<HttpRule> findWithFallback(String targetHost, String matchKey, String method) {
         List<HttpRule> result = new ArrayList<>();
-        for (HttpRule rule : repository.findByTargetHostOrWildcard(targetHost)) {
-            boolean hostMatches = targetHost.equals(rule.getTargetHost()) 
-                    || rule.getTargetHost() == null || rule.getTargetHost().isEmpty();
-            if (!hostMatches) {
-                continue;
-            }
-            if (matchesPath(rule.getMatchKey(), matchKey) && matchesMethod(rule.getMethod(), method)) {
+        for (HttpRule rule : findByHostAndMethod(targetHost, method)) {
+            if (matchesPath(rule.getMatchKey(), matchKey)) {
                 result.add(rule);
             } else if ("*".equals(rule.getMatchKey())) {
                 result.add(rule);
             }
         }
         return result;
+    }
+
+    /**
+     * 查詢指定來源主機與 HTTP 方法可能使用的規則，但不綁定實際 request path。
+     * 呼叫端可將此結果以 host + method 快取，避免動態 URL 每個 path 都建立一份快取。
+     */
+    public List<HttpRule> findByHostAndMethod(String targetHost, String method) {
+        List<HttpRule> result = new ArrayList<>();
+        for (HttpRule rule : repository.findByTargetHostOrWildcard(targetHost)) {
+            boolean hostMatches = targetHost.equals(rule.getTargetHost())
+                    || rule.getTargetHost() == null || rule.getTargetHost().isEmpty();
+            if (hostMatches && matchesMethod(rule.getMethod(), method)) {
+                result.add(rule);
+            }
+        }
+        return result;
+    }
+
+    /** 保留既有 exact、prefix wildcard 與全域 wildcard 的路徑語意。 */
+    public boolean matchesRequestPath(String pattern, String path) {
+        return "*".equals(pattern) || matchesPath(pattern, path);
     }
 
     private boolean matchesPath(String pattern, String path) {
@@ -249,7 +284,11 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
         if (dto.getTargetHost() != null && !dto.getTargetHost().isBlank()) {
             sb.append(" @ ").append(dto.getTargetHost());
         }
-        sb.append(" → ").append(dto.getStatus() != null ? dto.getStatus() : 200);
+        if (HttpRuleAction.FORWARD.name().equalsIgnoreCase(dto.getAction())) {
+            sb.append(" → Forward");
+        } else {
+            sb.append(" → ").append(dto.getStatus() != null ? dto.getStatus() : 200);
+        }
         int condCount = countConditions(dto);
         if (condCount > 0) {
             sb.append(" [").append(condCount).append(condCount == 1 ? " condition" : " conditions").append("]");

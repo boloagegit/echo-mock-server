@@ -67,16 +67,23 @@
         <Method name="hasActualChanges"/>
     </Match>
 
-    <!-- OpenAPI 匯入：uri/url 格式刻意回傳相同預設值 -->
-    <Match>
-        <Bug pattern="DB_DUPLICATE_BRANCHES"/>
-        <Class name="com.echo.service.OpenApiImportService"/>
-    </Match>
-
     <!-- SqliteBackupService: backup path is internally generated, not user input -->
     <Match>
         <Bug pattern="SQL_NONCONSTANT_STRING_PASSED_TO_EXECUTE"/>
         <Class name="com.echo.service.SqliteBackupService"/>
         <Method name="backup"/>
+    </Match>
+
+    <!-- OpenApiImportService: switch default branch is intentional (covers all types) -->
+    <Match>
+        <Bug pattern="DB_DUPLICATE_BRANCHES"/>
+        <Class name="com.echo.service.OpenApiImportService"/>
+        <Method name="defaultForType"/>
+    </Match>
+
+    <!-- H2SchemaMigration: null check on maxId is handled by surrounding conditional -->
+    <Match>
+        <Bug pattern="NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE"/>
+        <Class name="com.echo.config.H2SchemaMigration"/>
     </Match>
 </FindBugsFilter>

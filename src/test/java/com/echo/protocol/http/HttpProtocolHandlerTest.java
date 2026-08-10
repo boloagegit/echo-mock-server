@@ -13,7 +13,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class HttpProtocolHandlerTest {
@@ -209,6 +212,32 @@ class HttpProtocolHandlerTest {
         BaseRule rule = handler.fromDto(original);
         RuleDto result = handler.toDto(rule, null, false);
         assertThat(result.getSseLoopEnabled()).isFalse();
+    }
+
+    @Test
+    void findByHostAndMethod_filtersHostAndMethodWithoutBindingPath() {
+        HttpRule exact = HttpRule.builder().id("exact").targetHost("api.example.com")
+                .matchKey("/users/42").method("GET").build();
+        HttpRule prefix = HttpRule.builder().id("prefix").targetHost(null)
+                .matchKey("/users/*").method("GET").build();
+        HttpRule wrongHost = HttpRule.builder().id("other-host").targetHost("other.example.com")
+                .matchKey("/users/42").method("GET").build();
+        HttpRule wrongMethod = HttpRule.builder().id("post").targetHost("api.example.com")
+                .matchKey("/users/42").method("POST").build();
+        when(repository.findByTargetHostOrWildcard("api.example.com"))
+                .thenReturn(List.of(exact, prefix, wrongHost, wrongMethod));
+
+        assertThat(handler.findByHostAndMethod("api.example.com", "GET"))
+                .extracting(HttpRule::getId)
+                .containsExactly("exact", "prefix");
+    }
+
+    @Test
+    void matchesRequestPath_preservesExactPrefixAndGlobalWildcardSemantics() {
+        assertThat(handler.matchesRequestPath("/users/42", "/users/42")).isTrue();
+        assertThat(handler.matchesRequestPath("/users/*", "/users/42")).isTrue();
+        assertThat(handler.matchesRequestPath("*", "/anything")).isTrue();
+        assertThat(handler.matchesRequestPath("/users/42", "/users/43")).isFalse();
     }
 
     // --- helpers ---

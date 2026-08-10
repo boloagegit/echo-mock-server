@@ -1,5 +1,6 @@
 package com.echo.repository;
 
+import com.echo.entity.Protocol;
 import com.echo.entity.RequestLog;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -67,9 +68,42 @@ public interface RequestLogRepository extends JpaRepository<RequestLog, Long> {
     @Query("SELECT r.id, r.ruleId, r.protocol, r.method, r.endpoint, r.matched, " +
            "r.responseTimeMs, r.matchTimeMs, r.clientIp, r.requestTime, r.targetHost, " +
            "r.proxyStatus, r.proxyError, r.responseStatus, " +
-           "CASE WHEN r.requestBody IS NOT NULL AND r.requestBody <> '' THEN true ELSE false END, " +
-           "CASE WHEN r.responseBody IS NOT NULL AND r.responseBody <> '' THEN true ELSE false END, " +
-           "CASE WHEN r.matchChain IS NOT NULL AND r.matchChain <> '' THEN true ELSE false END " +
+           "CASE WHEN r.requestBody IS NOT NULL THEN true ELSE false END, " +
+           "CASE WHEN r.responseBody IS NOT NULL THEN true ELSE false END, " +
+           "CASE WHEN r.matchChain IS NOT NULL THEN true ELSE false END " +
            "FROM RequestLog r ORDER BY r.requestTime DESC")
     List<Object[]> findSummaryProjections(Pageable pageable);
+
+    /**
+     * 摘要分頁查詢。篩選與分頁全部在資料庫執行，避免先載入 max-records 再於 Java 過濾。
+     * 排序由 Pageable 提供，呼叫端必須限制允許的排序欄位。
+     */
+    @Query(value = "SELECT r.id, r.ruleId, r.protocol, r.method, r.endpoint, r.matched, " +
+                   "r.responseTimeMs, r.matchTimeMs, r.clientIp, r.requestTime, r.targetHost, " +
+                   "r.proxyStatus, r.proxyError, r.responseStatus, " +
+                   "CASE WHEN r.requestBody IS NOT NULL THEN true ELSE false END, " +
+                   "CASE WHEN r.responseBody IS NOT NULL THEN true ELSE false END, " +
+                   "CASE WHEN r.matchChain IS NOT NULL THEN true ELSE false END " +
+                   "FROM RequestLog r WHERE " +
+                   "(:ruleId IS NULL OR r.ruleId = :ruleId) AND " +
+                   "(:protocol IS NULL OR r.protocol = :protocol) AND " +
+                   "(:matched IS NULL OR r.matched = :matched) AND " +
+                   "(:endpoint IS NULL OR LOWER(r.endpoint) LIKE LOWER(CONCAT('%', :endpoint, '%')) " +
+                   "OR LOWER(r.targetHost) LIKE LOWER(CONCAT('%', :endpoint, '%')) " +
+                   "OR LOWER(r.ruleId) LIKE LOWER(CONCAT('%', :endpoint, '%'))) AND " +
+                   "(:afterId IS NULL OR r.id > :afterId)",
+           countQuery = "SELECT COUNT(r) FROM RequestLog r WHERE " +
+                        "(:ruleId IS NULL OR r.ruleId = :ruleId) AND " +
+                        "(:protocol IS NULL OR r.protocol = :protocol) AND " +
+                        "(:matched IS NULL OR r.matched = :matched) AND " +
+                        "(:endpoint IS NULL OR LOWER(r.endpoint) LIKE LOWER(CONCAT('%', :endpoint, '%')) " +
+                        "OR LOWER(r.targetHost) LIKE LOWER(CONCAT('%', :endpoint, '%')) " +
+                        "OR LOWER(r.ruleId) LIKE LOWER(CONCAT('%', :endpoint, '%'))) AND " +
+                        "(:afterId IS NULL OR r.id > :afterId)")
+    Page<Object[]> findSummaryPage(@Param("ruleId") String ruleId,
+                                   @Param("protocol") Protocol protocol,
+                                   @Param("matched") Boolean matched,
+                                   @Param("endpoint") String endpoint,
+                                   @Param("afterId") Long afterId,
+                                   Pageable pageable);
 }

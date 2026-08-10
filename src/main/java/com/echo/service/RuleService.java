@@ -19,7 +19,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * 規則服務 - 共用功能
@@ -186,8 +185,7 @@ public class RuleService {
         if (ids.isEmpty()) {
             return Collections.emptySet();
         }
-        return responseRepository.findAllById(ids).stream()
-                .map(Response::getId).collect(Collectors.toSet());
+        return Set.copyOf(responseRepository.findExistingIds(ids));
     }
 
 }

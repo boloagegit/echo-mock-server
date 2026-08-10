@@ -2,26 +2,39 @@ package com.echo.controller;
 
 import com.echo.agent.AgentRegistry;
 import com.echo.dto.AgentStatusDto;
+import com.echo.dto.RuleApplyDocument;
+import com.echo.dto.RuleApplyResult;
+import com.echo.dto.RuleApplySchema;
 import com.echo.dto.RuleDto;
+import com.echo.dto.RulePageDto;
+import com.echo.dto.RuleGroupSummaryDto;
 import com.echo.entity.BaseRule;
 import com.echo.entity.Protocol;
 import com.echo.entity.Response;
 import com.echo.entity.ResponseContentType;
 import com.echo.entity.RuleAuditLog;
+import com.echo.entity.HttpRuleAction;
+import com.echo.entity.Scenario;
 import com.echo.protocol.ProtocolHandler;
 import com.echo.protocol.ProtocolHandlerRegistry;
 import com.echo.entity.BuiltinUser;
-import com.echo.entity.Scenario;
 import com.echo.repository.BuiltinUserRepository;
 import com.echo.service.ResponseService;
+import com.echo.service.RuleApplyMapper;
+import com.echo.service.RuleApplyContractService;
+import com.echo.service.RuleApplyPersistenceSynchronizer;
+import com.echo.service.RuleApplyValidationException;
 import com.echo.service.RuleService;
+import com.echo.service.RuleQueryService;
 import com.echo.service.RequestLogService;
 import com.echo.service.RuleAuditService;
 import com.echo.service.ExcelImportService;
-import com.echo.service.OpenApiImportService;
 import com.echo.service.BackupService;
 import com.echo.service.CacheInvalidationService;
 import com.echo.service.ContentTypeConstraints;
+import com.echo.service.IssueReportService;
+import com.echo.service.HttpTargetConnectionService;
+import com.echo.service.OpenApiImportService;
 import com.echo.service.ResponseContentValidatorRegistry;
 import com.echo.service.ScenarioService;
 import com.echo.config.CacheConfig;
@@ -50,8 +63,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 /**
  * 管理後台 API 控制器
@@ -82,6 +95,7 @@ import java.util.stream.Collectors;
 public class AdminController {
 
     private final RuleService ruleService;
+    private final RuleQueryService ruleQueryService;
     private final ProtocolHandlerRegistry protocolHandlerRegistry;
     private final ResponseService responseService;
     private final RequestLogService requestLogService;
@@ -95,7 +109,22 @@ public class AdminController {
     private final BuiltinUserRepository builtinUserRepository;
     private final AgentRegistry agentRegistry;
     private final CacheManager cacheManager;
+    private final IssueReportService issueReportService;
+    private final Optional<HttpTargetConnectionService> httpTargetConnectionService;
+    private final RuleApplyMapper ruleApplyMapper;
+    private final RuleApplyPersistenceSynchronizer ruleApplyPersistenceSynchronizer;
+    private final RuleApplyContractService ruleApplyContractService;
     private final ScenarioService scenarioService;
+
+    @ExceptionHandler(RuleApplyValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleRuleApplyValidation(RuleApplyValidationException e) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", e.getMessage());
+        body.put("validationCode", e.getValidationCode());
+        body.put("path", e.getPath());
+        body.putAll(e.getDetails());
+        return ResponseEntity.badRequest().body(body);
+    }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException e) {
@@ -144,6 +173,9 @@ public class AdminController {
     @Value("${echo.request-log.max-records:10000}")
     private int statsMaxRecords;
 
+    @Value("${echo.features.bulk-import-export-enabled:false}")
+    private boolean bulkImportExportEnabled;
+
     private final Instant startupTime = Instant.now();
 
     // ========== 系統狀態 ==========
@@ -159,6 +191,7 @@ public class AdminController {
         status.put("artemisBrokerUrl", "tcp://localhost:" + jmsPort);
         status.put("ldapEnabled", ldapEnabled);
         status.put("selfRegistrationEnabled", selfRegistrationEnabled);
+        status.put("bulkImportExportEnabled", bulkImportExportEnabled);
         status.put("ldapUrl", ldapUrl);
         status.put("httpAlias", httpAlias);
         status.put("jmsAlias", jmsAlias);
@@ -195,7 +228,9 @@ public class AdminController {
         status.put("orphanResponses", responseService.countOrphanResponses());
 
         // 資料統計
-        status.put("ruleCount", protocolHandlerRegistry.findAllRules().size());
+        status.put("ruleCount", protocolHandlerRegistry.getAllHandlers().stream()
+                .mapToLong(com.echo.protocol.ProtocolHandler::count)
+                .sum());
         status.put("responseCount", responseService.count());
         status.put("requestLogCount", requestLogService.count());
         status.put("responseRetentionDays", responseRetentionDays);
@@ -215,11 +250,33 @@ public class AdminController {
         Runtime rt = Runtime.getRuntime();
         status.put("jvmHeapUsed", rt.totalMemory() - rt.freeMemory());
         status.put("jvmHeapMax", rt.maxMemory());
+        status.put("ruleCaches", getRuleCacheStats());
 
         // 啟動時間
         status.put("uptime", Duration.between(startupTime, Instant.now()).toSeconds());
 
+        // Issue Report
+        status.put("openIssueCount", issueReportService.countOpen());
+
         return ResponseEntity.ok(status);
+    }
+
+    private Map<String, Object> getRuleCacheStats() {
+        Map<String, Object> result = new HashMap<>();
+        for (String cacheName : CacheConfig.ALL_RULE_CACHES) {
+            org.springframework.cache.Cache springCache = cacheManager.getCache(cacheName);
+            if (springCache == null
+                    || !(springCache.getNativeCache() instanceof com.github.benmanes.caffeine.cache.Cache<?, ?> cache)) {
+                continue;
+            }
+            var stats = cache.stats();
+            result.put(cacheName, Map.of(
+                    "entries", cache.estimatedSize(),
+                    "requestCount", stats.requestCount(),
+                    "hitRate", stats.requestCount() == 0 ? 0.0 : stats.hitRate(),
+                    "evictionCount", stats.evictionCount()));
+        }
+        return result;
     }
 
     // ========== 資料庫備份 ==========
@@ -283,14 +340,66 @@ public class AdminController {
 
     @GetMapping("/rules")
     public ResponseEntity<List<RuleDto>> listRules() {
-        // 批次載入所有 Response
-        Map<Long, Response> responseMap = responseService.findAll().stream()
-                .collect(Collectors.toMap(Response::getId, r -> r));
-        
+        // 列表只需要規則 metadata。不傳入 Response，避免讀取整張 responses 的 LOB body。
         List<RuleDto> all = protocolHandlerRegistry.findAllRules().stream()
-                .map(rule -> protocolHandlerRegistry.toDto(rule, responseMap.get(rule.getResponseId())))
+                .map(rule -> protocolHandlerRegistry.toDto(rule, null))
                 .toList();
         return ResponseEntity.ok(all);
+    }
+
+    @GetMapping("/rules/page")
+    public ResponseEntity<RulePageDto> queryRules(
+            @RequestParam(required = false) Protocol protocol,
+            @RequestParam(required = false) Boolean enabled,
+            @RequestParam(required = false) Boolean isProtected,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false, name = "sort") String sortField,
+            @RequestParam(required = false) String direction) {
+        var result = ruleQueryService.query(new RuleQueryService.RuleQuery(
+                protocol, enabled, isProtected, keyword, page, size, sortField, direction));
+        List<RuleDto> rules = result.rules().stream()
+                .map(rule -> protocolHandlerRegistry.toDto(rule, null))
+                .toList();
+        return ResponseEntity.ok(new RulePageDto(rules, result.page(), result.size(),
+                result.totalElements(), result.totalPages()));
+    }
+
+    @GetMapping("/rules/groups")
+    public ResponseEntity<RuleGroupSummaryDto> queryRuleGroups(
+            @RequestParam(required = false) Protocol protocol,
+            @RequestParam(required = false) Boolean enabled,
+            @RequestParam(required = false) Boolean isProtected,
+            @RequestParam(required = false) String keyword) {
+        var result = ruleQueryService.queryGroupSummary(new RuleQueryService.RuleQuery(
+                protocol, enabled, isProtected, keyword, 0, 20, null, null));
+        return ResponseEntity.ok(new RuleGroupSummaryDto(
+                result.tagKeys(), result.counts(), result.totalElements()));
+    }
+
+    @GetMapping("/rules/group")
+    public ResponseEntity<RulePageDto> queryRuleGroup(
+            @RequestParam String key,
+            @RequestParam(required = false) String value,
+            @RequestParam(required = false) Protocol protocol,
+            @RequestParam(required = false) Boolean enabled,
+            @RequestParam(required = false) Boolean isProtected,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(required = false, name = "sort") String sortField,
+            @RequestParam(required = false) String direction) {
+        int effectiveLimit = Math.max(1, limit);
+        var result = ruleQueryService.queryGroup(new RuleQueryService.RuleQuery(
+                protocol, enabled, isProtected, keyword, 0, effectiveLimit, sortField, direction),
+                key, value, effectiveLimit);
+        List<RuleDto> rules = result.rules().stream()
+                .map(rule -> protocolHandlerRegistry.toDto(rule, null))
+                .toList();
+        int totalPages = result.totalElements() == 0 ? 0
+                : (int) Math.ceil((double) result.totalElements() / effectiveLimit);
+        return ResponseEntity.ok(new RulePageDto(
+                rules, 0, effectiveLimit, result.totalElements(), totalPages));
     }
 
     @GetMapping("/rules/{id}")
@@ -363,13 +472,100 @@ public class AdminController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/rules/{id}/manifest")
+    public ResponseEntity<RuleApplyDocument> getRuleManifest(@PathVariable String id) {
+        return findRuleById(id, true)
+                .map(ruleApplyMapper::fromRuleDto)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /** Returns the machine-readable contract used by the declarative editor and server validator. */
+    @GetMapping("/rules/schema")
+    public RuleApplySchema getRuleApplySchema() {
+        return ruleApplyContractService.schema();
+    }
+
+    /**
+     * 以宣告式 JSON 文件建立或更新規則。
+     * metadata.id 不存在時建立；存在時以 resourceVersion 做樂觀鎖更新。
+     */
+    @PostMapping("/rules/apply")
+    @Transactional
+    public ResponseEntity<?> applyRule(@RequestBody RuleApplyDocument document) {
+        ruleApplyContractService.validate(document);
+        RuleDto dto = ruleApplyMapper.toRuleDto(document);
+        validateProtocolEnabled(dto.getProtocol());
+
+        RuleApplyDocument.Metadata metadata = document.getMetadata();
+        String id = metadata == null || metadata.getId() == null || metadata.getId().isBlank()
+                ? null : metadata.getId().trim();
+        Long requestedVersion = metadata == null ? null : metadata.getResourceVersion();
+        Optional<? extends BaseRule> existing = id == null
+                ? Optional.empty()
+                : protocolHandlerRegistry.findById(id);
+
+        if (existing.isPresent()) {
+            BaseRule current = existing.get();
+            if (requestedVersion == null) {
+                throw new IllegalArgumentException("metadata.resourceVersion is required when updating an existing rule");
+            }
+            if (!Objects.equals(requestedVersion, current.getVersion())) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                        "error", "RESOURCE_VERSION_CONFLICT",
+                        "currentResourceVersion", current.getVersion()));
+            }
+            if (current.getProtocol() != dto.getProtocol()) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                        "error", "PROTOCOL_IMMUTABLE",
+                        "currentProtocol", current.getProtocol().name()));
+            }
+
+            dto.setId(id);
+            dto.setVersion(current.getVersion());
+            dto.setCreatedAt(current.getCreatedAt());
+            prepareApplyResponse(dto);
+            String beforeJson = ruleAuditService.map(service -> service.snapshot(current)).orElse(null);
+            try {
+                SaveResult saved = saveRule(dto);
+                ruleAuditService.ifPresent(service -> {
+                    if (beforeJson != null) {
+                        service.logUpdate(beforeJson, service.snapshot(saved.rule));
+                    } else {
+                        service.logUpdate(current, saved.rule);
+                    }
+                });
+                ruleApplyPersistenceSynchronizer.flush();
+                return applyResult(HttpStatus.OK, "UPDATED", saved.rule.getId());
+            } catch (ObjectOptimisticLockingFailureException e) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("error", "OPTIMISTIC_LOCK_CONFLICT"));
+            }
+        }
+
+        if (requestedVersion != null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "RESOURCE_NOT_FOUND"));
+        }
+
+        dto.setId(id);
+        dto.setVersion(null);
+        prepareApplyResponse(dto);
+        SaveResult saved = saveRule(dto);
+        ruleAuditService.ifPresent(service -> service.logCreate(saved.rule));
+        ruleApplyPersistenceSynchronizer.flush();
+        return applyResult(HttpStatus.CREATED, "CREATED", saved.rule.getId());
+    }
+
     @GetMapping("/rules/export")
     public ResponseEntity<List<RuleDto>> exportAllRules() {
+        if (!bulkImportExportEnabled) return featureUnavailable();
         return ResponseEntity.ok(getAllRules());
     }
 
     @PostMapping("/rules/import")
     public ResponseEntity<?> importRule(@RequestBody RuleDto dto) {
+        if (!bulkImportExportEnabled) return featureUnavailable();
         validateProtocolEnabled(dto.getProtocol());
         // 保留原有 ID（若有），讓 UUID 可跨環境同步
         dto.setVersion(null);
@@ -378,6 +574,7 @@ public class AdminController {
 
     @PostMapping("/rules/import-batch")
     public ResponseEntity<?> importRules(@RequestBody List<RuleDto> rules) {
+        if (!bulkImportExportEnabled) return featureUnavailable();
         int imported = 0;
         for (RuleDto dto : rules) {
             if (!protocolHandlerRegistry.isEnabled(dto.getProtocol())) {
@@ -393,6 +590,7 @@ public class AdminController {
 
     @GetMapping(value = "/rules/import-template", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     public ResponseEntity<byte[]> downloadImportTemplate() {
+        if (!bulkImportExportEnabled) return featureUnavailable();
         byte[] template = excelImportService.generateTemplate();
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=echo-import-template.xlsx")
@@ -401,6 +599,7 @@ public class AdminController {
 
     @PostMapping("/rules/import-excel")
     public ResponseEntity<?> importExcel(@RequestParam("file") MultipartFile file) {
+        if (!bulkImportExportEnabled) return featureUnavailable();
         try {
             List<Object> parsedRules = excelImportService.parseExcel(file);
             int imported = 0;
@@ -566,11 +765,13 @@ public class AdminController {
 
     @GetMapping("/responses/export")
     public ResponseEntity<List<Response>> exportAllResponses() {
+        if (!bulkImportExportEnabled) return featureUnavailable();
         return ResponseEntity.ok(responseService.findAll());
     }
 
     @PostMapping("/responses/import-batch")
     public ResponseEntity<?> importResponses(@RequestBody List<Response> responses) {
+        if (!bulkImportExportEnabled) return featureUnavailable();
         int count = 0;
         for (Response r : responses) {
             r.setId(null);
@@ -579,6 +780,10 @@ public class AdminController {
             count++;
         }
         return ResponseEntity.ok(Map.of("imported", count));
+    }
+
+    private <T> ResponseEntity<T> featureUnavailable() {
+        return ResponseEntity.notFound().build();
     }
 
     @DeleteMapping("/responses/batch")
@@ -632,14 +837,32 @@ public class AdminController {
             @RequestParam(required = false) String ruleId,
             @RequestParam(required = false) String protocol,
             @RequestParam(required = false) Boolean matched,
-            @RequestParam(required = false) String endpoint) {
+            @RequestParam(required = false) String endpoint,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false, name = "sort") String sortField,
+            @RequestParam(required = false) String direction,
+            @RequestParam(required = false) Long afterId) {
         RequestLogService.QueryFilter filter = RequestLogService.QueryFilter.builder()
                 .ruleId(ruleId)
                 .protocol(protocol != null ? Protocol.valueOf(protocol) : null)
                 .matched(matched)
                 .endpoint(endpoint)
+                .page(page)
+                .size(size != null ? size : limit)
+                .sortField(sortField)
+                .sortDirection(direction)
+                .afterId(afterId)
                 .build();
         return ResponseEntity.ok(requestLogService.querySummary(filter));
+    }
+
+    /** 保留給既有 Java 呼叫端與單元測試的相容入口。 */
+    public ResponseEntity<RequestLogService.SummaryQueryResult> queryLogs(
+            String ruleId, String protocol, Boolean matched, String endpoint) {
+        return queryLogs(ruleId, protocol, matched, endpoint,
+                null, null, null, null, null, null);
     }
 
     @GetMapping("/logs/{id}/detail")
@@ -705,12 +928,45 @@ public class AdminController {
                 .orElse(ResponseEntity.ok(List.of()));
     }
 
-    @GetMapping("/audit")
+    @GetMapping(value = "/audit", params = {"!page", "!detailId"})
     public ResponseEntity<List<RuleAuditLog>> getAllAuditLogs(
             @RequestParam(defaultValue = "1000") int limit) {
         return ruleAuditService
                 .map(s -> ResponseEntity.ok(s.getAllAuditLogs(limit)))
                 .orElse(ResponseEntity.ok(List.of()));
+    }
+
+    @GetMapping(value = "/audit", params = "page")
+    public ResponseEntity<RuleAuditService.AuditQueryResult> queryAuditLogs(
+            @RequestParam(required = false) String action,
+            @RequestParam(required = false) String operator,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size,
+            @RequestParam(required = false, name = "sort") String sortField,
+            @RequestParam(required = false) String direction) {
+        RuleAuditService.AuditQueryFilter filter = RuleAuditService.AuditQueryFilter.builder()
+                .action(action == null || action.isBlank() ? null : RuleAuditLog.Action.valueOf(action))
+                .operator(operator)
+                .keyword(keyword)
+                .page(page)
+                .size(size)
+                .sortField(sortField)
+                .sortDirection(direction)
+                .build();
+        return ruleAuditService
+                .map(s -> ResponseEntity.ok(s.queryAuditSummary(filter)))
+                .orElse(ResponseEntity.ok(RuleAuditService.AuditQueryResult.builder()
+                        .results(List.of()).page(0).size(size).totalElements(0).totalPages(0).build()));
+    }
+
+    @GetMapping(value = "/audit", params = "detailId")
+    public ResponseEntity<RuleAuditLog> getAuditLogDetail(@RequestParam Long detailId) {
+        return ruleAuditService
+                .map(s -> Optional.ofNullable(s.getAuditDetail(detailId))
+                        .map(ResponseEntity::ok)
+                        .orElse(ResponseEntity.notFound().build()))
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @DeleteMapping("/audit/all")
@@ -846,6 +1102,34 @@ public class AdminController {
 
     private record SaveResult(BaseRule rule, RuleDto dto) {}
 
+    private ResponseEntity<RuleApplyResult> applyResult(HttpStatus status, String operation, String id) {
+        RuleApplyDocument resource = findRuleById(id, true)
+                .map(ruleApplyMapper::fromRuleDto)
+                .orElseThrow(() -> new IllegalStateException("Applied rule not found: " + id));
+        return ResponseEntity.status(status).body(new RuleApplyResult(operation, resource));
+    }
+
+    /**
+     * responseId + responseBody 表示期望內容。內容相同時沿用；不同時建立新回應並重新綁定，
+     * 避免修改其他規則共用的 Response。
+     */
+    private void prepareApplyResponse(RuleDto dto) {
+        if (dto.getResponseId() == null || dto.getResponseBody() == null) {
+            return;
+        }
+        Response referenced = responseService.findById(dto.getResponseId())
+                .orElseThrow(() -> new IllegalArgumentException("Response not found: " + dto.getResponseId()));
+        boolean sameBody = Objects.equals(referenced.getBody(), dto.getResponseBody());
+        boolean sameDescription = dto.getResponseDescription() == null
+                || dto.getResponseDescription().isBlank()
+                || Objects.equals(referenced.getDescription(), dto.getResponseDescription());
+        if (sameBody && sameDescription) {
+            dto.setResponseBody(null);
+        } else {
+            dto.setResponseId(null);
+        }
+    }
+
     /** 根據協定清除對應的規則快取 */
     private void evictCacheByProtocol(Protocol protocol) {
         String cacheName = (protocol == Protocol.JMS)
@@ -890,8 +1174,18 @@ public class AdminController {
 
     private SaveResult saveRule(RuleDto dto) {
         Response response;
+        boolean forwarding = dto.getProtocol() == Protocol.HTTP
+                && HttpRuleAction.FORWARD.name().equalsIgnoreCase(dto.getAction());
+        if (forwarding) {
+            httpTargetConnectionService.ifPresent(service -> service.validateForwardSelection(
+                    dto.getForwardTargetMode(), dto.getHttpTargetConnectionId()));
+            dto.setResponseId(null);
+            dto.setResponseBody(null);
+            dto.setSseEnabled(false);
+            dto.setSseLoopEnabled(false);
+            response = null;
         // 使用現有 Response
-        if (dto.getResponseId() != null && (dto.getResponseBody() == null || dto.getResponseBody().isBlank())) {
+        } else if (dto.getResponseId() != null && (dto.getResponseBody() == null || dto.getResponseBody().isBlank())) {
             response = responseService.findById(dto.getResponseId())
                     .orElseThrow(() -> new IllegalArgumentException("Response not found: " + dto.getResponseId()));
         } else {

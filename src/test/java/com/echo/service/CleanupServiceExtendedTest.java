@@ -3,6 +3,7 @@ package com.echo.service;
 import com.echo.config.CacheConfig;
 import com.echo.protocol.ProtocolHandlerRegistry;
 import com.echo.repository.ResponseRepository;
+import com.echo.service.ScenarioService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,7 +46,6 @@ class CleanupServiceExtendedTest {
         when(responseRepository.findOrphanResponseIds(any())).thenReturn(List.of(1L, 2L));
         when(cacheManager.getCache(CacheConfig.HTTP_RULES_CACHE)).thenReturn(httpCache);
         when(cacheManager.getCache(CacheConfig.JMS_RULES_CACHE)).thenReturn(jmsCache);
-        when(protocolRegistry.findAllRules()).thenReturn(List.of());
 
         LocalDateTime before = LocalDateTime.now();
         cleanupService.cleanup();
@@ -70,7 +70,6 @@ class CleanupServiceExtendedTest {
     void cleanup_shouldNotClearCache_whenNoRulesDeleted() {
         when(protocolRegistry.deleteExpiredRules(any())).thenReturn(0);
         when(responseRepository.findOrphanResponseIds(any())).thenReturn(List.of());
-        when(protocolRegistry.findAllRules()).thenReturn(List.of());
 
         cleanupService.cleanup();
 
@@ -83,7 +82,6 @@ class CleanupServiceExtendedTest {
         when(responseRepository.findOrphanResponseIds(any())).thenReturn(List.of());
         when(cacheManager.getCache(CacheConfig.HTTP_RULES_CACHE)).thenReturn(httpCache);
         when(cacheManager.getCache(CacheConfig.JMS_RULES_CACHE)).thenReturn(jmsCache);
-        when(protocolRegistry.findAllRules()).thenReturn(List.of());
 
         cleanupService.cleanup();
 
@@ -96,7 +94,6 @@ class CleanupServiceExtendedTest {
         when(responseRepository.findOrphanResponseIds(any())).thenReturn(List.of());
         when(cacheManager.getCache(CacheConfig.HTTP_RULES_CACHE)).thenReturn(null);
         when(cacheManager.getCache(CacheConfig.JMS_RULES_CACHE)).thenReturn(null);
-        when(protocolRegistry.findAllRules()).thenReturn(List.of());
 
         cleanupService.cleanup();
 

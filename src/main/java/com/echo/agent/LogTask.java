@@ -1,7 +1,6 @@
 package com.echo.agent;
 
 import com.echo.entity.Protocol;
-import com.echo.service.ConditionMatcher;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -13,12 +12,15 @@ import java.util.Map;
  * Log Agent 的任務值物件。
  * <p>
  * 包含所有日誌欄位（與 {@code RequestLogService.LogEntry} 相同）
- * 以及匹配分析上下文（candidates、preparedBody、queryString、headers）。
+ * 以及匹配分析上下文（candidates、analysisBody、queryString、headers）。
+ * 解析後的 XML DOM / JSON tree 絕不可進入此物件；背景分析需要時會從
+ * {@code analysisBody} 重新建立短生命週期的 PreparedBody。
  * <p>
  * {@code candidates} 與 {@code headers} 為不可變集合，
  * 透過靜態工廠方法以 {@code List.copyOf()} 與 {@code Map.copyOf()} 確保不可變性。
  */
 @Getter
+@Builder
 public class LogTask {
 
     // --- 基本日誌欄位 ---
@@ -38,6 +40,7 @@ public class LogTask {
     private final Integer responseStatus;
     private final String requestBody;
     private final String responseBody;
+
     private final String faultType;
 
     // --- Scenario 狀態轉移資訊 ---
@@ -47,11 +50,11 @@ public class LogTask {
 
     // --- 匹配分析上下文 ---
     private final List<CandidateSnapshot> candidates;
-    private final ConditionMatcher.PreparedBody preparedBody;
+    private final String analysisBody;
     private final String queryString;
     private final Map<String, String> headers;
+    private final Map<String, Boolean> matchOutcomes;
 
-    @Builder
     private LogTask(
             String ruleId,
             Protocol protocol,
@@ -74,9 +77,10 @@ public class LogTask {
             String scenarioFromState,
             String scenarioToState,
             List<CandidateSnapshot> candidates,
-            ConditionMatcher.PreparedBody preparedBody,
+            String analysisBody,
             String queryString,
-            Map<String, String> headers) {
+            Map<String, String> headers,
+            Map<String, Boolean> matchOutcomes) {
         this.ruleId = ruleId;
         this.protocol = protocol;
         this.method = method;
@@ -98,8 +102,9 @@ public class LogTask {
         this.scenarioFromState = scenarioFromState;
         this.scenarioToState = scenarioToState;
         this.candidates = candidates != null ? List.copyOf(candidates) : List.of();
-        this.preparedBody = preparedBody;
+        this.analysisBody = analysisBody;
         this.queryString = queryString;
         this.headers = headers != null ? Map.copyOf(headers) : Map.of();
+        this.matchOutcomes = matchOutcomes != null ? Map.copyOf(matchOutcomes) : Map.of();
     }
 }

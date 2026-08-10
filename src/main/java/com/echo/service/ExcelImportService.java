@@ -1,7 +1,7 @@
 package com.echo.service;
 
-import com.echo.entity.FaultType;
 import com.echo.entity.HttpRule;
+import com.echo.entity.FaultType;
 import com.echo.entity.JmsRule;
 import com.echo.entity.Response;
 import com.echo.repository.ResponseRepository;
@@ -51,13 +51,13 @@ public class ExcelImportService {
 
             // Example HTTP rule
             Row httpRow = sheet.createRow(1);
-            httpRow.createCell(0).setCellValue("HTTP");           // protocol
+            httpRow.createCell(0).setCellValue("HTTP");            // protocol
             httpRow.createCell(1).setCellValue("api.example.com"); // targetHost
             httpRow.createCell(2).setCellValue("/api/users");      // matchKey
             httpRow.createCell(3).setCellValue("GET");             // method
             httpRow.createCell(4).setCellValue(200);               // status
             httpRow.createCell(5).setCellValue(0);                 // delayMs
-            httpRow.createCell(6).setCellValue("");                // maxDelayMs
+            httpRow.createCell(6).setCellValue(0);                 // maxDelayMs
             httpRow.createCell(7).setCellValue("userId=123");      // bodyCondition
             httpRow.createCell(8).setCellValue("status=active");   // queryCondition
             httpRow.createCell(9).setCellValue("Content-Type*=json"); // headerCondition
@@ -71,14 +71,14 @@ public class ExcelImportService {
 
             // Example JMS rule
             Row jmsRow = sheet.createRow(2);
-            jmsRow.createCell(0).setCellValue("JMS");              // protocol
+            jmsRow.createCell(0).setCellValue("JMS");             // protocol
             jmsRow.createCell(1).setCellValue("");                 // targetHost
-            jmsRow.createCell(2).setCellValue("*");                // matchKey
+            jmsRow.createCell(2).setCellValue("*");               // matchKey
             jmsRow.createCell(3).setCellValue("");                 // method
-            jmsRow.createCell(4).setCellValue(0);                  // status
-            jmsRow.createCell(5).setCellValue(50);                 // delayMs
-            jmsRow.createCell(6).setCellValue("");                 // maxDelayMs
-            jmsRow.createCell(7).setCellValue("//OrderType=VIP");  // bodyCondition
+            jmsRow.createCell(4).setCellValue(0);                 // status
+            jmsRow.createCell(5).setCellValue(50);                // delayMs
+            jmsRow.createCell(6).setCellValue(0);                 // maxDelayMs
+            jmsRow.createCell(7).setCellValue("//OrderType=VIP"); // bodyCondition
             jmsRow.createCell(8).setCellValue("");                 // queryCondition
             jmsRow.createCell(9).setCellValue("");                 // headerCondition
             jmsRow.createCell(10).setCellValue("<response><status>OK</status></response>"); // responseBody
@@ -227,28 +227,28 @@ public class ExcelImportService {
         rule.setEnabled(getCellBoolean(row, headerMap.get("enabled"), true));
         
         // Parse faultType
-        String jmsFt = getCellString(row, headerMap.get("faulttype"));
-        if (!jmsFt.isEmpty()) {
+        String ft = getCellString(row, headerMap.get("faulttype"));
+        if (!ft.isEmpty()) {
             try {
-                rule.setFaultType(FaultType.valueOf(jmsFt.toUpperCase(Locale.ROOT)));
+                rule.setFaultType(FaultType.valueOf(ft.toUpperCase(Locale.ROOT)));
             } catch (IllegalArgumentException e) {
-                log.warn("Invalid faultType '{}' in Excel row, using NONE", jmsFt);
+                log.warn("Invalid faultType '{}' in Excel row, using NONE", ft);
                 rule.setFaultType(FaultType.NONE);
             }
         }
 
         // Parse scenario fields
-        String jmsScenarioName = getCellString(row, headerMap.get("scenarioname"));
-        if (!jmsScenarioName.isEmpty()) {
-            rule.setScenarioName(jmsScenarioName);
+        String scenarioName = getCellString(row, headerMap.get("scenarioname"));
+        if (!scenarioName.isEmpty()) {
+            rule.setScenarioName(scenarioName);
         }
-        String jmsRequiredState = getCellString(row, headerMap.get("requiredscenariostate"));
-        if (!jmsRequiredState.isEmpty()) {
-            rule.setRequiredScenarioState(jmsRequiredState);
+        String requiredState = getCellString(row, headerMap.get("requiredscenariostate"));
+        if (!requiredState.isEmpty()) {
+            rule.setRequiredScenarioState(requiredState);
         }
-        String jmsNewState = getCellString(row, headerMap.get("newscenariostate"));
-        if (!jmsNewState.isEmpty()) {
-            rule.setNewScenarioState(jmsNewState);
+        String newState = getCellString(row, headerMap.get("newscenariostate"));
+        if (!newState.isEmpty()) {
+            rule.setNewScenarioState(newState);
         }
 
         // 建立 Response

@@ -16,6 +16,8 @@ spring:
       enabled: false
 
 echo:
+  cache:
+    sync-enabled: false
   admin:
     username: admin
     password: "{noop}admin"

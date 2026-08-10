@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public interface HttpRuleRepository extends JpaRepository<HttpRule, String> {
+    long countByHttpTargetConnectionId(Long httpTargetConnectionId);
 
     List<HttpRule> findByTargetHostAndMatchKey(String targetHost, String matchKey);
 

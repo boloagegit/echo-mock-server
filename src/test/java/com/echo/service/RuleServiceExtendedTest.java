@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -176,5 +177,23 @@ class RuleServiceExtendedTest {
 
         assertThat(result).containsExactly("r1", "r2");
         verify(protocolHandlerRegistry).findIdsByTagPattern("%\"env\":\"prod\"%");
+    }
+
+    @Test
+    void getValidResponseIds_shouldUseIdOnlyRepositoryQuery() {
+        Set<Long> requested = Set.of(1L, 2L, 999L);
+        when(responseRepository.findExistingIds(requested)).thenReturn(List.of(1L, 2L));
+
+        Set<Long> result = ruleService.getValidResponseIds(requested);
+
+        assertThat(result).containsExactlyInAnyOrder(1L, 2L);
+        verify(responseRepository).findExistingIds(requested);
+        verify(responseRepository, never()).findAllById(anyCollection());
+    }
+
+    @Test
+    void getValidResponseIds_shouldSkipDatabaseForEmptySet() {
+        assertThat(ruleService.getValidResponseIds(Set.of())).isEmpty();
+        verify(responseRepository, never()).findExistingIds(anyCollection());
     }
 }

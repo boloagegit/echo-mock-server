@@ -49,12 +49,12 @@ public class H2BackupService implements BackupService {
     @Scheduled(cron = "${echo.backup.cron:0 0 3 * * *}")
     public void scheduledBackup() {
         backup("scheduled");
-        compact();
     }
 
     /**
      * 執行 SHUTDOWN COMPACT 回收 H2 已刪除資料的磁碟空間。
-     * H2 會關閉並重寫檔案，HikariCP 自動重建連線。
+     * 此操作會關閉並重寫整個資料庫，只能在 Echo 已停機的維護時段手動執行，
+     * 不可與線上定時備份綁在一起。
      */
     public CompactResult compact() {
         try {
@@ -65,7 +65,7 @@ public class H2BackupService implements BackupService {
                     sizeBefore / 1024 / 1024, sizeAfter / 1024 / 1024);
             return new CompactResult(sizeBefore, sizeAfter);
         } catch (Exception e) {
-            log.warn("H2 compact failed (will retry next cycle): {}", e.getMessage());
+            log.warn("H2 compact failed: {}", e.getMessage());
             return null;
         }
     }
@@ -98,7 +98,7 @@ public class H2BackupService implements BackupService {
             Path filePath = dir.resolve(filename);
 
             // H2 BACKUP TO 指令
-            jdbcTemplate.execute("BACKUP TO '" + filePath.toAbsolutePath() + "'");
+            jdbcTemplate.execute("BACKUP TO '" + h2SqlPath(filePath) + "'");
             log.info("H2 backup completed: {} (trigger: {})", filename, trigger);
 
             cleanOldBackups();
@@ -107,6 +107,12 @@ public class H2BackupService implements BackupService {
             log.error("H2 backup failed", e);
             throw new RuntimeException("Backup failed: " + e.getMessage(), e);
         }
+    }
+
+    static String h2SqlPath(Path path) {
+        return path.toAbsolutePath().normalize().toString()
+                .replace('\\', '/')
+                .replace("'", "''");
     }
 
     private void cleanOldBackups() {

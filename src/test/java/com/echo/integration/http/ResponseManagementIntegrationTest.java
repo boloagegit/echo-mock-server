@@ -11,6 +11,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.context.TestPropertySource;
 
 import java.util.List;
 import java.util.Map;
@@ -20,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 回應管理整合測試
  */
+@TestPropertySource(properties = "echo.features.bulk-import-export-enabled=true")
 class ResponseManagementIntegrationTest extends BaseIntegrationTest {
 
     // ========== 9.2 Response CRUD ==========

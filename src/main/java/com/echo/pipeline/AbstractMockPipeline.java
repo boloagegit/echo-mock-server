@@ -8,13 +8,18 @@ import com.echo.service.MatchChainEntry;
 import com.echo.service.MatchDescriptionBuilder;
 import com.echo.service.MatchResult;
 import com.echo.service.RequestLogService;
+import com.echo.service.RequestLogUnavailableException;
 import com.echo.service.RuleService;
+import com.echo.util.CancellableStages;
 import com.echo.service.ScenarioService;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -52,6 +57,14 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
      * 步驟：findCandidateRules → prepareBody → matchRule → buildResponse/forward/handleNoMatch → recordLog → 回傳 PipelineResult
      */
     public PipelineResult execute(MockRequest request) {
+        return executeAsync(request).toCompletableFuture().join();
+    }
+
+    /**
+     * 執行 pipeline，並允許協定實作將慢速 I/O 以非同步方式完成。
+     * Mock 回應仍在原請求執行緒直接完成，不增加額外排程成本。
+     */
+    public CompletionStage<PipelineResult> executeAsync(MockRequest request) {
         long startTime = System.currentTimeMillis();
 
         try {
@@ -62,7 +75,9 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
             // 2. 準備 body（若 MockRequest 已有 preparedBody 則直接使用）
             ConditionMatcher.PreparedBody preparedBody = request.getPreparedBody();
             if (preparedBody == null) {
-                preparedBody = conditionMatcher.prepareBody(request.getBody());
+                preparedBody = requiresBodyParsing(candidates)
+                        ? conditionMatcher.prepareBody(request.getBody())
+                        : ConditionMatcher.PreparedBody.rawOnly(request.getBody());
             }
 
             // 3. 匹配規則
@@ -73,9 +88,10 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
             String matchChainJson = MatchDescriptionBuilder.toMatchChainJson(
                     matchResult.getMatchChain(), matchResult.isMatched());
 
-            MockResponse response;
-            String ruleId = null;
-            long delayMs = 0;
+            CompletionStage<MockResponse> responseStage = null;
+            MockResponse immediateResponse = null;
+            String ruleId;
+            long delayMs;
             String faultTypeName = null;
             String scenarioName = null;
             String scenarioFromState = null;
@@ -103,104 +119,141 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                     scenarioNewState = rule.getNewScenarioState();
                 }
 
-                // 4b. 解析回應內容
-                String responseBody = resolveResponseBody(rule.getResponseId());
-
-                // 4c. 建構回應（子類別實作，含模板渲染等）
-                response = buildResponse(rule, request, responseBody);
-
-                // 4d. 故障注入處理
                 FaultType faultType = rule.getFaultType() != null ? rule.getFaultType() : FaultType.NONE;
-                if (faultType == FaultType.EMPTY_RESPONSE) {
-                    response = MockResponse.builder()
-                            .status(response.getStatus())
+                if (faultType != FaultType.NONE) {
+                    String responseBody = resolveResponseBody(rule.getResponseId());
+                    immediateResponse = buildResponse(rule, request, responseBody);
+                    faultTypeName = faultType.name();
+                    if (faultType == FaultType.EMPTY_RESPONSE) {
+                        immediateResponse = MockResponse.builder()
+                            .status(immediateResponse.getStatus())
                             .body("")
                             .matched(true)
                             .forwarded(false)
                             .build();
-                }
-                if (faultType != FaultType.NONE) {
-                    faultTypeName = faultType.name();
+                    }
+                } else if (shouldForwardMatchedRule(rule, request)) {
+                    responseStage = forwardMatchedRuleAsync(rule, request);
+                } else {
+                    // 4b. 解析回應內容
+                    String responseBody = resolveResponseBody(rule.getResponseId());
+
+                    // 4c. 建構回應（子類別實作，含模板渲染等）
+                    immediateResponse = buildResponse(rule, request, responseBody);
                 }
             } else {
+                ruleId = null;
+                delayMs = 0;
                 // 5. 無匹配：判斷是否轉發
                 if (shouldForward(request)) {
-                    response = forward(request);
+                    responseStage = forwardAsync(request);
                 } else {
-                    response = handleNoMatch(request);
+                    immediateResponse = handleNoMatch(request);
                 }
             }
 
-            // 6. 記錄日誌
-            int responseTimeMs = (int) (System.currentTimeMillis() - startTime);
-
-            // proxy status: 轉發成功時為 response status，轉發失敗（有 proxyError）時為 null
-            Integer proxyStatus = null;
-            if (response.isForwarded() && response.getProxyError() == null) {
-                proxyStatus = response.getStatus();
+            String finalRuleId = ruleId;
+            long finalDelayMs = delayMs;
+            ConditionMatcher.PreparedBody finalPreparedBody = preparedBody;
+            String finalFaultTypeName = faultTypeName;
+            String finalScenarioName = scenarioName;
+            String finalScenarioFromState = scenarioFromState;
+            String finalScenarioNewState = scenarioNewState;
+            if (immediateResponse != null) {
+                return CompletableFuture.completedFuture(completeResult(
+                        request, startTime, candidates, finalPreparedBody,
+                        matchResult, matchTimeMs, matchChainJson,
+                        finalRuleId, finalDelayMs, immediateResponse,
+                        finalFaultTypeName, finalScenarioName,
+                        finalScenarioFromState, finalScenarioNewState));
             }
-
-            // targetHost: 匹配成功或轉發時傳入，handleNoMatch 時傳 null（與現有行為一致）
-            String logTargetHost = (matchResult.isMatched() || response.isForwarded())
-                    ? request.getTargetHost() : null;
-
-            recordLog(
-                    ruleId,
-                    request.getProtocol(),
-                    request.getMethod(),
-                    request.getPath(),
-                    matchResult.isMatched(),
-                    responseTimeMs,
-                    request.getClientIp(),
-                    matchChainJson,
-                    logTargetHost,
-                    proxyStatus,
-                    response.getProxyError(),
-                    response.getStatus(),
-                    matchTimeMs,
-                    request.getBody(),
-                    response.getBody(),
-                    candidates,
-                    preparedBody,
-                    request.getQueryString(),
-                    request.getHeaders(),
-                    faultTypeName,
-                    scenarioName,
-                    scenarioFromState,
-                    scenarioNewState
-            );
-
-            // 7. 回傳 PipelineResult
-            return PipelineResult.builder()
-                    .response(response)
-                    .ruleId(ruleId)
-                    .matched(matchResult.isMatched())
-                    .matchTimeMs(matchTimeMs)
-                    .responseTimeMs(responseTimeMs)
-                    .matchChainJson(matchChainJson)
-                    .delayMs(delayMs)
-                    .faultType(faultTypeName)
-                    .scenarioName(scenarioName)
-                    .scenarioNewState(scenarioNewState)
-                    .build();
+            return CancellableStages.handle(responseStage, (response, error) -> {
+                if (error != null) {
+                    return pipelineError(startTime, unwrap(error));
+                }
+                try {
+                    return completeResult(request, startTime, candidates, finalPreparedBody,
+                            matchResult, matchTimeMs, matchChainJson,
+                            finalRuleId, finalDelayMs, response,
+                            finalFaultTypeName, finalScenarioName,
+                            finalScenarioFromState, finalScenarioNewState);
+                } catch (Exception e) {
+                    return pipelineError(startTime, e);
+                }
+            });
 
         } catch (Exception e) {
-            log.error("Pipeline execution error: {}", e.getMessage(), e);
-            int responseTimeMs = (int) (System.currentTimeMillis() - startTime);
-            MockResponse errorResponse = MockResponse.builder()
-                    .status(500)
-                    .body("Pipeline error: " + e.getMessage())
-                    .matched(false)
-                    .forwarded(false)
-                    .build();
-            return PipelineResult.builder()
-                    .response(errorResponse)
-                    .matched(false)
-                    .matchTimeMs(0)
-                    .responseTimeMs(responseTimeMs)
-                    .delayMs(0)
-                    .build();
+            return CompletableFuture.completedFuture(pipelineError(startTime, e));
         }
+    }
+
+    private PipelineResult completeResult(MockRequest request,
+                                          long startTime,
+                                          List<T> candidates,
+                                          ConditionMatcher.PreparedBody preparedBody,
+                                          MatchResult<T> matchResult,
+                                          int matchTimeMs,
+                                          String matchChainJson,
+                                          String ruleId,
+                                          long delayMs,
+                                          MockResponse response,
+                                          String faultType,
+                                          String scenarioName,
+                                          String scenarioFromState,
+                                          String scenarioToState) {
+        int responseTimeMs = (int) (System.currentTimeMillis() - startTime);
+        Integer proxyStatus = response.isForwarded() && response.getProxyError() == null
+                ? response.getStatus() : null;
+        String logTargetHost = (matchResult.isMatched() || response.isForwarded())
+                ? request.getTargetHost() : null;
+
+        recordLog(ruleId, request.getProtocol(), request.getMethod(), request.getPath(),
+                matchResult.isMatched(), responseTimeMs, request.getClientIp(), matchChainJson,
+                logTargetHost, proxyStatus, response.getProxyError(), response.getStatus(),
+                matchTimeMs, request.getBody(), response.getBody(), candidates, preparedBody,
+                request.getQueryString(), request.getHeaders(), faultType,
+                scenarioName, scenarioFromState, scenarioToState);
+
+        return PipelineResult.builder()
+                .response(response)
+                .ruleId(ruleId)
+                .matched(matchResult.isMatched())
+                .matchTimeMs(matchTimeMs)
+                .responseTimeMs(responseTimeMs)
+                .matchChainJson(matchChainJson)
+                .delayMs(delayMs)
+                .faultType(faultType)
+                .scenarioName(scenarioName)
+                .scenarioNewState(scenarioToState)
+                .build();
+    }
+
+    private PipelineResult pipelineError(long startTime, Throwable error) {
+        log.error("Pipeline execution error: {}", error.getMessage(), error);
+        int responseTimeMs = (int) (System.currentTimeMillis() - startTime);
+        boolean logUnavailable = error instanceof RequestLogUnavailableException;
+        MockResponse errorResponse = MockResponse.builder()
+                .status(logUnavailable ? 503 : 500)
+                .body(logUnavailable
+                        ? "Request logging is temporarily unavailable"
+                        : "Pipeline error: " + error.getMessage())
+                .matched(false)
+                .forwarded(false)
+                .build();
+        return PipelineResult.builder()
+                .response(errorResponse)
+                .matched(false)
+                .matchTimeMs(0)
+                .responseTimeMs(responseTimeMs)
+                .delayMs(0)
+                .build();
+    }
+
+    private static Throwable unwrap(Throwable error) {
+        if (error instanceof CompletionException && error.getCause() != null) {
+            return error.getCause();
+        }
+        return error;
     }
 
     // ==================== 延遲計算 ====================
@@ -284,6 +337,20 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
         return new MatchResult<>(matched, chain);
     }
 
+    /** JSON/XML 只在至少一條啟用候選規則真的使用 body 條件時解析。 */
+    private boolean requiresBodyParsing(List<T> candidates) {
+        for (T rule : candidates) {
+            if (Boolean.FALSE.equals(rule.getEnabled())) {
+                continue;
+            }
+            String bodyCondition = extractConditions(rule).getBodyCondition();
+            if (bodyCondition != null && !bodyCondition.isBlank()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // ==================== 共用實作方法 ====================
 
     /**
@@ -346,6 +413,13 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     /** 執行轉發 */
     protected abstract MockResponse forward(MockRequest request);
 
+    /**
+     * 非同步轉發 hook。未覆寫的協定維持原有同步行為。
+     */
+    protected CompletionStage<MockResponse> forwardAsync(MockRequest request) {
+        return CompletableFuture.completedFuture(forward(request));
+    }
+
     /** 判斷是否應轉發 */
     protected abstract boolean shouldForward(MockRequest request);
 
@@ -360,4 +434,20 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
 
     /** 建立匹配鏈條目 */
     protected abstract MatchChainEntry createMatchChainEntry(T rule, String reason);
+
+    /** Explicit matched-rule forwarding hook; disabled for all existing rules by default. */
+    protected boolean shouldForwardMatchedRule(T rule, MockRequest request) {
+        return false;
+    }
+
+    protected MockResponse forwardMatchedRule(T rule, MockRequest request) {
+        throw new UnsupportedOperationException("Matched-rule forwarding is not supported");
+    }
+
+    /**
+     * 非同步的命中規則轉發 hook。預設委派原有同步實作。
+     */
+    protected CompletionStage<MockResponse> forwardMatchedRuleAsync(T rule, MockRequest request) {
+        return CompletableFuture.completedFuture(forwardMatchedRule(rule, request));
+    }
 }

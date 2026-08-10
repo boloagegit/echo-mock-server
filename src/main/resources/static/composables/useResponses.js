@@ -133,6 +133,7 @@ const useResponses = (deps) => {
     };
 
     const saveResponse = async () => {
+        if (deps.loading.value.responseSave) return;
         const payload = { description: responseForm.value.description, contentType: responseForm.value.contentType === 'sse' ? 'SSE' : null };
         if (responseForm.value.contentType === 'sse') {
             payload.body = serializeSseEvents(responseSseEvents.value);
@@ -140,13 +141,18 @@ const useResponses = (deps) => {
             payload.body = responseForm.value.body;
         }
         const url = editingResponse.value ? `/api/admin/responses/${editingResponse.value.id}` : '/api/admin/responses';
-        const r = await apiCall(url, { method: editingResponse.value ? 'PUT' : 'POST', body: JSON.stringify(payload) }, { errorMsg: t('toast.responseSaveFailed') });
-        if (r && r.ok) {
-            showToast(editingResponse.value ? t('toast.responseSaveSuccess') : t('toast.responseCreateSuccess'), 'success');
-            showResponseModal.value = false;
-            markDirty();
-            if (deps.onResponseSaved) deps.onResponseSaved();
-            loadResponseSummary(true);
+        deps.loading.value.responseSave = true;
+        try {
+            const r = await apiCall(url, { method: editingResponse.value ? 'PUT' : 'POST', body: JSON.stringify(payload) }, { errorMsg: t('toast.responseSaveFailed') });
+            if (r && r.ok) {
+                showToast(editingResponse.value ? t('toast.responseSaveSuccess') : t('toast.responseCreateSuccess'), 'success');
+                showResponseModal.value = false;
+                markDirty();
+                if (deps.onResponseSaved) deps.onResponseSaved();
+                loadResponseSummary(true);
+            }
+        } finally {
+            deps.loading.value.responseSave = false;
         }
     };
 

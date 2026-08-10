@@ -29,9 +29,10 @@
 - **規則展延** - 延長規則/回應的保留期限，避免被定時清除
 - **孤兒清理** - 偵測並清除未被任何規則使用的孤兒回應
 - **自動備份** - SQLite 資料庫排程備份、關機備份、手動觸發備份
-- **狀態機場景** - WireMock 風格狀態機，模擬多步驟流程（如訂單→付款→確認）
-- **故障注入** - 模擬連線重置、空回應，用於韌性測試
-- **假資料產生** - 內建假資料 helpers（姓名、email、電話、地址等），產生擬真回應
+- **狀態機場景** - WireMock 風格狀態機，可模擬多步驟流程
+- **故障注入** - 模擬連線重置與空回應，用於韌性測試
+- **OpenAPI 匯入** - 預覽並匯入 OpenAPI 3.x 或 Swagger 2.x JSON/YAML 規格
+- **假資料產生** - 內建姓名、Email、電話、地址與整數模板 helper
 - **規則測試** - 在管理介面直接測試規則匹配結果
 - **靜態分析** - SpotBugs 靜態程式碼分析
 - **零外部依賴** - 內嵌 SQLite 資料庫、Caffeine 快取
@@ -58,6 +59,34 @@
 ./gradlew bootJar
 java -jar build/libs/echo-server-*.jar
 ```
+
+Windows 開發機請在 PowerShell 使用：
+
+```powershell
+.\gradlew.bat dev
+.\gradlew.bat bootRun
+.\gradlew.bat bootJar
+java -jar (Get-ChildItem build\libs\echo-server-*.jar | Select-Object -First 1).FullName
+```
+
+### H2 遷移至 SQLite
+
+目前基礎設定仍以 H2 啟動；完成遷移後以 `sqlite` profile 啟動。遷移前必須先停止 Echo，且目標 SQLite 檔案不可已存在：
+
+```bash
+python3 scripts/migrate-h2-to-sqlite.py
+SPRING_PROFILES_ACTIVE=sqlite ./gradlew bootRun
+```
+
+PowerShell：
+
+```powershell
+python scripts\migrate-h2-to-sqlite.py
+$env:SPRING_PROFILES_ACTIVE="sqlite"
+.\gradlew.bat bootRun
+```
+
+遷移程式會先建立並核對 H2 備份，再於暫存 SQLite 中以單一交易搬移所有應用資料表。逐表筆數、SHA-256、`integrity_check`、`foreign_key_check` 及啟動後查詢 API 全部通過後，才會原子發布 `mockdb.sqlite`；原 H2 不會被刪除。非預設路徑及自動化參數請執行 `python3 scripts/migrate-h2-to-sqlite.py --help` 查看。
 
 ### Docker 部署
 
@@ -94,40 +123,6 @@ JVM 參數在 Dockerfile 中設定（預設 `-Xms256m -Xmx512m`），可透過 d
 | 登入頁面 | http://localhost:8080/login.html | 使用者登入 |
 | Mock 端點 | http://localhost:8080/mock/** | 攔截 HTTP 請求 |
 | — | — | SQLite 以檔案管理（不需要 Web Console） |
-
-## 從 H2 升級
-
-> **重大變更**：自本版本起，預設資料庫從 H2 改為 SQLite。
-
-**全新安裝** – 不需任何操作，預設使用 SQLite。
-
-**既有 H2 使用者** – 選擇以下方式之一：
-
-1. **繼續使用 H2**（不需遷移）：
-   ```bash
-   ./gradlew bootRun --args='--spring.profiles.active=h2'
-   ```
-
-2. **遷移到 SQLite**（建議）：
-   ```bash
-   # 1. 停止 Echo
-   # 2. 使用 H2 Shell 匯出資料
-   java -cp ~/.gradle/caches/**/h2-*.jar org.h2.tools.Shell \
-     -url "jdbc:h2:file:./mockdb;ACCESS_MODE_DATA=r" -user sa -password "" \
-     -sql "CALL CSVWRITE('./http_rules.csv', 'SELECT * FROM HTTP_RULES')"
-   # 對以下表重複：JMS_RULES, RESPONSES, BUILTIN_USERS, RULE_AUDIT_LOGS
-
-   # 3. 刪除舊 DB 並啟動 Echo（自動建立 SQLite）
-   rm mockdb.mv.db
-   ./gradlew dev
-   # JPA ddl-auto=update 會自動建立 schema
-
-   # 4. 透過 Admin UI 重新建立規則，或用 CSV 匯入
-   ```
-
-3. **全新開始** – 直接刪除 `mockdb.mv.db` 重啟，系統會自動建立新的 SQLite 資料庫。
-
-**為什麼換 SQLite？** H2 embedded mode 在非正常關閉時（kill -9、OOM kill、斷電）容易發生 chunk 損壞。SQLite 使用 WAL mode 的 atomic commit 機制，即使 crash 也能保證資料庫完整性。
 
 ## 規則匹配優先順序
 
@@ -210,6 +205,8 @@ Echo 可作為 JMS Proxy，在開發環境攔截 JMS 訊息：
                  無匹配規則 → 轉發到 Target ESB
 ```
 
+管理員可在「系統設定 → JMS 轉發連線」建立多組 Artemis/TIBCO 連線、測試連線並指定一組預設值。只有無規則匹配時才會使用預設的**轉發端**連線；Echo 自己接收訊息的 Embedded Artemis 不受影響。第一次建立資料庫連線設定後，系統會改用資料庫設定，原本 `application.yml` 的 `target` 僅作為尚未建立任何設定時的相容備援。密碼以 AES-GCM 加密保存且不會由 API 回傳；正式環境請固定設定 `ECHO_JMS_CREDENTIAL_KEY`，更換此金鑰前必須先重新輸入所有已儲存密碼。
+
 ## 條件匹配語法
 
 ### HTTP Body 條件 (JSON)
@@ -253,56 +250,24 @@ Echo 可作為 JMS Proxy，在開發環境攔截 JMS 訊息：
 
 ## 狀態機場景（Stateful Scenarios）
 
-使用 WireMock 風格的狀態機模擬多步驟流程。每個 Scenario 有 `scenarioName` 和 `currentState`（預設 `Started`）。
+規則可透過 `scenarioName` 加入指定狀態機，只在 `requiredScenarioState`
+符合時命中，並在命中後切換至 `newScenarioState`。每個 Scenario 的初始狀態都是
+`Started`。
 
-規則透過三個欄位控制狀態：
-- `scenarioName` — 綁定哪個狀態機
-- `requiredScenarioState` — 匹配前提：狀態必須是這個值才會匹配
-- `newScenarioState` — 匹配成功後，狀態轉移為這個值
-
-### 範例：訂單流程
-
-```bash
-# 規則 1：Started 狀態下 GET → pending
-curl -X POST http://localhost:8080/api/admin/rules -u admin:admin \
-  -H 'Content-Type: application/json' -d '{
-    "protocol":"HTTP", "matchKey":"/order/123", "method":"GET",
-    "responseBody":"{\"status\":\"pending\"}", "status":200, "priority":10,
-    "scenarioName":"order-flow", "requiredScenarioState":"Started", "newScenarioState":"Started"
-  }'
-
-# 規則 2：Started 狀態下 POST /pay → 狀態轉為 Paid
-curl -X POST http://localhost:8080/api/admin/rules -u admin:admin \
-  -H 'Content-Type: application/json' -d '{
-    "protocol":"HTTP", "matchKey":"/order/123/pay", "method":"POST",
-    "responseBody":"{\"result\":\"payment-ok\"}", "status":200, "priority":10,
-    "scenarioName":"order-flow", "requiredScenarioState":"Started", "newScenarioState":"Paid"
-  }'
-
-# 規則 3：Paid 狀態下 GET → paid
-curl -X POST http://localhost:8080/api/admin/rules -u admin:admin \
-  -H 'Content-Type: application/json' -d '{
-    "protocol":"HTTP", "matchKey":"/order/123", "method":"GET",
-    "responseBody":"{\"status\":\"paid\"}", "status":200, "priority":10,
-    "scenarioName":"order-flow", "requiredScenarioState":"Paid", "newScenarioState":"Paid"
-  }'
+```json
+{
+  "protocol": "HTTP",
+  "matchKey": "/orders/123/pay",
+  "method": "POST",
+  "scenarioName": "order-flow",
+  "requiredScenarioState": "Started",
+  "newScenarioState": "Paid",
+  "responseBody": "{\"result\":\"payment-ok\"}"
+}
 ```
 
-```bash
-curl http://localhost:8080/mock/order/123              # → {"status":"pending"}
-curl -X POST http://localhost:8080/mock/order/123/pay  # → {"result":"payment-ok"}
-curl http://localhost:8080/mock/order/123              # → {"status":"paid"}
-```
-
-### 重置狀態
-
-```bash
-# 重置單一 scenario
-curl -X PUT http://localhost:8080/api/admin/scenarios/order-flow/reset -u admin:admin
-
-# 重置所有 scenarios
-curl -X PUT http://localhost:8080/api/admin/scenarios/reset -u admin:admin
-```
+使用 `PUT /api/admin/scenarios/{name}/reset` 重置單一 Scenario，或使用
+`PUT /api/admin/scenarios/reset` 重置全部 Scenario。
 
 ## 使用方式
 
@@ -356,11 +321,12 @@ echo:
     sync-interval-ms: 5000      # 多實例 cache 同步間隔 (毫秒)
   jms:
     enabled: false              # 設為 true 啟用 JMS
+    credential-key: ${ECHO_JMS_CREDENTIAL_KEY} # 資料庫內轉發密碼的加密金鑰
     port: 61616                 # Artemis 監聽埠
     queue: ECHO.REQUEST         # 監聽的 Queue
     endpoint-field: ServiceName # 從訊息 body 提取端點識別欄位
     target:
-      enabled: false            # 設為 true 啟用轉發到 ESB
+      enabled: false            # 舊版單一連線相容設定；未建立資料庫連線時使用
       type: tibco               # artemis 或 tibco
       server-url: tcp://esb-server:7222
       timeout-seconds: 30
@@ -510,13 +476,6 @@ ADMIN 可透過管理介面管理內建帳號：
 | POST | /api/admin/builtin-users/register | 自助註冊（公開，需啟用） |
 | PUT | /api/account/change-password | 修改自己的密碼（已登入） |
 
-### 狀態機管理
-
-| Method | Path | 說明 |
-|--------|------|------|
-| PUT | /api/admin/scenarios/{name}/reset | 重置單一 Scenario 為 Started |
-| PUT | /api/admin/scenarios/reset | 重置所有 Scenarios 為 Started |
-
 ### JMS 測試
 
 | Method | Path | 說明 |
@@ -548,20 +507,6 @@ WireMock 風格的 Handlebars 模板引擎，在回應內容中使用 `{{...}}` 
 ```
 
 比較運算子：`eq`, `ne`, `gt`, `lt`, `contains`, `matches`
-
-### 假資料 Helpers
-
-```handlebars
-{{randomFirstName}}                           // 隨機名字
-{{randomLastName}}                            // 隨機姓氏
-{{randomFullName}}                            // 隨機全名
-{{randomEmail}}                               // 隨機 email
-{{randomPhoneNumber}}                         // 隨機電話 (xxx) xxx-xxxx
-{{randomCity}}                                // 隨機城市
-{{randomCountry}}                             // 隨機國家
-{{randomStreetAddress}}                       // 隨機地址
-{{randomInt min=1 max=100}}                   // 隨機整數
-```
 
 ### JSONPath / XPath
 
@@ -668,6 +613,9 @@ python3 scripts/stress-test-rps.py [URL] [秒數] [並發數]
 # Echo vs WireMock 比較（需要 libs/wiremock-standalone.jar）
 python3 scripts/stress-test-vs-wiremock.py [ECHO_URL] [WM_URL] [秒數] [並發數]
 
+# 2,000 條規則 RPS 測試（Echo XML/JSON vs WireMock XML）
+python3 scripts/bench-rps-xml.py
+
 # 2,000 條 JMS 規則匹配時間
 python3 scripts/bench-2000-jms.py
 
@@ -677,10 +625,10 @@ python3 scripts/stress-test-jms-match.py [BASE_URL]
 # 記憶體壓力測試
 python3 scripts/stress-test-memory.py [BASE_URL]
 
-# 快取隔離壓力測試
-python3 scripts/stress-test-cache-isolation.py
+# 日誌檢查
+python3 scripts/check-logs.py
 
-# 匹配情境回歸測試（138 個案例）
+# 匹配情境回歸測試（69 個案例）
 python3 scripts/test-match-scenarios.py
 ```
 

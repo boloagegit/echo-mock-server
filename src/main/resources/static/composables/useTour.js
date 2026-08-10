@@ -16,27 +16,27 @@ const useTour = ({ t }) => {
 
     const tourSteps = computed(() => [
         {
-            target: '.protocol-switch',
+            target: '[data-tour="protocol"]',
             title: t('tour.stepProtocolTitle'),
             body: t('tour.stepProtocolBody'),
         },
         {
-            target: '.rule-left .form-block:nth-child(2)',
+            target: '[data-tour="match"]',
             title: t('tour.stepMatchTitle'),
             body: t('tour.stepMatchBody'),
         },
         {
-            target: '.rule-left .form-block:nth-child(3)',
+            target: '[data-tour="conditions"]',
             title: t('tour.stepConditionTitle'),
             body: t('tour.stepConditionBody'),
         },
         {
-            target: '.rule-right .form-block:first-child',
+            target: '[data-tour="response"]',
             title: t('tour.stepResponseTitle'),
             body: t('tour.stepResponseBody'),
         },
         {
-            target: '.modal-footer',
+            target: '[data-tour="save"]',
             title: t('tour.stepSaveTitle'),
             body: t('tour.stepSaveBody'),
         },

@@ -154,4 +154,72 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
         List<Map<String, Object>> logs = queryLogs("endpoint=limit-test");
         assertThat(logs).isNotEmpty();
     }
+
+    @Test
+    @DisplayName("10.6 日誌查詢: 後端分頁、排序與 afterId 增量查詢")
+    @SuppressWarnings("unchecked")
+    void logServerPaginationAndIncrementalQuery() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Original-Host", "paged.test");
+        for (String suffix : List.of("c", "a", "b")) {
+            createHttpRule("/api/paged-" + suffix, "GET", "{\"suffix\":\"" + suffix + "\"}", "paged.test");
+            restTemplate.exchange("/mock/api/paged-" + suffix, HttpMethod.GET,
+                    new HttpEntity<>(headers), String.class);
+        }
+
+        Map<String, Object> page = null;
+        for (int attempt = 0; attempt < 10; attempt++) {
+            page = adminClient().getForEntity(
+                    "/api/admin/logs?endpoint=paged-&page=0&size=2&sort=endpoint&direction=asc", Map.class)
+                    .getBody();
+            if (page != null && ((Number) page.get("totalElements")).intValue() >= 3) {
+                break;
+            }
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+
+        assertThat(page).isNotNull();
+        assertThat(((Number) page.get("totalElements")).intValue()).isEqualTo(3);
+        assertThat(((Number) page.get("totalPages")).intValue()).isEqualTo(2);
+        List<Map<String, Object>> results = (List<Map<String, Object>>) page.get("results");
+        assertThat(results).hasSize(2);
+        assertThat(getLogEntry(results.get(0)).get("endpoint")).isEqualTo("/api/paged-a");
+        assertThat(getLogEntry(results.get(1)).get("endpoint")).isEqualTo("/api/paged-b");
+
+        Map<String, Object> newestPage = adminClient().getForEntity(
+                "/api/admin/logs?endpoint=paged-&page=0&size=1&sort=requestTime&direction=desc", Map.class)
+                .getBody();
+        long cursor = ((Number) newestPage.get("newestId")).longValue();
+        createHttpRule("/api/paged-new", "GET", "{\"new\":true}", "paged.test");
+        restTemplate.exchange("/mock/api/paged-new", HttpMethod.GET,
+                new HttpEntity<>(headers), String.class);
+
+        List<Map<String, Object>> incremental = List.of();
+        for (int attempt = 0; attempt < 10; attempt++) {
+            Map<String, Object> body = adminClient().getForEntity(
+                    "/api/admin/logs?endpoint=paged-&page=0&size=20&afterId=" + cursor, Map.class)
+                    .getBody();
+            incremental = (List<Map<String, Object>>) body.get("results");
+            if (!incremental.isEmpty()) {
+                break;
+            }
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+
+        assertThat(incremental).singleElement().satisfies(item -> {
+            Map<String, Object> log = getLogEntry(item);
+            assertThat(log.get("endpoint")).isEqualTo("/api/paged-new");
+            assertThat(((Number) log.get("id")).longValue()).isGreaterThan(cursor);
+        });
+    }
 }
