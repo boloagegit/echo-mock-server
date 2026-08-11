@@ -93,13 +93,14 @@ const ResponsesPage = {
               <button class="btn btn-sm" :class="responseContentTypeFilter==='SSE'?'btn-primary':'btn-secondary'" @click="$emit('update:responseContentTypeFilter', responseContentTypeFilter==='SSE'?'':'SSE')">SSE</button>
             </div>
             <div class="filter-divider"></div>
-            <div class="workspace-search-field">
-              <i class="bi bi-search"></i>
-              <input id="responseSearch" class="form-control" :value="responseFilter" @input="$emit('update:responseFilter', $event.target.value)" :placeholder="t('responses.searchPlaceholder')" style="padding-right:28px">
-              <button v-if="responseFilter" class="workspace-search-clear" @click="$emit('update:responseFilter', '')" :title="t('responses.clearSearch')" :aria-label="t('responses.clearSearch')">
-                <i class="bi bi-x"></i>
-              </button>
-            </div>
+            <workspace-search-field
+              input-id="responseSearch"
+              :model-value="responseFilter"
+              :placeholder="t('responses.searchPlaceholder')"
+              :aria-label="t('responses.searchPlaceholder')"
+              :clear-label="t('responses.clearSearch')"
+              @update:model-value="$emit('update:responseFilter', $event)"
+            ></workspace-search-field>
           </div>
         </div>
       </div>
@@ -129,8 +130,8 @@ const ResponsesPage = {
             <th style="width:88px" class="col-hide-md">{{t('responses.thType')}}</th>
             <th style="width:64px;cursor:pointer" class="col-hide-md" @click="$emit('toggle-response-sort', 'bodySize')">{{t('responses.thSize')}} <i class="bi" :class="responseSortIcon('bodySize')"></i></th>
             <th style="width:64px;cursor:pointer" class="col-hide-sm" @click="$emit('toggle-response-sort', 'usageCount')">{{t('responses.thUsageCount')}} <i class="bi" :class="responseSortIcon('usageCount')"></i></th>
-            <th style="width:96px;cursor:pointer" class="col-hide-md" @click="$emit('toggle-response-sort', 'createdAt')">{{t('responses.thCreatedAt')}} <i class="bi" :class="responseSortIcon('createdAt')"></i></th>
-            <th style="width:96px;cursor:pointer" class="col-hide-md" @click="$emit('toggle-response-sort', 'updatedAt')">{{t('responses.thUpdatedAt')}} <i class="bi" :class="responseSortIcon('updatedAt')"></i></th>
+            <th class="col-datetime col-hide-md" style="cursor:pointer" @click="$emit('toggle-response-sort', 'createdAt')">{{t('responses.thCreatedAt')}} <i class="bi" :class="responseSortIcon('createdAt')"></i></th>
+            <th class="col-datetime col-hide-md" style="cursor:pointer" @click="$emit('toggle-response-sort', 'updatedAt')">{{t('responses.thUpdatedAt')}} <i class="bi" :class="responseSortIcon('updatedAt')"></i></th>
             <th class="col-actions col-actions-3">{{t('responses.thActions')}}</th>
           </tr></thead>
           <tbody>
@@ -155,8 +156,8 @@ const ResponsesPage = {
                   <span v-if="r.usageCount" class="badge badge-success">{{r.usageCount}}</span>
                   <span v-else class="badge badge-secondary">0</span>
                 </td>
-                <td class="col-hide-md"><span class="sub-info" :title="fmtTime(r.createdAt,false)">{{fmtTime(r.createdAt)}}</span></td>
-                <td class="col-hide-md"><span class="sub-info" :title="fmtTime(r.updatedAt,false)">{{fmtTime(r.updatedAt)}}</span></td>
+                <td class="col-datetime col-hide-md"><span class="sub-info" :title="fmtTime(r.createdAt,false)">{{fmtTime(r.createdAt)}}</span></td>
+                <td class="col-datetime col-hide-md"><span class="sub-info" :title="fmtTime(r.updatedAt,false)">{{fmtTime(r.updatedAt)}}</span></td>
                 <td class="col-actions col-actions-3">
                   <div style="display:flex;gap:0.25rem">
                     <button v-if="r.usageCount" class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('toggle-response-rules', r)" :title="t('responses.viewLinkedRules', {count: r.usageCount})" :aria-label="t('responses.viewLinkedRules', {count: r.usageCount})"><i class="bi" :class="r.expanded?'bi-chevron-up':'bi-chevron-down'"></i></button>
@@ -196,18 +197,21 @@ const ResponsesPage = {
           </div>
         </div>
         </div>
-        <div class="card-table-footer">
-          <span class="sub-info">{{t('responses.totalCount', {count: responseSummary.length})}}</span>
-          <span v-if="responseFilter || responseUsageFilter || responseContentTypeFilter" class="badge badge-warning" style="margin-left:8px;cursor:pointer" :title="t('responses.clickClearFilter')" @click="$emit('clear-response-filters')"><i class="bi bi-funnel-fill"></i> {{t('responses.filtering')}}</span>
-          <div class="pagination-controls">
-            <button class="btn btn-sm btn-secondary" @click="$emit('update:responsePage', 1)" :disabled="!responsePage || responsePage===1" :aria-label="t('stats.firstPage')"><i class="bi bi-chevron-double-left" aria-hidden="true"></i></button>
-            <button class="btn btn-sm btn-secondary" @click="$emit('update:responsePage', responsePage-1)" :disabled="!responsePage || responsePage===1" :aria-label="t('stats.previousPage')"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
-            <span>{{responsePage}} / {{responseTotalPages}}</span>
-            <button class="btn btn-sm btn-secondary" @click="$emit('update:responsePage', responsePage+1)" :disabled="responsePage>=responseTotalPages" :aria-label="t('stats.nextPage')"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
-            <button class="btn btn-sm btn-secondary" @click="$emit('update:responsePage', responseTotalPages)" :disabled="responsePage>=responseTotalPages" :aria-label="t('stats.lastPage')"><i class="bi bi-chevron-double-right" aria-hidden="true"></i></button>
-          </div>
-          <select :value="responsePageSize" @change="$emit('update:responsePageSize', Number($event.target.value))" class="form-control issue-page-size" :aria-label="t('stats.pageSize')"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select>
-        </div>
+        <workspace-pagination
+          :page="responsePage" :total-pages="responseTotalPages" :page-size="responsePageSize"
+          :pagination-label="t('stats.pagination')"
+          :page-status-label="t('stats.pageStatus', {page:responsePage, total:responseTotalPages})"
+          :page-size-label="t('stats.pageSize')"
+          :first-page-label="t('stats.firstPage')" :previous-page-label="t('stats.previousPage')"
+          :next-page-label="t('stats.nextPage')" :last-page-label="t('stats.lastPage')"
+          @update:page="$emit('update:responsePage', $event)"
+          @update:page-size="$emit('update:responsePageSize', $event)"
+        >
+          <template #summary>
+            <span class="sub-info">{{t('responses.totalCount', {count: responseSummary.length})}}</span>
+            <button v-if="responseFilter || responseUsageFilter || responseContentTypeFilter" type="button" class="workspace-filter-reset" :title="t('responses.clickClearFilter')" @click="$emit('clear-response-filters')"><i class="bi bi-funnel-fill" aria-hidden="true"></i> {{t('responses.filtering')}}</button>
+          </template>
+        </workspace-pagination>
       </div>
     </div>
   `

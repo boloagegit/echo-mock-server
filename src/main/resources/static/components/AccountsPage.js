@@ -157,8 +157,8 @@ const AccountsPage = {
               <th>{{t('accounts.thUsername')}}</th>
               <th style="width:80px">{{t('accounts.thRole')}}</th>
               <th class="col-hide-sm" style="width:80px">{{t('accounts.thEnabled')}}</th>
-              <th class="col-hide-md" style="width:110px">{{t('accounts.thCreatedAt')}}</th>
-              <th class="col-hide-md" style="width:110px">{{t('accounts.thLastLoginAt')}}</th>
+              <th class="col-datetime col-hide-md">{{t('accounts.thCreatedAt')}}</th>
+              <th class="col-datetime col-hide-md">{{t('accounts.thLastLoginAt')}}</th>
               <th class="col-actions col-actions-3">{{t('accounts.thActions')}}</th>
             </tr></thead>
             <tbody>
@@ -169,8 +169,8 @@ const AccountsPage = {
                 </td>
                 <td><span class="badge" :class="a.role==='ROLE_ADMIN'?'badge-http':'badge-muted'">{{a.role==='ROLE_ADMIN'?t('accounts.roleAdmin'):t('accounts.roleUser')}}</span></td>
                 <td class="col-hide-sm"><span class="badge" :class="a.enabled?'badge-success':'badge-danger'">{{a.enabled?t('accounts.enabled'):t('accounts.disabled')}}</span></td>
-                <td class="col-hide-md"><span class="sub-info" :title="fmtTime(a.createdAt,false)">{{fmtTime(a.createdAt)}}</span></td>
-                <td class="col-hide-md"><span class="sub-info" :title="fmtTime(a.lastLoginAt,false)">{{fmtTime(a.lastLoginAt)}}</span></td>
+                <td class="col-datetime col-hide-md"><span class="sub-info" :title="fmtTime(a.createdAt,false)">{{fmtTime(a.createdAt)}}</span></td>
+                <td class="col-datetime col-hide-md"><span class="sub-info" :title="fmtTime(a.lastLoginAt,false)">{{fmtTime(a.lastLoginAt)}}</span></td>
                 <td class="col-actions col-actions-3">
                   <div style="display:flex;gap:0.25rem">
                     <button v-if="a.enabled" class="btn btn-sm btn-icon btn-secondary" :title="t('accounts.disable')" :aria-label="t('accounts.disable')" @click="accounts.disableAccount(a)"><i class="bi bi-pause-circle"></i></button>

@@ -20,6 +20,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -27,6 +28,7 @@ import static org.mockito.Mockito.when;
 class JmsTargetConnectionServiceTest {
 
     @Mock JmsTargetConnectionRepository repository;
+    @Mock com.echo.repository.JmsRuleRepository jmsRuleRepository;
     @Mock JmsCredentialCipher cipher;
     @Mock JmsTargetFactoryProvider provider;
     @Mock ConnectionFactory factory;
@@ -38,7 +40,8 @@ class JmsTargetConnectionServiceTest {
     @BeforeEach
     void setUp() {
         properties = new JmsProperties();
-        service = new JmsTargetConnectionService(repository, cipher, properties, List.of(provider));
+        service = new JmsTargetConnectionService(
+                repository, jmsRuleRepository, cipher, properties, List.of(provider));
     }
 
     @Test
@@ -96,6 +99,17 @@ class JmsTargetConnectionServiceTest {
     }
 
     @Test
+    void connectionUsedByRuleCannotBeDeleted() {
+        JmsTargetConnection entity = entity(2L, true, false);
+        when(repository.findById(2L)).thenReturn(Optional.of(entity));
+        when(jmsRuleRepository.countByJmsTargetConnectionId("2")).thenReturn(1L);
+
+        assertThatThrownBy(() -> service.delete(2L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("JMS_CONNECTION_IN_USE");
+    }
+
+    @Test
     void staleVersionReturnsOptimisticLockConflict() {
         JmsTargetConnection entity = entity(1L, true, true);
         entity.setVersion(5L);
@@ -122,17 +136,57 @@ class JmsTargetConnectionServiceTest {
     }
 
     @Test
-    void fallsBackToLegacyYamlOnlyWhenNoStoredProfilesExist() {
+    void resolvesExplicitEnabledConnection() {
+        JmsTargetConnection entity = entity(9L, true, false);
+        when(repository.findById(9L)).thenReturn(Optional.of(entity));
+
+        var resolved = service.resolveEnabled("9");
+
+        assertThat(resolved.cacheKey()).isEqualTo("db:9:0");
+        assertThat(resolved.target().getQueue()).isEqualTo("TARGET.REQUEST");
+    }
+
+    @Test
+    void resolvesYamlTargetWhenItIsConfigured() {
         properties.getTarget().setEnabled(true);
         properties.getTarget().setType("artemis");
         properties.getTarget().setServerUrl("tcp://legacy:61616");
-        when(repository.findFirstByDefaultConnectionTrueAndEnabledTrue()).thenReturn(Optional.empty());
-        when(repository.count()).thenReturn(0L);
 
         var resolved = service.resolveActive().orElseThrow();
 
         assertThat(resolved.legacy()).isTrue();
         assertThat(resolved.target().getServerUrl()).isEqualTo("tcp://legacy:61616");
+    }
+
+    @Test
+    void yamlTargetOverridesStoredDefault() {
+        properties.getTarget().setEnabled(true);
+        properties.getTarget().setType("artemis");
+        properties.getTarget().setServerUrl("tcp://yaml:61616");
+
+        var resolved = service.resolveActive().orElseThrow();
+
+        assertThat(resolved.legacy()).isTrue();
+        assertThat(resolved.name()).isEqualTo("application.yml");
+        assertThat(resolved.target().getServerUrl()).isEqualTo("tcp://yaml:61616");
+        verify(repository, never()).findFirstByDefaultConnectionTrueAndEnabledTrue();
+    }
+
+    @Test
+    void listIncludesYamlTargetAndStoredFallbackDefault() {
+        properties.getTarget().setEnabled(true);
+        properties.getTarget().setType("artemis");
+        properties.getTarget().setServerUrl("tcp://yaml:61616");
+        when(repository.findAllByOrderByNameAsc())
+                .thenReturn(List.of(entity(7L, true, true)));
+
+        var targets = service.list();
+
+        assertThat(targets).hasSize(2);
+        assertThat(targets.get(0).legacy()).isTrue();
+        assertThat(targets.get(0).name()).isEqualTo("application.yml");
+        assertThat(targets.get(1).legacy()).isFalse();
+        assertThat(targets.get(1).defaultConnection()).isTrue();
     }
 
     @Test

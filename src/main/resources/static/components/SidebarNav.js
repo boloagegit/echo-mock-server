@@ -45,12 +45,12 @@ const SidebarNav = {
           <span>Echo</span>
           <span v-if="envLabel" class="env-label">{{envLabel}}</span>
         </div>
-        <button class="sidebar-toggle" :aria-label="mobileMenu ? 'Close menu' : (sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar')" @click="mobileMenu ? $emit('update:mobileMenu', false) : $emit('update:sidebarCollapsed', !sidebarCollapsed)">
+        <button class="sidebar-toggle" :aria-label="mobileMenu ? t('sidebar.closeMenu') : (sidebarCollapsed ? t('sidebar.expandSidebar') : t('sidebar.collapseSidebar'))" @click="mobileMenu ? $emit('update:mobileMenu', false) : $emit('update:sidebarCollapsed', !sidebarCollapsed)">
           <i class="bi" :class="mobileMenu ? 'bi-x-lg' : (sidebarCollapsed ? 'bi-chevron-right' : 'bi-chevron-left')"></i>
         </button>
       </div>
       <div class="sidebar-nav">
-        <div class="nav-section">WORKSPACE</div>
+        <div class="nav-section">{{t('sidebar.workspace')}}</div>
         <button type="button" class="nav-item" :class="{active: page==='rules'}" @click="$emit('update:page', 'rules'); $emit('update:mobileMenu', false)">
           <i class="bi bi-list-ul"></i><span class="nav-text">{{t('sidebar.rules')}}</span>
         </button>
@@ -75,7 +75,7 @@ const SidebarNav = {
         </button>
 
         <div class="nav-divider" style="margin-top:auto"></div>
-        <div class="nav-section">PREFERENCES</div>
+        <div class="nav-section">{{t('sidebar.preferences')}}</div>
 
         <button type="button" class="nav-item" @click="helpSeen ? $emit('show-help') : $emit('start-tour')" :title="t('sidebar.help')">
           <i class="bi bi-question-circle"></i><span class="nav-text">{{t('sidebar.help')}}</span>
@@ -87,7 +87,7 @@ const SidebarNav = {
           <i class="bi" :class="themeIcon"></i><span class="nav-text">{{themeLabel}}</span>
         </button>
         <button type="button" class="nav-item" @click="$emit('switch-locale')">
-          <i class="bi bi-translate"></i><span class="nav-text">{{locale==='zh-TW' ? '中' : 'EN'}}</span>
+          <i class="bi bi-translate"></i><span class="nav-text">{{t('sidebar.languageShort')}}</span>
         </button>
 
         <div class="nav-divider"></div>

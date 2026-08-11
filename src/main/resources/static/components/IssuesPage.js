@@ -165,7 +165,7 @@ const IssuesPage = {
               <th style="width:80px">{{t('issues.thStatus')}}</th>
               <th>{{t('issues.thTitle')}}</th>
               <th class="col-hide-md" style="width:100px">{{t('issues.thCreatedBy')}}</th>
-              <th style="width:110px">{{t('issues.thTime')}}</th>
+              <th class="col-datetime">{{t('issues.thTime')}}</th>
               <th class="col-actions col-actions-1">{{t('issues.thActions')}}</th>
             </tr></thead>
             <tbody>
@@ -178,7 +178,7 @@ const IssuesPage = {
                     <div style="font-weight:500">{{issue.title}}</div>
                   </td>
                   <td class="col-hide-md"><span class="sub-info">{{issue.createdBy}}</span></td>
-                  <td><span class="sub-info" :title="fmtTime(issue.createdAt,false)">{{fmtTime(issue.createdAt)}}</span></td>
+                  <td class="col-datetime"><span class="sub-info" :title="fmtTime(issue.createdAt,false)">{{fmtTime(issue.createdAt)}}</span></td>
                   <td class="col-actions col-actions-1">
                     <button class="btn btn-sm btn-icon btn-secondary" :title="expandedId===issue.id?t('issues.collapse'):t('issues.expand')" :aria-label="expandedId===issue.id?t('issues.collapse'):t('issues.expand')" :aria-expanded="expandedId===issue.id" :aria-controls="'issue-detail-'+issue.id">
                       <i class="bi" :class="expandedId===issue.id?'bi-chevron-up':'bi-chevron-down'"></i>

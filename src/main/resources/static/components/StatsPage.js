@@ -23,7 +23,6 @@ const StatsPage = {
     httpLabel: String,
     jmsLabel: String,
     rules: Array,
-    autoRefresh: Boolean,
     logDetailExpanded: Object,
     detectMode: { type: Function, default: null }
   },
@@ -31,7 +30,7 @@ const StatsPage = {
     'load-logs', 'update:logFilter', 'update:logSort',
     'update:logPage', 'update:logPageSize',
     'toggle-sort', 'toggle-match-chain', 'toggle-log-detail', 'go-to-rule',
-    'toggle-auto-refresh', 'remove-log-chip', 'clear-log-filters', 'clip-copy',
+    'remove-log-chip', 'clear-log-filters', 'clip-copy',
     'create-rule-from-log'
   ],
   inject: ['t'],
@@ -352,13 +351,6 @@ const StatsPage = {
           </button>
         </div>
         <div class="page-actions">
-          <label class="inline-toggle" @click.stop :title="t('stats.autoRefreshTooltip')">
-            <span>{{t('stats.autoRefresh')}}</span>
-            <span class="toggle">
-              <input type="checkbox" :checked="autoRefresh" @change="$emit('toggle-auto-refresh')">
-              <span class="toggle-slider"></span>
-            </span>
-          </label>
           <button type="button" class="btn btn-secondary" @click="$emit('load-logs', true)" :disabled="loading.logs">
             <i class="bi bi-arrow-clockwise" :class="{'spin':loading.logs}" aria-hidden="true"></i>
             {{t('stats.refresh')}}
@@ -387,16 +379,14 @@ const StatsPage = {
                 @click="$emit('update:logFilter', {...logFilter, matched: logFilter.matched==='false'?'':'false'})">{{t('stats.filterUnmatched')}}</button>
             </div>
             <div class="filter-divider" aria-hidden="true"></div>
-            <div class="workspace-search-field" role="search">
-              <label class="visually-hidden" for="logSearch">{{t('stats.searchLabel')}}</label>
-              <i class="bi bi-search" aria-hidden="true"></i>
-              <input id="logSearch" :value="logFilter.endpoint"
-                @input="$emit('update:logFilter', {...logFilter, endpoint: $event.target.value})"
-                :placeholder="t('stats.searchPlaceholder')" class="form-control">
-              <button v-if="logFilter.endpoint" type="button" class="workspace-search-clear"
-                @click="$emit('update:logFilter', {...logFilter, endpoint:''})"
-                :aria-label="t('stats.clearSearch')" :title="t('stats.clearSearch')"><i class="bi bi-x" aria-hidden="true"></i></button>
-            </div>
+            <workspace-search-field
+              input-id="logSearch"
+              :model-value="logFilter.endpoint"
+              :placeholder="t('stats.searchPlaceholder')"
+              :aria-label="t('stats.searchLabel')"
+              :clear-label="t('stats.clearSearch')"
+              @update:model-value="$emit('update:logFilter', {...logFilter, endpoint:$event})"
+            ></workspace-search-field>
           </div>
         </div>
       </div>
@@ -539,25 +529,22 @@ const StatsPage = {
           </div>
         </div>
 
-        <div v-if="!loading.logsError" class="card-table-footer">
-          <div class="log-footer-summary">
+        <workspace-pagination v-if="!loading.logsError"
+          :page="logPage" :total-pages="totalPages" :page-size="logPageSize"
+          :pagination-label="t('stats.pagination')"
+          :page-status-label="t('stats.pageStatus', {page:logPage, total:totalPages})"
+          :page-size-label="t('stats.pageSize')"
+          :first-page-label="t('stats.firstPage')" :previous-page-label="t('stats.previousPage')"
+          :next-page-label="t('stats.nextPage')" :last-page-label="t('stats.lastPage')"
+          @update:page="$emit('update:logPage', $event)"
+          @update:page-size="$emit('update:logPageSize', $event)"
+        >
+          <template #summary>
             <span class="sub-info">{{t('stats.totalCount', {count: logSummary.filteredRequests ?? logs.length})}}</span>
-            <button v-if="logFilter.protocol||logFilter.matched||logFilter.endpoint" type="button" class="log-filter-reset"
+            <button v-if="logFilter.protocol||logFilter.matched||logFilter.endpoint" type="button" class="workspace-filter-reset"
               :title="t('stats.clickClearFilter')" @click="$emit('clear-log-filters')"><i class="bi bi-funnel-fill" aria-hidden="true"></i> {{t('stats.filtering')}}</button>
-          </div>
-          <div class="pagination-controls" role="navigation" :aria-label="t('stats.pagination')">
-            <button type="button" class="btn btn-sm btn-secondary" @click="$emit('update:logPage', 1)" :disabled="logPage===1" :aria-label="t('stats.firstPage')"><i class="bi bi-chevron-double-left" aria-hidden="true"></i></button>
-            <button type="button" class="btn btn-sm btn-secondary" @click="$emit('update:logPage', logPage-1)" :disabled="logPage===1" :aria-label="t('stats.previousPage')"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
-            <span class="tabular-nums" :aria-label="t('stats.pageStatus', {page: logPage, total: totalPages})">{{logPage}} / {{totalPages}}</span>
-            <button type="button" class="btn btn-sm btn-secondary" @click="$emit('update:logPage', logPage+1)" :disabled="logPage>=totalPages" :aria-label="t('stats.nextPage')"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
-            <button type="button" class="btn btn-sm btn-secondary" @click="$emit('update:logPage', totalPages)" :disabled="logPage>=totalPages" :aria-label="t('stats.lastPage')"><i class="bi bi-chevron-double-right" aria-hidden="true"></i></button>
-          </div>
-          <label class="log-page-size"><span class="visually-hidden">{{t('stats.pageSize')}}</span>
-            <select :value="logPageSize" @change="$emit('update:logPageSize', Number($event.target.value))" class="form-control" :aria-label="t('stats.pageSize')">
-              <option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option>
-            </select>
-          </label>
-        </div>
+          </template>
+        </workspace-pagination>
 
         <Teleport v-if="selectedLogItem && !loading.logsError" defer :to="'#log-detail-slot-'+selectedLogItem.log.id">
         <section class="log-inspector" :id="'log-detail-'+selectedLogItem.log.id"

@@ -74,7 +74,7 @@ class AdminControllerLogToRuleTest {
                 requestLogService, Optional.empty(), Optional.empty(),
                 Optional.empty(), excelImportService, openApiImportService, Optional.empty(),
                 responseContentValidatorRegistry, builtinUserRepository,
-                agentRegistry, cacheManager, issueReportService, Optional.empty(),
+                agentRegistry, cacheManager, issueReportService, Optional.empty(), Optional.empty(),
                 new RuleApplyMapper(new ObjectMapper()),
                 org.mockito.Mockito.mock(RuleApplyPersistenceSynchronizer.class),
                 new com.echo.service.RuleApplyContractService(true), scenarioService

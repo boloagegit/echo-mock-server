@@ -36,7 +36,8 @@ const RuleApplyModal = {
       const faultExcluded = new Set([
         'spec.responseId', 'spec.responseBody', 'spec.responseDescription',
         'spec.responseHeaders', 'spec.sseEnabled', 'spec.sseLoopEnabled',
-        'spec.responseContentType', 'spec.forwardTargetMode', 'spec.httpTargetConnectionId'
+        'spec.responseContentType', 'spec.forwardTargetMode', 'spec.httpTargetConnectionId',
+        'spec.jmsTargetConnectionId'
       ]);
       return (this.schema?.fields || []).filter(field => {
         const protocolMatches = !field.protocols?.length || !protocol || field.protocols.includes(protocol);
@@ -102,7 +103,8 @@ const RuleApplyModal = {
         ALWAYS: 'rules.applyRequiredAlways',
         HTTP: 'rules.applyRequiredHttp',
         EXISTING_RESOURCE: 'rules.applyRequiredExisting',
-        HTTP_FORWARD_CONNECTION: 'rules.applyRequiredConnection'
+        HTTP_FORWARD_CONNECTION: 'rules.applyRequiredConnection',
+        JMS_FORWARD_CONNECTION: 'rules.applyRequiredJmsConnection'
       };
       return field.requiredWhen ? this.t(keys[field.requiredWhen]) : this.t('rules.applyOptional');
     },

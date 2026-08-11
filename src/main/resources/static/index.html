@@ -48,6 +48,8 @@
                 :rule-preview-loading="rulePreviewLoading"
                 :rule-preview-error="rulePreviewError"
                 :rule-preview-cache="rulePreviewCache"
+                :rule-drag-enabled="ruleDragEnabled"
+                :rule-drag-available="ruleDragAvailable"
                 :can-drag-rules="canDragRules"
                 :show-data-dropdown="showDataDropdown"
                 :bulk-import-export-enabled="status?.bulkImportExportEnabled===true"
@@ -81,6 +83,7 @@
                 @toggle-rule-preview="toggleRulePreview($event)"
                 @handle-rule-row-click="handleRuleRowClick($event)"
                 @dismiss-dblclick-hint="dismissDblClickHint"
+                @update:rule-drag-enabled="setRuleDragEnabled($event)"
                 @go-to-responses="page='responses';responseFilter=String($event)"
                 @clip-copy="clipCopy($event)" @extend-rule="extendRule($event)"
                 @drag-start="(e, r) => onDragStart(e, r)"
@@ -103,7 +106,7 @@
                 :log-filter-chips="logFilterChips"
                 :jms-enabled="jmsEnabled" :http-label="httpLabel" :jms-label="jmsLabel"
                 :scenario-enabled="scenariosEnabled"
-                :rules="rules" :auto-refresh="autoRefresh"
+                :rules="rules"
                 :log-detail-expanded="logDetailExpanded"
                 :detect-mode="detectMode"
                 @load-logs="loadLogs($event)" @update:log-filter="logFilter=$event"
@@ -111,7 +114,7 @@
                 @update:log-page-size="logPageSize=$event"
                 @toggle-sort="toggleSort($event)" @toggle-match-chain="toggleMatchChain($event)"
                 @toggle-log-detail="(item, idx) => toggleLogDetail(item, idx)"
-                @go-to-rule="goToRule($event)" @toggle-auto-refresh="toggleAutoRefresh()"
+                @go-to-rule="goToRule($event)"
                 @remove-log-chip="removeLogChip($event)" @clear-log-filters="clearLogFilters"
                 @clip-copy="clipCopy($event)"
                 @create-rule-from-log="createRuleFromLog($event)"
@@ -248,7 +251,7 @@
         :show-catch-all-warning="showCatchAllWarning" :catch-all-confirmed="catchAllConfirmed"
         :show-body-condition-warning="showBodyConditionWarning"
         :jms-enabled="jmsEnabled" :scenario-enabled="scenariosEnabled" :http-label="httpLabel" :jms-label="jmsLabel"
-        :http-target-connections="httpTargetConnections"
+        :http-target-connections="httpTargetConnections" :jms-target-connections="jmsTargetConnections"
         :response-summary="responseSummary" :filtered-response-picker="filteredResponsePicker"
         :response-picker-search="responsePickerSearch" :response-dropdown-open="responseDropdownOpen"
         :response-picker-sse-only="responsePickerSseOnly"
@@ -352,6 +355,8 @@
 <script src="/composables/useRouter.js"></script>
 <script src="/components/SidebarNav.js"></script>
 <script src="/components/ToastContainer.js"></script>
+<script src="/components/WorkspaceSearchField.js?v=20260811.1"></script>
+<script src="/components/WorkspacePagination.js?v=20260811.2"></script>
 <script src="/components/ConfirmModal.js?v=20260809.5"></script>
 <script src="/components/TourOverlay.js?v=20260809.6"></script>
 <script src="/components/ImportModal.js?v=20260809.6"></script>

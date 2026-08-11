@@ -6,6 +6,7 @@ import com.echo.dto.JmsTargetConnectionRequest;
 import com.echo.entity.JmsTargetConnection;
 import com.echo.jms.target.JmsTargetFactoryProvider;
 import com.echo.repository.JmsTargetConnectionRepository;
+import com.echo.repository.JmsRuleRepository;
 import jakarta.jms.Connection;
 import jakarta.jms.ConnectionFactory;
 import lombok.RequiredArgsConstructor;
@@ -27,9 +28,11 @@ import java.util.Set;
 public class JmsTargetConnectionService {
 
     public static final String LEGACY_ID = "legacy-yaml";
+    private static final String YAML_TARGET_NAME = "application.yml";
     private static final Set<String> SUPPORTED_TYPES = Set.of("artemis", "tibco");
 
     private final JmsTargetConnectionRepository repository;
+    private final JmsRuleRepository jmsRuleRepository;
     private final JmsCredentialCipher credentialCipher;
     private final JmsProperties jmsProperties;
     private final List<JmsTargetFactoryProvider> factoryProviders;
@@ -37,10 +40,10 @@ public class JmsTargetConnectionService {
     @Transactional(readOnly = true)
     public List<JmsTargetConnectionDto> list() {
         List<JmsTargetConnectionDto> result = new ArrayList<>();
-        repository.findAllByOrderByNameAsc().stream().map(this::toDto).forEach(result::add);
-        if (result.isEmpty() && legacyConfigured()) {
+        if (legacyConfigured()) {
             result.add(legacyDto());
         }
+        repository.findAllByOrderByNameAsc().stream().map(this::toDto).forEach(result::add);
         return List.copyOf(result);
     }
 
@@ -132,11 +135,18 @@ public class JmsTargetConnectionService {
         if (Boolean.TRUE.equals(entity.getDefaultConnection())) {
             throw new IllegalArgumentException("DEFAULT_JMS_CONNECTION_CANNOT_BE_DELETED");
         }
+        if (jmsRuleRepository.countByJmsTargetConnectionId(String.valueOf(id)) > 0) {
+            throw new IllegalArgumentException("JMS_CONNECTION_IN_USE");
+        }
         repository.delete(entity);
     }
 
     @Transactional(readOnly = true)
     public Optional<ResolvedTarget> resolveActive() {
+        if (legacyConfigured()) {
+            return Optional.of(new ResolvedTarget(
+                    LEGACY_ID, YAML_TARGET_NAME, copyLegacyTarget(), true));
+        }
         Optional<JmsTargetConnection> stored = repository
                 .findFirstByDefaultConnectionTrueAndEnabledTrue();
         if (stored.isPresent()) {
@@ -145,11 +155,43 @@ public class JmsTargetConnectionService {
                     "db:" + entity.getId() + ":" + entity.getVersion(),
                     entity.getName(), toTarget(entity), false));
         }
-        if (repository.count() == 0 && legacyConfigured()) {
-            return Optional.of(new ResolvedTarget(
-                    LEGACY_ID, "Legacy application.yml", copyLegacyTarget(), true));
-        }
         return Optional.empty();
+    }
+
+    @Transactional(readOnly = true)
+    public ResolvedTarget resolveEnabled(String id) {
+        if (LEGACY_ID.equals(id)) {
+            if (!legacyConfigured()) {
+                throw new IllegalArgumentException("JMS_CONNECTION_NOT_FOUND");
+            }
+            return new ResolvedTarget(
+                    LEGACY_ID, YAML_TARGET_NAME, copyLegacyTarget(), true);
+        }
+        JmsTargetConnection entity = findEntity(parseId(id));
+        if (!Boolean.TRUE.equals(entity.getEnabled())) {
+            throw new IllegalArgumentException("JMS_CONNECTION_DISABLED");
+        }
+        return new ResolvedTarget(
+                "db:" + entity.getId() + ":" + entity.getVersion(),
+                entity.getName(), toTarget(entity), false);
+    }
+
+    @Transactional(readOnly = true)
+    public void validateForwardSelection(String mode, String connectionId) {
+        String effectiveMode = mode == null || mode.isBlank()
+                ? "DEFAULT_CONNECTION" : mode;
+        if ("CONNECTION".equals(effectiveMode)) {
+            if (connectionId == null || connectionId.isBlank()) {
+                throw new IllegalArgumentException("JMS_CONNECTION_REQUIRED");
+            }
+            resolveEnabled(connectionId);
+        } else if ("DEFAULT_CONNECTION".equals(effectiveMode)) {
+            if (resolveActive().isEmpty()) {
+                throw new IllegalArgumentException("DEFAULT_JMS_CONNECTION_NOT_FOUND");
+            }
+        } else {
+            throw new IllegalArgumentException("INVALID_JMS_FORWARD_TARGET_MODE");
+        }
     }
 
     @Transactional(readOnly = true)
@@ -268,7 +310,7 @@ public class JmsTargetConnectionService {
     private JmsTargetConnectionDto legacyDto() {
         JmsProperties.Target target = jmsProperties.getTarget();
         return new JmsTargetConnectionDto(
-                LEGACY_ID, null, "Legacy application.yml", normalizeType(target.getType()),
+                LEGACY_ID, null, YAML_TARGET_NAME, normalizeType(target.getType()),
                 target.getServerUrl(), target.getUsername(),
                 target.getPassword() != null && !target.getPassword().isEmpty(),
                 target.getQueue(), target.getTimeoutSeconds(), target.isEnabled(),

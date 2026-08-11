@@ -331,9 +331,9 @@ MessageProducer producer = session.createProducer(queue);</pre>
               <h4>{{t('help.condOverview')}}</h4>
               <p v-html="t('help.condOverviewDesc')"></p>
               <table class="help-table">
-                <tr><td><span class="cond-tag">Body</span></td><td v-html="t('help.condBody')"></td></tr>
-                <tr><td><span class="cond-tag query">Query</span></td><td v-html="t('help.condQuery')"></td></tr>
-                <tr><td><span class="cond-tag header">Header</span></td><td v-html="t('help.condHeader')"></td></tr>
+                <tr><td><span class="cond-tag">{{t('modal.condFieldBody')}}</span></td><td v-html="t('help.condBody')"></td></tr>
+                <tr><td><span class="cond-tag query">{{t('modal.condFieldQuery')}}</span></td><td v-html="t('help.condQuery')"></td></tr>
+                <tr><td><span class="cond-tag header">{{t('modal.condFieldHeader')}}</span></td><td v-html="t('help.condHeader')"></td></tr>
               </table>
               <p class="sub-info">{{t('help.jmsCondNote')}}</p>
             </div>

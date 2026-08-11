@@ -91,7 +91,7 @@ class AdminControllerTest {
 
     @BeforeEach
     void setUp() {
-        controller = new AdminController(ruleService, ruleQueryService, protocolHandlerRegistry, responseService, requestLogService, Optional.of(ruleAuditService), Optional.empty(), Optional.empty(), excelImportService, openApiImportService, Optional.empty(), responseContentValidatorRegistry, builtinUserRepository, agentRegistry, cacheManager, issueReportService, Optional.empty(), new RuleApplyMapper(new ObjectMapper()), mock(RuleApplyPersistenceSynchronizer.class), new com.echo.service.RuleApplyContractService(true), scenarioService);
+        controller = new AdminController(ruleService, ruleQueryService, protocolHandlerRegistry, responseService, requestLogService, Optional.of(ruleAuditService), Optional.empty(), Optional.empty(), excelImportService, openApiImportService, Optional.empty(), responseContentValidatorRegistry, builtinUserRepository, agentRegistry, cacheManager, issueReportService, Optional.empty(), Optional.empty(), new RuleApplyMapper(new ObjectMapper()), mock(RuleApplyPersistenceSynchronizer.class), new com.echo.service.RuleApplyContractService(true), scenarioService);
         ReflectionTestUtils.setField(controller, "ldapEnabled", false);
         ReflectionTestUtils.setField(controller, "ldapUrl", "");
         ReflectionTestUtils.setField(controller, "sessionTimeout", "180d");

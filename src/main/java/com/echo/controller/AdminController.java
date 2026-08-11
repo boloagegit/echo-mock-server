@@ -15,6 +15,7 @@ import com.echo.entity.Response;
 import com.echo.entity.ResponseContentType;
 import com.echo.entity.RuleAuditLog;
 import com.echo.entity.HttpRuleAction;
+import com.echo.entity.JmsRuleAction;
 import com.echo.protocol.ProtocolHandler;
 import com.echo.protocol.ProtocolHandlerRegistry;
 import com.echo.entity.BuiltinUser;
@@ -34,6 +35,7 @@ import com.echo.service.CacheInvalidationService;
 import com.echo.service.ContentTypeConstraints;
 import com.echo.service.IssueReportService;
 import com.echo.service.HttpTargetConnectionService;
+import com.echo.service.JmsTargetConnectionService;
 import com.echo.service.OpenApiImportService;
 import com.echo.service.ResponseContentValidatorRegistry;
 import com.echo.service.ScenarioService;
@@ -111,6 +113,7 @@ public class AdminController {
     private final CacheManager cacheManager;
     private final IssueReportService issueReportService;
     private final Optional<HttpTargetConnectionService> httpTargetConnectionService;
+    private final Optional<JmsTargetConnectionService> jmsTargetConnectionService;
     private final RuleApplyMapper ruleApplyMapper;
     private final RuleApplyPersistenceSynchronizer ruleApplyPersistenceSynchronizer;
     private final RuleApplyContractService ruleApplyContractService;
@@ -1246,8 +1249,11 @@ public class AdminController {
         boolean faulting = dto.getFaultType() != null
                 && !dto.getFaultType().isBlank()
                 && !FaultType.NONE.name().equals(dto.getFaultType());
-        boolean forwarding = !faulting && dto.getProtocol() == Protocol.HTTP
+        boolean httpForwarding = !faulting && dto.getProtocol() == Protocol.HTTP
                 && HttpRuleAction.FORWARD.name().equalsIgnoreCase(dto.getAction());
+        boolean jmsForwarding = !faulting && dto.getProtocol() == Protocol.JMS
+                && JmsRuleAction.FORWARD.name().equalsIgnoreCase(dto.getAction());
+        boolean forwarding = httpForwarding || jmsForwarding;
         if (faulting) {
             if (dto.getProtocol() == Protocol.HTTP) {
                 dto.setAction(HttpRuleAction.MOCK.name());
@@ -1258,12 +1264,24 @@ public class AdminController {
             dto.setResponseHeaders(null);
             dto.setForwardTargetMode(null);
             dto.setHttpTargetConnectionId(null);
+            dto.setJmsTargetConnectionId(null);
             dto.setSseEnabled(false);
             dto.setSseLoopEnabled(false);
             response = null;
         } else if (forwarding) {
-            httpTargetConnectionService.ifPresent(service -> service.validateForwardSelection(
-                    dto.getForwardTargetMode(), dto.getHttpTargetConnectionId()));
+            if (httpForwarding) {
+                httpTargetConnectionService.orElseThrow(() ->
+                        new IllegalStateException("HTTP target connection service unavailable"))
+                        .validateForwardSelection(
+                                dto.getForwardTargetMode(), dto.getHttpTargetConnectionId());
+                dto.setJmsTargetConnectionId(null);
+            } else {
+                jmsTargetConnectionService.orElseThrow(() ->
+                        new IllegalStateException("JMS target connection service unavailable"))
+                        .validateForwardSelection(
+                                dto.getForwardTargetMode(), dto.getJmsTargetConnectionId());
+                dto.setHttpTargetConnectionId(null);
+            }
             dto.setResponseId(null);
             dto.setResponseBody(null);
             dto.setSseEnabled(false);

@@ -27,12 +27,15 @@ public class RuleApplyContractService {
     private static final List<String> ACTIONS = List.of("MOCK", "FORWARD");
     private static final List<String> FORWARD_TARGET_MODES =
             List.of("ORIGINAL_HOST", "DEFAULT_CONNECTION", "CONNECTION");
+    private static final List<String> JMS_FORWARD_TARGET_MODES =
+            List.of("DEFAULT_CONNECTION", "CONNECTION");
     private static final List<String> RESPONSE_CONTENT_TYPES = List.of("TEXT", "SSE_EVENTS");
     private static final List<String> FAULT_TYPES =
             List.of("NONE", "CONNECTION_RESET", "EMPTY_RESPONSE");
     private static final Pattern HEADER_NAME =
             Pattern.compile("[!#$%&'*+.^_`|~0-9A-Za-z-]+");
     private static final List<String> HTTP_ONLY = List.of("HTTP");
+    private static final List<String> JMS_ONLY = List.of("JMS");
     private static final List<String> MOCK_ONLY = List.of("MOCK");
     private static final List<String> FORWARD_ONLY = List.of("FORWARD");
     private static final Set<String> SCENARIO_FIELDS = Set.of(
@@ -68,9 +71,10 @@ public class RuleApplyContractService {
                     field("spec.sseEnabled", "boolean", null, null, null, null, false, HTTP_ONLY, MOCK_ONLY, null, null, false),
                     field("spec.sseLoopEnabled", "boolean", null, null, null, null, false, HTTP_ONLY, MOCK_ONLY, null, null, false),
                     field("spec.responseContentType", "string", RESPONSE_CONTENT_TYPES, null, null, null, null, HTTP_ONLY, MOCK_ONLY, null, null, true),
-                    field("spec.action", "string", ACTIONS, null, null, null, "MOCK", HTTP_ONLY, null, null, null, false),
-                    field("spec.forwardTargetMode", "string", FORWARD_TARGET_MODES, null, null, null, "ORIGINAL_HOST", HTTP_ONLY, FORWARD_ONLY, null, null, false),
+                    field("spec.action", "string", ACTIONS, null, null, null, "MOCK", null, null, null, null, false),
+                    field("spec.forwardTargetMode", "string", FORWARD_TARGET_MODES, null, null, null, null, null, FORWARD_ONLY, null, null, false),
                     field("spec.httpTargetConnectionId", "integer", null, 1L, null, null, null, HTTP_ONLY, FORWARD_ONLY, "HTTP_FORWARD_CONNECTION", null, false),
+                    field("spec.jmsTargetConnectionId", "string", null, null, null, 64, null, JMS_ONLY, FORWARD_ONLY, "JMS_FORWARD_CONNECTION", null, false),
                     field("spec.faultType", "string", FAULT_TYPES, null, null, null, "NONE", null, null, null, null, false),
                     field("spec.scenarioName", "string", null, null, null, 100, null, null, null, null, null, false),
                     field("spec.requiredScenarioState", "string", null, null, null, 100, null, null, null, null, null, false),
@@ -193,6 +197,7 @@ public class RuleApplyContractService {
     private void validateMockSpec(RuleApplyDocument.Spec spec) {
         rejectPresent("spec.forwardTargetMode", spec.getForwardTargetMode(), "HTTP MOCK");
         rejectPresent("spec.httpTargetConnectionId", spec.getHttpTargetConnectionId(), "HTTP MOCK");
+        rejectPresent("spec.jmsTargetConnectionId", spec.getJmsTargetConnectionId(), "HTTP MOCK");
         range("spec.status", spec.getStatus(), 100, 599);
         validateStringMap("spec.responseHeaders", spec.getResponseHeaders(), true);
         if (Boolean.TRUE.equals(spec.getSseLoopEnabled()) && !Boolean.TRUE.equals(spec.getSseEnabled())) {
@@ -243,11 +248,29 @@ public class RuleApplyContractService {
         rejectPresent("spec.sseEnabled", spec.getSseEnabled(), "JMS");
         rejectPresent("spec.sseLoopEnabled", spec.getSseLoopEnabled(), "JMS");
         rejectPresent("spec.responseContentType", spec.getResponseContentType(), "JMS");
-        rejectPresent("spec.action", spec.getAction(), "JMS");
-        rejectPresent("spec.forwardTargetMode", spec.getForwardTargetMode(), "JMS");
         rejectPresent("spec.httpTargetConnectionId", spec.getHttpTargetConnectionId(), "JMS");
+        String action = normalized(spec.getAction(), "MOCK");
+        allowed("spec.action", action, ACTIONS);
         if (isFaulting(spec)) {
             validateFaultSpec(spec, "JMS");
+        } else if ("FORWARD".equals(action)) {
+            validateJmsForwardSpec(spec);
+        } else {
+            rejectPresent("spec.forwardTargetMode", spec.getForwardTargetMode(), "JMS MOCK");
+            rejectPresent("spec.jmsTargetConnectionId", spec.getJmsTargetConnectionId(), "JMS MOCK");
+        }
+    }
+
+    private void validateJmsForwardSpec(RuleApplyDocument.Spec spec) {
+        rejectPresent("spec.responseId", spec.getResponseId(), "JMS FORWARD");
+        rejectPresent("spec.responseBody", spec.getResponseBody(), "JMS FORWARD");
+        rejectPresent("spec.responseDescription", spec.getResponseDescription(), "JMS FORWARD");
+        String mode = normalized(spec.getForwardTargetMode(), "DEFAULT_CONNECTION");
+        allowed("spec.forwardTargetMode", mode, JMS_FORWARD_TARGET_MODES);
+        if ("CONNECTION".equals(mode)) {
+            requiredText("spec.jmsTargetConnectionId", spec.getJmsTargetConnectionId());
+        } else {
+            rejectPresent("spec.jmsTargetConnectionId", spec.getJmsTargetConnectionId(), mode);
         }
     }
 
@@ -259,13 +282,14 @@ public class RuleApplyContractService {
         rejectTrue("spec.sseEnabled", spec.getSseEnabled(), protocol + " FAULT");
         rejectTrue("spec.sseLoopEnabled", spec.getSseLoopEnabled(), protocol + " FAULT");
         rejectPresent("spec.responseContentType", spec.getResponseContentType(), protocol + " FAULT");
+        rejectPresent("spec.forwardTargetMode", spec.getForwardTargetMode(), protocol + " FAULT");
+        rejectPresent("spec.httpTargetConnectionId", spec.getHttpTargetConnectionId(), protocol + " FAULT");
+        rejectPresent("spec.jmsTargetConnectionId", spec.getJmsTargetConnectionId(), protocol + " FAULT");
         if ("HTTP".equals(protocol)) {
             if ("FORWARD".equals(normalized(spec.getAction(), "MOCK"))) {
                 fail("FAULT_ACTION_CONFLICT", "spec.action",
                         "spec.action must be MOCK when spec.faultType is enabled");
             }
-            rejectPresent("spec.forwardTargetMode", spec.getForwardTargetMode(), "HTTP FAULT");
-            rejectPresent("spec.httpTargetConnectionId", spec.getHttpTargetConnectionId(), "HTTP FAULT");
             range("spec.status", spec.getStatus(), 100, 599);
         }
     }

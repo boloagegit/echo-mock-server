@@ -29,6 +29,8 @@ const RulesPage = {
     rulePreviewLoading: Object,
     rulePreviewError: Object,
     rulePreviewCache: Object,
+    ruleDragEnabled: Boolean,
+    ruleDragAvailable: Boolean,
     canDragRules: Boolean,
     showDataDropdown: Boolean,
     bulkImportExportEnabled: Boolean,
@@ -57,6 +59,7 @@ const RulesPage = {
     'toggle-rule-preview', 'handle-rule-row-click',
     'dismiss-dblclick-hint',
     'go-to-responses',
+    'update:ruleDragEnabled',
     'clip-copy', 'extend-rule',
     'drag-start', 'drag-over', 'drag-leave', 'drop', 'drag-end',
     'toggle-data-dropdown', 'toggle-tag-group', 'toggle-tag-subgroup',
@@ -191,8 +194,8 @@ const RulesPage = {
     </div>
     <div v-if="!jmsEnabled" class="warning-banner"><i class="bi bi-exclamation-triangle"></i> {{t('rules.jmsNotEnabled', {jmsLabel: jmsLabel})}}</div>
     <div class="card rule-filter-card workspace-filter-card">
-        <div class="card-body filter-row rule-filter-bar">
-            <div class="rule-filter-controls">
+        <div class="card-body filter-row rule-filter-bar workspace-filter-bar">
+            <div class="rule-filter-controls workspace-filter-controls">
                 <div class="btn-group">
                     <button class="btn btn-sm" :class="ruleFilter.protocol==='HTTP'?'btn-primary':'btn-secondary'" @click="toggleFilter('protocol','HTTP')">{{httpLabel}}</button>
                     <button class="btn btn-sm" :class="ruleFilter.protocol==='JMS'?'btn-primary':'btn-secondary'" @click="toggleFilter('protocol','JMS')" :disabled="!jmsEnabled">{{jmsLabel}}</button>
@@ -205,15 +208,25 @@ const RulesPage = {
                     <button class="btn btn-sm" :class="ruleFilter.isProtected==='true'?'btn-primary':'btn-secondary'" @click="toggleFilter('isProtected','true')">{{t('rules.filterProtected')}}</button>
                     <button class="btn btn-sm" :class="ruleFilter.isProtected==='false'?'btn-primary':'btn-secondary'" @click="toggleFilter('isProtected','false')">{{t('rules.filterUnprotected')}}</button>
                 </div>
-                <div class="rule-search-field">
-                    <i class="bi bi-search rule-search-icon" aria-hidden="true"></i>
-                    <input id="ruleSearch" :value="ruleFilter.keyword" @input="setFilter('keyword', $event.target.value)" :placeholder="t('rules.searchPlaceholder')" :aria-label="t('rules.searchPlaceholder')" class="form-control">
-                    <button v-if="ruleFilter.keyword" class="btn btn-sm btn-icon rule-search-clear" @click="setFilter('keyword', '')" :title="t('rules.clearSearch')" :aria-label="t('rules.clearSearch')">
-                        <i class="bi bi-x"></i>
-                    </button>
-                </div>
+                <workspace-search-field
+                    input-id="ruleSearch"
+                    :model-value="ruleFilter.keyword"
+                    :placeholder="t('rules.searchPlaceholder')"
+                    :aria-label="t('rules.searchPlaceholder')"
+                    :clear-label="t('rules.clearSearch')"
+                    @update:model-value="setFilter('keyword', $event)"
+                ></workspace-search-field>
             </div>
             <div class="rule-view-controls">
+                <label v-if="ruleViewMode==='list'" class="rule-drag-toggle" :class="{'is-active':ruleDragEnabled,'is-disabled':!ruleDragAvailable}"
+                    :title="ruleDragAvailable?t('rules.dragSortHint'):t('rules.dragSortUnavailable')">
+                    <span class="rule-drag-toggle-label">{{t('rules.dragSort')}}</span>
+                    <span class="toggle toggle-sm" :class="{'disabled':!ruleDragAvailable}">
+                        <input type="checkbox" :checked="ruleDragEnabled" :disabled="!ruleDragAvailable"
+                            @change="$emit('update:ruleDragEnabled', $event.target.checked)">
+                        <span class="toggle-slider" aria-hidden="true"></span>
+                    </span>
+                </label>
                 <div class="btn-group">
                     <button class="btn btn-sm btn-secondary" :class="{'active':ruleViewMode==='list'}" @click="$emit('update:ruleViewMode', 'list')" :title="t('rules.listView')" :aria-label="t('rules.listView')"><i class="bi bi-list"></i></button>
                     <button class="btn btn-sm btn-secondary" :class="{'active':ruleViewMode==='group'}" @click="$emit('update:ruleViewMode', 'group')" :title="t('rules.groupView')" :aria-label="t('rules.groupView')"><i class="bi bi-collection"></i></button>
@@ -258,13 +271,13 @@ const RulesPage = {
                 <th class="col-cond col-hide-md">{{t('rules.thCondition')}}</th>
                 <th class="col-hide-sm" style="width:72px">{{t('rules.thEnabled')}}</th>
                 <th class="col-hide-md" style="width:56px;cursor:pointer" @click="$emit('toggle-rule-sort', 'priority')">{{t('rules.thPriority')}} <i class="bi" :class="ruleSortIcon('priority')"></i></th>
-                <th class="col-hide-md" style="width:96px;cursor:pointer" @click="$emit('toggle-rule-sort', 'createdAt')">{{t('rules.thCreatedAt')}} <i class="bi" :class="ruleSortIcon('createdAt')"></i></th>
+                <th class="col-datetime col-hide-md" style="cursor:pointer" @click="$emit('toggle-rule-sort', 'createdAt')">{{t('rules.thCreatedAt')}} <i class="bi" :class="ruleSortIcon('createdAt')"></i></th>
                 <th class="col-actions col-actions-4">{{t('rules.thActions')}}</th>
             </tr></thead>
             <tbody>
                 <template v-for="r in pagedRules" :key="r.id">
                 <tr :class="[{'selected-row':batchSelectMode && selectedRules.includes(r.id), 'row-clickable':!batchSelectMode}, dragRowClass(r)]" @click="!batchSelectMode && $emit('handle-rule-row-click', r)" :title="!batchSelectMode ? t('rules.clickPreviewDblEdit') : ''" @dragover="(e) => $emit('drag-over', e, r)" @dragleave="(e) => $emit('drag-leave', e, r)" @drop="$emit('drop', $event)">
-                    <td v-if="canDragRules" class="drag-handle-cell" draggable="true" @dragstart="(e) => $emit('drag-start', e, r)" @dragend="$emit('drag-end')"><i class="bi bi-grip-vertical"></i></td>
+                    <td v-if="canDragRules" class="drag-handle-cell" draggable="true" :aria-label="t('rules.dragRule', {id:shortId(r.id)})" :title="t('rules.dragRule', {id:shortId(r.id)})" @dragstart="(e) => $emit('drag-start', e, r)" @dragend="$emit('drag-end')"><i class="bi bi-grip-vertical" aria-hidden="true"></i></td>
                     <td v-if="batchSelectMode"><input type="checkbox" :checked="selectedRules.includes(r.id)" @change="toggleSelection(r.id)" :aria-label="t('rules.selectRule', {id:shortId(r.id)})"></td>
                     <td class="col-id">
                         <span class="badge badge-id" :title="r.id">{{shortId(r.id)}}</span>
@@ -299,9 +312,11 @@ const RulesPage = {
                         </label>
                     </td>
                     <td class="col-hide-md"><span class="badge badge-muted">{{r.priority ?? 0}}</span></td>
-                    <td class="col-hide-md">
-                        <span class="sub-info" :title="fmtTime(r.createdAt,false)">{{fmtTime(r.createdAt)}}</span>
-                        <span v-if="!r.isProtected && daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays) != null" class="badge" :class="daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays) <= 7 ? 'badge-warning' : 'badge-muted'" style="margin-left:4px">{{t('rules.daysLeft', {days: daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays)})}}</span>
+                    <td class="col-datetime col-hide-md">
+                        <div class="table-date-stack">
+                            <span class="sub-info" :title="fmtTime(r.createdAt,false)">{{fmtTime(r.createdAt)}}</span>
+                            <span v-if="!r.isProtected && daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays) != null" class="badge" :class="daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays) <= 7 ? 'badge-warning' : 'badge-muted'">{{t('rules.daysLeft', {days: daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays)})}}</span>
+                        </div>
                     </td>
                     <td class="col-actions col-actions-4">
                         <div style="display:flex;gap:0.25rem">
@@ -393,18 +408,21 @@ const RulesPage = {
             </div>
         </div>
         </div>
-        <div class="card-table-footer">
-            <span class="sub-info">{{t('rules.totalCount', {count: ruleTotalElements})}}</span>
-            <span v-if="ruleFilter.protocol||ruleFilter.enabled||ruleFilter.isProtected||ruleFilter.keyword" class="badge badge-warning" style="margin-left:8px;cursor:pointer" :title="t('rules.clickClearFilter')" @click="clearFilters()"><i class="bi bi-funnel-fill"></i> {{t('rules.filtering')}}</span>
-            <div class="pagination-controls">
-                <button class="btn btn-sm btn-secondary" @click="$emit('update:rulePage', 1)" :disabled="rulePage===1" :aria-label="t('stats.firstPage')"><i class="bi bi-chevron-double-left" aria-hidden="true"></i></button>
-                <button class="btn btn-sm btn-secondary" @click="$emit('update:rulePage', rulePage-1)" :disabled="rulePage===1" :aria-label="t('stats.previousPage')"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
-                <span>{{rulePage}} / {{ruleTotalPages}}</span>
-                <button class="btn btn-sm btn-secondary" @click="$emit('update:rulePage', rulePage+1)" :disabled="rulePage>=ruleTotalPages" :aria-label="t('stats.nextPage')"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
-                <button class="btn btn-sm btn-secondary" @click="$emit('update:rulePage', ruleTotalPages)" :disabled="rulePage>=ruleTotalPages" :aria-label="t('stats.lastPage')"><i class="bi bi-chevron-double-right" aria-hidden="true"></i></button>
-            </div>
-            <select :value="rulePageSize" @change="$emit('update:rulePageSize', Number($event.target.value)); $emit('update:rulePage', 1)" class="form-control issue-page-size" :aria-label="t('stats.pageSize')"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select>
-        </div>
+        <workspace-pagination
+            :page="rulePage" :total-pages="ruleTotalPages" :page-size="rulePageSize"
+            :pagination-label="t('stats.pagination')"
+            :page-status-label="t('stats.pageStatus', {page:rulePage, total:ruleTotalPages})"
+            :page-size-label="t('stats.pageSize')"
+            :first-page-label="t('stats.firstPage')" :previous-page-label="t('stats.previousPage')"
+            :next-page-label="t('stats.nextPage')" :last-page-label="t('stats.lastPage')"
+            @update:page="$emit('update:rulePage', $event)"
+            @update:page-size="$emit('update:rulePageSize', $event); $emit('update:rulePage', 1)"
+        >
+            <template #summary>
+                <span class="sub-info">{{t('rules.totalCount', {count: ruleTotalElements})}}</span>
+                <button v-if="ruleFilter.protocol||ruleFilter.enabled||ruleFilter.isProtected||ruleFilter.keyword" type="button" class="workspace-filter-reset" :title="t('rules.clickClearFilter')" @click="clearFilters()"><i class="bi bi-funnel-fill" aria-hidden="true"></i> {{t('rules.filtering')}}</button>
+            </template>
+        </workspace-pagination>
         </template>
         <!-- 分組檢視 -->
         <template v-else>
@@ -424,7 +442,7 @@ const RulesPage = {
                         <th class="col-cond col-hide-md">{{t('rules.thCondition')}}</th>
                         <th class="col-hide-sm" style="width:72px">{{t('rules.thEnabled')}}</th>
                         <th class="col-hide-md" style="width:56px">{{t('rules.thPriority')}}</th>
-                        <th class="col-hide-md" style="width:96px">{{t('rules.thCreatedAt')}}</th>
+                        <th class="col-datetime col-hide-md">{{t('rules.thCreatedAt')}}</th>
                         <th class="col-actions col-actions-4">{{t('rules.thActions')}}</th>
                     </tr></thead>
                     <tbody>
@@ -468,7 +486,7 @@ const RulesPage = {
                                 <th class="col-cond col-hide-md">{{t('rules.thCondition')}}</th>
                                 <th class="col-hide-sm" style="width:72px">{{t('rules.thEnabled')}}</th>
                                 <th class="col-hide-md" style="width:56px">{{t('rules.thPriority')}}</th>
-                                <th class="col-hide-md" style="width:96px">{{t('rules.thCreatedAt')}}</th>
+                                <th class="col-datetime col-hide-md">{{t('rules.thCreatedAt')}}</th>
                                 <th class="col-actions col-actions-4">{{t('rules.thActions')}}</th>
                             </tr></thead>
                             <tbody>

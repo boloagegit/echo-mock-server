@@ -53,12 +53,19 @@ const useRuleForm = (deps) => {
     // --- 表單狀態 ---
     const showModal = ref(false);
     const editing = ref(null);
-    const form = ref({ protocol: 'HTTP', action: 'MOCK', forwardTargetMode: 'ORIGINAL_HOST', httpTargetConnectionId: null, targetHost: '', matchKey: '', method: 'GET', status: 200, delayMs: 0, maxDelayMs: null, priority: 0, responseBody: '', condition: '', description: '', enabled: true, isProtected: false, tags: '', responseMode: 'new', responseId: null, faultType: 'NONE', scenarioName: '', requiredScenarioState: '', newScenarioState: '' });
+    const form = ref({ protocol: 'HTTP', action: 'MOCK', forwardTargetMode: 'ORIGINAL_HOST', httpTargetConnectionId: null, jmsTargetConnectionId: null, targetHost: '', matchKey: '', method: 'GET', status: 200, delayMs: 0, maxDelayMs: null, priority: 0, responseBody: '', condition: '', description: '', enabled: true, isProtected: false, tags: '', responseMode: 'new', responseId: null, faultType: 'NONE', scenarioName: '', requiredScenarioState: '', newScenarioState: '' });
     const httpTargetConnections = ref([]);
     const loadHttpTargetConnections = async () => {
         const response = await apiCall('/api/admin/http-target-connections', {}, { silent: true });
         if (response && response.ok) httpTargetConnections.value = await response.json();
     };
+    const jmsTargetConnections = ref([]);
+    const loadJmsTargetConnections = async () => {
+        const response = await apiCall('/api/admin/jms-target-connections', {}, { silent: true });
+        if (response && response.ok) jmsTargetConnections.value = await response.json();
+    };
+    const loadTargetConnectionsForProtocol = () => form.value.protocol === 'JMS'
+        ? loadJmsTargetConnections() : loadHttpTargetConnections();
     const conditions = ref([]);
     const conditionsExpanded = ref(true);
     const formErrors = ref({});
@@ -134,9 +141,20 @@ const useRuleForm = (deps) => {
             }
         } else if (form.value.protocol === 'JMS') {
             if (!form.value.matchKey) errors.matchKey = t('validation.queueNameRequired');
+            if (!faulting && form.value.action === 'FORWARD') {
+                if (form.value.forwardTargetMode === 'CONNECTION' && !form.value.jmsTargetConnectionId) {
+                    errors.jmsTargetConnectionId = t('validation.jmsConnectionRequired');
+                } else if (form.value.forwardTargetMode === 'CONNECTION'
+                    && !jmsTargetConnections.value.some(target => target.id === form.value.jmsTargetConnectionId && target.enabled)) {
+                    errors.jmsTargetConnectionId = t('validation.jmsConnectionDisabled');
+                } else if (form.value.forwardTargetMode === 'DEFAULT_CONNECTION'
+                    && !jmsTargetConnections.value.some(target => target.enabled && target.defaultConnection)) {
+                    errors.jmsTargetConnectionId = t('validation.jmsDefaultConnectionRequired');
+                }
+            }
         }
         const requiresResponse = !faulting
-            && !(form.value.protocol === 'HTTP' && form.value.action === 'FORWARD');
+            && form.value.action !== 'FORWARD';
         if (requiresResponse && form.value.responseMode === 'new') {
             if (!form.value.responseBody) errors.responseBody = t('validation.responseBodyRequired');
             else if (form.value.sseEnabled) {
@@ -200,6 +218,15 @@ const useRuleForm = (deps) => {
                 return httpTargetConnections.value.some(target => target.enabled && target.defaultConnection);
             }
             return true;
+        }
+        if (form.value.protocol === 'JMS' && form.value.action === 'FORWARD') {
+            if (!form.value.matchKey) return false;
+            if (form.value.forwardTargetMode === 'CONNECTION') {
+                return jmsTargetConnections.value.some(target =>
+                    target.id === form.value.jmsTargetConnectionId && target.enabled
+                );
+            }
+            return jmsTargetConnections.value.some(target => target.enabled && target.defaultConnection);
         }
         if (form.value.sseEnabled && form.value.protocol === 'HTTP') {
             if (!sseEvents.value.length || !sseEvents.value.some(e => e.data && e.data.trim())) return false;
@@ -467,9 +494,23 @@ const useRuleForm = (deps) => {
     };
 
     // --- 表單操作 ---
-    const setProtocol = p => { form.value.protocol = p; form.value.matchKey = p === 'JMS' ? '*' : ''; if (p === 'JMS') { form.value.sseEnabled = false; form.value.action = 'MOCK'; } else { loadHttpTargetConnections(); } conditions.value = []; localStorage.setItem('lastProtocol', p) };
+    const setProtocol = p => {
+        form.value.protocol = p;
+        form.value.matchKey = p === 'JMS' ? '*' : '';
+        form.value.action = 'MOCK';
+        form.value.forwardTargetMode = p === 'JMS' ? 'DEFAULT_CONNECTION' : 'ORIGINAL_HOST';
+        form.value.httpTargetConnectionId = null;
+        form.value.jmsTargetConnectionId = null;
+        if (p === 'JMS') form.value.sseEnabled = false;
+        loadTargetConnectionsForProtocol();
+        conditions.value = [];
+        localStorage.setItem('lastProtocol', p);
+    };
 
-    const resetForm = () => ({ protocol: localStorage.getItem('lastProtocol') || 'HTTP', action: 'MOCK', forwardTargetMode: 'ORIGINAL_HOST', httpTargetConnectionId: null, targetHost: '', matchKey: '', method: 'GET', status: 200, delayMs: 0, maxDelayMs: null, priority: 0, responseBody: '', responseDescription: '', responseHeaders: '', bodyCondition: '', queryCondition: '', headerCondition: '', description: '', enabled: true, isProtected: false, tags: '', responseMode: 'new', responseId: null, sseEnabled: false, sseLoopEnabled: false, faultType: 'NONE', scenarioName: '', requiredScenarioState: '', newScenarioState: '' });
+    const resetForm = () => {
+        const protocol = localStorage.getItem('lastProtocol') || 'HTTP';
+        return { protocol, action: 'MOCK', forwardTargetMode: protocol === 'JMS' ? 'DEFAULT_CONNECTION' : 'ORIGINAL_HOST', httpTargetConnectionId: null, jmsTargetConnectionId: null, targetHost: '', matchKey: '', method: 'GET', status: 200, delayMs: 0, maxDelayMs: null, priority: 0, responseBody: '', responseDescription: '', responseHeaders: '', bodyCondition: '', queryCondition: '', headerCondition: '', description: '', enabled: true, isProtected: false, tags: '', responseMode: 'new', responseId: null, sseEnabled: false, sseLoopEnabled: false, faultType: 'NONE', scenarioName: '', requiredScenarioState: '', newScenarioState: '' };
+    };
 
     const onResponseModeChange = () => {
         if (form.value.responseMode === 'existing') {
@@ -518,7 +559,7 @@ const useRuleForm = (deps) => {
         catchAllConfirmed.value = false;
         showCatchAllWarning.value = false;
         loadResponseSummary();
-        if (form.value.protocol === 'HTTP') loadHttpTargetConnections();
+        loadTargetConnectionsForProtocol();
         showModal.value = true;
     };
 
@@ -533,7 +574,7 @@ const useRuleForm = (deps) => {
         sseEvents.value = (r.sseEnabled && r.responseBody) ? deserializeSseEvents(r.responseBody) : [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }];
         parseConditions(r);
         loadResponseSummary();
-        if (form.value.protocol === 'HTTP') loadHttpTargetConnections();
+        loadTargetConnectionsForProtocol();
         showModal.value = true;
     };
 
@@ -564,7 +605,7 @@ const useRuleForm = (deps) => {
         catchAllConfirmed.value = false;
         showCatchAllWarning.value = false;
         loadResponseSummary();
-        if (form.value.protocol === 'HTTP') loadHttpTargetConnections();
+        loadTargetConnectionsForProtocol();
         showModal.value = true;
     };
 
@@ -583,12 +624,12 @@ const useRuleForm = (deps) => {
             const res = await apiCall(`/api/admin/rules/${r.id}`, {}, { silent: true });
             if (res && res.ok) { const full = await res.json(); r = full; }
         }
-        form.value = { ...r, action: r.action || 'MOCK', forwardTargetMode: r.forwardTargetMode || 'ORIGINAL_HOST', responseMode: r.responseId ? 'existing' : 'new' };
+        form.value = { ...r, action: r.action || 'MOCK', forwardTargetMode: r.forwardTargetMode || (r.protocol === 'JMS' ? 'DEFAULT_CONNECTION' : 'ORIGINAL_HOST'), responseMode: r.responseId ? 'existing' : 'new' };
         conditions.value = [];
         sseEvents.value = (r.sseEnabled && r.responseBody) ? deserializeSseEvents(r.responseBody) : [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }];
         parseConditions(r);
         loadResponseSummary();
-        if (form.value.protocol === 'HTTP') loadHttpTargetConnections();
+        loadTargetConnectionsForProtocol();
         showModal.value = true;
     };
 
@@ -661,12 +702,19 @@ const useRuleForm = (deps) => {
             payload.sseLoopEnabled = false;
             payload.forwardTargetMode = null;
             payload.httpTargetConnectionId = null;
-        } else if (payload.protocol === 'HTTP' && payload.action === 'FORWARD') {
+            payload.jmsTargetConnectionId = null;
+        } else if (payload.action === 'FORWARD') {
             payload.responseBody = null;
             payload.responseId = null;
             payload.sseEnabled = false;
             payload.sseLoopEnabled = false;
-            if (payload.forwardTargetMode !== 'CONNECTION') payload.httpTargetConnectionId = null;
+            if (payload.protocol === 'HTTP') {
+                payload.jmsTargetConnectionId = null;
+                if (payload.forwardTargetMode !== 'CONNECTION') payload.httpTargetConnectionId = null;
+            } else {
+                payload.httpTargetConnectionId = null;
+                if (payload.forwardTargetMode !== 'CONNECTION') payload.jmsTargetConnectionId = null;
+            }
         } else if (payload.responseMode === 'existing') { payload.responseBody = null; }
         else { payload.responseId = null; }
         delete payload.responseMode;
@@ -880,6 +928,7 @@ const useRuleForm = (deps) => {
         // 表單狀態
         showModal, editing, form, conditions, conditionsExpanded, formErrors, saving,
         httpTargetConnections, loadHttpTargetConnections,
+        jmsTargetConnections, loadJmsTargetConnections,
         // 驗證
         canSave, validateForm,
         // Catch-all 偵測

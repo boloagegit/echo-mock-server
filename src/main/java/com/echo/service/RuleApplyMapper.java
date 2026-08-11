@@ -3,6 +3,7 @@ package com.echo.service;
 import com.echo.dto.RuleApplyDocument;
 import com.echo.dto.RuleDto;
 import com.echo.entity.HttpRuleAction;
+import com.echo.entity.JmsRuleAction;
 import com.echo.entity.Protocol;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -51,6 +52,7 @@ public class RuleApplyMapper {
                 .action(spec.getAction())
                 .forwardTargetMode(spec.getForwardTargetMode())
                 .httpTargetConnectionId(spec.getHttpTargetConnectionId())
+                .jmsTargetConnectionId(spec.getJmsTargetConnectionId())
                 .faultType(spec.getFaultType())
                 .scenarioName(spec.getScenarioName())
                 .requiredScenarioState(spec.getRequiredScenarioState())
@@ -77,18 +79,20 @@ public class RuleApplyMapper {
 
         boolean http = dto.getProtocol() == Protocol.HTTP;
         boolean faulting = dto.getFaultType() != null && !"NONE".equalsIgnoreCase(dto.getFaultType());
-        boolean forwarding = http && !faulting
-                && HttpRuleAction.FORWARD.name().equalsIgnoreCase(dto.getAction());
+        boolean forwarding = !faulting && "FORWARD".equalsIgnoreCase(dto.getAction());
         if (http) {
             spec.targetHost(dto.getTargetHost())
                     .method(dto.getMethod())
                     .queryCondition(dto.getQueryCondition())
                     .headerCondition(dto.getHeaderCondition())
                     .action(forwarding ? HttpRuleAction.FORWARD.name() : HttpRuleAction.MOCK.name());
+        } else {
+            spec.action(forwarding ? JmsRuleAction.FORWARD.name() : JmsRuleAction.MOCK.name());
         }
         if (forwarding) {
-            spec.forwardTargetMode(dto.getForwardTargetMode())
-                    .httpTargetConnectionId(dto.getHttpTargetConnectionId());
+            spec.forwardTargetMode(dto.getForwardTargetMode());
+            if (http) spec.httpTargetConnectionId(dto.getHttpTargetConnectionId());
+            else spec.jmsTargetConnectionId(dto.getJmsTargetConnectionId());
         } else if (faulting) {
             if (http) {
                 spec.status(dto.getStatus());

@@ -142,8 +142,8 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
     const createDocumentFromForm = ({ form, conditions, editing, responseBody }) => {
         const http = form.protocol === 'HTTP';
         const faulting = form.faultType && form.faultType !== 'NONE';
-        const action = http ? (faulting ? 'MOCK' : (form.action || 'MOCK')) : null;
-        const forwarding = http && !faulting && action === 'FORWARD';
+        const action = faulting ? 'MOCK' : (form.action || 'MOCK');
+        const forwarding = !faulting && action === 'FORWARD';
         const usesExistingResponse = !forwarding && !faulting && form.responseMode === 'existing' && form.responseId;
         const metadataId = form.id || editing?.id;
         const metadataVersion = form.version ?? editing?.version;
@@ -171,9 +171,12 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
             sseLoopEnabled: http && !forwarding && !faulting ? form.sseLoopEnabled === true : null,
             responseContentType: http && !forwarding && !faulting ? (form.responseContentType || null) : null,
             action,
-            forwardTargetMode: forwarding ? (form.forwardTargetMode || 'ORIGINAL_HOST') : null,
-            httpTargetConnectionId: forwarding && form.forwardTargetMode === 'CONNECTION'
+            forwardTargetMode: forwarding ? (form.forwardTargetMode
+                || (http ? 'ORIGINAL_HOST' : 'DEFAULT_CONNECTION')) : null,
+            httpTargetConnectionId: http && forwarding && form.forwardTargetMode === 'CONNECTION'
                 ? Number(form.httpTargetConnectionId) : null,
+            jmsTargetConnectionId: !http && forwarding && form.forwardTargetMode === 'CONNECTION'
+                ? form.jmsTargetConnectionId : null,
             faultType: form.faultType || 'NONE',
             scenarioName: form.scenarioName || null,
             requiredScenarioState: form.scenarioName ? (form.requiredScenarioState || null) : null,
@@ -231,8 +234,10 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
                 sseLoopEnabled: spec.sseLoopEnabled === true,
                 responseContentType: spec.responseContentType || null,
                 action: spec.action || 'MOCK',
-                forwardTargetMode: spec.forwardTargetMode || 'ORIGINAL_HOST',
+                forwardTargetMode: spec.forwardTargetMode
+                    || (spec.protocol === 'JMS' ? 'DEFAULT_CONNECTION' : 'ORIGINAL_HOST'),
                 httpTargetConnectionId: spec.httpTargetConnectionId ?? null,
+                jmsTargetConnectionId: spec.jmsTargetConnectionId ?? null,
                 faultType: spec.faultType || 'NONE',
                 scenarioName: spec.scenarioName || '',
                 requiredScenarioState: spec.requiredScenarioState || '',
@@ -390,7 +395,8 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         const faultExcludedFields = new Set([
             'spec.responseId', 'spec.responseBody', 'spec.responseDescription',
             'spec.responseHeaders', 'spec.sseEnabled', 'spec.sseLoopEnabled',
-            'spec.responseContentType', 'spec.forwardTargetMode', 'spec.httpTargetConnectionId'
+            'spec.responseContentType', 'spec.forwardTargetMode', 'spec.httpTargetConnectionId',
+            'spec.jmsTargetConnectionId'
         ]);
         const fields = ruleApplySchema.value?.fields || [];
         for (const field of fields) {
@@ -406,6 +412,9 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
                 || (field.requiredWhen === 'HTTP' && protocol === 'HTTP')
                 || (field.requiredWhen === 'HTTP_FORWARD_CONNECTION'
                     && protocol === 'HTTP' && action === 'FORWARD'
+                    && document.spec.forwardTargetMode === 'CONNECTION')
+                || (field.requiredWhen === 'JMS_FORWARD_CONNECTION'
+                    && protocol === 'JMS' && action === 'FORWARD'
                     && document.spec.forwardTargetMode === 'CONNECTION'));
 
             if (present && !applicable) {

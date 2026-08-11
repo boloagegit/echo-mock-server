@@ -44,6 +44,7 @@ const useRules = (deps) => {
     // --- 選取 ---
     const selectedRules = ref([]);
     const batchSelectMode = ref(false);
+    const ruleDragEnabled = ref(false);
 
     // --- 標籤分組 ---
     const ruleViewMode = ref(localStorage.getItem('ruleViewMode') || 'list');
@@ -480,7 +481,21 @@ const useRules = (deps) => {
 
     // --- 拖曳排序 ---
     const dragState = ref({ dragging: false, dragId: null, overId: null, overPos: null });
-    const canDragRules = computed(() => isLoggedIn.value && !batchSelectMode.value && ruleSort.value.field === 'priority' && ruleViewMode.value === 'list');
+    const ruleDragAvailable = computed(() => isLoggedIn.value && !batchSelectMode.value && ruleViewMode.value === 'list');
+    const canDragRules = computed(() => ruleDragEnabled.value && ruleDragAvailable.value && ruleSort.value.field === 'priority' && !ruleSort.value.asc);
+
+    const setRuleDragEnabled = enabled => {
+        if (!enabled || !ruleDragAvailable.value) {
+            ruleDragEnabled.value = false;
+            resetDrag();
+            return;
+        }
+        ruleDragEnabled.value = true;
+        if (ruleSort.value.field !== 'priority' || ruleSort.value.asc) {
+            ruleSort.value = { field: 'priority', asc: false };
+            localStorage.setItem('ruleSort', JSON.stringify(ruleSort.value));
+        }
+    };
 
     const onDragStart = (e, rule) => {
         if (!canDragRules.value) return;
@@ -554,6 +569,13 @@ const useRules = (deps) => {
         if (rule.id === dragState.value.overId) return dragState.value.overPos === 'before' ? 'drag-over-before' : 'drag-over-after';
         return '';
     };
+
+    watch(ruleDragAvailable, available => {
+        if (!available && ruleDragEnabled.value) setRuleDragEnabled(false);
+    });
+    watch(ruleSort, sort => {
+        if (ruleDragEnabled.value && (sort.field !== 'priority' || sort.asc)) setRuleDragEnabled(false);
+    }, { deep: true });
 
     // --- Filter chips ---
     const ruleFilterChips = computed(() => {
@@ -679,6 +701,9 @@ const useRules = (deps) => {
         handleRuleRowClick,
         // 拖曳排序
         dragState,
+        ruleDragEnabled,
+        ruleDragAvailable,
+        setRuleDragEnabled,
         canDragRules,
         onDragStart,
         onDragOver,

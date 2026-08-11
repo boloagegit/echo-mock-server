@@ -2,6 +2,8 @@ package com.echo.pipeline;
 
 import com.echo.config.JmsProperties;
 import com.echo.entity.JmsRule;
+import com.echo.entity.JmsForwardTargetMode;
+import com.echo.entity.JmsRuleAction;
 import com.echo.entity.Protocol;
 import com.echo.jms.JmsTargetForwarder;
 import com.echo.service.ConditionMatcher;
@@ -156,6 +158,29 @@ class JmsMockPipelineTest {
             assertThat(response.getStatus()).isEqualTo(200);
             assertThat(response.getBody()).isEqualTo(forwardedBody);
             assertThat(response.getProxyError()).isNull();
+        }
+
+
+        @Test
+        @DisplayName("規則命中時使用該規則指定的 JMS 連線")
+        void matchedRuleUsesSelectedConnection() {
+            JmsRule rule = buildRule("jms-forward-rule", "ORDER.REQUEST", null, null);
+            rule.setAction(JmsRuleAction.FORWARD);
+            rule.setForwardTargetMode(JmsForwardTargetMode.CONNECTION);
+            rule.setJmsTargetConnectionId("7");
+            when(jmsProperties.getQueue()).thenReturn("ORDER.REQUEST");
+            when(jmsRuleService.findPreparedJmsRules("ORDER.REQUEST"))
+                    .thenReturn(List.of(rule));
+            when(targetForwarder.forward(anyString(), isNull(), eq("7"), eq(false)))
+                    .thenReturn("<Response>Selected target</Response>");
+
+            PipelineResult result = pipeline.execute(defaultRequest());
+
+            assertThat(result.isMatched()).isTrue();
+            assertThat(result.getResponse().isForwarded()).isTrue();
+            assertThat(result.getResponse().getBody()).isEqualTo("<Response>Selected target</Response>");
+            verify(targetForwarder).forward(anyString(), isNull(), eq("7"), eq(false));
+            verify(ruleService, never()).findResponseBodyById(anyLong());
         }
     }
 

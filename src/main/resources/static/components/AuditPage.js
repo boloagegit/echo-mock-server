@@ -51,21 +51,28 @@ const AuditPage = {
         <div class="card-body filter-row workspace-filter-bar">
           <div class="workspace-filter-controls">
             <div class="btn-group">
-              <button class="btn btn-sm" :class="auditFilter.action==='CREATE'?'btn-primary':'btn-secondary'" @click="$emit('update:auditFilter', {...auditFilter, action: auditFilter.action==='CREATE'?'':'CREATE'})">CREATE</button>
-              <button class="btn btn-sm" :class="auditFilter.action==='UPDATE'?'btn-primary':'btn-secondary'" @click="$emit('update:auditFilter', {...auditFilter, action: auditFilter.action==='UPDATE'?'':'UPDATE'})">UPDATE</button>
-              <button class="btn btn-sm" :class="auditFilter.action==='DELETE'?'btn-primary':'btn-secondary'" @click="$emit('update:auditFilter', {...auditFilter, action: auditFilter.action==='DELETE'?'':'DELETE'})">DELETE</button>
+              <button class="btn btn-sm" :class="auditFilter.action==='CREATE'?'btn-primary':'btn-secondary'" @click="$emit('update:auditFilter', {...auditFilter, action: auditFilter.action==='CREATE'?'':'CREATE'})">{{t('audit.actionCreate')}}</button>
+              <button class="btn btn-sm" :class="auditFilter.action==='UPDATE'?'btn-primary':'btn-secondary'" @click="$emit('update:auditFilter', {...auditFilter, action: auditFilter.action==='UPDATE'?'':'UPDATE'})">{{t('audit.actionUpdate')}}</button>
+              <button class="btn btn-sm" :class="auditFilter.action==='DELETE'?'btn-primary':'btn-secondary'" @click="$emit('update:auditFilter', {...auditFilter, action: auditFilter.action==='DELETE'?'':'DELETE'})">{{t('audit.actionDelete')}}</button>
             </div>
             <div class="filter-divider"></div>
-            <div class="workspace-search-field workspace-search-compact">
-              <i class="bi bi-person"></i>
-              <input :value="auditFilter.operator" @input="$emit('update:auditFilter', {...auditFilter, operator: $event.target.value})" :placeholder="t('audit.searchOperator')" class="form-control">
-            </div>
+            <workspace-search-field
+              :model-value="auditFilter.operator"
+              :placeholder="t('audit.searchOperator')"
+              :aria-label="t('audit.searchOperator')"
+              :clear-label="t('audit.clearAll')"
+              icon="bi-person" compact :show-clear="false"
+              @update:model-value="$emit('update:auditFilter', {...auditFilter, operator:$event})"
+            ></workspace-search-field>
             <div class="filter-divider"></div>
-            <div class="workspace-search-field">
-              <i class="bi bi-search"></i>
-              <input id="auditSearch" :value="auditFilter.keyword" @input="$emit('update:auditFilter', {...auditFilter, keyword: $event.target.value})" :placeholder="t('audit.searchContent')" class="form-control">
-              <button v-if="auditFilter.keyword" class="workspace-search-clear" @click="$emit('update:auditFilter', {...auditFilter, keyword:''})" :aria-label="t('audit.clearAll')" :title="t('audit.clearAll')"><i class="bi bi-x"></i></button>
-            </div>
+            <workspace-search-field
+              input-id="auditSearch"
+              :model-value="auditFilter.keyword"
+              :placeholder="t('audit.searchContent')"
+              :aria-label="t('audit.searchContent')"
+              :clear-label="t('audit.clearAll')"
+              @update:model-value="$emit('update:auditFilter', {...auditFilter, keyword:$event})"
+            ></workspace-search-field>
           </div>
         </div>
       </div>
@@ -88,7 +95,7 @@ const AuditPage = {
         </div>
         <table v-if="pagedAudit.length" class="table-fixed workspace-table">
           <thead><tr>
-            <th style="width:96px;cursor:pointer" @click="$emit('toggle-audit-sort','timestamp')">{{t('audit.thTime')}} <i class="bi" :class="auditSort.field==='timestamp'?(auditSort.asc?'bi-caret-up-fill':'bi-caret-down-fill'):'bi-arrow-down-up'"></i></th>
+            <th class="col-datetime" style="cursor:pointer" @click="$emit('toggle-audit-sort','timestamp')">{{t('audit.thTime')}} <i class="bi" :class="auditSort.field==='timestamp'?(auditSort.asc?'bi-caret-up-fill':'bi-caret-down-fill'):'bi-arrow-down-up'"></i></th>
             <th style="width:92px;cursor:pointer" @click="$emit('toggle-audit-sort','action')">{{t('audit.thAction')}} <i class="bi" :class="auditSort.field==='action'?(auditSort.asc?'bi-caret-up-fill':'bi-caret-down-fill'):'bi-arrow-down-up'"></i></th>
             <th class="col-hide-md" style="width:100px;cursor:pointer" @click="$emit('toggle-audit-sort','operator')">{{t('audit.thOperator')}} <i class="bi" :class="auditSort.field==='operator'?(auditSort.asc?'bi-caret-up-fill':'bi-caret-down-fill'):'bi-arrow-down-up'"></i></th>
             <th class="col-hide-md" style="width:72px">{{t('audit.thType')}}</th>
@@ -99,7 +106,7 @@ const AuditPage = {
           <tbody>
             <template v-for="log in pagedAudit" :key="log.id">
               <tr @click="$emit('toggle-audit-detail', log)" style="cursor:pointer" :class="{active:selectedAudit===log.id}">
-                <td><span class="sub-info" :title="fmtTime(log.timestamp,false)">{{fmtTime(log.timestamp)}}</span></td>
+                <td class="col-datetime"><span class="sub-info" :title="fmtTime(log.timestamp,false)">{{fmtTime(log.timestamp)}}</span></td>
                 <td><span class="badge" :class="'badge-'+log.action?.toLowerCase()">{{log.action}}</span><span v-if="getAuditChangeCount(log)" class="sub-info" style="display:block;margin-top:2px">{{getAuditChangeCount(log)}}</span></td>
                 <td class="col-hide-md"><span class="sub-info">{{log.operator}}</span></td>
                 <td class="col-hide-md"><span class="badge" :class="log.ruleId && log.ruleId.startsWith('response-') ? 'badge-resp' : 'badge-http'">{{log.ruleId && log.ruleId.startsWith('response-') ? t('audit.typeResponse') : t('audit.typeRule')}}</span></td>
@@ -172,18 +179,21 @@ const AuditPage = {
         </table>
         <div v-if="!pagedAudit.length && !loading.audit" class="empty workspace-empty"><i class="bi bi-inbox"></i><div class="workspace-empty-title">{{t('audit.emptyNoAudit')}}</div><div class="workspace-empty-hint">{{t('audit.emptyHint')}}</div></div>
         </div>
-        <div class="card-table-footer">
-          <span class="sub-info">{{t('audit.totalCount', {count: auditTotalElements})}}</span>
-          <span v-if="auditFilter.action||auditFilter.operator||auditFilter.keyword" class="badge badge-warning" style="margin-left:8px;cursor:pointer" :title="t('audit.clickClearFilter')" @click="$emit('clear-audit-filters')"><i class="bi bi-funnel-fill"></i> {{t('audit.filtering')}}</span>
-          <div class="pagination-controls">
-            <button class="btn btn-sm btn-secondary" @click="$emit('update:auditPage', 1)" :disabled="auditPage===1" :aria-label="t('stats.firstPage')"><i class="bi bi-chevron-double-left" aria-hidden="true"></i></button>
-            <button class="btn btn-sm btn-secondary" @click="$emit('update:auditPage', auditPage-1)" :disabled="auditPage===1" :aria-label="t('stats.previousPage')"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
-            <span>{{auditPage}} / {{auditTotalPages}}</span>
-            <button class="btn btn-sm btn-secondary" @click="$emit('update:auditPage', auditPage+1)" :disabled="auditPage>=auditTotalPages" :aria-label="t('stats.nextPage')"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
-            <button class="btn btn-sm btn-secondary" @click="$emit('update:auditPage', auditTotalPages)" :disabled="auditPage>=auditTotalPages" :aria-label="t('stats.lastPage')"><i class="bi bi-chevron-double-right" aria-hidden="true"></i></button>
-          </div>
-          <select :value="auditPageSize" @change="$emit('update:auditPageSize', Number($event.target.value))" class="form-control issue-page-size" :aria-label="t('stats.pageSize')"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select>
-        </div>
+        <workspace-pagination
+          :page="auditPage" :total-pages="auditTotalPages" :page-size="auditPageSize"
+          :pagination-label="t('stats.pagination')"
+          :page-status-label="t('stats.pageStatus', {page:auditPage, total:auditTotalPages})"
+          :page-size-label="t('stats.pageSize')"
+          :first-page-label="t('stats.firstPage')" :previous-page-label="t('stats.previousPage')"
+          :next-page-label="t('stats.nextPage')" :last-page-label="t('stats.lastPage')"
+          @update:page="$emit('update:auditPage', $event)"
+          @update:page-size="$emit('update:auditPageSize', $event)"
+        >
+          <template #summary>
+            <span class="sub-info">{{t('audit.totalCount', {count: auditTotalElements})}}</span>
+            <button v-if="auditFilter.action||auditFilter.operator||auditFilter.keyword" type="button" class="workspace-filter-reset" :title="t('audit.clickClearFilter')" @click="$emit('clear-audit-filters')"><i class="bi bi-funnel-fill" aria-hidden="true"></i> {{t('audit.filtering')}}</button>
+          </template>
+        </workspace-pagination>
       </div>
     </div>
   `

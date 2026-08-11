@@ -89,4 +89,23 @@ class RuleApplyMapperTest {
         assertThat(mapped.getRequiredScenarioState()).isEqualTo("Started");
         assertThat(mapped.getNewScenarioState()).isEqualTo("Failed");
     }
+
+    @Test
+    void preservesJmsForwardSelectionWhenRoundTripping() {
+        RuleDto dto = RuleDto.builder()
+                .protocol(Protocol.JMS)
+                .matchKey("ORDER.Q")
+                .action("FORWARD")
+                .forwardTargetMode("CONNECTION")
+                .jmsTargetConnectionId("legacy-yaml")
+                .build();
+
+        RuleApplyDocument document = mapper.fromRuleDto(dto);
+        RuleDto mapped = mapper.toRuleDto(document);
+
+        assertThat(document.getSpec().getAction()).isEqualTo("FORWARD");
+        assertThat(document.getSpec().getJmsTargetConnectionId()).isEqualTo("legacy-yaml");
+        assertThat(mapped.getForwardTargetMode()).isEqualTo("CONNECTION");
+        assertThat(mapped.getJmsTargetConnectionId()).isEqualTo("legacy-yaml");
+    }
 }

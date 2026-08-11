@@ -90,7 +90,7 @@
 
 - [x] **2-1. Fault Injection（故障注入）**
 
-**做法**：BaseRule 新增 `faultType` 欄位（enum: NONE / CONNECTION_RESET / EMPTY_RESPONSE），在回應階段根據 faultType 決定行為。
+**做法**：BaseRule 新增 `faultType` 欄位（enum: NONE / CONNECTION_RESET / EMPTY_RESPONSE），在回應階段根據 faultType 決定行為。表單編輯器將故障注入與 Mock 回應、轉發下游並列為互斥的規則模式；宣告式契約維持 `action=MOCK` 並搭配非 `NONE` 的 `faultType`，以保持 API 相容。
 
 **使用範例**：
 - 電商系統：模擬付款 API timeout，驗證前端是否正確顯示「請稍後再試」

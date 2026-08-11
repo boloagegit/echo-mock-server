@@ -57,9 +57,11 @@ const RuleGroupRow = {
         </label>
     </td>
     <td class="col-hide-md"><span class="badge badge-muted">{{rule.priority ?? 0}}</span></td>
-    <td class="col-hide-md">
-        <span class="sub-info" :title="fmtTime(rule.createdAt,false)">{{fmtTime(rule.createdAt)}}</span>
-        <span v-if="!rule.isProtected && daysLeft(rule.createdAt, rule.extendedAt, status?.cleanupRetentionDays) != null" class="badge" :class="daysLeft(rule.createdAt, rule.extendedAt, status?.cleanupRetentionDays) <= 7 ? 'badge-warning' : 'badge-muted'" style="margin-left:4px">{{t('rules.daysLeft', {days: daysLeft(rule.createdAt, rule.extendedAt, status?.cleanupRetentionDays)})}}</span>
+    <td class="col-datetime col-hide-md">
+        <div class="table-date-stack">
+            <span class="sub-info" :title="fmtTime(rule.createdAt,false)">{{fmtTime(rule.createdAt)}}</span>
+            <span v-if="!rule.isProtected && daysLeft(rule.createdAt, rule.extendedAt, status?.cleanupRetentionDays) != null" class="badge" :class="daysLeft(rule.createdAt, rule.extendedAt, status?.cleanupRetentionDays) <= 7 ? 'badge-warning' : 'badge-muted'">{{t('rules.daysLeft', {days: daysLeft(rule.createdAt, rule.extendedAt, status?.cleanupRetentionDays)})}}</span>
+        </div>
     </td>
     <td class="col-actions col-actions-3">
         <div style="display:flex;gap:0.25rem">

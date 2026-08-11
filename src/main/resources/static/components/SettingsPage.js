@@ -80,6 +80,14 @@ const SettingsPage = {
       const form = this.jmsTargetForm;
       return Boolean(form.name.trim() && form.serverUrl.trim() && form.queueName.trim());
     },
+    yamlJmsTargetConfigured() {
+      return this.jmsTargets.some(target => target.legacy && target.enabled);
+    },
+    activeJmsTarget() {
+      return this.jmsTargets.find(target => target.legacy && target.enabled)
+        || this.jmsTargets.find(target => !target.legacy && target.defaultConnection && target.enabled)
+        || null;
+    },
   },
   methods: {
     notify(message, type = 'success') {
@@ -187,10 +195,11 @@ const SettingsPage = {
       }
     },
     emptyJmsTargetForm() {
+      const hasStoredTarget = this.jmsTargets.some(target => !target.legacy);
       return {
         name: '', providerType: 'artemis', serverUrl: '', username: '', password: '',
         clearPassword: false, queueName: 'TARGET.REQUEST', timeoutSeconds: 30,
-        enabled: true, defaultConnection: this.jmsTargets.length === 0, version: null,
+        enabled: true, defaultConnection: !hasStoredTarget, version: null,
       };
     },
     openCreateJmsTarget() {
@@ -239,8 +248,13 @@ const SettingsPage = {
       const res = await apiCall('/api/admin/jms-target-connections/' + target.id + '/default', { method: 'PUT' });
       if (res && res.ok) {
         await this.loadJmsTargets();
-        this.notify(this.t('settings.jmsTargetDefaultChanged'));
+        this.notify(this.t(this.yamlJmsTargetConfigured
+          ? 'settings.jmsTargetFallbackDefaultChanged'
+          : 'settings.jmsTargetDefaultChanged'));
       }
+    },
+    jmsTargetDisplayName(target) {
+      return target?.legacy ? this.t('settings.jmsApplicationTarget') : (target?.name || '—');
     },
     onJmsTargetEnabledChange() {
       if (!this.jmsTargetForm.enabled) {
@@ -474,15 +488,15 @@ const SettingsPage = {
             </div>
             <div v-for="target in jmsTargets" :key="target.id" class="connection-row">
               <div class="connection-identity">
-                <div class="connection-name">{{target.name}}</div>
+                <div class="connection-name">{{jmsTargetDisplayName(target)}}</div>
                 <div class="sub-info">{{target.providerType.toUpperCase()}} · {{target.queueName}}</div>
               </div>
               <div class="connection-details">
                 <div class="settings-value-sm connection-address">{{target.serverUrl}}</div>
                 <div class="sub-info connection-badges">
                   <span :class="target.enabled?'status-on':'status-off'">{{target.enabled?t('settings.enabled'):t('settings.disabled')}}</span>
-                  <span v-if="target.defaultConnection" class="badge bg-primary">{{t('settings.jmsTargetDefault')}}</span>
-                  <span v-if="target.legacy" class="badge bg-secondary">application.yml</span>
+                  <span v-if="target.legacy" class="badge bg-primary">{{t('settings.jmsTargetForcedDefault')}}</span>
+                  <span v-else-if="target.defaultConnection" class="badge" :class="yamlJmsTargetConfigured?'bg-secondary':'bg-primary'">{{t(yamlJmsTargetConfigured?'settings.jmsTargetFallbackDefault':'settings.jmsTargetDefault')}}</span>
                   <span v-if="target.passwordConfigured"><i class="bi bi-key"></i></span>
                 </div>
                 <div v-if="jmsTargetTestResults[target.id]" class="sub-info connection-test-result" :class="jmsTargetTestResults[target.id].success?'success':'error'">
@@ -494,12 +508,14 @@ const SettingsPage = {
               </div>
               <div class="connection-actions">
                 <button class="btn btn-xs btn-secondary" @click="testJmsTarget(target)" :disabled="jmsTargetTestingId===target.id"><i class="bi bi-plug" :class="{'spin':jmsTargetTestingId===target.id}"></i> {{t('settings.jmsTargetTest')}}</button>
-                <button v-if="!target.legacy&&!target.defaultConnection" class="btn btn-xs btn-secondary" @click="makeDefaultJmsTarget(target)" :disabled="!target.enabled"><i class="bi bi-check-circle"></i> {{t('settings.jmsTargetSetDefault')}}</button>
+                <button v-if="!target.legacy&&!target.defaultConnection" class="btn btn-xs btn-secondary" @click="makeDefaultJmsTarget(target)" :disabled="!target.enabled"><i class="bi bi-check-circle"></i> {{t(yamlJmsTargetConfigured?'settings.jmsTargetSetFallbackDefault':'settings.jmsTargetSetDefault')}}</button>
                 <button v-if="!target.legacy" class="btn btn-xs btn-secondary" @click="openEditJmsTarget(target)"><i class="bi bi-pencil"></i> {{t('rules.edit')}}</button>
                 <button v-if="!target.legacy" class="btn btn-xs btn-outline-danger" @click="deleteJmsTarget(target)" :disabled="target.defaultConnection" :title="target.defaultConnection?t('settings.defaultConnectionDeleteDisabled'):t('rules.delete')"><i class="bi bi-trash"></i> {{t('rules.delete')}}</button>
               </div>
             </div>
             <div class="connection-guidance">
+              <div><span class="connection-guidance-label">{{t('settings.connectionSourceLabel')}}</span><span v-if="activeJmsTarget"><strong>{{jmsTargetDisplayName(activeJmsTarget)}}</strong> · {{activeJmsTarget.serverUrl}} · {{activeJmsTarget.queueName}}</span><span v-else>{{t('settings.jmsTargetNoDefault')}}</span></div>
+              <div><span class="connection-guidance-label">{{t('settings.connectionPriorityLabel')}}</span><span>{{t('settings.jmsTargetPriorityHint')}}</span></div>
               <div><span class="connection-guidance-label">{{t('settings.connectionApplyLabel')}}</span><span>{{t('settings.jmsTargetSwitchHint')}}</span></div>
               <div><span class="connection-guidance-label">{{t('settings.connectionReconnectLabel')}}</span><span>{{t('settings.jmsTargetReconnectHint')}}</span></div>
             </div>
@@ -559,7 +575,7 @@ const SettingsPage = {
             <template v-for="(a, idx) in agents" :key="a.name">
               <div v-if="idx > 0" style="border-top:1px solid var(--border);margin:0.5rem 0"></div>
               <div class="settings-item"><span class="settings-label">{{t('settings.agentName')}}</span><span class="settings-value" style="font-weight:600">{{ a.name }} <span :class="agentStatusBadgeClass(a.status)" style="margin-left:0.5rem"><i v-if="a.status !== 'RUNNING'" class="bi bi-exclamation-triangle me-1"></i>{{ agentStatusText(a.status) }}</span></span></div>
-              <div class="settings-item" v-if="a.description"><span class="settings-label"></span><span class="settings-value sub-info">{{ a.description }}</span></div>
+              <div class="settings-item" v-if="a.description"><span class="settings-label"></span><span class="settings-value sub-info">{{ a.name==='log-agent' ? t('settings.agentLogDescription') : a.description }}</span></div>
               <div class="settings-item"><span class="settings-label">{{t('settings.agentQueueSize')}}</span><span class="settings-value">{{ formatNum(a.queueSize) }}</span></div>
               <div class="settings-item"><span class="settings-label">{{t('settings.agentProcessed')}}</span><span class="settings-value">{{ formatNum(a.processedCount) }}</span></div>
               <div class="settings-item"><span class="settings-label">{{t('settings.agentDropped')}}</span><span class="settings-value">{{ formatNum(a.droppedCount) }}</span></div>
@@ -634,9 +650,9 @@ const SettingsPage = {
         <div class="modal-box workspace-modal connection-form-modal" style="max-width:680px" role="dialog" aria-modal="true" :aria-label="editingHttpTarget?t('settings.httpTargetEdit'):t('settings.httpTargetAdd')">
           <div class="modal-header"><h3><i class="bi bi-globe2"></i> {{editingHttpTarget?t('settings.httpTargetEdit'):t('settings.httpTargetAdd')}}</h3><button class="modal-close" @click="showHttpTargetForm=false" :aria-label="t('rules.close')" :title="t('rules.close')"><i class="bi bi-x-lg"></i></button></div>
           <div class="modal-body">
-            <div class="form-row"><div class="form-group"><label class="form-label" for="httpTargetName">{{t('settings.httpTargetName')}} <span class="required">*</span></label><input id="httpTargetName" class="form-control" v-model="httpTargetForm.name" maxlength="100" required></div><div class="form-group"><label class="form-label" for="httpAuthType">{{t('settings.httpAuthType')}}</label><select id="httpAuthType" class="form-control" v-model="httpTargetForm.authType"><option value="NONE">None</option><option value="BASIC">Basic</option><option value="BEARER">Bearer Token</option></select></div></div>
+            <div class="form-row"><div class="form-group"><label class="form-label" for="httpTargetName">{{t('settings.httpTargetName')}} <span class="required">*</span></label><input id="httpTargetName" class="form-control" v-model="httpTargetForm.name" maxlength="100" required></div><div class="form-group"><label class="form-label" for="httpAuthType">{{t('settings.httpAuthType')}}</label><select id="httpAuthType" class="form-control" v-model="httpTargetForm.authType"><option value="NONE">{{t('settings.authNone')}}</option><option value="BASIC">{{t('settings.authBasic')}}</option><option value="BEARER">{{t('settings.authBearerToken')}}</option></select></div></div>
             <div class="form-group"><label class="form-label" for="httpTargetBaseUrl">{{t('settings.httpTargetBaseUrl')}} <span class="required">*</span></label><input id="httpTargetBaseUrl" class="form-control" v-model="httpTargetForm.baseUrl" placeholder="https://internal-api.example.com" autocomplete="url" spellcheck="false" required></div>
-            <div v-if="httpTargetForm.authType!=='NONE'" class="form-row"><div v-if="httpTargetForm.authType==='BASIC'" class="form-group"><label class="form-label" for="httpTargetUsername">{{t('settings.httpTargetUsername')}}</label><input id="httpTargetUsername" class="form-control" v-model="httpTargetForm.username" autocomplete="off"></div><div class="form-group"><label class="form-label" for="httpTargetSecret">{{httpTargetForm.authType==='BEARER'?'Token':t('settings.httpTargetSecret')}}</label><input id="httpTargetSecret" type="password" class="form-control" v-model="httpTargetForm.secret" autocomplete="new-password" :placeholder="editingHttpTarget&&editingHttpTarget.secretConfigured?t('settings.httpTargetSecretKeep'):''"></div></div>
+            <div v-if="httpTargetForm.authType!=='NONE'" class="form-row"><div v-if="httpTargetForm.authType==='BASIC'" class="form-group"><label class="form-label" for="httpTargetUsername">{{t('settings.httpTargetUsername')}}</label><input id="httpTargetUsername" class="form-control" v-model="httpTargetForm.username" autocomplete="off"></div><div class="form-group"><label class="form-label" for="httpTargetSecret">{{httpTargetForm.authType==='BEARER'?t('settings.authToken'):t('settings.httpTargetSecret')}}</label><input id="httpTargetSecret" type="password" class="form-control" v-model="httpTargetForm.secret" autocomplete="new-password" :placeholder="editingHttpTarget&&editingHttpTarget.secretConfigured?t('settings.httpTargetSecretKeep'):''"></div></div>
             <label v-if="editingHttpTarget&&editingHttpTarget.secretConfigured" class="form-check"><input type="checkbox" v-model="httpTargetForm.clearSecret"> {{t('settings.httpTargetClearSecret')}}</label>
             <div class="form-row"><div class="form-group"><label class="form-label" for="httpConnectTimeout">{{t('settings.httpConnectTimeout')}}</label><input id="httpConnectTimeout" type="number" min="1" max="300" class="form-control" v-model.number="httpTargetForm.connectTimeoutSeconds"></div><div class="form-group"><label class="form-label" for="httpReadTimeout">{{t('settings.httpReadTimeout')}}</label><input id="httpReadTimeout" type="number" min="1" max="300" class="form-control" v-model.number="httpTargetForm.readTimeoutSeconds"></div></div>
             <div class="connection-form-options"><label class="form-check"><input type="checkbox" v-model="httpTargetForm.enabled" :disabled="editingHttpTarget?.defaultConnection" @change="onHttpTargetEnabledChange"> {{t('settings.enabled')}}</label><label class="form-check"><input type="checkbox" v-model="httpTargetForm.defaultConnection" :disabled="!httpTargetForm.enabled||editingHttpTarget?.defaultConnection"> {{t('settings.httpTargetDefault')}}</label></div>
@@ -661,7 +677,7 @@ const SettingsPage = {
             <div class="form-row"><div class="form-group"><label class="form-label" for="jmsTargetUsername">{{t('settings.jmsTargetUsername')}}</label><input id="jmsTargetUsername" class="form-control" v-model="jmsTargetForm.username" autocomplete="off"></div><div class="form-group"><label class="form-label" for="jmsTargetPassword">{{t('settings.jmsTargetPassword')}}</label><input id="jmsTargetPassword" type="password" class="form-control" v-model="jmsTargetForm.password" autocomplete="new-password" :placeholder="editingJmsTarget&&editingJmsTarget.passwordConfigured?t('settings.jmsTargetPasswordKeep'):''"></div></div>
             <label v-if="editingJmsTarget&&editingJmsTarget.passwordConfigured" class="form-check"><input type="checkbox" v-model="jmsTargetForm.clearPassword"> {{t('settings.jmsTargetClearPassword')}}</label>
             <div class="form-row"><div class="form-group"><label class="form-label" for="jmsTargetQueue">{{t('settings.jmsTargetQueue')}} <span class="required">*</span></label><input id="jmsTargetQueue" class="form-control" v-model="jmsTargetForm.queueName" spellcheck="false" required></div><div class="form-group"><label class="form-label" for="jmsTargetTimeout">{{t('settings.jmsTargetTimeout')}}</label><input id="jmsTargetTimeout" type="number" min="1" max="300" class="form-control" v-model.number="jmsTargetForm.timeoutSeconds"></div></div>
-            <div class="connection-form-options"><label class="form-check"><input type="checkbox" v-model="jmsTargetForm.enabled" :disabled="editingJmsTarget?.defaultConnection" @change="onJmsTargetEnabledChange"> {{t('settings.enabled')}}</label><label class="form-check"><input type="checkbox" v-model="jmsTargetForm.defaultConnection" :disabled="!jmsTargetForm.enabled||editingJmsTarget?.defaultConnection"> {{t('settings.jmsTargetDefault')}}</label></div>
+            <div class="connection-form-options"><label class="form-check"><input type="checkbox" v-model="jmsTargetForm.enabled" :disabled="editingJmsTarget?.defaultConnection" @change="onJmsTargetEnabledChange"> {{t('settings.enabled')}}</label><label class="form-check"><input type="checkbox" v-model="jmsTargetForm.defaultConnection" :disabled="!jmsTargetForm.enabled||editingJmsTarget?.defaultConnection"> {{t(yamlJmsTargetConfigured?'settings.jmsTargetFallbackDefault':'settings.jmsTargetDefault')}}</label></div>
           </div>
           <div class="modal-footer"><button class="btn btn-secondary" @click="showJmsTargetForm=false">{{t('rules.close')}}</button><button class="btn btn-primary" @click="saveJmsTarget" :disabled="jmsTargetSaving||!canSaveJmsTarget"><i class="bi bi-check-lg"></i> {{t('modal.save')}}</button></div>
         </div>

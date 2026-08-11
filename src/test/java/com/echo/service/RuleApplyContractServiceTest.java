@@ -46,6 +46,7 @@ class RuleApplyContractServiceTest {
                 "spec.status", "spec.responseHeaders", "spec.delayMs", "spec.maxDelayMs",
                 "spec.sseEnabled", "spec.sseLoopEnabled", "spec.responseContentType",
                 "spec.action", "spec.forwardTargetMode", "spec.httpTargetConnectionId",
+                "spec.jmsTargetConnectionId",
                 "spec.faultType", "spec.scenarioName", "spec.requiredScenarioState",
                 "spec.newScenarioState");
 
@@ -77,6 +78,38 @@ class RuleApplyContractServiceTest {
         assertThatCode(() -> contract.validate(httpMock)).doesNotThrowAnyException();
         assertThatCode(() -> contract.validate(httpForward)).doesNotThrowAnyException();
         assertThatCode(() -> contract.validate(jms)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void acceptsJmsForwardAndRequiresAConnectionForExplicitMode() {
+        RuleApplyDocument forward = base(Protocol.JMS, "ORDER.REQUEST.Q")
+                .spec(RuleApplyDocument.Spec.builder()
+                        .protocol(Protocol.JMS)
+                        .matchKey("ORDER.REQUEST.Q")
+                        .action("FORWARD")
+                        .forwardTargetMode("CONNECTION")
+                        .jmsTargetConnectionId("7")
+                        .build())
+                .build();
+
+        assertThatCode(() -> contract.validate(forward)).doesNotThrowAnyException();
+
+        forward.getSpec().setJmsTargetConnectionId(null);
+        assertValidation(forward, "REQUIRED", "spec.jmsTargetConnectionId");
+    }
+
+    @Test
+    void rejectsOriginalHostModeForJmsForwarding() {
+        RuleApplyDocument forward = base(Protocol.JMS, "ORDER.REQUEST.Q")
+                .spec(RuleApplyDocument.Spec.builder()
+                        .protocol(Protocol.JMS)
+                        .matchKey("ORDER.REQUEST.Q")
+                        .action("FORWARD")
+                        .forwardTargetMode("ORIGINAL_HOST")
+                        .build())
+                .build();
+
+        assertValidation(forward, "ALLOWED_VALUES", "spec.forwardTargetMode");
     }
 
     @Test

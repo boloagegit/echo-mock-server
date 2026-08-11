@@ -60,7 +60,8 @@ public final class H2ToSqliteMigrator {
             "jms_target_connections", "http_target_connections", "request_log_checkpoint");
     // An older H2 database may predate matched-rule forwarding. Null preserves old MOCK behavior.
     private static final Map<String, Set<String>> ALLOWED_TARGET_ONLY_COLUMNS = Map.of(
-            "http_rules", Set.of("action", "forward_target_mode", "http_target_connection_id")
+            "http_rules", Set.of("action", "forward_target_mode", "http_target_connection_id"),
+            "jms_rules", Set.of("action", "forward_target_mode", "jms_target_connection_id")
     );
 
     private H2ToSqliteMigrator() {

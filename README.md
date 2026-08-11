@@ -32,7 +32,7 @@ An enterprise-grade dual-protocol mock server supporting HTTP and JMS, designed 
 - **Orphan Cleanup** – Detect and remove orphan responses not used by any rule
 - **Auto Backup** – Scheduled H2/SQLite backup, shutdown backup, and manual trigger
 - **Stateful Scenarios** – Optional WireMock-style state machines for multi-step workflows (disabled by default)
-- **Fault Injection** – Simulate connection resets and empty responses for resilience testing
+- **Fault Injection** – Choose Fault Injection as a rule mode to simulate connection resets and empty responses for resilience testing
 - **OpenAPI Import** – Optional preview/import of OpenAPI 3.x or Swagger 2.x JSON/YAML specifications (disabled by default)
 - **Faker Data** – Built-in name, email, phone, address, and integer template helpers
 - **Rule Testing** – Test rule matching directly from the admin UI

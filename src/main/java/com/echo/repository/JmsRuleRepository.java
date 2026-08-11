@@ -20,6 +20,8 @@ public interface JmsRuleRepository extends JpaRepository<JmsRule, String> {
 
     int countByResponseId(Long responseId);
 
+    long countByJmsTargetConnectionId(String jmsTargetConnectionId);
+
     List<JmsRule> findByResponseId(Long responseId);
 
     int deleteByResponseId(Long responseId);
