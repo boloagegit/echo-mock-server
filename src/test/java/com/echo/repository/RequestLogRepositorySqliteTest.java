@@ -50,11 +50,11 @@ class RequestLogRepositorySqliteTest {
         List<Object[]> rows = repository.findSummaryProjections(PageRequest.of(0, 10));
 
         assertThat(rows).hasSize(1);
-        assertThat(rows.get(0)).hasSize(17);
+        assertThat(rows.get(0)).hasSize(21);
         assertThat(Arrays.asList(rows.get(0))).doesNotContain(largeBody);
-        assertThat(rows.get(0)[14]).isEqualTo(true);
-        assertThat(rows.get(0)[15]).isEqualTo(true);
-        assertThat(rows.get(0)[16]).isEqualTo(true);
+        assertThat(rows.get(0)[18]).isEqualTo(true);
+        assertThat(rows.get(0)[19]).isEqualTo(true);
+        assertThat(rows.get(0)[20]).isEqualTo(true);
         assertThat(repository.findById(saved.getId()))
                 .get()
                 .extracting(RequestLog::getRequestBody, RequestLog::getResponseBody)

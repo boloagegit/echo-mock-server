@@ -284,7 +284,11 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
         if (dto.getTargetHost() != null && !dto.getTargetHost().isBlank()) {
             sb.append(" @ ").append(dto.getTargetHost());
         }
-        if (HttpRuleAction.FORWARD.name().equalsIgnoreCase(dto.getAction())) {
+        if (FaultType.CONNECTION_RESET.name().equals(dto.getFaultType())) {
+            sb.append(" → Connection reset");
+        } else if (FaultType.EMPTY_RESPONSE.name().equals(dto.getFaultType())) {
+            sb.append(" → ").append(dto.getStatus() != null ? dto.getStatus() : 200).append(" (empty)");
+        } else if (HttpRuleAction.FORWARD.name().equalsIgnoreCase(dto.getAction())) {
             sb.append(" → Forward");
         } else {
             sb.append(" → ").append(dto.getStatus() != null ? dto.getStatus() : 200);

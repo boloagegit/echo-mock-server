@@ -68,6 +68,10 @@ class RequestLogSpoolTest {
         assertThat(restored.getAnalysisBody()).isEqualTo("{\"id\":1}");
         assertThat(restored.getHeaders()).containsEntry("X-Test", "value");
         assertThat(restored.getMatchOutcomes()).containsEntry("body:id=1", true);
+        assertThat(restored.getFaultType()).isEqualTo("EMPTY_RESPONSE");
+        assertThat(restored.getScenarioName()).isEqualTo("order-flow");
+        assertThat(restored.getScenarioFromState()).isEqualTo("Started");
+        assertThat(restored.getScenarioToState()).isEqualTo("Paid");
         assertThat(restored.getCandidates()).singleElement()
                 .extracting(CandidateSnapshot::getBodyCondition).isEqualTo("id=1");
 
@@ -316,6 +320,10 @@ class RequestLogSpoolTest {
                 .matchChain("[]")
                 .targetHost("api.internal")
                 .responseStatus(200)
+                .faultType("EMPTY_RESPONSE")
+                .scenarioName("order-flow")
+                .scenarioFromState("Started")
+                .scenarioToState("Paid")
                 .requestBody("{\"id\":1}")
                 .responseBody("{\"ok\":true}")
                 .candidates(List.of(candidate))

@@ -27,6 +27,8 @@ public class RuleApplyContractService {
     private static final List<String> FORWARD_TARGET_MODES =
             List.of("ORIGINAL_HOST", "DEFAULT_CONNECTION", "CONNECTION");
     private static final List<String> RESPONSE_CONTENT_TYPES = List.of("TEXT", "SSE_EVENTS");
+    private static final List<String> FAULT_TYPES =
+            List.of("NONE", "CONNECTION_RESET", "EMPTY_RESPONSE");
     private static final Pattern HEADER_NAME =
             Pattern.compile("[!#$%&'*+.^_`|~0-9A-Za-z-]+");
     private static final List<String> HTTP_ONLY = List.of("HTTP");
@@ -65,7 +67,11 @@ public class RuleApplyContractService {
                     field("spec.responseContentType", "string", RESPONSE_CONTENT_TYPES, null, null, null, null, HTTP_ONLY, MOCK_ONLY, null, null, true),
                     field("spec.action", "string", ACTIONS, null, null, null, "MOCK", HTTP_ONLY, null, null, null, false),
                     field("spec.forwardTargetMode", "string", FORWARD_TARGET_MODES, null, null, null, "ORIGINAL_HOST", HTTP_ONLY, FORWARD_ONLY, null, null, false),
-                    field("spec.httpTargetConnectionId", "integer", null, 1L, null, null, null, HTTP_ONLY, FORWARD_ONLY, "HTTP_FORWARD_CONNECTION", null, false)
+                    field("spec.httpTargetConnectionId", "integer", null, 1L, null, null, null, HTTP_ONLY, FORWARD_ONLY, "HTTP_FORWARD_CONNECTION", null, false),
+                    field("spec.faultType", "string", FAULT_TYPES, null, null, null, "NONE", null, null, null, null, false),
+                    field("spec.scenarioName", "string", null, null, null, 100, null, null, null, null, null, false),
+                    field("spec.requiredScenarioState", "string", null, null, null, 100, null, null, null, null, null, false),
+                    field("spec.newScenarioState", "string", null, null, null, 100, null, null, null, null, null, false)
             ));
 
     public RuleApplySchema schema() {
@@ -122,6 +128,9 @@ public class RuleApplyContractService {
         maxLength("spec.matchKey", spec.getMatchKey(), 255);
         maxLength("spec.description", spec.getDescription(), 255);
         maxLength("spec.responseDescription", spec.getResponseDescription(), 255);
+        maxLength("spec.scenarioName", spec.getScenarioName(), 100);
+        maxLength("spec.requiredScenarioState", spec.getRequiredScenarioState(), 100);
+        maxLength("spec.newScenarioState", spec.getNewScenarioState(), 100);
         minimum("spec.priority", spec.getPriority(), 0);
         minimum("spec.delayMs", spec.getDelayMs(), 0);
         minimum("spec.maxDelayMs", spec.getMaxDelayMs(), 0);
@@ -133,6 +142,13 @@ public class RuleApplyContractService {
         minimum("spec.responseId", spec.getResponseId(), 1);
         validateStringMap("spec.tags", spec.getTags(), false);
         validateCondition("spec.bodyCondition", spec.getBodyCondition());
+        String faultType = normalized(spec.getFaultType(), "NONE");
+        allowed("spec.faultType", faultType, FAULT_TYPES);
+        if ((hasText(spec.getRequiredScenarioState()) || hasText(spec.getNewScenarioState()))
+                && !hasText(spec.getScenarioName())) {
+            fail("SCENARIO_NAME_REQUIRED", "spec.scenarioName",
+                    "spec.scenarioName is required when scenario states are configured");
+        }
     }
 
     private void validateHttpSpec(RuleApplyDocument.Spec spec) {
@@ -151,7 +167,9 @@ public class RuleApplyContractService {
 
         String action = normalized(spec.getAction(), "MOCK");
         allowed("spec.action", action, ACTIONS);
-        if ("FORWARD".equals(action)) {
+        if (isFaulting(spec)) {
+            validateFaultSpec(spec, "HTTP");
+        } else if ("FORWARD".equals(action)) {
             validateForwardSpec(spec);
         } else {
             validateMockSpec(spec);
@@ -214,6 +232,32 @@ public class RuleApplyContractService {
         rejectPresent("spec.action", spec.getAction(), "JMS");
         rejectPresent("spec.forwardTargetMode", spec.getForwardTargetMode(), "JMS");
         rejectPresent("spec.httpTargetConnectionId", spec.getHttpTargetConnectionId(), "JMS");
+        if (isFaulting(spec)) {
+            validateFaultSpec(spec, "JMS");
+        }
+    }
+
+    private void validateFaultSpec(RuleApplyDocument.Spec spec, String protocol) {
+        rejectPresent("spec.responseId", spec.getResponseId(), protocol + " FAULT");
+        rejectPresent("spec.responseBody", spec.getResponseBody(), protocol + " FAULT");
+        rejectPresent("spec.responseDescription", spec.getResponseDescription(), protocol + " FAULT");
+        rejectPresent("spec.responseHeaders", spec.getResponseHeaders(), protocol + " FAULT");
+        rejectTrue("spec.sseEnabled", spec.getSseEnabled(), protocol + " FAULT");
+        rejectTrue("spec.sseLoopEnabled", spec.getSseLoopEnabled(), protocol + " FAULT");
+        rejectPresent("spec.responseContentType", spec.getResponseContentType(), protocol + " FAULT");
+        if ("HTTP".equals(protocol)) {
+            if ("FORWARD".equals(normalized(spec.getAction(), "MOCK"))) {
+                fail("FAULT_ACTION_CONFLICT", "spec.action",
+                        "spec.action must be MOCK when spec.faultType is enabled");
+            }
+            rejectPresent("spec.forwardTargetMode", spec.getForwardTargetMode(), "HTTP FAULT");
+            rejectPresent("spec.httpTargetConnectionId", spec.getHttpTargetConnectionId(), "HTTP FAULT");
+            range("spec.status", spec.getStatus(), 100, 599);
+        }
+    }
+
+    private boolean isFaulting(RuleApplyDocument.Spec spec) {
+        return !"NONE".equals(normalized(spec.getFaultType(), "NONE"));
     }
 
     private void validateCondition(String path, String value) {

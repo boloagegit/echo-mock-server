@@ -26,6 +26,7 @@ import org.springframework.cache.caffeine.CaffeineCache;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
@@ -121,9 +122,22 @@ class AdminControllerTest {
 
         assertThat(controller.exportAllRules().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(controller.importRules(List.of()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(controller.previewOpenApiImport(new MockMultipartFile(
+                "file", "api.yaml", "application/yaml", "openapi: 3.0.0".getBytes()))
+                .getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(controller.confirmOpenApiImport(List.of()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(controller.exportAllResponses().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(controller.importResponses(List.of()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         verifyNoInteractions(responseService);
+    }
+
+    @Test
+    void databaseFilePath_shouldFollowConfiguredDatabase() {
+        assertThat(AdminController.databaseFilePath("jdbc:sqlite:./data/mock.sqlite?busy_timeout=5000"))
+                .contains(java.nio.file.Paths.get("./data/mock.sqlite"));
+        assertThat(AdminController.databaseFilePath("jdbc:h2:file:./data/mockdb;AUTO_SERVER=TRUE"))
+                .contains(java.nio.file.Paths.get("./data/mockdb.mv.db"));
+        assertThat(AdminController.databaseFilePath("jdbc:sqlite::memory:")).isEmpty();
     }
 
     @Test
@@ -267,6 +281,31 @@ class AdminControllerTest {
         var response = controller.createRule(rule);
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    }
+
+    @Test
+    void createFaultRule_shouldNotCreateUnusedResponseOrForward() {
+        RuleDto rule = RuleDto.builder()
+                .protocol(Protocol.HTTP)
+                .matchKey("/fault")
+                .method("GET")
+                .action("FORWARD")
+                .faultType("CONNECTION_RESET")
+                .responseBody("unused")
+                .build();
+        var handler = mock(com.echo.protocol.ProtocolHandler.class);
+        HttpRule savedRule = HttpRule.builder().matchKey("/fault").build();
+        when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
+        when(handler.fromDto(argThat(dto -> "MOCK".equals(dto.getAction())
+                && dto.getResponseId() == null && dto.getResponseBody() == null)))
+                .thenReturn(savedRule);
+        when(handler.save(savedRule)).thenReturn(savedRule);
+        when(handler.toDto(savedRule, null, false)).thenReturn(rule);
+
+        var response = controller.createRule(rule);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        verify(responseService, never()).save(any());
     }
 
     @Test

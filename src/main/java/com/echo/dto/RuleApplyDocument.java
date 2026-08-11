@@ -97,6 +97,10 @@ public class RuleApplyDocument {
         private String action;
         private String forwardTargetMode;
         private Long httpTargetConnectionId;
+        private String faultType;
+        private String scenarioName;
+        private String requiredScenarioState;
+        private String newScenarioState;
 
         @JsonIgnore
         @Builder.Default

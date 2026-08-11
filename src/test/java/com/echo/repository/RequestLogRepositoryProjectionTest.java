@@ -39,18 +39,22 @@ class RequestLogRepositoryProjectionTest {
 
         assertThat(rows).hasSize(3);
         assertThat(rows).allSatisfy(row -> {
-            assertThat(row).hasSize(17);
+            assertThat(row).hasSize(21);
             assertThat(Arrays.asList(row)).doesNotContain(largeBody);
         });
-        assertThat(byEndpoint.get("/null")[14]).isEqualTo(false);
-        assertThat(byEndpoint.get("/null")[15]).isEqualTo(false);
-        assertThat(byEndpoint.get("/null")[16]).isEqualTo(false);
-        assertThat(byEndpoint.get("/empty")[14]).isEqualTo(true);
-        assertThat(byEndpoint.get("/empty")[15]).isEqualTo(true);
-        assertThat(byEndpoint.get("/empty")[16]).isEqualTo(true);
-        assertThat(byEndpoint.get("/large")[14]).isEqualTo(true);
-        assertThat(byEndpoint.get("/large")[15]).isEqualTo(true);
-        assertThat(byEndpoint.get("/large")[16]).isEqualTo(true);
+        assertThat(byEndpoint.get("/large")[14]).isEqualTo("EMPTY_RESPONSE");
+        assertThat(byEndpoint.get("/large")[15]).isEqualTo("order-flow");
+        assertThat(byEndpoint.get("/large")[16]).isEqualTo("Started");
+        assertThat(byEndpoint.get("/large")[17]).isEqualTo("Paid");
+        assertThat(byEndpoint.get("/null")[18]).isEqualTo(false);
+        assertThat(byEndpoint.get("/null")[19]).isEqualTo(false);
+        assertThat(byEndpoint.get("/null")[20]).isEqualTo(false);
+        assertThat(byEndpoint.get("/empty")[18]).isEqualTo(true);
+        assertThat(byEndpoint.get("/empty")[19]).isEqualTo(true);
+        assertThat(byEndpoint.get("/empty")[20]).isEqualTo(true);
+        assertThat(byEndpoint.get("/large")[18]).isEqualTo(true);
+        assertThat(byEndpoint.get("/large")[19]).isEqualTo(true);
+        assertThat(byEndpoint.get("/large")[20]).isEqualTo(true);
     }
 
     @Test
@@ -101,6 +105,10 @@ class RequestLogRepositoryProjectionTest {
                 .requestBody(requestBody)
                 .responseBody(responseBody)
                 .matchChain(matchChain)
+                .faultType("/large".equals(endpoint) ? "EMPTY_RESPONSE" : null)
+                .scenarioName("/large".equals(endpoint) ? "order-flow" : null)
+                .scenarioFromState("/large".equals(endpoint) ? "Started" : null)
+                .scenarioToState("/large".equals(endpoint) ? "Paid" : null)
                 .build();
     }
 }

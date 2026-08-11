@@ -36,7 +36,9 @@ public class RequestLogSummaryQuery {
                 log.get("endpoint"), log.get("matched"), log.get("responseTimeMs"),
                 log.get("matchTimeMs"), log.get("clientIp"), log.get("requestTime"),
                 log.get("targetHost"), log.get("proxyStatus"), log.get("proxyError"),
-                log.get("responseStatus"), builder.isNotNull(log.get("requestBody")),
+                log.get("responseStatus"), log.get("faultType"), log.get("scenarioName"),
+                log.get("scenarioFromState"), log.get("scenarioToState"),
+                builder.isNotNull(log.get("requestBody")),
                 builder.isNotNull(log.get("responseBody")),
                 builder.isNotNull(log.get("matchChain")));
         contentQuery.where(predicates(builder, log, filter));
@@ -98,7 +100,9 @@ public class RequestLogSummaryQuery {
                 row.get(6, Number.class), row.get(7, Number.class), row.get(8, String.class),
                 row.get(9, java.time.LocalDateTime.class), row.get(10, String.class),
                 row.get(11, Number.class), row.get(12, String.class), row.get(13, Number.class),
-                row.get(14, Boolean.class), row.get(15, Boolean.class), row.get(16, Boolean.class));
+                row.get(14, String.class), row.get(15, String.class), row.get(16, String.class),
+                row.get(17, String.class), row.get(18, Boolean.class), row.get(19, Boolean.class),
+                row.get(20, Boolean.class));
     }
 
     public record Filter(String ruleId, Protocol protocol, Boolean matched,
@@ -109,7 +113,8 @@ public class RequestLogSummaryQuery {
             Long id, String ruleId, Protocol protocol, String method, String endpoint,
             Boolean matched, Number responseTimeMs, Number matchTimeMs, String clientIp,
             java.time.LocalDateTime requestTime, String targetHost, Number proxyStatus,
-            String proxyError, Number responseStatus, Boolean hasRequestBody,
+            String proxyError, Number responseStatus, String faultType, String scenarioName,
+            String scenarioFromState, String scenarioToState, Boolean hasRequestBody,
             Boolean hasResponseBody, Boolean hasMatchChain) {
     }
 

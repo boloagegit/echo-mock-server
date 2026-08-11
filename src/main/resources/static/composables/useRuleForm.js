@@ -115,26 +115,28 @@ const useRuleForm = (deps) => {
     // --- 驗證 ---
     const validateForm = () => {
         const errors = {};
+        const faulting = form.value.faultType && form.value.faultType !== 'NONE';
         if (form.value.protocol === 'HTTP') {
             if (!form.value.matchKey) errors.matchKey = t('validation.matchKeyRequired');
             else if (!form.value.matchKey.startsWith('/') && form.value.matchKey !== '*') errors.matchKey = t('validation.matchKeyFormat');
             if (!form.value.method) errors.method = t('validation.methodRequired');
-            if (form.value.action !== 'FORWARD') {
+            if (form.value.action !== 'FORWARD' && (!faulting || form.value.faultType === 'EMPTY_RESPONSE')) {
                 if (!form.value.status) errors.status = t('validation.statusRequired');
                 else if (form.value.status < 100 || form.value.status > 599) errors.status = t('validation.statusRange');
-            } else if (form.value.forwardTargetMode === 'CONNECTION' && !form.value.httpTargetConnectionId) {
+            } else if (!faulting && form.value.forwardTargetMode === 'CONNECTION' && !form.value.httpTargetConnectionId) {
                 errors.httpTargetConnectionId = t('validation.httpConnectionRequired');
-            } else if (form.value.forwardTargetMode === 'CONNECTION'
+            } else if (!faulting && form.value.forwardTargetMode === 'CONNECTION'
                 && !httpTargetConnections.value.some(target => target.id === form.value.httpTargetConnectionId && target.enabled)) {
                 errors.httpTargetConnectionId = t('validation.httpConnectionDisabled');
-            } else if (form.value.forwardTargetMode === 'DEFAULT_CONNECTION'
+            } else if (!faulting && form.value.forwardTargetMode === 'DEFAULT_CONNECTION'
                 && !httpTargetConnections.value.some(target => target.enabled && target.defaultConnection)) {
                 errors.httpTargetConnectionId = t('validation.httpDefaultConnectionRequired');
             }
         } else if (form.value.protocol === 'JMS') {
             if (!form.value.matchKey) errors.matchKey = t('validation.queueNameRequired');
         }
-        const requiresResponse = !(form.value.protocol === 'HTTP' && form.value.action === 'FORWARD');
+        const requiresResponse = !faulting
+            && !(form.value.protocol === 'HTTP' && form.value.action === 'FORWARD');
         if (requiresResponse && form.value.responseMode === 'new') {
             if (!form.value.responseBody) errors.responseBody = t('validation.responseBodyRequired');
             else if (form.value.sseEnabled) {
@@ -180,6 +182,13 @@ const useRuleForm = (deps) => {
     });
 
     const canSave = computed(() => {
+        const faulting = form.value.faultType && form.value.faultType !== 'NONE';
+        if (faulting) {
+            if (!form.value.matchKey) return false;
+            if (form.value.protocol === 'HTTP' && !form.value.method) return false;
+            if (form.value.protocol === 'HTTP' && form.value.faultType === 'EMPTY_RESPONSE' && !form.value.status) return false;
+            return true;
+        }
         if (form.value.protocol === 'HTTP' && form.value.action === 'FORWARD') {
             if (!form.value.matchKey || !form.value.method) return false;
             if (form.value.forwardTargetMode === 'CONNECTION') {
@@ -631,17 +640,28 @@ const useRuleForm = (deps) => {
         form.value.queryCondition = queryConds || null;
         form.value.headerCondition = headerConds || null;
         // 使用現有 Response 時：若正在編輯回應內容，先自動儲存
-        if (form.value.action !== 'FORWARD' && form.value.responseMode === 'existing' && form.value.responseId && previewEditing.value && previewEditBody.value !== previewResponseBody.value) {
+        const faulting = form.value.faultType && form.value.faultType !== 'NONE';
+        if (!faulting && form.value.action !== 'FORWARD' && form.value.responseMode === 'existing' && form.value.responseId && previewEditing.value && previewEditBody.value !== previewResponseBody.value) {
             const resp = responseSummary.value.find(r => r.id === form.value.responseId);
             const rr = await apiCall(`/api/admin/responses/${form.value.responseId}`, { method: 'PUT', body: JSON.stringify({ description: resp?.description || '', body: previewEditBody.value }) }, { errorMsg: t('toast.responseSaveFailed') });
-            if (!rr || !rr.ok) { showToast(t('toast.responseSaveFailed'), 'error'); return; }
+            if (!rr || !rr.ok) { saving.value = false; showToast(t('toast.responseSaveFailed'), 'error'); return; }
             previewResponseBody.value = previewEditBody.value;
             previewEditing.value = false;
             renderEditor('preview', previewEditorRef, previewResponseBody.value, true);
             responsesMarkDirty();
         }
         const payload = { ...form.value };
-        if (payload.protocol === 'HTTP' && payload.action === 'FORWARD') {
+        if (faulting) {
+            payload.action = 'MOCK';
+            payload.responseBody = null;
+            payload.responseId = null;
+            payload.responseDescription = null;
+            payload.responseHeaders = null;
+            payload.sseEnabled = false;
+            payload.sseLoopEnabled = false;
+            payload.forwardTargetMode = null;
+            payload.httpTargetConnectionId = null;
+        } else if (payload.protocol === 'HTTP' && payload.action === 'FORWARD') {
             payload.responseBody = null;
             payload.responseId = null;
             payload.sseEnabled = false;

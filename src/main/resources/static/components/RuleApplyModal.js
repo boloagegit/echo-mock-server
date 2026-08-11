@@ -32,10 +32,21 @@ const RuleApplyModal = {
     applicableFields() {
       const protocol = this.spec.protocol;
       const action = this.spec.action || 'MOCK';
+      const faulting = this.spec.faultType && this.spec.faultType !== 'NONE';
+      const faultExcluded = new Set([
+        'spec.responseId', 'spec.responseBody', 'spec.responseDescription',
+        'spec.responseHeaders', 'spec.sseEnabled', 'spec.sseLoopEnabled',
+        'spec.responseContentType', 'spec.forwardTargetMode', 'spec.httpTargetConnectionId'
+      ]);
       return (this.schema?.fields || []).filter(field => {
         const protocolMatches = !field.protocols?.length || !protocol || field.protocols.includes(protocol);
         const actionMatches = !field.actions?.length || field.actions.includes(action);
-        return protocolMatches && actionMatches;
+        const connectionResetStatus = faulting
+          && this.spec.faultType === 'CONNECTION_RESET'
+          && field.path === 'spec.status';
+        return protocolMatches && actionMatches
+          && !(faulting && faultExcluded.has(field.path))
+          && !connectionResetStatus;
       });
     },
     filteredFields() {
@@ -84,6 +95,9 @@ const RuleApplyModal = {
       return this.t('rules.applyType' + suffix);
     },
     fieldRequirement(field) {
+      if (this.spec.faultType === 'CONNECTION_RESET' && field.path === 'spec.status') {
+        return this.t('rules.applyOptional');
+      }
       const keys = {
         ALWAYS: 'rules.applyRequiredAlways',
         HTTP: 'rules.applyRequiredHttp',
@@ -107,6 +121,7 @@ const RuleApplyModal = {
               <div class="rule-apply-template-controls" role="group" :aria-label="t('rules.applyTemplates')">
                 <button class="btn btn-sm btn-secondary" @click="$emit('replace-template','HTTP_MOCK')"><i class="bi bi-reply" aria-hidden="true"></i> {{t('rules.applyHttpMockTemplate')}}</button>
                 <button class="btn btn-sm btn-secondary" @click="$emit('replace-template','HTTP_FORWARD')"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> {{t('rules.applyHttpForwardTemplate')}}</button>
+                <button class="btn btn-sm btn-secondary" @click="$emit('replace-template','HTTP_FAULT')"><i class="bi bi-lightning" aria-hidden="true"></i> {{t('rules.applyHttpFaultTemplate')}}</button>
                 <button class="btn btn-sm btn-secondary" @click="$emit('replace-template','JMS')" :disabled="!jmsEnabled"><i class="bi bi-envelope" aria-hidden="true"></i> {{t('rules.applyJmsTemplate')}}</button>
               </div>
               <span class="rule-apply-document-state">

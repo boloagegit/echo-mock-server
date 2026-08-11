@@ -106,17 +106,11 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                 );
 
                 // 4a. Scenario 狀態轉移（在 buildResponse 之前）
-                if (rule.getScenarioName() != null && !rule.getScenarioName().isBlank()
-                        && rule.getNewScenarioState() != null && !rule.getNewScenarioState().isBlank()) {
-                    String actualState = scenarioService.getCurrentState(rule.getScenarioName());
-                    scenarioFromState = actualState;
-                    String expectedState = rule.getRequiredScenarioState();
-                    if (expectedState == null || expectedState.isBlank()) {
-                        expectedState = actualState;
-                    }
-                    scenarioService.advanceState(rule.getScenarioName(), expectedState, rule.getNewScenarioState());
-                    scenarioName = rule.getScenarioName();
-                    scenarioNewState = rule.getNewScenarioState();
+                ScenarioTransition scenarioTransition = advanceScenarioState(rule);
+                if (scenarioTransition != null) {
+                    scenarioName = scenarioTransition.name();
+                    scenarioFromState = scenarioTransition.fromState();
+                    scenarioNewState = scenarioTransition.toState();
                 }
 
                 FaultType faultType = rule.getFaultType() != null ? rule.getFaultType() : FaultType.NONE;
@@ -207,9 +201,11 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
         String logTargetHost = (matchResult.isMatched() || response.isForwarded())
                 ? request.getTargetHost() : null;
 
+        Integer loggedResponseStatus = "CONNECTION_RESET".equals(faultType)
+                ? null : response.getStatus();
         recordLog(ruleId, request.getProtocol(), request.getMethod(), request.getPath(),
                 matchResult.isMatched(), responseTimeMs, request.getClientIp(), matchChainJson,
-                logTargetHost, proxyStatus, response.getProxyError(), response.getStatus(),
+                logTargetHost, proxyStatus, response.getProxyError(), loggedResponseStatus,
                 matchTimeMs, request.getBody(), response.getBody(), candidates, preparedBody,
                 request.getQueryString(), request.getHeaders(), faultType,
                 scenarioName, scenarioFromState, scenarioToState);
@@ -268,6 +264,30 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
         }
         return delayMs;
     }
+
+    /**
+     * 套用規則的 Scenario 狀態轉移並回傳實際轉移結果。
+     * 沒有設定新狀態時仍回傳當前狀態，供請求紀錄呈現。
+     */
+    public ScenarioTransition advanceScenarioState(T rule) {
+        if (rule.getScenarioName() == null || rule.getScenarioName().isBlank()) {
+            return null;
+        }
+        String currentState = scenarioService.getCurrentState(rule.getScenarioName());
+        if (rule.getNewScenarioState() == null || rule.getNewScenarioState().isBlank()) {
+            return new ScenarioTransition(rule.getScenarioName(), currentState, null, false);
+        }
+        String expectedState = rule.getRequiredScenarioState();
+        if (expectedState == null || expectedState.isBlank()) {
+            expectedState = currentState;
+        }
+        boolean advanced = scenarioService.advanceState(
+                rule.getScenarioName(), expectedState, rule.getNewScenarioState());
+        return new ScenarioTransition(rule.getScenarioName(), currentState,
+                advanced ? rule.getNewScenarioState() : null, advanced);
+    }
+
+    public record ScenarioTransition(String name, String fromState, String toState, boolean advanced) {}
 
     // ==================== 共用匹配邏輯 ====================
 

@@ -68,6 +68,7 @@ public interface RequestLogRepository extends JpaRepository<RequestLog, Long> {
     @Query("SELECT r.id, r.ruleId, r.protocol, r.method, r.endpoint, r.matched, " +
            "r.responseTimeMs, r.matchTimeMs, r.clientIp, r.requestTime, r.targetHost, " +
            "r.proxyStatus, r.proxyError, r.responseStatus, " +
+           "r.faultType, r.scenarioName, r.scenarioFromState, r.scenarioToState, " +
            "CASE WHEN r.requestBody IS NOT NULL THEN true ELSE false END, " +
            "CASE WHEN r.responseBody IS NOT NULL THEN true ELSE false END, " +
            "CASE WHEN r.matchChain IS NOT NULL THEN true ELSE false END " +
@@ -81,6 +82,7 @@ public interface RequestLogRepository extends JpaRepository<RequestLog, Long> {
     @Query(value = "SELECT r.id, r.ruleId, r.protocol, r.method, r.endpoint, r.matched, " +
                    "r.responseTimeMs, r.matchTimeMs, r.clientIp, r.requestTime, r.targetHost, " +
                    "r.proxyStatus, r.proxyError, r.responseStatus, " +
+                   "r.faultType, r.scenarioName, r.scenarioFromState, r.scenarioToState, " +
                    "CASE WHEN r.requestBody IS NOT NULL THEN true ELSE false END, " +
                    "CASE WHEN r.responseBody IS NOT NULL THEN true ELSE false END, " +
                    "CASE WHEN r.matchChain IS NOT NULL THEN true ELSE false END " +

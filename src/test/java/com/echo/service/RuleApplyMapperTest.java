@@ -63,4 +63,30 @@ class RuleApplyMapperTest {
         assertThat(document.getSpec().getResponseBody().isTextual()).isTrue();
         assertThat(mapped.getResponseBody()).isEqualTo("plain text\nwith a second line");
     }
+
+    @Test
+    void preservesFaultAndScenarioFieldsWithoutCreatingResponseContent() {
+        RuleDto dto = RuleDto.builder()
+                .protocol(Protocol.HTTP)
+                .matchKey("/checkout")
+                .method("POST")
+                .action("FORWARD")
+                .status(503)
+                .faultType("EMPTY_RESPONSE")
+                .scenarioName("checkout")
+                .requiredScenarioState("Started")
+                .newScenarioState("Failed")
+                .responseBody("ignored")
+                .build();
+
+        RuleApplyDocument document = mapper.fromRuleDto(dto);
+        RuleDto mapped = mapper.toRuleDto(document);
+
+        assertThat(document.getSpec().getAction()).isEqualTo("MOCK");
+        assertThat(document.getSpec().getResponseBody()).isNull();
+        assertThat(mapped.getFaultType()).isEqualTo("EMPTY_RESPONSE");
+        assertThat(mapped.getScenarioName()).isEqualTo("checkout");
+        assertThat(mapped.getRequiredScenarioState()).isEqualTo("Started");
+        assertThat(mapped.getNewScenarioState()).isEqualTo("Failed");
+    }
 }

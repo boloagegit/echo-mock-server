@@ -341,18 +341,19 @@ const useRules = (deps) => {
                 // OpenAPI: 先預覽
                 const formData = new FormData();
                 formData.append('file', importFile.value);
-                const r = await fetch('/api/admin/rules/import-openapi/preview', { method: 'POST', body: formData, headers: { 'Accept': 'application/json' } });
-                const d = await r.json();
-                if (r.ok && d.success) {
+                const r = await apiCall('/api/admin/rules/import-openapi/preview', { method: 'POST', body: formData }, { silent: true });
+                const d = r ? await r.json().catch(() => ({})) : {};
+                if (r && r.ok && d.success) {
                     openApiPreviewTitle.value = d.title || '';
                     openApiPreviewVersion.value = d.version || '';
                     openApiPreviewRules.value = d.rules || [];
                     showOpenApiPreview.value = true;
+                    showImportModal.value = false;
+                    importFile.value = null;
+                    importFileName.value = '';
                 } else {
-                    showToast((d.errors && d.errors[0]) || t('toast.openApiParseFailed'), 'error');
+                    deps.loading.value.importError = (d.errors && d.errors[0]) || d.error || t('toast.openApiParseFailed');
                 }
-                showImportModal.value = false;
-                importFile.value = null; importFileName.value = '';
                 return;
             }
             if (importFormat.value === 'json') {
@@ -365,11 +366,11 @@ const useRules = (deps) => {
             } else {
                 const formData = new FormData();
                 formData.append('file', importFile.value);
-                const r = await fetch('/api/admin/rules/import-excel', { method: 'POST', body: formData });
-                if (r.ok) { const d = await r.json(); showToast(t('toast.importSuccess', {count: d.imported}), 'success'); markDirty(); loadRules(true); showImportModal.value = false; }
+                const r = await apiCall('/api/admin/rules/import-excel', { method: 'POST', body: formData }, { silent: true });
+                if (r && r.ok) { const d = await r.json(); showToast(t('toast.importSuccess', {count: d.imported}), 'success'); markDirty(); loadRules(true); showImportModal.value = false; }
                 else {
-                    const error = await r.json();
-                    deps.loading.value.importError = error.error || t('modal.importRequestFailed');
+                    const error = r ? await r.json().catch(() => ({})) : {};
+                    deps.loading.value.importError = error.error || (r ? t('modal.importRequestFailed') : t('toast.networkError'));
                     showToast(deps.loading.value.importError, 'error');
                 }
             }
@@ -604,6 +605,7 @@ const useRules = (deps) => {
     const triggerResponseImport = () => { showDataDropdown.value = false; document.getElementById('responseImportInput')?.click(); };
 
     const confirmOpenApiImport = async (selectedRules) => {
+        if (openApiImporting.value || !selectedRules?.length) return;
         openApiImporting.value = true;
         try {
             const r = await apiCall('/api/admin/rules/import-openapi/confirm', {
@@ -611,16 +613,18 @@ const useRules = (deps) => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(selectedRules)
             });
-            if (r.ok) {
+            if (r && r.ok) {
                 const d = await r.json();
                 showToast(t('toast.importSuccess', { count: d.imported }), 'success');
                 showOpenApiPreview.value = false;
+                markDirty();
                 loadRules(true);
             }
         } catch (e) {
             showToast(t('toast.importFailed'), 'error');
+        } finally {
+            openApiImporting.value = false;
         }
-        openApiImporting.value = false;
     };
 
     return {

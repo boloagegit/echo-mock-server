@@ -100,7 +100,12 @@ let _t = null;
 const apiCall = async (url, opt = {}, config = {}) => {
     const { silent = false, errorMsg = '' } = config;
     try {
-        const r = await fetch(url, { ...opt, headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', ...(opt.headers || {}) } });
+        const headers = { 'Accept': 'application/json', ...(opt.headers || {}) };
+        const isFormData = typeof FormData !== 'undefined' && opt.body instanceof FormData;
+        if (!isFormData && opt.body != null && !headers['Content-Type']) {
+            headers['Content-Type'] = 'application/json';
+        }
+        const r = await fetch(url, { ...opt, headers });
         if (r.status === 401 || r.status === 403) {
             if (!silent) { _showToast(_t('toast.loginRequired'), 'error'); }
             return r;

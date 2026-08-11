@@ -39,6 +39,10 @@ class RequestLogSummaryQueryIntegrationTest {
                     .requestBody(i % 5 == 0 ? "request" : null)
                     .responseBody(i % 6 == 0 ? "response" : null)
                     .matchChain(i % 7 == 0 ? "[]" : null)
+                    .faultType(i == 24 ? "EMPTY_RESPONSE" : null)
+                    .scenarioName(i == 24 ? "order-flow" : null)
+                    .scenarioFromState(i == 24 ? "Started" : null)
+                    .scenarioToState(i == 24 ? "Paid" : null)
                     .build());
         }
         repository.saveAllAndFlush(logs);
@@ -56,6 +60,10 @@ class RequestLogSummaryQueryIntegrationTest {
         assertThat(result.rows()).hasSize(3);
         assertThat(result.rows()).extracting(RequestLogSummaryQuery.SummaryRow::endpoint)
                 .containsExactly("/api/orders/24", "/api/orders/18", "/api/orders/12");
+        assertThat(result.rows().get(0).faultType()).isEqualTo("EMPTY_RESPONSE");
+        assertThat(result.rows().get(0).scenarioName()).isEqualTo("order-flow");
+        assertThat(result.rows().get(0).scenarioFromState()).isEqualTo("Started");
+        assertThat(result.rows().get(0).scenarioToState()).isEqualTo("Paid");
     }
 
     @Test

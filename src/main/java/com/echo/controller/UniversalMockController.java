@@ -3,11 +3,13 @@ package com.echo.controller;
 import com.echo.entity.HttpRule;
 import com.echo.entity.FaultType;
 import com.echo.entity.Protocol;
+import com.echo.pipeline.AbstractMockPipeline;
 import com.echo.pipeline.HttpMockPipeline;
 import com.echo.pipeline.MockRequest;
 import com.echo.pipeline.MockResponse;
 import com.echo.pipeline.PipelineResult;
 import com.echo.service.HttpRuleService;
+import com.echo.service.ConditionMatcher;
 import com.echo.service.MatchDescriptionBuilder;
 import com.echo.service.MatchResult;
 import com.echo.service.RuleService;
@@ -15,6 +17,8 @@ import com.echo.service.RequestLogService;
 import com.echo.service.ResponseTemplateService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.undertow.server.ServerConnection;
+import io.undertow.servlet.handlers.ServletRequestContext;
 import jakarta.annotation.PreDestroy;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -142,8 +146,16 @@ public class UniversalMockController {
 
         log.debug("SSE request: host={}, path={}, method={}", originalHost, path, method);
 
-        MatchResult<HttpRule> matchResult = httpRuleService.findMatchingHttpRuleWithCandidates(
-                originalHost, path, method, null, queryString, requestHeaders);
+        MatchResult<HttpRule> matchResult;
+        if (httpMockPipeline != null) {
+            List<HttpRule> candidates = httpRuleService.findPreparedHttpRules(originalHost, path, method);
+            matchResult = httpMockPipeline.matchRule(candidates,
+                    ConditionMatcher.PreparedBody.rawOnly(null), queryString, requestHeaders);
+        } else {
+            // 保留給舊有單元測試與嵌入式呼叫端的相容路徑。
+            matchResult = httpRuleService.findMatchingHttpRuleWithCandidates(
+                    originalHost, path, method, null, queryString, requestHeaders);
+        }
         long matchTime = System.currentTimeMillis() - startTime;
         String matchChainJson = MatchDescriptionBuilder.toMatchChainJson(matchResult.getMatchChain(), matchResult.isMatched());
 
@@ -157,27 +169,26 @@ public class UniversalMockController {
         }
 
         HttpRule rule = matchResult.getMatchedRule();
+        AbstractMockPipeline.ScenarioTransition scenarioTransition = httpMockPipeline != null
+                ? httpMockPipeline.advanceScenarioState(rule)
+                : null;
 
         // Fault injection check
         FaultType faultType = rule.getFaultType() != null ? rule.getFaultType() : FaultType.NONE;
         if (faultType == FaultType.CONNECTION_RESET) {
             long responseTime = System.currentTimeMillis() - startTime;
-            requestLogService.record(rule.getId(), Protocol.HTTP, method, path, true,
-                    (int) responseTime, clientIp, matchChainJson, originalHost, null, null, null, (int) matchTime,
-                    null, null);
-            try {
-                response.getOutputStream().close();
-            } catch (Exception e) {
-                log.warn("SSE connection reset: {}", e.getMessage());
-            }
+            recordSseRule(rule, method, path, (int) responseTime, clientIp,
+                    matchChainJson, originalHost, null, (int) matchTime, null,
+                    queryString, requestHeaders, faultType, scenarioTransition);
+            captureConnectionReset(response).run();
             return ResponseEntity.ok().build();
         }
         if (faultType == FaultType.EMPTY_RESPONSE) {
             int faultStatus = rule.getHttpStatus() != null ? rule.getHttpStatus() : 200;
             long responseTime = System.currentTimeMillis() - startTime;
-            requestLogService.record(rule.getId(), Protocol.HTTP, method, path, true,
-                    (int) responseTime, clientIp, matchChainJson, originalHost, null, null, faultStatus, (int) matchTime,
-                    null, "");
+            recordSseRule(rule, method, path, (int) responseTime, clientIp,
+                    matchChainJson, originalHost, faultStatus, (int) matchTime, "",
+                    queryString, requestHeaders, faultType, scenarioTransition);
             response.setStatus(faultStatus);
             try {
                 response.getOutputStream().flush();
@@ -202,9 +213,9 @@ public class UniversalMockController {
 
             int status = rule.getHttpStatus() != null ? rule.getHttpStatus() : 200;
             long responseTime = System.currentTimeMillis() - startTime;
-            requestLogService.record(rule.getId(), Protocol.HTTP, method, path,
-                    true, (int) responseTime, clientIp, matchChainJson, originalHost, null, null, status, (int) matchTime,
-                    null, responseBody);
+            recordSseRule(rule, method, path, (int) responseTime, clientIp,
+                    matchChainJson, originalHost, status, (int) matchTime, responseBody,
+                    queryString, requestHeaders, faultType, scenarioTransition);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(detectContentType(responseBody));
@@ -225,9 +236,9 @@ public class UniversalMockController {
         // responseId 為 null → HTTP 500
         if (rule.getResponseId() == null) {
             long responseTime = System.currentTimeMillis() - startTime;
-            requestLogService.record(rule.getId(), Protocol.HTTP, method, path,
-                    true, (int) responseTime, clientIp, matchChainJson, originalHost, null, null, 500, (int) matchTime,
-                    null, null);
+            recordSseRule(rule, method, path, (int) responseTime, clientIp,
+                    matchChainJson, originalHost, 500, (int) matchTime, null,
+                    queryString, requestHeaders, faultType, scenarioTransition);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("SSE rule has no response body configured (responseId is null).");
         }
@@ -238,18 +249,18 @@ public class UniversalMockController {
         // 事件列表為空 → HTTP 500
         if (events.isEmpty()) {
             long responseTime = System.currentTimeMillis() - startTime;
-            requestLogService.record(rule.getId(), Protocol.HTTP, method, path,
-                    true, (int) responseTime, clientIp, matchChainJson, originalHost, null, null, 500, (int) matchTime,
-                    null, null);
+            recordSseRule(rule, method, path, (int) responseTime, clientIp,
+                    matchChainJson, originalHost, 500, (int) matchTime, null,
+                    queryString, requestHeaders, faultType, scenarioTransition);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("SSE rule has no valid events.");
         }
 
         // 記錄請求日誌
         long responseTime = System.currentTimeMillis() - startTime;
-        requestLogService.record(rule.getId(), Protocol.HTTP, method, path,
-                true, (int) responseTime, clientIp, matchChainJson, originalHost, null, null, 200, (int) matchTime,
-                null, responseBody);
+        recordSseRule(rule, method, path, (int) responseTime, clientIp,
+                matchChainJson, originalHost, 200, (int) matchTime, responseBody,
+                queryString, requestHeaders, faultType, scenarioTransition);
 
         boolean loopEnabled = Boolean.TRUE.equals(rule.getSseLoopEnabled());
         long timeout = loopEnabled ? SSE_LOOP_TIMEOUT_MS : SSE_TIMEOUT_MS;
@@ -260,6 +271,29 @@ public class UniversalMockController {
                 queryString, requestHeaders, path, method);
 
         return emitter;
+    }
+
+    private void recordSseRule(
+            HttpRule rule, String method, String path, int responseTimeMs,
+            String clientIp, String matchChainJson, String originalHost,
+            Integer responseStatus, int matchTimeMs, String responseBody,
+            String queryString, Map<String, String> requestHeaders,
+            FaultType faultType, AbstractMockPipeline.ScenarioTransition scenarioTransition) {
+        if (faultType == FaultType.NONE && scenarioTransition == null) {
+            requestLogService.record(rule.getId(), Protocol.HTTP, method, path, true,
+                    responseTimeMs, clientIp, matchChainJson, originalHost,
+                    null, null, responseStatus, matchTimeMs, null, responseBody);
+            return;
+        }
+        requestLogService.record(rule.getId(), Protocol.HTTP, method, path, true,
+                responseTimeMs, clientIp, matchChainJson, originalHost,
+                null, null, responseStatus, matchTimeMs, null, responseBody,
+                List.of(rule), ConditionMatcher.PreparedBody.rawOnly(null),
+                queryString, requestHeaders,
+                faultType != FaultType.NONE ? faultType.name() : null,
+                scenarioTransition != null ? scenarioTransition.name() : null,
+                scenarioTransition != null ? scenarioTransition.fromState() : null,
+                scenarioTransition != null ? scenarioTransition.toState() : null);
     }
 
     /**
@@ -469,6 +503,7 @@ public class UniversalMockController {
         // 2. Mock 直接完成；實際下游 I/O 使用非阻塞 client。
         CompletableFuture<PipelineResult> pipelineFuture =
                 httpMockPipeline.executeAsync(mockRequest).toCompletableFuture();
+        Runnable connectionReset = captureConnectionReset(httpResponse);
 
         // 一般 Mock／404 已在目前執行緒完成，直接回傳可省下 MVC async context、
         // DeferredResult 與 callback 配置；轉發或延遲回應仍保留原非同步流程。
@@ -477,7 +512,7 @@ public class UniversalMockController {
                 PipelineResult immediate = pipelineFuture.join();
                 if (immediate.getDelayMs() <= 0) {
                     if ("CONNECTION_RESET".equals(immediate.getFaultType())) {
-                        resetConnection(httpResponse);
+                        connectionReset.run();
                         return null;
                     }
                     return toResponseEntity(immediate.getResponse());
@@ -489,13 +524,13 @@ public class UniversalMockController {
             }
         }
 
-        return deferResponse(pipelineFuture, httpResponse);
+        return deferResponse(pipelineFuture, connectionReset);
     }
 
     @SuppressWarnings("FutureReturnValueIgnored")
     private DeferredResult<ResponseEntity<String>> deferResponse(
             CompletableFuture<PipelineResult> pipelineFuture,
-            HttpServletResponse httpResponse) {
+            Runnable connectionReset) {
         DeferredResult<ResponseEntity<String>> deferredResult = new DeferredResult<>(requestTimeoutMs);
         deferredResult.onTimeout(() -> {
             deferredResult.setErrorResult(
@@ -514,7 +549,7 @@ public class UniversalMockController {
                         .body("Pipeline error"));
                 return;
             }
-            completeResponse(deferredResult, result, httpResponse);
+            completeResponse(deferredResult, result, connectionReset);
         });
 
         return deferredResult;
@@ -523,13 +558,13 @@ public class UniversalMockController {
     @SuppressWarnings("FutureReturnValueIgnored")
     private void completeResponse(DeferredResult<ResponseEntity<String>> deferredResult,
                                   PipelineResult result,
-                                  HttpServletResponse httpResponse) {
+                                  Runnable connectionReset) {
         if (deferredResult.isSetOrExpired()) return;
         MockResponse mockResponse = result.getResponse();
         Runnable completion = () -> {
             if (!deferredResult.isSetOrExpired()) {
                 if ("CONNECTION_RESET".equals(result.getFaultType())) {
-                    resetConnection(httpResponse);
+                    connectionReset.run();
                     deferredResult.setResult(null);
                 } else {
                     deferredResult.setResult(toResponseEntity(mockResponse));
@@ -544,11 +579,28 @@ public class UniversalMockController {
         }
     }
 
-    private void resetConnection(HttpServletResponse response) {
+    private Runnable captureConnectionReset(HttpServletResponse response) {
+        ServletRequestContext requestContext = ServletRequestContext.current();
+        if (requestContext != null) {
+            ServerConnection connection = requestContext.getExchange().getConnection();
+            return () -> closeTransportConnection(connection);
+        }
+        return () -> closeResponseStream(response);
+    }
+
+    private void closeTransportConnection(ServerConnection connection) {
+        try {
+            connection.close();
+        } catch (IOException e) {
+            log.warn("Failed to reset transport connection: {}", e.getMessage());
+        }
+    }
+
+    private void closeResponseStream(HttpServletResponse response) {
         try {
             response.getOutputStream().close();
         } catch (IOException e) {
-            log.warn("Failed to reset connection: {}", e.getMessage());
+            log.warn("Failed to close fallback response stream: {}", e.getMessage());
         }
     }
 

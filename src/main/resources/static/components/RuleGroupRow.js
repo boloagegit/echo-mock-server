@@ -39,9 +39,10 @@ const RuleGroupRow = {
             <code style="font-weight:500" :title="rule.matchKey">{{rule.matchKey}}</code>
             <span v-if="rule.sseEnabled" class="badge badge-sse" :title="t('rules.sseStream')">SSE</span>
             <span v-if="rule.action==='FORWARD'" class="badge badge-muted"><i class="bi bi-box-arrow-up-right"></i> {{t('rules.forward')}}</span>
+            <span v-if="rule.faultType&&rule.faultType!=='NONE'" class="badge badge-muted" :title="t('rules.fault_'+rule.faultType)"><i class="bi bi-lightning" aria-hidden="true"></i> {{t('rules.faultInjection')}}</span>
         </div>
         <div v-if="rule.description" class="sub-info" style="margin-top:2px" :title="rule.description">{{rule.description}}</div>
-        <div v-if="rule.targetHost" class="rule-endpoint-meta"><span class="rule-source-host" :title="t('rules.targetPrefix')+rule.targetHost"><span>{{t('rules.targetPrefix')}}</span><code>{{rule.targetHost}}</code></span></div>
+        <div v-if="rule.targetHost||rule.scenarioName" class="rule-endpoint-meta"><span v-if="rule.targetHost" class="rule-source-host" :title="t('rules.targetPrefix')+rule.targetHost"><span>{{t('rules.targetPrefix')}}</span><code>{{rule.targetHost}}</code></span><span v-if="rule.scenarioName" class="rule-scenario-meta" :title="t('rules.scenarioTooltip',{name:rule.scenarioName,required:rule.requiredScenarioState||'Started',newState:rule.newScenarioState||rule.requiredScenarioState||'Started'})"><i class="bi bi-diagram-3" aria-hidden="true"></i><code>{{rule.scenarioName}}</code></span></div>
     </td>
     <td class="col-cond col-hide-md" :title="condTooltip(rule)">
         <div v-if="condTags(rule).length" class="cond-list">
@@ -90,8 +91,10 @@ const RuleGroupRow = {
             <div class="pv-main">
                 <div class="pv-fields">
                     <div class="pv-section-title">{{t('rules.pvSectionSettings')}}</div>
-                    <div class="pv-field" v-if="rulePreviewCache[rule.id].protocol==='HTTP'&&rulePreviewCache[rule.id].action!=='FORWARD'"><span class="pv-label">{{t('rules.pvStatusCode')}}</span><span class="badge" :class="rulePreviewCache[rule.id].status<400?'badge-success':rulePreviewCache[rule.id].status<500?'badge-warning':'badge-danger'">{{rulePreviewCache[rule.id].status}}</span></div>
+                    <div class="pv-field" v-if="rulePreviewCache[rule.id].protocol==='HTTP'&&rulePreviewCache[rule.id].action!=='FORWARD'&&rulePreviewCache[rule.id].faultType!=='CONNECTION_RESET'"><span class="pv-label">{{t('rules.pvStatusCode')}}</span><span class="badge" :class="rulePreviewCache[rule.id].status<400?'badge-success':rulePreviewCache[rule.id].status<500?'badge-warning':'badge-danger'">{{rulePreviewCache[rule.id].status}}</span></div>
                     <div class="pv-field" v-if="rulePreviewCache[rule.id].action==='FORWARD'"><span class="pv-label">{{t('rules.forward')}}</span><span>{{rulePreviewCache[rule.id].forwardTargetMode==='CONNECTION' ? '#'+rulePreviewCache[rule.id].httpTargetConnectionId : rulePreviewCache[rule.id].forwardTargetMode}}</span></div>
+                    <div class="pv-field" v-if="rulePreviewCache[rule.id].faultType&&rulePreviewCache[rule.id].faultType!=='NONE'"><span class="pv-label">{{t('rules.faultInjection')}}</span><span class="pv-result-value"><i class="bi bi-lightning" aria-hidden="true"></i>{{t('rules.fault_'+rulePreviewCache[rule.id].faultType)}}</span></div>
+                    <div class="pv-field" v-if="rulePreviewCache[rule.id].scenarioName"><span class="pv-label">{{t('rules.pvScenario')}}</span><span class="pv-scenario-value" :title="t('rules.scenarioTooltip',{name:rulePreviewCache[rule.id].scenarioName,required:rulePreviewCache[rule.id].requiredScenarioState||'Started',newState:rulePreviewCache[rule.id].newScenarioState||rulePreviewCache[rule.id].requiredScenarioState||'Started'})"><strong>{{rulePreviewCache[rule.id].scenarioName}}</strong><code>{{rulePreviewCache[rule.id].requiredScenarioState||'Started'}}</code><i class="bi bi-arrow-right" aria-hidden="true"></i><code>{{rulePreviewCache[rule.id].newScenarioState||rulePreviewCache[rule.id].requiredScenarioState||'Started'}}</code></span></div>
                     <div class="pv-field"><span class="pv-label">{{t('rules.pvDelay')}}</span><span>{{rulePreviewCache[rule.id].delayMs||0}} ms</span></div>
                     <div class="pv-field"><span class="pv-label">{{t('rules.pvPriority')}}</span><span>{{rulePreviewCache[rule.id].priority||0}}</span></div>
                     <div class="pv-field"><span class="pv-label">{{t('rules.pvProtected')}}</span><span><i class="bi" :class="rulePreviewCache[rule.id].isProtected ? 'bi-shield-fill-check text-success' : 'bi-shield'" style="margin-right:2px"></i> {{rulePreviewCache[rule.id].isProtected ? t('rules.pvYes') : t('rules.pvNo')}}</span></div>
@@ -108,12 +111,13 @@ const RuleGroupRow = {
                 </div>
                 <div class="pv-body">
                     <div class="pv-body-header">
-                        <span class="pv-label">{{t('rules.pvResponseContent')}} <span v-if="rulePreviewCache[rule.id]._isSse" class="badge badge-sse" style="margin-left:4px">SSE</span></span>
-                        <div style="display:flex;align-items:center;gap:0.35rem">
+                        <span class="pv-label">{{rulePreviewCache[rule.id].faultType&&rulePreviewCache[rule.id].faultType!=='NONE'?t('rules.faultInjection'):t('rules.pvResponseContent')}} <span v-if="rulePreviewCache[rule.id]._isSse" class="badge badge-sse" style="margin-left:4px">SSE</span></span>
+                        <div v-if="!rulePreviewCache[rule.id].faultType||rulePreviewCache[rule.id].faultType==='NONE'" style="display:flex;align-items:center;gap:0.35rem">
                             <button v-if="rulePreviewCache[rule.id]._previewBody" class="btn btn-sm btn-icon btn-secondary" @click="$emit('clip-copy', rulePreviewCache[rule.id].responseBody||rulePreviewCache[rule.id]._previewBody)" :title="t('rules.copyFullContent')" :aria-label="t('rules.copyFullContent')"><i class="bi bi-clipboard"></i></button>
                         </div>
                     </div>
-                    <pre class="pv-pre">{{rulePreviewCache[rule.id]._previewBody || t('rules.empty')}}</pre>
+                    <div v-if="rulePreviewCache[rule.id].faultType&&rulePreviewCache[rule.id].faultType!=='NONE'" class="pv-fault-preview"><i class="bi bi-lightning" aria-hidden="true"></i><strong>{{t('rules.fault_'+rulePreviewCache[rule.id].faultType)}}</strong><span>{{rulePreviewCache[rule.id].faultType==='EMPTY_RESPONSE' ? t('modal.faultEmptyResponse'+(rulePreviewCache[rule.id].protocol==='JMS'?'Jms':'Http')+'Hint') : t('modal.faultConnectionReset'+(rulePreviewCache[rule.id].protocol==='JMS'?'Jms':'Http')+'Hint')}}</span></div>
+                    <pre v-else class="pv-pre">{{rulePreviewCache[rule.id]._previewBody || t('rules.empty')}}</pre>
                 </div>
             </div>
         </div>

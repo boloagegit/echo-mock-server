@@ -541,6 +541,10 @@ public class RequestLogService {
                 .proxyStatus(e.getProxyStatus())
                 .proxyError(e.getProxyError())
                 .responseStatus(e.getResponseStatus())
+                .faultType(e.getFaultType())
+                .scenarioName(e.getScenarioName())
+                .scenarioFromState(e.getScenarioFromState())
+                .scenarioToState(e.getScenarioToState())
                 .hasRequestBody(e.getRequestBody() != null && !e.getRequestBody().isBlank())
                 .hasResponseBody(e.getResponseBody() != null && !e.getResponseBody().isBlank())
                 .hasMatchChain(e.getMatchChain() != null && !e.getMatchChain().isBlank())
@@ -563,9 +567,13 @@ public class RequestLogService {
                 .proxyStatus(row[11] != null ? ((Number) row[11]).intValue() : null)
                 .proxyError((String) row[12])
                 .responseStatus(row[13] != null ? ((Number) row[13]).intValue() : null)
-                .hasRequestBody(Boolean.TRUE.equals(row[14]))
-                .hasResponseBody(Boolean.TRUE.equals(row[15]))
-                .hasMatchChain(Boolean.TRUE.equals(row[16]))
+                .faultType((String) row[14])
+                .scenarioName((String) row[15])
+                .scenarioFromState((String) row[16])
+                .scenarioToState((String) row[17])
+                .hasRequestBody(Boolean.TRUE.equals(row[18]))
+                .hasResponseBody(Boolean.TRUE.equals(row[19]))
+                .hasMatchChain(Boolean.TRUE.equals(row[20]))
                 .build();
     }
 
@@ -585,6 +593,10 @@ public class RequestLogService {
                 .proxyStatus(row.proxyStatus() != null ? row.proxyStatus().intValue() : null)
                 .proxyError(row.proxyError())
                 .responseStatus(row.responseStatus() != null ? row.responseStatus().intValue() : null)
+                .faultType(row.faultType())
+                .scenarioName(row.scenarioName())
+                .scenarioFromState(row.scenarioFromState())
+                .scenarioToState(row.scenarioToState())
                 .hasRequestBody(Boolean.TRUE.equals(row.hasRequestBody()))
                 .hasResponseBody(Boolean.TRUE.equals(row.hasResponseBody()))
                 .hasMatchChain(Boolean.TRUE.equals(row.hasMatchChain()))
@@ -610,12 +622,12 @@ public class RequestLogService {
         private Integer proxyStatus;
         private String proxyError;
         private Integer responseStatus;
-        private String requestBody;
-        private String responseBody;
         private String faultType;
         private String scenarioName;
         private String scenarioFromState;
         private String scenarioToState;
+        private String requestBody;
+        private String responseBody;
     }
 
     /**
@@ -638,6 +650,10 @@ public class RequestLogService {
         private Integer proxyStatus;
         private String proxyError;
         private Integer responseStatus;
+        private String faultType;
+        private String scenarioName;
+        private String scenarioFromState;
+        private String scenarioToState;
         /** 是否有 requestBody（供前端判斷是否需要 lazy load） */
         private boolean hasRequestBody;
         /** 是否有 responseBody */

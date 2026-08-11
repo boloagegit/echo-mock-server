@@ -277,10 +277,12 @@ const RulesPage = {
                             <code :title="r.matchKey">{{r.matchKey}}</code>
                             <span v-if="r.sseEnabled" class="badge badge-sse" :title="t('rules.sseStream')">SSE</span>
                             <span v-if="r.action==='FORWARD'" class="badge badge-muted"><i class="bi bi-box-arrow-up-right"></i> {{t('rules.forward')}}</span>
+                            <span v-if="r.faultType&&r.faultType!=='NONE'" class="badge badge-muted" :title="t('rules.fault_'+r.faultType)"><i class="bi bi-lightning" aria-hidden="true"></i> {{t('rules.faultInjection')}}</span>
                         </div>
                         <div v-if="r.description" class="sub-info rule-description" :title="r.description">{{r.description}}</div>
-                        <div v-if="r.targetHost || r.tags" class="rule-endpoint-meta">
+                        <div v-if="r.targetHost || r.scenarioName || r.tags" class="rule-endpoint-meta">
                             <span v-if="r.targetHost" class="rule-source-host" :title="t('rules.targetPrefix')+r.targetHost"><span>{{t('rules.targetPrefix')}}</span><code>{{r.targetHost}}</code></span>
+                            <span v-if="r.scenarioName" class="rule-scenario-meta" :title="t('rules.scenarioTooltip',{name:r.scenarioName,required:r.requiredScenarioState||'Started',newState:r.newScenarioState||r.requiredScenarioState||'Started'})"><i class="bi bi-diagram-3" aria-hidden="true"></i><code>{{r.scenarioName}}</code></span>
                             <span v-for="(v,k) in parseTags(r.tags)" :key="k" class="badge badge-tag" :title="k+'='+v">{{k}}:{{v}}</span>
                         </div>
                     </td>
@@ -329,8 +331,10 @@ const RulesPage = {
                             <div class="pv-main">
                                 <div class="pv-fields">
                                     <div class="pv-section-title">{{t('rules.pvSectionSettings')}}</div>
-                                    <div class="pv-field" v-if="rulePreviewCache[r.id].protocol==='HTTP'&&rulePreviewCache[r.id].action!=='FORWARD'"><span class="pv-label">{{t('rules.pvStatusCode')}}</span><span class="badge" :class="rulePreviewCache[r.id].status<400?'badge-success':rulePreviewCache[r.id].status<500?'badge-warning':'badge-danger'">{{rulePreviewCache[r.id].status}}</span></div>
+                                    <div class="pv-field" v-if="rulePreviewCache[r.id].protocol==='HTTP'&&rulePreviewCache[r.id].action!=='FORWARD'&&rulePreviewCache[r.id].faultType!=='CONNECTION_RESET'"><span class="pv-label">{{t('rules.pvStatusCode')}}</span><span class="badge" :class="rulePreviewCache[r.id].status<400?'badge-success':rulePreviewCache[r.id].status<500?'badge-warning':'badge-danger'">{{rulePreviewCache[r.id].status}}</span></div>
                                     <div class="pv-field" v-if="rulePreviewCache[r.id].action==='FORWARD'"><span class="pv-label">{{t('rules.forward')}}</span><span>{{rulePreviewCache[r.id].forwardTargetMode==='CONNECTION' ? '#'+rulePreviewCache[r.id].httpTargetConnectionId : rulePreviewCache[r.id].forwardTargetMode}}</span></div>
+                                    <div class="pv-field" v-if="rulePreviewCache[r.id].faultType&&rulePreviewCache[r.id].faultType!=='NONE'"><span class="pv-label">{{t('rules.faultInjection')}}</span><span class="pv-result-value"><i class="bi bi-lightning" aria-hidden="true"></i>{{t('rules.fault_'+rulePreviewCache[r.id].faultType)}}</span></div>
+                                    <div class="pv-field" v-if="rulePreviewCache[r.id].scenarioName"><span class="pv-label">{{t('rules.pvScenario')}}</span><span class="pv-scenario-value" :title="t('rules.scenarioTooltip',{name:rulePreviewCache[r.id].scenarioName,required:rulePreviewCache[r.id].requiredScenarioState||'Started',newState:rulePreviewCache[r.id].newScenarioState||rulePreviewCache[r.id].requiredScenarioState||'Started'})"><strong>{{rulePreviewCache[r.id].scenarioName}}</strong><code>{{rulePreviewCache[r.id].requiredScenarioState||'Started'}}</code><i class="bi bi-arrow-right" aria-hidden="true"></i><code>{{rulePreviewCache[r.id].newScenarioState||rulePreviewCache[r.id].requiredScenarioState||'Started'}}</code></span></div>
                                     <div class="pv-field"><span class="pv-label">{{t('rules.pvDelay')}}</span><span>{{rulePreviewCache[r.id].delayMs||0}} ms</span></div>
                                     <div class="pv-field"><span class="pv-label">{{t('rules.pvPriority')}}</span><span>{{rulePreviewCache[r.id].priority||0}}</span></div>
                                     <div class="pv-field"><span class="pv-label">{{t('rules.pvProtected')}}</span><span><i class="bi" :class="rulePreviewCache[r.id].isProtected ? 'bi-shield-fill-check text-success' : 'bi-shield'" style="margin-right:2px"></i> {{rulePreviewCache[r.id].isProtected ? t('rules.pvYes') : t('rules.pvNo')}}</span></div>
@@ -347,8 +351,8 @@ const RulesPage = {
                                 </div>
                                 <div class="pv-body">
                                     <div class="pv-body-header">
-                                        <span class="pv-label">{{t('rules.pvResponseContent')}} <span v-if="rulePreviewCache[r.id]._isSse" class="badge badge-sse pv-sse-badge">SSE</span></span>
-                                        <div class="pv-body-tools">
+                                        <span class="pv-label">{{rulePreviewCache[r.id].faultType&&rulePreviewCache[r.id].faultType!=='NONE'?t('rules.faultInjection'):t('rules.pvResponseContent')}} <span v-if="rulePreviewCache[r.id]._isSse" class="badge badge-sse pv-sse-badge">SSE</span></span>
+                                        <div v-if="!rulePreviewCache[r.id].faultType||rulePreviewCache[r.id].faultType==='NONE'" class="pv-body-tools">
                                             <div v-if="rulePreviewCache[r.id]._previewBody" class="pv-search-bar">
                                                 <input :value="pvSearch[r.id]||''" @input="setPvSearch(r.id, $event.target.value)" :placeholder="t('rules.pvSearchBody')" :aria-label="t('rules.pvSearchBody')" @keydown.enter.prevent="pvNavSearch(r.id, rulePreviewCache[r.id]._previewBody, 1)" @keydown.shift.enter.prevent="pvNavSearch(r.id, rulePreviewCache[r.id]._previewBody, -1)">
                                                 <span v-if="pvSearch[r.id]" class="pv-search-count">{{pvMatchCount(r.id, rulePreviewCache[r.id]._previewBody)?(pvSearchIdx[r.id]||0)+1:0}}/{{pvMatchCount(r.id, rulePreviewCache[r.id]._previewBody)}}</span>
@@ -358,8 +362,9 @@ const RulesPage = {
                                             <button v-if="rulePreviewCache[r.id]._previewBody" class="btn btn-sm btn-icon btn-secondary" @click="$emit('clip-copy', rulePreviewCache[r.id].responseBody||rulePreviewCache[r.id]._previewBody)" :title="t('rules.copyFullContent')" :aria-label="t('rules.copyFullContent')"><i class="bi bi-clipboard"></i></button>
                                         </div>
                                     </div>
-                                    <pre :ref="'pvPre_'+r.id" class="pv-pre" :class="{'expanded': pvExpanded[r.id]}"><template v-if="pvSearch[r.id] && rulePreviewCache[r.id]._previewBody"><template v-for="(seg,si) in pvHighlight(r.id, rulePreviewCache[r.id]._previewBody)" :key="si"><span v-if="seg.hl" class="pv-highlight" :class="{'pv-highlight-current': pvHlIsCurrent(r.id, si)}">{{seg.text}}</span><template v-else>{{seg.text}}</template></template></template><template v-else>{{rulePreviewCache[r.id]._previewBody || t('rules.empty')}}</template></pre>
-                                    <button v-if="rulePreviewCache[r.id]._previewBody && (pvExpanded[r.id] || pvOverflow[r.id])" class="pv-expand-btn" @click="togglePvExpand(r.id)">
+                                    <div v-if="rulePreviewCache[r.id].faultType&&rulePreviewCache[r.id].faultType!=='NONE'" class="pv-fault-preview"><i class="bi bi-lightning" aria-hidden="true"></i><strong>{{t('rules.fault_'+rulePreviewCache[r.id].faultType)}}</strong><span>{{rulePreviewCache[r.id].faultType==='EMPTY_RESPONSE' ? t('modal.faultEmptyResponse'+(rulePreviewCache[r.id].protocol==='JMS'?'Jms':'Http')+'Hint') : t('modal.faultConnectionReset'+(rulePreviewCache[r.id].protocol==='JMS'?'Jms':'Http')+'Hint')}}</span></div>
+                                    <pre v-else :ref="'pvPre_'+r.id" class="pv-pre" :class="{'expanded': pvExpanded[r.id]}"><template v-if="pvSearch[r.id] && rulePreviewCache[r.id]._previewBody"><template v-for="(seg,si) in pvHighlight(r.id, rulePreviewCache[r.id]._previewBody)" :key="si"><span v-if="seg.hl" class="pv-highlight" :class="{'pv-highlight-current': pvHlIsCurrent(r.id, si)}">{{seg.text}}</span><template v-else>{{seg.text}}</template></template></template><template v-else>{{rulePreviewCache[r.id]._previewBody || t('rules.empty')}}</template></pre>
+                                    <button v-if="(!rulePreviewCache[r.id].faultType||rulePreviewCache[r.id].faultType==='NONE')&&rulePreviewCache[r.id]._previewBody && (pvExpanded[r.id] || pvOverflow[r.id])" class="pv-expand-btn" @click="togglePvExpand(r.id)">
                                         <i class="bi" :class="pvExpanded[r.id]?'bi-chevron-compact-up':'bi-chevron-compact-down'" aria-hidden="true"></i>
                                         {{pvExpanded[r.id] ? t('rules.pvCollapse') : t('rules.pvExpand')}}
                                     </button>

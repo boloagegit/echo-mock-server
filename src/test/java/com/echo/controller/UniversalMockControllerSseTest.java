@@ -2,6 +2,9 @@ package com.echo.controller;
 
 import com.echo.entity.HttpRule;
 import com.echo.entity.Protocol;
+import com.echo.pipeline.AbstractMockPipeline;
+import com.echo.pipeline.HttpMockPipeline;
+import com.echo.service.ConditionMatcher;
 import com.echo.service.HttpRuleService;
 import com.echo.service.MatchChainEntry;
 import com.echo.service.MatchResult;
@@ -13,6 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentMatchers;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -55,6 +59,44 @@ class UniversalMockControllerSseTest {
         return new MatchResult<>(rule,
                 List.of(new MatchChainEntry(
                         rule.getId(), "match", rule.getMatchKey(), rule.getDescription(), null)));
+    }
+
+    @Test
+    void sseRoutingUsesScenarioAwarePipelineAndRecordsTransition() {
+        HttpMockPipeline pipeline = mock(HttpMockPipeline.class);
+        UniversalMockController scenarioController = new UniversalMockController(
+                ruleService, httpRuleService, requestLogService, templateService, pipeline);
+        HttpRule rule = HttpRule.builder()
+                .id("scenario-sse")
+                .matchKey("/scenario")
+                .method("GET")
+                .sseEnabled(false)
+                .responseId(42L)
+                .httpStatus(200)
+                .scenarioName("checkout")
+                .requiredScenarioState("Started")
+                .newScenarioState("Paid")
+                .build();
+        when(httpRuleService.findPreparedHttpRules("default", "/scenario", "GET"))
+                .thenReturn(List.of(rule));
+        when(pipeline.matchRule(anyList(), any(ConditionMatcher.PreparedBody.class),
+                isNull(), anyMap())).thenReturn(matched(rule));
+        when(pipeline.advanceScenarioState(rule)).thenReturn(
+                new AbstractMockPipeline.ScenarioTransition("checkout", "Started", "Paid", true));
+        when(ruleService.findResponseBodyById(42L)).thenReturn(Optional.of("{\"ok\":true}"));
+        when(templateService.hasTemplate(anyString())).thenReturn(false);
+
+        Object result = scenarioController.handleSseRequest(
+                sseGetRequest("/scenario"), httpServletResponse);
+
+        assertThat(result).isInstanceOf(ResponseEntity.class);
+        verify(pipeline).advanceScenarioState(rule);
+        verify(requestLogService).record(
+                eq("scenario-sse"), eq(Protocol.HTTP), eq("GET"), eq("/scenario"), eq(true),
+                anyInt(), eq("127.0.0.1"), anyString(), eq("default"),
+                isNull(), isNull(), eq(200), anyInt(), isNull(), eq("{\"ok\":true}"),
+                ArgumentMatchers.<HttpRule>anyList(), any(ConditionMatcher.PreparedBody.class),
+                isNull(), anyMap(), isNull(), eq("checkout"), eq("Started"), eq("Paid"));
     }
 
     private MatchResult<HttpRule> noMatch() {

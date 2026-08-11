@@ -36,7 +36,9 @@ class RuleApplyContractServiceTest {
                 "spec.tags", "spec.responseId", "spec.responseBody", "spec.responseDescription",
                 "spec.status", "spec.responseHeaders", "spec.delayMs", "spec.maxDelayMs",
                 "spec.sseEnabled", "spec.sseLoopEnabled", "spec.responseContentType",
-                "spec.action", "spec.forwardTargetMode", "spec.httpTargetConnectionId");
+                "spec.action", "spec.forwardTargetMode", "spec.httpTargetConnectionId",
+                "spec.faultType", "spec.scenarioName", "spec.requiredScenarioState",
+                "spec.newScenarioState");
 
         RuleApplySchema schema = contract.schema();
         Set<String> actual = schema.fields().stream()
@@ -66,6 +68,33 @@ class RuleApplyContractServiceTest {
         assertThatCode(() -> contract.validate(httpMock)).doesNotThrowAnyException();
         assertThatCode(() -> contract.validate(httpForward)).doesNotThrowAnyException();
         assertThatCode(() -> contract.validate(jms)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void acceptsFaultAndScenarioDocuments() {
+        RuleApplyDocument httpFault = base(Protocol.HTTP, "/fault")
+                .spec(RuleApplyDocument.Spec.builder()
+                        .protocol(Protocol.HTTP)
+                        .matchKey("/fault")
+                        .method("GET")
+                        .action("MOCK")
+                        .status(503)
+                        .faultType("EMPTY_RESPONSE")
+                        .scenarioName("checkout")
+                        .requiredScenarioState("Started")
+                        .newScenarioState("Failed")
+                        .build())
+                .build();
+        RuleApplyDocument jmsFault = base(Protocol.JMS, "ORDER.Q")
+                .spec(RuleApplyDocument.Spec.builder()
+                        .protocol(Protocol.JMS)
+                        .matchKey("ORDER.Q")
+                        .faultType("CONNECTION_RESET")
+                        .build())
+                .build();
+
+        assertThatCode(() -> contract.validate(httpFault)).doesNotThrowAnyException();
+        assertThatCode(() -> contract.validate(jmsFault)).doesNotThrowAnyException();
     }
 
     @Test
@@ -117,6 +146,17 @@ class RuleApplyContractServiceTest {
         delays.getSpec().setDelayMs(100L);
         delays.getSpec().setMaxDelayMs(50L);
         assertValidation(delays, "DELAY_RANGE", "spec.maxDelayMs");
+
+        RuleApplyDocument scenarioWithoutName = httpMock();
+        scenarioWithoutName.getSpec().setNewScenarioState("Paid");
+        assertValidation(scenarioWithoutName, "SCENARIO_NAME_REQUIRED", "spec.scenarioName");
+
+        RuleApplyDocument ambiguousFault = httpMock();
+        ambiguousFault.getSpec().setFaultType("CONNECTION_RESET");
+        ambiguousFault.getSpec().setResponseBody(null);
+        ambiguousFault.getSpec().setResponseHeaders(null);
+        ambiguousFault.getSpec().setAction("FORWARD");
+        assertValidation(ambiguousFault, "FAULT_ACTION_CONFLICT", "spec.action");
     }
 
     @Test

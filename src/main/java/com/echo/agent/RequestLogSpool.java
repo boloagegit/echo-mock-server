@@ -759,6 +759,7 @@ public class RequestLogSpool {
             int responseTimeMs, Integer matchTimeMs, String clientIp, LocalDateTime requestTime,
             String matchChain, String targetHost, Integer proxyStatus, String proxyError,
             Integer responseStatus, String requestBody, String responseBody,
+            String faultType, String scenarioName, String scenarioFromState, String scenarioToState,
             List<CandidateRecord> candidates, String analysisBody, String queryString,
             Map<String, String> headers, Map<String, Boolean> matchOutcomes,
             boolean analysisUsesRequestBody) {
@@ -770,6 +771,7 @@ public class RequestLogSpool {
                     task.isMatched(), task.getResponseTimeMs(), task.getMatchTimeMs(), task.getClientIp(),
                     task.getRequestTime(), task.getMatchChain(), task.getTargetHost(), task.getProxyStatus(),
                     task.getProxyError(), task.getResponseStatus(), task.getRequestBody(), task.getResponseBody(),
+                    task.getFaultType(), task.getScenarioName(), task.getScenarioFromState(), task.getScenarioToState(),
                     null, analysisUsesRequestBody ? null : task.getAnalysisBody(),
                     task.getQueryString(), task.getHeaders(), task.getMatchOutcomes(),
                     analysisUsesRequestBody);
@@ -784,6 +786,8 @@ public class RequestLogSpool {
                     .requestTime(requestTime).matchChain(matchChain).targetHost(targetHost)
                     .proxyStatus(proxyStatus).proxyError(proxyError).responseStatus(responseStatus)
                     .requestBody(requestBody).responseBody(responseBody)
+                    .faultType(faultType).scenarioName(scenarioName)
+                    .scenarioFromState(scenarioFromState).scenarioToState(scenarioToState)
                     .candidates(restoredCandidates == null ? List.of() : restoredCandidates.stream()
                             .map(CandidateRecord::toCandidate).toList())
                     .analysisBody(analysisUsesRequestBody ? requestBody : analysisBody)

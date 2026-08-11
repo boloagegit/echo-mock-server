@@ -47,6 +47,23 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
                 tags: {}
             }
         },
+        HTTP_FAULT: {
+            apiVersion: 'echo.mock/v1',
+            kind: 'Rule',
+            metadata: {},
+            spec: {
+                protocol: 'HTTP',
+                method: 'GET',
+                matchKey: '/api/example',
+                action: 'MOCK',
+                faultType: 'CONNECTION_RESET',
+                delayMs: 0,
+                priority: 0,
+                enabled: true,
+                protected: false,
+                tags: {}
+            }
+        },
         JMS: {
             apiVersion: 'echo.mock/v1',
             kind: 'Rule',
@@ -124,9 +141,10 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
 
     const createDocumentFromForm = ({ form, conditions, editing, responseBody }) => {
         const http = form.protocol === 'HTTP';
-        const action = http ? (form.action || 'MOCK') : null;
-        const forwarding = http && action === 'FORWARD';
-        const usesExistingResponse = !forwarding && form.responseMode === 'existing' && form.responseId;
+        const faulting = form.faultType && form.faultType !== 'NONE';
+        const action = http ? (faulting ? 'MOCK' : (form.action || 'MOCK')) : null;
+        const forwarding = http && !faulting && action === 'FORWARD';
+        const usesExistingResponse = !forwarding && !faulting && form.responseMode === 'existing' && form.responseId;
         const metadataId = form.id || editing?.id;
         const metadataVersion = form.version ?? editing?.version;
         const spec = {
@@ -143,19 +161,23 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
             protected: form.isProtected === true,
             tags: parseJsonObject(form.tags),
             responseId: usesExistingResponse ? Number(form.responseId) : null,
-            responseBody: forwarding ? null : parseResponseBody(responseBody),
-            responseDescription: forwarding ? null : (form.responseDescription || null),
+            responseBody: forwarding || faulting ? null : parseResponseBody(responseBody),
+            responseDescription: forwarding || faulting ? null : (form.responseDescription || null),
             status: http && !forwarding ? Number(form.status || 200) : null,
-            responseHeaders: http && !forwarding ? parseJsonObject(form.responseHeaders) : null,
+            responseHeaders: http && !forwarding && !faulting ? parseJsonObject(form.responseHeaders) : null,
             delayMs: Number(form.delayMs) || 0,
             maxDelayMs: form.maxDelayMs == null || form.maxDelayMs === '' ? null : Number(form.maxDelayMs),
-            sseEnabled: http && !forwarding ? form.sseEnabled === true : null,
-            sseLoopEnabled: http && !forwarding ? form.sseLoopEnabled === true : null,
-            responseContentType: http && !forwarding ? (form.responseContentType || null) : null,
+            sseEnabled: http && !forwarding && !faulting ? form.sseEnabled === true : null,
+            sseLoopEnabled: http && !forwarding && !faulting ? form.sseLoopEnabled === true : null,
+            responseContentType: http && !forwarding && !faulting ? (form.responseContentType || null) : null,
             action,
             forwardTargetMode: forwarding ? (form.forwardTargetMode || 'ORIGINAL_HOST') : null,
             httpTargetConnectionId: forwarding && form.forwardTargetMode === 'CONNECTION'
-                ? Number(form.httpTargetConnectionId) : null
+                ? Number(form.httpTargetConnectionId) : null,
+            faultType: form.faultType || 'NONE',
+            scenarioName: form.scenarioName || null,
+            requiredScenarioState: form.scenarioName ? (form.requiredScenarioState || null) : null,
+            newScenarioState: form.scenarioName ? (form.newScenarioState || null) : null
         };
         Object.keys(spec).forEach(key => {
             if (spec[key] == null) { delete spec[key]; }
@@ -211,6 +233,10 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
                 action: spec.action || 'MOCK',
                 forwardTargetMode: spec.forwardTargetMode || 'ORIGINAL_HOST',
                 httpTargetConnectionId: spec.httpTargetConnectionId ?? null,
+                faultType: spec.faultType || 'NONE',
+                scenarioName: spec.scenarioName || '',
+                requiredScenarioState: spec.requiredScenarioState || '',
+                newScenarioState: spec.newScenarioState || '',
                 bodyCondition: spec.bodyCondition || '',
                 queryCondition: spec.queryCondition || '',
                 headerCondition: spec.headerCondition || ''
@@ -270,6 +296,8 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
             INVALID_REGEX: 'rules.applyValidationRegex',
             SSE_LOOP_REQUIRES_SSE: 'rules.applyValidationSseLoop',
             CONTENT_TYPE_MISMATCH: 'rules.applyValidationContentType',
+            SCENARIO_NAME_REQUIRED: 'rules.applyValidationScenarioName',
+            FAULT_ACTION_CONFLICT: 'rules.applyValidationFaultAction',
             MAP_STRING_VALUE: 'rules.applyValidationStringMap',
             HEADER_NAME: 'rules.applyValidationHeaderName',
             HEADER_VALUE: 'rules.applyValidationHeaderValue',
@@ -353,18 +381,27 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         validateUnknownFields(errors, document);
         const protocol = document.spec.protocol;
         const action = document.spec.action || 'MOCK';
+        const faulting = document.spec.faultType && document.spec.faultType !== 'NONE';
+        const faultExcludedFields = new Set([
+            'spec.responseId', 'spec.responseBody', 'spec.responseDescription',
+            'spec.responseHeaders', 'spec.sseEnabled', 'spec.sseLoopEnabled',
+            'spec.responseContentType', 'spec.forwardTargetMode', 'spec.httpTargetConnectionId'
+        ]);
         const fields = ruleApplySchema.value?.fields || [];
         for (const field of fields) {
             const present = hasPath(document, field.path);
             const value = getPathValue(document, field.path);
             const protocolApplies = !field.protocols?.length || field.protocols.includes(protocol);
             const actionApplies = !field.actions?.length || field.actions.includes(action);
-            const applicable = protocolApplies && actionApplies;
-            const required = field.requiredWhen === 'ALWAYS'
+            const applicable = protocolApplies && actionApplies
+                && !(faulting && faultExcludedFields.has(field.path));
+            const required = applicable && !(faulting
+                && document.spec.faultType === 'CONNECTION_RESET'
+                && field.path === 'spec.status') && (field.requiredWhen === 'ALWAYS'
                 || (field.requiredWhen === 'HTTP' && protocol === 'HTTP')
                 || (field.requiredWhen === 'HTTP_FORWARD_CONNECTION'
                     && protocol === 'HTTP' && action === 'FORWARD'
-                    && document.spec.forwardTargetMode === 'CONNECTION');
+                    && document.spec.forwardTargetMode === 'CONNECTION'));
 
             if (present && !applicable) {
                 issue(errors, 'NOT_APPLICABLE', field.path, { context: protocol + (action ? ' / ' + action : '') });
@@ -410,6 +447,12 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         }
         if (spec.sseLoopEnabled === true && spec.sseEnabled !== true) {
             issue(errors, 'SSE_LOOP_REQUIRES_SSE', 'spec.sseLoopEnabled');
+        }
+        if ((spec.requiredScenarioState || spec.newScenarioState) && !spec.scenarioName) {
+            issue(errors, 'SCENARIO_NAME_REQUIRED', 'spec.scenarioName');
+        }
+        if (faulting && protocol === 'HTTP' && action === 'FORWARD') {
+            issue(errors, 'FAULT_ACTION_CONFLICT', 'spec.action');
         }
         if (spec.responseContentType && protocol === 'HTTP' && action === 'MOCK') {
             const expected = spec.sseEnabled === true ? 'SSE_EVENTS' : 'TEXT';

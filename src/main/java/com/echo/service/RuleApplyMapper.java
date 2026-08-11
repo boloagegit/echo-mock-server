@@ -51,6 +51,10 @@ public class RuleApplyMapper {
                 .action(spec.getAction())
                 .forwardTargetMode(spec.getForwardTargetMode())
                 .httpTargetConnectionId(spec.getHttpTargetConnectionId())
+                .faultType(spec.getFaultType())
+                .scenarioName(spec.getScenarioName())
+                .requiredScenarioState(spec.getRequiredScenarioState())
+                .newScenarioState(spec.getNewScenarioState())
                 .build();
     }
 
@@ -65,10 +69,16 @@ public class RuleApplyMapper {
                 .protectedRule(dto.getIsProtected())
                 .tags(readMap(dto.getTags()))
                 .delayMs(dto.getDelayMs())
-                .maxDelayMs(dto.getMaxDelayMs());
+                .maxDelayMs(dto.getMaxDelayMs())
+                .faultType(dto.getFaultType())
+                .scenarioName(dto.getScenarioName())
+                .requiredScenarioState(dto.getRequiredScenarioState())
+                .newScenarioState(dto.getNewScenarioState());
 
         boolean http = dto.getProtocol() == Protocol.HTTP;
-        boolean forwarding = http && HttpRuleAction.FORWARD.name().equalsIgnoreCase(dto.getAction());
+        boolean faulting = dto.getFaultType() != null && !"NONE".equalsIgnoreCase(dto.getFaultType());
+        boolean forwarding = http && !faulting
+                && HttpRuleAction.FORWARD.name().equalsIgnoreCase(dto.getAction());
         if (http) {
             spec.targetHost(dto.getTargetHost())
                     .method(dto.getMethod())
@@ -79,6 +89,10 @@ public class RuleApplyMapper {
         if (forwarding) {
             spec.forwardTargetMode(dto.getForwardTargetMode())
                     .httpTargetConnectionId(dto.getHttpTargetConnectionId());
+        } else if (faulting) {
+            if (http) {
+                spec.status(dto.getStatus());
+            }
         } else {
             spec.responseId(dto.getResponseId())
                     .responseBody(readBody(dto.getResponseBody()))

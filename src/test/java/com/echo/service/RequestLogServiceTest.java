@@ -383,6 +383,7 @@ class RequestLogServiceTest {
         void querySummary_shouldDelegateFilteringPaginationAndSortingToDb() {
             Object[] row = { 15L, "uuid-1", Protocol.HTTP, "GET", "/api", true,
                     12, 3, "127.0.0.1", LocalDateTime.now(), "host", null, null, 200,
+                    "EMPTY_RESPONSE", "order-flow", "Started", "Paid",
                     false, false, false };
             when(requestLogRepository.findSummaryPage(isNull(), eq(Protocol.HTTP), eq(true), eq("/api"),
                     eq(10L), any(Pageable.class)))
@@ -394,7 +395,13 @@ class RequestLogServiceTest {
                     .page(1).size(2).sortField("responseTimeMs").sortDirection("asc").build());
 
             assertThat(result.getResults()).singleElement()
-                    .extracting(item -> item.getLog().getId()).isEqualTo(15L);
+                    .satisfies(item -> {
+                        assertThat(item.getLog().getId()).isEqualTo(15L);
+                        assertThat(item.getLog().getFaultType()).isEqualTo("EMPTY_RESPONSE");
+                        assertThat(item.getLog().getScenarioName()).isEqualTo("order-flow");
+                        assertThat(item.getLog().getScenarioFromState()).isEqualTo("Started");
+                        assertThat(item.getLog().getScenarioToState()).isEqualTo("Paid");
+                    });
             assertThat(result.getTotalElements()).isEqualTo(5);
             assertThat(result.getTotalPages()).isEqualTo(3);
             verify(requestLogRepository).findSummaryPage(isNull(), eq(Protocol.HTTP), eq(true), eq("/api"),

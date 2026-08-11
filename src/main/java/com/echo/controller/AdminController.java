@@ -9,6 +9,7 @@ import com.echo.dto.RuleDto;
 import com.echo.dto.RulePageDto;
 import com.echo.dto.RuleGroupSummaryDto;
 import com.echo.entity.BaseRule;
+import com.echo.entity.FaultType;
 import com.echo.entity.Protocol;
 import com.echo.entity.Response;
 import com.echo.entity.ResponseContentType;
@@ -238,10 +239,9 @@ public class AdminController {
 
         // DB 檔案大小
         try {
-            Path dbFile = Paths.get("./mockdb.mv.db");
-            if (Files.exists(dbFile)) {
-                status.put("dbFileSize", Files.size(dbFile));
-            }
+            databaseFilePath(datasourceUrl)
+                    .filter(Files::exists)
+                    .ifPresent(path -> putDatabaseFileSize(status, path));
         } catch (Exception e) {
             // ignore
         }
@@ -629,6 +629,7 @@ public class AdminController {
 
     @PostMapping(value = "/rules/import-openapi/preview", consumes = "multipart/form-data")
     public ResponseEntity<?> previewOpenApiImport(@RequestParam("file") MultipartFile file) {
+        if (!bulkImportExportEnabled) return featureUnavailable();
         try {
             String content = new String(file.getBytes(), StandardCharsets.UTF_8);
             OpenApiImportService.OpenApiParseResult result = openApiImportService.parse(content);
@@ -654,6 +655,7 @@ public class AdminController {
     @PostMapping("/rules/import-openapi/confirm")
     @Transactional
     public ResponseEntity<?> confirmOpenApiImport(@RequestBody List<RuleDto> rules) {
+        if (!bulkImportExportEnabled) return featureUnavailable();
         int imported = 0;
         for (RuleDto dto : rules) {
             if (dto.getProtocol() == null) {
@@ -1157,6 +1159,19 @@ public class AdminController {
         }
     }
 
+    private void validateRuleFields(RuleDto dto) {
+        validateScenarioFields(dto);
+        String value = dto.getFaultType();
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        try {
+            FaultType.valueOf(value);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Unsupported faultType: " + value);
+        }
+    }
+
     private List<RuleDto> getAllRules() {
         return protocolHandlerRegistry.findAllRules().stream()
                 .map(r -> protocolHandlerRegistry.toDto(r, getResponse(r.getResponseId())))
@@ -1173,10 +1188,27 @@ public class AdminController {
     }
 
     private SaveResult saveRule(RuleDto dto) {
+        validateRuleFields(dto);
         Response response;
-        boolean forwarding = dto.getProtocol() == Protocol.HTTP
+        boolean faulting = dto.getFaultType() != null
+                && !dto.getFaultType().isBlank()
+                && !FaultType.NONE.name().equals(dto.getFaultType());
+        boolean forwarding = !faulting && dto.getProtocol() == Protocol.HTTP
                 && HttpRuleAction.FORWARD.name().equalsIgnoreCase(dto.getAction());
-        if (forwarding) {
+        if (faulting) {
+            if (dto.getProtocol() == Protocol.HTTP) {
+                dto.setAction(HttpRuleAction.MOCK.name());
+            }
+            dto.setResponseId(null);
+            dto.setResponseBody(null);
+            dto.setResponseDescription(null);
+            dto.setResponseHeaders(null);
+            dto.setForwardTargetMode(null);
+            dto.setHttpTargetConnectionId(null);
+            dto.setSseEnabled(false);
+            dto.setSseLoopEnabled(false);
+            response = null;
+        } else if (forwarding) {
             httpTargetConnectionService.ifPresent(service -> service.validateForwardSelection(
                     dto.getForwardTargetMode(), dto.getHttpTargetConnectionId()));
             dto.setResponseId(null);
@@ -1213,6 +1245,44 @@ public class AdminController {
         evictCacheByProtocol(dto.getProtocol());
         cacheInvalidationService.ifPresent(s -> s.publishInvalidation(dto.getProtocol()));
         return new SaveResult(saved, handler.toDto(saved, response, false));
+    }
+
+    static Optional<Path> databaseFilePath(String url) {
+        if (url != null && url.startsWith("jdbc:sqlite:")) {
+            String configuredPath = url.substring("jdbc:sqlite:".length());
+            int queryIndex = configuredPath.indexOf('?');
+            if (queryIndex >= 0) configuredPath = configuredPath.substring(0, queryIndex);
+            if (":memory:".equals(configuredPath)) {
+                return Optional.empty();
+            }
+            if (!configuredPath.isBlank()) {
+                return Optional.of(Paths.get(configuredPath));
+            }
+        }
+        if (url != null && url.startsWith("jdbc:h2:mem:")) {
+            return Optional.empty();
+        }
+        if (url != null && url.startsWith("jdbc:h2:file:")) {
+            String configuredPath = url.substring("jdbc:h2:file:".length());
+            int optionIndex = configuredPath.indexOf(';');
+            if (optionIndex >= 0) configuredPath = configuredPath.substring(0, optionIndex);
+            if (!configuredPath.isBlank()) {
+                return Optional.of(Paths.get(configuredPath.endsWith(".mv.db")
+                        ? configuredPath : configuredPath + ".mv.db"));
+            }
+        }
+        Path sqlite = Paths.get("./mockdb.sqlite");
+        if (Files.exists(sqlite)) return Optional.of(sqlite);
+        Path h2 = Paths.get("./mockdb.mv.db");
+        return Files.exists(h2) ? Optional.of(h2) : Optional.empty();
+    }
+
+    private static void putDatabaseFileSize(Map<String, Object> status, Path path) {
+        try {
+            status.put("dbFileSize", Files.size(path));
+        } catch (java.io.IOException ignored) {
+            // Status remains available even when the file disappears during inspection.
+        }
     }
 
     private Response getResponse(Long responseId) {

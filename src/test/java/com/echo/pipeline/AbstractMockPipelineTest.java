@@ -522,4 +522,44 @@ class AbstractMockPipelineTest {
             assertThat(result.isMatched()).isFalse();
         }
     }
+
+    @Nested
+    @DisplayName("Scenario state transition")
+    class ScenarioTransitionTests {
+
+        @Test
+        void advancesScenarioAndReturnsActualTransition() {
+            HttpRule rule = HttpRule.builder()
+                    .scenarioName("checkout")
+                    .requiredScenarioState("Started")
+                    .newScenarioState("Paid")
+                    .build();
+            when(scenarioService.getCurrentState("checkout")).thenReturn("Started");
+            when(scenarioService.advanceState("checkout", "Started", "Paid")).thenReturn(true);
+
+            AbstractMockPipeline.ScenarioTransition transition = pipeline.advanceScenarioState(rule);
+
+            assertThat(transition.name()).isEqualTo("checkout");
+            assertThat(transition.fromState()).isEqualTo("Started");
+            assertThat(transition.toState()).isEqualTo("Paid");
+            assertThat(transition.advanced()).isTrue();
+        }
+
+        @Test
+        void failedCompareAndSetDoesNotClaimAStateTransition() {
+            HttpRule rule = HttpRule.builder()
+                    .scenarioName("checkout")
+                    .requiredScenarioState("Started")
+                    .newScenarioState("Paid")
+                    .build();
+            when(scenarioService.getCurrentState("checkout")).thenReturn("Started");
+            when(scenarioService.advanceState("checkout", "Started", "Paid")).thenReturn(false);
+
+            AbstractMockPipeline.ScenarioTransition transition = pipeline.advanceScenarioState(rule);
+
+            assertThat(transition.fromState()).isEqualTo("Started");
+            assertThat(transition.toState()).isNull();
+            assertThat(transition.advanced()).isFalse();
+        }
+    }
 }

@@ -48,6 +48,8 @@ const SettingsPage = {
       },
       scenarios: [],
       scenariosLoading: false,
+      scenariosError: false,
+      scenarioResetting: null,
     };
   },
   mounted() {
@@ -263,41 +265,52 @@ const SettingsPage = {
     },
     async loadScenarios() {
       this.scenariosLoading = true;
+      this.scenariosError = false;
       try {
         const res = await apiCall('/api/admin/scenarios', {}, { silent: true });
         if (res && res.ok) {
           this.scenarios = await res.json();
+        } else {
+          this.scenariosError = true;
         }
       } catch (e) {
-        // best-effort
+        this.scenariosError = true;
       } finally {
         this.scenariosLoading = false;
       }
     },
     async resetScenario(name) {
+      if (!window.confirm(this.t('settings.scenarioResetConfirm', { name }))) { return; }
+      this.scenarioResetting = name;
       try {
         const res = await apiCall(`/api/admin/scenarios/${encodeURIComponent(name)}/reset`, { method: 'PUT' }, { silent: true });
         if (res && res.ok) {
-          _showToast(this.t('toast.scenarioResetSuccess'), 'success');
-          this.loadScenarios();
+          this.notify(this.t('toast.scenarioResetSuccess'));
+          await this.loadScenarios();
         } else {
-          _showToast(this.t('toast.scenarioResetFailed'), 'error');
+          this.notify(this.t('toast.scenarioResetFailed'), 'error');
         }
       } catch (e) {
-        _showToast(this.t('toast.scenarioResetFailed'), 'error');
+        this.notify(this.t('toast.scenarioResetFailed'), 'error');
+      } finally {
+        this.scenarioResetting = null;
       }
     },
     async resetAllScenarios() {
+      if (!window.confirm(this.t('settings.scenarioResetAllConfirm'))) { return; }
+      this.scenarioResetting = '*';
       try {
         const res = await apiCall('/api/admin/scenarios/reset', { method: 'PUT' }, { silent: true });
         if (res && res.ok) {
-          _showToast(this.t('toast.scenarioResetAllSuccess'), 'success');
-          this.loadScenarios();
+          this.notify(this.t('toast.scenarioResetAllSuccess'));
+          await this.loadScenarios();
         } else {
-          _showToast(this.t('toast.scenarioResetFailed'), 'error');
+          this.notify(this.t('toast.scenarioResetFailed'), 'error');
         }
       } catch (e) {
-        _showToast(this.t('toast.scenarioResetFailed'), 'error');
+        this.notify(this.t('toast.scenarioResetFailed'), 'error');
+      } finally {
+        this.scenarioResetting = null;
       }
     },
     async loadAgents() {
@@ -574,22 +587,26 @@ const SettingsPage = {
             <div class="settings-item"><span class="settings-label"></span><span class="settings-value sub-info"><i class="bi bi-info-circle"></i> {{t('settings.h2OnlyNote')}}</span></div>
           </div>
         </div>
-        <div class="settings-card">
-          <div class="settings-card-header"><i class="bi bi-diagram-3"></i> {{t('settings.scenarios')}}</div>
-          <div class="settings-card-body" v-if="scenarios.length">
-            <div class="settings-card-actions">
-              <button class="btn btn-sm btn-outline-danger" @click="resetAllScenarios"><i class="bi bi-arrow-counterclockwise"></i> {{t('settings.resetAllScenarios')}}</button>
-            </div>
-            <div v-for="s in scenarios" :key="s.name" class="settings-item">
-              <span class="settings-label settings-label-strong">{{s.name}}</span>
-              <span class="settings-value settings-value-actions">
-                <span>{{s.state}}</span>
-                <button class="btn btn-xs btn-secondary" @click="resetScenario(s.name)"><i class="bi bi-arrow-counterclockwise"></i> {{t('settings.resetScenario')}}</button>
-              </span>
-            </div>
+        <div class="settings-card settings-scenario-card">
+          <div class="settings-card-header settings-card-header-actions">
+            <span><i class="bi bi-diagram-3" aria-hidden="true"></i> {{t('settings.scenarios')}}</span>
+            <button v-if="scenarios.length && !scenariosError" type="button" class="btn btn-xs btn-secondary" @click="resetAllScenarios" :disabled="scenarioResetting!==null">
+              <i class="bi" :class="scenarioResetting==='*'?'bi-arrow-clockwise spin':'bi-arrow-counterclockwise'" aria-hidden="true"></i>{{t('settings.resetAllScenarios')}}
+            </button>
           </div>
-          <div class="settings-card-body" v-else>
-            <div class="settings-item"><span class="sub-info">{{t('settings.noScenarios')}}</span></div>
+          <div class="settings-card-body scenario-settings-body" aria-live="polite">
+            <div v-if="scenariosLoading" class="settings-state-row"><i class="bi bi-arrow-clockwise spin" aria-hidden="true"></i><span>{{t('settings.scenariosLoading')}}</span></div>
+            <div v-else-if="scenariosError" class="settings-state-row is-error"><i class="bi bi-exclamation-circle" aria-hidden="true"></i><span>{{t('settings.scenariosLoadFailed')}}</span><button type="button" class="btn btn-xs btn-secondary" @click="loadScenarios">{{t('common.retry')}}</button></div>
+            <div v-else-if="scenarios.length" class="scenario-list">
+              <div v-for="s in scenarios" :key="s.scenarioName" class="scenario-row">
+                <div class="scenario-identity"><strong>{{s.scenarioName}}</strong><span>{{t('settings.currentScenarioState')}}</span></div>
+                <code class="scenario-state">{{s.currentState}}</code>
+                <button type="button" class="btn btn-xs btn-secondary" @click="resetScenario(s.scenarioName)" :disabled="scenarioResetting!==null" :aria-label="t('settings.scenarioResetNamed', {name:s.scenarioName})">
+                  <i class="bi" :class="scenarioResetting===s.scenarioName?'bi-arrow-clockwise spin':'bi-arrow-counterclockwise'" aria-hidden="true"></i>{{t('settings.resetScenario')}}
+                </button>
+              </div>
+            </div>
+            <div v-else class="settings-state-row"><i class="bi bi-diagram-3" aria-hidden="true"></i><span>{{t('settings.noScenarios')}}</span></div>
           </div>
         </div>
         <div class="settings-card settings-danger-zone">
