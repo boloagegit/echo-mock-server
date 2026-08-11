@@ -10,21 +10,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Fault Injection — rules can simulate CONNECTION_RESET (close connection) or EMPTY_RESPONSE (return empty body) for HTTP and JMS
 - Faker Handlebars helpers — randomFirstName, randomLastName, randomFullName, randomEmail, randomPhoneNumber, randomCity, randomCountry, randomStreetAddress, randomInt
 - OpenAPI/Swagger import — upload spec to auto-generate mock rules with preview
+- Declarative rule authoring — create or update rules from a validated JSON document while retaining the form editor
+- Selectable HTTP and JMS forwarding profiles with application configuration fallback
+- Durable SQLite WAL request-log spool so transient primary-database failures delay records instead of silently dropping them
+- Verified H2-to-SQLite migration script with row counts, SHA-256 digests, integrity checks, and startup smoke tests
 - Agent Framework with Log Agent and match chain analysis (near-miss / shadowed detection)
 - Built-in account management — CRUD, enable/disable, password reset, self-registration
 - Error Prone compile-time static analysis
 - Request log body search and formatted preview with CodeMirror highlighting
+- One-click maintainer release workflow with validated CalVer tags, release artifacts, checksums, generated notes, and GHCR images
 
 ### Changed
 - Priority field semantics reversed to higher-number-higher-priority
 - Split HTTP/JMS rule caches for better isolation
 - Extract Template Method pipeline for HTTP/JMS mock processing
 - WebJar paths changed to version-agnostic (no more HTML edits on upgrade)
+- HTTP downstream forwarding now uses Reactor Netty with bounded response buffering, connection-pool limits, and explicit timeout budgets
+- Request-log persistence is handled by a single background consumer rather than flushing the primary database on request threads
+- Scenario and bulk import/export user interfaces are controlled by feature flags and are disabled by default
+- Desktop UI surfaces, rule editing, request details, settings, accessibility, and light/dark design tokens were aligned without changing the main navigation model
+- Spring Boot updated to 3.5.16 and the build aligned with the supported Gradle 8.14.5 line
 
 ### Fixed
 - SpotBugs mutable array warnings
 - Remember Me validity now uses dedicated `echo.remember-me.validity` setting
 - Rule matching performance — removed MatchChain/Detail construction in hot loop
+- Dynamic-path cache churn and unnecessary JSON/XML parsing in the matching hot path
+- Request-log spool startup when a macOS temporary-directory path resolves through a symbolic link
+- Backup filename handling for root-like paths reported by static analysis
+- Docker Compose health check now targets the administrative status endpoint
+- Docker health checks send the required JSON accept header and include the curl runtime dependency
 
 ## [v2026.04.02] — 2026-04-02
 

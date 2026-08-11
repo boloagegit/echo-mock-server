@@ -63,6 +63,7 @@ echo:
   env-label:                    # 環境別名（如 DEV、SIT、UAT），可用環境變數 ECHO_ENV_LABEL 覆蓋
   features:
     bulk-import-export-enabled: ${ECHO_BULK_IMPORT_EXPORT_ENABLED:false}  # 批次匯入／匯出，預設關閉
+    scenarios-enabled: ${ECHO_SCENARIOS_ENABLED:false}                    # Scenario 狀態機，預設關閉
   remember-me:
     key: ${ECHO_REMEMBER_ME_KEY:change-me-in-production}  # 必須透過環境變數覆蓋
     validity: 180d                # Remember Me cookie 有效期，可用環境變數 ECHO_REMEMBER_ME_VALIDITY 覆蓋

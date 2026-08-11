@@ -376,7 +376,9 @@ public class RequestLogSpool {
     private void initializeDatabase() {
         try {
             Path parent = spoolPath.getParent();
-            if (parent != null) {
+            // createDirectories treats a symlink-to-directory (for example macOS /tmp)
+            // as an existing non-directory on some JDK/file-system combinations.
+            if (parent != null && !Files.isDirectory(parent)) {
                 Files.createDirectories(parent);
             }
             try (Connection connection = openConnection(); Statement statement = connection.createStatement()) {

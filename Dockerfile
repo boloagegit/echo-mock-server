@@ -5,6 +5,11 @@ LABEL description="Enterprise Mock Server for HTTP and JMS"
 
 WORKDIR /app
 
+# HEALTHCHECK uses curl; install only the runtime package and remove apt metadata.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 # 建立非 root 用戶
 RUN useradd -m -s /bin/bash echo
 
@@ -26,6 +31,7 @@ ENV JAVA_OPTS="-Xms256m -Xmx512m \
 EXPOSE 8080 61616
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
-    CMD curl -f http://localhost:8080/api/admin/status || exit 1
+    CMD curl --fail --silent --show-error --header 'Accept: application/json' \
+        http://localhost:8080/api/admin/status || exit 1
 
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

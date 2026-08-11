@@ -77,7 +77,7 @@ class AdminControllerLogToRuleTest {
                 agentRegistry, cacheManager, issueReportService, Optional.empty(),
                 new RuleApplyMapper(new ObjectMapper()),
                 org.mockito.Mockito.mock(RuleApplyPersistenceSynchronizer.class),
-                new com.echo.service.RuleApplyContractService(), scenarioService
+                new com.echo.service.RuleApplyContractService(true), scenarioService
         );
         ReflectionTestUtils.setField(controller, "ldapEnabled", false);
         ReflectionTestUtils.setField(controller, "ldapUrl", "");

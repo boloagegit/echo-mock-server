@@ -11,6 +11,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.ByteArrayOutputStream;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -39,7 +40,8 @@ class HttpOutboundForwarderTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        InetAddress ipv4Loopback = InetAddress.getByAddress(new byte[]{127, 0, 0, 1});
+        server = HttpServer.create(new InetSocketAddress(ipv4Loopback, 0), 0);
         server.createContext("/base/orders", exchange -> {
             String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             requestSummary.set(exchange.getRequestMethod() + " " + exchange.getRequestURI()

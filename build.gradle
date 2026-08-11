@@ -1,29 +1,24 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.5.13'
+    id 'org.springframework.boot' version '3.5.16'
     id 'io.spring.dependency-management' version '1.1.7'
     id 'jacoco'
-    id 'com.github.spotbugs' version '6.5.1'
+    id 'com.github.spotbugs' version '6.5.10'
     id 'net.ltgt.errorprone' version '5.1.0'
 }
 
 group = 'com.echo'
-version = {
-    try {
-        def stdout = new ByteArrayOutputStream()
-        exec {
-            commandLine 'git', 'describe', '--tags', '--abbrev=0'
-            standardOutput = stdout
-            errorOutput = new ByteArrayOutputStream()
-            ignoreExitValue = true
-        }
-        def tag = stdout.toString().trim()
-        tag ? tag.replaceFirst(/^v/, '') : '0.0.0-SNAPSHOT'
-    } catch (Exception e) {
-        '0.0.0-SNAPSHOT'
-    }
-}()
+def releaseVersion = providers.gradleProperty('releaseVersion').orNull?.trim()
+def gitTag = providers.exec {
+    commandLine 'git', 'describe', '--tags', '--abbrev=0'
+    ignoreExitValue = true
+}.standardOutput.asText.get().trim()
+version = releaseVersion ?: (gitTag ? gitTag.replaceFirst(/^v/, '') : '0.0.0-SNAPSHOT')
 description = 'Enterprise-grade dual-protocol mock server for HTTP and JMS'
+
+// Required by the current SpotBugs/BCEL toolchain and backward-compatible with
+// Spring Boot 3.5's managed Commons Lang API.
+ext['commons-lang3.version'] = '3.20.0'
 
 java {
     toolchain {
@@ -37,6 +32,13 @@ configurations {
     }
 }
 
+// Spring's spring-jcl provides the Commons Logging API bridge. Keeping the
+// original commons-logging jar alongside it causes duplicate discovery and
+// can select the wrong implementation at runtime.
+configurations.configureEach {
+    exclude group: 'commons-logging', module: 'commons-logging'
+}
+
 repositories {
     mavenCentral()
 }
@@ -48,8 +50,8 @@ dependencies {
     // Reactive outbound HTTP only; the application server remains Spring MVC + Undertow.
     implementation 'io.projectreactor.netty:reactor-netty-http'
     // Keep Reactor's asynchronous DNS resolver accurate on both Apple Silicon and Intel Macs.
-    runtimeOnly(group: 'io.netty', name: 'netty-resolver-dns-native-macos', classifier: 'osx-aarch_64')
-    runtimeOnly(group: 'io.netty', name: 'netty-resolver-dns-native-macos', classifier: 'osx-x86_64')
+    runtimeOnly 'io.netty:netty-resolver-dns-native-macos::osx-aarch_64'
+    runtimeOnly 'io.netty:netty-resolver-dns-native-macos::osx-x86_64'
     implementation 'org.apache.httpcomponents.client5:httpclient5'
     modules {
         module('org.springframework.boot:spring-boot-starter-tomcat') {
@@ -60,7 +62,7 @@ dependencies {
     // Data & Persistence
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.hibernate.orm:hibernate-community-dialects'
-    runtimeOnly 'org.xerial:sqlite-jdbc:3.53.1.0'
+    runtimeOnly 'org.xerial:sqlite-jdbc:3.53.2.1'
     runtimeOnly 'com.h2database:h2'
     // runtimeOnly 'com.oracle.database.jdbc:ojdbc11'  # 未來支援 Oracle
 
@@ -72,16 +74,16 @@ dependencies {
     implementation 'com.github.ben-manes.caffeine:caffeine'
 
     // JSON Path for WireMock-style matching
-    implementation 'com.jayway.jsonpath:json-path:2.10.0'
+    implementation 'com.jayway.jsonpath:json-path:3.0.0'
 
     // Handlebars for Response Templating
-    implementation 'com.github.jknack:handlebars:4.5.0'
+    implementation 'com.github.jknack:handlebars:4.5.4'
 
     // Excel parsing with Apache POI
     implementation 'org.apache.poi:poi-ooxml:5.5.1'
 
     // OpenAPI/Swagger spec parsing
-    implementation 'io.swagger.parser.v3:swagger-parser:2.1.39'
+    implementation 'io.swagger.parser.v3:swagger-parser:2.1.46'
 
     // Security & LDAP
     implementation 'org.springframework.boot:spring-boot-starter-security'
@@ -97,27 +99,29 @@ dependencies {
 
     // WebJars for Intranet-friendly Frontend (NO CDN)
     implementation 'org.webjars:webjars-locator-core'
-    implementation 'org.webjars.npm:vue:3.5.31'
+    implementation 'org.webjars.npm:vue:3.5.41'
     implementation 'org.webjars.npm:bootstrap:5.3.8'
     implementation 'org.webjars.npm:bootstrap-icons:1.13.1'
-    implementation 'org.webjars.npm:codemirror:5.65.20'
+    // The UI uses CodeMirror 5's global API and /lib paths; 5.65.21 is the latest compatible release.
+    implementation 'org.webjars.npm:codemirror:5.65.21'
 
     // Feign (compileOnly - for MockRedirectClient reference code)
-    compileOnly 'io.github.openfeign:feign-core:13.12'
-    testImplementation 'io.github.openfeign:feign-core:13.12'
+    compileOnly 'io.github.openfeign:feign-core:13.13'
+    testImplementation 'io.github.openfeign:feign-core:13.13'
 
     // Lombok
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 
     // Error Prone (compile-time only, does NOT affect runtime)
+    // 2.42.0 is the newest Error Prone release that can run on the Java 17 toolchain.
     errorprone 'com.google.errorprone:error_prone_core:2.42.0'
 
     // Testing
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
-    testImplementation 'com.unboundid:unboundid-ldapsdk:7.0.4'
-    testImplementation 'net.jqwik:jqwik:1.9.3'
+    testImplementation 'com.unboundid:unboundid-ldapsdk:7.0.5'
+    testImplementation 'net.jqwik:jqwik:1.10.1'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -135,7 +139,7 @@ jacocoTestReport {
 }
 
 jacoco {
-    toolVersion = "0.8.14"
+    toolVersion = "0.8.15"
 }
 
 // SpotBugs 靜態分析
@@ -223,7 +227,7 @@ tasks.register('t') {
     dependsOn 'test'
 }
 
-task runJmsTest(type: JavaExec) {
+tasks.register('runJmsTest', JavaExec) {
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'com.echo.jms.ManualJmsTest'
 }

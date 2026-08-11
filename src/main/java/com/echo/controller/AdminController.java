@@ -15,7 +15,6 @@ import com.echo.entity.Response;
 import com.echo.entity.ResponseContentType;
 import com.echo.entity.RuleAuditLog;
 import com.echo.entity.HttpRuleAction;
-import com.echo.entity.Scenario;
 import com.echo.protocol.ProtocolHandler;
 import com.echo.protocol.ProtocolHandlerRegistry;
 import com.echo.entity.BuiltinUser;
@@ -177,6 +176,9 @@ public class AdminController {
     @Value("${echo.features.bulk-import-export-enabled:false}")
     private boolean bulkImportExportEnabled;
 
+    @Value("${echo.features.scenarios-enabled:false}")
+    private boolean scenariosEnabled;
+
     private final Instant startupTime = Instant.now();
 
     // ========== 系統狀態 ==========
@@ -193,6 +195,7 @@ public class AdminController {
         status.put("ldapEnabled", ldapEnabled);
         status.put("selfRegistrationEnabled", selfRegistrationEnabled);
         status.put("bulkImportExportEnabled", bulkImportExportEnabled);
+        status.put("scenariosEnabled", scenariosEnabled);
         status.put("ldapUrl", ldapUrl);
         status.put("httpAlias", httpAlias);
         status.put("jmsAlias", jmsAlias);
@@ -1069,18 +1072,21 @@ public class AdminController {
     // ========== Scenario 管理 ==========
 
     @GetMapping("/scenarios")
-    public ResponseEntity<List<Scenario>> listScenarios() {
+    public ResponseEntity<?> listScenarios() {
+        if (!scenariosEnabled) return featureUnavailable();
         return ResponseEntity.ok(scenarioService.findAll());
     }
 
     @PutMapping("/scenarios/{name}/reset")
     public ResponseEntity<?> resetScenario(@PathVariable String name) {
+        if (!scenariosEnabled) return featureUnavailable();
         scenarioService.resetScenario(name);
         return ResponseEntity.ok(Map.of("success", true, "scenarioName", name));
     }
 
     @PutMapping("/scenarios/reset")
     public ResponseEntity<?> resetAllScenarios() {
+        if (!scenariosEnabled) return featureUnavailable();
         scenarioService.resetAll();
         return ResponseEntity.ok(Map.of("success", true));
     }
@@ -1159,8 +1165,55 @@ public class AdminController {
         }
     }
 
+    /**
+     * 關閉 Scenario 功能時，不允許建立或變更 Scenario 設定。
+     * 既有規則的值可以原樣保存，避免使用者修改其他欄位時意外破壞既有行為。
+     */
+    private void validateScenarioFeature(RuleDto dto) {
+        if (scenariosEnabled) {
+            return;
+        }
+        BaseRule existing = dto.getId() == null
+                ? null
+                : protocolHandlerRegistry.findById(dto.getId()).orElse(null);
+        if (sameScenario(existing, dto)) {
+            return;
+        }
+        if (hasScenario(existing) || hasScenario(dto)) {
+            throw new IllegalArgumentException("SCENARIOS_DISABLED");
+        }
+    }
+
+    private boolean sameScenario(BaseRule existing, RuleDto dto) {
+        return existing != null
+                && Objects.equals(normalizeScenarioValue(existing.getScenarioName()), normalizeScenarioValue(dto.getScenarioName()))
+                && Objects.equals(normalizeScenarioValue(existing.getRequiredScenarioState()), normalizeScenarioValue(dto.getRequiredScenarioState()))
+                && Objects.equals(normalizeScenarioValue(existing.getNewScenarioState()), normalizeScenarioValue(dto.getNewScenarioState()));
+    }
+
+    private boolean hasScenario(BaseRule rule) {
+        return rule != null && (hasText(rule.getScenarioName())
+                || hasText(rule.getRequiredScenarioState())
+                || hasText(rule.getNewScenarioState()));
+    }
+
+    private boolean hasScenario(RuleDto dto) {
+        return hasText(dto.getScenarioName())
+                || hasText(dto.getRequiredScenarioState())
+                || hasText(dto.getNewScenarioState());
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private String normalizeScenarioValue(String value) {
+        return hasText(value) ? value.trim() : null;
+    }
+
     private void validateRuleFields(RuleDto dto) {
         validateScenarioFields(dto);
+        validateScenarioFeature(dto);
         String value = dto.getFaultType();
         if (value == null || value.isBlank()) {
             return;

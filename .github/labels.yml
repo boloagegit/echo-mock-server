@@ -1,5 +1,5 @@
 # Echo Mock Server - GitHub Labels
-# Synced by .github/workflows/manage-labels.yml
+# Canonical label catalog, synced by .github/workflows/manage-labels.yml
 
 # === Type ===
 - name: "bug"
@@ -21,6 +21,18 @@
 - name: "chore"
   color: "ededed"
   description: "Maintenance tasks, CI, dependencies"
+
+- name: "performance"
+  color: "f9d0c4"
+  description: "Runtime or build performance improvements"
+
+- name: "dependencies"
+  color: "0366d6"
+  description: "Dependency updates"
+
+- name: "breaking-change"
+  color: "b60205"
+  description: "Requires users to change configuration or integration code"
 
 # === Priority ===
 - name: "priority:high"
@@ -52,6 +64,18 @@
   color: "008672"
   description: "Extra attention is needed"
 
+- name: "status:needs-info"
+  color: "d4c5f9"
+  description: "More information is required before work can continue"
+
+- name: "status:stale"
+  color: "cfd3d7"
+  description: "No recent activity"
+
+- name: "ignore-for-release"
+  color: "ffffff"
+  description: "Exclude this change from generated release notes"
+
 # === Area ===
 - name: "area:http"
   color: "1d76db"
@@ -68,3 +92,19 @@
 - name: "area:api"
   color: "bfd4f2"
   description: "Backend REST API"
+
+- name: "area:backend"
+  color: "0052cc"
+  description: "Backend services, persistence, or configuration"
+
+- name: "area:security"
+  color: "ee0701"
+  description: "Authentication, authorization, or security"
+
+- name: "area:docker"
+  color: "0db7ed"
+  description: "Container image or Docker Compose"
+
+- name: "area:build"
+  color: "5319e7"
+  description: "Build system or GitHub automation"

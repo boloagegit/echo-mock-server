@@ -7,7 +7,7 @@ Thank you for your interest in contributing! Here's how to get started.
 ### Prerequisites
 
 - Java 17+
-- Gradle 8+ (or use the included `./gradlew` wrapper)
+- Gradle 8.14+ (or use the included `./gradlew` wrapper)
 
 ### Getting Started
 
@@ -77,6 +77,25 @@ src/main/java/com/echo/
 - Use GitHub Issues
 - Include steps to reproduce, expected vs actual behavior
 - Attach relevant logs or screenshots if possible
+
+## Maintainer Release Process
+
+Formal releases use the **Create Release** GitHub Actions workflow:
+
+1. Ensure `main` is green and contains every intended release change.
+2. Open **Actions → Create Release → Run workflow**.
+3. Enter a version without the `v` prefix, using `YYYY.MM.DD` or
+   `YYYY.MM.DD.N` for an additional release on the same day.
+4. Start the workflow from `main`.
+
+The workflow validates the version, runs the full build and static analysis,
+smoke-tests the JAR, builds the container, creates an annotated `v<version>`
+tag, publishes generated release notes with the JAR and SHA-256 checksum, and
+publishes the versioned, commit-SHA, and `latest` container tags to GHCR.
+
+The release version is supplied to Gradle as `-PreleaseVersion=<version>`.
+Ordinary local and CI builds continue to derive their version from the nearest
+Git tag, falling back to `0.0.0-SNAPSHOT` when no tag exists.
 
 ## License
 

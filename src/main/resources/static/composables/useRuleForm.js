@@ -787,6 +787,7 @@ const useRuleForm = (deps) => {
         watch(showModal, open => {
             if (open) {
                 Vue.nextTick(() => {
+                    if (form.value.faultType && form.value.faultType !== 'NONE') return;
                     if (form.value.responseMode === 'new' && !form.value.sseEnabled) {
                         renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; });
                     } else if (form.value.responseMode === 'existing' && form.value.responseId && !previewResponseLoading.value && !previewResponseLoadFailed.value) {
@@ -808,6 +809,7 @@ const useRuleForm = (deps) => {
             previewFormatted.value = false;
             previewEditing.value = false;
             previewEditBody.value = '';
+            if (form.value.faultType && form.value.faultType !== 'NONE') return;
             if (mode === 'new') {
                 if (!form.value.sseEnabled) {
                     renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; });
@@ -819,7 +821,7 @@ const useRuleForm = (deps) => {
         });
 
         watch(() => form.value.action, action => {
-            if (action !== 'FORWARD') {
+            if (action !== 'FORWARD' && (!form.value.faultType || form.value.faultType === 'NONE')) {
                 Vue.nextTick(() => {
                     if (form.value.responseMode === 'new' && !form.value.sseEnabled) {
                         renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; });
@@ -828,6 +830,19 @@ const useRuleForm = (deps) => {
                     }
                 });
             }
+        });
+
+        watch(() => form.value.faultType, (faultType, previousFaultType) => {
+            const faultEnabled = faultType && faultType !== 'NONE';
+            const faultWasEnabled = previousFaultType && previousFaultType !== 'NONE';
+            if (faultEnabled || !faultWasEnabled) return;
+            Vue.nextTick(() => {
+                if (form.value.responseMode === 'new' && !form.value.sseEnabled) {
+                    renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; });
+                } else if (form.value.responseMode === 'existing' && form.value.responseId && !previewResponseLoading.value && !previewResponseLoadFailed.value) {
+                    renderEditor('preview', previewEditorRef, previewResponseBody.value, !previewEditing.value);
+                }
+            });
         });
 
         watch(() => form.value.sseEnabled, (sse, oldSse) => {

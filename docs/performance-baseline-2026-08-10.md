@@ -1,10 +1,12 @@
 # Echo 轉發與模擬效能基準（2026-08-10）
 
+> 本文件是保留測試條件與決策背景的歷史工程紀錄，不代表目前預設設定。請以 `application.yml`、README 與最新同環境 A/B 結果為準；文件中的臨時路徑不是專案資料或部署位置。
+
 ## 基準範圍
 
 - 基準版本：優化前的本機整合版本
 - 測試目的：鎖定 LogAgent、HTTP Mock、HTTP 下游轉發與 JMS 規則匹配的優化前基準。
-- 資料隔離：使用 `/tmp/echo-baseline.zZnzmT` 下的臨時 H2 資料庫；停用備份與定期清理，未使用專案正式 `mockdb`。
+- 資料隔離：使用系統暫存目錄下的臨時 H2 資料庫；停用備份與定期清理，未使用專案正式 `mockdb`。
 - HTTP 下游：本機無輸出測試服務，監聽 `127.0.0.1:18081`。
 - JMS：獨立 H2 資料庫與 Embedded Artemis，監聽 `16161`；批次匯入只在此測試程序啟用。
 - 請求紀錄：維持正式預設的 database store、3,000 queue、50 batch、5 秒 flush、10,000 筆上限。
@@ -187,11 +189,11 @@ python3 scripts/bench-2000-jms.py http://127.0.0.1:18080
 - 指定 HTTP 連線轉發、狀態碼與 Request Log 一致。
 - 自簽 HTTPS `X-Original-Host` 實際轉發回傳 208 及正確 body，憑證與 hostname 驗證仍依預設跳過。
 
-本批不變更 Entity schema、`application.yml` 預設值、轉發規則語意或正式資料庫。效能測試輸出保留在 `/tmp/echo-forward-perf.1j9lXU`，完整 JMS E2E 輸出保留在 `/tmp/echo-forward-jms-e2e.a4fGCg`。
+本批不變更 Entity schema、`application.yml` 預設值、轉發規則語意或正式資料庫；所有效能與 JMS E2E 輸出都寫入系統暫存目錄，未加入版本控制。
 
 ## 第 4 批：HTTP 連線生命週期與可觀測性（未提交）
 
-這一批使用 `/tmp/echo-http-stability.AGeWqs` 下的臨時 H2，沒有讀寫正式 `mockdb`。下游仍為同一個 `127.0.0.1:18081` 無輸出服務，測試時關閉 JMS、備份與排程清理。
+這一批使用系統暫存目錄下的臨時 H2，沒有讀寫正式 `mockdb`。下游仍為本機無輸出測試服務，測試時關閉 JMS、備份與排程清理。
 
 實作內容：
 
@@ -246,7 +248,7 @@ python3 scripts/bench-2000-jms.py http://127.0.0.1:18080
 | 1 s 下游，200 並行 | 60.34 RPS，149 個非 2xx | 61.61 RPS，151 個非 2xx | +2.1%，pool 3 s 保護相同 |
 | 100 個 5 s 慢轉發干擾下的 Mock | 51,915.68 RPS，p99 1.00 ms | 48,768.74 RPS，p99 1.32 ms | -6.1%，仍保留 93.9% 隔離吞吐 |
 
-測試期間同機另有獨立 Gradle test worker 長時間使用 CPU，因此剔除明顯受干擾的 9k RPS 樣本；表格採用低系統負載、JIT 暖機後的相同命令結果，原始輸出在 `/tmp/echo-reactive-e2e.WXbQLx` 與 `/tmp/echo-reactive-perf.WaDxnZ`。
+測試期間同機另有獨立 Gradle test worker 長時間使用 CPU，因此剔除明顯受干擾的 9k RPS 樣本；表格採用低系統負載、JIT 暖機後的相同命令結果，原始輸出只保留在系統暫存目錄。
 
 正確性與穩定性驗證：
 
@@ -323,4 +325,4 @@ CPU 每秒 `ps` 取樣在各檔沒有一致優劣（Reactive 1,000 並行平均 
 
 這組 1,000 並行結果只證明小回應的 transport 容量，不代表可以同時緩衝 1,000 筆 10 MiB 回應。回應仍需完整組成 `String` 才能交給既有 MVC pipeline，因此部署值必須依實際 body 大小與 heap 一起估算；10 MiB 是單筆防線，不是全域記憶體保證。
 
-原始輸出位於 `/tmp/echo-reactive-hardening.PFM67E/current-results` 與 `/tmp/echo-reactive-hardening.PFM67E/blocking-results`；測試全程未讀寫正式 `mockdb`。
+原始輸出只保留在系統暫存目錄；測試全程未讀寫正式 `mockdb`。

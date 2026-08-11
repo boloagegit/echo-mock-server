@@ -16,6 +16,7 @@
 """
 
 import json
+import os
 import sys
 import time
 import urllib.request
@@ -27,7 +28,9 @@ from collections import defaultdict
 BASE_URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8080"
 DURATION = int(sys.argv[2]) if len(sys.argv) > 2 else 15
 CONCURRENCY = int(sys.argv[3]) if len(sys.argv) > 3 else 10
-AUTH = base64.b64encode(b"admin:admin").decode()
+AUTH = base64.b64encode(
+    f"{os.getenv('ECHO_TEST_USERNAME', 'admin')}:{os.getenv('ECHO_TEST_PASSWORD', 'admin')}".encode()
+).decode()
 HOST = "cache-iso.api.test"
 
 HTTP_PATH_COUNT = 20       # 建立幾條不同 path 的 HTTP 規則

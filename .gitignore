@@ -36,6 +36,9 @@ Desktop.ini
 *.trace.db
 *.lock.db
 mockdb.*
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 backups/
 
 # Logs
@@ -46,6 +49,7 @@ logs/
 # Runtime
 *.pid
 *.seed
+*.hprof
 hs_err_pid*
 replay_pid*
 
@@ -79,6 +83,8 @@ __pycache__/
 .Python
 *.egg-info/
 .env
+.env.*
+!.env.example
 .venv/
 venv/
 
@@ -94,11 +100,22 @@ venv/
 *.orig
 *.rej
 bundles/
+dist/
 data/
 libs/*.jar
 .jqwik-database
 AGENTS.md
 screenshots/
+/docs/screenshots/
 __files/
 mappings/
 /artifacts/
+/.impeccable/
+
+# Local credentials and certificates
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key

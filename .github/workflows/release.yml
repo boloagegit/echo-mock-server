@@ -2,7 +2,7 @@ name: Release
 
 on:
   release:
-    types: [created]
+    types: [published]
 
 permissions:
   contents: write
@@ -11,7 +11,7 @@ jobs:
   build-and-upload:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -32,24 +32,54 @@ jobs:
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
 
       - name: Prepare release artifacts
         run: |
           mkdir -p dist
-          JAR_NAME="echo-server-${{ steps.version.outputs.tag }}.jar"
+          JAR_NAME="echo-server-${{ steps.version.outputs.version }}.jar"
           cp build/libs/echo-server-*.jar "dist/${JAR_NAME}"
           cd dist
-          shasum -a 256 "${JAR_NAME}" > "${JAR_NAME}.sha256"
+          sha256sum "${JAR_NAME}" > "${JAR_NAME}.sha256"
 
       - name: Smoke test JAR
+        shell: bash
         run: |
-          timeout 15 java -jar dist/echo-server-*.jar \
+          set -euo pipefail
+          LOG="$RUNNER_TEMP/echo-release-smoke.log"
+          java -jar dist/echo-server-*.jar \
             --spring.profiles.active=dev \
-            --server.port=0 \
-            || [ $? -eq 124 ]
+            --server.port=18080 >"$LOG" 2>&1 &
+          APP_PID=$!
+          trap 'kill "$APP_PID" >/dev/null 2>&1 || true' EXIT
+
+          READY=false
+          for _ in $(seq 1 45); do
+            if ! kill -0 "$APP_PID" >/dev/null 2>&1; then
+              cat "$LOG"
+              echo "Application stopped before becoming healthy" >&2
+              exit 1
+            fi
+            if curl --fail --silent \
+              --header 'Accept: application/json' \
+              http://localhost:18080/api/admin/status >/dev/null; then
+              READY=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$READY" != true ]; then
+            cat "$LOG"
+            echo "Application did not become healthy within 45 seconds" >&2
+            exit 1
+          fi
+
+          kill "$APP_PID"
+          wait "$APP_PID" || true
+          trap - EXIT
 
       - name: Upload artifacts to Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/echo-server-*.jar

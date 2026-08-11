@@ -18,6 +18,7 @@ const RuleEditModal = {
         catchAllConfirmed: Boolean,
         showBodyConditionWarning: Boolean,
         jmsEnabled: Boolean,
+        scenarioEnabled: Boolean,
         httpLabel: String,
         jmsLabel: String,
         httpTargetConnections: Array,
@@ -199,23 +200,18 @@ const RuleEditModal = {
         const defaultHttpTargetConnection = Vue.computed(() =>
             (props.httpTargetConnections || []).find(target => target.defaultConnection && target.enabled)
         );
-        const lastFaultType = ref('CONNECTION_RESET');
         const resultMode = Vue.computed({
-            get: () => props.form.faultType && props.form.faultType !== 'NONE'
-                ? 'FAULT'
-                : (props.form.protocol === 'HTTP' && props.form.action === 'FORWARD' ? 'FORWARD' : 'MOCK'),
+            get: () => props.form.protocol === 'HTTP' && props.form.action === 'FORWARD' ? 'FORWARD' : 'MOCK',
             set: mode => {
-                if (mode === 'FAULT') {
-                    props.form.faultType = lastFaultType.value;
-                    props.form.action = 'MOCK';
-                    props.form.sseEnabled = false;
-                    return;
-                }
-                props.form.faultType = 'NONE';
+                const switchingFromForward = props.form.action === 'FORWARD';
                 props.form.action = mode === 'FORWARD' ? 'FORWARD' : 'MOCK';
+                if (mode === 'FORWARD' || switchingFromForward) props.form.faultType = 'NONE';
                 if (mode === 'FORWARD') props.form.sseEnabled = false;
             }
         });
+        const faultEnabled = Vue.computed(() =>
+            Boolean(props.form.faultType && props.form.faultType !== 'NONE')
+        );
         const faultBehaviorHint = Vue.computed(() => {
             const suffix = props.form.protocol === 'JMS' ? 'Jms' : 'Http';
             return props.form.faultType === 'EMPTY_RESPONSE'
@@ -226,6 +222,11 @@ const RuleEditModal = {
             props.form.protocol === 'JMS'
                 ? t('modal.faultSkipJmsReply')
                 : t('modal.faultConnectionReset')
+        );
+        const faultTypeLabel = Vue.computed(() =>
+            props.form.faultType === 'EMPTY_RESPONSE'
+                ? t('modal.faultEmptyResponse')
+                : faultConnectionResetLabel.value
         );
         const mockAdvancedOpen = ref(false);
         const forwardAdvancedOpen = ref(false);
@@ -241,11 +242,16 @@ const RuleEditModal = {
             return t('modal.noDelay');
         });
         const mockAdvancedSummary = Vue.computed(() => {
-            if (!hasAdvancedTiming() && responseHeaderCount.value === 0) {
+            if (!faultEnabled.value && !hasAdvancedTiming() && responseHeaderCount.value === 0) {
                 return props.form.protocol === 'HTTP' ? t('modal.advancedMockHint') : t('modal.advancedJmsHint');
             }
-            const parts = [delaySummary.value];
-            if (responseHeaderCount.value > 0) {
+            const parts = [];
+            if (faultEnabled.value) parts.push(t('modal.faultSummary', { type: faultTypeLabel.value }));
+            if (props.form.protocol === 'HTTP' && props.form.faultType === 'EMPTY_RESPONSE') {
+                parts.push(`HTTP ${props.form.status || '—'}`);
+            }
+            if (hasAdvancedTiming()) parts.push(delaySummary.value);
+            if (!faultEnabled.value && responseHeaderCount.value > 0) {
                 parts.push(t('modal.headerCountSummary', { count: responseHeaderCount.value }));
             }
             return parts.join(' · ');
@@ -255,7 +261,7 @@ const RuleEditModal = {
         );
         const syncAdvancedDisclosure = () => {
             const timingConfigured = hasAdvancedTiming();
-            mockAdvancedOpen.value = timingConfigured || responseHeaderCount.value > 0;
+            mockAdvancedOpen.value = faultEnabled.value || timingConfigured || responseHeaderCount.value > 0;
             forwardAdvancedOpen.value = timingConfigured;
         };
         const setMockAdvancedOpen = event => { mockAdvancedOpen.value = event.currentTarget.open; };
@@ -373,9 +379,12 @@ const RuleEditModal = {
             if (!open) responsePickerActiveIndex.value = -1;
         });
         Vue.watch(() => props.form.faultType, faultType => {
-            if (faultType && faultType !== 'NONE') lastFaultType.value = faultType;
+            if (!faultType || faultType === 'NONE') return;
+            props.form.action = 'MOCK';
+            props.form.sseEnabled = false;
+            mockAdvancedOpen.value = true;
         });
-        Vue.watch(() => [props.formErrors?.delayMs, props.formErrors?.maxDelayMs], errors => {
+        Vue.watch(() => [props.formErrors?.delayMs, props.formErrors?.maxDelayMs, props.formErrors?.status], errors => {
             if (!props.show || !errors.some(Boolean)) return;
             if (props.form.protocol === 'HTTP' && props.form.action === 'FORWARD') forwardAdvancedOpen.value = true;
             else mockAdvancedOpen.value = true;
@@ -395,7 +404,7 @@ const RuleEditModal = {
             responseOptionId, openResponsePicker, closeResponsePicker, selectResponse,
             onResponsePickerKeydown, onResponseSearchInput, clearResponseSearch, onDialogKeydown,
             selectedResponse, forwardSelection, availableHttpTargetConnections, defaultHttpTargetConnection,
-            resultMode, faultBehaviorHint, faultConnectionResetLabel,
+            resultMode, faultEnabled, faultBehaviorHint, faultConnectionResetLabel, faultTypeLabel,
             selectedForwardTarget, forwardSourceSummary, forwardTargetLabel, forwardDestinationUrl,
             mockAdvancedOpen, forwardAdvancedOpen, delaySummary, mockAdvancedSummary, forwardAdvancedSummary,
             setMockAdvancedOpen, setForwardAdvancedOpen,
@@ -465,7 +474,7 @@ const RuleEditModal = {
                                     <i class="bi" :class="form.isProtected?'bi-shield-fill-check':'bi-shield'" aria-hidden="true"></i>
                                     <span>{{form.isProtected ? t('modal.formProtected') : t('modal.formUnprotected')}}</span>
                                 </button>
-                                <button type="button" v-if="form.protocol==='HTTP' && form.action!=='FORWARD'" class="rule-state-control" :class="{'is-active':form.sseEnabled,'is-selected':form.sseEnabled}" :aria-pressed="form.sseEnabled" @click="form.sseEnabled=!form.sseEnabled">
+                                <button type="button" v-if="form.protocol==='HTTP' && form.action!=='FORWARD' && !faultEnabled" class="rule-state-control" :class="{'is-active':form.sseEnabled,'is-selected':form.sseEnabled}" :aria-pressed="form.sseEnabled" @click="form.sseEnabled=!form.sseEnabled">
                                     <i class="bi bi-broadcast" aria-hidden="true"></i>
                                     <span>SSE</span>
                                 </button>
@@ -568,7 +577,7 @@ const RuleEditModal = {
                         </div>
                     </div>
                     <!-- Scenario matching is a condition; the resulting state transition lives in the right pane. -->
-                    <div class="form-block scenario-match-settings">
+                    <div v-if="scenarioEnabled" class="form-block scenario-match-settings">
                         <div class="form-block-header"><i class="bi bi-diagram-3"></i> {{t('modal.scenarioMatch')}}</div>
                         <div class="scenario-match-fields">
                             <div class="form-group">
@@ -682,7 +691,7 @@ const RuleEditModal = {
                         </div>
                         <fieldset class="result-action-selector">
                             <legend class="visually-hidden">{{t('modal.ruleAction')}}</legend>
-                            <div class="rule-outcome-options" :class="{'has-three-options':form.protocol==='HTTP'}" role="radiogroup" :aria-label="t('modal.ruleAction')">
+                            <div class="rule-outcome-options" :class="{'is-single-option':form.protocol!=='HTTP'}" role="radiogroup" :aria-label="t('modal.ruleAction')">
                                 <label class="rule-outcome-option" :class="{'is-selected':resultMode==='MOCK'}">
                                     <input type="radio" name="ruleAction" value="MOCK" v-model="resultMode">
                                     <span class="rule-outcome-copy">
@@ -695,63 +704,10 @@ const RuleEditModal = {
                                         <strong><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>{{t('modal.forwardAction')}}</strong>
                                     </span>
                                 </label>
-                                <label class="rule-outcome-option" :class="{'is-selected':resultMode==='FAULT'}">
-                                    <input type="radio" name="ruleAction" value="FAULT" v-model="resultMode">
-                                    <span class="rule-outcome-copy">
-                                        <strong><i class="bi bi-lightning" aria-hidden="true"></i>{{t('modal.faultAction')}}</strong>
-                                    </span>
-                                </label>
                             </div>
                         </fieldset>
                     </div>
-                    <template v-if="resultMode==='FAULT'">
-                        <div class="form-block fault-result-settings">
-                            <div class="form-block-header"><i class="bi bi-lightning"></i> {{t('modal.faultSettings')}}</div>
-                            <div class="fault-result-grid">
-                                <div class="form-group">
-                                    <label class="form-label" for="ruleFaultType">{{t('modal.faultType')}}</label>
-                                    <select id="ruleFaultType" class="form-control" v-model="form.faultType">
-                                        <option value="CONNECTION_RESET">{{faultConnectionResetLabel}}</option>
-                                        <option value="EMPTY_RESPONSE">{{t('modal.faultEmptyResponse')}}</option>
-                                    </select>
-                                </div>
-                                <div v-if="form.protocol==='HTTP' && form.faultType==='EMPTY_RESPONSE'" class="form-group fault-status-field">
-                                    <label class="form-label" for="faultStatus">{{t('modal.statusCode')}}</label>
-                                    <input id="faultStatus" type="number" class="form-control" v-model.number="form.status" min="100" max="599" :class="{'is-invalid':formErrors.status}">
-                                    <div v-if="formErrors.status" class="invalid-feedback result-field-error">{{formErrors.status}}</div>
-                                </div>
-                            </div>
-                            <div class="page-context-note fault-behavior-note" role="note">
-                                <i class="bi bi-info-circle" aria-hidden="true"></i>
-                                <span>{{faultBehaviorHint}}</span>
-                            </div>
-                            <details class="result-advanced-disclosure" :open="mockAdvancedOpen" @toggle="setMockAdvancedOpen">
-                                <summary>
-                                    <span class="result-advanced-summary-icon"><i class="bi bi-sliders" aria-hidden="true"></i></span>
-                                    <span class="result-advanced-summary-copy"><strong>{{t('modal.advancedSettings')}}</strong><small>{{delaySummary}}</small></span>
-                                    <i class="bi bi-chevron-down result-advanced-chevron" aria-hidden="true"></i>
-                                </summary>
-                                <div class="result-advanced-content">
-                                    <div class="result-delay-group">
-                                        <span class="result-advanced-field-title">{{t('modal.responseDelay')}}</span>
-                                        <div class="result-delay-inputs">
-                                            <div class="form-group">
-                                                <label class="visually-hidden" for="faultDelayMs">{{t('modal.delayMinimum')}}</label>
-                                                <div class="input-affix" :class="{'is-invalid':formErrors.delayMs}"><span class="input-affix-prefix" aria-hidden="true">Min</span><input id="faultDelayMs" type="number" class="form-control" v-model.number="form.delayMs" min="0" placeholder="0"><span class="input-affix-postfix" aria-hidden="true">ms</span></div>
-                                                <div v-if="formErrors.delayMs" class="invalid-feedback result-field-error">{{formErrors.delayMs}}</div>
-                                            </div>
-                                            <div class="form-group">
-                                                <label class="visually-hidden" for="faultMaxDelayMs">{{t('modal.delayMaximum')}}</label>
-                                                <div class="input-affix" :class="{'is-invalid':formErrors.maxDelayMs}"><span class="input-affix-prefix" aria-hidden="true">Max</span><input id="faultMaxDelayMs" type="number" class="form-control" v-model.number="form.maxDelayMs" min="0" :placeholder="t('modal.delayFixedHint')"><span class="input-affix-postfix" aria-hidden="true">ms</span></div>
-                                                <div v-if="formErrors.maxDelayMs" class="invalid-feedback result-field-error">{{formErrors.maxDelayMs}}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </details>
-                        </div>
-                    </template>
-                    <template v-else-if="form.protocol==='HTTP' && form.action==='FORWARD'">
+                    <template v-if="form.protocol==='HTTP' && form.action==='FORWARD'">
                         <div class="form-block forward-settings">
                             <div class="form-block-header"><i class="bi bi-hdd-network"></i> {{t('modal.forwardTarget')}}</div>
                             <div class="form-group">
@@ -827,6 +783,7 @@ const RuleEditModal = {
                     <template v-else>
                     <!-- 回應模式 + 統一選擇器 -->
                     <div class="form-block mock-result-settings" data-tour="response">
+                        <template v-if="!faultEnabled">
                         <div class="response-mode-toolbar">
                             <span class="response-mode-label"><i class="bi bi-arrow-left-right" aria-hidden="true"></i>{{t('modal.responseMode')}}</span>
                             <div class="protocol-switch">
@@ -909,6 +866,7 @@ const RuleEditModal = {
                                 </div>
                             </div>
                         </div>
+                        </template>
                         <details class="result-advanced-disclosure" :open="mockAdvancedOpen" @toggle="setMockAdvancedOpen">
                             <summary>
                                 <span class="result-advanced-summary-icon"><i class="bi bi-sliders" aria-hidden="true"></i></span>
@@ -918,7 +876,32 @@ const RuleEditModal = {
                                 </span>
                                 <i class="bi bi-chevron-down result-advanced-chevron" aria-hidden="true"></i>
                             </summary>
-                            <div class="result-advanced-content" :class="{'has-headers':form.protocol==='HTTP'}">
+                            <div class="result-advanced-content" :class="{'has-headers':form.protocol==='HTTP' && !faultEnabled}">
+                                <div class="fault-advanced-section">
+                                    <span class="result-advanced-field-title">{{t('modal.faultType')}}</span>
+                                    <div class="fault-result-grid" :class="{'has-status':form.protocol==='HTTP' && form.faultType==='EMPTY_RESPONSE'}">
+                                        <div class="form-group">
+                                            <label class="visually-hidden" for="ruleFaultType">{{t('modal.faultType')}}</label>
+                                            <select id="ruleFaultType" class="form-control" v-model="form.faultType">
+                                                <option value="NONE">{{t('modal.faultNone')}}</option>
+                                                <option value="CONNECTION_RESET">{{faultConnectionResetLabel}}</option>
+                                                <option value="EMPTY_RESPONSE">{{t('modal.faultEmptyResponse')}}</option>
+                                            </select>
+                                        </div>
+                                        <div v-if="form.protocol==='HTTP' && form.faultType==='EMPTY_RESPONSE'" class="form-group fault-status-field">
+                                            <label class="visually-hidden" for="faultStatus">{{t('modal.statusCode')}}</label>
+                                            <div class="input-affix" :class="{'is-invalid':formErrors.status}">
+                                                <span class="input-affix-prefix">{{t('modal.statusCode')}}</span>
+                                                <input id="faultStatus" type="number" class="form-control" v-model.number="form.status" min="100" max="599">
+                                            </div>
+                                            <div v-if="formErrors.status" class="invalid-feedback result-field-error">{{formErrors.status}}</div>
+                                        </div>
+                                    </div>
+                                    <div v-if="faultEnabled" class="page-context-note fault-behavior-note" role="note" aria-live="polite">
+                                        <i class="bi bi-info-circle" aria-hidden="true"></i>
+                                        <span>{{faultBehaviorHint}} {{t('modal.faultResponseDiscardHint')}}</span>
+                                    </div>
+                                </div>
                                 <div class="result-delay-group">
                                     <span class="result-advanced-field-title">{{t('modal.responseDelay')}}</span>
                                     <div class="result-delay-inputs">
@@ -942,7 +925,7 @@ const RuleEditModal = {
                                         </div>
                                     </div>
                                 </div>
-                                <div v-if="form.protocol==='HTTP'" class="result-headers-field">
+                                <div v-if="form.protocol==='HTTP' && !faultEnabled" class="result-headers-field">
                                     <span class="result-advanced-field-title">{{t('modal.responseHeaders')}}</span>
                                     <div class="meta-tags">
                                         <span v-for="(v,k) in parseHeaders(form.responseHeaders)" :key="k" class="tag-chip">
@@ -961,7 +944,7 @@ const RuleEditModal = {
                         </details>
                     </div>
                     <!-- 回應內容 -->
-                    <div class="form-block response-content-block">
+                    <div v-if="!faultEnabled" class="form-block response-content-block">
                         <!-- SSE 表格編輯器 -->
                         <div v-if="form.sseEnabled && form.protocol==='HTTP'" class="sse-editor-wrap rule-sse-editor">
                             <div class="rule-sse-toolbar">
@@ -1081,7 +1064,7 @@ const RuleEditModal = {
                         </div>
                     </div>
                     </template>
-                    <div v-if="form.scenarioName" class="form-block result-scenario-transition">
+                    <div v-if="scenarioEnabled && form.scenarioName" class="form-block result-scenario-transition">
                         <div class="form-block-header"><i class="bi bi-arrow-repeat"></i> {{t('modal.scenarioTransition')}}</div>
                         <div class="scenario-transition-row">
                             <div class="scenario-transition-source">

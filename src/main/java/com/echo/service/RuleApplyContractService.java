@@ -3,6 +3,7 @@ package com.echo.service;
 import com.echo.dto.RuleApplyDocument;
 import com.echo.dto.RuleApplySchema;
 import com.echo.entity.Protocol;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
 
@@ -34,6 +35,8 @@ public class RuleApplyContractService {
     private static final List<String> HTTP_ONLY = List.of("HTTP");
     private static final List<String> MOCK_ONLY = List.of("MOCK");
     private static final List<String> FORWARD_ONLY = List.of("FORWARD");
+    private static final Set<String> SCENARIO_FIELDS = Set.of(
+            "spec.scenarioName", "spec.requiredScenarioState", "spec.newScenarioState");
 
     private final RuleApplySchema schema = new RuleApplySchema(
             RuleApplyDocument.API_VERSION,
@@ -74,8 +77,19 @@ public class RuleApplyContractService {
                     field("spec.newScenarioState", "string", null, null, null, 100, null, null, null, null, null, false)
             ));
 
+    private final RuleApplySchema exposedSchema;
+
+    public RuleApplyContractService(
+            @Value("${echo.features.scenarios-enabled:false}") boolean scenariosEnabled) {
+        exposedSchema = scenariosEnabled
+                ? schema
+                : new RuleApplySchema(schema.apiVersion(), schema.kind(), schema.fields().stream()
+                        .filter(field -> !SCENARIO_FIELDS.contains(field.path()))
+                        .toList());
+    }
+
     public RuleApplySchema schema() {
-        return schema;
+        return exposedSchema;
     }
 
     public void validate(RuleApplyDocument document) {

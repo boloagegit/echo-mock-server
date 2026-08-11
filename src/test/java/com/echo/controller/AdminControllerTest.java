@@ -91,7 +91,7 @@ class AdminControllerTest {
 
     @BeforeEach
     void setUp() {
-        controller = new AdminController(ruleService, ruleQueryService, protocolHandlerRegistry, responseService, requestLogService, Optional.of(ruleAuditService), Optional.empty(), Optional.empty(), excelImportService, openApiImportService, Optional.empty(), responseContentValidatorRegistry, builtinUserRepository, agentRegistry, cacheManager, issueReportService, Optional.empty(), new RuleApplyMapper(new ObjectMapper()), mock(RuleApplyPersistenceSynchronizer.class), new com.echo.service.RuleApplyContractService(), scenarioService);
+        controller = new AdminController(ruleService, ruleQueryService, protocolHandlerRegistry, responseService, requestLogService, Optional.of(ruleAuditService), Optional.empty(), Optional.empty(), excelImportService, openApiImportService, Optional.empty(), responseContentValidatorRegistry, builtinUserRepository, agentRegistry, cacheManager, issueReportService, Optional.empty(), new RuleApplyMapper(new ObjectMapper()), mock(RuleApplyPersistenceSynchronizer.class), new com.echo.service.RuleApplyContractService(true), scenarioService);
         ReflectionTestUtils.setField(controller, "ldapEnabled", false);
         ReflectionTestUtils.setField(controller, "ldapUrl", "");
         ReflectionTestUtils.setField(controller, "sessionTimeout", "180d");
@@ -101,6 +101,7 @@ class AdminControllerTest {
         ReflectionTestUtils.setField(controller, "httpAlias", "HTTP");
         ReflectionTestUtils.setField(controller, "jmsAlias", "JMS");
         ReflectionTestUtils.setField(controller, "bulkImportExportEnabled", true);
+        ReflectionTestUtils.setField(controller, "scenariosEnabled", true);
         // 預設 HTTP 啟用，JMS 停用
         lenient().when(protocolHandlerRegistry.isEnabled(Protocol.HTTP)).thenReturn(true);
         lenient().when(protocolHandlerRegistry.isEnabled(Protocol.JMS)).thenReturn(false);
@@ -114,6 +115,17 @@ class AdminControllerTest {
         assertThat(response.getBody()).containsKey("serverPort");
         assertThat(response.getBody().get("isLoggedIn")).isEqualTo(false);
         assertThat(response.getBody().get("bulkImportExportEnabled")).isEqualTo(true);
+        assertThat(response.getBody().get("scenariosEnabled")).isEqualTo(true);
+    }
+
+    @Test
+    void scenarios_shouldBeUnavailableWhenFeatureIsDisabled() {
+        ReflectionTestUtils.setField(controller, "scenariosEnabled", false);
+
+        assertThat(controller.listScenarios().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(controller.resetScenario("checkout").getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(controller.resetAllScenarios().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        verifyNoInteractions(scenarioService);
     }
 
     @Test
@@ -284,6 +296,21 @@ class AdminControllerTest {
     }
 
     @Test
+    void createRule_shouldRejectScenarioFieldsWhenFeatureIsDisabled() {
+        ReflectionTestUtils.setField(controller, "scenariosEnabled", false);
+        RuleDto rule = RuleDto.builder()
+                .protocol(Protocol.HTTP)
+                .matchKey("/checkout")
+                .scenarioName("checkout")
+                .requiredScenarioState("Started")
+                .build();
+
+        assertThatThrownBy(() -> controller.createRule(rule))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("SCENARIOS_DISABLED");
+    }
+
+    @Test
     void createFaultRule_shouldNotCreateUnusedResponseOrForward() {
         RuleDto rule = RuleDto.builder()
                 .protocol(Protocol.HTTP)
@@ -333,6 +360,47 @@ class AdminControllerTest {
         var response = controller.updateRule("uuid-1", updated);
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void updateRule_shouldPreserveUnchangedLegacyScenarioWhenFeatureIsDisabled() {
+        ReflectionTestUtils.setField(controller, "scenariosEnabled", false);
+        HttpRule existing = HttpRule.builder()
+                .id("uuid-1").version(0L).responseId(1L)
+                .scenarioName("checkout").requiredScenarioState("Started").newScenarioState("Paid")
+                .build();
+        RuleDto updated = RuleDto.builder()
+                .protocol(Protocol.HTTP).matchKey("/updated").responseId(1L)
+                .scenarioName("checkout").requiredScenarioState("Started").newScenarioState("Paid")
+                .build();
+        doReturn(Optional.of(existing)).when(protocolHandlerRegistry).findById("uuid-1");
+        when(responseService.findById(1L)).thenReturn(Optional.of(com.echo.entity.Response.builder().id(1L).build()));
+        var handler = mock(com.echo.protocol.ProtocolHandler.class);
+        when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
+        HttpRule savedRule = HttpRule.builder().id("uuid-1").matchKey("/updated").responseId(1L).build();
+        when(handler.fromDto(any())).thenReturn(savedRule);
+        when(handler.save(any())).thenReturn(savedRule);
+        when(handler.toDto(any(), any(), anyBoolean())).thenReturn(updated);
+
+        assertThat(controller.updateRule("uuid-1", updated).getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void updateRule_shouldRejectLegacyScenarioChangesWhenFeatureIsDisabled() {
+        ReflectionTestUtils.setField(controller, "scenariosEnabled", false);
+        HttpRule existing = HttpRule.builder()
+                .id("uuid-1").version(0L)
+                .scenarioName("checkout").requiredScenarioState("Started").newScenarioState("Paid")
+                .build();
+        RuleDto updated = RuleDto.builder()
+                .protocol(Protocol.HTTP).matchKey("/updated")
+                .scenarioName("checkout").requiredScenarioState("Started").newScenarioState("Cancelled")
+                .build();
+        doReturn(Optional.of(existing)).when(protocolHandlerRegistry).findById("uuid-1");
+
+        assertThatThrownBy(() -> controller.updateRule("uuid-1", updated))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("SCENARIOS_DISABLED");
     }
 
     @Test

@@ -13,13 +13,16 @@ JMS 匹配效能測試：2000 條規則 + 20 欄位 XML body
 """
 
 import json
+import os
 import sys
 import time
 import urllib.request
 import base64
 
 BASE_URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8080"
-AUTH = base64.b64encode(b"admin:admin").decode()
+AUTH = base64.b64encode(
+    f"{os.getenv('ECHO_TEST_USERNAME', 'admin')}:{os.getenv('ECHO_TEST_PASSWORD', 'admin')}".encode()
+).decode()
 QUEUE = "ECHO.REQUEST"
 
 

@@ -22,8 +22,17 @@ class RuleApplyContractServiceTest {
 
     @BeforeEach
     void setUp() {
-        contract = new RuleApplyContractService();
+        contract = new RuleApplyContractService(true);
         objectMapper = new ObjectMapper();
+    }
+
+    @Test
+    void schemaOmitsScenarioFieldsWhenFeatureIsDisabled() {
+        RuleApplyContractService disabledContract = new RuleApplyContractService(false);
+
+        assertThat(disabledContract.schema().fields())
+                .extracting(RuleApplySchema.Field::path)
+                .doesNotContain("spec.scenarioName", "spec.requiredScenarioState", "spec.newScenarioState");
     }
 
     @Test

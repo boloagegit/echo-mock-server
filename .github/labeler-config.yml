@@ -1,76 +1,80 @@
 version: 1
 labels:
   # --- Conventional Commit title matching ---
-  - label: "Bugfix"
+  - label: "bug"
     title: '^fix(\([^)]*\))?:|^fix:.*'
 
   - label: "enhancement"
     title: '^feat(\([^)]*\))?:|^feat:.*'
 
-  - label: "build"
+  - label: "area:build"
     title: '^build(\([^)]*\))?:|^build:.*'
 
   - label: "chore"
     title: '^chore(\([^)]*\))?:|^chore:.*'
 
-  - label: "ci"
+  - label: "area:build"
     title: '^ci(\([^)]*\))?:|^ci:.*'
 
-  - label: "perf"
+  - label: "performance"
     title: '^perf(\([^)]*\))?:|^perf:.*'
 
   - label: "refactor"
     title: '^refactor(\([^)]*\))?:|^refactor:.*'
 
-  - label: "revert"
+  - label: "chore"
     title: '^revert(\([^)]*\))?:|^revert:.*'
 
-  - label: "style"
+  - label: "refactor"
     title: '^style(\([^)]*\))?:|^style:.*'
 
-  - label: "Documentation"
+  - label: "documentation"
     title: '^docs(\([^)]*\))?:|^docs:.*'
 
   - label: "dependencies"
     title: '^deps(\([^)]*\))?:|^deps:.*'
 
   # --- File path matching ---
-  - label: "Java"
+  - label: "area:backend"
     files:
       - 'src/main/java/.*.java'
 
-  - label: "Back End"
+  - label: "area:backend"
     files:
       - 'src/main/java/com/echo/controller/.*'
       - 'src/main/java/com/echo/service/.*'
       - 'src/main/java/com/echo/config/.*'
       - 'src/main/resources/.*'
 
-  - label: "JMS"
+  - label: "area:jms"
     files:
       - 'src/main/java/com/echo/jms/.*'
 
-  - label: "Security"
+  - label: "area:security"
     files:
       - 'src/main/java/com/echo/config/Security.*'
 
-  - label: "Docker"
+  - label: "area:docker"
     files:
       - 'Dockerfile'
       - 'docker-compose.yml'
 
-  - label: "Documentation"
+  - label: "documentation"
     files:
       - '.*.md'
 
-  - label: "ci"
+  - label: "area:build"
     files:
       - '.github/.*'
 
-  - label: "Gradle"
+  - label: "area:build"
     files:
       - 'gradle/.*'
       - 'gradlew'
       - 'gradlew.bat'
       - 'build.gradle'
       - 'settings.gradle'
+
+  - label: "area:ui"
+    files:
+      - 'src/main/resources/static/.*'

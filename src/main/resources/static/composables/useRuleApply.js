@@ -1,7 +1,7 @@
 /**
  * useRuleApply - 宣告式規則設定流程與表單草稿轉換。
  */
-const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRules, markRulesDirty }) => {
+const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRules, markRulesDirty, scenariosEnabled }) => {
     const ruleApplyText = Vue.ref('');
     const ruleApplyLoading = Vue.ref(false);
     const ruleApplySaving = Vue.ref(false);
@@ -319,12 +319,17 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
     };
 
     const validateUnknownFields = (errors, document) => {
+        const specFields = new Set((ruleApplySchema.value?.fields || [])
+            .filter(field => field.path.startsWith('spec.'))
+            .map(field => field.path.substring(5)));
+        // 關閉功能後，既有 Scenario 規則仍可原樣保存；伺服器會拒絕任何狀態欄位變更。
+        if (!scenariosEnabled?.value && document.metadata?.id) {
+            ['scenarioName', 'requiredScenarioState', 'newScenarioState'].forEach(field => specFields.add(field));
+        }
         const allowed = {
             document: new Set(['apiVersion', 'kind', 'metadata', 'spec']),
             metadata: new Set(['id', 'resourceVersion']),
-            spec: new Set((ruleApplySchema.value?.fields || [])
-                .filter(field => field.path.startsWith('spec.'))
-                .map(field => field.path.substring(5)))
+            spec: specFields
         };
         const inspect = (value, path, keys) => {
             if (!value || typeof value !== 'object' || Array.isArray(value)) { return; }

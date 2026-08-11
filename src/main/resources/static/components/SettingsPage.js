@@ -55,16 +55,24 @@ const SettingsPage = {
   mounted() {
     this.loadAgents();
     if (this.isAdmin) { this.loadJmsTargets(); this.loadHttpTargets(); }
-    this.loadScenarios();
+    if (this.scenarioEnabled) { this.loadScenarios(); }
   },
   watch: {
     status() {
       this.loadAgents();
       if (this.isAdmin) { this.loadJmsTargets(); this.loadHttpTargets(); }
-      this.loadScenarios();
+      if (this.scenarioEnabled) {
+        this.loadScenarios();
+      } else {
+        this.scenarios = [];
+        this.scenariosError = false;
+      }
     }
   },
   computed: {
+    scenarioEnabled() {
+      return this.status?.scenariosEnabled === true;
+    },
     canSaveHttpTarget() {
       return Boolean(this.httpTargetForm.name.trim() && this.httpTargetForm.baseUrl.trim());
     },
@@ -264,6 +272,7 @@ const SettingsPage = {
       }
     },
     async loadScenarios() {
+      if (!this.scenarioEnabled) { return; }
       this.scenariosLoading = true;
       this.scenariosError = false;
       try {
@@ -587,7 +596,7 @@ const SettingsPage = {
             <div class="settings-item"><span class="settings-label"></span><span class="settings-value sub-info"><i class="bi bi-info-circle"></i> {{t('settings.h2OnlyNote')}}</span></div>
           </div>
         </div>
-        <div class="settings-card settings-scenario-card">
+        <div v-if="scenarioEnabled" class="settings-card settings-scenario-card">
           <div class="settings-card-header settings-card-header-actions">
             <span><i class="bi bi-diagram-3" aria-hidden="true"></i> {{t('settings.scenarios')}}</span>
             <button v-if="scenarios.length && !scenariosError" type="button" class="btn btn-xs btn-secondary" @click="resetAllScenarios" :disabled="scenarioResetting!==null">

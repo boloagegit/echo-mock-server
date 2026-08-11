@@ -19,6 +19,7 @@ const StatsPage = {
     totalPages: Number,
     logFilterChips: Array,
     jmsEnabled: Boolean,
+    scenarioEnabled: Boolean,
     httpLabel: String,
     jmsLabel: String,
     rules: Array,
@@ -712,8 +713,8 @@ const StatsPage = {
                 <div><dt>{{t('stats.detailDuration')}}</dt><dd class="tabular-nums">{{selectedLogItem.log.responseTimeMs}} ms</dd></div>
                 <div v-if="selectedLogItem.log.responseStatus != null"><dt>{{t('stats.detailResponseStatus')}}</dt><dd><span class="log-status-code" :class="selectedLogItem.log.responseStatus<400?'is-success':selectedLogItem.log.responseStatus<500?'is-warning':'is-danger'">{{selectedLogItem.log.responseStatus}}</span></dd></div>
                 <div v-if="selectedLogItem.log.faultType && selectedLogItem.log.faultType !== 'NONE'"><dt>{{t('stats.detailFaultType')}}</dt><dd><span class="log-outcome log-outcome-warning"><i class="bi bi-lightning" aria-hidden="true"></i>{{t('rules.fault_' + selectedLogItem.log.faultType)}}</span></dd></div>
-                <div v-if="selectedLogItem.log.scenarioName"><dt>{{t('stats.detailScenario')}}</dt><dd>{{selectedLogItem.log.scenarioName}}</dd></div>
-                <div v-if="selectedLogItem.log.scenarioToState"><dt>{{t('stats.detailScenarioTransition')}}</dt><dd class="log-scenario-transition"><span>{{selectedLogItem.log.scenarioFromState || 'Started'}}</span><i class="bi bi-arrow-right" aria-hidden="true"></i><strong>{{selectedLogItem.log.scenarioToState}}</strong></dd></div>
+                <div v-if="scenarioEnabled && selectedLogItem.log.scenarioName"><dt>{{t('stats.detailScenario')}}</dt><dd>{{selectedLogItem.log.scenarioName}}</dd></div>
+                <div v-if="scenarioEnabled && selectedLogItem.log.scenarioToState"><dt>{{t('stats.detailScenarioTransition')}}</dt><dd class="log-scenario-transition"><span>{{selectedLogItem.log.scenarioFromState || 'Started'}}</span><i class="bi bi-arrow-right" aria-hidden="true"></i><strong>{{selectedLogItem.log.scenarioToState}}</strong></dd></div>
                 <div v-if="selectedLogItem.log.matchTimeMs != null"><dt>{{t('stats.detailMatchTime')}}</dt><dd class="tabular-nums">{{selectedLogItem.log.matchTimeMs}} ms</dd></div>
                 <div v-if="selectedLogItem.log.matchTimeMs != null && selectedLogItem.log.responseTimeMs > selectedLogItem.log.matchTimeMs"><dt>{{t('stats.detailOtherTime')}}</dt><dd class="tabular-nums">{{selectedLogItem.log.responseTimeMs - selectedLogItem.log.matchTimeMs}} ms</dd></div>
                 <div v-if="selectedLogItem.log.proxyStatus != null"><dt>{{t('stats.detailProxyStatus')}}</dt><dd><span class="log-status-code" :class="selectedLogItem.log.proxyStatus<400?'is-success':selectedLogItem.log.proxyStatus<500?'is-warning':'is-danger'">{{selectedLogItem.log.proxyStatus}}</span></dd></div>

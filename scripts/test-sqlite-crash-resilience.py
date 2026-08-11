@@ -29,7 +29,11 @@ import urllib.request
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 BASE_URL = ""
-AUTH = base64.b64encode(b"admin:admin").decode()
+TEST_USERNAME = os.getenv("ECHO_TEST_USERNAME", "admin")
+TEST_PASSWORD = os.getenv("ECHO_TEST_PASSWORD", "admin")
+AUTH = base64.b64encode(
+    f"{TEST_USERNAME}:{TEST_PASSWORD}".encode()
+).decode()
 DB_FILE = Path()
 SPOOL_FILE = Path()
 JAR_FILE = Path()
@@ -96,6 +100,8 @@ def start_server():
             f"--spring.datasource.url=jdbc:sqlite:{normalized_db}?journal_mode=WAL&busy_timeout=10000&synchronous=NORMAL&foreign_keys=ON",
             f"--echo.request-log.durable.spool-path={SPOOL_FILE}",
             f"--server.port={BASE_URL.rsplit(':', 1)[1]}",
+            f"--echo.admin.username={TEST_USERNAME}",
+            f"--echo.admin.password={TEST_PASSWORD}",
             "--echo.backup.enabled=false",
             "--echo.cleanup.enabled=false",
             "--echo.jms.enabled=false",

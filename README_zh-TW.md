@@ -2,10 +2,6 @@
 
 企業級雙協定 Mock 伺服器，支援 HTTP 和 JMS 協定，用於開發與測試環境模擬 API 回應。
 
-## 截圖
-
-![Mock Rules - Dark Theme](docs/screenshots/mock-rules-dark.png)
-
 ## 功能特色
 
 - **雙協定支援** - HTTP REST API 與 JMS (Artemis) 訊息佇列
@@ -17,25 +13,25 @@
 - **動態模板** - WireMock 風格 Handlebars 模板引擎，支援條件、迴圈、JSONPath/XPath
 - **Proxy 轉發** - 無匹配規則時自動轉發到原始主機
 - **視覺化管理** - Dark/Light Theme Web UI，支援 RWD 響應式設計
-- **批次操作** - 匯出/匯入規則與回應、批次刪除 (ADMIN 限定)
-- **Excel 匯入** - 支援 Excel 批次匯入規則，可下載匯入範本
+- **批次操作** - 選用的規則／回應匯出匯入與批次刪除（ADMIN 限定；匯入匯出預設關閉）
+- **Excel 匯入** - 選用的 Excel 批次匯入與範本下載（預設關閉）
 - **修訂紀錄** - 追蹤規則變更歷史，自動清理過期紀錄
 - **統計監控** - 即時請求統計與命中率追蹤，自動刷新含閒置偵測
-- **高效能** - 4K+ RPS (JSON)，2,000 條規則 XML/XPath 匹配比 WireMock 快 14 倍
+- **實測效能** - 提供可重現的 JSON/XML 基準，明確記錄負載、延遲與錯誤數
 - **權限控管** - Admin/User 角色分離，支援 LDAP 認證與內建帳號管理
 - **內建帳號** - 帳號 CRUD、啟用/停用、密碼重設、忘記密碼、自助註冊
 - **Remember Me** - 登入後長期記住，預設與 Session 同步（180 天）
 - **規則保護** - 標記規則為受保護，防止被自動清除
 - **規則展延** - 延長規則/回應的保留期限，避免被定時清除
 - **孤兒清理** - 偵測並清除未被任何規則使用的孤兒回應
-- **自動備份** - SQLite 資料庫排程備份、關機備份、手動觸發備份
-- **狀態機場景** - WireMock 風格狀態機，可模擬多步驟流程
+- **自動備份** - H2/SQLite 資料庫排程備份、關機備份、手動觸發備份
+- **狀態機場景** - 選用的 WireMock 風格狀態機，可模擬多步驟流程（預設關閉）
 - **故障注入** - 模擬連線重置與空回應，用於韌性測試
-- **OpenAPI 匯入** - 預覽並匯入 OpenAPI 3.x 或 Swagger 2.x JSON/YAML 規格
+- **OpenAPI 匯入** - 選用的 OpenAPI 3.x／Swagger 2.x JSON/YAML 預覽與匯入（預設關閉）
 - **假資料產生** - 內建姓名、Email、電話、地址與整數模板 helper
 - **規則測試** - 在管理介面直接測試規則匹配結果
 - **靜態分析** - SpotBugs 靜態程式碼分析
-- **零外部依賴** - 內嵌 SQLite 資料庫、Caffeine 快取
+- **不需外部資料庫** - 預設內嵌 H2，另提供 SQLite WAL profile
 - **內網友善** - 前端使用 WebJars，無需 CDN
 - **環境識別** - 協定別名、環境標籤，多環境部署一目了然
 
@@ -44,7 +40,7 @@
 ### 環境需求
 
 - Java 17+
-- Gradle 8+ (或使用內建 wrapper)
+- Gradle 8.14+ (或使用內建 wrapper)
 
 ### 啟動服務
 
@@ -115,6 +111,15 @@ docker compose down
 
 JVM 參數在 Dockerfile 中設定（預設 `-Xms256m -Xmx512m`），可透過 docker-compose.yml 的 `environment` 加入 `JAVA_OPTS` 覆蓋。
 
+### 選用功能
+
+以下使用者功能預設關閉，可依部署需求開啟：
+
+| 環境變數 | 預設值 | 說明 |
+|----------|--------|------|
+| `ECHO_BULK_IMPORT_EXPORT_ENABLED` | `false` | 顯示並啟用批次匯入／匯出操作 |
+| `ECHO_SCENARIOS_ENABLED` | `false` | 啟用 Scenario 狀態機規則與管理功能 |
+
 ### 存取服務
 
 | 服務 | URL | 說明 |
@@ -122,7 +127,7 @@ JVM 參數在 Dockerfile 中設定（預設 `-Xms256m -Xmx512m`），可透過 d
 | 管理介面 | http://localhost:8080/ | Mock 規則管理 |
 | 登入頁面 | http://localhost:8080/login.html | 使用者登入 |
 | Mock 端點 | http://localhost:8080/mock/** | 攔截 HTTP 請求 |
-| — | — | SQLite 以檔案管理（不需要 Web Console） |
+| 資料庫 | — | 預設使用 H2；完成遷移後啟用 `sqlite` profile 使用 SQLite WAL |
 
 ## 規則匹配優先順序
 
@@ -291,6 +296,15 @@ location /api/ {
     proxy_pass http://echo-server:8080/mock/;
 }
 ```
+
+### 下游 HTTPS 憑證驗證
+
+HTTP 轉發預設維持**內網相容模式**：不驗證憑證鏈與主機名稱，確保公司內網的
+私有或自簽憑證仍可正常使用。已儲存的 HTTP 連線可在「系統設定」中個別切換為
+**嚴格憑證驗證**；舊有的 `X-Original-Host` 轉發則維持內網相容模式。
+
+此預設只適合受信任的內部網路。若下游服務會經過不受信任的網路，請建立已儲存
+的 HTTP 連線並開啟嚴格憑證驗證。
 
 ## 設定檔
 
@@ -554,7 +568,22 @@ spring:
 
 ## 效能測試
 
-測試環境：macOS, Apple Silicon, Java 17, 20 並發執行緒, 每場景 10 秒。
+效能數字只代表指定負載，不應視為通用產品宣稱；`scripts/` 下的腳本才是重現基準的依據。
+
+### 目前 Echo vs WireMock A/B（2026-08-11）
+
+Echo 與 WireMock 3.13.2 在相同 Apple Silicon 主機、Java 22.0.2、512 MiB heap、開啟請求紀錄、50 並行及每個服務／場景 8 秒的條件下測試。兩邊 HTTP 5xx 與連線錯誤皆為 0。
+
+| 場景 | Echo RPS | WireMock RPS | 比值 | Echo p95 | WireMock p95 |
+|------|---------:|-------------:|-----:|---------:|-------------:|
+| 簡單 JSON、無條件 | 6,327 | 7,068 | 0.90x | 13.1ms | 12.9ms |
+| JSON、10 個候選規則 | 7,570 | 6,875 | 1.10x | 10.6ms | 13.0ms |
+| XML 約 1KB + XPath | 7,136 | 4,617 | 1.55x | 11.3ms | 24.4ms |
+| XML 約 80KB + XPath | 3,116 | 483 | 6.46x | 23.9ms | 180.6ms |
+
+本輪簡單 JSON 仍比 WireMock 慢約 10%；當候選規則或 XML/XPath 解析成本增加時 Echo 才開始領先。這不代表 Echo 的每項功能都比 WireMock 快。
+
+以下聚焦型基準是較早在 macOS／Apple Silicon、Java 17、20 並行及每場景 10 秒下取得；只有命令與環境完全一致時才可直接比較。
 
 ### 規則數量影響（1,600 條規則）
 
@@ -583,7 +612,7 @@ XML 匹配成本隨 body 大小線性增長（DOM 解析）。JSON 匹配不受 
 - **Response Body 快取**: 50MB 上限, 5MB 閾值, 12 小時過期
 - 規則變更時自動失效
 
-### 大量規則匹配（2,000 條規則，worst case）
+### 歷史大量規則匹配（2,000 條規則，worst case）
 
 測試條件：2,000 條 HTTP 規則含 XPath 條件（`//ServiceName=xxx;//CustId=yyy`），目標規則排序最後（worst case 全遍歷），10 併發，200 請求。
 
@@ -593,7 +622,7 @@ XML 匹配成本隨 body 大小線性增長（DOM 解析）。JSON 匹配不受 
 | Echo JSON（2,000 規則，欄位匹配） | 1,066 | 9.3ms | 8.0ms | 24.8ms | 28.7ms |
 | WireMock XML（2,000 規則，XPath） | 31 | 311.9ms | 311.3ms | 400.7ms | 427.0ms |
 
-Echo 的 XML/XPath 匹配在大量規則下比 WireMock **快 14 倍**，歸功於簡單 XPath 模式的 `getElementsByTagName` 快速路徑與預編譯 `XPathExpression` 快取。JSON 匹配更快（1,066 RPS），因 Jackson 的欄位查找為 O(1) hash lookup。
+在這組歷史 2,000 規則負載中，Echo 的 XML/XPath 路徑比當時測試的 WireMock **快 14 倍**，主要來自簡單 XPath 的 `getElementsByTagName` 快速路徑與預編譯 `XPathExpression` 快取；此結果只適用於該組 worst-case 規則。
 
 ### 執行壓力測試
 
@@ -610,7 +639,7 @@ python3 scripts/stress-test-xml-body.py
 # RPS 吞吐量測試
 python3 scripts/stress-test-rps.py [URL] [秒數] [並發數]
 
-# Echo vs WireMock 比較（需要 libs/wiremock-standalone.jar）
+# Echo vs WireMock 比較（請先另外啟動 WireMock）
 python3 scripts/stress-test-vs-wiremock.py [ECHO_URL] [WM_URL] [秒數] [並發數]
 
 # 2,000 條規則 RPS 測試（Echo XML/JSON vs WireMock XML）
@@ -650,18 +679,18 @@ python3 scripts/test-match-scenarios.py
 
 | 類別 | 技術 |
 |------|------|
-| Framework | Spring Boot 3.5.13 |
+| Framework | Spring Boot 3.5.16 |
 | Web Server | Undertow |
-| Database | SQLite (WAL mode) |
+| Database | H2（預設），可切換 SQLite WAL profile |
 | Cache | Caffeine |
 | Messaging | Artemis (Embedded) |
 | Security | Spring Security |
 | Template | Handlebars 4.5 |
-| JSON Path | JsonPath 2.10 |
+| JSON Path | JsonPath 3.0 |
 | Excel | Apache POI |
 | Static Analysis | SpotBugs |
 | Frontend | Vue.js 3.5 + Bootstrap 5.3 + Bootstrap Icons 1.13 + CodeMirror 5 (WebJars) |
-| Build | Gradle 8 |
+| Build | Gradle 8.14.5 |
 
 ## License
 
