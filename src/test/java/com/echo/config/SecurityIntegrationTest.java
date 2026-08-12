@@ -315,6 +315,25 @@ class SecurityIntegrationTest {
     }
 
     @Test
+    void updateAppliedRule_shouldReturn401_whenNotAuthenticated() throws Exception {
+        mockMvc.perform(put("/api/admin/rules/997a9b59-e57a-4777-9522-580cf38a5422/apply")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void updateAppliedRule_shouldReachValidation_whenUser() throws Exception {
+        mockMvc.perform(put("/api/admin/rules/997a9b59-e57a-4777-9522-580cf38a5422/apply")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void ruleManifest_shouldReturn401_whenNotAuthenticated() throws Exception {
         mockMvc.perform(get("/api/admin/rules/997a9b59-e57a-4777-9522-580cf38a5422/manifest"))
                 .andExpect(status().isUnauthorized());

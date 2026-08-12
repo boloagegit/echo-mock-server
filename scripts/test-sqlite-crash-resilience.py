@@ -237,11 +237,11 @@ def test_kill_during_write():
 
     # 開始大量寫入，在寫入過程中 kill
     print("  → 開始密集寫入 + 同時強制終止...")
-    
+
     # 用 thread 持續寫入
     writing = True
     write_count = [0]
-    
+
     def writer():
         i = 0
         while writing:
@@ -258,13 +258,13 @@ def test_kill_during_write():
                 write_count[0] += 1
             i += 1
             time.sleep(0.01)  # 10ms 間隔密集寫入
-    
+
     t = threading.Thread(target=writer, daemon=True)
     t.start()
-    
+
     # 等寫入進行一段時間
     time.sleep(2)
-    
+
     print(f"  → 已寫入 {write_count[0]} 條，執行強制終止...")
     writing = False
     kill_server(proc)
@@ -275,7 +275,7 @@ def test_kill_during_write():
     print("  → 驗證資料庫完整性...")
     integrity = check_db_integrity()
     rule_count = count_rules()
-    
+
     print(f"  → integrity_check: {'ok' if integrity else 'FAILED'}")
     print(f"  → 資料庫中規則數: {rule_count} (WAL 未 checkpoint 時可能為 0)")
     print(f"  → kill 前寫入數: {base_count + write_count[0]}")
@@ -316,7 +316,7 @@ def test_repeated_crash_recovery():
 
     for round_num in range(1, 6):
         print(f"\n  --- 第 {round_num} 輪 ---")
-        
+
         proc = start_server()
         if not wait_for_server():
             print(f"  ✗ 第 {round_num} 輪啟動失敗！資料庫可能損壞")
@@ -336,7 +336,7 @@ def test_repeated_crash_recovery():
         # 隨機等 0.5~2 秒後 kill
         wait_time = random.uniform(0.5, 2.0)
         time.sleep(wait_time)
-        
+
         print(f"  → 等待 {wait_time:.1f}s 後強制終止...")
         kill_server(proc)
         time.sleep(0.5)
@@ -345,7 +345,7 @@ def test_repeated_crash_recovery():
         integrity = check_db_integrity()
         current_count = count_rules()
         print(f"  → integrity: {'ok' if integrity else 'FAILED'}, rules: {current_count}")
-        
+
         expected_committed = (initial_rules or 0) + cumulative_rules
         if not integrity or current_count < expected_committed:
             print(f"  ✗ 第 {round_num} 輪後資料庫損壞或已回覆成功的資料遺失！")
@@ -359,13 +359,13 @@ def test_repeated_crash_recovery():
         s, data = api("GET", "/api/admin/status")
         rule_count = data.get("ruleCount", 0) if isinstance(data, dict) else 0
         print(f"  → 最終啟動成功，規則數: {rule_count}")
-        
+
         # 驗證能正常寫入
         created = create_rules_burst(3, "final-verify")
         print(f"  → 最終寫入驗證: {created}/3 成功")
-        
+
         stop_server(proc)
-        
+
         expected_committed = (initial_rules or 0) + cumulative_rules
         if rule_count >= expected_committed and created == 3:
             print("  ✓ 情境 2 通過：反覆 crash 後資料庫正常")
@@ -402,7 +402,7 @@ def test_concurrent_write_then_kill():
 
     # 10 個 thread 同時寫入
     print("  → 啟動 10 個並發寫入 thread...")
-    
+
     stop_event = threading.Event()
     concurrent_count = [0]
     lock = threading.Lock()
@@ -429,7 +429,7 @@ def test_concurrent_write_then_kill():
     print(f"  → 並發寫入 {concurrent_count[0]} 條，執行強制終止...")
     stop_event.set()
     kill_server(proc)
-    
+
     for t in threads:
         t.join(timeout=2)
     time.sleep(1)

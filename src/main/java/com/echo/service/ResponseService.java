@@ -4,6 +4,7 @@ import com.echo.config.CacheConfig;
 import com.echo.entity.Response;
 import com.echo.protocol.ProtocolHandlerRegistry;
 import com.echo.repository.ResponseRepository;
+import com.echo.repository.ResponseSummaryQuery;
 import com.github.benmanes.caffeine.cache.Cache;
 import lombok.Builder;
 import lombok.Getter;
@@ -25,6 +26,7 @@ import java.util.Optional;
 public class ResponseService {
 
     private final ResponseRepository responseRepository;
+    private final ResponseSummaryQuery responseSummaryQuery;
     private final ProtocolHandlerRegistry protocolHandlerRegistry;
     private final Cache<Long, String> responseBodyCache;
     private final CacheManager cacheManager;
@@ -71,6 +73,52 @@ public class ResponseService {
                         .build();
                 })
                 .toList();
+    }
+
+    /** 取得回應摘要分頁；列表只載入當頁，不載入大型 body。 */
+    public ResponseSummaryPage findSummaryPage(String keyword, String usage, String contentType,
+                                               int requestedPage, int requestedSize,
+                                               String sortField, String direction) {
+        int pageSize = Math.max(1, Math.min(200, requestedSize));
+        int page = Math.max(0, requestedPage);
+        String normalizedKeyword = normalize(keyword);
+        String normalizedUsage = normalizeOption(usage, "used", "unused");
+        String normalizedContentType = normalizeOption(contentType, "GENERAL", "SSE");
+        boolean ascending = "asc".equalsIgnoreCase(direction);
+        ResponseSummaryQuery.Result result = responseSummaryQuery.query(
+                new ResponseSummaryQuery.Filter(normalizedKeyword, normalizedUsage, normalizedContentType),
+                page, pageSize, sortField, ascending);
+
+        int effectivePage = result.totalPages() == 0 ? 0 : Math.min(page, result.totalPages() - 1);
+        if (effectivePage != page) {
+            result = responseSummaryQuery.query(
+                    new ResponseSummaryQuery.Filter(normalizedKeyword, normalizedUsage, normalizedContentType),
+                    effectivePage, pageSize, sortField, ascending);
+        }
+        List<ResponseSummary> summaries = result.rows().stream()
+                .map(row -> ResponseSummary.builder()
+                        .id(row.id())
+                        .description(row.description())
+                        .bodySize(row.bodySize())
+                        .contentType(row.contentType())
+                        .usageCount(row.usageCount())
+                        .createdAt(row.createdAt())
+                        .updatedAt(row.updatedAt())
+                        .extendedAt(row.extendedAt())
+                        .build())
+                .toList();
+        return new ResponseSummaryPage(summaries, effectivePage, pageSize,
+                result.totalElements(), result.totalPages());
+    }
+
+    private String normalize(String value) {
+        if (value == null || value.isBlank()) { return null; }
+        return value.trim();
+    }
+
+    private String normalizeOption(String value, String first, String second) {
+        if (first.equals(value) || second.equals(value)) { return value; }
+        return null;
     }
 
     @Transactional
@@ -167,6 +215,17 @@ public class ResponseService {
     }
 
     public record DeleteAllResult(int deletedResponses, int deletedRules) {}
+
+    public record ResponseSummaryPage(
+            List<ResponseSummary> results,
+            int page,
+            int size,
+            long totalElements,
+            int totalPages) {
+        public ResponseSummaryPage {
+            results = List.copyOf(results);
+        }
+    }
 
     @Getter
     @Builder

@@ -180,6 +180,36 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
         assertThat(((Number) summary.get("usageCount")).intValue()).isGreaterThan(0);
     }
 
+    @Test
+    @DisplayName("Response 摘要分頁 → 後端搜尋、使用狀態與分頁正確")
+    @SuppressWarnings("unchecked")
+    void responseSummaryPage_shouldFilterAndPaginate() {
+        Response used = createResponse("分頁搜尋-使用中", "{\"used\":true}");
+        createResponse("分頁搜尋-未使用", "{\"unused\":true}");
+        RuleDto rule = RuleDto.builder()
+                .protocol(Protocol.HTTP)
+                .matchKey("/api/response-page-search")
+                .method("GET")
+                .responseId(used.getId())
+                .status(200)
+                .build();
+        adminClient().postForEntity("/api/admin/rules", rule, RuleDto.class);
+
+        ResponseEntity<Map<String, Object>> response = adminClient().exchange(
+                "/api/admin/responses/summary?keyword=分頁搜尋&usage=used&page=0&size=1&sort=usageCount&direction=desc",
+                HttpMethod.GET, null, new ParameterizedTypeReference<>() {});
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<String, Object> page = response.getBody();
+        assertThat(page).isNotNull();
+        assertThat(((Number) page.get("totalElements")).longValue()).isEqualTo(1);
+        assertThat(((Number) page.get("totalPages")).intValue()).isEqualTo(1);
+        List<Map<String, Object>> results = (List<Map<String, Object>>) page.get("results");
+        assertThat(results).hasSize(1);
+        assertThat(((Number) results.get(0).get("id")).longValue()).isEqualTo(used.getId());
+        assertThat(((Number) results.get(0).get("usageCount")).intValue()).isGreaterThan(0);
+    }
+
     // ========== 9.5 Response 關聯規則查詢 ==========
 
     @Test

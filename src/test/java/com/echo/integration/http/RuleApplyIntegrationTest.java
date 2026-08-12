@@ -55,6 +55,54 @@ class RuleApplyIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    @DisplayName("建立規則時不得指定 ID，必須由後端產生")
+    void createRejectsClientSuppliedId() throws Exception {
+        RuleApplyDocument document = httpDocument("/apply/client-id", "GET", "value");
+        document.setMetadata(RuleApplyDocument.Metadata.builder()
+                .id("997a9b59-e57a-4777-9522-580cf38a5422")
+                .build());
+
+        ResponseEntity<Map> response = adminClient().exchange(
+                "/api/admin/rules/apply",
+                HttpMethod.POST,
+                new HttpEntity<>(document),
+                Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).containsEntry("validationCode", "SYSTEM_FIELD_READ_ONLY");
+        assertThat(response.getBody()).containsEntry("path", "metadata.id");
+    }
+
+    @Test
+    @DisplayName("更新端點綁定原規則 ID，不得透過 JSON 改指另一筆")
+    void updateRejectsDocumentIdDifferentFromPath() throws Exception {
+        RuleApplyDocument first = apply(
+                httpDocument("/apply/first", "GET", "first"), RuleApplyResult.class)
+                .getBody().resource();
+        RuleApplyDocument second = apply(
+                httpDocument("/apply/second", "GET", "second"), RuleApplyResult.class)
+                .getBody().resource();
+        second.getSpec().setDescription("must not overwrite first");
+
+        ResponseEntity<Map> response = adminClient().exchange(
+                "/api/admin/rules/{id}/apply",
+                HttpMethod.PUT,
+                new HttpEntity<>(second),
+                Map.class,
+                first.getMetadata().getId());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).containsEntry("validationCode", "RESOURCE_ID_MISMATCH");
+        assertThat(response.getBody()).containsEntry("path", "metadata.id");
+
+        ResponseEntity<RuleApplyDocument> unchanged = adminClient().getForEntity(
+                "/api/admin/rules/{id}/manifest",
+                RuleApplyDocument.class,
+                first.getMetadata().getId());
+        assertThat(unchanged.getBody().getSpec().getDescription()).isEqualTo("JSON Apply HTTP");
+    }
+
+    @Test
     @DisplayName("重複套用相同 responseBody 時沿用既有 Response")
     void exactReapplyReusesResponse() throws Exception {
         ResponseEntity<RuleApplyResult> created = apply(
@@ -237,6 +285,15 @@ class RuleApplyIntegrationTest extends BaseIntegrationTest {
     }
 
     private <T> ResponseEntity<T> apply(RuleApplyDocument document, Class<T> responseType) {
+        String id = document.getMetadata() == null ? null : document.getMetadata().getId();
+        if (id != null && !id.isBlank()) {
+            return adminClient().exchange(
+                    "/api/admin/rules/{id}/apply",
+                    HttpMethod.PUT,
+                    new HttpEntity<>(document),
+                    responseType,
+                    id);
+        }
         return adminClient().exchange(
                 "/api/admin/rules/apply",
                 HttpMethod.POST,

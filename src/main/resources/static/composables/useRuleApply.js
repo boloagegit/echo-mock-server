@@ -9,6 +9,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
     const ruleApplyOperation = Vue.ref('');
     const ruleApplySchema = Vue.ref(null);
     const ruleApplySchemaError = Vue.ref('');
+    const ruleApplyIdentity = Vue.ref(null);
 
     const templates = {
         HTTP_MOCK: {
@@ -82,6 +83,57 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
     };
 
     const templateText = template => JSON.stringify(templates[template] || templates.HTTP_MOCK, null, 2);
+
+    const ruleApplySystemFields = Vue.computed(() => ({
+        apiVersion: ruleApplySchema.value?.apiVersion || 'echo.mock/v1',
+        kind: ruleApplySchema.value?.kind || 'Rule',
+        id: ruleApplyIdentity.value?.id || null,
+        resourceVersion: ruleApplyIdentity.value?.version ?? null
+    }));
+
+    const identityFromDocument = document => document?.metadata?.id ? {
+        id: document.metadata.id,
+        version: document.metadata.resourceVersion,
+        protocol: document.spec?.protocol
+    } : null;
+
+    const enforceSystemFields = text => {
+        let document;
+        try { document = JSON.parse(text); }
+        catch { return { text, changed: false }; }
+        if (!document || typeof document !== 'object' || Array.isArray(document)) {
+            return { text, changed: false };
+        }
+
+        let changed = false;
+        const setValue = (target, key, value) => {
+            if (target[key] !== value) {
+                target[key] = value;
+                changed = true;
+            }
+        };
+        setValue(document, 'apiVersion', ruleApplySystemFields.value.apiVersion);
+        setValue(document, 'kind', ruleApplySystemFields.value.kind);
+        if (!document.metadata || typeof document.metadata !== 'object' || Array.isArray(document.metadata)) {
+            document.metadata = {};
+            changed = true;
+        }
+        if (ruleApplyIdentity.value) {
+            setValue(document.metadata, 'id', ruleApplyIdentity.value.id);
+            setValue(document.metadata, 'resourceVersion', ruleApplyIdentity.value.version);
+        } else {
+            for (const key of ['id', 'resourceVersion']) {
+                if (Object.prototype.hasOwnProperty.call(document.metadata, key)) {
+                    delete document.metadata[key];
+                    changed = true;
+                }
+            }
+        }
+        return {
+            text: changed ? JSON.stringify(document, null, 2) : text,
+            changed
+        };
+    };
 
     const parseJsonObject = value => {
         if (value && typeof value === 'object' && !Array.isArray(value)) { return value; }
@@ -308,7 +360,10 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
             HEADER_VALUE: 'rules.applyValidationHeaderValue',
             LINE_BREAK: 'rules.applyValidationLineBreak',
             UUID: 'rules.applyIdUuid',
-            VERSION_REQUIRES_ID: 'rules.applyVersionRequiresId'
+            VERSION_REQUIRES_ID: 'rules.applyVersionRequiresId',
+            SYSTEM_FIELD_READ_ONLY: 'rules.applyValidationSystemFieldReadOnly',
+            SYSTEM_FIELD_REQUIRED: 'rules.applyValidationSystemFieldRequired',
+            RESOURCE_ID_MISMATCH: 'rules.applyValidationResourceIdMismatch'
         };
         return t(keys[error.code] || 'rules.applyValidationFailed', params);
     };
@@ -389,6 +444,27 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         }
 
         validateUnknownFields(errors, document);
+        if (document.apiVersion !== ruleApplySystemFields.value.apiVersion) {
+            issue(errors, 'SYSTEM_FIELD_READ_ONLY', 'apiVersion');
+        }
+        if (document.kind !== ruleApplySystemFields.value.kind) {
+            issue(errors, 'SYSTEM_FIELD_READ_ONLY', 'kind');
+        }
+        if (ruleApplyIdentity.value) {
+            if (document.metadata?.id !== ruleApplyIdentity.value.id) {
+                issue(errors, 'RESOURCE_ID_MISMATCH', 'metadata.id', { expected: ruleApplyIdentity.value.id });
+            }
+            if (document.metadata?.resourceVersion !== ruleApplyIdentity.value.version) {
+                issue(errors, 'SYSTEM_FIELD_READ_ONLY', 'metadata.resourceVersion');
+            }
+        } else {
+            if (document.metadata?.id != null) {
+                issue(errors, 'SYSTEM_FIELD_READ_ONLY', 'metadata.id');
+            }
+            if (document.metadata?.resourceVersion != null) {
+                issue(errors, 'SYSTEM_FIELD_READ_ONLY', 'metadata.resourceVersion');
+            }
+        }
         const protocol = document.spec.protocol;
         const action = document.spec.action || 'MOCK';
         const faulting = document.spec.faultType && document.spec.faultType !== 'NONE';
@@ -533,14 +609,21 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
     };
 
     const setRuleApplyDocument = document => {
-        ruleApplyText.value = typeof document === 'string' ? document : JSON.stringify(document, null, 2);
+        let parsed = document;
+        if (typeof document === 'string') {
+            try { parsed = JSON.parse(document); } catch { parsed = null; }
+        }
+        ruleApplyIdentity.value = identityFromDocument(parsed);
+        const text = typeof document === 'string' ? document : JSON.stringify(document, null, 2);
+        ruleApplyText.value = enforceSystemFields(text).text;
         ruleApplyError.value = '';
         ruleApplyOperation.value = '';
     };
 
     const updateRuleApplyText = value => {
-        ruleApplyText.value = value;
-        ruleApplyError.value = '';
+        const enforced = enforceSystemFields(value);
+        ruleApplyText.value = enforced.text;
+        ruleApplyError.value = enforced.changed ? t('rules.applySystemFieldsRestored') : '';
         ruleApplyOperation.value = '';
     };
 
@@ -609,6 +692,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         ruleApplyText.value = '';
         ruleApplyError.value = '';
         ruleApplyOperation.value = '';
+        ruleApplyIdentity.value = null;
     };
 
     const replaceRuleApplyTemplate = async template => {
@@ -625,6 +709,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         ruleApplyText.value = templateText(template);
         ruleApplyError.value = '';
         ruleApplyOperation.value = '';
+        ruleApplyIdentity.value = null;
     };
 
     const applyRuleDocument = async () => {
@@ -642,8 +727,12 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         if (!document) { return; }
 
         ruleApplySaving.value = true;
-        const response = await apiCall('/api/admin/rules/apply', {
-            method: 'POST',
+        const ruleId = ruleApplyIdentity.value?.id;
+        const endpoint = ruleId
+            ? '/api/admin/rules/' + encodeURIComponent(ruleId) + '/apply'
+            : '/api/admin/rules/apply';
+        const response = await apiCall(endpoint, {
+            method: ruleId ? 'PUT' : 'POST',
             body: JSON.stringify(document)
         }, { silent: true });
         ruleApplySaving.value = false;
@@ -676,6 +765,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
 
         const result = await response.json();
         ruleApplyText.value = JSON.stringify(result.resource, null, 2);
+        ruleApplyIdentity.value = identityFromDocument(result.resource);
         ruleApplyOperation.value = result.operation || 'UPDATED';
         showToast(result.operation === 'CREATED' ? t('rules.applyCreated') : t('rules.applyUpdated'), 'success');
         markRulesDirty();
@@ -691,6 +781,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         ruleApplyOperation,
         ruleApplySchema,
         ruleApplySchemaError,
+        ruleApplySystemFields,
         ruleApplyValidationErrors,
         createDocumentFromForm,
         createFormDraftFromDocument,

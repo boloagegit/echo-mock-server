@@ -255,8 +255,12 @@ body {
 .workspace-filter-bar .btn-group .btn { min-height: 32px; border: 0; border-radius: var(--radius-control) }
 .workspace-filter-bar .btn-group .btn-secondary { background: transparent }
 .workspace-filter-bar .btn-group .btn-secondary:hover { background: rgba(var(--muted-rgb), 0.12) }
-.workspace-search-field { position: relative; flex: 1; min-width: 160px }
-.workspace-search-field > i {
+.workspace-search-field { display: flex; flex: 1; min-width: 160px }
+.workspace-search-submit-mode {
+    gap: var(--space-sm);
+}
+.workspace-search-input { position: relative; flex: 1; min-width: 0 }
+.workspace-search-input > i {
     position: absolute;
     z-index: 1;
     inset-inline-start: 11px;
@@ -283,9 +287,10 @@ body {
 .workspace-search-field input[type="search"]::-webkit-search-cancel-button,
 .workspace-search-field input[type="search"]::-webkit-search-decoration { display: none }
 .workspace-search-compact { flex: 0 1 160px; min-width: 120px }
+.workspace-search-submit-mode.workspace-search-compact { flex-basis: 250px }
 .workspace-search-clear {
     position: absolute;
-    right: 2px;
+    inset-inline-end: 2px;
     top: 50%;
     transform: translateY(-50%);
     width: 24px;
@@ -296,6 +301,29 @@ body {
     color: var(--muted);
     background: transparent;
     cursor: pointer;
+}
+.workspace-search-submit {
+    min-width: 80px;
+    height: 32px;
+    padding: 0 var(--space-sm);
+    border: 0;
+    border-radius: var(--radius-control);
+    color: #fff;
+    background: var(--btn-primary);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2xs);
+}
+.workspace-search-submit:hover:not(:disabled) { background: var(--primary) }
+.workspace-search-submit:focus-visible { outline: none; box-shadow: var(--focus-ring) }
+.workspace-search-submit:disabled {
+    color: var(--muted);
+    background: var(--surface-control);
+    cursor: default;
 }
 .workspace-search-clear:hover { color: var(--text); background: rgba(var(--muted-rgb), 0.12) }
 .workspace-search-clear:focus-visible { outline: none; box-shadow: var(--focus-ring) }
@@ -391,27 +419,6 @@ body {
 .rule-filter-bar { background: var(--card) }
 .rule-filter-controls { min-width: 0 }
 .rule-view-controls { display: flex; gap: var(--space-sm); align-items: center }
-.rule-drag-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-sm);
-    min-height: 32px;
-    padding-inline: var(--space-md);
-    border-radius: var(--radius-control);
-    background: var(--surface-control);
-    color: var(--muted);
-    cursor: pointer;
-    font-size: var(--font-sm);
-    font-weight: 600;
-    white-space: nowrap;
-    transition-property: background-color, color;
-    transition-duration: 120ms;
-}
-.rule-drag-toggle:hover { color: var(--text); background: rgba(var(--muted-rgb), 0.12) }
-.rule-drag-toggle.is-active { color: var(--text); background: var(--surface-primary-soft) }
-.rule-drag-toggle.is-disabled { opacity: 0.5; cursor: not-allowed }
-.rule-drag-toggle input:focus-visible + .toggle-slider { box-shadow: var(--focus-ring) }
-.rule-drag-toggle-label { line-height: 1 }
 .rule-view-controls .btn { width: 32px; height: 32px; justify-content: center; padding: 0 }
 .rule-filter-bar .btn-group { gap: var(--space-2xs); padding: 2px; border-radius: var(--radius-panel); background: var(--hover) }
 .rule-filter-bar .btn-group .btn { border: 0; border-radius: var(--radius-control) }
@@ -4193,6 +4200,60 @@ tr.drag-over-after td {
 .rule-apply-document-state { display: inline-flex; align-items: center; gap: var(--space-xs); margin-inline-start: var(--space-xs); color: var(--muted); font-size: var(--font-sm) }
 .rule-apply-document-state i { color: var(--primary) }
 .rule-apply-toolbar > .btn:last-child { margin-inline-start: auto }
+.rule-apply-system-area {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--space-md);
+    align-items: start;
+    margin-bottom: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-control);
+    background: var(--surface-control);
+}
+.rule-apply-system-heading {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    min-height: 24px;
+    color: var(--muted);
+    font-size: var(--font-xs);
+    font-weight: 600;
+    white-space: nowrap;
+}
+.rule-apply-system-grid {
+    display: grid;
+    grid-template-columns: minmax(150px, 0.8fr) minmax(90px, 0.45fr) minmax(210px, 1.5fr) minmax(170px, 0.9fr);
+    gap: var(--space-md);
+    min-width: 0;
+    margin: 0;
+}
+.rule-apply-system-grid > div { min-width: 0 }
+.rule-apply-system-grid dt { color: var(--muted); font-size: 11px; line-height: 1.2 }
+.rule-apply-system-grid dd {
+    min-width: 0;
+    margin: 2px 0 0;
+    color: var(--text);
+    font-size: var(--font-xs);
+    line-height: 1.35;
+}
+.rule-apply-system-grid code {
+    display: block;
+    overflow: hidden;
+    color: inherit;
+    font-size: inherit;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.rule-apply-replace-notice {
+    display: flex;
+    gap: var(--space-xs);
+    align-items: center;
+    margin: 0 0 var(--space-sm);
+    color: var(--muted);
+    font-size: var(--font-xs);
+    line-height: 1.45;
+}
+.rule-apply-replace-notice i { flex: 0 0 auto; color: var(--primary) }
 .rule-apply-editor-shell {
     position: relative;
     flex: 1;

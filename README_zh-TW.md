@@ -119,6 +119,7 @@ JVM 參數在 Dockerfile 中設定（預設 `-Xms256m -Xmx512m`），可透過 d
 |----------|--------|------|
 | `ECHO_BULK_IMPORT_EXPORT_ENABLED` | `false` | 顯示並啟用批次匯入／匯出操作 |
 | `ECHO_SCENARIOS_ENABLED` | `false` | 啟用 Scenario 狀態機規則與管理功能 |
+| `ECHO_RULE_DRAG_SORT_ENABLED` | `false` | 啟用規則列表的拖曳優先度排序 |
 
 ### 存取服務
 

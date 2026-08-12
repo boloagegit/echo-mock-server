@@ -17,7 +17,8 @@ import java.util.Map;
 /**
  * 宣告式規則文件。
  *
- * <p>metadata.id 缺省時建立新規則；有 id 時依 resourceVersion 更新既有規則。
+ * <p>apiVersion、kind 與 metadata 識別欄位由系統管理。建立規則時由後端產生 ID；
+ * 更新時以請求路徑綁定規則 ID，並依 resourceVersion 進行樂觀鎖檢查。
  * spec 表示完整期望狀態，而不是局部 patch。</p>
  */
 @Data

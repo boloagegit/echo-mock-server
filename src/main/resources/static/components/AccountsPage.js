@@ -126,11 +126,16 @@ const AccountsPage = {
       <!-- Search -->
       <div class="card workspace-filter-card">
         <div class="card-body filter-row workspace-filter-bar">
-          <div class="workspace-search-field">
-            <i class="bi bi-search"></i>
-            <input v-model="accounts.searchKeyword.value" :placeholder="t('accounts.searchPlaceholder')" class="form-control">
-            <button v-if="accounts.searchKeyword.value" class="workspace-search-clear" @click="accounts.searchKeyword.value=''" :aria-label="t('accounts.searchPlaceholder')"><i class="bi bi-x"></i></button>
-          </div>
+          <workspace-search-field
+            input-id="accountSearch"
+            :model-value="accounts.searchKeyword.value"
+            :placeholder="t('accounts.searchPlaceholder')"
+            :aria-label="t('accounts.searchPlaceholder')"
+            :clear-label="t('accounts.searchPlaceholder')"
+            :submit-mode="true"
+            :submit-label="t('common.searchAction')"
+            @search="accounts.searchKeyword.value=$event"
+          ></workspace-search-field>
         </div>
       </div>
 

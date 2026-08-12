@@ -125,6 +125,7 @@ The following user-facing features are intentionally disabled by default and can
 |----------|---------|-------------|
 | `ECHO_BULK_IMPORT_EXPORT_ENABLED` | `false` | Shows and enables bulk import/export operations |
 | `ECHO_SCENARIOS_ENABLED` | `false` | Enables stateful Scenario rules and Scenario administration |
+| `ECHO_RULE_DRAG_SORT_ENABLED` | `false` | Enables drag-and-drop priority ordering in the rule list |
 
 ### Access the Service
 

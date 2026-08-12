@@ -59,6 +59,39 @@ class RuleApplyContractServiceTest {
         assertThat(schema.kind()).isEqualTo(RuleApplyDocument.KIND);
         assertThat(actual).containsExactlyInAnyOrderElementsOf(expected);
         assertThat(schema.fields()).extracting(RuleApplySchema.Field::path).doesNotHaveDuplicates();
+        assertThat(schema.fields().stream()
+                .filter(RuleApplySchema.Field::readOnly)
+                .map(RuleApplySchema.Field::path))
+                .contains("apiVersion", "kind", "metadata.id", "metadata.resourceVersion");
+    }
+
+    @Test
+    void createRejectsClientSuppliedIdentity() {
+        RuleApplyDocument document = httpMock();
+        document.setMetadata(RuleApplyDocument.Metadata.builder()
+                .id("997a9b59-e57a-4777-9522-580cf38a5422")
+                .build());
+
+        assertValidation(() -> contract.validateForCreate(document),
+                "SYSTEM_FIELD_READ_ONLY", "metadata.id");
+    }
+
+    @Test
+    void updateRequiresPathBoundIdentityAndResourceVersion() {
+        String expectedId = "997a9b59-e57a-4777-9522-580cf38a5422";
+        RuleApplyDocument document = httpMock();
+        document.setMetadata(RuleApplyDocument.Metadata.builder()
+                .id("4e8cae15-ded1-4856-98ea-74e8719fd52a")
+                .resourceVersion(0L)
+                .build());
+
+        assertValidation(() -> contract.validateForUpdate(document, expectedId),
+                "RESOURCE_ID_MISMATCH", "metadata.id");
+
+        document.getMetadata().setId(expectedId);
+        document.getMetadata().setResourceVersion(null);
+        assertValidation(() -> contract.validateForUpdate(document, expectedId),
+                "SYSTEM_FIELD_REQUIRED", "metadata.resourceVersion");
     }
 
     @Test
@@ -247,7 +280,12 @@ class RuleApplyContractServiceTest {
     }
 
     private void assertValidation(RuleApplyDocument document, String code, String path) {
-        assertThatThrownBy(() -> contract.validate(document))
+        assertValidation(() -> contract.validate(document), code, path);
+    }
+
+    private void assertValidation(org.assertj.core.api.ThrowableAssert.ThrowingCallable callable,
+                                  String code, String path) {
+        assertThatThrownBy(callable)
                 .isInstanceOfSatisfying(RuleApplyValidationException.class, error -> {
                     assertThat(error.getValidationCode()).isEqualTo(code);
                     assertThat(error.getPath()).isEqualTo(path);

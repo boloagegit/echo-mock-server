@@ -30,8 +30,7 @@ const AuditPage = {
     'update:auditPage', 'update:auditPageSize',
     'toggle-audit-sort', 'delete-all-audit',
     'remove-audit-chip', 'clear-audit-filters',
-    'go-to-rule', 'go-to-response',
-    'debounced-load-audit', 'toggle-audit-detail'
+    'go-to-rule', 'go-to-response', 'toggle-audit-detail'
   ],
   inject: ['t'],
   methods: {
@@ -61,8 +60,10 @@ const AuditPage = {
               :placeholder="t('audit.searchOperator')"
               :aria-label="t('audit.searchOperator')"
               :clear-label="t('audit.clearAll')"
-              icon="bi-person" compact :show-clear="false"
-              @update:model-value="$emit('update:auditFilter', {...auditFilter, operator:$event})"
+              icon="bi-person" compact
+              :submit-mode="true"
+              :submit-label="t('common.searchAction')"
+              @search="$emit('update:auditFilter', {...auditFilter, operator:$event})"
             ></workspace-search-field>
             <div class="filter-divider"></div>
             <workspace-search-field
@@ -71,7 +72,9 @@ const AuditPage = {
               :placeholder="t('audit.searchContent')"
               :aria-label="t('audit.searchContent')"
               :clear-label="t('audit.clearAll')"
-              @update:model-value="$emit('update:auditFilter', {...auditFilter, keyword:$event})"
+              :submit-mode="true"
+              :submit-label="t('common.searchAction')"
+              @search="$emit('update:auditFilter', {...auditFilter, keyword:$event})"
             ></workspace-search-field>
           </div>
         </div>

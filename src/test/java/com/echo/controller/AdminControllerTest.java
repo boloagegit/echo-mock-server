@@ -102,6 +102,7 @@ class AdminControllerTest {
         ReflectionTestUtils.setField(controller, "jmsAlias", "JMS");
         ReflectionTestUtils.setField(controller, "bulkImportExportEnabled", true);
         ReflectionTestUtils.setField(controller, "scenariosEnabled", true);
+        ReflectionTestUtils.setField(controller, "ruleDragSortEnabled", true);
         // 預設 HTTP 啟用，JMS 停用
         lenient().when(protocolHandlerRegistry.isEnabled(Protocol.HTTP)).thenReturn(true);
         lenient().when(protocolHandlerRegistry.isEnabled(Protocol.JMS)).thenReturn(false);
@@ -116,6 +117,16 @@ class AdminControllerTest {
         assertThat(response.getBody().get("isLoggedIn")).isEqualTo(false);
         assertThat(response.getBody().get("bulkImportExportEnabled")).isEqualTo(true);
         assertThat(response.getBody().get("scenariosEnabled")).isEqualTo(true);
+        assertThat(response.getBody().get("ruleDragSortEnabled")).isEqualTo(true);
+    }
+
+    @Test
+    void getStatus_shouldExposeDisabledRuleDragSortFeature() {
+        ReflectionTestUtils.setField(controller, "ruleDragSortEnabled", false);
+
+        var response = controller.getStatus(null);
+
+        assertThat(response.getBody().get("ruleDragSortEnabled")).isEqualTo(false);
     }
 
     @Test

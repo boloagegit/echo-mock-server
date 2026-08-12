@@ -182,6 +182,9 @@ public class AdminController {
     @Value("${echo.features.scenarios-enabled:false}")
     private boolean scenariosEnabled;
 
+    @Value("${echo.features.rule-drag-sort-enabled:false}")
+    private boolean ruleDragSortEnabled;
+
     private final Instant startupTime = Instant.now();
 
     // ========== 系統狀態 ==========
@@ -199,6 +202,7 @@ public class AdminController {
         status.put("selfRegistrationEnabled", selfRegistrationEnabled);
         status.put("bulkImportExportEnabled", bulkImportExportEnabled);
         status.put("scenariosEnabled", scenariosEnabled);
+        status.put("ruleDragSortEnabled", ruleDragSortEnabled);
         status.put("ldapUrl", ldapUrl);
         status.put("httpAlias", httpAlias);
         status.put("jmsAlias", jmsAlias);
@@ -492,30 +496,37 @@ public class AdminController {
         return ruleApplyContractService.schema();
     }
 
-    /**
-     * 以宣告式 JSON 文件建立或更新規則。
-     * metadata.id 不存在時建立；存在時以 resourceVersion 做樂觀鎖更新。
-     */
+    /** Creates a rule from a complete declarative JSON document. */
     @PostMapping("/rules/apply")
     @Transactional
     public ResponseEntity<?> applyRule(@RequestBody RuleApplyDocument document) {
-        ruleApplyContractService.validate(document);
+        ruleApplyContractService.validateForCreate(document);
+        RuleDto dto = ruleApplyMapper.toRuleDto(document);
+        validateProtocolEnabled(dto.getProtocol());
+
+        dto.setId(null);
+        dto.setVersion(null);
+        prepareApplyResponse(dto);
+        SaveResult saved = saveRule(dto);
+        ruleAuditService.ifPresent(service -> service.logCreate(saved.rule));
+        ruleApplyPersistenceSynchronizer.flush();
+        return applyResult(HttpStatus.CREATED, "CREATED", saved.rule.getId());
+    }
+
+    /** Updates the path-bound rule from a complete declarative JSON document. */
+    @PutMapping("/rules/{id}/apply")
+    @Transactional
+    public ResponseEntity<?> applyRule(@PathVariable String id, @RequestBody RuleApplyDocument document) {
+        ruleApplyContractService.validateForUpdate(document, id);
         RuleDto dto = ruleApplyMapper.toRuleDto(document);
         validateProtocolEnabled(dto.getProtocol());
 
         RuleApplyDocument.Metadata metadata = document.getMetadata();
-        String id = metadata == null || metadata.getId() == null || metadata.getId().isBlank()
-                ? null : metadata.getId().trim();
-        Long requestedVersion = metadata == null ? null : metadata.getResourceVersion();
-        Optional<? extends BaseRule> existing = id == null
-                ? Optional.empty()
-                : protocolHandlerRegistry.findById(id);
+        Long requestedVersion = metadata.getResourceVersion();
+        Optional<? extends BaseRule> existing = protocolHandlerRegistry.findById(id);
 
         if (existing.isPresent()) {
             BaseRule current = existing.get();
-            if (requestedVersion == null) {
-                throw new IllegalArgumentException("metadata.resourceVersion is required when updating an existing rule");
-            }
             if (!Objects.equals(requestedVersion, current.getVersion())) {
                 return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
                         "error", "RESOURCE_VERSION_CONFLICT",
@@ -548,19 +559,8 @@ public class AdminController {
                         .body(Map.of("error", "OPTIMISTIC_LOCK_CONFLICT"));
             }
         }
-
-        if (requestedVersion != null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("error", "RESOURCE_NOT_FOUND"));
-        }
-
-        dto.setId(id);
-        dto.setVersion(null);
-        prepareApplyResponse(dto);
-        SaveResult saved = saveRule(dto);
-        ruleAuditService.ifPresent(service -> service.logCreate(saved.rule));
-        ruleApplyPersistenceSynchronizer.flush();
-        return applyResult(HttpStatus.CREATED, "CREATED", saved.rule.getId());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", "RESOURCE_NOT_FOUND"));
     }
 
     @GetMapping("/rules/export")
@@ -686,9 +686,22 @@ public class AdminController {
         return ResponseEntity.ok(responseService.search(keyword));
     }
 
-    @GetMapping("/responses/summary")
+    @GetMapping(value = "/responses/summary", params = "!page")
     public ResponseEntity<List<ResponseService.ResponseSummary>> listResponseSummary() {
         return ResponseEntity.ok(responseService.findAllWithUsage());
+    }
+
+    @GetMapping(value = "/responses/summary", params = "page")
+    public ResponseEntity<ResponseService.ResponseSummaryPage> listResponseSummaryPage(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String usage,
+            @RequestParam(required = false) String contentType,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "updatedAt") String sort,
+            @RequestParam(defaultValue = "desc") String direction) {
+        return ResponseEntity.ok(responseService.findSummaryPage(
+                keyword, usage, contentType, page, size, sort, direction));
     }
 
     @GetMapping("/responses/{id}")

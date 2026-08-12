@@ -21,6 +21,7 @@ const ResponsesPage = {
     status: Object,
     responsePage: Number,
     responsePageSize: Number,
+    responseTotalElements: Number,
     responseTotalPages: Number,
   },
   emits: [
@@ -60,7 +61,7 @@ const ResponsesPage = {
       <div class="page-header">
         <div class="page-heading">
           <h1 class="page-title">{{t('responses.title')}}</h1>
-          <span class="page-count">{{responseSummary.length}}</span>
+          <span class="page-count">{{responseTotalElements}}</span>
         </div>
         <div class="page-actions">
           <button class="btn btn-secondary" @click="$emit('load-responses', true)" :disabled="loading.responses"><i class="bi bi-arrow-clockwise" :class="{'spin':loading.responses}"></i> {{t('responses.refresh')}}</button>
@@ -99,7 +100,9 @@ const ResponsesPage = {
               :placeholder="t('responses.searchPlaceholder')"
               :aria-label="t('responses.searchPlaceholder')"
               :clear-label="t('responses.clearSearch')"
-              @update:model-value="$emit('update:responseFilter', $event)"
+              :submit-mode="true"
+              :submit-label="t('common.searchAction')"
+              @search="$emit('update:responseFilter', $event)"
             ></workspace-search-field>
           </div>
         </div>
@@ -208,7 +211,7 @@ const ResponsesPage = {
           @update:page-size="$emit('update:responsePageSize', $event)"
         >
           <template #summary>
-            <span class="sub-info">{{t('responses.totalCount', {count: responseSummary.length})}}</span>
+            <span class="sub-info">{{t('responses.totalCount', {count: responseTotalElements})}}</span>
             <button v-if="responseFilter || responseUsageFilter || responseContentTypeFilter" type="button" class="workspace-filter-reset" :title="t('responses.clickClearFilter')" @click="$emit('clear-response-filters')"><i class="bi bi-funnel-fill" aria-hidden="true"></i> {{t('responses.filtering')}}</button>
           </template>
         </workspace-pagination>

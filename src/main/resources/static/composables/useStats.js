@@ -65,7 +65,6 @@ const useStats = (deps) => {
             logSort.value.asc = false;
         }
         localStorage.setItem('logSort', JSON.stringify(logSort.value));
-        logPage.value = 1;
     };
 
     /** 取得排序圖示 class */
@@ -76,7 +75,6 @@ const useStats = (deps) => {
     /** 每頁筆數變更 */
     const onPageSizeChange = () => {
         localStorage.setItem('logPageSize', logPageSize.value);
-        logPage.value = 1;
     };
 
     const hydrateCachedDetails = (items) => {
@@ -150,26 +148,25 @@ const useStats = (deps) => {
     // --- 載入（列表只拿當頁摘要，統計另行低頻刷新） ---
     const loadLogs = async (force) => {
         if (!force && !shouldLoad()) { return; }
-        debouncedLoadLogs.cancel();
         await Promise.all([loadLogPage(), loadLogSummary()]);
     };
 
-    const debouncedLoadLogs = debounce(() => loadLogPage(), 300);
+    const reloadLogsFromFirstPage = () => {
+        if (logPage.value !== 1) { logPage.value = 1; }
+        else { loadLogPage(); }
+    };
 
     // 查詢條件變更後，只向後端查詢新的一頁，不再於瀏覽器掃描全部記錄。
     watch(logFilter, () => {
-        logPage.value = 1;
-        debouncedLoadLogs();
+        reloadLogsFromFirstPage();
     }, { deep: true });
     watch(logSort, () => {
-        logPage.value = 1;
-        debouncedLoadLogs();
+        reloadLogsFromFirstPage();
     }, { deep: true });
-    watch(logPage, () => debouncedLoadLogs());
+    watch(logPage, () => loadLogPage());
     watch(logPageSize, () => {
         localStorage.setItem('logPageSize', logPageSize.value);
-        logPage.value = 1;
-        debouncedLoadLogs();
+        reloadLogsFromFirstPage();
     });
 
     // --- Lazy load detail ---
@@ -250,17 +247,14 @@ const useStats = (deps) => {
 
     const removeLogChip = (key) => {
         logFilter.value[key] = '';
-        logPage.value = 1;
     };
 
     const clearLogFilters = () => {
         logFilter.value = { protocol: '', matched: '', endpoint: '' };
-        logPage.value = 1;
     };
 
     // --- 清理函式（供 onUnmounted 呼叫） ---
     const cleanupStats = () => {
-        debouncedLoadLogs.cancel();
         if (listAbortController) { listAbortController.abort(); }
     };
 
@@ -280,7 +274,6 @@ const useStats = (deps) => {
         sortIcon,
         onPageSizeChange,
         loadLogs,
-        debouncedLoadLogs,
         toggleMatchChain,
         logDetailExpanded,
         toggleLogDetail,

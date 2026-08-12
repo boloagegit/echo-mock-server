@@ -11,7 +11,8 @@ const RuleApplyModal = {
     schema: Object,
     schemaError: String,
     validationErrors: { type: Array, default: () => [] },
-    jmsEnabled: Boolean
+    jmsEnabled: Boolean,
+    systemFields: { type: Object, default: () => ({}) }
   },
   emits: ['close', 'apply', 'replace-template', 'update:documentText'],
   data() {
@@ -133,9 +134,26 @@ const RuleApplyModal = {
               <button class="btn btn-sm btn-secondary" @click="formatDocument" :disabled="loading"><i class="bi bi-braces" aria-hidden="true"></i> {{t('rules.applyFormat')}}</button>
             </div>
 
+            <div class="rule-apply-system-area">
+              <div class="rule-apply-system-heading">
+                <i class="bi bi-lock" aria-hidden="true"></i>
+                <span>{{t('rules.applySystemFields')}}</span>
+              </div>
+              <dl class="rule-apply-system-grid">
+                <div><dt>apiVersion</dt><dd><code>{{systemFields.apiVersion}}</code></dd></div>
+                <div><dt>kind</dt><dd><code>{{systemFields.kind}}</code></dd></div>
+                <div><dt>metadata.id</dt><dd><code :title="systemFields.id">{{systemFields.id || t('rules.applyServerGenerated')}}</code></dd></div>
+                <div><dt>metadata.resourceVersion</dt><dd><code>{{systemFields.resourceVersion ?? t('rules.applyAfterCreate')}}</code></dd></div>
+              </dl>
+            </div>
+            <p id="ruleApplyReplaceNotice" class="rule-apply-replace-notice">
+              <i class="bi bi-info-circle" aria-hidden="true"></i>
+              <span>{{t('rules.applyFullStateWarning')}}</span>
+            </p>
+
             <div class="rule-apply-editor-shell" :class="{'is-loading':loading, 'has-error':visibleError}">
               <div v-if="loading" class="rule-apply-loading"><i class="bi bi-arrow-clockwise spin" aria-hidden="true"></i> {{t('rules.loading')}}</div>
-              <textarea ref="editorInput" class="rule-apply-textarea" :value="documentText" @input="updateDocument" @keydown.ctrl.enter.prevent="$emit('apply')" @keydown.meta.enter.prevent="$emit('apply')" :aria-label="t('rules.applyEditorLabel')" :aria-invalid="!!visibleError" aria-describedby="ruleApplyFeedback" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+              <textarea ref="editorInput" class="rule-apply-textarea" :value="documentText" @input="updateDocument" @keydown.ctrl.enter.prevent="$emit('apply')" @keydown.meta.enter.prevent="$emit('apply')" :aria-label="t('rules.applyEditorLabel')" :aria-invalid="!!visibleError" aria-describedby="ruleApplyReplaceNotice ruleApplyFeedback" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
             </div>
             <div v-if="visibleError" id="ruleApplyFeedback" class="rule-apply-feedback is-error" role="alert">
               <i class="bi bi-exclamation-circle" aria-hidden="true"></i><span>{{visibleError}}</span>

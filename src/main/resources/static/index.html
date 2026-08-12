@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="/webjars/bootstrap-icons/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="/webjars/codemirror/lib/codemirror.css">
     <link rel="stylesheet" href="/theme.css">
-<link rel="stylesheet" href="/style.css?v=20260809.6">
+<link rel="stylesheet" href="/style.css?v=20260812.1">
 </head>
 <body>
 <div id="app" v-cloak>
@@ -48,8 +48,6 @@
                 :rule-preview-loading="rulePreviewLoading"
                 :rule-preview-error="rulePreviewError"
                 :rule-preview-cache="rulePreviewCache"
-                :rule-drag-enabled="ruleDragEnabled"
-                :rule-drag-available="ruleDragAvailable"
                 :can-drag-rules="canDragRules"
                 :show-data-dropdown="showDataDropdown"
                 :bulk-import-export-enabled="status?.bulkImportExportEnabled===true"
@@ -83,7 +81,6 @@
                 @toggle-rule-preview="toggleRulePreview($event)"
                 @handle-rule-row-click="handleRuleRowClick($event)"
                 @dismiss-dblclick-hint="dismissDblClickHint"
-                @update:rule-drag-enabled="setRuleDragEnabled($event)"
                 @go-to-responses="page='responses';responseFilter=String($event)"
                 @clip-copy="clipCopy($event)" @extend-rule="extendRule($event)"
                 @drag-start="(e, r) => onDragStart(e, r)"
@@ -141,7 +138,6 @@
                 @toggle-audit-sort="toggleAuditSort($event)" @delete-all-audit="deleteAllAudit"
                 @remove-audit-chip="removeAuditChip($event)" @clear-audit-filters="clearAuditFilters"
                 @go-to-rule="goToRule($event)" @go-to-response="goToResponse($event)"
-                @debounced-load-audit="debouncedLoadAudit()"
             ></audit-page>
 
             <!-- Issues Page -->
@@ -178,6 +174,7 @@
                 :status="status"
                 :response-page="responsePage"
                 :response-page-size="responsePageSize"
+                :response-total-elements="responseTotalElements"
                 :response-total-pages="responseTotalPages"
                 @load-responses="loadResponseSummary($event)"
                 @open-response-modal="openResponseModal($event)"
@@ -252,7 +249,7 @@
         :show-body-condition-warning="showBodyConditionWarning"
         :jms-enabled="jmsEnabled" :scenario-enabled="scenariosEnabled" :http-label="httpLabel" :jms-label="jmsLabel"
         :http-target-connections="httpTargetConnections" :jms-target-connections="jmsTargetConnections"
-        :response-summary="responseSummary" :filtered-response-picker="filteredResponsePicker"
+        :response-summary="responseOptions" :filtered-response-picker="filteredResponsePicker"
         :response-picker-search="responsePickerSearch" :response-dropdown-open="responseDropdownOpen"
         :response-picker-sse-only="responsePickerSseOnly"
         :sse-events="sseEvents" :sse-preview="ssePreview"
@@ -300,6 +297,7 @@
                 :schema-error="ruleApplySchemaError"
                 :validation-errors="ruleApplyValidationErrors"
                 :jms-enabled="jmsEnabled"
+                :system-fields="ruleApplySystemFields"
                 @close="closeModal"
                 @apply="applyRuleSettings"
                 @replace-template="replaceRuleApplyTemplate($event)"
@@ -344,10 +342,10 @@
 <script src="/composables/useTheme.js"></script>
 <script src="/composables/useTour.js"></script>
 <script src="/composables/useEditor.js"></script>
-<script src="/composables/useStats.js?v=20260809.5"></script>
-<script src="/composables/useAudit.js"></script>
-<script src="/composables/useResponses.js?v=20260809.5"></script>
-<script src="/composables/useRules.js?v=20260809.5"></script>
+<script src="/composables/useStats.js?v=20260812.1"></script>
+<script src="/composables/useAudit.js?v=20260812.1"></script>
+<script src="/composables/useResponses.js?v=20260812.1"></script>
+<script src="/composables/useRules.js?v=20260812.1"></script>
 <script src="/composables/useRuleApply.js?v=20260809.3"></script>
 <script src="/composables/useRuleForm.js?v=20260809.5"></script>
 <script src="/composables/useAccounts.js?v=20260809.5"></script>
@@ -355,25 +353,25 @@
 <script src="/composables/useRouter.js"></script>
 <script src="/components/SidebarNav.js"></script>
 <script src="/components/ToastContainer.js"></script>
-<script src="/components/WorkspaceSearchField.js?v=20260811.1"></script>
+<script src="/components/WorkspaceSearchField.js?v=20260812.1"></script>
 <script src="/components/WorkspacePagination.js?v=20260811.2"></script>
 <script src="/components/ConfirmModal.js?v=20260809.5"></script>
 <script src="/components/TourOverlay.js?v=20260809.6"></script>
 <script src="/components/ImportModal.js?v=20260809.6"></script>
-<script src="/components/AuditPage.js?v=20260809.5"></script>
+<script src="/components/AuditPage.js?v=20260812.1"></script>
 <script src="/components/IssuesPage.js?v=20260809.6"></script>
-<script src="/components/StatsPage.js?v=20260809.6"></script>
+<script src="/components/StatsPage.js?v=20260812.1"></script>
 <script src="/components/ResponseEditModal.js?v=20260809.6"></script>
 <script src="/components/ChangePasswordModal.js?v=20260809.5"></script>
-<script src="/components/ResponsesPage.js?v=20260809.5"></script>
+<script src="/components/ResponsesPage.js?v=20260812.1"></script>
 <script src="/components/SettingsPage.js"></script>
 <script src="/components/PriorityHelpModal.js?v=20260809.7"></script>
-<script src="/components/RulesPage.js?v=20260809.5"></script>
+<script src="/components/RulesPage.js?v=20260812.1"></script>
 <script src="/components/RuleGroupRow.js?v=20260809.5"></script>
-<script src="/components/AccountsPage.js?v=20260809.7"></script>
+<script src="/components/AccountsPage.js?v=20260812.1"></script>
 <script src="/components/RuleEditModal.js?v=20260809.5"></script>
 <script src="/components/RuleApplyModal.js?v=20260809.3"></script>
 <script src="/components/OpenApiPreviewModal.js"></script>
-<script src="/app.js?v=20260809.5"></script>
+<script src="/app.js?v=20260812.1"></script>
 </body>
 </html>

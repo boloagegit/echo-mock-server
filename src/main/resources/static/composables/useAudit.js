@@ -9,7 +9,7 @@
  * @param {Function} deps.showConfirm - 確認對話框函式（來自 useToast）
  * @param {Function} deps.t - 翻譯函式（來自 useI18n）
  * @param {Function} deps.requireLogin - 登入檢查函式（來自 useAuth）
- * @returns {{ auditLogs: Ref, selectedAudit: Ref, auditFilter: Ref, auditSort: Ref, auditPage: Ref, auditPageSize: Ref, filteredAudit: ComputedRef, sortedAudit: ComputedRef, pagedAudit: ComputedRef, auditTotalPages: ComputedRef, auditTruncated: ComputedRef, toggleAuditSort: Function, auditSortIcon: Function, onAuditPageSizeChange: Function, loadAudit: Function, debouncedLoadAudit: Function, deleteAllAuditLogs: Function, AUDIT_FIELD_LABELS: Function, AUDIT_HIDDEN_FIELDS: Set, fieldLabel: Function, formatFieldValue: Function, formatAuditJson: Function, getAuditChanges: Function, getAuditTarget: Function, getAuditDescription: Function, getAuditProtocol: Function, getAuditChangeCount: Function, escapeHtml: Function, auditFilterChips: ComputedRef, removeAuditChip: Function, clearAuditFilters: Function }}
+ * @returns {Object} 修訂記錄狀態與操作
  */
 const useAudit = (deps) => {
     const { ref, computed, watch } = Vue;
@@ -58,7 +58,6 @@ const useAudit = (deps) => {
         if (auditSort.value.field === field) auditSort.value.asc = !auditSort.value.asc;
         else { auditSort.value.field = field; auditSort.value.asc = false; }
         localStorage.setItem('auditSort', JSON.stringify(auditSort.value));
-        auditPage.value = 1;
     };
 
     /** 取得排序圖示 class */
@@ -69,7 +68,6 @@ const useAudit = (deps) => {
     /** 每頁筆數變更 */
     const onAuditPageSizeChange = () => {
         localStorage.setItem('auditPageSize', auditPageSize.value);
-        auditPage.value = 1;
     };
 
     // --- 載入與刪除 ---
@@ -124,25 +122,24 @@ const useAudit = (deps) => {
 
     const loadAudit = async (force) => {
         if (!force && !shouldLoad()) return;
-        debouncedLoadAudit.cancel();
         await loadAuditPage();
     };
 
-    const debouncedLoadAudit = debounce(() => loadAuditPage(), 300);
+    const reloadAuditFromFirstPage = () => {
+        if (auditPage.value !== 1) { auditPage.value = 1; }
+        else { loadAuditPage(); }
+    };
 
     watch(auditFilter, () => {
-        auditPage.value = 1;
-        debouncedLoadAudit();
+        reloadAuditFromFirstPage();
     }, { deep: true });
     watch(auditSort, () => {
-        auditPage.value = 1;
-        debouncedLoadAudit();
+        reloadAuditFromFirstPage();
     }, { deep: true });
-    watch(auditPage, () => debouncedLoadAudit());
+    watch(auditPage, () => loadAuditPage());
     watch(auditPageSize, () => {
         localStorage.setItem('auditPageSize', auditPageSize.value);
-        auditPage.value = 1;
-        debouncedLoadAudit();
+        reloadAuditFromFirstPage();
     });
 
     const toggleAuditDetail = async (log) => {
@@ -305,7 +302,6 @@ const useAudit = (deps) => {
         auditSortIcon,
         onAuditPageSizeChange,
         loadAudit,
-        debouncedLoadAudit,
         toggleAuditDetail,
         deleteAllAuditLogs,
         AUDIT_FIELD_LABELS,

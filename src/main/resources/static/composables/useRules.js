@@ -15,11 +15,12 @@
  * @param {import('vue').Ref} deps.page - 當前頁面（來自 app.js）
  * @param {import('vue').Ref} deps.httpLabel - HTTP 協定標籤
  * @param {import('vue').Ref} deps.jmsLabel - JMS 協定標籤
+ * @param {import('vue').Ref} deps.ruleDragSortEnabled - 部署端是否啟用拖曳排序
  * @returns {Object} 規則管理相關的狀態與方法
  */
 const useRules = (deps) => {
     const { ref, computed, watch } = Vue;
-    const { showToast, showConfirm, t, requireLogin, login, isLoggedIn, loading, httpLabel, jmsLabel } = deps;
+    const { showToast, showConfirm, t, requireLogin, login, isLoggedIn, loading, httpLabel, jmsLabel, ruleDragSortEnabled } = deps;
 
     // --- 資料快取機制 ---
     const dataLastLoaded = { rules: 0 };
@@ -44,7 +45,6 @@ const useRules = (deps) => {
     // --- 選取 ---
     const selectedRules = ref([]);
     const batchSelectMode = ref(false);
-    const ruleDragEnabled = ref(false);
 
     // --- 標籤分組 ---
     const ruleViewMode = ref(localStorage.getItem('ruleViewMode') || 'list');
@@ -104,7 +104,7 @@ const useRules = (deps) => {
         ? rules.value
         : []);
 
-    const toggleRuleSort = f => { ruleSort.value = ruleSort.value.field === f ? { field: f, asc: !ruleSort.value.asc } : { field: f, asc: false }; localStorage.setItem('ruleSort', JSON.stringify(ruleSort.value)); rulePage.value = 1 };
+    const toggleRuleSort = f => { ruleSort.value = ruleSort.value.field === f ? { field: f, asc: !ruleSort.value.asc } : { field: f, asc: false }; localStorage.setItem('ruleSort', JSON.stringify(ruleSort.value)); };
     const ruleSortIcon = f => ruleSort.value.field === f ? (ruleSort.value.asc ? 'bi-caret-up-fill' : 'bi-caret-down-fill') : 'bi-arrow-down-up';
 
     // --- 載入 ---
@@ -172,7 +172,6 @@ const useRules = (deps) => {
 
     const loadRules = async (force) => {
         if (!force && !shouldLoad()) return;
-        if (force) { debouncedRuleLoad.cancel(); }
         const requestId = ++listRequestSequence;
         if (listAbortController) { listAbortController.abort(); }
         const abortController = new AbortController();
@@ -221,22 +220,18 @@ const useRules = (deps) => {
         }
     };
 
-    const debouncedRuleLoad = debounce(() => loadRules(true), 300);
+    const reloadRulesFromFirstPage = () => {
+        if (rulePage.value !== 1) { rulePage.value = 1; }
+        else { loadRules(true); }
+    };
 
-    watch(ruleFilter, () => {
-        rulePage.value = 1;
-        debouncedRuleLoad();
-    }, { deep: true });
-    watch(ruleSort, () => {
-        rulePage.value = 1;
-        debouncedRuleLoad();
-    }, { deep: true });
+    watch(ruleFilter, reloadRulesFromFirstPage, { deep: true });
+    watch(ruleSort, reloadRulesFromFirstPage, { deep: true });
     watch(rulePage, () => {
-        if (ruleViewMode.value === 'list') { debouncedRuleLoad(); }
+        if (ruleViewMode.value === 'list') { loadRules(true); }
     });
     watch(rulePageSize, () => {
-        rulePage.value = 1;
-        if (ruleViewMode.value === 'list') { debouncedRuleLoad(); }
+        if (ruleViewMode.value === 'list') { reloadRulesFromFirstPage(); }
     });
     watch(ruleViewMode, v => {
         localStorage.setItem('ruleViewMode', v);
@@ -481,21 +476,10 @@ const useRules = (deps) => {
 
     // --- 拖曳排序 ---
     const dragState = ref({ dragging: false, dragId: null, overId: null, overPos: null });
-    const ruleDragAvailable = computed(() => isLoggedIn.value && !batchSelectMode.value && ruleViewMode.value === 'list');
-    const canDragRules = computed(() => ruleDragEnabled.value && ruleDragAvailable.value && ruleSort.value.field === 'priority' && !ruleSort.value.asc);
-
-    const setRuleDragEnabled = enabled => {
-        if (!enabled || !ruleDragAvailable.value) {
-            ruleDragEnabled.value = false;
-            resetDrag();
-            return;
-        }
-        ruleDragEnabled.value = true;
-        if (ruleSort.value.field !== 'priority' || ruleSort.value.asc) {
-            ruleSort.value = { field: 'priority', asc: false };
-            localStorage.setItem('ruleSort', JSON.stringify(ruleSort.value));
-        }
-    };
+    const ruleDragAvailable = computed(() => ruleDragSortEnabled?.value === true
+        && isLoggedIn.value && !batchSelectMode.value && ruleViewMode.value === 'list');
+    const canDragRules = computed(() => ruleDragAvailable.value
+        && ruleSort.value.field === 'priority' && !ruleSort.value.asc);
 
     const onDragStart = (e, rule) => {
         if (!canDragRules.value) return;
@@ -570,12 +554,17 @@ const useRules = (deps) => {
         return '';
     };
 
-    watch(ruleDragAvailable, available => {
-        if (!available && ruleDragEnabled.value) setRuleDragEnabled(false);
+    watch(ruleDragSortEnabled, enabled => {
+        if (!enabled) {
+            resetDrag();
+            return;
+        }
+        ruleSort.value = { field: 'priority', asc: false };
+        localStorage.setItem('ruleSort', JSON.stringify(ruleSort.value));
+        rulePage.value = 1;
     });
-    watch(ruleSort, sort => {
-        if (ruleDragEnabled.value && (sort.field !== 'priority' || sort.asc)) setRuleDragEnabled(false);
-    }, { deep: true });
+    watch(ruleDragAvailable, available => { if (!available) resetDrag(); });
+    watch(ruleSort, () => resetDrag(), { deep: true });
 
     // --- Filter chips ---
     const ruleFilterChips = computed(() => {
@@ -701,9 +690,6 @@ const useRules = (deps) => {
         handleRuleRowClick,
         // 拖曳排序
         dragState,
-        ruleDragEnabled,
-        ruleDragAvailable,
-        setRuleDragEnabled,
         canDragRules,
         onDragStart,
         onDragOver,

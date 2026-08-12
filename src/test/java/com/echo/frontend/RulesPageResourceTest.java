@@ -15,37 +15,34 @@ class RulesPageResourceTest {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Test
-    void keepsDragSortingOffUntilTheUserEnablesIt() throws IOException {
+    void gatesDragSortingWithTheDeploymentFeatureFlag() throws IOException {
         String composable = resourceText("static/composables/useRules.js");
 
         assertThat(composable)
-                .contains("const ruleDragEnabled = ref(false)")
-                .contains("ruleDragEnabled.value && ruleDragAvailable.value")
-                .contains("const setRuleDragEnabled = enabled =>")
+                .contains("ruleDragSortEnabled?.value === true")
+                .contains("watch(ruleDragSortEnabled, enabled =>")
                 .contains("ruleSort.value = { field: 'priority', asc: false }");
     }
 
     @Test
-    void rendersAnAccessibleDragSortToggleAndOnlyShowsHandlesWhenEnabled() throws IOException {
+    void removesTheUserToggleAndOnlyShowsHandlesWhenTheFeatureIsAvailable() throws IOException {
         String component = resourceText("static/components/RulesPage.js");
 
         assertThat(component)
-                .contains("class=\"rule-drag-toggle\"")
-                .contains(":checked=\"ruleDragEnabled\"")
-                .contains(":disabled=\"!ruleDragAvailable\"")
-                .contains("@change=\"$emit('update:ruleDragEnabled', $event.target.checked)\"")
+                .doesNotContain("rule-drag-toggle")
+                .doesNotContain("update:ruleDragEnabled")
                 .contains("<td v-if=\"canDragRules\" class=\"drag-handle-cell\"");
     }
 
     @Test
-    void localizesDragSortControls() throws IOException {
+    void localizesTheDragHandleLabelWithoutExposingAUserToggle() throws IOException {
         JsonNode zh = OBJECT_MAPPER.readTree(resourceText("static/i18n/zh-TW.json")).path("rules");
         JsonNode en = OBJECT_MAPPER.readTree(resourceText("static/i18n/en.json")).path("rules");
 
-        assertThat(zh.path("dragSort").asText()).isEqualTo("拖曳排序");
-        assertThat(zh.path("dragSortHint").asText()).isNotBlank();
-        assertThat(en.path("dragSort").asText()).isEqualTo("Drag to Sort");
-        assertThat(en.path("dragSortHint").asText()).isNotBlank();
+        assertThat(zh.path("dragRule").asText()).isNotBlank();
+        assertThat(en.path("dragRule").asText()).isNotBlank();
+        assertThat(zh.has("dragSort")).isFalse();
+        assertThat(en.has("dragSort")).isFalse();
     }
 
     private static String resourceText(String path) throws IOException {

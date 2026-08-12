@@ -29,8 +29,6 @@ const RulesPage = {
     rulePreviewLoading: Object,
     rulePreviewError: Object,
     rulePreviewCache: Object,
-    ruleDragEnabled: Boolean,
-    ruleDragAvailable: Boolean,
     canDragRules: Boolean,
     showDataDropdown: Boolean,
     bulkImportExportEnabled: Boolean,
@@ -59,7 +57,6 @@ const RulesPage = {
     'toggle-rule-preview', 'handle-rule-row-click',
     'dismiss-dblclick-hint',
     'go-to-responses',
-    'update:ruleDragEnabled',
     'clip-copy', 'extend-rule',
     'drag-start', 'drag-over', 'drag-leave', 'drop', 'drag-end',
     'toggle-data-dropdown', 'toggle-tag-group', 'toggle-tag-subgroup',
@@ -214,19 +211,12 @@ const RulesPage = {
                     :placeholder="t('rules.searchPlaceholder')"
                     :aria-label="t('rules.searchPlaceholder')"
                     :clear-label="t('rules.clearSearch')"
-                    @update:model-value="setFilter('keyword', $event)"
+                    :submit-mode="true"
+                    :submit-label="t('common.searchAction')"
+                    @search="setFilter('keyword', $event)"
                 ></workspace-search-field>
             </div>
             <div class="rule-view-controls">
-                <label v-if="ruleViewMode==='list'" class="rule-drag-toggle" :class="{'is-active':ruleDragEnabled,'is-disabled':!ruleDragAvailable}"
-                    :title="ruleDragAvailable?t('rules.dragSortHint'):t('rules.dragSortUnavailable')">
-                    <span class="rule-drag-toggle-label">{{t('rules.dragSort')}}</span>
-                    <span class="toggle toggle-sm" :class="{'disabled':!ruleDragAvailable}">
-                        <input type="checkbox" :checked="ruleDragEnabled" :disabled="!ruleDragAvailable"
-                            @change="$emit('update:ruleDragEnabled', $event.target.checked)">
-                        <span class="toggle-slider" aria-hidden="true"></span>
-                    </span>
-                </label>
                 <div class="btn-group">
                     <button class="btn btn-sm btn-secondary" :class="{'active':ruleViewMode==='list'}" @click="$emit('update:ruleViewMode', 'list')" :title="t('rules.listView')" :aria-label="t('rules.listView')"><i class="bi bi-list"></i></button>
                     <button class="btn btn-sm btn-secondary" :class="{'active':ruleViewMode==='group'}" @click="$emit('update:ruleViewMode', 'group')" :title="t('rules.groupView')" :aria-label="t('rules.groupView')"><i class="bi bi-collection"></i></button>

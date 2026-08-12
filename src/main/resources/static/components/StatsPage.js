@@ -385,7 +385,9 @@ const StatsPage = {
               :placeholder="t('stats.searchPlaceholder')"
               :aria-label="t('stats.searchLabel')"
               :clear-label="t('stats.clearSearch')"
-              @update:model-value="$emit('update:logFilter', {...logFilter, endpoint:$event})"
+              :submit-mode="true"
+              :submit-label="t('common.searchAction')"
+              @search="$emit('update:logFilter', {...logFilter, endpoint:$event})"
             ></workspace-search-field>
           </div>
         </div>
