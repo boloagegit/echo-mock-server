@@ -9,11 +9,11 @@
     <link rel="stylesheet" href="/webjars/bootstrap-icons/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="/webjars/codemirror/lib/codemirror.css">
     <link rel="stylesheet" href="/theme.css">
-    <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/style.css?v=20260812.1">
 </head>
 <body>
 <div id="app" v-cloak>
-    <div class="top-loader" v-if="loading.rules||loading.logs||loading.audit||loading.responses||loading.accounts"></div>
+    <div class="top-loader" v-if="loading.rules||loading.logs||loading.audit||loading.responses||loading.accounts||loading.issues"></div>
     <div class="layout">
         <sidebar-nav
             :page="page" @update:page="page=$event"
@@ -23,7 +23,7 @@
             :status="status" :jms-enabled="jmsEnabled" :locale="locale"
             :theme-icon="themeIcon" :theme-label="themeLabel"
             :density="density" :density-icon="densityIcon" :density-label="densityLabel"
-            :help-seen="helpSeen"
+            :help-seen="helpSeen" :open-issue-count="openIssueCount"
             @show-help="showPriorityHelp=true" @toggle-theme="toggleTheme" @toggle-density="toggleDensity"
             @start-tour="startTour"
             @switch-locale="switchLocale" @login="login" @logout="logout"
@@ -39,22 +39,26 @@
                 :http-label="httpLabel" :jms-label="jmsLabel"
                 :rule-filter="ruleFilter" :rule-sort="ruleSort"
                 :rule-view-mode="ruleViewMode"
-                :paged-rules="pagedRules" :rule-total-pages="ruleTotalPages"
+                :paged-rules="pagedRules" :rule-total-elements="ruleTotalElements" :rule-total-pages="ruleTotalPages"
                 :rule-page="rulePage" :rule-page-size="rulePageSize"
                 :batch-select-mode="batchSelectMode" :selected-rules="selectedRules"
                 :rule-filter-chips="ruleFilterChips"
                 :show-dbl-click-hint="showDblClickHint"
                 :rule-preview-expanded="rulePreviewExpanded"
                 :rule-preview-loading="rulePreviewLoading"
+                :rule-preview-error="rulePreviewError"
                 :rule-preview-cache="rulePreviewCache"
+                :can-drag-rules="canDragRules"
                 :show-data-dropdown="showDataDropdown"
+                :bulk-import-export-enabled="status?.bulkImportExportEnabled===true"
                 :expanded-tag-groups="expandedTagGroups"
                 :expanded-tag-subgroups="expandedTagSubgroups"
                 :tag-keys="tagKeys" :rules-by-tag="rulesByTag"
                 :rules-by-tag-group="rulesByTagGroup"
+                :group-counts="groupCounts" :group-loading="groupLoading"
                 :filtered-rules="filteredRules"
                 :get-group-limit="getGroupLimit"
-                :rule-sort-icon="ruleSortIcon"
+                :rule-sort-icon="ruleSortIcon" :drag-row-class="dragRowClass"
                 @load-rules="loadRules($event)"
                 @open-create="openCreate" @toggle-batch-select="batchSelectMode=!batchSelectMode;selectedRules=[]"
                 @batch-protect="batchProtect($event)" @delete-selected="deleteSelectedRules"
@@ -79,6 +83,10 @@
                 @dismiss-dblclick-hint="dismissDblClickHint"
                 @go-to-responses="page='responses';responseFilter=String($event)"
                 @clip-copy="clipCopy($event)" @extend-rule="extendRule($event)"
+                @drag-start="(e, r) => onDragStart(e, r)"
+                @drag-over="(e, r) => onDragOver(e, r)"
+                @drag-leave="(e, r) => onDragLeave(e, r)"
+                @drop="onDrop($event)" @drag-end="onDragEnd"
                 @toggle-data-dropdown="toggleDataDropdown"
                 @toggle-tag-group="toggleTagGroup($event)"
                 @toggle-tag-subgroup="toggleTagSubgroup($event)"
@@ -94,7 +102,8 @@
                 :paged-logs="pagedLogs" :total-pages="totalPages"
                 :log-filter-chips="logFilterChips"
                 :jms-enabled="jmsEnabled" :http-label="httpLabel" :jms-label="jmsLabel"
-                :rules="rules" :auto-refresh="autoRefresh"
+                :scenario-enabled="scenariosEnabled"
+                :rules="rules"
                 :log-detail-expanded="logDetailExpanded"
                 :detect-mode="detectMode"
                 @load-logs="loadLogs($event)" @update:log-filter="logFilter=$event"
@@ -102,7 +111,7 @@
                 @update:log-page-size="logPageSize=$event"
                 @toggle-sort="toggleSort($event)" @toggle-match-chain="toggleMatchChain($event)"
                 @toggle-log-detail="(item, idx) => toggleLogDetail(item, idx)"
-                @go-to-rule="goToRule($event)" @toggle-auto-refresh="toggleAutoRefresh()"
+                @go-to-rule="goToRule($event)"
                 @remove-log-chip="removeLogChip($event)" @clear-log-filters="clearLogFilters"
                 @clip-copy="clipCopy($event)"
                 @create-rule-from-log="createRuleFromLog($event)"
@@ -113,6 +122,7 @@
                 :audit-logs="auditLogs" :loading="loading" :selected-audit="selectedAudit"
                 :audit-filter="auditFilter" :audit-sort="auditSort"
                 :audit-page="auditPage" :audit-page-size="auditPageSize"
+                :audit-total-elements="auditTotalElements"
                 :paged-audit="pagedAudit" :audit-total-pages="auditTotalPages"
                 :audit-truncated="auditTruncated" :audit-filter-chips="auditFilterChips"
                 :is-admin="isAdmin" :status="status"
@@ -122,13 +132,31 @@
                 :get-audit-description="getAuditDescription"
                 :get-audit-protocol="getAuditProtocol"
                 @load-audit="loadAudit($event)" @update:selected-audit="selectedAudit=$event"
+                @toggle-audit-detail="toggleAuditDetail($event)"
                 @update:audit-filter="auditFilter=$event" @update:audit-page="auditPage=$event"
                 @update:audit-page-size="auditPageSize=$event"
                 @toggle-audit-sort="toggleAuditSort($event)" @delete-all-audit="deleteAllAudit"
                 @remove-audit-chip="removeAuditChip($event)" @clear-audit-filters="clearAuditFilters"
                 @go-to-rule="goToRule($event)" @go-to-response="goToResponse($event)"
-                @debounced-load-audit="debouncedLoadAudit()"
             ></audit-page>
+
+            <!-- Issues Page -->
+            <issues-page v-if="page==='issues'"
+                :issues="issues" :loading="loading"
+                :issue-filter="issueFilter" :issue-page="issuePage"
+                :issue-page-size="issuePageSize" :paged-issues="pagedIssues"
+                :issue-total-pages="issueTotalPages" :filtered-issues="filteredIssues"
+                :is-admin="isAdmin"
+                @load-issues="loadIssues($event)"
+                @create-issue="(...args) => createIssue(args[0], args[1]).then(args[2])"
+                @reply-issue="(...args) => replyIssue(args[0], args[1])"
+                @resolve-issue="resolveIssue($event)"
+                @reopen-issue="reopenIssue($event)"
+                @delete-issue="deleteIssue($event)"
+                @update:issue-filter="issueFilter=$event"
+                @update:issue-page="issuePage=$event"
+                @update:issue-page-size="issuePageSize=$event"
+            ></issues-page>
 
             <!-- Responses Page -->
             <responses-page v-if="page==='responses'"
@@ -142,9 +170,11 @@
                 :batch-select-response-mode="batchSelectResponseMode"
                 :selected-responses="selectedResponses"
                 :show-response-data-dropdown="showResponseDataDropdown"
+                :bulk-import-export-enabled="status?.bulkImportExportEnabled===true"
                 :status="status"
                 :response-page="responsePage"
                 :response-page-size="responsePageSize"
+                :response-total-elements="responseTotalElements"
                 :response-total-pages="responseTotalPages"
                 @load-responses="loadResponseSummary($event)"
                 @open-response-modal="openResponseModal($event)"
@@ -194,13 +224,13 @@
     <!-- Priority Help Modal -->
     <priority-help-modal
         :show="showPriorityHelp" :help-tab="helpTab"
-        @close="showPriorityHelp=false" @update:help-tab="helpTab=$event"
+        @close="showPriorityHelp=false" @start-tour="showPriorityHelp=false;startTour()" @update:help-tab="helpTab=$event"
     ></priority-help-modal>
 
     <!-- Response Edit Modal -->
     <response-edit-modal
         :show="showResponseModal" :editing="editingResponse"
-        :form="responseForm" :maximized="responseModalMaximized"
+        :form="responseForm" :maximized="responseModalMaximized" :saving="loading.responseSave"
         :sse-events="responseSseEvents" :sse-preview="responseSsePreview"
         :response-form-formatted="responseFormFormatted"
         @close="showResponseModal=false"
@@ -213,22 +243,25 @@
 
     <!-- Create/Edit Modal -->
     <rule-edit-modal
-        :show="showModal" :editing="editing" :form="form" :conditions="conditions"
+        :show="showModal" :editing="editing" :editor-mode="ruleEditorMode" :form="form" :conditions="conditions"
         :form-errors="formErrors" :can-save="canSave" :saving="saving" :maximized="ruleModalMaximized"
         :show-catch-all-warning="showCatchAllWarning" :catch-all-confirmed="catchAllConfirmed"
         :show-body-condition-warning="showBodyConditionWarning"
-        :jms-enabled="jmsEnabled" :http-label="httpLabel" :jms-label="jmsLabel"
-        :response-summary="responseSummary" :filtered-response-picker="filteredResponsePicker"
+        :jms-enabled="jmsEnabled" :scenario-enabled="scenariosEnabled" :http-label="httpLabel" :jms-label="jmsLabel"
+        :http-target-connections="httpTargetConnections" :jms-target-connections="jmsTargetConnections"
+        :response-summary="responseOptions" :filtered-response-picker="filteredResponsePicker"
         :response-picker-search="responsePickerSearch" :response-dropdown-open="responseDropdownOpen"
         :response-picker-sse-only="responsePickerSseOnly"
         :sse-events="sseEvents" :sse-preview="ssePreview"
         :test-expanded="testExpanded" :test-params="testParams" :test-result="testResult"
         :test-loading="testLoading" :test-sse-events="testSseEvents" :test-sse-mode="testSseMode"
-        :preview-response-body="previewResponseBody" :preview-editing="previewEditing"
+        :preview-response-body="previewResponseBody" :preview-response-loading="previewResponseLoading"
+        :preview-response-load-failed="previewResponseLoadFailed" :preview-editing="previewEditing"
         :preview-edit-body="previewEditBody" :preview-response-usage-count="previewResponseUsageCount"
         :preview-saving="previewSaving" :preview-formatted="previewFormatted"
         :edit-formatted="editFormatted" :new-tag="newTag" :new-header="newHeader"
         @close="closeModal" @save="(close) => saveRule(close)"
+        @change-editor-mode="changeRuleEditorMode($event)"
         @update:catch-all-confirmed="catchAllConfirmed=$event"
         @update:maximized="ruleModalMaximized=$event"
         @set-protocol="setProtocol($event)"
@@ -251,55 +284,47 @@
         @clear-response-selection="form.responseId=null;sseEvents=[{event:'',data:'',id:'',delayMs:0,type:'normal'}]"
         @reorder-sse-events="sseEvents=$event"
         @apply-template="applyTemplate($event)"
-    ></rule-edit-modal>
+    >
+        <template #declarative>
+            <rule-apply-modal
+                :active="ruleEditorMode==='declarative'"
+                :document-text="ruleApplyText"
+                :loading="ruleApplyLoading"
+                :saving="ruleApplySaving"
+                :error="ruleApplyError"
+                :operation="ruleApplyOperation"
+                :schema="ruleApplySchema"
+                :schema-error="ruleApplySchemaError"
+                :validation-errors="ruleApplyValidationErrors"
+                :jms-enabled="jmsEnabled"
+                :system-fields="ruleApplySystemFields"
+                @close="closeModal"
+                @apply="applyRuleSettings"
+                @replace-template="replaceRuleApplyTemplate($event)"
+                @update:document-text="updateRuleApplyText($event)"
+            ></rule-apply-modal>
+        </template>
+    </rule-edit-modal>
 
-    <import-modal :show="showImportModal" :import-format="importFormat" :import-file="importFile" :import-file-name="importFileName" @close="showImportModal=false" @update:import-format="importFormat=$event;importFile=null;importFileName=''" @handle-file="handleImportFile($event)" @do-import="doImport"></import-modal>
+    <import-modal :show="showImportModal" :import-format="importFormat" :import-file="importFile" :import-file-name="importFileName" :loading="loading.importRules" :error="loading.importError" @close="showImportModal=false;loading.importError=''" @update:import-format="importFormat=$event;importFile=null;importFileName='';loading.importError=''" @handle-file="handleImportFile($event)" @do-import="doImport"></import-modal>
 
     <openapi-preview-modal :show="showOpenApiPreview" :title="openApiPreviewTitle" :version="openApiPreviewVersion" :rules="openApiPreviewRules" :loading="openApiImporting" @close="showOpenApiPreview=false" @confirm="confirmOpenApiImport"></openapi-preview-modal>
 
-    <!-- Tour Overlay -->
-    <div v-if="tourActive" class="tour-overlay">
-        <div class="tour-highlight" :style="tourHighlightStyle"></div>
-        <div class="tour-tooltip" :style="tourTooltipStyle">
-            <div class="tour-tooltip-title">
-                <i class="bi bi-lightbulb" style="color:var(--warning)"></i>
-                {{tourSteps[tourStep]?.title}}
-            </div>
-            <div class="tour-tooltip-body">{{tourSteps[tourStep]?.body}}</div>
-            <div class="tour-tooltip-footer">
-                <span class="tour-tooltip-steps">{{tourStep + 1}} / {{tourSteps.length}}</span>
-                <div class="tour-tooltip-actions">
-                    <button v-if="tourStep > 0" class="btn btn-xs btn-secondary" @click="prevStep">{{t('tour.prev')}}</button>
-                    <button class="btn btn-xs btn-secondary" @click="skipTour">{{t('tour.skip')}}</button>
-                    <button class="btn btn-xs btn-primary" @click="nextStep">{{tourStep < tourSteps.length - 1 ? t('tour.next') : t('tour.finish')}}</button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <tour-overlay
+        v-if="tourActive" :active="tourActive" :step="tourStep" :steps="tourSteps"
+        :highlight-style="tourHighlightStyle" :tooltip-style="tourTooltipStyle"
+        @prev="prevStep" @next="nextStep" @skip="skipTour"
+    ></tour-overlay>
 
-    <!-- Force Change Password Modal -->
-    <div v-if="showForceChangePassword" class="modal-overlay">
-        <div class="modal-box" style="max-width:420px">
-            <div class="modal-header">
-                <h3>{{t('accounts.changePassword.title')}}</h3>
-            </div>
-            <div class="modal-body">
-                <p style="margin-bottom:1rem;color:var(--muted)">{{t('accounts.changePassword.description')}}</p>
-                <div class="form-group" style="margin-bottom:1rem">
-                    <label class="form-label">{{t('accounts.changePassword.oldPassword')}}</label>
-                    <input v-model="forceChangePwdForm.oldPassword" type="password" class="form-control" :placeholder="t('accounts.changePassword.oldPasswordPlaceholder')" @keydown.enter="submitForceChangePassword">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">{{t('accounts.changePassword.newPassword')}}</label>
-                    <input v-model="forceChangePwdForm.newPassword" type="password" class="form-control" :placeholder="t('accounts.changePassword.newPasswordPlaceholder')" @keydown.enter="submitForceChangePassword">
-                </div>
-                <div v-if="forceChangePwdError" style="margin-top:0.75rem;color:var(--danger);font-size:13px">{{forceChangePwdError}}</div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-primary" @click="submitForceChangePassword" :disabled="forceChangePwdSubmitting || !forceChangePwdForm.oldPassword || !forceChangePwdForm.newPassword">{{t('accounts.changePassword.submit')}}</button>
-            </div>
-        </div>
-    </div>
+    <change-password-modal
+        :show="showForceChangePassword" :form="forceChangePwdForm"
+        :error="forceChangePwdError" :submitting="forceChangePwdSubmitting"
+        :required="status?.forceChangePassword===true"
+        @close="showForceChangePassword=false;forceChangePwdError='';forceChangePwdForm={oldPassword:'',newPassword:''}"
+        @logout="showForceChangePassword=false;logout()"
+        @submit="submitForceChangePassword"
+        @update:form="forceChangePwdForm=$event"
+    ></change-password-modal>
 
     <confirm-modal :confirm-state="confirmState"></confirm-modal>
 
@@ -309,7 +334,7 @@
 <script src="/webjars/codemirror/lib/codemirror.js"></script>
 <script src="/webjars/codemirror/mode/javascript/javascript.js"></script>
 <script src="/webjars/codemirror/mode/xml/xml.js"></script>
-<script src="/utils.js"></script>
+<script src="/utils.js?v=20260809.6"></script>
 <!-- Composables (載入順序：utils.js → composables → components → app.js) -->
 <script src="/composables/useI18n.js"></script>
 <script src="/composables/useToast.js"></script>
@@ -317,28 +342,36 @@
 <script src="/composables/useTheme.js"></script>
 <script src="/composables/useTour.js"></script>
 <script src="/composables/useEditor.js"></script>
-<script src="/composables/useStats.js"></script>
-<script src="/composables/useAudit.js"></script>
-<script src="/composables/useResponses.js"></script>
-<script src="/composables/useRules.js"></script>
-<script src="/composables/useRuleForm.js"></script>
-<script src="/composables/useAccounts.js"></script>
+<script src="/composables/useStats.js?v=20260812.1"></script>
+<script src="/composables/useAudit.js?v=20260812.1"></script>
+<script src="/composables/useResponses.js?v=20260812.1"></script>
+<script src="/composables/useRules.js?v=20260812.1"></script>
+<script src="/composables/useRuleApply.js?v=20260809.3"></script>
+<script src="/composables/useRuleForm.js?v=20260809.5"></script>
+<script src="/composables/useAccounts.js?v=20260809.5"></script>
+<script src="/composables/useIssues.js?v=20260809.5"></script>
 <script src="/composables/useRouter.js"></script>
 <script src="/components/SidebarNav.js"></script>
 <script src="/components/ToastContainer.js"></script>
-<script src="/components/ConfirmModal.js"></script>
-<script src="/components/ImportModal.js"></script>
-<script src="/components/OpenApiPreviewModal.js"></script>
-<script src="/components/AuditPage.js"></script>
-<script src="/components/StatsPage.js"></script>
-<script src="/components/ResponseEditModal.js"></script>
-<script src="/components/ResponsesPage.js"></script>
+<script src="/components/WorkspaceSearchField.js?v=20260812.1"></script>
+<script src="/components/WorkspacePagination.js?v=20260811.2"></script>
+<script src="/components/ConfirmModal.js?v=20260809.5"></script>
+<script src="/components/TourOverlay.js?v=20260809.6"></script>
+<script src="/components/ImportModal.js?v=20260809.6"></script>
+<script src="/components/AuditPage.js?v=20260812.1"></script>
+<script src="/components/IssuesPage.js?v=20260809.6"></script>
+<script src="/components/StatsPage.js?v=20260812.1"></script>
+<script src="/components/ResponseEditModal.js?v=20260809.6"></script>
+<script src="/components/ChangePasswordModal.js?v=20260809.5"></script>
+<script src="/components/ResponsesPage.js?v=20260812.1"></script>
 <script src="/components/SettingsPage.js"></script>
-<script src="/components/PriorityHelpModal.js"></script>
-<script src="/components/RulesPage.js"></script>
-<script src="/components/RuleGroupRow.js"></script>
-<script src="/components/AccountsPage.js"></script>
-<script src="/components/RuleEditModal.js"></script>
-<script src="/app.js"></script>
+<script src="/components/PriorityHelpModal.js?v=20260809.7"></script>
+<script src="/components/RulesPage.js?v=20260812.1"></script>
+<script src="/components/RuleGroupRow.js?v=20260809.5"></script>
+<script src="/components/AccountsPage.js?v=20260812.1"></script>
+<script src="/components/RuleEditModal.js?v=20260809.5"></script>
+<script src="/components/RuleApplyModal.js?v=20260809.3"></script>
+<script src="/components/OpenApiPreviewModal.js"></script>
+<script src="/app.js?v=20260812.1"></script>
 </body>
 </html>

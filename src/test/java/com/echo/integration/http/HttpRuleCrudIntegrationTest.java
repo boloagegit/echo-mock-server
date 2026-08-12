@@ -2,7 +2,10 @@ package com.echo.integration.http;
 
 import com.echo.dto.RuleDto;
 import com.echo.entity.Protocol;
+import com.echo.config.CacheConfig;
 import com.echo.integration.base.BaseIntegrationTest;
+import com.echo.service.HttpRuleService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpEntity;
@@ -18,6 +21,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * HTTP 一般規則 CRUD 整合測試
  */
 class HttpRuleCrudIntegrationTest extends BaseIntegrationTest {
+
+    @Autowired
+    private HttpRuleService httpRuleService;
 
     @org.junit.jupiter.api.BeforeEach
     void ensureCleanState() {
@@ -120,6 +126,57 @@ class HttpRuleCrudIntegrationTest extends BaseIntegrationTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody()).hasSize(3);
+    }
+
+    @Test
+    @DisplayName("動態 URL 共用 host + method 規則快取，仍正確區分 exact 與 wildcard")
+    void dynamicPaths_shouldSharePreparedRuleSetCache() {
+        createHttpRule("/users/*", "GET", "{\"kind\":\"wildcard\"}");
+        RuleDto exact = createHttpRule("/users/42", "GET", "{\"kind\":\"exact\"}");
+
+        List<com.echo.entity.HttpRule> first =
+                httpRuleService.findPreparedHttpRules("default", "/users/1", "GET");
+        List<com.echo.entity.HttpRule> second =
+                httpRuleService.findPreparedHttpRules("default", "/users/42", "GET");
+
+        assertThat(first).extracting(com.echo.entity.HttpRule::getMatchKey)
+                .containsExactly("/users/*");
+        assertThat(second).extracting(com.echo.entity.HttpRule::getId)
+                .contains(exact.getId());
+        assertThat(second).extracting(com.echo.entity.HttpRule::getMatchKey)
+                .contains("/users/42", "/users/*");
+
+        var springCache = cacheManager.getCache(CacheConfig.HTTP_RULES_CACHE);
+        assertThat(springCache).isNotNull();
+        var nativeCache = (com.github.benmanes.caffeine.cache.Cache<?, ?>)
+                springCache.getNativeCache();
+        assertThat(nativeCache.estimatedSize()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("大型 Response body 只在單筆規則詳情載入，列表仍保留所有 metadata")
+    void listRules_shouldExcludeLargeResponseBodyWithoutBreakingDetail() {
+        String largeBody = "x".repeat(512 * 1024);
+        RuleDto created = createHttpRule("/api/large-response", "GET", largeBody);
+
+        ResponseEntity<RuleDto[]> listResponse = restTemplate
+                .getForEntity("/api/admin/rules", RuleDto[].class);
+
+        assertThat(listResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(listResponse.getBody()).isNotNull();
+        assertThat(listResponse.getBody()).hasSize(1);
+        RuleDto summary = listResponse.getBody()[0];
+        assertThat(summary.getId()).isEqualTo(created.getId());
+        assertThat(summary.getResponseId()).isEqualTo(created.getResponseId());
+        assertThat(summary.getMatchKey()).isEqualTo("/api/large-response");
+        assertThat(summary.getResponseBody()).isNull();
+
+        ResponseEntity<RuleDto> detailResponse = restTemplate
+                .getForEntity("/api/admin/rules/" + created.getId(), RuleDto.class);
+
+        assertThat(detailResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(detailResponse.getBody()).isNotNull();
+        assertThat(detailResponse.getBody().getResponseBody()).isEqualTo(largeBody);
     }
 
     @Test

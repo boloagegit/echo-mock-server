@@ -4,6 +4,8 @@ import com.echo.dto.RuleDto;
 import com.echo.entity.BaseRule;
 import com.echo.entity.FaultType;
 import com.echo.entity.JmsRule;
+import com.echo.entity.JmsForwardTargetMode;
+import com.echo.entity.JmsRuleAction;
 import com.echo.entity.Protocol;
 import com.echo.entity.Response;
 import com.echo.jms.JmsConnectionManager;
@@ -61,6 +63,10 @@ public class JmsProtocolHandler extends AbstractProtocolHandler {
                 .responseId(r.getResponseId())
                 .delayMs(r.getDelayMs())
                 .maxDelayMs(r.getMaxDelayMs())
+                .action((r.getAction() != null ? r.getAction() : JmsRuleAction.MOCK).name())
+                .forwardTargetMode((r.getForwardTargetMode() != null
+                        ? r.getForwardTargetMode() : JmsForwardTargetMode.DEFAULT_CONNECTION).name())
+                .jmsTargetConnectionId(r.getJmsTargetConnectionId())
                 .faultType(r.getFaultType() != null ? r.getFaultType().name() : "NONE")
                 .scenarioName(r.getScenarioName())
                 .requiredScenarioState(r.getRequiredScenarioState())
@@ -86,6 +92,9 @@ public class JmsProtocolHandler extends AbstractProtocolHandler {
                 .responseId(dto.getResponseId())
                 .delayMs(dto.getDelayMs() != null ? dto.getDelayMs() : 0L)
                 .maxDelayMs(dto.getMaxDelayMs())
+                .action(parseAction(dto.getAction()))
+                .forwardTargetMode(parseForwardTargetMode(dto.getForwardTargetMode()))
+                .jmsTargetConnectionId(dto.getJmsTargetConnectionId())
                 .faultType(parseFaultType(dto.getFaultType()))
                 .scenarioName(dto.getScenarioName())
                 .requiredScenarioState(dto.getRequiredScenarioState())
@@ -197,6 +206,24 @@ public class JmsProtocolHandler extends AbstractProtocolHandler {
             return FaultType.valueOf(value);
         } catch (IllegalArgumentException e) {
             return FaultType.NONE;
+        }
+    }
+
+    private JmsRuleAction parseAction(String value) {
+        if (value == null || value.isBlank()) return JmsRuleAction.MOCK;
+        try {
+            return JmsRuleAction.valueOf(value);
+        } catch (IllegalArgumentException e) {
+            return JmsRuleAction.MOCK;
+        }
+    }
+
+    private JmsForwardTargetMode parseForwardTargetMode(String value) {
+        if (value == null || value.isBlank()) return JmsForwardTargetMode.DEFAULT_CONNECTION;
+        try {
+            return JmsForwardTargetMode.valueOf(value);
+        } catch (IllegalArgumentException e) {
+            return JmsForwardTargetMode.DEFAULT_CONNECTION;
         }
     }
 

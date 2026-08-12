@@ -2,6 +2,8 @@ package com.echo.dto;
 
 import com.echo.entity.HttpRule;
 import com.echo.entity.JmsRule;
+import com.echo.entity.JmsForwardTargetMode;
+import com.echo.entity.JmsRuleAction;
 import com.echo.entity.Protocol;
 import com.echo.entity.Response;
 import com.echo.protocol.http.HttpProtocolHandler;
@@ -84,5 +86,27 @@ class RuleDtoTest {
         RuleDto dto = handler.toDto(rule, response, true);
 
         assertThat(dto.getResponseBody()).isEqualTo("test body");
+    }
+
+    @Test
+    void jmsHandler_roundTripsForwardSelection() {
+        JmsProtocolHandler handler = new JmsProtocolHandler(jmsRuleRepository, null);
+        JmsRule rule = JmsRule.builder()
+                .id("test-id")
+                .queueName("TEST.QUEUE")
+                .action(JmsRuleAction.FORWARD)
+                .forwardTargetMode(JmsForwardTargetMode.CONNECTION)
+                .jmsTargetConnectionId("9")
+                .build();
+
+        RuleDto dto = handler.toDto(rule, null, false);
+        JmsRule mapped = (JmsRule) handler.fromDto(dto);
+
+        assertThat(dto.getAction()).isEqualTo("FORWARD");
+        assertThat(dto.getForwardTargetMode()).isEqualTo("CONNECTION");
+        assertThat(dto.getJmsTargetConnectionId()).isEqualTo("9");
+        assertThat(mapped.getAction()).isEqualTo(JmsRuleAction.FORWARD);
+        assertThat(mapped.getForwardTargetMode()).isEqualTo(JmsForwardTargetMode.CONNECTION);
+        assertThat(mapped.getJmsTargetConnectionId()).isEqualTo("9");
     }
 }

@@ -1,61 +1,130 @@
 /**
- * ConfirmModal - 確認對話框
+ * ConfirmModal - 通用確認對話框
  *
- * 通用確認/取消對話框，支援危險操作樣式與輸入驗證。
+ * 保留一般、危險與輸入確認三種流程，集中處理焦點、鍵盤及驗證回饋。
  */
 const ConfirmModal = {
   props: {
     confirmState: Object
   },
-  emits: [],
   inject: ['t'],
-  mounted() { this._onKey = e => this._trapFocus(e); },
+  data() {
+    return {
+      attempted: false,
+      previousFocus: null,
+      inertSiblings: []
+    };
+  },
+  computed: {
+    hasRequiredInput() {
+      return this.confirmState.requireInput != null;
+    },
+    inputMismatch() {
+      return this.attempted && this.hasRequiredInput && this.confirmState.inputValue !== this.confirmState.requireInput;
+    }
+  },
+  mounted() {
+    this._onKey = event => this.handleKeydown(event);
+  },
+  beforeUnmount() {
+    document.removeEventListener('keydown', this._onKey);
+    this.restoreBackground();
+  },
   watch: {
-    'confirmState.show'(v) {
-      if (v) {
+    'confirmState.show'(visible) {
+      if (visible) {
+        this.attempted = false;
+        this.previousFocus = document.activeElement;
         document.addEventListener('keydown', this._onKey);
         this.$nextTick(() => {
-          const el = this.$el?.querySelector?.('.modal-box');
-          if (el) { const btn = el.querySelector('button, input'); if (btn) { btn.focus(); } }
+          this.makeBackgroundInert();
+          this.$refs.cancelButton?.focus();
         });
-      } else {
-        document.removeEventListener('keydown', this._onKey);
+        return;
       }
+      document.removeEventListener('keydown', this._onKey);
+      this.restoreBackground();
+      this.previousFocus?.focus?.();
+      this.previousFocus = null;
     }
   },
   methods: {
-    _trapFocus(e) {
-      if (e.key !== 'Tab') { return; }
-      const box = this.$el?.querySelector?.('.modal-box');
+    makeBackgroundInert() {
+      const overlay = this.$el;
+      const parent = overlay?.parentElement;
+      if (!parent) { return; }
+      this.inertSiblings = Array.from(parent.children).filter(node => node !== overlay).map(node => ({
+        node,
+        inert: node.inert,
+        ariaHidden: node.getAttribute('aria-hidden')
+      }));
+      this.inertSiblings.forEach(({ node }) => {
+        node.inert = true;
+        node.setAttribute('aria-hidden', 'true');
+      });
+    },
+    restoreBackground() {
+      this.inertSiblings.forEach(({ node, inert, ariaHidden }) => {
+        node.inert = inert;
+        if (ariaHidden == null) { node.removeAttribute('aria-hidden'); }
+        else { node.setAttribute('aria-hidden', ariaHidden); }
+      });
+      this.inertSiblings = [];
+    },
+    handleKeydown(event) {
+      if (!this.confirmState.show) { return; }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        this.confirmState.onCancel();
+        return;
+      }
+      if (event.key !== 'Tab') { return; }
+      const box = this.$refs.dialog;
       if (!box) { return; }
-      const focusable = box.querySelectorAll('button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])');
+      const focusable = Array.from(box.querySelectorAll('button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'));
       if (!focusable.length) { return; }
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (e.shiftKey) {
-        if (document.activeElement === first) { e.preventDefault(); last.focus(); }
-      } else {
-        if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
       }
+    },
+    submitConfirm() {
+      this.attempted = true;
+      if (this.hasRequiredInput && this.confirmState.inputValue !== this.confirmState.requireInput) {
+        this.$nextTick(() => this.$refs.confirmInput?.focus());
+        return;
+      }
+      this.confirmState.onConfirm();
     }
   },
   template: /* html */`
-    <div class="modal-overlay" v-if="confirmState.show" @click.self="confirmState.onCancel" @keyup.escape="confirmState.onCancel">
-      <div class="modal-box" style="max-width:420px" role="dialog" aria-modal="true">
+    <div v-if="confirmState.show" class="modal-overlay" @click.self="confirmState.onCancel">
+      <div ref="dialog" class="modal-box workspace-modal confirm-modal" :class="{'confirm-modal-danger':confirmState.danger}" role="alertdialog" aria-modal="true" aria-labelledby="confirmDialogTitle" aria-describedby="confirmDialogMessage">
         <div class="modal-header">
-          <h3><i class="bi" :class="confirmState.danger?'bi-exclamation-triangle text-danger':'bi-question-circle'"></i> {{confirmState.title}}</h3>
-          <button class="close-btn" @click="confirmState.onCancel" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+          <div class="modal-heading">
+            <span class="modal-heading-icon"><i class="bi" :class="confirmState.danger?'bi-exclamation-triangle':'bi-question-circle'" aria-hidden="true"></i></span>
+            <h3 id="confirmDialogTitle">{{confirmState.title}}</h3>
+          </div>
+          <button type="button" class="close-btn" @click="confirmState.onCancel" :aria-label="confirmState.cancelText"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
         </div>
-        <div class="modal-body" style="padding:1.5rem">
-          <p style="white-space:pre-line;margin:0">{{confirmState.message}}</p>
-          <div v-if="confirmState.requireInput!=null" style="margin-top:1rem">
-            <label class="form-label">{{confirmState.inputLabel}}</label>
-            <input class="form-control" v-model="confirmState.inputValue" @keyup.enter="confirmState.inputValue===confirmState.requireInput && confirmState.onConfirm()">
+        <div class="modal-body confirm-modal-body">
+          <p id="confirmDialogMessage" class="confirm-modal-message">{{confirmState.message}}</p>
+          <div v-if="hasRequiredInput" class="confirm-input-group">
+            <label class="form-label" for="confirmInput">{{confirmState.inputLabel}}</label>
+            <p class="confirm-input-hint">{{t('confirm.enterToConfirm', {value:confirmState.requireInput})}}</p>
+            <input ref="confirmInput" id="confirmInput" class="form-control" :class="{'is-invalid':inputMismatch}" v-model="confirmState.inputValue" autocomplete="off" :aria-invalid="inputMismatch?'true':'false'" :aria-describedby="inputMismatch?'confirmInputHint confirmInputError':'confirmInputHint'" @input="attempted=false" @keyup.enter="submitConfirm">
+            <span id="confirmInputHint" class="visually-hidden">{{t('confirm.enterToConfirm', {value:confirmState.requireInput})}}</span>
+            <div v-if="inputMismatch" id="confirmInputError" class="invalid-feedback" role="alert">{{t('confirm.inputMismatch')}}</div>
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="confirmState.onCancel">{{confirmState.cancelText}}</button>
-          <button class="btn" :class="confirmState.danger?'btn-danger':'btn-primary'" @click="confirmState.onConfirm" :disabled="confirmState.requireInput!=null && confirmState.inputValue!==confirmState.requireInput">{{confirmState.confirmText}}</button>
+          <button ref="cancelButton" type="button" class="btn btn-secondary confirm-cancel" @click="confirmState.onCancel">{{confirmState.cancelText}}</button>
+          <button type="button" class="btn" :class="confirmState.danger?'btn-danger':'btn-primary'" @click="submitConfirm"><i v-if="confirmState.danger" class="bi bi-trash" aria-hidden="true"></i>{{confirmState.confirmText}}</button>
         </div>
       </div>
     </div>

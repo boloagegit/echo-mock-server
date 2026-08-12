@@ -50,8 +50,10 @@ const useAccounts = (deps) => {
 
     const loadAccounts = async () => {
         loading.value.accounts = true;
+        loading.value.accountsError = '';
         const r = await apiCall('/api/admin/builtin-users', {}, { silent: true });
         if (r && r.ok) { accounts.value = await r.json(); }
+        else { loading.value.accountsError = t('accounts.loadFailed'); }
         loading.value.accounts = false;
     };
 

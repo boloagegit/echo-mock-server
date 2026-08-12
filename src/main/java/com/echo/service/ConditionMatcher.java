@@ -4,8 +4,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.PathNotFoundException;
+import com.jayway.jsonpath.spi.json.JacksonJsonNodeJsonProvider;
+import com.jayway.jsonpath.spi.mapper.JacksonMappingProvider;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -23,9 +26,11 @@ import javax.xml.xpath.XPathFactory;
 import jakarta.annotation.PreDestroy;
 import java.io.StringReader;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 import java.util.regex.Pattern;
 
 /**
@@ -73,8 +78,17 @@ public class ConditionMatcher {
     }
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final Configuration jsonPathConfiguration = Configuration.builder()
+            .jsonProvider(new JacksonJsonNodeJsonProvider(objectMapper))
+            .mappingProvider(new JacksonMappingProvider(objectMapper))
+            .build();
     private final Cache<String, Pattern> patternCache = Caffeine.newBuilder()
             .maximumSize(500)
+            .expireAfterAccess(1, TimeUnit.HOURS)
+            .build();
+
+    private final Cache<String, JsonPath> jsonPathCache = Caffeine.newBuilder()
+            .maximumSize(1000)
             .expireAfterAccess(1, TimeUnit.HOURS)
             .build();
 
@@ -107,6 +121,7 @@ public class ConditionMatcher {
         DOC_BUILDER.remove();
         XPATH.remove();
         patternCache.invalidateAll();
+        jsonPathCache.invalidateAll();
         xpathExprCache.invalidateAll();
     }
 
@@ -157,6 +172,8 @@ public class ConditionMatcher {
         private final Document xmlDoc;
         private final JsonNode jsonNode;
         private final BodyType type;
+        private final Map<String, Boolean> matchOutcomes = new HashMap<>();
+        private final Map<String, JsonPathResult> jsonPathResults = new HashMap<>();
 
         enum BodyType { XML, JSON, PLAIN, EMPTY, TOO_LARGE }
 
@@ -175,6 +192,17 @@ public class ConditionMatcher {
             return new PreparedBody(null, null, null, BodyType.TOO_LARGE);
         }
 
+        /**
+         * 保留原始內容供請求紀錄使用，但不建立 JSON tree 或 XML DOM。
+         * 僅在候選規則完全沒有 body 條件時使用。
+         */
+        public static PreparedBody rawOnly(String raw) {
+            if (raw == null || raw.isBlank()) {
+                return empty();
+            }
+            return new PreparedBody(raw, null, null, BodyType.PLAIN);
+        }
+
         /** 取得已解析的 XML Document，若非 XML 則為 null */
         public Document getXmlDoc() {
             return xmlDoc;
@@ -188,6 +216,46 @@ public class ConditionMatcher {
         /** 取得原始 body 字串 */
         public String getRaw() {
             return raw;
+        }
+
+        /** Lightweight request-time predicate results; never contains parsed body objects. */
+        public Map<String, Boolean> getMatchOutcomesSnapshot() {
+            return Map.copyOf(matchOutcomes);
+        }
+
+        private boolean cachedMatch(String key, BooleanSupplier matcher) {
+            Boolean cached = matchOutcomes.get(key);
+            if (cached != null) {
+                return cached;
+            }
+            boolean result = matcher.getAsBoolean();
+            matchOutcomes.put(key, result);
+            return result;
+        }
+
+        private void restoreMatchOutcomes(Map<String, Boolean> outcomes) {
+            if (outcomes != null && !outcomes.isEmpty()) {
+                matchOutcomes.putAll(outcomes);
+            }
+        }
+
+        private JsonPathResult cachedJsonPath(
+                String path, java.util.function.Supplier<JsonPathResult> reader) {
+            return jsonPathResults.computeIfAbsent(path, ignored -> reader.get());
+        }
+
+        int cachedJsonPathCount() {
+            return jsonPathResults.size();
+        }
+    }
+
+    private record JsonPathResult(boolean found, String value) {
+        private static JsonPathResult missing() {
+            return new JsonPathResult(false, null);
+        }
+
+        private static JsonPathResult found(String value) {
+            return new JsonPathResult(true, value);
         }
     }
 
@@ -220,6 +288,13 @@ public class ConditionMatcher {
         return new PreparedBody(trimmed, null, null, PreparedBody.BodyType.PLAIN);
     }
 
+    /** Rebuilds parsed body state while reusing predicates already evaluated on the request path. */
+    public PreparedBody prepareBody(String body, Map<String, Boolean> matchOutcomes) {
+        PreparedBody prepared = prepareBody(body);
+        prepared.restoreMatchOutcomes(matchOutcomes);
+        return prepared;
+    }
+
     // ==================== Public Matching API ====================
 
     /**
@@ -232,7 +307,8 @@ public class ConditionMatcher {
         if (bodyCondition != null && !bodyCondition.isBlank()) {
             for (String c : bodyCondition.split(";")) {
                 String trimmed = c.trim();
-                if (!trimmed.isEmpty() && !matchBodyPrepared(trimmed, prepared)) {
+                if (!trimmed.isEmpty() && !cachedMatch(prepared, "body:" + trimmed,
+                        () -> matchBodyPrepared(trimmed, prepared))) {
                     return false;
                 }
             }
@@ -240,7 +316,8 @@ public class ConditionMatcher {
         if (queryCondition != null && !queryCondition.isBlank()) {
             for (String c : queryCondition.split(";")) {
                 String trimmed = c.trim();
-                if (!trimmed.isEmpty() && !matchQueryParam(trimmed, queryString)) {
+                if (!trimmed.isEmpty() && !cachedMatch(prepared, "query:" + trimmed,
+                        () -> matchQueryParam(trimmed, queryString))) {
                     return false;
                 }
             }
@@ -248,7 +325,8 @@ public class ConditionMatcher {
         if (headerCondition != null && !headerCondition.isBlank()) {
             for (String c : headerCondition.split(";")) {
                 String trimmed = c.trim();
-                if (!trimmed.isEmpty() && !matchHeader(trimmed, headers)) {
+                if (!trimmed.isEmpty() && !cachedMatch(prepared, "header:" + trimmed,
+                        () -> matchHeader(trimmed, headers))) {
                     return false;
                 }
             }
@@ -266,17 +344,17 @@ public class ConditionMatcher {
         List<ConditionResult> results = new ArrayList<>();
 
         evaluateConditions(bodyCondition, "bodyCondition", results,
-                c -> matchBodyPrepared(c, prepared),
+                c -> cachedMatch(prepared, "body:" + c, () -> matchBodyPrepared(c, prepared)),
                 c -> buildBodyDetail(c, prepared),
                 c -> "bodyCondition PASS (" + c + ")");
 
         evaluateConditions(queryCondition, "queryCondition", results,
-                c -> matchQueryParam(c, queryString),
+                c -> cachedMatch(prepared, "query:" + c, () -> matchQueryParam(c, queryString)),
                 c -> buildQueryDetail(c, queryString),
                 c -> "queryCondition PASS (" + c + ")");
 
         evaluateConditions(headerCondition, "headerCondition", results,
-                c -> matchHeader(c, headers),
+                c -> cachedMatch(prepared, "header:" + c, () -> matchHeader(c, headers)),
                 c -> buildHeaderDetail(c, headers),
                 c -> "headerCondition PASS (" + c + ")");
 
@@ -285,6 +363,10 @@ public class ConditionMatcher {
                 .overallMatch(overallMatch)
                 .results(results)
                 .build();
+    }
+
+    private boolean cachedMatch(PreparedBody prepared, String key, BooleanSupplier matcher) {
+        return prepared == null ? matcher.getAsBoolean() : prepared.cachedMatch(key, matcher);
     }
 
     /**
@@ -326,7 +408,7 @@ public class ConditionMatcher {
         }
         try {
             if (condition.startsWith("$.")) {
-                return extractJsonPathActual(parsed.field(), prepared.raw);
+                return extractJsonPathActual(parsed.field(), prepared);
             }
             if (condition.startsWith("//")) {
                 if (prepared.xmlDoc != null) {
@@ -371,15 +453,12 @@ public class ConditionMatcher {
         return node.isTextual() ? node.asText() : node.toString();
     }
 
-    private String extractJsonPathActual(String jsonPath, String body) {
-        try {
-            Object result = JsonPath.read(body, jsonPath);
-            return result != null ? result.toString() : "null";
-        } catch (PathNotFoundException e) {
-            return "not found";
-        } catch (Exception e) {
+    private String extractJsonPathActual(String jsonPath, PreparedBody prepared) {
+        JsonPathResult result = readJsonPath(prepared, jsonPath);
+        if (!result.found()) {
             return "not found";
         }
+        return result.value() != null ? result.value() : "null";
     }
 
     private String extractXmlActual(String field, Document doc) {
@@ -508,7 +587,7 @@ public class ConditionMatcher {
             return false;
         }
         if (condition.startsWith("$.")) {
-            return matchJsonPath(condition, prepared.raw);
+            return matchJsonPath(condition, prepared);
         }
         if (condition.startsWith("//")) {
             if (prepared.xmlDoc != null) {
@@ -579,11 +658,14 @@ public class ConditionMatcher {
         }
     }
 
-    private boolean matchJsonPath(String condition, String body) {
+    private boolean matchJsonPath(String condition, PreparedBody prepared) {
         try {
             var parsed = parseCondition(condition);
-            Object result = JsonPath.read(body, parsed.field);
-            String actual = result != null ? result.toString() : null;
+            JsonPathResult result = readJsonPath(prepared, parsed.field);
+            if (!result.found()) {
+                return false;
+            }
+            String actual = result.value();
             if (actual != null && actual.length() > maxFieldValueLength) {
                 log.debug("Skipping JsonPath match: value too large ({} chars), condition: {}", actual.length(), condition);
                 return false;
@@ -594,6 +676,32 @@ public class ConditionMatcher {
         } catch (Exception e) {
             log.warn("JsonPath match failed: {}", e.getMessage());
             return false;
+        }
+    }
+
+    private JsonPathResult readJsonPath(PreparedBody prepared, String path) {
+        if (prepared == null || prepared.jsonNode == null) {
+            return JsonPathResult.missing();
+        }
+        return prepared.cachedJsonPath(path, () -> evaluateJsonPath(prepared.jsonNode, path));
+    }
+
+    private JsonPathResult evaluateJsonPath(JsonNode jsonNode, String path) {
+        try {
+            JsonPath compiled = jsonPathCache.get(path, JsonPath::compile);
+            Object value = compiled.read(jsonNode, jsonPathConfiguration);
+            if (value instanceof JsonNode node) {
+                if (node.isNull()) {
+                    return JsonPathResult.found(null);
+                }
+                return JsonPathResult.found(node.isTextual() ? node.asText() : node.toString());
+            }
+            return JsonPathResult.found(value != null ? value.toString() : null);
+        } catch (PathNotFoundException e) {
+            return JsonPathResult.missing();
+        } catch (Exception e) {
+            log.warn("JsonPath evaluation failed: {}", e.getMessage());
+            return JsonPathResult.missing();
         }
     }
 

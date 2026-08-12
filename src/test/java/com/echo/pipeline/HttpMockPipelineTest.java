@@ -7,6 +7,7 @@ import com.echo.service.HttpRuleService;
 import com.echo.service.RequestLogService;
 import com.echo.service.ResponseTemplateService;
 import com.echo.service.RuleService;
+import com.echo.service.ScenarioService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -55,13 +56,16 @@ class HttpMockPipelineTest {
     @Mock
     private RestTemplate restTemplate;
 
+    @Mock
+    private ScenarioService scenarioService;
+
     private HttpMockPipeline pipeline;
 
     @BeforeEach
     void setUp() {
         pipeline = new HttpMockPipeline(
                 conditionMatcher, ruleService, requestLogService,
-                httpRuleService, templateService, restTemplate, null);
+                httpRuleService, templateService, restTemplate, null, scenarioService);
     }
 
     // ==================== Helpers ====================
@@ -195,9 +199,6 @@ class HttpMockPipelineTest {
             when(httpRuleService.findPreparedHttpRules("backend.example.com", "/api/data", "GET"))
                     .thenReturn(Collections.emptyList());
 
-            ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
-
             ResponseEntity<String> proxyResponse = new ResponseEntity<>("proxy body", HttpStatus.OK);
             when(restTemplate.exchange(eq("https://backend.example.com/api/data?q=hello"),
                     any(), any(), eq(String.class)))
@@ -237,9 +238,6 @@ class HttpMockPipelineTest {
             when(httpRuleService.findPreparedHttpRules("unreachable.host", "/api/data", "GET"))
                     .thenReturn(Collections.emptyList());
 
-            ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
-
             when(restTemplate.exchange(anyString(), any(), any(), eq(String.class)))
                     .thenThrow(new RestClientException("Connection refused"));
 
@@ -264,9 +262,6 @@ class HttpMockPipelineTest {
         void noMatchReturns404() {
             when(httpRuleService.findPreparedHttpRules("default", "/api/users", "POST"))
                     .thenReturn(Collections.emptyList());
-
-            ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
 
             PipelineResult result = pipeline.execute(defaultRequest());
 
@@ -370,9 +365,6 @@ class HttpMockPipelineTest {
         void recordCalledOnNoMatch() {
             when(httpRuleService.findPreparedHttpRules("default", "/api/users", "POST"))
                     .thenReturn(Collections.emptyList());
-
-            ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
 
             pipeline.execute(defaultRequest());
 

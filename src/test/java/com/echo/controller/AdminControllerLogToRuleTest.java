@@ -4,6 +4,10 @@ import com.echo.dto.RuleDto;
 import com.echo.entity.Protocol;
 import com.echo.service.RequestLogService;
 import com.echo.service.RequestLogService.LogEntry;
+import com.echo.service.IssueReportService;
+import com.echo.service.RuleApplyMapper;
+import com.echo.service.RuleApplyPersistenceSynchronizer;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,6 +30,9 @@ class AdminControllerLogToRuleTest {
     private com.echo.service.RuleService ruleService;
 
     @Mock
+    private com.echo.service.RuleQueryService ruleQueryService;
+
+    @Mock
     private com.echo.protocol.ProtocolHandlerRegistry protocolHandlerRegistry;
 
     @Mock
@@ -36,9 +43,6 @@ class AdminControllerLogToRuleTest {
 
     @Mock
     private com.echo.service.ExcelImportService excelImportService;
-
-    @Mock
-    private com.echo.service.OpenApiImportService openApiImportService;
 
     @Mock
     private com.echo.service.ResponseContentValidatorRegistry responseContentValidatorRegistry;
@@ -53,6 +57,12 @@ class AdminControllerLogToRuleTest {
     private org.springframework.cache.CacheManager cacheManager;
 
     @Mock
+    private IssueReportService issueReportService;
+
+    @Mock
+    private com.echo.service.OpenApiImportService openApiImportService;
+
+    @Mock
     private com.echo.service.ScenarioService scenarioService;
 
     private AdminController controller;
@@ -60,11 +70,14 @@ class AdminControllerLogToRuleTest {
     @BeforeEach
     void setUp() {
         controller = new AdminController(
-                ruleService, protocolHandlerRegistry, responseService,
+                ruleService, ruleQueryService, protocolHandlerRegistry, responseService,
                 requestLogService, Optional.empty(), Optional.empty(),
                 Optional.empty(), excelImportService, openApiImportService, Optional.empty(),
                 responseContentValidatorRegistry, builtinUserRepository,
-                agentRegistry, cacheManager, scenarioService
+                agentRegistry, cacheManager, issueReportService, Optional.empty(), Optional.empty(),
+                new RuleApplyMapper(new ObjectMapper()),
+                org.mockito.Mockito.mock(RuleApplyPersistenceSynchronizer.class),
+                new com.echo.service.RuleApplyContractService(true), scenarioService
         );
         ReflectionTestUtils.setField(controller, "ldapEnabled", false);
         ReflectionTestUtils.setField(controller, "ldapUrl", "");

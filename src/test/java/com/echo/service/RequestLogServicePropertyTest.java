@@ -1,6 +1,5 @@
 package com.echo.service;
 
-import com.echo.agent.AgentStatus;
 import com.echo.agent.LogAgent;
 import com.echo.agent.LogTask;
 import com.echo.entity.Protocol;
@@ -13,7 +12,10 @@ import net.jqwik.api.constraints.StringLength;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.ObjectProvider;
 
+import java.util.function.Supplier;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -22,7 +24,7 @@ import static org.mockito.Mockito.*;
  * <p>
  * Feature: agent-framework-log-agent
  * <p>
- * 驗證 record() 委派給 LogAgent 以及 LogAgent 不可用時的降級同步寫入。
+ * 驗證 record() 委派給 LogAgent，以及 LogAgent 不可用時不進行同步寫入。
  */
 class RequestLogServicePropertyTest {
 
@@ -80,7 +82,6 @@ class RequestLogServicePropertyTest {
         when(configService.isRequestLogMemoryMode()).thenReturn(true);
         when(configService.getRequestLogMaxRecords()).thenReturn(100);
         when(configService.isRequestLogIncludeBody()).thenReturn(false);
-        when(logAgent.getStatus()).thenReturn(AgentStatus.RUNNING);
 
         RequestLogService service = createService(
                 repo, configService, protocolHandlerRegistry, providerOf(logAgent));
@@ -89,14 +90,13 @@ class RequestLogServicePropertyTest {
         service.record(ruleId, protocol, null, endpoint, matched, responseTimeMs,
                 "127.0.0.1", null, null, null, null, null, null, null, null);
 
-        // Assert — LogAgent.submit() 被呼叫一次
-        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
-        verify(logAgent, times(1)).submit(captor.capture());
+        // Assert — lazy task factory is delegated once and contains the correct fields.
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        ArgumentCaptor<Supplier<? extends LogTask>> captor =
+                (ArgumentCaptor) ArgumentCaptor.forClass(Supplier.class);
+        verify(logAgent, times(1)).submitDurably(captor.capture());
 
-        Object submitted = captor.getValue();
-        assertThat(submitted).isInstanceOf(LogTask.class);
-
-        LogTask task = (LogTask) submitted;
+        LogTask task = captor.getValue().get();
         assertThat(task.getRuleId()).isEqualTo(ruleId);
         assertThat(task.getProtocol()).isEqualTo(protocol);
         assertThat(task.getEndpoint()).isEqualTo(endpoint);
@@ -128,7 +128,6 @@ class RequestLogServicePropertyTest {
         when(configService.isRequestLogMemoryMode()).thenReturn(true);
         when(configService.getRequestLogMaxRecords()).thenReturn(100);
         when(configService.isRequestLogIncludeBody()).thenReturn(false);
-        when(logAgent.getStatus()).thenReturn(AgentStatus.RUNNING);
 
         RequestLogService service = createService(
                 repo, configService, protocolHandlerRegistry, providerOf(logAgent));
@@ -146,14 +145,14 @@ class RequestLogServicePropertyTest {
     // ==================== Property 10 ====================
 
     /**
-     * Feature: agent-framework-log-agent, Property 10: Fallback to synchronous write when agent unavailable
+     * Feature: agent-framework-log-agent, Property 10: Drop when agent unavailable
      * <p>
-     * LogAgent 為 null（provider 回傳 null）時，record() 直接寫入 memory buffer，無資料遺失。
+     * LogAgent 為 null（provider 回傳 null）時，record() 不得同步寫入 memory 或 database。
      * <p>
      * **Validates: Requirements 6.4**
      */
     @Property(tries = 20)
-    void fallbackToMemoryWriteWhenAgentNull(
+    void dropWhenAgentNull(
             @ForAll @IntRange(min = 1, max = 10) int recordCount) {
 
         // Arrange
@@ -170,24 +169,26 @@ class RequestLogServicePropertyTest {
 
         // Act — 寫入 recordCount 筆
         for (int i = 0; i < recordCount; i++) {
-            service.record("rule-" + i, Protocol.HTTP, null, "/api/" + i, true, 10,
-                    "127.0.0.1", null, null, null, null, null, null, null, null);
+            int index = i;
+            assertThatThrownBy(() -> service.record("rule-" + index, Protocol.HTTP, null,
+                    "/api/" + index, true, 10, "127.0.0.1", null, null, null,
+                    null, null, null, null, null))
+                    .isInstanceOf(RequestLogUnavailableException.class);
         }
 
-        // Assert — 全部寫入 memory buffer，無資料遺失
-        assertThat(service.count()).isEqualTo(recordCount);
+        assertThat(service.count()).isZero();
+        verify(repo, never()).save(any());
     }
 
     /**
-     * Feature: agent-framework-log-agent, Property 10: Fallback to synchronous write when agent unavailable
+     * Feature: agent-framework-log-agent, Property 10: Drop when agent rejects
      * <p>
-     * LogAgent 狀態為 STOPPED 時，record() 直接寫入 memory buffer，無資料遺失。
+     * LogAgent 拒絕任務時，record() 不得同步寫入 memory buffer。
      * <p>
      * **Validates: Requirements 6.4**
      */
     @Property(tries = 20)
-    void fallbackToMemoryWriteWhenAgentStopped(
-            @ForAll("nonRunningStatuses") AgentStatus status,
+    void dropWhenAgentRejects(
             @ForAll @IntRange(min = 1, max = 10) int recordCount) {
 
         // Arrange
@@ -199,32 +200,34 @@ class RequestLogServicePropertyTest {
         when(configService.isRequestLogMemoryMode()).thenReturn(true);
         when(configService.getRequestLogMaxRecords()).thenReturn(100);
         when(configService.isRequestLogIncludeBody()).thenReturn(false);
-        when(logAgent.getStatus()).thenReturn(status);
+        doThrow(new RequestLogUnavailableException("rejected"))
+                .when(logAgent).submitDurably(any());
 
         RequestLogService service = createService(
                 repo, configService, protocolHandlerRegistry, providerOf(logAgent));
 
         // Act
         for (int i = 0; i < recordCount; i++) {
-            service.record("rule-" + i, Protocol.HTTP, null, "/api/" + i, true, 10,
-                    "127.0.0.1", null, null, null, null, null, null, null, null);
+            int index = i;
+            assertThatThrownBy(() -> service.record("rule-" + index, Protocol.HTTP, null,
+                    "/api/" + index, true, 10, "127.0.0.1", null, null, null,
+                    null, null, null, null, null))
+                    .isInstanceOf(RequestLogUnavailableException.class);
         }
 
-        // Assert — LogAgent.submit() 不應被呼叫
-        verify(logAgent, never()).submit(any());
-        // 全部寫入 memory buffer
-        assertThat(service.count()).isEqualTo(recordCount);
+        verify(logAgent, times(recordCount)).submitDurably(any());
+        assertThat(service.count()).isZero();
     }
 
     /**
-     * Feature: agent-framework-log-agent, Property 10: Fallback to synchronous write when agent unavailable
+     * Feature: agent-framework-log-agent, Property 10: Database fallback is forbidden
      * <p>
-     * LogAgent 不可用時，database 模式下 record() 直接寫入 DB，無資料遺失。
+     * LogAgent 不可用時，database 模式也不得由請求執行緒直接寫入 DB。
      * <p>
      * **Validates: Requirements 6.4**
      */
     @Property(tries = 20)
-    void fallbackToDatabaseWriteWhenAgentUnavailable(
+    void dropWithoutDatabaseWriteWhenAgentUnavailable(
             @ForAll @IntRange(min = 1, max = 10) int recordCount) {
 
         // Arrange
@@ -235,19 +238,21 @@ class RequestLogServicePropertyTest {
         when(configService.isRequestLogMemoryMode()).thenReturn(false);
         when(configService.getRequestLogMaxRecords()).thenReturn(10000);
         when(configService.isRequestLogIncludeBody()).thenReturn(false);
-        when(repo.count()).thenReturn(0L);
 
         RequestLogService service = createService(
                 repo, configService, protocolHandlerRegistry, emptyProvider());
 
         // Act
         for (int i = 0; i < recordCount; i++) {
-            service.record("rule-" + i, Protocol.HTTP, null, "/api/" + i, true, 10,
-                    "127.0.0.1", null, null, null, null, null, null, null, null);
+            int index = i;
+            assertThatThrownBy(() -> service.record("rule-" + index, Protocol.HTTP, null,
+                    "/api/" + index, true, 10, "127.0.0.1", null, null, null,
+                    null, null, null, null, null))
+                    .isInstanceOf(RequestLogUnavailableException.class);
         }
 
-        // Assert — 每筆都直接寫入 DB
-        verify(repo, times(recordCount)).save(any(RequestLog.class));
+        verify(repo, never()).save(any(RequestLog.class));
+        verify(repo, never()).count();
     }
 
     // ==================== Providers ====================
@@ -257,8 +262,4 @@ class RequestLogServicePropertyTest {
         return Arbitraries.of(Protocol.values());
     }
 
-    @Provide
-    Arbitrary<AgentStatus> nonRunningStatuses() {
-        return Arbitraries.of(AgentStatus.STARTING, AgentStatus.STOPPING, AgentStatus.STOPPED);
-    }
 }

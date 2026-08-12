@@ -8,10 +8,6 @@
 
 An enterprise-grade dual-protocol mock server supporting HTTP and JMS, designed for simulating API responses in development and testing environments.
 
-## Screenshot
-
-![Mock Rules - Dark Theme](docs/screenshots/mock-rules-dark.png)
-
 ## Features
 
 - **Dual Protocol Support** – HTTP REST API and JMS (Artemis) message queues
@@ -23,24 +19,25 @@ An enterprise-grade dual-protocol mock server supporting HTTP and JMS, designed 
 - **Dynamic Templates** – WireMock-style Handlebars template engine with conditionals, loops, JSONPath/XPath
 - **Proxy Forwarding** – Automatically forwards to the original host when no matching rule is found
 - **Visual Management** – Dark/Light theme Web UI with responsive design (RWD)
-- **Batch Operations** – Export/import rules and responses, batch delete (ADMIN only)
-- **Excel Import** – Batch import rules via Excel with downloadable template
+- **Batch Operations** – Optional export/import for rules and responses plus batch delete (ADMIN only; import/export disabled by default)
+- **Excel Import** – Optional batch import via Excel with a downloadable template (disabled by default)
 - **Audit Trail** – Track rule change history with automatic cleanup of expired records
 - **Statistics & Monitoring** – Real-time request statistics and hit rate tracking with auto-refresh and idle detection
-- **High Performance** – 4K+ RPS (JSON), XML/XPath matching 14x faster than WireMock at scale (2,000 rules)
+- **Measured Performance** – Reproducible JSON/XML benchmarks with explicit workload, latency, and error counts
 - **Access Control** – Admin/User role separation with LDAP authentication support and built-in account management
 - **Built-in Accounts** – Account CRUD, enable/disable, password reset, forgot password, self-registration
 - **Remember Me** – Long-lived login sessions, synced with session timeout (default 180 days)
 - **Rule Protection** – Mark rules as protected to prevent automatic cleanup
 - **Rule Extension** – Extend retention period for rules/responses to avoid scheduled cleanup
 - **Orphan Cleanup** – Detect and remove orphan responses not used by any rule
-- **Auto Backup** – Scheduled SQLite database backup, shutdown backup, and manual trigger
-- **Stateful Scenarios** – WireMock-style state machine for simulating multi-step workflows (e.g., order → payment → confirmation)
-- **Fault Injection** – Simulate connection reset and empty response for resilience testing
-- **Faker Data** – Built-in fake data helpers (name, email, phone, address, etc.) for realistic mock responses
+- **Auto Backup** – Scheduled H2/SQLite backup, shutdown backup, and manual trigger
+- **Stateful Scenarios** – Optional WireMock-style state machines for multi-step workflows (disabled by default)
+- **Fault Injection** – Choose Fault Injection as a rule mode to simulate connection resets and empty responses for resilience testing
+- **OpenAPI Import** – Optional preview/import of OpenAPI 3.x or Swagger 2.x JSON/YAML specifications (disabled by default)
+- **Faker Data** – Built-in name, email, phone, address, and integer template helpers
 - **Rule Testing** – Test rule matching directly from the admin UI
 - **Static Analysis** – SpotBugs code analysis
-- **Zero External Dependencies** – Embedded SQLite database and Caffeine cache
+- **No External Database Required** – Embedded H2 by default, with an optional SQLite WAL profile
 - **Intranet Friendly** – Frontend uses WebJars, no CDN required
 - **Environment Identification** – Protocol aliases and environment labels for easy multi-environment deployment
 
@@ -49,7 +46,7 @@ An enterprise-grade dual-protocol mock server supporting HTTP and JMS, designed 
 ### Prerequisites
 
 - Java 17+
-- Gradle 8+ (or use the included wrapper)
+- Gradle 8.14+ (or use the included wrapper)
 
 ### Start the Server
 
@@ -64,6 +61,34 @@ An enterprise-grade dual-protocol mock server supporting HTTP and JMS, designed 
 ./gradlew bootJar
 java -jar build/libs/echo-server-*.jar
 ```
+
+On a Windows development machine, run the equivalent commands in PowerShell:
+
+```powershell
+.\gradlew.bat dev
+.\gradlew.bat bootRun
+.\gradlew.bat bootJar
+java -jar (Get-ChildItem build\libs\echo-server-*.jar | Select-Object -First 1).FullName
+```
+
+### Migrate H2 to SQLite
+
+The base configuration currently starts with H2. Stop Echo before migrating, and use a target SQLite path that does not already exist:
+
+```bash
+python3 scripts/migrate-h2-to-sqlite.py
+SPRING_PROFILES_ACTIVE=sqlite ./gradlew bootRun
+```
+
+PowerShell:
+
+```powershell
+python scripts\migrate-h2-to-sqlite.py
+$env:SPRING_PROFILES_ACTIVE="sqlite"
+.\gradlew.bat bootRun
+```
+
+The migration verifies an H2 recovery backup, copies all application tables into a staged SQLite database in one transaction, compares row counts and per-table SHA-256 digests, runs SQLite integrity and foreign-key checks, and starts Echo for API smoke tests. It atomically publishes `mockdb.sqlite` only after every check passes and never deletes the H2 source. Run `python3 scripts/migrate-h2-to-sqlite.py --help` for non-default paths and automation options.
 
 ### Docker Deployment
 
@@ -92,6 +117,16 @@ Environment variables:
 
 JVM options are set in the Dockerfile (default `-Xms256m -Xmx512m`). Override by adding `JAVA_OPTS` to docker-compose.yml `environment`.
 
+### Optional Features
+
+The following user-facing features are intentionally disabled by default and can be enabled per deployment:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ECHO_BULK_IMPORT_EXPORT_ENABLED` | `false` | Shows and enables bulk import/export operations |
+| `ECHO_SCENARIOS_ENABLED` | `false` | Enables stateful Scenario rules and Scenario administration |
+| `ECHO_RULE_DRAG_SORT_ENABLED` | `false` | Enables drag-and-drop priority ordering in the rule list |
+
 ### Access the Service
 
 | Service | URL | Description |
@@ -99,41 +134,7 @@ JVM options are set in the Dockerfile (default `-Xms256m -Xmx512m`). Override by
 | Admin UI | http://localhost:8080/ | Mock rule management |
 | Login Page | http://localhost:8080/login.html | User login |
 | Mock Endpoint | http://localhost:8080/mock/** | Intercept HTTP requests |
-| — | — | SQLite DB managed via file (no web console needed) |
-
-## Upgrading from H2
-
-> **Breaking Change**: The default database has been changed from H2 to SQLite starting from this version.
-
-**New installations** – No action needed. SQLite is used by default.
-
-**Existing H2 users** – Choose one of the following:
-
-1. **Keep using H2** (no migration needed):
-   ```bash
-   ./gradlew bootRun --args='--spring.profiles.active=h2'
-   ```
-
-2. **Migrate to SQLite** (recommended):
-   ```bash
-   # 1. Stop Echo
-   # 2. Export data from H2 using H2 Shell
-   java -cp ~/.gradle/caches/**/h2-*.jar org.h2.tools.Shell \
-     -url "jdbc:h2:file:./mockdb;ACCESS_MODE_DATA=r" -user sa -password "" \
-     -sql "CALL CSVWRITE('./http_rules.csv', 'SELECT * FROM HTTP_RULES')"
-   # Repeat for: JMS_RULES, RESPONSES, BUILTIN_USERS, RULE_AUDIT_LOGS
-
-   # 3. Delete old DB and start Echo (auto-creates SQLite)
-   rm mockdb.mv.db
-   ./gradlew dev
-   # JPA ddl-auto=update will create the schema
-
-   # 4. Import CSV via H2 Shell → SQLite (or re-create rules via Admin UI)
-   ```
-
-3. **Start fresh** – Delete `mockdb.mv.db` and restart. A new SQLite database will be created automatically.
-
-**Why SQLite?** H2 embedded mode is prone to chunk corruption on abnormal shutdown (kill -9, OOM kill, power loss). SQLite uses atomic commit with WAL mode, guaranteeing database integrity even after crashes.
+| Database | — | H2 is the default; enable the `sqlite` profile after migration to use SQLite WAL |
 
 ## Rule Matching Priority
 
@@ -216,6 +217,8 @@ Application ──JMS──▶ Echo (Artemis)  ──JMS──▶ ESB (TIBCO/Art
                      No match    → Forward to Target ESB
 ```
 
+Administrators can create multiple Artemis/TIBCO profiles under **System Settings → JMS Forward Connections**, test them, and select one default. Only unmatched messages use this outbound default; Echo's inbound Embedded Artemis connection is unchanged. Once the first database profile is created, database profiles take precedence and the legacy `application.yml` target is used only while no database profile exists. Passwords are stored with AES-GCM encryption and are never returned by the API. Set a stable `ECHO_JMS_CREDENTIAL_KEY` in production; changing it requires re-entering every stored password.
+
 ## Condition Matching Syntax
 
 ### HTTP Body Conditions (JSON)
@@ -259,56 +262,24 @@ Multiple conditions separated by `;` must all match (AND logic):
 
 ## Stateful Scenarios
 
-Simulate multi-step workflows using WireMock-style state machines. Each scenario has a `scenarioName` and a `currentState` (default: `Started`).
+Rules can participate in a named state machine using `scenarioName`, match only in
+`requiredScenarioState`, and transition to `newScenarioState` after a successful match.
+Every scenario starts in `Started`.
 
-Rules use three fields to control state:
-- `scenarioName` – Which state machine this rule belongs to
-- `requiredScenarioState` – Rule only matches when the scenario is in this state
-- `newScenarioState` – After matching, transition the scenario to this state
-
-### Example: Order Flow
-
-```bash
-# Rule 1: In "Started" state, GET returns pending
-curl -X POST http://localhost:8080/api/admin/rules -u admin:admin \
-  -H 'Content-Type: application/json' -d '{
-    "protocol":"HTTP", "matchKey":"/order/123", "method":"GET",
-    "responseBody":"{\"status\":\"pending\"}", "status":200, "priority":10,
-    "scenarioName":"order-flow", "requiredScenarioState":"Started", "newScenarioState":"Started"
-  }'
-
-# Rule 2: In "Started" state, POST /pay transitions to "Paid"
-curl -X POST http://localhost:8080/api/admin/rules -u admin:admin \
-  -H 'Content-Type: application/json' -d '{
-    "protocol":"HTTP", "matchKey":"/order/123/pay", "method":"POST",
-    "responseBody":"{\"result\":\"payment-ok\"}", "status":200, "priority":10,
-    "scenarioName":"order-flow", "requiredScenarioState":"Started", "newScenarioState":"Paid"
-  }'
-
-# Rule 3: In "Paid" state, GET returns paid
-curl -X POST http://localhost:8080/api/admin/rules -u admin:admin \
-  -H 'Content-Type: application/json' -d '{
-    "protocol":"HTTP", "matchKey":"/order/123", "method":"GET",
-    "responseBody":"{\"status\":\"paid\"}", "status":200, "priority":10,
-    "scenarioName":"order-flow", "requiredScenarioState":"Paid", "newScenarioState":"Paid"
-  }'
+```json
+{
+  "protocol": "HTTP",
+  "matchKey": "/orders/123/pay",
+  "method": "POST",
+  "scenarioName": "order-flow",
+  "requiredScenarioState": "Started",
+  "newScenarioState": "Paid",
+  "responseBody": "{\"result\":\"payment-ok\"}"
+}
 ```
 
-```bash
-curl http://localhost:8080/mock/order/123          # → {"status":"pending"}
-curl -X POST http://localhost:8080/mock/order/123/pay  # → {"result":"payment-ok"}
-curl http://localhost:8080/mock/order/123          # → {"status":"paid"}
-```
-
-### Reset Scenarios
-
-```bash
-# Reset a single scenario
-curl -X PUT http://localhost:8080/api/admin/scenarios/order-flow/reset -u admin:admin
-
-# Reset all scenarios
-curl -X PUT http://localhost:8080/api/admin/scenarios/reset -u admin:admin
-```
+Reset one scenario with `PUT /api/admin/scenarios/{name}/reset`, or all scenarios
+with `PUT /api/admin/scenarios/reset`.
 
 ## Usage
 
@@ -332,6 +303,18 @@ location /api/ {
     proxy_pass http://echo-server:8080/mock/;
 }
 ```
+
+### Outbound HTTPS verification
+
+HTTP forwarding keeps **intranet-compatible TLS behavior by default**: certificate-chain
+and hostname verification are disabled so private or self-signed downstream services
+continue to work. Saved HTTP connection profiles can opt into **Strict Certificate
+Verification** in System Settings. Legacy `X-Original-Host` forwarding remains in
+intranet-compatible mode.
+
+Use the default only on a trusted internal network. For downstream services reached
+through an untrusted network, create a saved HTTP connection and enable strict
+verification.
 
 ## Configuration
 
@@ -362,11 +345,12 @@ echo:
     sync-interval-ms: 5000      # Multi-instance cache sync interval (ms)
   jms:
     enabled: false              # Set to true to enable JMS
+    credential-key: ${ECHO_JMS_CREDENTIAL_KEY} # Encrypts stored forwarding credentials
     port: 61616                 # Artemis listen port
     queue: ECHO.REQUEST         # Queue to listen on
     endpoint-field: ServiceName # Field to extract endpoint identifier from message body
     target:
-      enabled: false            # Set to true to enable forwarding to ESB
+      enabled: false            # Legacy fallback used until a database profile exists
       type: tibco               # artemis or tibco
       server-url: tcp://esb-server:7222
       timeout-seconds: 30
@@ -487,7 +471,7 @@ ADMIN can manage built-in accounts via the admin UI:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | /api/admin/logs | Request logs (filter by ruleId/protocol/matched/endpoint) |
+| GET | /api/admin/logs | Request logs (filter by ruleId/protocol/matched/endpoint; page/size/sort/direction; afterId for incremental refresh) |
 | GET | /api/admin/logs/summary | Request log summary |
 | DELETE | /api/admin/logs/all | Delete all request logs (ADMIN) |
 | GET | /api/admin/rules/{id}/audit | Audit logs for a rule |
@@ -515,13 +499,6 @@ ADMIN can manage built-in accounts via the admin UI:
 | POST | /api/admin/builtin-users/forgot-password | Forgot password (public) |
 | POST | /api/admin/builtin-users/register | Self-register (public, must be enabled) |
 | PUT | /api/account/change-password | Change own password (authenticated) |
-
-### Scenario Management
-
-| Method | Path | Description |
-|--------|------|-------------|
-| PUT | /api/admin/scenarios/{name}/reset | Reset a single scenario to Started |
-| PUT | /api/admin/scenarios/reset | Reset all scenarios to Started |
 
 ### JMS Testing
 
@@ -554,20 +531,6 @@ WireMock-style Handlebars template engine. Use `{{...}}` syntax in response cont
 ```
 
 Comparison operators: `eq`, `ne`, `gt`, `lt`, `contains`, `matches`
-
-### Faker Data Helpers
-
-```handlebars
-{{randomFirstName}}                           // Random first name
-{{randomLastName}}                            // Random last name
-{{randomFullName}}                            // Random full name
-{{randomEmail}}                               // Random email
-{{randomPhoneNumber}}                         // Random phone (xxx) xxx-xxxx
-{{randomCity}}                                // Random city
-{{randomCountry}}                             // Random country
-{{randomStreetAddress}}                       // Random street address
-{{randomInt min=1 max=100}}                   // Random integer in range
-```
 
 ### JSONPath / XPath
 
@@ -615,7 +578,22 @@ spring:
 
 ## Performance Benchmark
 
-Test environment: macOS, Apple Silicon, Java 17, 20 concurrent threads, 10 seconds per scenario.
+Benchmark numbers are workload-specific and should not be treated as universal product claims. The scripts under `scripts/` are the source of truth for reproducing them.
+
+### Current Echo vs WireMock A/B (2026-08-11)
+
+Echo and WireMock 3.13.2 were run on the same Apple Silicon host with Java 22.0.2, a 512 MiB heap, request journals enabled, 50 concurrent clients, and 8 seconds per server/scenario. Both sides completed with zero HTTP 5xx or connection errors.
+
+| Scenario | Echo RPS | WireMock RPS | Ratio | Echo p95 | WireMock p95 |
+|----------|---------:|-------------:|------:|---------:|-------------:|
+| Simple JSON, no condition | 6,327 | 7,068 | 0.90x | 13.1ms | 12.9ms |
+| JSON, 10 candidate rules | 7,570 | 6,875 | 1.10x | 10.6ms | 13.0ms |
+| XML ~1KB + XPath | 7,136 | 4,617 | 1.55x | 11.3ms | 24.4ms |
+| XML ~80KB + XPath | 3,116 | 483 | 6.46x | 23.9ms | 180.6ms |
+
+Simple JSON is still about 10% behind WireMock in this run; Echo leads once candidate matching or XML/XPath parsing becomes significant. This does not imply that every Echo feature is faster than its WireMock equivalent.
+
+The focused benchmarks below were collected earlier on macOS/Apple Silicon with Java 17, 20 concurrent threads, and 10 seconds per scenario. Compare results only when the command and environment are identical.
 
 ### Rule Count Impact (1,600 rules)
 
@@ -644,7 +622,7 @@ XML matching cost grows linearly with body size due to DOM parsing. JSON matchin
 - **Response body cache**: 50MB limit, 5MB threshold, 12-hour expiration
 - Automatically invalidated on rule changes
 
-### High-Volume Rule Matching (2,000 rules, worst case)
+### Historical High-Volume Rule Matching (2,000 rules, worst case)
 
 Test: 2,000 HTTP rules with XPath conditions (`//ServiceName=xxx;//CustId=yyy`), target rule sorted last (worst case full traversal), 10 concurrent threads, 200 requests.
 
@@ -654,7 +632,7 @@ Test: 2,000 HTTP rules with XPath conditions (`//ServiceName=xxx;//CustId=yyy`),
 | Echo JSON (2,000 rules, field match) | 1,066 | 9.3ms | 8.0ms | 24.8ms | 28.7ms |
 | WireMock XML (2,000 rules, XPath) | 31 | 311.9ms | 311.3ms | 400.7ms | 427.0ms |
 
-Echo's XML/XPath matching is **14x faster** than WireMock at scale, thanks to `getElementsByTagName` fast path for simple XPath patterns and pre-compiled `XPathExpression` caching. JSON matching is even faster (1,066 RPS) due to Jackson's O(1) hash lookup.
+In this historical 2,000-rule workload, Echo's XML/XPath path was **14x faster** than the tested WireMock build, thanks to the `getElementsByTagName` fast path for simple XPath patterns and pre-compiled `XPathExpression` caching. The result is specific to this worst-case rule set.
 
 ### Run Benchmarks
 
@@ -671,8 +649,11 @@ python3 scripts/stress-test-xml-body.py
 # RPS throughput test
 python3 scripts/stress-test-rps.py [URL] [DURATION] [CONCURRENCY]
 
-# Echo vs WireMock comparison (requires libs/wiremock-standalone.jar)
+# Echo vs WireMock comparison (start a separate WireMock instance first)
 python3 scripts/stress-test-vs-wiremock.py [ECHO_URL] [WM_URL] [DURATION] [CONCURRENCY]
+
+# 2,000 rules RPS test (Echo XML/JSON vs WireMock XML)
+python3 scripts/bench-rps-xml.py
 
 # 2,000 JMS rules match time
 python3 scripts/bench-2000-jms.py
@@ -683,10 +664,10 @@ python3 scripts/stress-test-jms-match.py [BASE_URL]
 # Memory stress test
 python3 scripts/stress-test-memory.py [BASE_URL]
 
-# Cache isolation stress test
-python3 scripts/stress-test-cache-isolation.py
+# Log check
+python3 scripts/check-logs.py
 
-# Match scenario regression test (138 cases)
+# Match scenario regression test (69 cases)
 python3 scripts/test-match-scenarios.py
 ```
 
@@ -708,18 +689,18 @@ python3 scripts/test-match-scenarios.py
 
 | Category | Technology |
 |----------|-----------|
-| Framework | Spring Boot 3.5.13 |
+| Framework | Spring Boot 3.5.16 |
 | Web Server | Undertow |
-| Database | SQLite (WAL mode) |
+| Database | H2 (default), SQLite WAL profile available |
 | Cache | Caffeine |
 | Messaging | Artemis (Embedded) |
 | Security | Spring Security |
 | Template | Handlebars 4.5 |
-| JSON Path | JsonPath 2.10 |
+| JSON Path | JsonPath 3.0 |
 | Excel | Apache POI |
 | Static Analysis | SpotBugs |
 | Frontend | Vue.js 3.5 + Bootstrap 5.3 + Bootstrap Icons 1.13 + CodeMirror 5 (WebJars) |
-| Build | Gradle 8 |
+| Build | Gradle 8.14.5 |
 
 ## License
 

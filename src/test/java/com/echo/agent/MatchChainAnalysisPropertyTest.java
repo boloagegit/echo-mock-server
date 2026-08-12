@@ -103,7 +103,7 @@ class MatchChainAnalysisPropertyTest {
                 .responseTimeMs(10)
                 .requestTime(LocalDateTime.now())
                 .candidates(List.of(candidate))
-                .preparedBody(prepared)
+                .analysisBody(prepared.getRaw())
                 .queryString(null)
                 .headers(Map.of())
                 .build();
@@ -182,7 +182,7 @@ class MatchChainAnalysisPropertyTest {
                 .responseTimeMs(10)
                 .requestTime(LocalDateTime.now())
                 .candidates(List.of(matchedCandidate, shadowedCandidate))
-                .preparedBody(prepared)
+                .analysisBody(prepared.getRaw())
                 .queryString(null)
                 .headers(Map.of())
                 .build();
@@ -240,7 +240,7 @@ class MatchChainAnalysisPropertyTest {
                 .responseTimeMs(10)
                 .requestTime(LocalDateTime.now())
                 .candidates(List.of(disabledCandidate))
-                .preparedBody(prepared)
+                .analysisBody(prepared.getRaw())
                 .queryString(null)
                 .headers(Map.of())
                 .build();
@@ -324,7 +324,7 @@ class MatchChainAnalysisPropertyTest {
                 .responseTimeMs(10)
                 .requestTime(LocalDateTime.now())
                 .candidates(List.of(matchCandidate, nearMissCandidate, skippedCandidate))
-                .preparedBody(prepared)
+                .analysisBody(prepared.getRaw())
                 .queryString(null)
                 .headers(Map.of())
                 .build();
@@ -383,7 +383,7 @@ class MatchChainAnalysisPropertyTest {
                 .responseTimeMs(10)
                 .requestTime(LocalDateTime.now())
                 .candidates(List.of(candidate))
-                .preparedBody(prepared)
+                .analysisBody(prepared.getRaw())
                 .queryString(null)
                 .headers(Map.of())
                 .build();

@@ -36,6 +36,20 @@ import lombok.experimental.SuperBuilder;
 @AllArgsConstructor
 public class JmsRule extends BaseRule {
 
+    /** Existing rows with null are interpreted as MOCK for backward compatibility. */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    @lombok.Builder.Default
+    private JmsRuleAction action = JmsRuleAction.MOCK;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    @lombok.Builder.Default
+    private JmsForwardTargetMode forwardTargetMode = JmsForwardTargetMode.DEFAULT_CONNECTION;
+
+    /** String keeps the legacy application.yml identifier compatible with stored profiles. */
+    private String jmsTargetConnectionId;
+
     /** 
      * Queue 名稱匹配模式
      * <p>支援萬用字元 * 匹配任意字串
@@ -52,6 +66,16 @@ public class JmsRule extends BaseRule {
     @Override
     public Protocol getProtocol() {
         return Protocol.JMS;
+    }
+
+    @PrePersist
+    @Override
+    protected void onCreate() {
+        super.onCreate();
+        if (action == null) action = JmsRuleAction.MOCK;
+        if (forwardTargetMode == null) {
+            forwardTargetMode = JmsForwardTargetMode.DEFAULT_CONNECTION;
+        }
     }
 
     /**

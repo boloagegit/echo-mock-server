@@ -2,12 +2,15 @@ package com.echo.pipeline;
 
 import com.echo.config.JmsProperties;
 import com.echo.entity.JmsRule;
+import com.echo.entity.JmsForwardTargetMode;
+import com.echo.entity.JmsRuleAction;
 import com.echo.entity.Protocol;
 import com.echo.jms.JmsTargetForwarder;
 import com.echo.service.ConditionMatcher;
 import com.echo.service.JmsRuleService;
 import com.echo.service.RequestLogService;
 import com.echo.service.RuleService;
+import com.echo.service.ScenarioService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -51,13 +54,16 @@ class JmsMockPipelineTest {
     @Mock
     private JmsProperties jmsProperties;
 
+    @Mock
+    private ScenarioService scenarioService;
+
     private JmsMockPipeline pipeline;
 
     @BeforeEach
     void setUp() {
         pipeline = new JmsMockPipeline(
                 conditionMatcher, ruleService, requestLogService,
-                jmsRuleService, targetForwarder, jmsProperties, null);
+                jmsRuleService, targetForwarder, jmsProperties, scenarioService);
     }
 
     // ==================== Helpers ====================
@@ -82,14 +88,6 @@ class JmsMockPipelineTest {
                 .priority(0)
                 .delayMs(0L)
                 .build();
-    }
-
-    private JmsProperties.Target buildTarget(boolean enabled, String serverUrl) {
-        JmsProperties.Target target = new JmsProperties.Target();
-        target.setEnabled(enabled);
-        target.setServerUrl(serverUrl);
-        target.setQueue("TARGET.REQUEST");
-        return target;
     }
 
     // ==================== 1. Normal match response ====================
@@ -141,15 +139,11 @@ class JmsMockPipelineTest {
         @Test
         @DisplayName("無匹配且 target 啟用時轉發成功，forwarded=true")
         void forwardSuccess() {
-            JmsProperties.Target target = buildTarget(true, "tcp://target-host:61616");
-            when(jmsProperties.getTarget()).thenReturn(target);
+            when(targetForwarder.hasActiveTarget()).thenReturn(true);
             when(jmsProperties.getQueue()).thenReturn("ORDER.REQUEST");
 
             when(jmsRuleService.findPreparedJmsRules("ORDER.REQUEST"))
                     .thenReturn(Collections.emptyList());
-
-            ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
 
             String forwardedBody = "<Response>Forwarded OK</Response>";
             when(targetForwarder.forward(anyString(), isNull()))
@@ -165,6 +159,29 @@ class JmsMockPipelineTest {
             assertThat(response.getBody()).isEqualTo(forwardedBody);
             assertThat(response.getProxyError()).isNull();
         }
+
+
+        @Test
+        @DisplayName("規則命中時使用該規則指定的 JMS 連線")
+        void matchedRuleUsesSelectedConnection() {
+            JmsRule rule = buildRule("jms-forward-rule", "ORDER.REQUEST", null, null);
+            rule.setAction(JmsRuleAction.FORWARD);
+            rule.setForwardTargetMode(JmsForwardTargetMode.CONNECTION);
+            rule.setJmsTargetConnectionId("7");
+            when(jmsProperties.getQueue()).thenReturn("ORDER.REQUEST");
+            when(jmsRuleService.findPreparedJmsRules("ORDER.REQUEST"))
+                    .thenReturn(List.of(rule));
+            when(targetForwarder.forward(anyString(), isNull(), eq("7"), eq(false)))
+                    .thenReturn("<Response>Selected target</Response>");
+
+            PipelineResult result = pipeline.execute(defaultRequest());
+
+            assertThat(result.isMatched()).isTrue();
+            assertThat(result.getResponse().isForwarded()).isTrue();
+            assertThat(result.getResponse().getBody()).isEqualTo("<Response>Selected target</Response>");
+            verify(targetForwarder).forward(anyString(), isNull(), eq("7"), eq(false));
+            verify(ruleService, never()).findResponseBodyById(anyLong());
+        }
     }
 
     // ==================== 3. JMS forwarding failure (error in response) ====================
@@ -176,15 +193,11 @@ class JmsMockPipelineTest {
         @Test
         @DisplayName("轉發回應包含 <error> 時設定 proxyError")
         void forwardWithErrorResponse() {
-            JmsProperties.Target target = buildTarget(true, "tcp://target-host:61616");
-            when(jmsProperties.getTarget()).thenReturn(target);
+            when(targetForwarder.hasActiveTarget()).thenReturn(true);
             when(jmsProperties.getQueue()).thenReturn("ORDER.REQUEST");
 
             when(jmsRuleService.findPreparedJmsRules("ORDER.REQUEST"))
                     .thenReturn(Collections.emptyList());
-
-            ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
 
             String errorBody = "<error>JMS forward error: Connection refused</error>";
             when(targetForwarder.forward(anyString(), isNull()))
@@ -208,15 +221,10 @@ class JmsMockPipelineTest {
         @Test
         @DisplayName("空候選清單且 shouldForward=false 時回傳 error XML")
         void noMatchReturnsErrorReply() {
-            JmsProperties.Target target = buildTarget(false, null);
-            when(jmsProperties.getTarget()).thenReturn(target);
             when(jmsProperties.getQueue()).thenReturn("ORDER.REQUEST");
 
             when(jmsRuleService.findPreparedJmsRules("ORDER.REQUEST"))
                     .thenReturn(Collections.emptyList());
-
-            ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
 
             PipelineResult result = pipeline.execute(defaultRequest());
 
@@ -238,10 +246,9 @@ class JmsMockPipelineTest {
     class ShouldForwardDecision {
 
         @Test
-        @DisplayName("target.enabled=true, serverUrl=\"tcp://host\" → true")
+        @DisplayName("存在有效預設轉發連線 → true")
         void enabledWithServerUrlReturnsTrue() {
-            JmsProperties.Target target = buildTarget(true, "tcp://host:61616");
-            when(jmsProperties.getTarget()).thenReturn(target);
+            when(targetForwarder.hasActiveTarget()).thenReturn(true);
 
             MockRequest request = MockRequest.builder()
                     .protocol(Protocol.JMS)
@@ -252,10 +259,9 @@ class JmsMockPipelineTest {
         }
 
         @Test
-        @DisplayName("target.enabled=false → false")
+        @DisplayName("沒有有效預設轉發連線 → false")
         void disabledReturnsFalse() {
-            JmsProperties.Target target = buildTarget(false, "tcp://host:61616");
-            when(jmsProperties.getTarget()).thenReturn(target);
+            when(targetForwarder.hasActiveTarget()).thenReturn(false);
 
             MockRequest request = MockRequest.builder()
                     .protocol(Protocol.JMS)
@@ -266,10 +272,9 @@ class JmsMockPipelineTest {
         }
 
         @Test
-        @DisplayName("target.enabled=true, serverUrl=null → false")
+        @DisplayName("預設解析器回傳 false 時不轉發")
         void enabledWithNullServerUrlReturnsFalse() {
-            JmsProperties.Target target = buildTarget(true, null);
-            when(jmsProperties.getTarget()).thenReturn(target);
+            when(targetForwarder.hasActiveTarget()).thenReturn(false);
 
             MockRequest request = MockRequest.builder()
                     .protocol(Protocol.JMS)
@@ -280,10 +285,9 @@ class JmsMockPipelineTest {
         }
 
         @Test
-        @DisplayName("target.enabled=true, serverUrl=\"\" → false")
+        @DisplayName("無可用連線時保持 false")
         void enabledWithEmptyServerUrlReturnsFalse() {
-            JmsProperties.Target target = buildTarget(true, "");
-            when(jmsProperties.getTarget()).thenReturn(target);
+            when(targetForwarder.hasActiveTarget()).thenReturn(false);
 
             MockRequest request = MockRequest.builder()
                     .protocol(Protocol.JMS)
@@ -353,15 +357,10 @@ class JmsMockPipelineTest {
         @Test
         @DisplayName("無匹配且不轉發時 record() 傳入 ruleId=null、matched=false")
         void recordCalledOnNoMatch() {
-            JmsProperties.Target target = buildTarget(false, null);
-            when(jmsProperties.getTarget()).thenReturn(target);
             when(jmsProperties.getQueue()).thenReturn("ORDER.REQUEST");
 
             when(jmsRuleService.findPreparedJmsRules("ORDER.REQUEST"))
                     .thenReturn(Collections.emptyList());
-
-            ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
 
             pipeline.execute(defaultRequest());
 

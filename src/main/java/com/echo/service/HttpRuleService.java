@@ -53,15 +53,29 @@ public class HttpRuleService {
 
     public MatchResult<HttpRule> findMatchingHttpRuleWithCandidates(String host, String path, String method,
             String body, String queryString, Map<String, String> headers) {
-        List<HttpRule> rules = proxy().findPreparedHttpRules(host, path, method);
+        List<HttpRule> rules = findPreparedHttpRules(host, path, method);
         return findMatchingHttpRuleInternal(rules, body, queryString, headers);
     }
 
-    @Cacheable(cacheNames = CacheConfig.HTTP_RULES_CACHE,
-               key = "'http-prepared:' + #host + ':' + #path + ':' + #method")
+    /**
+     * 從 host + method 的共用規則集篩出本次 path 候選。
+     * 動態 URL（例如 /users/1、/users/2）不再各自占用一個 Caffeine entry。
+     */
     public List<HttpRule> findPreparedHttpRules(String host, String path, String method) {
-        log.debug("Cache miss - preparing HTTP rules: host={}, path={}, method={}", host, path, method);
-        List<HttpRule> rules = httpHandler.findWithFallback(host, path, method);
+        // 直接建構 service 的單元測試／工具沒有 Spring proxy，維持原有查詢路徑。
+        if (applicationContext == null) {
+            return prepareHttpRules(httpHandler.findWithFallback(host, path, method));
+        }
+        return proxy().findPreparedHttpRuleSet(host, method).stream()
+                .filter(rule -> httpHandler.matchesRequestPath(rule.getMatchKey(), path))
+                .toList();
+    }
+
+    @Cacheable(cacheNames = CacheConfig.HTTP_RULES_CACHE,
+               key = "'http-prepared-set:' + #host + ':' + #method")
+    public List<HttpRule> findPreparedHttpRuleSet(String host, String method) {
+        log.debug("Cache miss - preparing HTTP rule set: host={}, method={}", host, method);
+        List<HttpRule> rules = httpHandler.findByHostAndMethod(host, method);
         return prepareHttpRules(rules);
     }
 

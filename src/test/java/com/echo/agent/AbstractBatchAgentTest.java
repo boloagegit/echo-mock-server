@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,6 +41,8 @@ class AbstractBatchAgentTest {
         private volatile boolean throwOnProcess = false;
         private final AtomicInteger processCallCount = new AtomicInteger();
         private volatile CountDownLatch processLatch;
+        private volatile CountDownLatch releaseProcessLatch;
+        private volatile String processThreadName;
 
         TestBatchAgent(int queueCapacity, int batchSize, int flushIntervalSeconds) {
             super(queueCapacity, batchSize, flushIntervalSeconds);
@@ -57,10 +60,18 @@ class AbstractBatchAgentTest {
 
         @Override
         protected void processBatch(List<String> batch) {
+            processThreadName = Thread.currentThread().getName();
             processCallCount.incrementAndGet();
             batchCalls.add(new ArrayList<>(batch));
             if (processLatch != null) {
                 processLatch.countDown();
+            }
+            if (releaseProcessLatch != null) {
+                try {
+                    releaseProcessLatch.await(3, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
             }
             if (throwOnProcess) {
                 throw new RuntimeException("Simulated processBatch failure");
@@ -180,7 +191,7 @@ class AbstractBatchAgentTest {
         agent.throwOnProcess = true;
         agent.start();
 
-        // First submit triggers flush → processBatch throws
+        // First submit is consumed by the background worker and processBatch throws.
         agent.submit("fail-task");
 
         // Small delay to let the flush happen
@@ -254,8 +265,9 @@ class AbstractBatchAgentTest {
         agent.start();
 
         agent.submit("valid-task");
+        agent.shutdown();
 
-        assertThat(agent.getStats().getQueueSize()).isEqualTo(1);
+        assertThat(agent.getStats().getProcessedCount()).isEqualTo(1);
     }
 
     @Test
@@ -268,7 +280,49 @@ class AbstractBatchAgentTest {
         agent.submit("valid-2");
         agent.submit(3.14);
         agent.submit("valid-3");
+        agent.shutdown();
 
-        assertThat(agent.getStats().getQueueSize()).isEqualTo(3);
+        assertThat(agent.getStats().getProcessedCount()).isEqualTo(3);
+    }
+
+    @Test
+    void submit_shouldNeverProcessBatchOnCallingThread() throws InterruptedException {
+        agent = new TestBatchAgent(10, 1, 60);
+        agent.processLatch = new CountDownLatch(1);
+        agent.start();
+        String callerThread = Thread.currentThread().getName();
+
+        agent.submit("background-only");
+
+        assertThat(agent.processLatch.await(3, TimeUnit.SECONDS)).isTrue();
+        assertThat(agent.processThreadName)
+                .isEqualTo("test-agent-consumer")
+                .isNotEqualTo(callerThread);
+    }
+
+    @Test
+    void submitLazy_shouldNotCreateExpensiveTaskWhenQueueIsFull() throws InterruptedException {
+        agent = new TestBatchAgent(1, 1, 60);
+        agent.processLatch = new CountDownLatch(1);
+        agent.releaseProcessLatch = new CountDownLatch(1);
+        agent.start();
+
+        try {
+            agent.submit("blocking-task");
+            assertThat(agent.processLatch.await(3, TimeUnit.SECONDS)).isTrue();
+            agent.submit("queued-task");
+            AtomicBoolean taskCreated = new AtomicBoolean(false);
+
+            boolean accepted = agent.submitLazy(() -> {
+                taskCreated.set(true);
+                return "expensive-task";
+            });
+
+            assertThat(accepted).isFalse();
+            assertThat(taskCreated).isFalse();
+            assertThat(agent.getStats().getDroppedCount()).isEqualTo(1);
+        } finally {
+            agent.releaseProcessLatch.countDown();
+        }
     }
 }

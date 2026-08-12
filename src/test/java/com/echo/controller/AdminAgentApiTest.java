@@ -4,6 +4,10 @@ import com.echo.agent.AgentRegistry;
 import com.echo.agent.AgentStats;
 import com.echo.agent.AgentStatus;
 import com.echo.agent.EchoAgent;
+import com.echo.service.IssueReportService;
+import com.echo.service.RuleApplyMapper;
+import com.echo.service.RuleApplyPersistenceSynchronizer;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,6 +41,9 @@ class AdminAgentApiTest {
     private com.echo.service.RuleService ruleService;
 
     @Mock
+    private com.echo.service.RuleQueryService ruleQueryService;
+
+    @Mock
     private com.echo.protocol.ProtocolHandlerRegistry protocolHandlerRegistry;
 
     @Mock
@@ -52,9 +59,6 @@ class AdminAgentApiTest {
     private com.echo.service.ExcelImportService excelImportService;
 
     @Mock
-    private com.echo.service.OpenApiImportService openApiImportService;
-
-    @Mock
     private com.echo.service.ResponseContentValidatorRegistry responseContentValidatorRegistry;
 
     @Mock
@@ -67,6 +71,12 @@ class AdminAgentApiTest {
     private CacheManager cacheManager;
 
     @Mock
+    private IssueReportService issueReportService;
+
+    @Mock
+    private com.echo.service.OpenApiImportService openApiImportService;
+
+    @Mock
     private com.echo.service.ScenarioService scenarioService;
 
     private MockMvc mockMvc;
@@ -74,10 +84,13 @@ class AdminAgentApiTest {
     @BeforeEach
     void setUp() {
         AdminController controller = new AdminController(
-                ruleService, protocolHandlerRegistry, responseService, requestLogService,
+                ruleService, ruleQueryService, protocolHandlerRegistry, responseService, requestLogService,
                 Optional.of(ruleAuditService), Optional.empty(), Optional.empty(),
                 excelImportService, openApiImportService, Optional.empty(), responseContentValidatorRegistry,
-                builtinUserRepository, agentRegistry, cacheManager, scenarioService);
+                builtinUserRepository, agentRegistry, cacheManager, issueReportService, Optional.empty(), Optional.empty(),
+                new RuleApplyMapper(new ObjectMapper()),
+                org.mockito.Mockito.mock(RuleApplyPersistenceSynchronizer.class),
+                new com.echo.service.RuleApplyContractService(true), scenarioService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 

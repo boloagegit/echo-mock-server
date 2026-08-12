@@ -44,16 +44,14 @@ class H2SchemaMigrationTest {
     }
 
     @AfterEach
-    void tearDown() {
+    void tearDown() throws Exception {
         jdbcTemplate.execute("DROP ALL OBJECTS");
         // 清理 file-based DB 暫存檔
         if (tempDbDir != null) {
-            try {
-                java.nio.file.Files.walk(tempDbDir)
-                        .sorted(java.util.Comparator.reverseOrder())
-                        .map(java.nio.file.Path::toFile)
-                        .forEach(java.io.File::delete);
-            } catch (Exception ignored) {
+            try (var paths = java.nio.file.Files.walk(tempDbDir)) {
+                for (var path : paths.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                    java.nio.file.Files.deleteIfExists(path);
+                }
             }
         }
     }

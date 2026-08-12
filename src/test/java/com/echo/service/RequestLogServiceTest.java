@@ -1,7 +1,7 @@
 package com.echo.service;
 
-import com.echo.agent.AgentStatus;
 import com.echo.agent.LogAgent;
+import com.echo.agent.LogTask;
 import com.echo.entity.HttpRule;
 import com.echo.entity.Protocol;
 import com.echo.entity.RequestLog;
@@ -15,11 +15,16 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -51,15 +56,47 @@ class RequestLogServiceTest {
         return provider;
     }
 
+    private void persistMemoryTask(LogTask task) {
+        RequestLogService.LogEntry entry = RequestLogService.LogEntry.builder()
+                .id(RequestLogService.nextMemoryId())
+                .ruleId(task.getRuleId())
+                .protocol(task.getProtocol())
+                .method(task.getMethod())
+                .endpoint(task.getEndpoint())
+                .matched(task.isMatched())
+                .responseTimeMs(task.getResponseTimeMs())
+                .matchTimeMs(task.getMatchTimeMs())
+                .clientIp(task.getClientIp())
+                .requestTime(task.getRequestTime())
+                .matchChain(task.getMatchChain())
+                .targetHost(task.getTargetHost())
+                .proxyStatus(task.getProxyStatus())
+                .proxyError(task.getProxyError())
+                .responseStatus(task.getResponseStatus())
+                .requestBody(task.getRequestBody())
+                .responseBody(task.getResponseBody())
+                .build();
+        service.getMemoryBuffer().addFirst(entry);
+        int size = service.getBufferSize().incrementAndGet();
+        int maxRecords = 100;
+        while (size > maxRecords && service.getMemoryBuffer().pollLast() != null) {
+            size = service.getBufferSize().decrementAndGet();
+        }
+    }
+
     @Nested
     class MemoryModeTests {
         @BeforeEach
         void setUp() {
             when(configService.isRequestLogMemoryMode()).thenReturn(true);
             when(configService.getRequestLogMaxRecords()).thenReturn(100);
-            // LogAgent not available — fallback to synchronous memory write
-            service = new RequestLogService(requestLogRepository, configService, protocolHandlerRegistry, emptyProvider());
+            service = new RequestLogService(requestLogRepository, configService, protocolHandlerRegistry, providerOf(logAgent));
             service.init();
+            lenient().doAnswer(invocation -> {
+                Supplier<LogTask> supplier = invocation.getArgument(0);
+                persistMemoryTask(supplier.get());
+                return null;
+            }).when(logAgent).submitDurably(any());
         }
 
         @Test
@@ -84,6 +121,46 @@ class RequestLogServiceTest {
             assertThat(summary.getMethod()).isEqualTo("GET");
             assertThat(summary.isHasRequestBody()).isTrue();
             assertThat(summary.isHasResponseBody()).isTrue();
+        }
+
+        @Test
+        void querySummary_shouldPaginateAndSortInMemory() {
+            service.record("uuid-1", Protocol.HTTP, "GET", "/50", true, 50, "127.0.0.1", null, null, null, null, null, null);
+            service.record("uuid-1", Protocol.HTTP, "GET", "/10", true, 10, "127.0.0.1", null, null, null, null, null, null);
+            service.record("uuid-1", Protocol.HTTP, "GET", "/30", true, 30, "127.0.0.1", null, null, null, null, null, null);
+            service.record("uuid-1", Protocol.HTTP, "GET", "/20", true, 20, "127.0.0.1", null, null, null, null, null, null);
+            service.record("uuid-1", Protocol.HTTP, "GET", "/40", true, 40, "127.0.0.1", null, null, null, null, null, null);
+
+            var result = service.querySummary(RequestLogService.QueryFilter.builder()
+                    .page(1).size(2).sortField("responseTimeMs").sortDirection("asc").build());
+
+            assertThat(result.getResults()).extracting(item -> item.getLog().getResponseTimeMs())
+                    .containsExactly(30, 40);
+            assertThat(result.getPage()).isEqualTo(1);
+            assertThat(result.getSize()).isEqualTo(2);
+            assertThat(result.getTotalElements()).isEqualTo(5);
+            assertThat(result.getTotalPages()).isEqualTo(3);
+
+            var outOfRange = service.querySummary(RequestLogService.QueryFilter.builder()
+                    .page(Integer.MAX_VALUE).size(100).build());
+            assertThat(outOfRange.getResults()).isEmpty();
+            assertThat(outOfRange.getTotalElements()).isEqualTo(5);
+        }
+
+        @Test
+        void querySummary_shouldReturnOnlyRecordsAfterCursor() {
+            service.record("uuid-1", Protocol.HTTP, "GET", "/old-1", true, 10, "127.0.0.1", null, null, null, null, null, null);
+            service.record("uuid-1", Protocol.HTTP, "GET", "/old-2", true, 10, "127.0.0.1", null, null, null, null, null, null);
+            Long cursor = service.querySummary(RequestLogService.QueryFilter.builder().build()).getNewestId();
+            service.record("uuid-1", Protocol.HTTP, "GET", "/new", true, 10, "127.0.0.1", null, null, null, null, null, null);
+
+            var result = service.querySummary(RequestLogService.QueryFilter.builder()
+                    .afterId(cursor).page(0).size(20).build());
+
+            assertThat(result.getResults()).singleElement()
+                    .extracting(item -> item.getLog().getEndpoint()).isEqualTo("/new");
+            assertThat(result.getTotalElements()).isEqualTo(1);
+            assertThat(result.getNewestId()).isGreaterThan(cursor);
         }
 
         @Test
@@ -245,7 +322,6 @@ class RequestLogServiceTest {
         void setUp() {
             when(configService.isRequestLogMemoryMode()).thenReturn(true);
             when(configService.getRequestLogMaxRecords()).thenReturn(100);
-            when(logAgent.getStatus()).thenReturn(AgentStatus.RUNNING);
             service = new RequestLogService(requestLogRepository, configService, protocolHandlerRegistry, providerOf(logAgent));
             service.init();
         }
@@ -254,9 +330,19 @@ class RequestLogServiceTest {
         void record_shouldDelegateToLogAgent() {
             service.record("uuid-1", Protocol.HTTP, "GET", "/api", true, 10, "127.0.0.1", null, null, null, null, null, null);
 
-            verify(logAgent).submit(any());
+            verify(logAgent).submitDurably(any());
             // Memory buffer should be empty — LogAgent handles writing
             assertThat(service.count()).isEqualTo(0);
+        }
+
+        @Test
+        void record_shouldNotBuildBodySnapshotBeforeAgentInvokesSupplier() {
+
+            service.record("uuid-1", Protocol.HTTP, "POST", "/api", true, 10, "127.0.0.1",
+                    null, null, null, null, null, null, "request", "response");
+
+            verify(configService, never()).isRequestLogIncludeBody();
+            verify(requestLogRepository, never()).save(any());
         }
     }
 
@@ -266,16 +352,18 @@ class RequestLogServiceTest {
         void setUp() {
             when(configService.isRequestLogMemoryMode()).thenReturn(false);
             when(configService.getRequestLogMaxRecords()).thenReturn(10000);
-            // LogAgent not available — fallback to synchronous DB write
+            // LogAgent 不可用時 request log 必須丟棄，不得同步寫 DB。
             service = new RequestLogService(requestLogRepository, configService, protocolHandlerRegistry, emptyProvider());
             service.init();
         }
 
         @Test
-        void record_shouldWriteToDbSynchronously() {
-            service.record("uuid-1", Protocol.HTTP, "GET", "/api", true, 10, "127.0.0.1", null, null, null, null, null, null);
-            
-            verify(requestLogRepository).save(any(RequestLog.class));
+        void record_shouldNotWriteToDbSynchronously() {
+            assertThatThrownBy(() -> service.record("uuid-1", Protocol.HTTP, "GET", "/api",
+                    true, 10, "127.0.0.1", null, null, null, null, null, null))
+                    .isInstanceOf(RequestLogUnavailableException.class);
+
+            verify(requestLogRepository, never()).save(any(RequestLog.class));
         }
 
         @Test
@@ -292,12 +380,45 @@ class RequestLogServiceTest {
         }
 
         @Test
-        void record_shouldDeleteOldRecordsWhenExceedingMax() {
-            when(requestLogRepository.count()).thenReturn(15000L);
-            
-            service.record("uuid-1", Protocol.HTTP, "GET", "/api", true, 10, "127.0.0.1", null, null, null, null, null, null);
-            
-            verify(requestLogRepository).deleteOldest(5000);
+        void querySummary_shouldDelegateFilteringPaginationAndSortingToDb() {
+            Object[] row = { 15L, "uuid-1", Protocol.HTTP, "GET", "/api", true,
+                    12, 3, "127.0.0.1", LocalDateTime.now(), "host", null, null, 200,
+                    "EMPTY_RESPONSE", "order-flow", "Started", "Paid",
+                    false, false, false };
+            when(requestLogRepository.findSummaryPage(isNull(), eq(Protocol.HTTP), eq(true), eq("/api"),
+                    eq(10L), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(Collections.singletonList(row),
+                            org.springframework.data.domain.PageRequest.of(1, 2), 5));
+
+            var result = service.querySummary(RequestLogService.QueryFilter.builder()
+                    .protocol(Protocol.HTTP).matched(true).endpoint(" /api ").afterId(10L)
+                    .page(1).size(2).sortField("responseTimeMs").sortDirection("asc").build());
+
+            assertThat(result.getResults()).singleElement()
+                    .satisfies(item -> {
+                        assertThat(item.getLog().getId()).isEqualTo(15L);
+                        assertThat(item.getLog().getFaultType()).isEqualTo("EMPTY_RESPONSE");
+                        assertThat(item.getLog().getScenarioName()).isEqualTo("order-flow");
+                        assertThat(item.getLog().getScenarioFromState()).isEqualTo("Started");
+                        assertThat(item.getLog().getScenarioToState()).isEqualTo("Paid");
+                    });
+            assertThat(result.getTotalElements()).isEqualTo(5);
+            assertThat(result.getTotalPages()).isEqualTo(3);
+            verify(requestLogRepository).findSummaryPage(isNull(), eq(Protocol.HTTP), eq(true), eq("/api"),
+                    eq(10L), argThat(pageable -> pageable.getPageNumber() == 1
+                            && pageable.getPageSize() == 2
+                            && pageable.getSort().getOrderFor("responseTimeMs").getDirection() == Sort.Direction.ASC));
+            verify(requestLogRepository, never()).findSummaryProjections(any());
+        }
+
+        @Test
+        void record_shouldNotRunRetentionSynchronously() {
+            assertThatThrownBy(() -> service.record("uuid-1", Protocol.HTTP, "GET", "/api",
+                    true, 10, "127.0.0.1", null, null, null, null, null, null))
+                    .isInstanceOf(RequestLogUnavailableException.class);
+
+            verify(requestLogRepository, never()).count();
+            verify(requestLogRepository, never()).deleteOldest(anyInt());
         }
 
         @Test
@@ -334,7 +455,6 @@ class RequestLogServiceTest {
         void setUp() {
             when(configService.isRequestLogMemoryMode()).thenReturn(false);
             when(configService.getRequestLogMaxRecords()).thenReturn(10000);
-            when(logAgent.getStatus()).thenReturn(AgentStatus.RUNNING);
             service = new RequestLogService(requestLogRepository, configService, protocolHandlerRegistry, providerOf(logAgent));
             service.init();
         }
@@ -343,7 +463,7 @@ class RequestLogServiceTest {
         void record_shouldDelegateToLogAgent() {
             service.record("uuid-1", Protocol.HTTP, "GET", "/api", true, 10, "127.0.0.1", null, null, null, null, null, null);
 
-            verify(logAgent).submit(any());
+            verify(logAgent).submitDurably(any());
             verify(requestLogRepository, never()).save(any());
         }
     }
@@ -357,25 +477,27 @@ class RequestLogServiceTest {
         }
 
         @Test
-        void record_shouldFallbackWhenLogAgentNotRunning() {
-            when(logAgent.getStatus()).thenReturn(AgentStatus.STOPPED);
+        void record_shouldDropWhenLogAgentNotRunning() {
             service = new RequestLogService(requestLogRepository, configService, protocolHandlerRegistry, providerOf(logAgent));
             service.init();
 
             service.record("uuid-1", Protocol.HTTP, "GET", "/api", true, 10, "127.0.0.1", null, null, null, null, null, null);
 
-            verify(logAgent, never()).submit(any());
-            assertThat(service.count()).isEqualTo(1);
+            verify(logAgent).submitDurably(any());
+            assertThat(service.count()).isZero();
         }
 
         @Test
-        void record_shouldFallbackWhenLogAgentEmpty() {
+        void record_shouldDropWhenLogAgentEmpty() {
             service = new RequestLogService(requestLogRepository, configService, protocolHandlerRegistry, emptyProvider());
             service.init();
 
-            service.record("uuid-1", Protocol.HTTP, "GET", "/api", true, 10, "127.0.0.1", null, null, null, null, null, null);
+            assertThatThrownBy(() -> service.record("uuid-1", Protocol.HTTP, "GET", "/api",
+                    true, 10, "127.0.0.1", null, null, null, null, null, null))
+                    .isInstanceOf(RequestLogUnavailableException.class);
 
-            assertThat(service.count()).isEqualTo(1);
+            assertThat(service.count()).isZero();
+            verify(requestLogRepository, never()).save(any());
         }
     }
 }

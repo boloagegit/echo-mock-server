@@ -9,6 +9,7 @@ import com.echo.repository.ResponseRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
@@ -24,6 +25,9 @@ public class DataInitializer implements CommandLineRunner {
     private final ResponseRepository responseRepository;
     private final HttpRuleRepository httpRuleRepository;
     private final JmsRuleRepository jmsRuleRepository;
+
+    @Value("${echo.features.scenarios-enabled:false}")
+    private boolean scenariosEnabled;
 
     @Override
     public void run(String... args) {
@@ -162,15 +166,21 @@ public class DataInitializer implements CommandLineRunner {
                 .queueName("*").description("預設回應")
                 .priority(0).responseId(defaultResp.getId()).delayMs(0L).build());
 
-        // ========== Scenario 範例：訂單流程 ==========
+        if (scenariosEnabled) {
+            initializeScenarioExamples();
+        }
+
+        log.info("Test data initialized: {} HTTP rules, {} JMS rules, {} responses",
+                httpRuleRepository.count(), jmsRuleRepository.count(), responseRepository.count());
+    }
+
+    private void initializeScenarioExamples() {
         Response scenarioOrderPendingResp = responseRepository.save(Response.builder()
                 .description("訂單-待付款")
                 .body("{\"orderId\":\"ORD-001\",\"status\":\"pending\"}").build());
-
         Response scenarioPayResp = responseRepository.save(Response.builder()
                 .description("付款成功")
                 .body("{\"orderId\":\"ORD-001\",\"result\":\"paid\"}").build());
-
         Response scenarioOrderPaidResp = responseRepository.save(Response.builder()
                 .description("訂單-已付款")
                 .body("{\"orderId\":\"ORD-001\",\"status\":\"paid\"}").build());
@@ -181,22 +191,17 @@ public class DataInitializer implements CommandLineRunner {
                 .responseId(scenarioOrderPendingResp.getId()).httpStatus(200).delayMs(0L)
                 .scenarioName("order-flow").requiredScenarioState("Started").newScenarioState("Started")
                 .build());
-
         httpRuleRepository.save(HttpRule.builder()
                 .targetHost("default").matchKey("/api/scenario/order/pay").method("POST")
                 .description("Scenario: 付款").priority(10)
                 .responseId(scenarioPayResp.getId()).httpStatus(200).delayMs(0L)
                 .scenarioName("order-flow").requiredScenarioState("Started").newScenarioState("Paid")
                 .build());
-
         httpRuleRepository.save(HttpRule.builder()
                 .targetHost("default").matchKey("/api/scenario/order").method("GET")
                 .description("Scenario: 查詢訂單(已付款)").priority(10)
                 .responseId(scenarioOrderPaidResp.getId()).httpStatus(200).delayMs(0L)
                 .scenarioName("order-flow").requiredScenarioState("Paid").newScenarioState("Paid")
                 .build());
-
-        log.info("Test data initialized: {} HTTP rules, {} JMS rules, {} responses",
-                httpRuleRepository.count(), jmsRuleRepository.count(), responseRepository.count());
     }
 }

@@ -2,10 +2,6 @@
 
 企業級雙協定 Mock 伺服器，支援 HTTP 和 JMS 協定，用於開發與測試環境模擬 API 回應。
 
-## 截圖
-
-![Mock Rules - Dark Theme](docs/screenshots/mock-rules-dark.png)
-
 ## 功能特色
 
 - **雙協定支援** - HTTP REST API 與 JMS (Artemis) 訊息佇列
@@ -17,24 +13,25 @@
 - **動態模板** - WireMock 風格 Handlebars 模板引擎，支援條件、迴圈、JSONPath/XPath
 - **Proxy 轉發** - 無匹配規則時自動轉發到原始主機
 - **視覺化管理** - Dark/Light Theme Web UI，支援 RWD 響應式設計
-- **批次操作** - 匯出/匯入規則與回應、批次刪除 (ADMIN 限定)
-- **Excel 匯入** - 支援 Excel 批次匯入規則，可下載匯入範本
+- **批次操作** - 選用的規則／回應匯出匯入與批次刪除（ADMIN 限定；匯入匯出預設關閉）
+- **Excel 匯入** - 選用的 Excel 批次匯入與範本下載（預設關閉）
 - **修訂紀錄** - 追蹤規則變更歷史，自動清理過期紀錄
 - **統計監控** - 即時請求統計與命中率追蹤，自動刷新含閒置偵測
-- **高效能** - 4K+ RPS (JSON)，2,000 條規則 XML/XPath 匹配比 WireMock 快 14 倍
+- **實測效能** - 提供可重現的 JSON/XML 基準，明確記錄負載、延遲與錯誤數
 - **權限控管** - Admin/User 角色分離，支援 LDAP 認證與內建帳號管理
 - **內建帳號** - 帳號 CRUD、啟用/停用、密碼重設、忘記密碼、自助註冊
 - **Remember Me** - 登入後長期記住，預設與 Session 同步（180 天）
 - **規則保護** - 標記規則為受保護，防止被自動清除
 - **規則展延** - 延長規則/回應的保留期限，避免被定時清除
 - **孤兒清理** - 偵測並清除未被任何規則使用的孤兒回應
-- **自動備份** - SQLite 資料庫排程備份、關機備份、手動觸發備份
-- **狀態機場景** - WireMock 風格狀態機，模擬多步驟流程（如訂單→付款→確認）
-- **故障注入** - 模擬連線重置、空回應，用於韌性測試
-- **假資料產生** - 內建假資料 helpers（姓名、email、電話、地址等），產生擬真回應
+- **自動備份** - H2/SQLite 資料庫排程備份、關機備份、手動觸發備份
+- **狀態機場景** - 選用的 WireMock 風格狀態機，可模擬多步驟流程（預設關閉）
+- **故障注入** - 在規則模式選擇故障注入，模擬連線重置與空回應進行韌性測試
+- **OpenAPI 匯入** - 選用的 OpenAPI 3.x／Swagger 2.x JSON/YAML 預覽與匯入（預設關閉）
+- **假資料產生** - 內建姓名、Email、電話、地址與整數模板 helper
 - **規則測試** - 在管理介面直接測試規則匹配結果
 - **靜態分析** - SpotBugs 靜態程式碼分析
-- **零外部依賴** - 內嵌 SQLite 資料庫、Caffeine 快取
+- **不需外部資料庫** - 預設內嵌 H2，另提供 SQLite WAL profile
 - **內網友善** - 前端使用 WebJars，無需 CDN
 - **環境識別** - 協定別名、環境標籤，多環境部署一目了然
 
@@ -43,7 +40,7 @@
 ### 環境需求
 
 - Java 17+
-- Gradle 8+ (或使用內建 wrapper)
+- Gradle 8.14+ (或使用內建 wrapper)
 
 ### 啟動服務
 
@@ -58,6 +55,34 @@
 ./gradlew bootJar
 java -jar build/libs/echo-server-*.jar
 ```
+
+Windows 開發機請在 PowerShell 使用：
+
+```powershell
+.\gradlew.bat dev
+.\gradlew.bat bootRun
+.\gradlew.bat bootJar
+java -jar (Get-ChildItem build\libs\echo-server-*.jar | Select-Object -First 1).FullName
+```
+
+### H2 遷移至 SQLite
+
+目前基礎設定仍以 H2 啟動；完成遷移後以 `sqlite` profile 啟動。遷移前必須先停止 Echo，且目標 SQLite 檔案不可已存在：
+
+```bash
+python3 scripts/migrate-h2-to-sqlite.py
+SPRING_PROFILES_ACTIVE=sqlite ./gradlew bootRun
+```
+
+PowerShell：
+
+```powershell
+python scripts\migrate-h2-to-sqlite.py
+$env:SPRING_PROFILES_ACTIVE="sqlite"
+.\gradlew.bat bootRun
+```
+
+遷移程式會先建立並核對 H2 備份，再於暫存 SQLite 中以單一交易搬移所有應用資料表。逐表筆數、SHA-256、`integrity_check`、`foreign_key_check` 及啟動後查詢 API 全部通過後，才會原子發布 `mockdb.sqlite`；原 H2 不會被刪除。非預設路徑及自動化參數請執行 `python3 scripts/migrate-h2-to-sqlite.py --help` 查看。
 
 ### Docker 部署
 
@@ -86,6 +111,16 @@ docker compose down
 
 JVM 參數在 Dockerfile 中設定（預設 `-Xms256m -Xmx512m`），可透過 docker-compose.yml 的 `environment` 加入 `JAVA_OPTS` 覆蓋。
 
+### 選用功能
+
+以下使用者功能預設關閉，可依部署需求開啟：
+
+| 環境變數 | 預設值 | 說明 |
+|----------|--------|------|
+| `ECHO_BULK_IMPORT_EXPORT_ENABLED` | `false` | 顯示並啟用批次匯入／匯出操作 |
+| `ECHO_SCENARIOS_ENABLED` | `false` | 啟用 Scenario 狀態機規則與管理功能 |
+| `ECHO_RULE_DRAG_SORT_ENABLED` | `false` | 啟用規則列表的拖曳優先度排序 |
+
 ### 存取服務
 
 | 服務 | URL | 說明 |
@@ -93,41 +128,7 @@ JVM 參數在 Dockerfile 中設定（預設 `-Xms256m -Xmx512m`），可透過 d
 | 管理介面 | http://localhost:8080/ | Mock 規則管理 |
 | 登入頁面 | http://localhost:8080/login.html | 使用者登入 |
 | Mock 端點 | http://localhost:8080/mock/** | 攔截 HTTP 請求 |
-| — | — | SQLite 以檔案管理（不需要 Web Console） |
-
-## 從 H2 升級
-
-> **重大變更**：自本版本起，預設資料庫從 H2 改為 SQLite。
-
-**全新安裝** – 不需任何操作，預設使用 SQLite。
-
-**既有 H2 使用者** – 選擇以下方式之一：
-
-1. **繼續使用 H2**（不需遷移）：
-   ```bash
-   ./gradlew bootRun --args='--spring.profiles.active=h2'
-   ```
-
-2. **遷移到 SQLite**（建議）：
-   ```bash
-   # 1. 停止 Echo
-   # 2. 使用 H2 Shell 匯出資料
-   java -cp ~/.gradle/caches/**/h2-*.jar org.h2.tools.Shell \
-     -url "jdbc:h2:file:./mockdb;ACCESS_MODE_DATA=r" -user sa -password "" \
-     -sql "CALL CSVWRITE('./http_rules.csv', 'SELECT * FROM HTTP_RULES')"
-   # 對以下表重複：JMS_RULES, RESPONSES, BUILTIN_USERS, RULE_AUDIT_LOGS
-
-   # 3. 刪除舊 DB 並啟動 Echo（自動建立 SQLite）
-   rm mockdb.mv.db
-   ./gradlew dev
-   # JPA ddl-auto=update 會自動建立 schema
-
-   # 4. 透過 Admin UI 重新建立規則，或用 CSV 匯入
-   ```
-
-3. **全新開始** – 直接刪除 `mockdb.mv.db` 重啟，系統會自動建立新的 SQLite 資料庫。
-
-**為什麼換 SQLite？** H2 embedded mode 在非正常關閉時（kill -9、OOM kill、斷電）容易發生 chunk 損壞。SQLite 使用 WAL mode 的 atomic commit 機制，即使 crash 也能保證資料庫完整性。
+| 資料庫 | — | 預設使用 H2；完成遷移後啟用 `sqlite` profile 使用 SQLite WAL |
 
 ## 規則匹配優先順序
 
@@ -210,6 +211,8 @@ Echo 可作為 JMS Proxy，在開發環境攔截 JMS 訊息：
                  無匹配規則 → 轉發到 Target ESB
 ```
 
+管理員可在「系統設定 → JMS 轉發連線」建立多組 Artemis/TIBCO 連線、測試連線並指定一組預設值。只有無規則匹配時才會使用預設的**轉發端**連線；Echo 自己接收訊息的 Embedded Artemis 不受影響。第一次建立資料庫連線設定後，系統會改用資料庫設定，原本 `application.yml` 的 `target` 僅作為尚未建立任何設定時的相容備援。密碼以 AES-GCM 加密保存且不會由 API 回傳；正式環境請固定設定 `ECHO_JMS_CREDENTIAL_KEY`，更換此金鑰前必須先重新輸入所有已儲存密碼。
+
 ## 條件匹配語法
 
 ### HTTP Body 條件 (JSON)
@@ -253,56 +256,24 @@ Echo 可作為 JMS Proxy，在開發環境攔截 JMS 訊息：
 
 ## 狀態機場景（Stateful Scenarios）
 
-使用 WireMock 風格的狀態機模擬多步驟流程。每個 Scenario 有 `scenarioName` 和 `currentState`（預設 `Started`）。
+規則可透過 `scenarioName` 加入指定狀態機，只在 `requiredScenarioState`
+符合時命中，並在命中後切換至 `newScenarioState`。每個 Scenario 的初始狀態都是
+`Started`。
 
-規則透過三個欄位控制狀態：
-- `scenarioName` — 綁定哪個狀態機
-- `requiredScenarioState` — 匹配前提：狀態必須是這個值才會匹配
-- `newScenarioState` — 匹配成功後，狀態轉移為這個值
-
-### 範例：訂單流程
-
-```bash
-# 規則 1：Started 狀態下 GET → pending
-curl -X POST http://localhost:8080/api/admin/rules -u admin:admin \
-  -H 'Content-Type: application/json' -d '{
-    "protocol":"HTTP", "matchKey":"/order/123", "method":"GET",
-    "responseBody":"{\"status\":\"pending\"}", "status":200, "priority":10,
-    "scenarioName":"order-flow", "requiredScenarioState":"Started", "newScenarioState":"Started"
-  }'
-
-# 規則 2：Started 狀態下 POST /pay → 狀態轉為 Paid
-curl -X POST http://localhost:8080/api/admin/rules -u admin:admin \
-  -H 'Content-Type: application/json' -d '{
-    "protocol":"HTTP", "matchKey":"/order/123/pay", "method":"POST",
-    "responseBody":"{\"result\":\"payment-ok\"}", "status":200, "priority":10,
-    "scenarioName":"order-flow", "requiredScenarioState":"Started", "newScenarioState":"Paid"
-  }'
-
-# 規則 3：Paid 狀態下 GET → paid
-curl -X POST http://localhost:8080/api/admin/rules -u admin:admin \
-  -H 'Content-Type: application/json' -d '{
-    "protocol":"HTTP", "matchKey":"/order/123", "method":"GET",
-    "responseBody":"{\"status\":\"paid\"}", "status":200, "priority":10,
-    "scenarioName":"order-flow", "requiredScenarioState":"Paid", "newScenarioState":"Paid"
-  }'
+```json
+{
+  "protocol": "HTTP",
+  "matchKey": "/orders/123/pay",
+  "method": "POST",
+  "scenarioName": "order-flow",
+  "requiredScenarioState": "Started",
+  "newScenarioState": "Paid",
+  "responseBody": "{\"result\":\"payment-ok\"}"
+}
 ```
 
-```bash
-curl http://localhost:8080/mock/order/123              # → {"status":"pending"}
-curl -X POST http://localhost:8080/mock/order/123/pay  # → {"result":"payment-ok"}
-curl http://localhost:8080/mock/order/123              # → {"status":"paid"}
-```
-
-### 重置狀態
-
-```bash
-# 重置單一 scenario
-curl -X PUT http://localhost:8080/api/admin/scenarios/order-flow/reset -u admin:admin
-
-# 重置所有 scenarios
-curl -X PUT http://localhost:8080/api/admin/scenarios/reset -u admin:admin
-```
+使用 `PUT /api/admin/scenarios/{name}/reset` 重置單一 Scenario，或使用
+`PUT /api/admin/scenarios/reset` 重置全部 Scenario。
 
 ## 使用方式
 
@@ -326,6 +297,15 @@ location /api/ {
     proxy_pass http://echo-server:8080/mock/;
 }
 ```
+
+### 下游 HTTPS 憑證驗證
+
+HTTP 轉發預設維持**內網相容模式**：不驗證憑證鏈與主機名稱，確保公司內網的
+私有或自簽憑證仍可正常使用。已儲存的 HTTP 連線可在「系統設定」中個別切換為
+**嚴格憑證驗證**；舊有的 `X-Original-Host` 轉發則維持內網相容模式。
+
+此預設只適合受信任的內部網路。若下游服務會經過不受信任的網路，請建立已儲存
+的 HTTP 連線並開啟嚴格憑證驗證。
 
 ## 設定檔
 
@@ -356,11 +336,12 @@ echo:
     sync-interval-ms: 5000      # 多實例 cache 同步間隔 (毫秒)
   jms:
     enabled: false              # 設為 true 啟用 JMS
+    credential-key: ${ECHO_JMS_CREDENTIAL_KEY} # 資料庫內轉發密碼的加密金鑰
     port: 61616                 # Artemis 監聽埠
     queue: ECHO.REQUEST         # 監聽的 Queue
     endpoint-field: ServiceName # 從訊息 body 提取端點識別欄位
     target:
-      enabled: false            # 設為 true 啟用轉發到 ESB
+      enabled: false            # 舊版單一連線相容設定；未建立資料庫連線時使用
       type: tibco               # artemis 或 tibco
       server-url: tcp://esb-server:7222
       timeout-seconds: 30
@@ -510,13 +491,6 @@ ADMIN 可透過管理介面管理內建帳號：
 | POST | /api/admin/builtin-users/register | 自助註冊（公開，需啟用） |
 | PUT | /api/account/change-password | 修改自己的密碼（已登入） |
 
-### 狀態機管理
-
-| Method | Path | 說明 |
-|--------|------|------|
-| PUT | /api/admin/scenarios/{name}/reset | 重置單一 Scenario 為 Started |
-| PUT | /api/admin/scenarios/reset | 重置所有 Scenarios 為 Started |
-
 ### JMS 測試
 
 | Method | Path | 說明 |
@@ -548,20 +522,6 @@ WireMock 風格的 Handlebars 模板引擎，在回應內容中使用 `{{...}}` 
 ```
 
 比較運算子：`eq`, `ne`, `gt`, `lt`, `contains`, `matches`
-
-### 假資料 Helpers
-
-```handlebars
-{{randomFirstName}}                           // 隨機名字
-{{randomLastName}}                            // 隨機姓氏
-{{randomFullName}}                            // 隨機全名
-{{randomEmail}}                               // 隨機 email
-{{randomPhoneNumber}}                         // 隨機電話 (xxx) xxx-xxxx
-{{randomCity}}                                // 隨機城市
-{{randomCountry}}                             // 隨機國家
-{{randomStreetAddress}}                       // 隨機地址
-{{randomInt min=1 max=100}}                   // 隨機整數
-```
 
 ### JSONPath / XPath
 
@@ -609,7 +569,22 @@ spring:
 
 ## 效能測試
 
-測試環境：macOS, Apple Silicon, Java 17, 20 並發執行緒, 每場景 10 秒。
+效能數字只代表指定負載，不應視為通用產品宣稱；`scripts/` 下的腳本才是重現基準的依據。
+
+### 目前 Echo vs WireMock A/B（2026-08-11）
+
+Echo 與 WireMock 3.13.2 在相同 Apple Silicon 主機、Java 22.0.2、512 MiB heap、開啟請求紀錄、50 並行及每個服務／場景 8 秒的條件下測試。兩邊 HTTP 5xx 與連線錯誤皆為 0。
+
+| 場景 | Echo RPS | WireMock RPS | 比值 | Echo p95 | WireMock p95 |
+|------|---------:|-------------:|-----:|---------:|-------------:|
+| 簡單 JSON、無條件 | 6,327 | 7,068 | 0.90x | 13.1ms | 12.9ms |
+| JSON、10 個候選規則 | 7,570 | 6,875 | 1.10x | 10.6ms | 13.0ms |
+| XML 約 1KB + XPath | 7,136 | 4,617 | 1.55x | 11.3ms | 24.4ms |
+| XML 約 80KB + XPath | 3,116 | 483 | 6.46x | 23.9ms | 180.6ms |
+
+本輪簡單 JSON 仍比 WireMock 慢約 10%；當候選規則或 XML/XPath 解析成本增加時 Echo 才開始領先。這不代表 Echo 的每項功能都比 WireMock 快。
+
+以下聚焦型基準是較早在 macOS／Apple Silicon、Java 17、20 並行及每場景 10 秒下取得；只有命令與環境完全一致時才可直接比較。
 
 ### 規則數量影響（1,600 條規則）
 
@@ -638,7 +613,7 @@ XML 匹配成本隨 body 大小線性增長（DOM 解析）。JSON 匹配不受 
 - **Response Body 快取**: 50MB 上限, 5MB 閾值, 12 小時過期
 - 規則變更時自動失效
 
-### 大量規則匹配（2,000 條規則，worst case）
+### 歷史大量規則匹配（2,000 條規則，worst case）
 
 測試條件：2,000 條 HTTP 規則含 XPath 條件（`//ServiceName=xxx;//CustId=yyy`），目標規則排序最後（worst case 全遍歷），10 併發，200 請求。
 
@@ -648,7 +623,7 @@ XML 匹配成本隨 body 大小線性增長（DOM 解析）。JSON 匹配不受 
 | Echo JSON（2,000 規則，欄位匹配） | 1,066 | 9.3ms | 8.0ms | 24.8ms | 28.7ms |
 | WireMock XML（2,000 規則，XPath） | 31 | 311.9ms | 311.3ms | 400.7ms | 427.0ms |
 
-Echo 的 XML/XPath 匹配在大量規則下比 WireMock **快 14 倍**，歸功於簡單 XPath 模式的 `getElementsByTagName` 快速路徑與預編譯 `XPathExpression` 快取。JSON 匹配更快（1,066 RPS），因 Jackson 的欄位查找為 O(1) hash lookup。
+在這組歷史 2,000 規則負載中，Echo 的 XML/XPath 路徑比當時測試的 WireMock **快 14 倍**，主要來自簡單 XPath 的 `getElementsByTagName` 快速路徑與預編譯 `XPathExpression` 快取；此結果只適用於該組 worst-case 規則。
 
 ### 執行壓力測試
 
@@ -665,8 +640,11 @@ python3 scripts/stress-test-xml-body.py
 # RPS 吞吐量測試
 python3 scripts/stress-test-rps.py [URL] [秒數] [並發數]
 
-# Echo vs WireMock 比較（需要 libs/wiremock-standalone.jar）
+# Echo vs WireMock 比較（請先另外啟動 WireMock）
 python3 scripts/stress-test-vs-wiremock.py [ECHO_URL] [WM_URL] [秒數] [並發數]
+
+# 2,000 條規則 RPS 測試（Echo XML/JSON vs WireMock XML）
+python3 scripts/bench-rps-xml.py
 
 # 2,000 條 JMS 規則匹配時間
 python3 scripts/bench-2000-jms.py
@@ -677,10 +655,10 @@ python3 scripts/stress-test-jms-match.py [BASE_URL]
 # 記憶體壓力測試
 python3 scripts/stress-test-memory.py [BASE_URL]
 
-# 快取隔離壓力測試
-python3 scripts/stress-test-cache-isolation.py
+# 日誌檢查
+python3 scripts/check-logs.py
 
-# 匹配情境回歸測試（138 個案例）
+# 匹配情境回歸測試（69 個案例）
 python3 scripts/test-match-scenarios.py
 ```
 
@@ -702,18 +680,18 @@ python3 scripts/test-match-scenarios.py
 
 | 類別 | 技術 |
 |------|------|
-| Framework | Spring Boot 3.5.13 |
+| Framework | Spring Boot 3.5.16 |
 | Web Server | Undertow |
-| Database | SQLite (WAL mode) |
+| Database | H2（預設），可切換 SQLite WAL profile |
 | Cache | Caffeine |
 | Messaging | Artemis (Embedded) |
 | Security | Spring Security |
 | Template | Handlebars 4.5 |
-| JSON Path | JsonPath 2.10 |
+| JSON Path | JsonPath 3.0 |
 | Excel | Apache POI |
 | Static Analysis | SpotBugs |
 | Frontend | Vue.js 3.5 + Bootstrap 5.3 + Bootstrap Icons 1.13 + CodeMirror 5 (WebJars) |
-| Build | Gradle 8 |
+| Build | Gradle 8.14.5 |
 
 ## License
 

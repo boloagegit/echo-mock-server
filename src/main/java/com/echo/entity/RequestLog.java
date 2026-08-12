@@ -13,7 +13,12 @@ import java.time.LocalDateTime;
 @Table(name = "request_log", indexes = {
     @Index(name = "idx_log_rule_id", columnList = "ruleId"),
     @Index(name = "idx_log_request_time", columnList = "requestTime"),
-    @Index(name = "idx_log_protocol", columnList = "protocol")
+    @Index(name = "idx_log_protocol", columnList = "protocol"),
+    @Index(name = "idx_log_request_time_id", columnList = "requestTime,id"),
+    @Index(name = "idx_log_rule_time_id", columnList = "ruleId,requestTime,id"),
+    @Index(name = "idx_log_protocol_matched_time_id", columnList = "protocol,matched,requestTime,id"),
+    @Index(name = "idx_log_endpoint_time_id", columnList = "endpoint,requestTime,id"),
+    @Index(name = "idx_log_response_time_id", columnList = "responseTimeMs,id")
 })
 @Getter
 @Setter

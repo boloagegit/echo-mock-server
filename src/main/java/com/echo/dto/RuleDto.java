@@ -47,6 +47,10 @@ public class RuleDto {
     private Boolean sseEnabled;
     private Boolean sseLoopEnabled;
     private String responseContentType;
+    private String action;
+    private String forwardTargetMode;
+    private Long httpTargetConnectionId;
+    private String jmsTargetConnectionId;
     private String faultType;
     private String scenarioName;
     private String requiredScenarioState;

@@ -1,0 +1,193 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version without the v prefix (YYYY.MM.DD or YYYY.MM.DD.N)
+        required: true
+        type: string
+
+concurrency:
+  group: create-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Validate, build, and publish
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Validate release version
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$RELEASE_VERSION" <<'PY'
+          import datetime
+          import re
+          import sys
+
+          version = sys.argv[1]
+          match = re.fullmatch(r"(\d{4})\.(\d{2})\.(\d{2})(?:\.([1-9]\d*))?", version)
+          if not match:
+              raise SystemExit("Version must use YYYY.MM.DD or YYYY.MM.DD.N without a v prefix")
+          datetime.date(*(int(part) for part in match.groups()[:3]))
+          PY
+
+          TAG="v${RELEASE_VERSION}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists" >&2
+            exit 1
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists" >&2
+            exit 1
+          fi
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "jar=echo-server-${RELEASE_VERSION}.jar" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build, test, and analyze
+        run: ./gradlew clean build spotbugsMain -PreleaseVersion="$RELEASE_VERSION"
+
+      - name: Verify artifact version
+        shell: bash
+        run: |
+          set -euo pipefail
+          JAR="build/libs/${{ steps.release.outputs.jar }}"
+          test -f "$JAR"
+          VERSION=$(unzip -p "$JAR" META-INF/MANIFEST.MF \
+            | tr -d '\r' \
+            | sed -n 's/^Implementation-Version: //p')
+          if [ "$VERSION" != "$RELEASE_VERSION" ]; then
+            echo "Expected artifact version ${RELEASE_VERSION}, got ${VERSION:-missing}" >&2
+            exit 1
+          fi
+
+      - name: Smoke test JAR
+        shell: bash
+        run: |
+          set -euo pipefail
+          JAR="build/libs/${{ steps.release.outputs.jar }}"
+          LOG="$RUNNER_TEMP/echo-release-smoke.log"
+          java -jar "$JAR" \
+            --spring.profiles.active=dev \
+            --server.port=18080 >"$LOG" 2>&1 &
+          APP_PID=$!
+          trap 'kill "$APP_PID" >/dev/null 2>&1 || true' EXIT
+
+          READY=false
+          for _ in $(seq 1 45); do
+            if ! kill -0 "$APP_PID" >/dev/null 2>&1; then
+              cat "$LOG"
+              echo "Application stopped before becoming healthy" >&2
+              exit 1
+            fi
+            if curl --fail --silent \
+              --header 'Accept: application/json' \
+              http://localhost:18080/api/admin/status >/dev/null; then
+              READY=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$READY" != true ]; then
+            cat "$LOG"
+            echo "Application did not become healthy within 45 seconds" >&2
+            exit 1
+          fi
+
+          kill "$APP_PID"
+          wait "$APP_PID" || true
+          trap - EXIT
+
+      - name: Prepare release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp "build/libs/${{ steps.release.outputs.jar }}" "dist/${{ steps.release.outputs.jar }}"
+          cd dist
+          sha256sum "${{ steps.release.outputs.jar }}" > "${{ steps.release.outputs.jar }}.sha256"
+
+      - name: Build Docker image
+        shell: bash
+        run: |
+          set -euo pipefail
+          OWNER=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          IMAGE="ghcr.io/${OWNER}/echo-mock-server"
+          docker build \
+            --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.version=${RELEASE_VERSION}" \
+            --tag "${IMAGE}:${RELEASE_VERSION}" \
+            .
+          docker tag "${IMAGE}:${RELEASE_VERSION}" "${IMAGE}:${GITHUB_SHA::7}"
+          docker tag "${IMAGE}:${RELEASE_VERSION}" "${IMAGE}:latest"
+          echo "IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+
+      - name: Create annotated tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.release.outputs.tag }}" -m "Release ${RELEASE_VERSION}"
+          git push origin "${{ steps.release.outputs.tag }}"
+
+      - name: Create draft GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "${{ steps.release.outputs.tag }}" \
+            "dist/${{ steps.release.outputs.jar }}" \
+            "dist/${{ steps.release.outputs.jar }}.sha256" \
+            --verify-tag \
+            --generate-notes \
+            --draft \
+            --title "Echo Mock Server ${{ steps.release.outputs.tag }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Docker image
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io \
+            --username "$GITHUB_ACTOR" \
+            --password-stdin
+          docker push "${IMAGE}:${RELEASE_VERSION}"
+          docker push "${IMAGE}:${GITHUB_SHA::7}"
+          docker push "${IMAGE}:latest"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish GitHub Release
+        shell: bash
+        run: gh release edit "${{ steps.release.outputs.tag }}" --draft=false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

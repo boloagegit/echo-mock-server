@@ -20,18 +20,18 @@
 - 內建帳號管理 + 自助註冊
 - 國際化 UI（英文 + 繁體中文）
 
-## 待開發功能
+## 功能狀態
 
-| 功能 | 說明 |
-|------|------|
-| OpenAPI/Swagger 匯入 | 上傳 spec 自動產生 mock 規則 |
-| Stateful Scenarios | 狀態機模擬多步驟對話流程 |
-| Fault Injection | connection reset、empty response |
-| Webhook/Callback | 匹配後主動呼叫另一個 URL |
-| Faker 假資料產生 | 內建假名字、地址、email 等產生器 |
-| Multipart 匹配 | 檔案上傳 API 的 request 匹配 |
-| Java SDK | 原生 client library |
-| Testcontainers | 一行 code 在測試中啟動 Echo |
+| 狀態 | 功能 | 說明 |
+|------|------|------|
+| 已完成 | OpenAPI/Swagger 匯入 | 上傳 spec、預覽並產生 mock 規則 |
+| 已完成、預設關閉 | Stateful Scenarios | 狀態機模擬多步驟對話流程 |
+| 已完成 | Fault Injection | connection reset、empty response |
+| 已完成 | Faker 假資料產生 | 內建假名字、地址、email 等產生器 |
+| 待開發 | Webhook/Callback | 匹配後主動呼叫另一個 URL |
+| 待開發 | Multipart 匹配 | 檔案上傳 API 的 request 匹配 |
+| 待評估 | Java SDK | 原生 client library |
+| 待評估 | Testcontainers | 一行 code 在測試中啟動 Echo |
 
 ## Roadmap
 
@@ -90,7 +90,7 @@
 
 - [x] **2-1. Fault Injection（故障注入）**
 
-**做法**：BaseRule 新增 `faultType` 欄位（enum: NONE / CONNECTION_RESET / EMPTY_RESPONSE），在回應階段根據 faultType 決定行為。
+**做法**：BaseRule 新增 `faultType` 欄位（enum: NONE / CONNECTION_RESET / EMPTY_RESPONSE），在回應階段根據 faultType 決定行為。表單編輯器將故障注入與 Mock 回應、轉發下游並列為互斥的規則模式；宣告式契約維持 `action=MOCK` 並搭配非 `NONE` 的 `faultType`，以保持 API 相容。
 
 **使用範例**：
 - 電商系統：模擬付款 API timeout，驗證前端是否正確顯示「請稍後再試」

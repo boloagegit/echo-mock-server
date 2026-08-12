@@ -9,10 +9,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -114,6 +116,42 @@ class RuleAuditServiceTest {
 
         assertThat(logs).hasSize(1);
         assertThat(logs.get(0).getRuleId()).isEqualTo("uuid-1");
+    }
+
+    @Test
+    void queryAuditSummary_shouldMapPageWithoutJson() {
+        LocalDateTime timestamp = LocalDateTime.now();
+        Object[] row = new Object[]{1L, "uuid-1", RuleAuditLog.Action.UPDATE,
+                "admin", timestamp, true, true};
+        when(repository.findSummaryPage(eq(RuleAuditLog.Action.UPDATE), eq("admin"), eq("uuid"), any()))
+                .thenReturn(new PageImpl<>(Collections.singletonList(row)));
+
+        RuleAuditService.AuditQueryResult result = service.queryAuditSummary(
+                RuleAuditService.AuditQueryFilter.builder()
+                        .action(RuleAuditLog.Action.UPDATE)
+                        .operator(" admin ")
+                        .keyword(" uuid ")
+                        .page(0)
+                        .size(20)
+                        .sortField("operator")
+                        .sortDirection("asc")
+                        .build());
+
+        assertThat(result.getResults()).singleElement().satisfies(summary -> {
+            assertThat(summary.getRuleId()).isEqualTo("uuid-1");
+            assertThat(summary.isHasBeforeJson()).isTrue();
+            assertThat(summary.isHasAfterJson()).isTrue();
+        });
+        assertThat(result.getTotalElements()).isEqualTo(1);
+    }
+
+    @Test
+    void getAuditDetail_shouldReturnFullEntity() {
+        RuleAuditLog detail = RuleAuditLog.builder().id(9L).beforeJson("{\"old\":1}")
+                .afterJson("{\"new\":2}").build();
+        when(repository.findById(9L)).thenReturn(Optional.of(detail));
+
+        assertThat(service.getAuditDetail(9L)).isSameAs(detail);
     }
 
     @Test

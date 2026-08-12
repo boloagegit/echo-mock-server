@@ -4,6 +4,7 @@ import com.echo.entity.BaseRule;
 import com.echo.entity.HttpRule;
 import com.echo.entity.JmsRule;
 import lombok.Builder;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 
 import java.util.List;
@@ -17,6 +18,7 @@ import java.util.Objects;
  */
 @Getter
 @Builder
+@EqualsAndHashCode
 public class CandidateSnapshot {
 
     private final String ruleId;

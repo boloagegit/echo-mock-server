@@ -6,6 +6,7 @@
 """
 
 import json
+import os
 import sys
 import time
 import urllib.request
@@ -14,7 +15,9 @@ import base64
 BASE_URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8080"
 ADMIN_API = f"{BASE_URL}/api/admin"
 MOCK_API = f"{BASE_URL}/mock"
-AUTH = base64.b64encode(b"admin:admin").decode()
+AUTH = base64.b64encode(
+    f"{os.getenv('ECHO_TEST_USERNAME', 'admin')}:{os.getenv('ECHO_TEST_PASSWORD', 'admin')}".encode()
+).decode()
 HOST = "stress.api.test"
 
 

@@ -23,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -62,6 +63,8 @@ class FaultInjectionTest {
         static class TestPipeline extends AbstractMockPipeline<HttpRule> {
 
             List<HttpRule> candidateRules = Collections.emptyList();
+            Integer loggedResponseStatus;
+            String loggedFaultType;
 
             TestPipeline(ConditionMatcher conditionMatcher,
                          RuleService ruleService,
@@ -122,6 +125,22 @@ class FaultInjectionTest {
             @Override
             protected MatchChainEntry createMatchChainEntry(HttpRule rule, String reason) {
                 return MatchChainEntry.fromHttp(rule, reason);
+            }
+
+            @Override
+            protected void recordLog(String ruleId, Protocol protocol, String method,
+                                     String endpoint, boolean matched, int responseTimeMs,
+                                     String clientIp, String matchChainJson, String targetHost,
+                                     Integer proxyStatus, String proxyError,
+                                     Integer responseStatus, Integer matchTimeMs,
+                                     String requestBody, String responseBody,
+                                     List<HttpRule> candidates,
+                                     ConditionMatcher.PreparedBody preparedBody,
+                                     String queryString, Map<String, String> headers,
+                                     String faultType, String scenarioName,
+                                     String scenarioFromState, String scenarioToState) {
+                loggedResponseStatus = responseStatus;
+                loggedFaultType = faultType;
             }
         }
 
@@ -186,6 +205,7 @@ class FaultInjectionTest {
             assertThat(result.getFaultType()).isEqualTo("EMPTY_RESPONSE");
             assertThat(result.getResponse().getBody()).isEmpty();
             assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            assertThat(pipeline.loggedResponseStatus).isEqualTo(200);
             assertThat(result.isMatched()).isTrue();
         }
 
@@ -202,6 +222,8 @@ class FaultInjectionTest {
             assertThat(result.getFaultType()).isEqualTo("CONNECTION_RESET");
             assertThat(result.getResponse().getBody()).isEqualTo("original-body");
             assertThat(result.isMatched()).isTrue();
+            assertThat(pipeline.loggedFaultType).isEqualTo("CONNECTION_RESET");
+            assertThat(pipeline.loggedResponseStatus).isNull();
         }
 
         // ---- Test 4 ----
@@ -351,6 +373,7 @@ class FaultInjectionTest {
             BaseRule rule = handler.fromDto(dto);
 
             assertThat(rule.getFaultType()).isEqualTo(FaultType.CONNECTION_RESET);
+            assertThat(rule.getDescription()).isEqualTo("GET /api/test → Connection reset");
         }
 
         // ---- Test 12 ----

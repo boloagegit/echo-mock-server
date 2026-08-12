@@ -17,9 +17,11 @@ const ResponsesPage = {
     batchSelectResponseMode: Boolean,
     selectedResponses: Array,
     showResponseDataDropdown: Boolean,
+    bulkImportExportEnabled: Boolean,
     status: Object,
     responsePage: Number,
     responsePageSize: Number,
+    responseTotalElements: Number,
     responseTotalPages: Number,
   },
   emits: [
@@ -55,30 +57,33 @@ const ResponsesPage = {
     },
   },
   template: /* html */`
-    <div class="page" :class="{active:true}">
+    <div class="page workspace-page responses-workspace" :class="{active:true}">
       <div class="page-header">
-        <h1 class="page-title">{{t('responses.title')}}</h1>
-        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <div class="page-heading">
+          <h1 class="page-title">{{t('responses.title')}}</h1>
+          <span class="page-count">{{responseTotalElements}}</span>
+        </div>
+        <div class="page-actions">
           <button class="btn btn-secondary" @click="$emit('load-responses', true)" :disabled="loading.responses"><i class="bi bi-arrow-clockwise" :class="{'spin':loading.responses}"></i> {{t('responses.refresh')}}</button>
           <button class="btn btn-secondary" @click="$emit('update:batchSelectResponseMode', !batchSelectResponseMode); $emit('update:selectedResponses', [])" :disabled="!isLoggedIn" :class="{'active':batchSelectResponseMode}"><i class="bi bi-check2-square"></i> {{t('responses.batchSelect')}}</button>
           <button class="btn btn-danger" @click="$emit('delete-selected-responses')" v-if="batchSelectResponseMode && selectedResponses.length"><i class="bi bi-trash"></i> {{t('responses.deleteCount', {count: selectedResponses.length})}}</button>
           <button class="btn btn-primary" @click="$emit('open-response-modal', null)" :disabled="!isLoggedIn"><i class="bi bi-plus-lg"></i> {{t('responses.addResponse')}}</button>
-          <div v-if="false" class="resp-data-dropdown-wrapper data-dropdown-wrapper" style="position:relative">
-            <button class="btn btn-secondary" @click.stop="$emit('toggle-response-data-dropdown')" :title="t('responses.exportImport')"><i class="bi bi-three-dots-vertical"></i></button>
-            <div v-if="showResponseDataDropdown" class="data-dropdown">
-              <div class="data-dropdown-item" @click="$emit('export-responses')"><i class="bi bi-box-arrow-up"></i> {{t('responses.exportResponses')}}</div>
-              <div class="data-dropdown-item" @click="$emit('trigger-response-import')"><i class="bi bi-box-arrow-in-down"></i> {{t('responses.importResponses')}}</div>
+          <div v-if="isLoggedIn && bulkImportExportEnabled" class="resp-data-dropdown-wrapper data-dropdown-wrapper">
+            <button type="button" class="btn btn-secondary btn-icon" @click.stop="$emit('toggle-response-data-dropdown')" :title="t('responses.exportImport')" :aria-label="t('responses.exportImport')" :aria-expanded="showResponseDataDropdown?'true':'false'" aria-haspopup="menu"><i class="bi bi-three-dots-vertical" aria-hidden="true"></i></button>
+            <div v-if="showResponseDataDropdown" class="data-dropdown" role="menu">
+              <button type="button" class="data-dropdown-item" role="menuitem" @click="$emit('export-responses')"><i class="bi bi-box-arrow-up" aria-hidden="true"></i> {{t('responses.exportResponses')}}</button>
+              <button type="button" class="data-dropdown-item" role="menuitem" @click="$emit('trigger-response-import')"><i class="bi bi-box-arrow-in-down" aria-hidden="true"></i> {{t('responses.importResponses')}}</button>
             </div>
             <input id="responseImportInput2" type="file" accept=".json" @change="$emit('import-responses', $event)" hidden>
           </div>
         </div>
       </div>
-      <div class="alert alert-info">
+      <div class="page-context-note">
         <i class="bi bi-info-circle"></i> {{t('responses.sharedInfo')}}
       </div>
-      <div class="card" style="margin-bottom:0.5rem">
-        <div class="card-body filter-row">
-          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;flex:1">
+      <div class="card workspace-filter-card">
+        <div class="card-body filter-row workspace-filter-bar">
+          <div class="workspace-filter-controls">
             <div class="btn-group">
               <button class="btn btn-sm" :class="responseUsageFilter==='used'?'btn-primary':'btn-secondary'" @click="$emit('update:responseUsageFilter', responseUsageFilter==='used'?'':'used')">{{t('responses.filterUsed')}}</button>
               <button class="btn btn-sm" :class="responseUsageFilter==='unused'?'btn-primary':'btn-secondary'" @click="$emit('update:responseUsageFilter', responseUsageFilter==='unused'?'':'unused')">{{t('responses.filterUnused')}}</button>
@@ -89,12 +94,16 @@ const ResponsesPage = {
               <button class="btn btn-sm" :class="responseContentTypeFilter==='SSE'?'btn-primary':'btn-secondary'" @click="$emit('update:responseContentTypeFilter', responseContentTypeFilter==='SSE'?'':'SSE')">SSE</button>
             </div>
             <div class="filter-divider"></div>
-            <div style="position:relative;flex:1;min-width:120px">
-              <input id="responseSearch" class="form-control" :value="responseFilter" @input="$emit('update:responseFilter', $event.target.value)" :placeholder="t('responses.searchPlaceholder')" style="padding-right:28px">
-              <button v-if="responseFilter" class="btn btn-sm btn-icon" @click="$emit('update:responseFilter', '')" :title="t('responses.clearSearch')" style="position:absolute;right:2px;top:50%;transform:translateY(-50%);padding:0.2rem;width:24px;height:24px;background:none;border:none;color:var(--muted)">
-                <i class="bi bi-x"></i>
-              </button>
-            </div>
+            <workspace-search-field
+              input-id="responseSearch"
+              :model-value="responseFilter"
+              :placeholder="t('responses.searchPlaceholder')"
+              :aria-label="t('responses.searchPlaceholder')"
+              :clear-label="t('responses.clearSearch')"
+              :submit-mode="true"
+              :submit-label="t('common.searchAction')"
+              @search="$emit('update:responseFilter', $event)"
+            ></workspace-search-field>
           </div>
         </div>
       </div>
@@ -102,7 +111,7 @@ const ResponsesPage = {
         <span class="filter-chip" v-for="c in responseFilterChips" :key="c.key">{{c.label}} <button class="chip-remove" @click="$emit('remove-response-chip', c.key)"><i class="bi bi-x"></i></button></span>
         <button class="chip-clear" @click="$emit('clear-response-filters')">{{t('responses.clearAll')}}</button>
       </div>
-      <div class="card card-table">
+      <div class="card card-table workspace-table-card">
         <div class="card-table-body">
         <div v-if="loading.responses && !responseSummary.length">
           <div v-for="i in 6" :key="'sk-resp-'+i" class="sk-row">
@@ -116,22 +125,22 @@ const ResponsesPage = {
             <span style="margin-left:auto;display:flex;gap:4px"><span class="sk sk-btn"></span><span class="sk sk-btn"></span></span>
           </div>
         </div>
-        <table v-if="pagedResponseSummary.length" class="table-fixed">
+        <table v-if="pagedResponseSummary.length" class="table-fixed workspace-table">
           <thead><tr>
-            <th v-if="batchSelectResponseMode" style="width:40px"><input type="checkbox" @change="$emit('toggle-select-all-responses', $event)" :checked="selectedResponses.length===pagedResponseSummary.length && pagedResponseSummary.length>0" aria-label="Select all"></th>
+            <th v-if="batchSelectResponseMode" style="width:40px"><input type="checkbox" @change="$emit('toggle-select-all-responses', $event)" :checked="selectedResponses.length===pagedResponseSummary.length && pagedResponseSummary.length>0" :aria-label="t('responses.selectAll')"></th>
             <th class="col-id" style="cursor:pointer" @click="$emit('toggle-response-sort', 'id')">{{t('responses.thId')}} <i class="bi" :class="responseSortIcon('id')"></i></th>
             <th>{{t('responses.thDescription')}}</th>
             <th style="width:88px" class="col-hide-md">{{t('responses.thType')}}</th>
             <th style="width:64px;cursor:pointer" class="col-hide-md" @click="$emit('toggle-response-sort', 'bodySize')">{{t('responses.thSize')}} <i class="bi" :class="responseSortIcon('bodySize')"></i></th>
             <th style="width:64px;cursor:pointer" class="col-hide-sm" @click="$emit('toggle-response-sort', 'usageCount')">{{t('responses.thUsageCount')}} <i class="bi" :class="responseSortIcon('usageCount')"></i></th>
-            <th style="width:96px;cursor:pointer" class="col-hide-md" @click="$emit('toggle-response-sort', 'createdAt')">{{t('responses.thCreatedAt')}} <i class="bi" :class="responseSortIcon('createdAt')"></i></th>
-            <th style="width:96px;cursor:pointer" class="col-hide-md" @click="$emit('toggle-response-sort', 'updatedAt')">{{t('responses.thUpdatedAt')}} <i class="bi" :class="responseSortIcon('updatedAt')"></i></th>
+            <th class="col-datetime col-hide-md" style="cursor:pointer" @click="$emit('toggle-response-sort', 'createdAt')">{{t('responses.thCreatedAt')}} <i class="bi" :class="responseSortIcon('createdAt')"></i></th>
+            <th class="col-datetime col-hide-md" style="cursor:pointer" @click="$emit('toggle-response-sort', 'updatedAt')">{{t('responses.thUpdatedAt')}} <i class="bi" :class="responseSortIcon('updatedAt')"></i></th>
             <th class="col-actions col-actions-3">{{t('responses.thActions')}}</th>
           </tr></thead>
           <tbody>
             <template v-for="r in pagedResponseSummary" :key="r.id">
               <tr :class="{'selected-row':batchSelectResponseMode && selectedResponses.includes(r.id), 'unused-row':!r.usageCount, 'row-clickable':!batchSelectResponseMode}" @click="!batchSelectResponseMode && r.usageCount && $emit('toggle-response-rules', r)" @dblclick="!batchSelectResponseMode && isLoggedIn && $emit('open-response-modal', r)" :title="!batchSelectResponseMode ? (r.usageCount ? t('responses.clickExpandDblEdit') : t('responses.dblClickEdit')) : ''">
-                <td v-if="batchSelectResponseMode"><input type="checkbox" :value="r.id" :checked="selectedResponses.includes(r.id)" @change="toggleSelection(r.id, $event.target.checked)" aria-label="Select response"></td>
+                <td v-if="batchSelectResponseMode"><input type="checkbox" :value="r.id" :checked="selectedResponses.includes(r.id)" @change="toggleSelection(r.id, $event.target.checked)" :aria-label="t('responses.selectResponse', {id:shortId(r.id)})"></td>
                 <td class="col-id"><span class="badge badge-id">{{r.id}}</span></td>
                 <td>
                   <div>{{r.description||t('responses.noDescription')}}</div>
@@ -150,14 +159,14 @@ const ResponsesPage = {
                   <span v-if="r.usageCount" class="badge badge-success">{{r.usageCount}}</span>
                   <span v-else class="badge badge-secondary">0</span>
                 </td>
-                <td class="col-hide-md"><span class="sub-info" :title="fmtTime(r.createdAt,false)">{{fmtTime(r.createdAt)}}</span></td>
-                <td class="col-hide-md"><span class="sub-info" :title="fmtTime(r.updatedAt,false)">{{fmtTime(r.updatedAt)}}</span></td>
+                <td class="col-datetime col-hide-md"><span class="sub-info" :title="fmtTime(r.createdAt,false)">{{fmtTime(r.createdAt)}}</span></td>
+                <td class="col-datetime col-hide-md"><span class="sub-info" :title="fmtTime(r.updatedAt,false)">{{fmtTime(r.updatedAt)}}</span></td>
                 <td class="col-actions col-actions-3">
                   <div style="display:flex;gap:0.25rem">
-                    <button v-if="r.usageCount" class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('toggle-response-rules', r)" :title="t('responses.viewLinkedRules', {count: r.usageCount})"><i class="bi" :class="r.expanded?'bi-chevron-up':'bi-chevron-down'"></i></button>
-                    <button v-if="!r.usageCount && daysLeft(r.updatedAt, r.extendedAt, status?.responseRetentionDays) != null" class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('extend-response', r.id)" :title="t('responses.clickExtend')" :disabled="!isLoggedIn"><i class="bi bi-clock-history"></i></button>
-                    <button class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('open-response-modal', r)" :title="t('responses.edit')" :disabled="!isLoggedIn"><i class="bi bi-pencil"></i></button>
-                    <button class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('delete-response', r.id, r.usageCount)" :title="t('responses.delete')" :disabled="!isLoggedIn"><i class="bi bi-trash"></i></button>
+                    <button v-if="r.usageCount" class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('toggle-response-rules', r)" :title="t('responses.viewLinkedRules', {count: r.usageCount})" :aria-label="t('responses.viewLinkedRules', {count: r.usageCount})"><i class="bi" :class="r.expanded?'bi-chevron-up':'bi-chevron-down'"></i></button>
+                    <button v-if="!r.usageCount && daysLeft(r.updatedAt, r.extendedAt, status?.responseRetentionDays) != null" class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('extend-response', r.id)" :title="t('responses.clickExtend')" :aria-label="t('responses.clickExtend')" :disabled="!isLoggedIn"><i class="bi bi-clock-history"></i></button>
+                    <button class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('open-response-modal', r)" :title="t('responses.edit')" :aria-label="t('responses.edit')" :disabled="!isLoggedIn"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('delete-response', r.id, r.usageCount)" :title="t('responses.delete')" :aria-label="t('responses.delete')" :disabled="!isLoggedIn"><i class="bi bi-trash"></i></button>
                   </div>
                 </td>
               </tr>
@@ -177,7 +186,7 @@ const ResponsesPage = {
             </template>
           </tbody>
         </table>
-        <div v-if="!pagedResponseSummary.length && !loading.responses" class="empty">
+        <div v-if="!pagedResponseSummary.length && !loading.responses" class="empty workspace-empty">
           <i class="bi bi-file-earmark-text"></i>
           <div v-if="responseFilter || responseUsageFilter || responseContentTypeFilter">
             {{t('responses.emptyFilterResult')}}
@@ -186,22 +195,26 @@ const ResponsesPage = {
             </div>
           </div>
           <div v-else>
-            {{t('responses.emptyNoResponses')}}
+            <div class="workspace-empty-title">{{t('responses.emptyNoResponses')}}</div>
+            <div class="workspace-empty-hint">{{t('responses.emptyHint')}}</div>
           </div>
         </div>
         </div>
-        <div class="card-table-footer">
-          <span class="sub-info">{{t('responses.totalCount', {count: responseSummary.length})}}</span>
-          <span v-if="responseFilter || responseUsageFilter || responseContentTypeFilter" class="badge badge-warning" style="margin-left:8px;cursor:pointer" :title="t('responses.clickClearFilter')" @click="$emit('clear-response-filters')"><i class="bi bi-funnel-fill"></i> {{t('responses.filtering')}}</span>
-          <div class="pagination-controls">
-            <button class="btn btn-sm btn-secondary" @click="$emit('update:responsePage', 1)" :disabled="!responsePage || responsePage===1" aria-label="First page"><i class="bi bi-chevron-double-left"></i></button>
-            <button class="btn btn-sm btn-secondary" @click="$emit('update:responsePage', responsePage-1)" :disabled="!responsePage || responsePage===1" aria-label="Previous page"><i class="bi bi-chevron-left"></i></button>
-            <span>{{responsePage}} / {{responseTotalPages}}</span>
-            <button class="btn btn-sm btn-secondary" @click="$emit('update:responsePage', responsePage+1)" :disabled="responsePage>=responseTotalPages" aria-label="Next page"><i class="bi bi-chevron-right"></i></button>
-            <button class="btn btn-sm btn-secondary" @click="$emit('update:responsePage', responseTotalPages)" :disabled="responsePage>=responseTotalPages" aria-label="Last page"><i class="bi bi-chevron-double-right"></i></button>
-          </div>
-          <select :value="responsePageSize" @change="$emit('update:responsePageSize', Number($event.target.value))" class="form-control" style="width:auto" aria-label="Page size"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select>
-        </div>
+        <workspace-pagination
+          :page="responsePage" :total-pages="responseTotalPages" :page-size="responsePageSize"
+          :pagination-label="t('stats.pagination')"
+          :page-status-label="t('stats.pageStatus', {page:responsePage, total:responseTotalPages})"
+          :page-size-label="t('stats.pageSize')"
+          :first-page-label="t('stats.firstPage')" :previous-page-label="t('stats.previousPage')"
+          :next-page-label="t('stats.nextPage')" :last-page-label="t('stats.lastPage')"
+          @update:page="$emit('update:responsePage', $event)"
+          @update:page-size="$emit('update:responsePageSize', $event)"
+        >
+          <template #summary>
+            <span class="sub-info">{{t('responses.totalCount', {count: responseTotalElements})}}</span>
+            <button v-if="responseFilter || responseUsageFilter || responseContentTypeFilter" type="button" class="workspace-filter-reset" :title="t('responses.clickClearFilter')" @click="$emit('clear-response-filters')"><i class="bi bi-funnel-fill" aria-hidden="true"></i> {{t('responses.filtering')}}</button>
+          </template>
+        </workspace-pagination>
       </div>
     </div>
   `

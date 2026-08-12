@@ -1,12 +1,42 @@
 package com.echo.config;
 
 import com.github.benmanes.caffeine.cache.Cache;
+import org.springframework.cache.caffeine.CaffeineCache;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class CacheConfigExtendedTest {
+
+    @Test
+    void ruleCache_shouldRemainBoundedUnderDynamicPathChurn() {
+        CacheConfig config = new CacheConfig();
+        ReflectionTestUtils.setField(config, "ruleCacheMaxEntries", 128);
+        ReflectionTestUtils.setField(config, "ruleCacheExpireMinutes", 60);
+        var manager = config.cacheManager(config.caffeineConfig());
+        CaffeineCache springCache = (CaffeineCache) manager.getCache(CacheConfig.HTTP_RULES_CACHE);
+        assertThat(springCache).isNotNull();
+        Cache<Object, Object> nativeCache = springCache.getNativeCache();
+
+        for (int i = 0; i < 10_000; i++) {
+            nativeCache.put("http:host:/orders/" + i + ":GET", "candidate-list");
+        }
+        nativeCache.cleanUp();
+
+        assertThat(nativeCache.estimatedSize()).isLessThanOrEqualTo(128);
+        assertThat(nativeCache.stats().evictionCount()).isGreaterThan(0);
+    }
+
+    @Test
+    void ruleCacheSettings_shouldExposeConfiguredBounds() {
+        CacheConfig config = new CacheConfig();
+        ReflectionTestUtils.setField(config, "ruleCacheMaxEntries", 321);
+        ReflectionTestUtils.setField(config, "ruleCacheExpireMinutes", 45);
+
+        assertThat(config.getRuleCacheMaxEntries()).isEqualTo(321);
+        assertThat(config.getRuleCacheExpireMinutes()).isEqualTo(45);
+    }
 
     @Test
     void responseBodyCache_shouldCreateWeightBasedCache() {

@@ -127,7 +127,12 @@ class ComplexScenarioMatchTimeTest extends BaseIntegrationTest {
 
         RequestLogService.SummaryQueryResult logResult = null;
         for (int attempt = 0; attempt < 15; attempt++) {
-            try { Thread.sleep(200); } catch (InterruptedException ignored) {}
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("Interrupted while waiting for the asynchronous request log", e);
+            }
             ResponseEntity<RequestLogService.SummaryQueryResult> logsResponse = adminClient().getForEntity(
                     "/api/admin/logs?matched=true&protocol=HTTP&endpoint=/api/v1/orders",
                     RequestLogService.SummaryQueryResult.class);

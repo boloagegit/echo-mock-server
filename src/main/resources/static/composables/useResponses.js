@@ -17,17 +17,16 @@ const useResponses = (deps) => {
 
     // --- 資料快取機制 ---
     const dataLastLoaded = { responses: 0 };
-    const dataDirty = { responses: false };
+    const dataDirty = { responses: false, options: false };
     const DATA_TTL = 30000;
     const shouldLoad = () => !dataLastLoaded.responses || dataDirty.responses || (Date.now() - dataLastLoaded.responses > DATA_TTL);
     const markLoaded = () => { dataLastLoaded.responses = Date.now(); dataDirty.responses = false; };
-    const markDirty = () => { dataDirty.responses = true; };
+    const markDirty = () => { dataDirty.responses = true; dataDirty.options = true; };
 
     // --- 工具函式 ---
-    const matchAll = (text, keywords) => keywords.every(kw => text.includes(kw));
-
     // --- 狀態 ---
     const responseSummary = ref([]);
+    const responseOptions = ref([]);
     const responseFilter = ref('');
     const savedResponseSort = JSON.parse(localStorage.getItem('responseSort') || 'null');
     const responseSort = ref(savedResponseSort || { field: 'updatedAt', asc: false });
@@ -35,6 +34,11 @@ const useResponses = (deps) => {
     const responsePageSize = ref(20);
     const responseUsageFilter = ref('');
     const responseContentTypeFilter = ref('');
+    const responseTotalElements = ref(0);
+    const serverResponseTotalPages = ref(0);
+    let listRequestSequence = 0;
+    let listAbortController = null;
+    let responseOptionsLoadedAt = 0;
 
     // --- Modal 狀態 ---
     const showResponseModal = ref(false);
@@ -53,57 +57,90 @@ const useResponses = (deps) => {
     const showResponseDataDropdown = ref(false);
 
     // --- 篩選、排序、分頁 ---
-    const filteredResponseSummary = computed(() => {
-        let list = responseSummary.value;
-        if (responseUsageFilter.value === 'used') {
-            list = list.filter(r => r.usageCount > 0);
-        } else if (responseUsageFilter.value === 'unused') {
-            list = list.filter(r => r.usageCount === 0);
-        }
-        if (responseContentTypeFilter.value === 'SSE') {
-            list = list.filter(r => r.contentType === 'SSE');
-        } else if (responseContentTypeFilter.value === 'GENERAL') {
-            list = list.filter(r => !r.contentType || r.contentType !== 'SSE');
-        }
-        if (responseFilter.value) {
-            const keywords = responseFilter.value.toLowerCase().split(/\s+/).filter(k => k);
-            list = list.filter(r => matchAll(String(r.id) + ' ' + (r.description || '').toLowerCase(), keywords));
-        }
-        const f = responseSort.value.field, asc = responseSort.value.asc;
-        return [...list].sort((a, b) => { const av = a[f], bv = b[f]; return (av < bv ? -1 : av > bv ? 1 : 0) * (asc ? 1 : -1) });
-    });
-
-    const responseTotalPages = computed(() => Math.max(1, Math.ceil(filteredResponseSummary.value.length / responsePageSize.value)));
-    const pagedResponseSummary = computed(() => filteredResponseSummary.value.slice((responsePage.value - 1) * responsePageSize.value, responsePage.value * responsePageSize.value));
+    const filteredResponseSummary = computed(() => responseSummary.value);
+    const pagedResponseSummary = computed(() => responseSummary.value);
+    const responseTotalPages = computed(() => Math.max(1, serverResponseTotalPages.value));
 
     /** 切換排序欄位/方向 */
     const toggleResponseSort = f => {
         if (responseSort.value.field === f) responseSort.value.asc = !responseSort.value.asc;
         else { responseSort.value.field = f; responseSort.value.asc = false; }
         localStorage.setItem('responseSort', JSON.stringify(responseSort.value));
-        responsePage.value = 1;
     };
 
     /** 取得排序圖示 class */
     const responseSortIcon = f => responseSort.value.field === f ? (responseSort.value.asc ? 'bi-caret-up-fill' : 'bi-caret-down-fill') : 'bi-arrow-down-up';
 
     /** 每頁筆數變更 */
-    const onResponsePageSizeChange = () => { responsePage.value = 1; };
-
-    // --- watchers: 篩選變更時重置頁碼 ---
-    watch(responseFilter, () => responsePage.value = 1);
-    watch(responseUsageFilter, () => responsePage.value = 1);
-    watch(responseContentTypeFilter, () => responsePage.value = 1);
+    const onResponsePageSizeChange = () => {};
 
     // --- 載入 ---
+    const buildResponseQuery = () => {
+        const params = new URLSearchParams();
+        params.set('page', String(Math.max(0, responsePage.value - 1)));
+        params.set('size', String(responsePageSize.value));
+        params.set('sort', responseSort.value.field);
+        params.set('direction', responseSort.value.asc ? 'asc' : 'desc');
+        const keyword = responseFilter.value.trim();
+        if (keyword) { params.set('keyword', keyword); }
+        if (responseUsageFilter.value) { params.set('usage', responseUsageFilter.value); }
+        if (responseContentTypeFilter.value) { params.set('contentType', responseContentTypeFilter.value); }
+        return '/api/admin/responses/summary?' + params.toString();
+    };
+
     const loadResponseSummary = async (force) => {
         if (!force && !shouldLoad()) return;
+        const requestId = ++listRequestSequence;
+        if (listAbortController) { listAbortController.abort(); }
+        const abortController = new AbortController();
+        listAbortController = abortController;
         deps.loading.value.responses = true;
-        const r = await apiCall('/api/admin/responses/summary', {}, { errorMsg: t('toast.responseLoadFailed') });
-        if (r && r.ok) { responseSummary.value = await r.json(); markLoaded(); }
-        Object.keys(responseRulesCache).forEach(k => delete responseRulesCache[k]);
-        deps.loading.value.responses = false;
+        try {
+            const r = await apiCall(buildResponseQuery(), { signal: abortController.signal }, { errorMsg: t('toast.responseLoadFailed') });
+            if (requestId !== listRequestSequence) { return false; }
+            if (r && r.ok) {
+                const data = await r.json();
+                if (requestId !== listRequestSequence) { return false; }
+                responseSummary.value = data.results || [];
+                responseTotalElements.value = Number(data.totalElements || 0);
+                serverResponseTotalPages.value = Number(data.totalPages || 0);
+                if (responsePage.value > responseTotalPages.value) { responsePage.value = responseTotalPages.value; }
+                markLoaded();
+                Object.keys(responseRulesCache).forEach(k => delete responseRulesCache[k]);
+            }
+            return !!(r && r.ok);
+        } finally {
+            if (requestId === listRequestSequence) {
+                if (listAbortController === abortController) { listAbortController = null; }
+                deps.loading.value.responses = false;
+            }
+        }
     };
+
+    const loadResponseOptions = async (force) => {
+        if (!force && responseOptionsLoadedAt && Date.now() - responseOptionsLoadedAt <= DATA_TTL && !dataDirty.options) {
+            return true;
+        }
+        const r = await apiCall('/api/admin/responses/summary', {}, { errorMsg: t('toast.responseLoadFailed') });
+        if (r && r.ok) {
+            responseOptions.value = await r.json();
+            responseOptionsLoadedAt = Date.now();
+            dataDirty.options = false;
+            return true;
+        }
+        return false;
+    };
+
+    const reloadResponseFirstPage = () => {
+        if (responsePage.value !== 1) { responsePage.value = 1; }
+        else { loadResponseSummary(true); }
+    };
+    watch(responseFilter, reloadResponseFirstPage);
+    watch(responseUsageFilter, reloadResponseFirstPage);
+    watch(responseContentTypeFilter, reloadResponseFirstPage);
+    watch(responseSort, reloadResponseFirstPage, { deep: true });
+    watch(responsePage, () => loadResponseSummary(true));
+    watch(responsePageSize, reloadResponseFirstPage);
 
     // --- Modal 操作 ---
     const openResponseModal = async (r) => {
@@ -133,6 +170,7 @@ const useResponses = (deps) => {
     };
 
     const saveResponse = async () => {
+        if (deps.loading.value.responseSave) return;
         const payload = { description: responseForm.value.description, contentType: responseForm.value.contentType === 'sse' ? 'SSE' : null };
         if (responseForm.value.contentType === 'sse') {
             payload.body = serializeSseEvents(responseSseEvents.value);
@@ -140,13 +178,18 @@ const useResponses = (deps) => {
             payload.body = responseForm.value.body;
         }
         const url = editingResponse.value ? `/api/admin/responses/${editingResponse.value.id}` : '/api/admin/responses';
-        const r = await apiCall(url, { method: editingResponse.value ? 'PUT' : 'POST', body: JSON.stringify(payload) }, { errorMsg: t('toast.responseSaveFailed') });
-        if (r && r.ok) {
-            showToast(editingResponse.value ? t('toast.responseSaveSuccess') : t('toast.responseCreateSuccess'), 'success');
-            showResponseModal.value = false;
-            markDirty();
-            if (deps.onResponseSaved) deps.onResponseSaved();
-            loadResponseSummary(true);
+        deps.loading.value.responseSave = true;
+        try {
+            const r = await apiCall(url, { method: editingResponse.value ? 'PUT' : 'POST', body: JSON.stringify(payload) }, { errorMsg: t('toast.responseSaveFailed') });
+            if (r && r.ok) {
+                showToast(editingResponse.value ? t('toast.responseSaveSuccess') : t('toast.responseCreateSuccess'), 'success');
+                showResponseModal.value = false;
+                markDirty();
+                if (deps.onResponseSaved) deps.onResponseSaved();
+                loadResponseSummary(true);
+            }
+        } finally {
+            deps.loading.value.responseSave = false;
         }
     };
 
@@ -215,7 +258,7 @@ const useResponses = (deps) => {
 
     const deleteAllResponses = async () => {
         if (!await requireLogin()) return;
-        const count = responseSummary.value.length;
+        const count = responseTotalElements.value;
         if (!await showConfirm({ title: t('confirm.deleteAllResponses'), message: t('confirm.deleteAllResponsesMsg', {count}), confirmText: t('confirm.deleteAll'), danger: true, requireInput: 'DELETE', inputLabel: t('confirm.deleteAllResponsesInputLabel') })) return;
         const r = await apiCall('/api/admin/responses/all', { method: 'DELETE' }, { errorMsg: t('toast.deleteAllResponsesFailed') });
         if (r && r.ok) {
@@ -231,6 +274,7 @@ const useResponses = (deps) => {
         const rid = id.replace('response-', '');
         deps.page.value = 'responses';
         responseFilter.value = rid;
+        responsePage.value = 1;
     };
 
     // --- Dropdown ---
@@ -288,10 +332,12 @@ const useResponses = (deps) => {
 
     return {
         responseSummary,
+        responseOptions,
         responseFilter,
         responseSort,
         responsePage,
         responsePageSize,
+        responseTotalElements,
         filteredResponseSummary,
         pagedResponseSummary,
         responseTotalPages,
@@ -303,6 +349,7 @@ const useResponses = (deps) => {
         responseForm,
         responseSseEvents,
         loadResponseSummary,
+        loadResponseOptions,
         openResponseModal,
         saveResponse,
         deleteResponse,

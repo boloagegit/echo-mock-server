@@ -16,7 +16,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Mark stale issues
-        uses: actions/stale@v9
+        uses: actions/stale@v11
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           days-before-stale: 30
@@ -27,8 +27,8 @@ jobs:
           close-issue-message: >
             This issue has been automatically closed due to inactivity after being marked as stale.
             Please reopen if you need further assistance.
-          stale-issue-label: "Stale"
+          stale-issue-label: "status:stale"
           remove-stale-when-updated: true
-          only-issue-labels: "more-info-needed"
+          only-issue-labels: "status:needs-info"
           days-before-pr-stale: -1
           days-before-pr-close: -1

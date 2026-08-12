@@ -1,5 +1,6 @@
 package com.echo.controller;
 
+import com.echo.config.CacheConfig;
 import com.echo.dto.RuleDto;
 import com.echo.entity.HttpRule;
 import com.echo.entity.Protocol;
@@ -7,21 +8,29 @@ import com.echo.entity.ResponseContentType;
 import com.echo.entity.RuleAuditLog;
 import com.echo.service.ResponseContentValidatorRegistry;
 import com.echo.service.ResponseContentValidator;
+import com.echo.service.RuleApplyMapper;
+import com.echo.service.RuleApplyPersistenceSynchronizer;
 import com.echo.service.RuleService;
+import com.echo.service.RuleQueryService;
 import com.echo.service.RequestLogService;
 import com.echo.service.RuleAuditService;
+import com.echo.service.IssueReportService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cache.CacheManager;
+import org.springframework.cache.caffeine.CaffeineCache;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,6 +49,9 @@ class AdminControllerTest {
     private RuleService ruleService;
 
     @Mock
+    private RuleQueryService ruleQueryService;
+
+    @Mock
     private RequestLogService requestLogService;
 
     @Mock
@@ -50,9 +62,6 @@ class AdminControllerTest {
 
     @Mock
     private com.echo.service.ExcelImportService excelImportService;
-
-    @Mock
-    private com.echo.service.OpenApiImportService openApiImportService;
 
     @Mock
     private com.echo.protocol.ProtocolHandlerRegistry protocolHandlerRegistry;
@@ -70,13 +79,19 @@ class AdminControllerTest {
     private CacheManager cacheManager;
 
     @Mock
+    private IssueReportService issueReportService;
+
+    @Mock
+    private com.echo.service.OpenApiImportService openApiImportService;
+
+    @Mock
     private com.echo.service.ScenarioService scenarioService;
 
     private AdminController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new AdminController(ruleService, protocolHandlerRegistry, responseService, requestLogService, Optional.of(ruleAuditService), Optional.empty(), Optional.empty(), excelImportService, openApiImportService, Optional.empty(), responseContentValidatorRegistry, builtinUserRepository, agentRegistry, cacheManager, scenarioService);
+        controller = new AdminController(ruleService, ruleQueryService, protocolHandlerRegistry, responseService, requestLogService, Optional.of(ruleAuditService), Optional.empty(), Optional.empty(), excelImportService, openApiImportService, Optional.empty(), responseContentValidatorRegistry, builtinUserRepository, agentRegistry, cacheManager, issueReportService, Optional.empty(), Optional.empty(), new RuleApplyMapper(new ObjectMapper()), mock(RuleApplyPersistenceSynchronizer.class), new com.echo.service.RuleApplyContractService(true), scenarioService);
         ReflectionTestUtils.setField(controller, "ldapEnabled", false);
         ReflectionTestUtils.setField(controller, "ldapUrl", "");
         ReflectionTestUtils.setField(controller, "sessionTimeout", "180d");
@@ -85,6 +100,9 @@ class AdminControllerTest {
         ReflectionTestUtils.setField(controller, "datasourceUrl", "jdbc:h2:mem:test");
         ReflectionTestUtils.setField(controller, "httpAlias", "HTTP");
         ReflectionTestUtils.setField(controller, "jmsAlias", "JMS");
+        ReflectionTestUtils.setField(controller, "bulkImportExportEnabled", true);
+        ReflectionTestUtils.setField(controller, "scenariosEnabled", true);
+        ReflectionTestUtils.setField(controller, "ruleDragSortEnabled", true);
         // 預設 HTTP 啟用，JMS 停用
         lenient().when(protocolHandlerRegistry.isEnabled(Protocol.HTTP)).thenReturn(true);
         lenient().when(protocolHandlerRegistry.isEnabled(Protocol.JMS)).thenReturn(false);
@@ -97,6 +115,66 @@ class AdminControllerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).containsKey("serverPort");
         assertThat(response.getBody().get("isLoggedIn")).isEqualTo(false);
+        assertThat(response.getBody().get("bulkImportExportEnabled")).isEqualTo(true);
+        assertThat(response.getBody().get("scenariosEnabled")).isEqualTo(true);
+        assertThat(response.getBody().get("ruleDragSortEnabled")).isEqualTo(true);
+    }
+
+    @Test
+    void getStatus_shouldExposeDisabledRuleDragSortFeature() {
+        ReflectionTestUtils.setField(controller, "ruleDragSortEnabled", false);
+
+        var response = controller.getStatus(null);
+
+        assertThat(response.getBody().get("ruleDragSortEnabled")).isEqualTo(false);
+    }
+
+    @Test
+    void scenarios_shouldBeUnavailableWhenFeatureIsDisabled() {
+        ReflectionTestUtils.setField(controller, "scenariosEnabled", false);
+
+        assertThat(controller.listScenarios().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(controller.resetScenario("checkout").getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(controller.resetAllScenarios().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        verifyNoInteractions(scenarioService);
+    }
+
+    @Test
+    void bulkImportExport_shouldBeUnavailableWhenFeatureIsDisabled() {
+        ReflectionTestUtils.setField(controller, "bulkImportExportEnabled", false);
+
+        assertThat(controller.exportAllRules().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(controller.importRules(List.of()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(controller.previewOpenApiImport(new MockMultipartFile(
+                "file", "api.yaml", "application/yaml", "openapi: 3.0.0".getBytes()))
+                .getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(controller.confirmOpenApiImport(List.of()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(controller.exportAllResponses().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(controller.importResponses(List.of()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        verifyNoInteractions(responseService);
+    }
+
+    @Test
+    void databaseFilePath_shouldFollowConfiguredDatabase() {
+        assertThat(AdminController.databaseFilePath("jdbc:sqlite:./data/mock.sqlite?busy_timeout=5000"))
+                .contains(java.nio.file.Paths.get("./data/mock.sqlite"));
+        assertThat(AdminController.databaseFilePath("jdbc:h2:file:./data/mockdb;AUTO_SERVER=TRUE"))
+                .contains(java.nio.file.Paths.get("./data/mockdb.mv.db"));
+        assertThat(AdminController.databaseFilePath("jdbc:sqlite::memory:")).isEmpty();
+    }
+
+    @Test
+    void getStatus_shouldCountRulesWithoutLoadingAllEntities() {
+        var httpHandler = mock(com.echo.protocol.ProtocolHandler.class);
+        var jmsHandler = mock(com.echo.protocol.ProtocolHandler.class);
+        when(httpHandler.count()).thenReturn(3L);
+        when(jmsHandler.count()).thenReturn(2L);
+        when(protocolHandlerRegistry.getAllHandlers()).thenReturn(List.of(httpHandler, jmsHandler));
+
+        var response = controller.getStatus(null);
+
+        assertThat(response.getBody().get("ruleCount")).isEqualTo(5L);
+        verify(protocolHandlerRegistry, never()).findAllRules();
     }
 
     @Test
@@ -111,12 +189,85 @@ class AdminControllerTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void getStatus_shouldExposeBoundedRuleCacheStats() {
+        com.github.benmanes.caffeine.cache.Cache<Object, Object> nativeCache =
+                com.github.benmanes.caffeine.cache.Caffeine.newBuilder().recordStats().build();
+        nativeCache.put("known", "rules");
+        Object hit = nativeCache.getIfPresent("known");
+        Object miss = nativeCache.getIfPresent("missing");
+        assertThat(hit).isEqualTo("rules");
+        assertThat(miss).isNull();
+        when(cacheManager.getCache(CacheConfig.HTTP_RULES_CACHE))
+                .thenReturn(new CaffeineCache(CacheConfig.HTTP_RULES_CACHE, nativeCache));
+
+        var response = controller.getStatus(null);
+        Map<String, Object> caches = (Map<String, Object>) response.getBody().get("ruleCaches");
+        Map<String, Object> http = (Map<String, Object>) caches.get(CacheConfig.HTTP_RULES_CACHE);
+
+        assertThat(http.get("entries")).isEqualTo(1L);
+        assertThat(http.get("requestCount")).isEqualTo(2L);
+        assertThat((Double) http.get("hitRate")).isEqualTo(0.5);
+    }
+
+    @Test
     void listRules_shouldReturnAllRules() {
         when(protocolHandlerRegistry.findAllRules()).thenReturn(List.of(new HttpRule(), new HttpRule()));
+        when(protocolHandlerRegistry.toDto(any(), isNull()))
+                .thenReturn(RuleDto.builder().build());
         
         var response = controller.listRules();
         
         assertThat(response.getBody()).hasSize(2);
+        verify(protocolHandlerRegistry, times(2)).toDto(any(), isNull());
+        verifyNoInteractions(responseService);
+    }
+
+    @Test
+    void queryRules_shouldReturnStablePagedShape() {
+        HttpRule rule = HttpRule.builder().id("rule-1").matchKey("/orders").build();
+        when(ruleQueryService.query(any())).thenReturn(new RuleQueryService.RuleQueryResult(
+                List.of(rule), 1, 20, 45, 3));
+        when(protocolHandlerRegistry.toDto(rule, null))
+                .thenReturn(RuleDto.builder().id("rule-1").protocol(Protocol.HTTP).build());
+
+        var response = controller.queryRules(Protocol.HTTP, true, false,
+                "orders", 1, 20, "priority", "asc");
+
+        assertThat(response.getBody().results()).extracting(RuleDto::getId).containsExactly("rule-1");
+        assertThat(response.getBody().page()).isEqualTo(1);
+        assertThat(response.getBody().totalElements()).isEqualTo(45);
+        assertThat(response.getBody().totalPages()).isEqualTo(3);
+    }
+
+    @Test
+    void queryRuleGroups_shouldReturnCountsWithoutRuleBodies() {
+        when(ruleQueryService.queryGroupSummary(any())).thenReturn(
+                new RuleQueryService.RuleGroupSummary(
+                        Map.of("env", List.of("prod")),
+                        Map.of("_untagged", 2L, "env=prod", 3L), 5));
+
+        var response = controller.queryRuleGroups(Protocol.HTTP, true, false, "orders");
+
+        assertThat(response.getBody().tagKeys()).containsEntry("env", List.of("prod"));
+        assertThat(response.getBody().counts()).containsEntry("env=prod", 3L);
+        assertThat(response.getBody().totalElements()).isEqualTo(5);
+    }
+
+    @Test
+    void queryRuleGroup_shouldMapOnlyLoadedGroupRules() {
+        HttpRule rule = HttpRule.builder().id("group-rule").matchKey("/orders").build();
+        when(ruleQueryService.queryGroup(any(), eq("env"), eq("prod"), eq(20)))
+                .thenReturn(new RuleQueryService.RuleGroupContent(List.of(rule), 42));
+        when(protocolHandlerRegistry.toDto(rule, null))
+                .thenReturn(RuleDto.builder().id("group-rule").protocol(Protocol.HTTP).build());
+
+        var response = controller.queryRuleGroup("env", "prod", Protocol.HTTP,
+                null, null, null, 20, "priority", "desc");
+
+        assertThat(response.getBody().results()).extracting(RuleDto::getId)
+                .containsExactly("group-rule");
+        assertThat(response.getBody().totalElements()).isEqualTo(42);
     }
 
     @Test
@@ -156,6 +307,46 @@ class AdminControllerTest {
     }
 
     @Test
+    void createRule_shouldRejectScenarioFieldsWhenFeatureIsDisabled() {
+        ReflectionTestUtils.setField(controller, "scenariosEnabled", false);
+        RuleDto rule = RuleDto.builder()
+                .protocol(Protocol.HTTP)
+                .matchKey("/checkout")
+                .scenarioName("checkout")
+                .requiredScenarioState("Started")
+                .build();
+
+        assertThatThrownBy(() -> controller.createRule(rule))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("SCENARIOS_DISABLED");
+    }
+
+    @Test
+    void createFaultRule_shouldNotCreateUnusedResponseOrForward() {
+        RuleDto rule = RuleDto.builder()
+                .protocol(Protocol.HTTP)
+                .matchKey("/fault")
+                .method("GET")
+                .action("FORWARD")
+                .faultType("CONNECTION_RESET")
+                .responseBody("unused")
+                .build();
+        var handler = mock(com.echo.protocol.ProtocolHandler.class);
+        HttpRule savedRule = HttpRule.builder().matchKey("/fault").build();
+        when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
+        when(handler.fromDto(argThat(dto -> "MOCK".equals(dto.getAction())
+                && dto.getResponseId() == null && dto.getResponseBody() == null)))
+                .thenReturn(savedRule);
+        when(handler.save(savedRule)).thenReturn(savedRule);
+        when(handler.toDto(savedRule, null, false)).thenReturn(rule);
+
+        var response = controller.createRule(rule);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        verify(responseService, never()).save(any());
+    }
+
+    @Test
     void createRule_shouldRejectJmsRule_whenJmsDisabled() {
         RuleDto rule = RuleDto.builder().protocol(Protocol.JMS).matchKey("QUEUE").build();
         
@@ -180,6 +371,47 @@ class AdminControllerTest {
         var response = controller.updateRule("uuid-1", updated);
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void updateRule_shouldPreserveUnchangedLegacyScenarioWhenFeatureIsDisabled() {
+        ReflectionTestUtils.setField(controller, "scenariosEnabled", false);
+        HttpRule existing = HttpRule.builder()
+                .id("uuid-1").version(0L).responseId(1L)
+                .scenarioName("checkout").requiredScenarioState("Started").newScenarioState("Paid")
+                .build();
+        RuleDto updated = RuleDto.builder()
+                .protocol(Protocol.HTTP).matchKey("/updated").responseId(1L)
+                .scenarioName("checkout").requiredScenarioState("Started").newScenarioState("Paid")
+                .build();
+        doReturn(Optional.of(existing)).when(protocolHandlerRegistry).findById("uuid-1");
+        when(responseService.findById(1L)).thenReturn(Optional.of(com.echo.entity.Response.builder().id(1L).build()));
+        var handler = mock(com.echo.protocol.ProtocolHandler.class);
+        when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
+        HttpRule savedRule = HttpRule.builder().id("uuid-1").matchKey("/updated").responseId(1L).build();
+        when(handler.fromDto(any())).thenReturn(savedRule);
+        when(handler.save(any())).thenReturn(savedRule);
+        when(handler.toDto(any(), any(), anyBoolean())).thenReturn(updated);
+
+        assertThat(controller.updateRule("uuid-1", updated).getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void updateRule_shouldRejectLegacyScenarioChangesWhenFeatureIsDisabled() {
+        ReflectionTestUtils.setField(controller, "scenariosEnabled", false);
+        HttpRule existing = HttpRule.builder()
+                .id("uuid-1").version(0L)
+                .scenarioName("checkout").requiredScenarioState("Started").newScenarioState("Paid")
+                .build();
+        RuleDto updated = RuleDto.builder()
+                .protocol(Protocol.HTTP).matchKey("/updated")
+                .scenarioName("checkout").requiredScenarioState("Started").newScenarioState("Cancelled")
+                .build();
+        doReturn(Optional.of(existing)).when(protocolHandlerRegistry).findById("uuid-1");
+
+        assertThatThrownBy(() -> controller.updateRule("uuid-1", updated))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("SCENARIOS_DISABLED");
     }
 
     @Test
@@ -239,6 +471,36 @@ class AdminControllerTest {
     }
 
     @Test
+    void queryLogs_shouldPassPaginationSortingAndIncrementalCursor() {
+        when(requestLogService.querySummary(any())).thenReturn(
+                RequestLogService.SummaryQueryResult.builder().results(List.of()).build());
+
+        controller.queryLogs(null, "HTTP", false, "payment", 2, 50, null,
+                "responseTimeMs", "asc", 99L);
+
+        verify(requestLogService).querySummary(argThat(f ->
+                f.getProtocol() == Protocol.HTTP
+                        && Boolean.FALSE.equals(f.getMatched())
+                        && f.getEndpoint().equals("payment")
+                        && f.getPage() == 2
+                        && f.getSize() == 50
+                        && f.getSortField().equals("responseTimeMs")
+                        && f.getSortDirection().equals("asc")
+                        && f.getAfterId() == 99L));
+    }
+
+    @Test
+    void queryLogs_shouldKeepLegacyLimitParameter() {
+        when(requestLogService.querySummary(any())).thenReturn(
+                RequestLogService.SummaryQueryResult.builder().results(List.of()).build());
+
+        controller.queryLogs(null, null, null, null, null, null, 100,
+                null, null, null);
+
+        verify(requestLogService).querySummary(argThat(f -> f.getSize() == 100));
+    }
+
+    @Test
     void getLogSummary_shouldReturnSummary() {
         when(requestLogService.getSummary()).thenReturn(
                 RequestLogService.Summary.builder().totalRequests(100).matchedRequests(90).matchRate(90.0).build());
@@ -277,6 +539,29 @@ class AdminControllerTest {
         var response = controller.getAllAuditLogs(1000);
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void queryAuditLogs_shouldReturnPagedSummary() {
+        RuleAuditService.AuditQueryResult result = RuleAuditService.AuditQueryResult.builder()
+                .results(List.of()).page(0).size(20).totalElements(0).totalPages(0).build();
+        when(ruleAuditService.queryAuditSummary(any())).thenReturn(result);
+
+        var response = controller.queryAuditLogs("UPDATE", "admin", "uuid", 0, 20,
+                "timestamp", "desc");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isSameAs(result);
+    }
+
+    @Test
+    void getAuditLogDetail_shouldReturnFullEntityOrNotFound() {
+        RuleAuditLog detail = RuleAuditLog.builder().id(7L).afterJson("{\"id\":7}").build();
+        when(ruleAuditService.getAuditDetail(7L)).thenReturn(detail);
+        when(ruleAuditService.getAuditDetail(8L)).thenReturn(null);
+
+        assertThat(controller.getAuditLogDetail(7L).getBody()).isSameAs(detail);
+        assertThat(controller.getAuditLogDetail(8L).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     @Test

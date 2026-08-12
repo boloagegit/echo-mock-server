@@ -10,6 +10,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.context.TestPropertySource;
 
 import java.util.List;
 import java.util.Map;
@@ -19,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 匯入/匯出整合測試（HTTP + JMS）
  */
+@TestPropertySource(properties = "echo.features.bulk-import-export-enabled=true")
 class ImportExportIntegrationTest extends BaseIntegrationTest {
 
     @org.junit.jupiter.api.BeforeEach

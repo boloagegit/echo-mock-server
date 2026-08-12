@@ -14,6 +14,7 @@ Echo vs WireMock RPS 比較測試
 """
 
 import json
+import os
 import sys
 import time
 import urllib.request
@@ -27,7 +28,9 @@ WM_URL = sys.argv[2] if len(sys.argv) > 2 else "http://localhost:9090"
 DURATION = int(sys.argv[3]) if len(sys.argv) > 3 else 10
 CONCURRENCY = int(sys.argv[4]) if len(sys.argv) > 4 else 20
 
-ECHO_AUTH = base64.b64encode(b"admin:admin").decode()
+ECHO_AUTH = base64.b64encode(
+    f"{os.getenv('ECHO_TEST_USERNAME', 'admin')}:{os.getenv('ECHO_TEST_PASSWORD', 'admin')}".encode()
+).decode()
 HOST = "perf.api.test"
 
 
@@ -356,10 +359,10 @@ for idx, sc in enumerate(SCENARIOS):
 
     ratio = echo_result["rps"] / wm_result["rps"] if wm_result["rps"] > 0 else 0
 
-    print(f"\n  {'':>12} {'RPS':>8} {'avg':>8} {'p50':>8} {'p95':>8} {'p99':>8}")
-    print(f"  {'─'*12} {'─'*8} {'─'*8} {'─'*8} {'─'*8} {'─'*8}")
-    print(f"  {'Echo':>12} {echo_result['rps']:>7,.0f} {echo_result['avg']:>7.1f}ms {echo_result['p50']:>7.1f}ms {echo_result['p95']:>7.1f}ms {echo_result['p99']:>7.1f}ms")
-    print(f"  {'WireMock':>12} {wm_result['rps']:>7,.0f} {wm_result['avg']:>7.1f}ms {wm_result['p50']:>7.1f}ms {wm_result['p95']:>7.1f}ms {wm_result['p99']:>7.1f}ms")
+    print(f"\n  {'':>12} {'RPS':>8} {'errors':>8} {'avg':>8} {'p50':>8} {'p95':>8} {'p99':>8}")
+    print(f"  {'─'*12} {'─'*8} {'─'*8} {'─'*8} {'─'*8} {'─'*8} {'─'*8}")
+    print(f"  {'Echo':>12} {echo_result['rps']:>7,.0f} {echo_result['errors']:>8,} {echo_result['avg']:>7.1f}ms {echo_result['p50']:>7.1f}ms {echo_result['p95']:>7.1f}ms {echo_result['p99']:>7.1f}ms")
+    print(f"  {'WireMock':>12} {wm_result['rps']:>7,.0f} {wm_result['errors']:>8,} {wm_result['avg']:>7.1f}ms {wm_result['p50']:>7.1f}ms {wm_result['p95']:>7.1f}ms {wm_result['p99']:>7.1f}ms")
     print(f"  {'比值':>12} {ratio:>7.2f}x")
 
     all_results.append({
@@ -372,11 +375,11 @@ print()
 print("=" * 70)
 print("  總結：Echo vs WireMock")
 print("=" * 70)
-print(f"  {'場景':<30} {'Body':>6} {'Echo RPS':>10} {'WM RPS':>10} {'比值':>8} {'Echo p95':>10} {'WM p95':>10}")
-print(f"  {'─'*30} {'─'*6} {'─'*10} {'─'*10} {'─'*8} {'─'*10} {'─'*10}")
+print(f"  {'場景':<30} {'Body':>6} {'Echo RPS':>10} {'WM RPS':>10} {'比值':>8} {'Echo err':>9} {'WM err':>9} {'Echo p95':>10} {'WM p95':>10}")
+print(f"  {'─'*30} {'─'*6} {'─'*10} {'─'*10} {'─'*8} {'─'*9} {'─'*9} {'─'*10} {'─'*10}")
 for r in all_results:
     bl = f"{r['body_size']//1024}KB" if r['body_size'] >= 1024 else f"{r['body_size']}B"
-    print(f"  {r['name']:<30} {bl:>6} {r['echo']['rps']:>9,.0f} {r['wm']['rps']:>9,.0f} {r['ratio']:>7.2f}x {r['echo']['p95']:>9.1f}ms {r['wm']['p95']:>9.1f}ms")
+    print(f"  {r['name']:<30} {bl:>6} {r['echo']['rps']:>9,.0f} {r['wm']['rps']:>9,.0f} {r['ratio']:>7.2f}x {r['echo']['errors']:>9,} {r['wm']['errors']:>9,} {r['echo']['p95']:>9.1f}ms {r['wm']['p95']:>9.1f}ms")
 print("=" * 70)
 
 # --- 清理 ---
@@ -385,3 +388,7 @@ echo_api("DELETE", "/api/admin/responses/orphans")
 echo_api("DELETE", "/api/admin/logs/all")
 wm_api("POST", "/__admin/mappings/reset", {})
 print("\n完成")
+
+if any(result["echo"]["errors"] or result["wm"]["errors"] for result in all_results):
+    print("錯誤：至少一個效能場景發生 HTTP 5xx 或連線錯誤", file=sys.stderr)
+    sys.exit(1)

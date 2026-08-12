@@ -3,49 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Echo - Login</title>
+    <title>Echo－登入</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="stylesheet" href="/theme.css">
     <link rel="stylesheet" href="/webjars/bootstrap-icons/font/bootstrap-icons.min.css">
     <style>
         /* 登入頁專用衍生變數（基於 theme.css 共用變數） */
-        :root{--input-bg:var(--bg);--card-alpha:rgba(22,27,34,0.9);--shadow:rgba(0,0,0,0.5);--shape-color:rgba(var(--primary-rgb),0.08);--grid-color:rgba(var(--primary-rgb),0.03);--gradient-top:rgba(var(--primary-rgb),0.15);--gradient-corner:rgba(var(--muted-rgb),0.08);--footer-bg:rgba(0,0,0,0.2);--btn-hover-shadow:rgba(var(--primary-rgb),0.5);--logo-bg:rgba(var(--primary-rgb),0.2);--logo-border:rgba(var(--primary-rgb),0.25);--logo-glow:rgba(var(--primary-rgb),0.2);--logo-glow-hover:rgba(var(--primary-rgb),0.15);--logo-outer:var(--primary);--shimmer:rgba(255,255,255,0.1)}
-        :root[data-theme="light"]{--input-bg:var(--bg);--card-alpha:rgba(255,255,255,0.92);--shadow:rgba(0,0,0,0.12);--footer-bg:rgba(0,0,0,0.03);--shimmer:rgba(255,255,255,0.2)}
+        :root{--input-bg:var(--bg);--login-shadow:rgba(0,0,0,0.32);--footer-bg:rgba(0,0,0,0.12);--logo-outer:var(--primary)}
+        :root[data-theme="light"]{--input-bg:var(--bg);--login-shadow:rgba(31,35,40,0.12);--footer-bg:rgba(31,35,40,0.025)}
         *{box-sizing:border-box;margin:0;padding:0}
         body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1rem;position:relative;overflow:hidden}
         
-        /* 背景動畫 */
-        .bg-gradient{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 0%,var(--gradient-top) 0%,transparent 50%),radial-gradient(ellipse at 80% 80%,var(--gradient-corner) 0%,transparent 40%);pointer-events:none}
-        .bg-grid{position:fixed;inset:0;background-image:linear-gradient(var(--grid-color) 1px,transparent 1px),linear-gradient(90deg,var(--grid-color) 1px,transparent 1px);background-size:50px 50px;pointer-events:none}
-        .floating-shapes{position:fixed;inset:0;overflow:hidden;pointer-events:none}
-        .shape{position:absolute;border-radius:50%;background:var(--shape-color);filter:blur(40px);animation:float 20s ease-in-out infinite}
-        .shape:nth-child(1){width:300px;height:300px;top:-100px;left:-100px;animation-delay:0s}
-        .shape:nth-child(2){width:200px;height:200px;bottom:-50px;right:-50px;animation-delay:-5s}
-        .shape:nth-child(3){width:150px;height:150px;top:50%;left:80%;animation-delay:-10s}
-        @keyframes float{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(30px,30px) scale(1.1)}}
-        
         /* 登入卡片 */
-        .login-card{background:var(--card-alpha);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:16px;width:100%;max-width:380px;overflow:hidden;position:relative;z-index:1;box-shadow:0 25px 50px -12px var(--shadow)}
-        .login-header{padding:2.5rem 2rem 1.5rem;text-align:center;position:relative}
-        .login-header::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:200px;height:1px;background:linear-gradient(90deg,transparent,var(--primary),transparent)}
+        .login-card{background:var(--card);border:0;border-radius:16px;width:100%;max-width:380px;overflow:hidden;position:relative;z-index:1;box-shadow:0 20px 48px -18px var(--login-shadow)}
+        .login-header{padding:2rem 2rem 0.25rem;text-align:center;position:relative}
         
-        /* Logo 動畫 */
-        .login-logo{width:72px;height:72px;background:linear-gradient(135deg,var(--logo-bg),rgba(139,92,246,0.08));border:1px solid var(--logo-border);border-radius:20px;display:flex;align-items:center;justify-content:center;margin:0 auto 1.25rem;position:relative;animation:pulse 3s ease-in-out infinite}
-        .login-logo::before{content:'';position:absolute;inset:-2px;border-radius:22px;background:linear-gradient(135deg,var(--logo-outer),transparent);opacity:0.3;z-index:-1;filter:blur(8px)}
-        .login-logo svg{animation:iconPulse 3s ease-in-out infinite}
-        @keyframes pulse{0%,100%{box-shadow:0 0 0 0 var(--logo-glow)}50%{box-shadow:0 0 20px 5px var(--logo-glow-hover)}}
-        @keyframes iconPulse{0%,100%{opacity:1}50%{opacity:0.7}}
+        .login-logo{width:52px;height:52px;display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;position:relative}
         
-        .login-header h1{font-size:1.5rem;font-weight:600;margin-bottom:0.5rem;background:linear-gradient(135deg,var(--text),var(--muted));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-        .login-header p{color:var(--muted);font-size:14px}
+        .login-header h1{font-size:1.5rem;font-weight:600;margin:0;color:var(--text)}
         
-        .login-body{padding:1.5rem 2rem 2rem}
+        .login-body{padding:1.25rem 2rem 1.75rem}
         .form-group{margin-bottom:1.25rem}
         .form-label{display:block;font-size:13px;font-weight:500;margin-bottom:0.5rem;color:var(--text)}
         .input-wrapper{position:relative}
         .input-wrapper i{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:16px;transition:color 0.2s}
-        .form-control{width:100%;padding:0.875rem 1rem 0.875rem 44px;font-size:14px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;color:var(--text);transition:all 0.2s}
-        .form-control:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 4px rgba(var(--primary-rgb),0.1)}
+        .form-control{width:100%;padding:0.875rem 1rem 0.875rem 44px;font-size:14px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;color:var(--text);transition:border-color 0.2s,box-shadow 0.2s}
+        .form-control:focus{outline:2px solid var(--primary);outline-offset:1px;border-color:transparent;box-shadow:none}
         .form-control:focus + i,.input-wrapper:focus-within i{color:var(--primary)}
         .form-control::placeholder{color:var(--muted)}
         
@@ -54,18 +37,14 @@
         .remember-check input{width:18px;height:18px;accent-color:var(--primary);cursor:pointer}
         .remember-check label{font-size:13px;color:var(--muted);cursor:pointer}
         
-        .btn{width:100%;padding:0.875rem 1rem;font-size:14px;font-weight:600;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:0.5rem;transition:all 0.2s;position:relative;overflow:hidden}
-        .btn-primary{background:linear-gradient(135deg,var(--primary),rgba(var(--primary-rgb),0.8));color:#fff;margin-top:0.5rem}
-        .btn-primary:hover{transform:translateY(-2px);box-shadow:0 10px 20px -10px var(--btn-hover-shadow)}
-        .btn-primary:active{transform:translateY(0)}
-        .btn-primary::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent,var(--shimmer),transparent);transform:translateX(-100%);transition:transform 0.5s}
-        .btn-primary:hover::before{transform:translateX(100%)}
+        .btn{width:100%;padding:0.875rem 1rem;font-size:14px;font-weight:600;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:0.5rem;transition:background-color 0.2s,border-color 0.2s,opacity 0.2s;position:relative}
+        .btn-primary{background:var(--primary);color:#fff;margin-top:0.5rem}
+        .btn-primary:hover{opacity:0.9}
         
-        .alert{padding:0.875rem 1rem;border-radius:10px;font-size:13px;margin-bottom:1.25rem;display:flex;align-items:center;gap:0.75rem;animation:shake 0.5s ease-in-out}
+        .alert{padding:0.875rem 1rem;border-radius:10px;font-size:13px;margin-bottom:1.25rem;display:flex;align-items:center;gap:0.75rem}
         .alert-danger{background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.2);color:var(--danger)}
-        @keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-5px)}40%,80%{transform:translateX(5px)}}
         
-        .login-footer{padding:1.25rem 2rem;border-top:1px solid var(--border);text-align:center;background:var(--footer-bg)}
+        .login-footer{padding:1rem 2rem;border:0;text-align:center;background:var(--footer-bg)}
         .login-footer p{color:var(--muted);font-size:12px;margin:0}
         
         /* 忘記密碼連結 */
@@ -96,19 +75,10 @@
     </style>
 </head>
 <body>
-    <div class="bg-gradient"></div>
-    <div class="bg-grid"></div>
-    <div class="floating-shapes">
-        <div class="shape"></div>
-        <div class="shape"></div>
-        <div class="shape"></div>
-    </div>
-    
     <div class="login-card">
         <div class="login-header">
             <div class="login-logo"><svg viewBox="0 0 24 24" width="36" height="36"><g fill="none" stroke="var(--logo-outer)" stroke-width="2" stroke-linecap="round"><path d="M6 17a8 8 0 0 1 0-10" opacity=".5"/><path d="M9 15a5 5 0 0 1 0-6" opacity=".75"/><circle cx="12" cy="12" r="1.5" fill="var(--logo-outer)" stroke="none"/><path d="M15 9a5 5 0 0 1 0 6" opacity=".75"/><path d="M18 7a8 8 0 0 1 0 10" opacity=".5"/></g></svg></div>
             <h1>Echo Mock Server</h1>
-            <p data-i18n="login.subtitle">請登入以管理模擬規則</p>
         </div>
         
         <div class="login-body">

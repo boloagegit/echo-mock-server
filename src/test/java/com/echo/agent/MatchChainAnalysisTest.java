@@ -116,7 +116,7 @@ class MatchChainAnalysisTest {
                 .requestTime(LocalDateTime.of(2026, 1, 15, 10, 30, 0))
                 .matchChain("[{\"ruleId\":\"rule-match\"}]")
                 .candidates(List.of(matchCandidate, nearMissCandidate, shadowedCandidate, skippedCandidate))
-                .preparedBody(prepared)
+                .analysisBody(prepared.getRaw())
                 .queryString(null)
                 .headers(Map.of())
                 .build();
@@ -193,7 +193,7 @@ class MatchChainAnalysisTest {
                 .requestTime(LocalDateTime.now())
                 .matchChain(originalChain)
                 .candidates(List.of(candidate))
-                .preparedBody(prepared)
+                .analysisBody(prepared.getRaw())
                 .queryString("status=active")
                 .headers(Map.of("X-Env", "prod"))
                 .build();
@@ -239,7 +239,7 @@ class MatchChainAnalysisTest {
                 .responseTimeMs(10)
                 .requestTime(LocalDateTime.now())
                 .candidates(List.of(candidate))
-                .preparedBody(prepared)
+                .analysisBody(prepared.getRaw())
                 .queryString("status=active")
                 .headers(Map.of("X-Tenant", "abc"))
                 .build();
@@ -279,7 +279,7 @@ class MatchChainAnalysisTest {
                 .requestTime(LocalDateTime.now())
                 .matchChain(originalChain)
                 .candidates(List.of())
-                .preparedBody(new ConditionMatcher().prepareBody("{\"a\":1}"))
+                .analysisBody("{\"a\":1}")
                 .build();
 
         // Act
@@ -314,7 +314,7 @@ class MatchChainAnalysisTest {
                 .requestTime(LocalDateTime.now())
                 .matchChain(originalChain)
                 .candidates(List.of(candidate))
-                .preparedBody(null)
+                .analysisBody(null)
                 .build();
 
         // Act
@@ -353,7 +353,7 @@ class MatchChainAnalysisTest {
                 .responseTimeMs(10)
                 .requestTime(LocalDateTime.now())
                 .candidates(List.of(candidate))
-                .preparedBody(prepared)
+                .analysisBody(prepared.getRaw())
                 .queryString(null)
                 .headers(Map.of())
                 .build();
@@ -396,7 +396,7 @@ class MatchChainAnalysisTest {
                 .responseTimeMs(5)
                 .requestTime(LocalDateTime.now())
                 .candidates(List.of(fallbackCandidate))
-                .preparedBody(prepared)
+                .analysisBody(prepared.getRaw())
                 .queryString(null)
                 .headers(Map.of())
                 .build();

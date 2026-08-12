@@ -12,9 +12,9 @@ If you discover a security vulnerability in Echo Mock Server, please report it r
 
 **Do NOT open a public GitHub issue for security vulnerabilities.**
 
-Instead, please email: **[security@example.com](mailto:security@example.com)**
+Instead, please email: **[boloage@gmail.com](mailto:boloage@gmail.com)**.
 
-> ⚠️ Replace the email above with your actual security contact before publishing.
+Please do not include credentials, production data, or other secrets in a public issue.
 
 ### What to include
 

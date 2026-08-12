@@ -12,10 +12,12 @@ Worst case 記憶體測試
 用法：python3 scripts/stress-test-memory.py [BASE_URL]
 """
 
-import json, sys, time, urllib.request, base64
+import json, os, sys, time, urllib.request, base64
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8080"
-AUTH = base64.b64encode(b"admin:admin").decode()
+AUTH = base64.b64encode(
+    f"{os.getenv('ECHO_TEST_USERNAME', 'admin')}:{os.getenv('ECHO_TEST_PASSWORD', 'admin')}".encode()
+).decode()
 
 def api(method, path, data=None, ct="application/json"):
     url = f"{BASE}{path}"

@@ -53,7 +53,19 @@ const useRuleForm = (deps) => {
     // --- 表單狀態 ---
     const showModal = ref(false);
     const editing = ref(null);
-    const form = ref({ protocol: 'HTTP', targetHost: '', matchKey: '', method: 'GET', status: 200, delayMs: 0, maxDelayMs: null, priority: 0, responseBody: '', condition: '', description: '', enabled: true, isProtected: false, tags: '', responseMode: 'new', responseId: null, faultType: 'NONE', scenarioName: '', requiredScenarioState: '', newScenarioState: '' });
+    const form = ref({ protocol: 'HTTP', action: 'MOCK', forwardTargetMode: 'ORIGINAL_HOST', httpTargetConnectionId: null, jmsTargetConnectionId: null, targetHost: '', matchKey: '', method: 'GET', status: 200, delayMs: 0, maxDelayMs: null, priority: 0, responseBody: '', condition: '', description: '', enabled: true, isProtected: false, tags: '', responseMode: 'new', responseId: null, faultType: 'NONE', scenarioName: '', requiredScenarioState: '', newScenarioState: '' });
+    const httpTargetConnections = ref([]);
+    const loadHttpTargetConnections = async () => {
+        const response = await apiCall('/api/admin/http-target-connections', {}, { silent: true });
+        if (response && response.ok) httpTargetConnections.value = await response.json();
+    };
+    const jmsTargetConnections = ref([]);
+    const loadJmsTargetConnections = async () => {
+        const response = await apiCall('/api/admin/jms-target-connections', {}, { silent: true });
+        if (response && response.ok) jmsTargetConnections.value = await response.json();
+    };
+    const loadTargetConnectionsForProtocol = () => form.value.protocol === 'JMS'
+        ? loadJmsTargetConnections() : loadHttpTargetConnections();
     const conditions = ref([]);
     const conditionsExpanded = ref(true);
     const formErrors = ref({});
@@ -66,61 +78,84 @@ const useRuleForm = (deps) => {
     const sseEvents = ref([]);
     const addSseEvent = () => { sseEvents.value.push({ event: '', data: '', id: '', delayMs: 0, type: 'normal' }); };
     const removeSseEvent = (index) => { if (sseEvents.value.length > 1) { sseEvents.value.splice(index, 1); } };
-    const ssePreview = computed(() => {
-        const events = sseEvents.value;
+    const buildSsePreview = (events, loopEnabled = false) => {
         if (!events || !events.length) { return ''; }
         const lines = [];
-        events.forEach((evt, i) => {
+        let terminalEventReached = false;
+        for (let i = 0; i < events.length; i++) {
+            const evt = events[i];
             if (i > 0) { lines.push(''); }
             if (evt.delayMs > 0) { lines.push(t('ssePreview.delay', {ms: evt.delayMs})); lines.push(''); }
             const type = evt.type || 'normal';
-            if (type === 'abort') { lines.push(t('ssePreview.abort')); return; }
+            if (type === 'abort') {
+                lines.push(t('ssePreview.abort'));
+                terminalEventReached = true;
+            }
             if (type === 'error') { lines.push(t('ssePreview.errorEvent')); }
-            const evtName = type === 'error' ? 'error' : (evt.event || 'message');
-            lines.push('event: ' + evtName);
-            const data = evt.data || '';
-            data.split('\n').forEach(line => { lines.push('data: ' + line); });
-            if (evt.id) { lines.push('id: ' + evt.id); }
-            lines.push('');
-        });
-        if (form.value.sseLoopEnabled) { lines.push(t('ssePreview.loopPlay')); }
+            if (type !== 'abort') {
+                const evtName = type === 'error' ? 'error' : (evt.event || 'message');
+                lines.push('event: ' + evtName);
+                const data = evt.data || '';
+                data.split('\n').forEach(line => { lines.push('data: ' + line); });
+                if (evt.id) { lines.push('id: ' + evt.id); }
+                lines.push('');
+            }
+            if (type === 'error') { terminalEventReached = true; }
+            if (terminalEventReached) {
+                const remainingCount = events.length - i - 1;
+                if (remainingCount > 0) { lines.push(t('ssePreview.remainingSkipped', {count: remainingCount})); }
+                break;
+            }
+        }
+        if (loopEnabled && !terminalEventReached) { lines.push(t('ssePreview.loopPlay')); }
         return lines.join('\n');
+    };
+    const ssePreview = computed(() => {
+        return buildSsePreview(sseEvents.value, Boolean(form.value.sseLoopEnabled));
     });
 
     // --- SSE 回應預覽 ---
     const responseSsePreview = computed(() => {
-        const events = responseSseEvents.value;
-        if (!events || !events.length) { return ''; }
-        const lines = [];
-        events.forEach((evt, i) => {
-            if (i > 0) { lines.push(''); }
-            if (evt.delayMs > 0) { lines.push(t('ssePreview.delay', {ms: evt.delayMs})); lines.push(''); }
-            const type = evt.type || 'normal';
-            if (type === 'abort') { lines.push(t('ssePreview.abort')); return; }
-            if (type === 'error') { lines.push(t('ssePreview.errorEvent')); }
-            const evtName = type === 'error' ? 'error' : (evt.event || 'message');
-            lines.push('event: ' + evtName);
-            const data = evt.data || '';
-            data.split('\n').forEach(line => { lines.push('data: ' + line); });
-            if (evt.id) { lines.push('id: ' + evt.id); }
-            lines.push('');
-        });
-        return lines.join('\n');
+        return buildSsePreview(responseSseEvents.value);
     });
 
     // --- 驗證 ---
     const validateForm = () => {
         const errors = {};
+        const faulting = form.value.faultType && form.value.faultType !== 'NONE';
         if (form.value.protocol === 'HTTP') {
             if (!form.value.matchKey) errors.matchKey = t('validation.matchKeyRequired');
             else if (!form.value.matchKey.startsWith('/') && form.value.matchKey !== '*') errors.matchKey = t('validation.matchKeyFormat');
             if (!form.value.method) errors.method = t('validation.methodRequired');
-            if (!form.value.status) errors.status = t('validation.statusRequired');
-            else if (form.value.status < 100 || form.value.status > 599) errors.status = t('validation.statusRange');
+            if (form.value.action !== 'FORWARD' && (!faulting || form.value.faultType === 'EMPTY_RESPONSE')) {
+                if (!form.value.status) errors.status = t('validation.statusRequired');
+                else if (form.value.status < 100 || form.value.status > 599) errors.status = t('validation.statusRange');
+            } else if (!faulting && form.value.forwardTargetMode === 'CONNECTION' && !form.value.httpTargetConnectionId) {
+                errors.httpTargetConnectionId = t('validation.httpConnectionRequired');
+            } else if (!faulting && form.value.forwardTargetMode === 'CONNECTION'
+                && !httpTargetConnections.value.some(target => target.id === form.value.httpTargetConnectionId && target.enabled)) {
+                errors.httpTargetConnectionId = t('validation.httpConnectionDisabled');
+            } else if (!faulting && form.value.forwardTargetMode === 'DEFAULT_CONNECTION'
+                && !httpTargetConnections.value.some(target => target.enabled && target.defaultConnection)) {
+                errors.httpTargetConnectionId = t('validation.httpDefaultConnectionRequired');
+            }
         } else if (form.value.protocol === 'JMS') {
             if (!form.value.matchKey) errors.matchKey = t('validation.queueNameRequired');
+            if (!faulting && form.value.action === 'FORWARD') {
+                if (form.value.forwardTargetMode === 'CONNECTION' && !form.value.jmsTargetConnectionId) {
+                    errors.jmsTargetConnectionId = t('validation.jmsConnectionRequired');
+                } else if (form.value.forwardTargetMode === 'CONNECTION'
+                    && !jmsTargetConnections.value.some(target => target.id === form.value.jmsTargetConnectionId && target.enabled)) {
+                    errors.jmsTargetConnectionId = t('validation.jmsConnectionDisabled');
+                } else if (form.value.forwardTargetMode === 'DEFAULT_CONNECTION'
+                    && !jmsTargetConnections.value.some(target => target.enabled && target.defaultConnection)) {
+                    errors.jmsTargetConnectionId = t('validation.jmsDefaultConnectionRequired');
+                }
+            }
         }
-        if (form.value.responseMode === 'new') {
+        const requiresResponse = !faulting
+            && form.value.action !== 'FORWARD';
+        if (requiresResponse && form.value.responseMode === 'new') {
             if (!form.value.responseBody) errors.responseBody = t('validation.responseBodyRequired');
             else if (form.value.sseEnabled) {
                 try {
@@ -129,7 +164,7 @@ const useRuleForm = (deps) => {
                     else if (arr.length === 0) { errors.responseBody = t('validation.sseArrayEmpty'); }
                 } catch (e) { errors.responseBody = t('validation.sseJsonError', {message: e.message}); }
             }
-        } else if (form.value.responseMode === 'existing') {
+        } else if (requiresResponse && form.value.responseMode === 'existing') {
             if (!form.value.responseId) errors.responseId = t('validation.responseIdRequired');
         }
         if (form.value.delayMs < 0) errors.delayMs = t('validation.delayNonNegative');
@@ -165,6 +200,34 @@ const useRuleForm = (deps) => {
     });
 
     const canSave = computed(() => {
+        const faulting = form.value.faultType && form.value.faultType !== 'NONE';
+        if (faulting) {
+            if (!form.value.matchKey) return false;
+            if (form.value.protocol === 'HTTP' && !form.value.method) return false;
+            if (form.value.protocol === 'HTTP' && form.value.faultType === 'EMPTY_RESPONSE' && !form.value.status) return false;
+            return true;
+        }
+        if (form.value.protocol === 'HTTP' && form.value.action === 'FORWARD') {
+            if (!form.value.matchKey || !form.value.method) return false;
+            if (form.value.forwardTargetMode === 'CONNECTION') {
+                return httpTargetConnections.value.some(target =>
+                    target.id === form.value.httpTargetConnectionId && target.enabled
+                );
+            }
+            if (form.value.forwardTargetMode === 'DEFAULT_CONNECTION') {
+                return httpTargetConnections.value.some(target => target.enabled && target.defaultConnection);
+            }
+            return true;
+        }
+        if (form.value.protocol === 'JMS' && form.value.action === 'FORWARD') {
+            if (!form.value.matchKey) return false;
+            if (form.value.forwardTargetMode === 'CONNECTION') {
+                return jmsTargetConnections.value.some(target =>
+                    target.id === form.value.jmsTargetConnectionId && target.enabled
+                );
+            }
+            return jmsTargetConnections.value.some(target => target.enabled && target.defaultConnection);
+        }
         if (form.value.sseEnabled && form.value.protocol === 'HTTP') {
             if (!sseEvents.value.length || !sseEvents.value.some(e => e.data && e.data.trim())) return false;
             if (form.value.responseMode === 'existing' && !form.value.responseId) return false;
@@ -200,10 +263,22 @@ const useRuleForm = (deps) => {
     // --- 回應預覽 ---
     const previewResponseId = ref(null);
     const previewResponseBody = ref('');
+    const previewResponseLoading = ref(false);
+    const previewResponseLoadFailed = ref(false);
     const previewEditing = ref(false);
     const previewEditBody = ref('');
     const previewResponseUsageCount = ref(0);
     const previewSaving = ref(false);
+    const resetResponsePreview = () => {
+        previewLoadSequence += 1;
+        previewResponseId.value = null;
+        previewResponseBody.value = '';
+        previewResponseLoading.value = false;
+        previewResponseLoadFailed.value = false;
+        previewEditing.value = false;
+        previewEditBody.value = '';
+        previewResponseUsageCount.value = 0;
+    };
 
     // --- 表單輔助 ---
     const newTag = ref({ key: '', value: '' });
@@ -419,17 +494,29 @@ const useRuleForm = (deps) => {
     };
 
     // --- 表單操作 ---
-    const setProtocol = p => { form.value.protocol = p; form.value.matchKey = p === 'JMS' ? '*' : ''; if (p === 'JMS') { form.value.sseEnabled = false; } conditions.value = []; localStorage.setItem('lastProtocol', p) };
+    const setProtocol = p => {
+        form.value.protocol = p;
+        form.value.matchKey = p === 'JMS' ? '*' : '';
+        form.value.action = 'MOCK';
+        form.value.forwardTargetMode = p === 'JMS' ? 'DEFAULT_CONNECTION' : 'ORIGINAL_HOST';
+        form.value.httpTargetConnectionId = null;
+        form.value.jmsTargetConnectionId = null;
+        if (p === 'JMS') form.value.sseEnabled = false;
+        loadTargetConnectionsForProtocol();
+        conditions.value = [];
+        localStorage.setItem('lastProtocol', p);
+    };
 
-    const resetForm = () => ({ protocol: localStorage.getItem('lastProtocol') || 'HTTP', targetHost: '', matchKey: '', method: 'GET', status: 200, delayMs: 0, maxDelayMs: null, priority: 0, responseBody: '', responseDescription: '', responseHeaders: '', bodyCondition: '', queryCondition: '', headerCondition: '', description: '', enabled: true, isProtected: false, tags: '', responseMode: 'new', responseId: null, sseEnabled: false, sseLoopEnabled: false, faultType: 'NONE', scenarioName: '', requiredScenarioState: '', newScenarioState: '' });
+    const resetForm = () => {
+        const protocol = localStorage.getItem('lastProtocol') || 'HTTP';
+        return { protocol, action: 'MOCK', forwardTargetMode: protocol === 'JMS' ? 'DEFAULT_CONNECTION' : 'ORIGINAL_HOST', httpTargetConnectionId: null, jmsTargetConnectionId: null, targetHost: '', matchKey: '', method: 'GET', status: 200, delayMs: 0, maxDelayMs: null, priority: 0, responseBody: '', responseDescription: '', responseHeaders: '', bodyCondition: '', queryCondition: '', headerCondition: '', description: '', enabled: true, isProtected: false, tags: '', responseMode: 'new', responseId: null, sseEnabled: false, sseLoopEnabled: false, faultType: 'NONE', scenarioName: '', requiredScenarioState: '', newScenarioState: '' };
+    };
 
     const onResponseModeChange = () => {
         if (form.value.responseMode === 'existing') {
-            form.value.responseBody = ''; form.value.status = 200; form.value.delayMs = 0;
             responsePickerSearch.value = ''; loadResponseSummary();
-        } else {
-            form.value.responseId = null;
         }
+        responseDropdownOpen.value = false;
     };
 
     const parseConditions = r => {
@@ -463,6 +550,7 @@ const useRuleForm = (deps) => {
     const openCreate = async () => {
         if (!await requireLogin()) return;
         editing.value = null;
+        resetResponsePreview();
         form.value = resetForm();
         form.value.matchKey = form.value.protocol === 'JMS' ? '*' : '';
         conditions.value = [];
@@ -471,12 +559,14 @@ const useRuleForm = (deps) => {
         catchAllConfirmed.value = false;
         showCatchAllWarning.value = false;
         loadResponseSummary();
+        loadTargetConnectionsForProtocol();
         showModal.value = true;
     };
 
     const copyRule = async r => {
         if (!await requireLogin()) return;
         editing.value = null;
+        resetResponsePreview();
         form.value = { ...r, id: undefined, description: (r.description || '') + t('common.copySuffix'), responseMode: 'new', responseId: null };
         conditions.value = [];
         catchAllConfirmed.value = false;
@@ -484,12 +574,14 @@ const useRuleForm = (deps) => {
         sseEvents.value = (r.sseEnabled && r.responseBody) ? deserializeSseEvents(r.responseBody) : [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }];
         parseConditions(r);
         loadResponseSummary();
+        loadTargetConnectionsForProtocol();
         showModal.value = true;
     };
 
     const createFromLog = async (ruleDto) => {
         if (!await requireLogin()) return;
         editing.value = null;
+        resetResponsePreview();
         form.value = {
             ...resetForm(),
             protocol: ruleDto.protocol || 'HTTP',
@@ -513,6 +605,7 @@ const useRuleForm = (deps) => {
         catchAllConfirmed.value = false;
         showCatchAllWarning.value = false;
         loadResponseSummary();
+        loadTargetConnectionsForProtocol();
         showModal.value = true;
     };
 
@@ -526,29 +619,18 @@ const useRuleForm = (deps) => {
         formErrors.value = {};
         catchAllConfirmed.value = false;
         showCatchAllWarning.value = false;
-        previewEditing.value = false;
-        previewEditBody.value = '';
-        previewResponseBody.value = '';
+        resetResponsePreview();
         if (!r.responseId) {
             const res = await apiCall(`/api/admin/rules/${r.id}`, {}, { silent: true });
             if (res && res.ok) { const full = await res.json(); r = full; }
         }
-        form.value = { ...r, responseMode: r.responseId ? 'existing' : 'new' };
+        form.value = { ...r, action: r.action || 'MOCK', forwardTargetMode: r.forwardTargetMode || (r.protocol === 'JMS' ? 'DEFAULT_CONNECTION' : 'ORIGINAL_HOST'), responseMode: r.responseId ? 'existing' : 'new' };
         conditions.value = [];
         sseEvents.value = (r.sseEnabled && r.responseBody) ? deserializeSseEvents(r.responseBody) : [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }];
         parseConditions(r);
         loadResponseSummary();
+        loadTargetConnectionsForProtocol();
         showModal.value = true;
-        if (r.responseId) {
-            const res = await apiCall(`/api/admin/responses/${r.responseId}`, {}, { silent: true });
-            if (res && res.ok) {
-                const d = await res.json();
-                previewResponseBody.value = d.body;
-                if (form.value.sseEnabled && d.body) {
-                    sseEvents.value = deserializeSseEvents(d.body);
-                }
-            }
-        }
     };
 
     const closeModal = () => {
@@ -566,10 +648,7 @@ const useRuleForm = (deps) => {
         testSseMode.value = false;
         stopSseTest();
         testParams.value = { query: '', headersStr: '', body: '', timeout: 30 };
-        previewResponseId.value = null;
-        previewEditing.value = false;
-        previewEditBody.value = '';
-        previewResponseUsageCount.value = 0;
+        resetResponsePreview();
         conditionsExpanded.value = true;
     };
 
@@ -577,7 +656,7 @@ const useRuleForm = (deps) => {
 
     const saveRule = async (andClose = false) => {
         // SSE 模式：序列化表格資料到 responseBody
-        if (form.value.sseEnabled && form.value.protocol === 'HTTP') {
+        if (form.value.action !== 'FORWARD' && form.value.sseEnabled && form.value.protocol === 'HTTP') {
             const serialized = serializeSseEvents(sseEvents.value);
             if (form.value.responseMode === 'existing' && form.value.responseId) {
                 const rr = await apiCall(`/api/admin/responses/${form.value.responseId}`, { method: 'PUT', body: JSON.stringify({ body: serialized }) }, { errorMsg: t('toast.responseSaveFailed') });
@@ -602,17 +681,41 @@ const useRuleForm = (deps) => {
         form.value.queryCondition = queryConds || null;
         form.value.headerCondition = headerConds || null;
         // 使用現有 Response 時：若正在編輯回應內容，先自動儲存
-        if (form.value.responseMode === 'existing' && form.value.responseId && previewEditing.value && previewEditBody.value !== previewResponseBody.value) {
+        const faulting = form.value.faultType && form.value.faultType !== 'NONE';
+        if (!faulting && form.value.action !== 'FORWARD' && form.value.responseMode === 'existing' && form.value.responseId && previewEditing.value && previewEditBody.value !== previewResponseBody.value) {
             const resp = responseSummary.value.find(r => r.id === form.value.responseId);
             const rr = await apiCall(`/api/admin/responses/${form.value.responseId}`, { method: 'PUT', body: JSON.stringify({ description: resp?.description || '', body: previewEditBody.value }) }, { errorMsg: t('toast.responseSaveFailed') });
-            if (!rr || !rr.ok) { showToast(t('toast.responseSaveFailed'), 'error'); return; }
+            if (!rr || !rr.ok) { saving.value = false; showToast(t('toast.responseSaveFailed'), 'error'); return; }
             previewResponseBody.value = previewEditBody.value;
             previewEditing.value = false;
             renderEditor('preview', previewEditorRef, previewResponseBody.value, true);
             responsesMarkDirty();
         }
         const payload = { ...form.value };
-        if (payload.responseMode === 'existing') { payload.responseBody = null; }
+        if (faulting) {
+            payload.action = 'MOCK';
+            payload.responseBody = null;
+            payload.responseId = null;
+            payload.responseDescription = null;
+            payload.responseHeaders = null;
+            payload.sseEnabled = false;
+            payload.sseLoopEnabled = false;
+            payload.forwardTargetMode = null;
+            payload.httpTargetConnectionId = null;
+            payload.jmsTargetConnectionId = null;
+        } else if (payload.action === 'FORWARD') {
+            payload.responseBody = null;
+            payload.responseId = null;
+            payload.sseEnabled = false;
+            payload.sseLoopEnabled = false;
+            if (payload.protocol === 'HTTP') {
+                payload.jmsTargetConnectionId = null;
+                if (payload.forwardTargetMode !== 'CONNECTION') payload.httpTargetConnectionId = null;
+            } else {
+                payload.httpTargetConnectionId = null;
+                if (payload.forwardTargetMode !== 'CONNECTION') payload.jmsTargetConnectionId = null;
+            }
+        } else if (payload.responseMode === 'existing') { payload.responseBody = null; }
         else { payload.responseId = null; }
         delete payload.responseMode;
         try {
@@ -688,6 +791,41 @@ const useRuleForm = (deps) => {
     const togglePreviewFormat = () => { previewFormatted.value = !previewFormatted.value; renderEditor('preview', previewEditorRef, previewEditing.value ? previewEditBody.value : previewResponseBody.value, !previewEditing.value, previewEditing.value ? v => { previewEditBody.value = v; } : undefined); };
     const toggleEditFormat = () => { editFormatted.value = !editFormatted.value; renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; }); };
 
+    let previewLoadSequence = 0;
+    const loadSelectedResponse = async id => {
+        const sequence = ++previewLoadSequence;
+        previewResponseId.value = null;
+        previewResponseLoading.value = Boolean(id);
+        previewResponseLoadFailed.value = false;
+        previewResponseBody.value = '';
+        if (!id) return;
+        try {
+            const response = await apiCall(`/api/admin/responses/${id}`, {}, { silent: true });
+            if (sequence !== previewLoadSequence || form.value.responseId !== id) return;
+            if (!response || !response.ok) {
+                previewResponseLoadFailed.value = true;
+                return;
+            }
+            const data = await response.json();
+            previewResponseBody.value = typeof data.body === 'string' ? data.body : '';
+            previewResponseId.value = id;
+            if (form.value.sseEnabled && previewResponseBody.value) {
+                sseEvents.value = deserializeSseEvents(previewResponseBody.value);
+            }
+        } catch {
+            if (sequence === previewLoadSequence && form.value.responseId === id) {
+                previewResponseLoadFailed.value = true;
+            }
+        } finally {
+            if (sequence === previewLoadSequence && form.value.responseId === id) {
+                previewResponseLoading.value = false;
+                if (!previewResponseLoadFailed.value && form.value.responseMode === 'existing' && !form.value.sseEnabled) {
+                    Vue.nextTick(() => renderEditor('preview', previewEditorRef, previewResponseBody.value, true));
+                }
+            }
+        }
+    };
+
     // --- Watchers ---
     const setupFormWatchers = () => {
         watch(isCatchAll, val => {
@@ -697,37 +835,21 @@ const useRuleForm = (deps) => {
         watch(showModal, open => {
             if (open) {
                 Vue.nextTick(() => {
+                    if (form.value.faultType && form.value.faultType !== 'NONE') return;
                     if (form.value.responseMode === 'new' && !form.value.sseEnabled) {
                         renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; });
-                    } else if (form.value.responseMode === 'existing' && previewResponseBody.value) {
+                    } else if (form.value.responseMode === 'existing' && form.value.responseId && !previewResponseLoading.value && !previewResponseLoadFailed.value) {
                         renderEditor('preview', previewEditorRef, previewResponseBody.value, !previewEditing.value);
                     }
                 });
             }
         });
 
-        watch(() => form.value.responseId, async (id, oldId) => {
+        watch(() => form.value.responseId, (id, oldId) => {
             previewFormatted.value = false;
             previewEditing.value = false;
             previewEditBody.value = '';
-            if (id && id !== oldId) {
-                const r = await apiCall(`/api/admin/responses/${id}`, {}, { silent: true });
-                if (r && r.ok) {
-                    const d = await r.json();
-                    previewResponseBody.value = d.body;
-                    if (form.value.sseEnabled && d.body) {
-                        sseEvents.value = deserializeSseEvents(d.body);
-                    }
-                }
-            } else if (!id) {
-                previewResponseBody.value = '';
-            }
-        });
-
-        watch(previewResponseBody, body => {
-            if (body && !previewFormatted.value && !previewEditing.value) {
-                Vue.nextTick(() => renderEditor('preview', previewEditorRef, body, true));
-            }
+            if (id !== oldId) loadSelectedResponse(id);
         });
 
         watch(() => form.value.responseMode, mode => {
@@ -735,12 +857,40 @@ const useRuleForm = (deps) => {
             previewFormatted.value = false;
             previewEditing.value = false;
             previewEditBody.value = '';
+            if (form.value.faultType && form.value.faultType !== 'NONE') return;
             if (mode === 'new') {
                 if (!form.value.sseEnabled) {
                     renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; });
                 }
             }
-            else if (mode === 'existing' && previewResponseBody.value) renderEditor('preview', previewEditorRef, previewResponseBody.value, true);
+            else if (mode === 'existing' && form.value.responseId && !previewResponseLoading.value && !previewResponseLoadFailed.value) {
+                Vue.nextTick(() => renderEditor('preview', previewEditorRef, previewResponseBody.value, true));
+            }
+        });
+
+        watch(() => form.value.action, action => {
+            if (action !== 'FORWARD' && (!form.value.faultType || form.value.faultType === 'NONE')) {
+                Vue.nextTick(() => {
+                    if (form.value.responseMode === 'new' && !form.value.sseEnabled) {
+                        renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; });
+                    } else if (form.value.responseMode === 'existing' && form.value.responseId && !previewResponseLoading.value && !previewResponseLoadFailed.value) {
+                        renderEditor('preview', previewEditorRef, previewResponseBody.value, !previewEditing.value);
+                    }
+                });
+            }
+        });
+
+        watch(() => form.value.faultType, (faultType, previousFaultType) => {
+            const faultEnabled = faultType && faultType !== 'NONE';
+            const faultWasEnabled = previousFaultType && previousFaultType !== 'NONE';
+            if (faultEnabled || !faultWasEnabled) return;
+            Vue.nextTick(() => {
+                if (form.value.responseMode === 'new' && !form.value.sseEnabled) {
+                    renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; });
+                } else if (form.value.responseMode === 'existing' && form.value.responseId && !previewResponseLoading.value && !previewResponseLoadFailed.value) {
+                    renderEditor('preview', previewEditorRef, previewResponseBody.value, !previewEditing.value);
+                }
+            });
         });
 
         watch(() => form.value.sseEnabled, (sse, oldSse) => {
@@ -758,7 +908,7 @@ const useRuleForm = (deps) => {
                 }
                 if (form.value.responseMode === 'new') {
                     Vue.nextTick(() => renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; }));
-                } else if (form.value.responseMode === 'existing' && previewResponseBody.value) {
+                } else if (form.value.responseMode === 'existing' && form.value.responseId && !previewResponseLoading.value && !previewResponseLoadFailed.value) {
                     Vue.nextTick(() => renderEditor('preview', previewEditorRef, previewResponseBody.value, !previewEditing.value));
                 }
             }
@@ -777,6 +927,8 @@ const useRuleForm = (deps) => {
     return {
         // 表單狀態
         showModal, editing, form, conditions, conditionsExpanded, formErrors, saving,
+        httpTargetConnections, loadHttpTargetConnections,
+        jmsTargetConnections, loadJmsTargetConnections,
         // 驗證
         canSave, validateForm,
         // Catch-all 偵測
@@ -792,7 +944,7 @@ const useRuleForm = (deps) => {
         testExpanded, testParams, testResult, testLoading,
         testSseEvents, testSseMode, runTest, stopSseTest, generateTestData,
         // 回應預覽
-        previewResponseId, previewResponseBody,
+        previewResponseId, previewResponseBody, previewResponseLoading, previewResponseLoadFailed,
         previewEditing, previewEditBody, previewResponseUsageCount,
         previewSaving, togglePreviewEditing, savePreviewResponse,
         // 回應選擇器

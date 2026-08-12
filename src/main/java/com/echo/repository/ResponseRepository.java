@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,6 +24,10 @@ public interface ResponseRepository extends JpaRepository<Response, Long> {
     /** 只查詢 body */
     @Query("SELECT r.body FROM Response r WHERE r.id = :id")
     Optional<String> findBodyById(@Param("id") Long id);
+
+    /** 只查詢存在的 ID，不載入 Response entity 或 body LOB。 */
+    @Query("SELECT r.id FROM Response r WHERE r.id IN :ids")
+    List<Long> findExistingIds(@Param("ids") Collection<Long> ids);
 
     /** 搜尋（描述包含關鍵字） */
     List<Response> findByDescriptionContainingIgnoreCase(String keyword);

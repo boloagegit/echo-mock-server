@@ -59,22 +59,22 @@ Mock Server  原始 API
 
 啟用時，攔截器會：
 1. 擷取原始 API host 存入 `X-Original-Host` header
-2. 保留 base path（如 `/gateway`）並與 Mock Server 組合
+2. 保留 base path（如 `/csiw`）並與 Mock Server 組合
 3. 將請求轉發到 Mock Server 的 `/mock/**` 端點
 
 ### 範例
 
-原始 FeignClient URL: `https://api.example.com/gateway`
+原始 FeignClient URL: `https://test.internal.example.com/csiw`
 請求路徑: `/api/users`
 
 轉換後:
-- `X-Original-Host: api.example.com`
-- 請求 URL: `http://localhost:8080/mock/gateway/api/users`
+- `X-Original-Host: test.internal.example.com`
+- 請求 URL: `http://localhost:8080/mock/csiw/api/users`
 
-Echo 規則 matchKey 應設為: `/gateway/api/users`
+Echo 規則 matchKey 應設為: `/csiw/api/users`
 
 ## 注意事項
 
 - Mock Server 需先建立對應的 Mock 規則
-- 規則的 matchKey 需包含 base path（如 `/gateway/api/users`）
+- 規則的 matchKey 需包含 base path（如 `/csiw/api/users`）
 - 此攔截器會影響所有 FeignClient，如需針對特定 Client，請自行調整 `@ConditionalOnProperty` 條件

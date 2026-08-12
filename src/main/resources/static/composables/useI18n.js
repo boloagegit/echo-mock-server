@@ -21,7 +21,7 @@ const useI18n = () => {
      */
     const loadLocale = async (lang) => {
         try {
-            const r = await fetch(`/i18n/${lang}.json`);
+            const r = await fetch(`/i18n/${lang}.json?v=20260809.7`);
             if (r.ok) { messages.value = await r.json(); }
         } catch (e) { console.warn('Failed to load locale:', lang, e); }
     };

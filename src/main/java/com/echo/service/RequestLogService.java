@@ -1,6 +1,5 @@
 package com.echo.service;
 
-import com.echo.agent.AgentStatus;
 import com.echo.agent.CandidateSnapshot;
 import com.echo.agent.LogAgent;
 import com.echo.agent.LogTask;
@@ -10,12 +9,16 @@ import com.echo.entity.Protocol;
 import com.echo.entity.RequestLog;
 import com.echo.protocol.ProtocolHandlerRegistry;
 import com.echo.repository.RequestLogRepository;
+import com.echo.repository.RequestLogSummaryQuery;
 import jakarta.annotation.PostConstruct;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,7 +38,9 @@ import java.util.stream.Stream;
  * - memory: 純記憶體環形緩衝區
  * - database: 寫入 DB，定期清理超過 max-records 的舊資料
  *
- * 日誌寫入委派給 LogAgent 非同步處理；當 LogAgent 不可用時降級為同步寫入。
+ * Database 模式會先由 LogAgent 寫入獨立 durable spool，再由背景 worker
+ * 批次送往主資料庫。只有 spool 確認落地後請求才算成功接受，主資料庫
+ * 暫時不可用時不會靜默丟失紀錄。
  */
 @Service
 @Slf4j
@@ -45,6 +50,7 @@ public class RequestLogService {
     private final SystemConfigService configService;
     private final ProtocolHandlerRegistry protocolHandlerRegistry;
     private final ObjectProvider<LogAgent> logAgentProvider;
+    private final RequestLogSummaryQuery summaryQuery;
 
     // ===== Memory 模式: 環形緩衝區 =====
     private ConcurrentLinkedDeque<LogEntry> memoryBuffer;
@@ -59,17 +65,29 @@ public class RequestLogService {
         return MEMORY_ID_SEQ.getAndIncrement();
     }
 
-    /** 只 warn 一次 LogAgent 不可用 */
-    private final AtomicBoolean fallbackWarned = new AtomicBoolean(false);
+    /** LogAgent 不可用時只 warn 一次，恢復後才允許再次提示。 */
+    private final AtomicBoolean agentUnavailableWarned = new AtomicBoolean(false);
 
+    @Autowired
     public RequestLogService(RequestLogRepository requestLogRepository,
                              SystemConfigService configService,
                              ProtocolHandlerRegistry protocolHandlerRegistry,
-                             ObjectProvider<LogAgent> logAgentProvider) {
+                             ObjectProvider<LogAgent> logAgentProvider,
+                             RequestLogSummaryQuery summaryQuery) {
         this.requestLogRepository = requestLogRepository;
         this.configService = configService;
         this.protocolHandlerRegistry = protocolHandlerRegistry;
         this.logAgentProvider = logAgentProvider;
+        this.summaryQuery = summaryQuery;
+    }
+
+    /** Test-compatible constructor retaining the repository mock seam. */
+    public RequestLogService(RequestLogRepository requestLogRepository,
+                             SystemConfigService configService,
+                             ProtocolHandlerRegistry protocolHandlerRegistry,
+                             ObjectProvider<LogAgent> logAgentProvider) {
+        this(requestLogRepository, configService, protocolHandlerRegistry,
+                logAgentProvider, null);
     }
 
     @PostConstruct
@@ -151,9 +169,15 @@ public class RequestLogService {
                        String requestBody, String responseBody) {
         record(ruleId, protocol, method, endpoint, matched, responseTimeMs, clientIp,
                 matchChain, targetHost, proxyStatus, proxyError, responseStatus, matchTimeMs,
-                requestBody, responseBody, null, null, null, null, null);
+                requestBody, responseBody, null, null, null, null);
     }
 
+    /**
+     * 記錄請求（含匹配上下文）
+     * <p>
+     * 當 LogAgent 可用時，延遲建構 LogTask 並委派給 durable spool。
+     * Agent 或 spool 不可用時 fail fast，避免回覆成功卻遺失請求紀錄。
+     */
     @SuppressWarnings("java:S107") // 參數數量多是因為需要傳遞完整的匹配上下文
     public <T extends BaseRule> void record(String ruleId, Protocol protocol, String method, String endpoint,
                        boolean matched, int responseTimeMs, String clientIp,
@@ -164,21 +188,15 @@ public class RequestLogService {
                        List<T> candidates,
                        ConditionMatcher.PreparedBody preparedBody,
                        String queryString,
-                       Map<String, String> headers,
-                       String faultType) {
+                       Map<String, String> headers) {
         record(ruleId, protocol, method, endpoint, matched, responseTimeMs, clientIp,
                 matchChain, targetHost, proxyStatus, proxyError, responseStatus, matchTimeMs,
-                requestBody, responseBody, candidates, preparedBody, queryString, headers, faultType,
-                null, null, null);
+                requestBody, responseBody, candidates, preparedBody, queryString, headers,
+                null, null, null, null);
     }
 
-    /**
-     * 記錄請求（含匹配上下文與 Scenario 狀態轉移資訊）
-     * <p>
-     * 當 LogAgent 可用且狀態為 RUNNING 時，建構 LogTask 並委派給 LogAgent 非同步處理。
-     * 當 LogAgent 不可用或非 RUNNING 時，降級為同步寫入（memory buffer 或 database）。
-     */
-    @SuppressWarnings("java:S107") // 參數數量多是因為需要傳遞完整的匹配上下文
+    /** 記錄請求，並保留故障注入與 Scenario 狀態轉移資訊。 */
+    @SuppressWarnings("java:S107")
     public <T extends BaseRule> void record(String ruleId, Protocol protocol, String method, String endpoint,
                        boolean matched, int responseTimeMs, String clientIp,
                        String matchChain, String targetHost,
@@ -193,133 +211,74 @@ public class RequestLogService {
                        String scenarioName,
                        String scenarioFromState,
                        String scenarioToState) {
-        // 深拷貝候選規則為不可變快照（thread-safe，供 LogAgent 背景分析使用）
-        List<CandidateSnapshot> candidateSnapshots = CandidateSnapshot.toCandidateSnapshots(candidates);
+        LogAgent agent = logAgentProvider.getIfAvailable();
+        if (agent == null) {
+            if (agentUnavailableWarned.compareAndSet(false, true)) {
+                log.warn("LogAgent unavailable; requests cannot be durably acknowledged");
+            }
+            throw new RequestLogUnavailableException("Request-log agent is unavailable");
+        }
+        agentUnavailableWarned.set(false);
+        agent.submitDurably(() -> buildLogTask(
+                ruleId, protocol, method, endpoint, matched, responseTimeMs, clientIp,
+                matchChain, targetHost, proxyStatus, proxyError, responseStatus, matchTimeMs,
+                requestBody, responseBody, candidates, preparedBody, queryString, headers,
+                faultType, scenarioName, scenarioFromState, scenarioToState));
+    }
 
+    private <T extends BaseRule> LogTask buildLogTask(
+            String ruleId, Protocol protocol, String method, String endpoint,
+            boolean matched, int responseTimeMs, String clientIp,
+            String matchChain, String targetHost, Integer proxyStatus, String proxyError,
+            Integer responseStatus, Integer matchTimeMs, String requestBody, String responseBody,
+            List<T> candidates, ConditionMatcher.PreparedBody preparedBody,
+            String queryString, Map<String, String> headers,
+            String faultType, String scenarioName,
+            String scenarioFromState, String scenarioToState) {
+        List<CandidateSnapshot> candidateSnapshots = CandidateSnapshot.toCandidateSnapshots(candidates);
         String reqBody = null;
         String resBody = null;
+        int maxSize = configService.getRequestLogMaxBodySize();
         if (configService.isRequestLogIncludeBody()) {
-            int maxSize = configService.getRequestLogMaxBodySize();
             reqBody = truncateBody(requestBody, maxSize);
             resBody = truncateBody(responseBody, maxSize);
         }
-
-        // 嘗試委派給 LogAgent
-        LogAgent agent = logAgentProvider.getIfAvailable();
-        if (agent != null && agent.getStatus() == AgentStatus.RUNNING) {
-            LogTask task = LogTask.builder()
-                    .ruleId(ruleId)
-                    .protocol(protocol)
-                    .method(method)
-                    .endpoint(endpoint)
-                    .matched(matched)
-                    .responseTimeMs(responseTimeMs)
-                    .matchTimeMs(matchTimeMs)
-                    .clientIp(clientIp)
-                    .requestTime(LocalDateTime.now())
-                    .matchChain(matchChain)
-                    .targetHost(targetHost)
-                    .proxyStatus(proxyStatus)
-                    .proxyError(proxyError)
-                    .responseStatus(responseStatus)
-                    .requestBody(reqBody)
-                    .responseBody(resBody)
-                    .faultType(faultType)
-                    .scenarioName(scenarioName)
-                    .scenarioFromState(scenarioFromState)
-                    .scenarioToState(scenarioToState)
-                    .candidates(candidateSnapshots)
-                    .preparedBody(preparedBody)
-                    .queryString(queryString)
-                    .headers(headers)
-                    .build();
-            agent.submit(task);
-            // 成功委派後重置 fallback 警告標記
-            fallbackWarned.set(false);
-        } else {
-            // 降級為同步寫入
-            if (fallbackWarned.compareAndSet(false, true)) {
-                log.warn("LogAgent not available or not RUNNING, falling back to synchronous write");
-            }
-
-            LogEntry entry = LogEntry.builder()
-                    .ruleId(ruleId)
-                    .protocol(protocol)
-                    .method(method)
-                    .endpoint(endpoint)
-                    .matched(matched)
-                    .responseTimeMs(responseTimeMs)
-                    .matchTimeMs(matchTimeMs)
-                    .clientIp(clientIp)
-                    .requestTime(LocalDateTime.now())
-                    .matchChain(matchChain)
-                    .targetHost(targetHost)
-                    .proxyStatus(proxyStatus)
-                    .proxyError(proxyError)
-                    .responseStatus(responseStatus)
-                    .requestBody(reqBody)
-                    .responseBody(resBody)
-                    .faultType(faultType)
-                    .scenarioName(scenarioName)
-                    .scenarioFromState(scenarioFromState)
-                    .scenarioToState(scenarioToState)
-                    .build();
-
-            directWrite(entry);
-        }
-    }
-
-    /**
-     * 同步直接寫入（降級路徑）。
-     * Memory 模式寫入環形緩衝區；Database 模式直接 save 到 DB。
-     */
-    private void directWrite(LogEntry entry) {
-        if (configService.isRequestLogMemoryMode()) {
-            if (entry.getId() == null) {
-                entry = LogEntry.builder()
-                        .id(MEMORY_ID_SEQ.getAndIncrement())
-                        .ruleId(entry.getRuleId())
-                        .protocol(entry.getProtocol())
-                        .method(entry.getMethod())
-                        .endpoint(entry.getEndpoint())
-                        .matched(entry.isMatched())
-                        .responseTimeMs(entry.getResponseTimeMs())
-                        .matchTimeMs(entry.getMatchTimeMs())
-                        .clientIp(entry.getClientIp())
-                        .requestTime(entry.getRequestTime())
-                        .matchChain(entry.getMatchChain())
-                        .targetHost(entry.getTargetHost())
-                        .proxyStatus(entry.getProxyStatus())
-                        .proxyError(entry.getProxyError())
-                        .responseStatus(entry.getResponseStatus())
-                        .requestBody(entry.getRequestBody())
-                        .responseBody(entry.getResponseBody())
-                        .faultType(entry.getFaultType())
-                        .scenarioName(entry.getScenarioName())
-                        .scenarioFromState(entry.getScenarioFromState())
-                        .scenarioToState(entry.getScenarioToState())
-                        .build();
-            }
-            memoryBuffer.addFirst(entry);
-            int size = bufferSize.incrementAndGet();
-            while (size > maxRecords) {
-                if (memoryBuffer.pollLast() != null) {
-                    size = bufferSize.decrementAndGet();
-                } else {
-                    break;
-                }
-            }
-        } else {
-            try {
-                requestLogRepository.save(toEntity(entry));
-                long count = requestLogRepository.count();
-                if (count > maxRecords) {
-                    requestLogRepository.deleteOldest((int) (count - maxRecords));
-                }
-            } catch (Exception e) {
-                log.warn("Failed to persist log synchronously: {}", e.getMessage());
-            }
-        }
+        String rawAnalysisBody = preparedBody != null ? preparedBody.getRaw() : requestBody;
+        // Detailed near-miss analysis is optional. Never retain an oversized source body
+        // merely for diagnostics; the request-time match chain remains authoritative.
+        String analysisBody = rawAnalysisBody != null && rawAnalysisBody.length() <= maxSize
+                ? rawAnalysisBody : null;
+        return LogTask.builder()
+                .ruleId(ruleId)
+                .protocol(protocol)
+                .method(method)
+                .endpoint(endpoint)
+                .matched(matched)
+                .responseTimeMs(responseTimeMs)
+                .matchTimeMs(matchTimeMs)
+                .clientIp(clientIp)
+                .requestTime(LocalDateTime.now())
+                .matchChain(matchChain)
+                .targetHost(targetHost)
+                .proxyStatus(proxyStatus)
+                .proxyError(proxyError)
+                .responseStatus(responseStatus)
+                .requestBody(reqBody)
+                .responseBody(resBody)
+                .faultType(faultType)
+                .scenarioName(scenarioName)
+                .scenarioFromState(scenarioFromState)
+                .scenarioToState(scenarioToState)
+                .candidates(candidateSnapshots)
+                // Never retain PreparedBody: XML PreparedBody owns a full DOM and caused
+                // queued log tasks to pin hundreds of MiB. Persist only source text and
+                // reconstruct parsed state inside the background analysis worker.
+                .analysisBody(analysisBody)
+                .queryString(queryString)
+                .headers(headers)
+                .matchOutcomes(preparedBody != null
+                        ? preparedBody.getMatchOutcomesSnapshot() : Map.of())
+                .build();
     }
 
     // ===== 查詢方法 =====
@@ -370,30 +329,49 @@ public class RequestLogService {
      * 查詢請求記錄摘要（不含 body / matchChain，供列表顯示）
      */
     public SummaryQueryResult querySummary(QueryFilter filter) {
-        Stream<LogSummaryEntry> stream;
+        int pageNumber = Math.max(0, filter.getPage() != null ? filter.getPage() : 0);
+        int pageSize = Math.max(1, Math.min(filter.getSize() != null ? filter.getSize() : maxRecords, maxRecords));
+        String sortField = normalizeSortField(filter.getSortField());
+        Sort.Direction sortDirection = "asc".equalsIgnoreCase(filter.getSortDirection())
+                ? Sort.Direction.ASC : Sort.Direction.DESC;
+
+        List<LogSummaryEntry> entries;
+        long totalElements;
+        int totalPages;
         if (configService.isRequestLogMemoryMode()) {
-            stream = memoryBuffer.stream().map(this::toSummaryFromEntry);
+            List<LogSummaryEntry> filtered = applySummaryFilters(
+                    memoryBuffer.stream().map(this::toSummaryFromEntry), filter)
+                    .sorted(summaryComparator(sortField, sortDirection))
+                    .toList();
+            totalElements = filtered.size();
+            totalPages = totalElements == 0 ? 0 : (int) Math.ceil((double) totalElements / pageSize);
+            long offset = (long) pageNumber * pageSize;
+            int fromIndex = offset >= filtered.size() ? filtered.size() : (int) offset;
+            int toIndex = Math.min(fromIndex + pageSize, filtered.size());
+            entries = filtered.subList(fromIndex, toIndex);
         } else {
-            stream = requestLogRepository.findSummaryProjections(PageRequest.of(0, maxRecords))
-                    .stream().map(this::toSummaryFromProjection);
+            String endpoint = normalizeEndpoint(filter.getEndpoint());
+            Sort pageSort = Sort.by(sortDirection, sortField)
+                    .and(Sort.by(sortDirection, "id"));
+            if (summaryQuery != null) {
+                RequestLogSummaryQuery.Result resultPage = summaryQuery.query(
+                        new RequestLogSummaryQuery.Filter(
+                                filter.getRuleId(), filter.getProtocol(), filter.getMatched(),
+                                endpoint, filter.getAfterId()),
+                        pageNumber, pageSize, sortField,
+                        sortDirection == Sort.Direction.ASC);
+                entries = resultPage.rows().stream().map(this::toSummaryFromRow).toList();
+                totalElements = resultPage.totalElements();
+                totalPages = resultPage.totalPages();
+            } else {
+                Page<Object[]> resultPage = requestLogRepository.findSummaryPage(
+                        filter.getRuleId(), filter.getProtocol(), filter.getMatched(), endpoint,
+                        filter.getAfterId(), PageRequest.of(pageNumber, pageSize, pageSort));
+                entries = resultPage.getContent().stream().map(this::toSummaryFromProjection).toList();
+                totalElements = resultPage.getTotalElements();
+                totalPages = resultPage.getTotalPages();
+            }
         }
-
-        // 篩選
-        if (filter.getRuleId() != null) {
-            stream = stream.filter(e -> filter.getRuleId().equals(e.getRuleId()));
-        }
-        if (filter.getProtocol() != null) {
-            stream = stream.filter(e -> filter.getProtocol() == e.getProtocol());
-        }
-        if (filter.getMatched() != null) {
-            stream = stream.filter(e -> filter.getMatched() == e.isMatched());
-        }
-        if (filter.getEndpoint() != null && !filter.getEndpoint().isBlank()) {
-            String ep = filter.getEndpoint();
-            stream = stream.filter(e -> e.getEndpoint() != null && e.getEndpoint().contains(ep));
-        }
-
-        List<LogSummaryEntry> entries = stream.toList();
 
         // 批次載入規則資訊 (避免 N+1)
         Set<String> ruleIds = entries.stream().map(LogSummaryEntry::getRuleId).filter(Objects::nonNull).collect(Collectors.toSet());
@@ -408,7 +386,68 @@ public class RequestLogService {
                 .rule(e.getRuleId() != null ? ruleCache.get(e.getRuleId()) : null)
                 .build()).toList();
 
-        return SummaryQueryResult.builder().results(results).build();
+        Long newestId = entries.stream().map(LogSummaryEntry::getId)
+                .filter(Objects::nonNull).max(Long::compareTo).orElse(null);
+        return SummaryQueryResult.builder()
+                .results(results)
+                .page(pageNumber)
+                .size(pageSize)
+                .totalElements(totalElements)
+                .totalPages(totalPages)
+                .newestId(newestId)
+                .build();
+    }
+
+    private Stream<LogSummaryEntry> applySummaryFilters(Stream<LogSummaryEntry> stream, QueryFilter filter) {
+        if (filter.getRuleId() != null) {
+            stream = stream.filter(e -> filter.getRuleId().equals(e.getRuleId()));
+        }
+        if (filter.getProtocol() != null) {
+            stream = stream.filter(e -> filter.getProtocol() == e.getProtocol());
+        }
+        if (filter.getMatched() != null) {
+            stream = stream.filter(e -> filter.getMatched() == e.isMatched());
+        }
+        String endpoint = normalizeEndpoint(filter.getEndpoint());
+        if (endpoint != null) {
+            String normalized = endpoint.toLowerCase(Locale.ROOT);
+            stream = stream.filter(e -> containsIgnoreCase(e.getEndpoint(), normalized)
+                    || containsIgnoreCase(e.getTargetHost(), normalized)
+                    || containsIgnoreCase(e.getRuleId(), normalized));
+        }
+        if (filter.getAfterId() != null) {
+            stream = stream.filter(e -> e.getId() != null && e.getId() > filter.getAfterId());
+        }
+        return stream;
+    }
+
+    private boolean containsIgnoreCase(String value, String normalizedKeyword) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(normalizedKeyword);
+    }
+
+    private String normalizeEndpoint(String endpoint) {
+        return endpoint == null || endpoint.isBlank() ? null : endpoint.trim();
+    }
+
+    private String normalizeSortField(String sortField) {
+        return switch (sortField == null ? "requestTime" : sortField) {
+            case "endpoint" -> "endpoint";
+            case "responseTimeMs" -> "responseTimeMs";
+            default -> "requestTime";
+        };
+    }
+
+    private Comparator<LogSummaryEntry> summaryComparator(String sortField, Sort.Direction direction) {
+        Comparator<LogSummaryEntry> comparator = switch (sortField) {
+            case "endpoint" -> Comparator.comparing(LogSummaryEntry::getEndpoint,
+                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
+            case "responseTimeMs" -> Comparator.comparingInt(LogSummaryEntry::getResponseTimeMs);
+            default -> Comparator.comparing(LogSummaryEntry::getRequestTime,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+        };
+        comparator = comparator.thenComparing(LogSummaryEntry::getId,
+                Comparator.nullsLast(Comparator.naturalOrder()));
+        return direction == Sort.Direction.DESC ? comparator.reversed() : comparator;
     }
 
     /**
@@ -460,31 +499,6 @@ public class RequestLogService {
         return body.substring(0, maxSize) + "...(truncated)";
     }
 
-    private RequestLog toEntity(LogEntry e) {
-        return RequestLog.builder()
-                .ruleId(e.getRuleId())
-                .protocol(e.getProtocol())
-                .method(e.getMethod())
-                .endpoint(e.getEndpoint())
-                .matched(e.isMatched())
-                .responseTimeMs(e.getResponseTimeMs())
-                .matchTimeMs(e.getMatchTimeMs())
-                .clientIp(e.getClientIp())
-                .requestTime(e.getRequestTime())
-                .matchChain(e.getMatchChain())
-                .targetHost(e.getTargetHost())
-                .proxyStatus(e.getProxyStatus())
-                .proxyError(e.getProxyError())
-                .responseStatus(e.getResponseStatus())
-                .requestBody(e.getRequestBody())
-                .responseBody(e.getResponseBody())
-                .faultType(e.getFaultType())
-                .scenarioName(e.getScenarioName())
-                .scenarioFromState(e.getScenarioFromState())
-                .scenarioToState(e.getScenarioToState())
-                .build();
-    }
-
     private LogEntry toEntry(RequestLog log) {
         return LogEntry.builder()
                 .id(log.getId())
@@ -527,6 +541,10 @@ public class RequestLogService {
                 .proxyStatus(e.getProxyStatus())
                 .proxyError(e.getProxyError())
                 .responseStatus(e.getResponseStatus())
+                .faultType(e.getFaultType())
+                .scenarioName(e.getScenarioName())
+                .scenarioFromState(e.getScenarioFromState())
+                .scenarioToState(e.getScenarioToState())
                 .hasRequestBody(e.getRequestBody() != null && !e.getRequestBody().isBlank())
                 .hasResponseBody(e.getResponseBody() != null && !e.getResponseBody().isBlank())
                 .hasMatchChain(e.getMatchChain() != null && !e.getMatchChain().isBlank())
@@ -549,9 +567,39 @@ public class RequestLogService {
                 .proxyStatus(row[11] != null ? ((Number) row[11]).intValue() : null)
                 .proxyError((String) row[12])
                 .responseStatus(row[13] != null ? ((Number) row[13]).intValue() : null)
-                .hasRequestBody(Boolean.TRUE.equals(row[14]))
-                .hasResponseBody(Boolean.TRUE.equals(row[15]))
-                .hasMatchChain(Boolean.TRUE.equals(row[16]))
+                .faultType((String) row[14])
+                .scenarioName((String) row[15])
+                .scenarioFromState((String) row[16])
+                .scenarioToState((String) row[17])
+                .hasRequestBody(Boolean.TRUE.equals(row[18]))
+                .hasResponseBody(Boolean.TRUE.equals(row[19]))
+                .hasMatchChain(Boolean.TRUE.equals(row[20]))
+                .build();
+    }
+
+    private LogSummaryEntry toSummaryFromRow(RequestLogSummaryQuery.SummaryRow row) {
+        return LogSummaryEntry.builder()
+                .id(row.id())
+                .ruleId(row.ruleId())
+                .protocol(row.protocol())
+                .method(row.method())
+                .endpoint(row.endpoint())
+                .matched(Boolean.TRUE.equals(row.matched()))
+                .responseTimeMs(row.responseTimeMs() != null ? row.responseTimeMs().intValue() : 0)
+                .matchTimeMs(row.matchTimeMs() != null ? row.matchTimeMs().intValue() : null)
+                .clientIp(row.clientIp())
+                .requestTime(row.requestTime())
+                .targetHost(row.targetHost())
+                .proxyStatus(row.proxyStatus() != null ? row.proxyStatus().intValue() : null)
+                .proxyError(row.proxyError())
+                .responseStatus(row.responseStatus() != null ? row.responseStatus().intValue() : null)
+                .faultType(row.faultType())
+                .scenarioName(row.scenarioName())
+                .scenarioFromState(row.scenarioFromState())
+                .scenarioToState(row.scenarioToState())
+                .hasRequestBody(Boolean.TRUE.equals(row.hasRequestBody()))
+                .hasResponseBody(Boolean.TRUE.equals(row.hasResponseBody()))
+                .hasMatchChain(Boolean.TRUE.equals(row.hasMatchChain()))
                 .build();
     }
 
@@ -574,12 +622,12 @@ public class RequestLogService {
         private Integer proxyStatus;
         private String proxyError;
         private Integer responseStatus;
-        private String requestBody;
-        private String responseBody;
         private String faultType;
         private String scenarioName;
         private String scenarioFromState;
         private String scenarioToState;
+        private String requestBody;
+        private String responseBody;
     }
 
     /**
@@ -602,6 +650,10 @@ public class RequestLogService {
         private Integer proxyStatus;
         private String proxyError;
         private Integer responseStatus;
+        private String faultType;
+        private String scenarioName;
+        private String scenarioFromState;
+        private String scenarioToState;
         /** 是否有 requestBody（供前端判斷是否需要 lazy load） */
         private boolean hasRequestBody;
         /** 是否有 responseBody */
@@ -654,6 +706,11 @@ public class RequestLogService {
         private Protocol protocol;
         private Boolean matched;
         private String endpoint;
+        private Integer page;
+        private Integer size;
+        private String sortField;
+        private String sortDirection;
+        private Long afterId;
     }
 
     @Getter @Builder
@@ -664,6 +721,11 @@ public class RequestLogService {
     @Getter @Builder
     public static class SummaryQueryResult {
         private List<LogSummaryWithRule> results;
+        private int page;
+        private int size;
+        private long totalElements;
+        private int totalPages;
+        private Long newestId;
     }
 
     @Getter @Builder

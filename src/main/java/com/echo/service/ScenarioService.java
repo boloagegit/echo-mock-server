@@ -118,6 +118,7 @@ public class ScenarioService {
         List<Scenario> orphans = all.stream()
                 .filter(s -> !activeScenarioNames.contains(s.getScenarioName()))
                 .toList();
+
         if (!orphans.isEmpty()) {
             scenarioRepository.deleteAll(orphans);
             log.info("Deleted {} orphan scenarios: {}", orphans.size(),

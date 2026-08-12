@@ -49,12 +49,12 @@ public class H2BackupService implements BackupService {
     @Scheduled(cron = "${echo.backup.cron:0 0 3 * * *}")
     public void scheduledBackup() {
         backup("scheduled");
-        compact();
     }
 
     /**
      * 執行 SHUTDOWN COMPACT 回收 H2 已刪除資料的磁碟空間。
-     * H2 會關閉並重寫檔案，HikariCP 自動重建連線。
+     * 此操作會關閉並重寫整個資料庫，只能在 Echo 已停機的維護時段手動執行，
+     * 不可與線上定時備份綁在一起。
      */
     public CompactResult compact() {
         try {
@@ -65,7 +65,7 @@ public class H2BackupService implements BackupService {
                     sizeBefore / 1024 / 1024, sizeAfter / 1024 / 1024);
             return new CompactResult(sizeBefore, sizeAfter);
         } catch (Exception e) {
-            log.warn("H2 compact failed (will retry next cycle): {}", e.getMessage());
+            log.warn("H2 compact failed: {}", e.getMessage());
             return null;
         }
     }
@@ -98,7 +98,7 @@ public class H2BackupService implements BackupService {
             Path filePath = dir.resolve(filename);
 
             // H2 BACKUP TO 指令
-            jdbcTemplate.execute("BACKUP TO '" + filePath.toAbsolutePath() + "'");
+            jdbcTemplate.execute("BACKUP TO '" + h2SqlPath(filePath) + "'");
             log.info("H2 backup completed: {} (trigger: {})", filename, trigger);
 
             cleanOldBackups();
@@ -107,6 +107,12 @@ public class H2BackupService implements BackupService {
             log.error("H2 backup failed", e);
             throw new RuntimeException("Backup failed: " + e.getMessage(), e);
         }
+    }
+
+    static String h2SqlPath(Path path) {
+        return path.toAbsolutePath().normalize().toString()
+                .replace('\\', '/')
+                .replace("'", "''");
     }
 
     private void cleanOldBackups() {
@@ -119,9 +125,9 @@ public class H2BackupService implements BackupService {
             LocalDate cutoff = LocalDate.now().minusDays(retentionDays);
 
             try (Stream<Path> files = Files.list(dir)) {
-                files.filter(p -> p.getFileName().toString().matches("echo-\\d{4}-\\d{2}-\\d{2}\\.zip"))
+                files.filter(p -> fileName(p).matches("echo-\\d{4}-\\d{2}-\\d{2}\\.zip"))
                         .filter(p -> {
-                            String name = p.getFileName().toString();
+                            String name = fileName(p);
                             String dateStr = name.substring(5, 15); // echo-YYYY-MM-DD.zip
                             LocalDate fileDate = LocalDate.parse(dateStr, DATE_FORMAT);
                             return fileDate.isBefore(cutoff);
@@ -129,9 +135,9 @@ public class H2BackupService implements BackupService {
                         .forEach(p -> {
                             try {
                                 Files.delete(p);
-                                log.info("Deleted old backup: {}", p.getFileName());
+                                log.info("Deleted old backup: {}", fileName(p));
                             } catch (IOException e) {
-                                log.warn("Failed to delete old backup: {}", p.getFileName(), e);
+                                log.warn("Failed to delete old backup: {}", fileName(p), e);
                             }
                         });
             }
@@ -149,11 +155,11 @@ public class H2BackupService implements BackupService {
             }
 
             try (Stream<Path> files = Files.list(dir)) {
-                return files.filter(p -> p.getFileName().toString().matches("echo-\\d{4}-\\d{2}-\\d{2}\\.zip"))
+                return files.filter(p -> fileName(p).matches("echo-\\d{4}-\\d{2}-\\d{2}\\.zip"))
                         .map(p -> {
                             try {
                                 return new BackupFile(
-                                        p.getFileName().toString(),
+                                        fileName(p),
                                         Files.size(p),
                                         LocalDateTime.ofInstant(
                                                 Files.getLastModifiedTime(p).toInstant(),
@@ -172,6 +178,11 @@ public class H2BackupService implements BackupService {
             log.warn("Failed to list backups", e);
             return List.of();
         }
+    }
+
+    private static String fileName(Path path) {
+        Path name = path.getFileName();
+        return name != null ? name.toString() : "";
     }
 
     @Override

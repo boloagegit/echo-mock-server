@@ -2,6 +2,9 @@ package com.echo.controller;
 
 import com.echo.entity.HttpRule;
 import com.echo.entity.Protocol;
+import com.echo.pipeline.AbstractMockPipeline;
+import com.echo.pipeline.HttpMockPipeline;
+import com.echo.service.ConditionMatcher;
 import com.echo.service.HttpRuleService;
 import com.echo.service.MatchChainEntry;
 import com.echo.service.MatchResult;
@@ -13,13 +16,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentMatchers;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 import java.util.Optional;
 
@@ -34,6 +38,7 @@ class UniversalMockControllerSseTest {
     @Mock private HttpRuleService httpRuleService;
     @Mock private RequestLogService requestLogService;
     @Mock private ResponseTemplateService templateService;
+    @Mock private HttpServletResponse httpServletResponse;
 
     private UniversalMockController controller;
 
@@ -56,6 +61,44 @@ class UniversalMockControllerSseTest {
                         rule.getId(), "match", rule.getMatchKey(), rule.getDescription(), null)));
     }
 
+    @Test
+    void sseRoutingUsesScenarioAwarePipelineAndRecordsTransition() {
+        HttpMockPipeline pipeline = mock(HttpMockPipeline.class);
+        UniversalMockController scenarioController = new UniversalMockController(
+                ruleService, httpRuleService, requestLogService, templateService, pipeline);
+        HttpRule rule = HttpRule.builder()
+                .id("scenario-sse")
+                .matchKey("/scenario")
+                .method("GET")
+                .sseEnabled(false)
+                .responseId(42L)
+                .httpStatus(200)
+                .scenarioName("checkout")
+                .requiredScenarioState("Started")
+                .newScenarioState("Paid")
+                .build();
+        when(httpRuleService.findPreparedHttpRules("default", "/scenario", "GET"))
+                .thenReturn(List.of(rule));
+        when(pipeline.matchRule(anyList(), any(ConditionMatcher.PreparedBody.class),
+                isNull(), anyMap())).thenReturn(matched(rule));
+        when(pipeline.advanceScenarioState(rule)).thenReturn(
+                new AbstractMockPipeline.ScenarioTransition("checkout", "Started", "Paid", true));
+        when(ruleService.findResponseBodyById(42L)).thenReturn(Optional.of("{\"ok\":true}"));
+        when(templateService.hasTemplate(anyString())).thenReturn(false);
+
+        Object result = scenarioController.handleSseRequest(
+                sseGetRequest("/scenario"), httpServletResponse);
+
+        assertThat(result).isInstanceOf(ResponseEntity.class);
+        verify(pipeline).advanceScenarioState(rule);
+        verify(requestLogService).record(
+                eq("scenario-sse"), eq(Protocol.HTTP), eq("GET"), eq("/scenario"), eq(true),
+                anyInt(), eq("127.0.0.1"), anyString(), eq("default"),
+                isNull(), isNull(), eq(200), anyInt(), isNull(), eq("{\"ok\":true}"),
+                ArgumentMatchers.<HttpRule>anyList(), any(ConditionMatcher.PreparedBody.class),
+                isNull(), anyMap(), isNull(), eq("checkout"), eq("Started"), eq("Paid"));
+    }
+
     private MatchResult<HttpRule> noMatch() {
         return new MatchResult<>(null, List.of());
     }
@@ -71,7 +114,7 @@ class UniversalMockControllerSseTest {
         when(ruleService.findResponseBodyById(1L))
                 .thenReturn(Optional.of("[{\"data\":\"hello\"}]"));
 
-        Object result = controller.handleSseRequest(sseGetRequest("/events"), new MockHttpServletResponse());
+        Object result = controller.handleSseRequest(sseGetRequest("/events"), httpServletResponse);
 
         assertThat(result).isInstanceOf(SseEmitter.class);
     }
@@ -85,7 +128,7 @@ class UniversalMockControllerSseTest {
         when(ruleService.findResponseBodyById(2L))
                 .thenReturn(Optional.of("{\"status\":\"ok\"}"));
 
-        Object result = controller.handleSseRequest(sseGetRequest("/api/test"), new MockHttpServletResponse());
+        Object result = controller.handleSseRequest(sseGetRequest("/api/test"), httpServletResponse);
 
         assertThat(result).isInstanceOf(ResponseEntity.class);
         @SuppressWarnings("unchecked")
@@ -99,7 +142,7 @@ class UniversalMockControllerSseTest {
         when(httpRuleService.findMatchingHttpRuleWithCandidates(any(), any(), any(), any(), any(), any()))
                 .thenReturn(noMatch());
 
-        Object result = controller.handleSseRequest(sseGetRequest("/unknown"), new MockHttpServletResponse());
+        Object result = controller.handleSseRequest(sseGetRequest("/unknown"), httpServletResponse);
 
         assertThat(result).isInstanceOf(ResponseEntity.class);
         @SuppressWarnings("unchecked")
@@ -118,7 +161,7 @@ class UniversalMockControllerSseTest {
         when(ruleService.findResponseBodyById(3L))
                 .thenReturn(Optional.of("not valid json"));
 
-        Object result = controller.handleSseRequest(sseGetRequest("/events"), new MockHttpServletResponse());
+        Object result = controller.handleSseRequest(sseGetRequest("/events"), httpServletResponse);
 
         assertThat(result).isInstanceOf(ResponseEntity.class);
         @SuppressWarnings("unchecked")
@@ -135,7 +178,7 @@ class UniversalMockControllerSseTest {
         when(ruleService.findResponseBodyById(4L))
                 .thenReturn(Optional.of("[]"));
 
-        Object result = controller.handleSseRequest(sseGetRequest("/events"), new MockHttpServletResponse());
+        Object result = controller.handleSseRequest(sseGetRequest("/events"), httpServletResponse);
 
         assertThat(result).isInstanceOf(ResponseEntity.class);
         @SuppressWarnings("unchecked")
@@ -150,7 +193,7 @@ class UniversalMockControllerSseTest {
         when(httpRuleService.findMatchingHttpRuleWithCandidates(any(), any(), any(), any(), any(), any()))
                 .thenReturn(matched(rule));
 
-        Object result = controller.handleSseRequest(sseGetRequest("/events"), new MockHttpServletResponse());
+        Object result = controller.handleSseRequest(sseGetRequest("/events"), httpServletResponse);
 
         assertThat(result).isInstanceOf(ResponseEntity.class);
         @SuppressWarnings("unchecked")
@@ -171,7 +214,7 @@ class UniversalMockControllerSseTest {
         when(templateService.hasTemplate("{{now}}")).thenReturn(true);
         when(templateService.render(eq("{{now}}"), any())).thenReturn("2026-01-01");
 
-        Object result = controller.handleSseRequest(sseGetRequest("/events"), new MockHttpServletResponse());
+        Object result = controller.handleSseRequest(sseGetRequest("/events"), httpServletResponse);
 
         assertThat(result).isInstanceOf(SseEmitter.class);
         // Give background thread time to execute
@@ -189,7 +232,7 @@ class UniversalMockControllerSseTest {
                 .thenReturn(Optional.of("[{\"data\":\"plain text\"}]"));
         when(templateService.hasTemplate("plain text")).thenReturn(false);
 
-        Object result = controller.handleSseRequest(sseGetRequest("/events"), new MockHttpServletResponse());
+        Object result = controller.handleSseRequest(sseGetRequest("/events"), httpServletResponse);
 
         assertThat(result).isInstanceOf(SseEmitter.class);
         Thread.sleep(200);
@@ -207,7 +250,7 @@ class UniversalMockControllerSseTest {
         when(ruleService.findResponseBodyById(7L))
                 .thenReturn(Optional.of("[{\"data\":\"hello\"}]"));
 
-        controller.handleSseRequest(sseGetRequest("/events"), new MockHttpServletResponse());
+        controller.handleSseRequest(sseGetRequest("/events"), httpServletResponse);
 
         verify(requestLogService).record(eq("sse-7"), eq(Protocol.HTTP), eq("GET"), eq("/events"),
                 eq(true), anyInt(), eq("127.0.0.1"), any(), any(), isNull(), isNull(), eq(200), anyInt(),
@@ -219,7 +262,7 @@ class UniversalMockControllerSseTest {
         when(httpRuleService.findMatchingHttpRuleWithCandidates(any(), any(), any(), any(), any(), any()))
                 .thenReturn(noMatch());
 
-        controller.handleSseRequest(sseGetRequest("/unknown"), new MockHttpServletResponse());
+        controller.handleSseRequest(sseGetRequest("/unknown"), httpServletResponse);
 
         verify(requestLogService).record(isNull(), eq(Protocol.HTTP), eq("GET"), eq("/unknown"),
                 eq(false), anyInt(), eq("127.0.0.1"), any(), isNull(), isNull(), isNull(), eq(404), anyInt(),
@@ -263,7 +306,7 @@ class UniversalMockControllerSseTest {
                     .thenReturn(Optional.of("{\"ok\":true}"));
         }
 
-        Object result = ctrl.handleSseRequest(sseGetRequest("/test"), new MockHttpServletResponse());
+        Object result = ctrl.handleSseRequest(sseGetRequest("/test"), null);
 
         if (input.sseEnabled) {
             assertThat(result).isInstanceOf(SseEmitter.class);
@@ -318,7 +361,7 @@ class UniversalMockControllerSseTest {
 
         when(mockRuleSvc.findResponseBodyById(300L)).thenReturn(Optional.of(json.toString()));
 
-        Object result = ctrl.handleSseRequest(sseGetRequest("/stream"), new MockHttpServletResponse());
+        Object result = ctrl.handleSseRequest(sseGetRequest("/stream"), null);
 
         assertThat(result).isInstanceOf(SseEmitter.class);
         // Give background thread time to complete
@@ -367,7 +410,7 @@ class UniversalMockControllerSseTest {
             when(mockTmplSvc.render(eq(input.data), any())).thenReturn("rendered");
         }
 
-        Object result = ctrl.handleSseRequest(sseGetRequest("/tmpl"), new MockHttpServletResponse());
+        Object result = ctrl.handleSseRequest(sseGetRequest("/tmpl"), null);
 
         assertThat(result).isInstanceOf(SseEmitter.class);
         Thread.sleep(200);
@@ -414,7 +457,7 @@ class UniversalMockControllerSseTest {
         when(mockRuleSvc.findResponseBodyById(500L))
                 .thenReturn(Optional.of("[{\"data\":\"log-test\"}]"));
 
-        ctrl.handleSseRequest(sseGetRequest(input.path), new MockHttpServletResponse());
+        ctrl.handleSseRequest(sseGetRequest(input.path), null);
 
         verify(mockLogSvc).record(eq(input.ruleId), eq(Protocol.HTTP), eq("GET"), eq(input.path),
                 eq(true), anyInt(), any(), any(), any(), isNull(), isNull(), eq(200), anyInt(),

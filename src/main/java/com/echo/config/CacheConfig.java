@@ -22,9 +22,19 @@ public class CacheConfig {
     public static final String MOCK_RULES_CACHE = "mockRules";
     public static final String HTTP_RULES_CACHE = "httpRules";
     public static final String JMS_RULES_CACHE = "jmsRules";
+    public static final String HTTP_TARGET_DEFAULT_CACHE = "httpTargetDefault";
+    public static final String HTTP_TARGET_RESOLVED_CACHE = "httpTargetResolved";
 
     /** 所有規則快取名稱（供需要清除全部的場景使用） */
     public static final List<String> ALL_RULE_CACHES = List.of(HTTP_RULES_CACHE, JMS_RULES_CACHE);
+
+    /** 規則查詢快取最多保留的 request key 數，避免動態 URL 撐大 heap。 */
+    @Value("${echo.cache.rules.max-entries:2000}")
+    private int ruleCacheMaxEntries = 2000;
+
+    /** 規則查詢快取閒置逾時分鐘數。 */
+    @Value("${echo.cache.rules.expire-minutes:60}")
+    private int ruleCacheExpireMinutes = 60;
 
     /** Response body 快取上限 (預設 200MB) */
     @Value("${echo.cache.body.max-size-mb:200}")
@@ -41,14 +51,16 @@ public class CacheConfig {
     @Bean
     public Caffeine<Object, Object> caffeineConfig() {
         return Caffeine.newBuilder()
-                .maximumSize(10_000)
-                .expireAfterWrite(12, TimeUnit.HOURS)
+                .maximumSize(Math.max(1, ruleCacheMaxEntries))
+                .expireAfterAccess(Math.max(1, ruleCacheExpireMinutes), TimeUnit.MINUTES)
                 .recordStats();
     }
 
     @Bean
     public CacheManager cacheManager(Caffeine<Object, Object> caffeine) {
-        CaffeineCacheManager cacheManager = new CaffeineCacheManager(HTTP_RULES_CACHE, JMS_RULES_CACHE);
+        CaffeineCacheManager cacheManager = new CaffeineCacheManager(
+                HTTP_RULES_CACHE, JMS_RULES_CACHE, HTTP_TARGET_DEFAULT_CACHE,
+                HTTP_TARGET_RESOLVED_CACHE);
         cacheManager.setCaffeine(caffeine);
         return cacheManager;
     }
@@ -66,5 +78,13 @@ public class CacheConfig {
 
     public int getBodyCacheThresholdBytes() {
         return bodyCacheThresholdKb * 1024;
+    }
+
+    public int getRuleCacheMaxEntries() {
+        return ruleCacheMaxEntries;
+    }
+
+    public int getRuleCacheExpireMinutes() {
+        return ruleCacheExpireMinutes;
     }
 }

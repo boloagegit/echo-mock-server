@@ -61,12 +61,16 @@ spring:
 # Echo 自訂配置
 echo:
   env-label:                    # 環境別名（如 DEV、SIT、UAT），可用環境變數 ECHO_ENV_LABEL 覆蓋
+  features:
+    bulk-import-export-enabled: ${ECHO_BULK_IMPORT_EXPORT_ENABLED:false}  # 批次匯入／匯出，預設關閉
+    scenarios-enabled: ${ECHO_SCENARIOS_ENABLED:false}                    # Scenario 狀態機，預設關閉
+    rule-drag-sort-enabled: ${ECHO_RULE_DRAG_SORT_ENABLED:false}          # 規則列表拖曳排序，預設關閉
   remember-me:
-    key: echo-remember-me-secret  # ⚠️ 生產環境請務必替換！可用環境變數 ECHO_REMEMBER_ME_KEY 覆蓋
+    key: ${ECHO_REMEMBER_ME_KEY:change-me-in-production}  # 必須透過環境變數覆蓋
     validity: 180d                # Remember Me cookie 有效期，可用環境變數 ECHO_REMEMBER_ME_VALIDITY 覆蓋
   admin:
-    username: admin             # ⚠️ 預設帳號，生產環境請替換。可用環境變數 ECHO_ADMIN_USERNAME 覆蓋
-    password: "{bcrypt}$2a$10$cGp.LHC3zCORJIgwLvh6qehSMWZV27KbwI0VravTWP51EkxvbkEmm"  # ⚠️ 預設密碼 admin，生產環境請替換。可用環境變數 ECHO_ADMIN_PASSWORD 覆蓋
+    username: admin             # 可用環境變數 ECHO_ADMIN_USERNAME 覆蓋
+    password: "{bcrypt}$2a$10$cGp.LHC3zCORJIgwLvh6qehSMWZV27KbwI0VravTWP51EkxvbkEmm"  # admin，可用環境變數 ECHO_ADMIN_PASSWORD 覆蓋
   storage:
     mode: database  # database 或 file
     file-path: ./data/rules.json  # file 模式時的路徑
@@ -80,7 +84,7 @@ echo:
     enabled: false
     alias:                     # JMS 協定顯示別名，可用環境變數 ECHO_JMS_ALIAS 覆蓋
     port: 61616              # Artemis 監聽埠 (外部服務連線 tcp://localhost:61616)
-    username: admin          # ⚠️ 預設帳密，生產環境請替換。可用環境變數 ECHO_JMS_USERNAME / ECHO_JMS_PASSWORD 覆蓋
+    username: admin          # Artemis 帳密，可用環境變數 ECHO_JMS_USERNAME / ECHO_JMS_PASSWORD 覆蓋
     password: admin
     concurrency: "10-30"     # JMS listener 並發數 (min-max)，可用環境變數 ECHO_JMS_CONCURRENCY 覆蓋
     queue: ECHO.REQUEST      # Echo 監聽的 Source Queue（外部服務送訊息到此 Queue）
@@ -88,18 +92,39 @@ echo:
     target:
       enabled: false         # true 時啟用轉發到目標 JMS Server
       type: tibco            # artemis | tibco
-      server-url: tcp://esb-server:7222  # ⚠️ 範例位址，請替換為實際 JMS Server
+      server-url: tcp://esb-server:7222
       username: admin
-      password: changeme       # ⚠️ 範例佔位符，請透過環境變數 ECHO_JMS_TARGET_PASSWORD 覆蓋
+      password: changeme       # 範例佔位符，請透過環境變數 ECHO_JMS_TARGET_PASSWORD 覆蓋
       timeout-seconds: 30
       queue: TARGET.REQUEST  # 目標 JMS Server 上的 Queue（轉發目的地）
   http:
     alias: HTTP     # HTTP 協定顯示名稱
+    # HTTP request 的總時間預算；連線設定的 pool + connect + read 必須小於此值
+    request-timeout-ms: ${ECHO_HTTP_REQUEST_TIMEOUT_MS:40000}
+    forward:
+      # 全部 HTTP 下游共用並行連線上限；不再另設單一下游 50 條限制
+      max-connections: ${ECHO_HTTP_FORWARD_MAX_CONNECTIONS:1000}
+      # 容量用盡時最多等待筆數；超過立即回應容量不足，避免尖峰耗盡 heap
+      max-pending-requests: ${ECHO_HTTP_FORWARD_MAX_PENDING_REQUESTS:1000}
+      # 單筆下游回應最多 10 MiB；Content-Length 與 chunked body 都會檢查
+      max-response-body-bytes: ${ECHO_HTTP_FORWARD_MAX_RESPONSE_BODY_BYTES:10485760}
+      # 全部進行中下游回應合計最多緩衝 128 MiB，避免 1000 條連線同時撐爆 heap
+      max-buffered-response-bytes: ${ECHO_HTTP_FORWARD_MAX_BUFFERED_RESPONSE_BYTES:134217728}
+      pool-acquire-timeout-ms: ${ECHO_HTTP_FORWARD_POOL_ACQUIRE_TIMEOUT_MS:3000}
   stats:
     retention-days: 7  # 統計資料保留天數
   request-log:
     store: database    # memory 或 database
     max-records: 10000 # 最大記錄數
+    durable:
+      # 獨立 SQLite WAL 先接收紀錄，主資料庫暫時不可用時不會靜默丟失
+      spool-path: ${ECHO_REQUEST_LOG_SPOOL_PATH:./data/request-log-spool.sqlite}
+      append-queue-capacity: ${ECHO_REQUEST_LOG_SPOOL_QUEUE_CAPACITY:2000}
+      append-batch-size: ${ECHO_REQUEST_LOG_SPOOL_BATCH_SIZE:100}
+      group-commit-ms: ${ECHO_REQUEST_LOG_SPOOL_GROUP_COMMIT_MS:2}
+      queue-offer-timeout-ms: ${ECHO_REQUEST_LOG_SPOOL_OFFER_TIMEOUT_MS:10000}
+      retry-ms: ${ECHO_REQUEST_LOG_SPOOL_RETRY_MS:250}
+      max-pending-bytes: ${ECHO_REQUEST_LOG_SPOOL_MAX_PENDING_BYTES:10737418240}
   audit:
     retention-days: 30  # 審計記錄保留天數
   cleanup:
@@ -118,6 +143,7 @@ echo:
       queue-capacity: 3000           # LogAgent 佇列容量
       batch-size: 50                # 批次大小觸發閾值
       flush-interval-seconds: 5     # 時間觸發間隔（秒）
+      max-write-rate-per-second: ${ECHO_AGENT_LOG_MAX_WRITE_RATE_PER_SECOND:1000}
     analysis:
       enabled: true                 # 啟用匹配鏈分析（near-miss / shadowed 偵測）
   matcher:

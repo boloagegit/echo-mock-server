@@ -8,14 +8,21 @@ const PriorityHelpModal = {
     show: Boolean,
     helpTab: String,
   },
-  emits: ['close', 'update:helpTab'],
+  emits: ['close', 'start-tour', 'update:helpTab'],
   inject: ['t'],
   setup(props, { emit }) {
     const { ref, computed, watch, nextTick, onBeforeUnmount, inject } = Vue;
     const t = inject('t');
     const activeTocId = ref('');
     const helpContentRef = ref(null);
+    const helpDialogRef = ref(null);
+    const helpOverlayRef = ref(null);
+    const closeButtonRef = ref(null);
+    const helpTabsRef = ref(null);
+    const tabOrder = ['start', 'http', 'jms', 'condition', 'advanced'];
     let observer = null;
+    let previousFocus = null;
+    let inertSiblings = [];
 
     const tocItems = computed(() => {
       switch (props.helpTab) {
@@ -92,15 +99,86 @@ const PriorityHelpModal = {
 
     watch(() => props.show, (val) => {
       if (val) {
-        nextTick(() => setupObserver());
+        previousFocus = document.activeElement;
+        document.addEventListener('keydown', handleModalKeydown);
+        nextTick(() => {
+          setupObserver();
+          makeBackgroundInert();
+          closeButtonRef.value?.focus();
+        });
       } else if (observer) {
         observer.disconnect();
+        document.removeEventListener('keydown', handleModalKeydown);
+        restoreBackground();
+        previousFocus?.focus?.();
+        previousFocus = null;
       }
     });
 
     onBeforeUnmount(() => {
       if (observer) { observer.disconnect(); }
+      document.removeEventListener('keydown', handleModalKeydown);
+      restoreBackground();
     });
+
+    const makeBackgroundInert = () => {
+      const overlay = helpOverlayRef.value;
+      const parent = overlay?.parentElement;
+      if (!parent) { return; }
+      inertSiblings = Array.from(parent.children).filter(node => node !== overlay).map(node => ({
+        node,
+        inert: node.inert,
+        ariaHidden: node.getAttribute('aria-hidden')
+      }));
+      inertSiblings.forEach(({ node }) => {
+        node.inert = true;
+        node.setAttribute('aria-hidden', 'true');
+      });
+    };
+
+    const restoreBackground = () => {
+      inertSiblings.forEach(({ node, inert, ariaHidden }) => {
+        node.inert = inert;
+        if (ariaHidden == null) { node.removeAttribute('aria-hidden'); }
+        else { node.setAttribute('aria-hidden', ariaHidden); }
+      });
+      inertSiblings = [];
+    };
+
+    const handleModalKeydown = event => {
+      if (!props.show) { return; }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        emit('close');
+        return;
+      }
+      if (event.key !== 'Tab') { return; }
+      const focusable = Array.from(helpDialogRef.value?.querySelectorAll('button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])') || []);
+      if (!focusable.length) { return; }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    const setHelpTab = tab => emit('update:helpTab', tab);
+
+    const moveHelpTab = event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { return; }
+      event.preventDefault();
+      const current = Math.max(0, tabOrder.indexOf(props.helpTab));
+      const next = event.key === 'Home' ? 0
+        : event.key === 'End' ? tabOrder.length - 1
+        : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabOrder.length) % tabOrder.length;
+      emit('update:helpTab', tabOrder[next]);
+      nextTick(() => helpTabsRef.value?.querySelector('[role="tab"][aria-selected="true"]')?.focus());
+    };
 
     const scrollTo = (id) => {
       const container = helpContentRef.value;
@@ -112,46 +190,43 @@ const PriorityHelpModal = {
       }
     };
 
-    return { tocItems, activeTocId, helpContentRef, scrollTo, t };
+    return { tocItems, activeTocId, helpContentRef, helpDialogRef, helpOverlayRef, closeButtonRef, helpTabsRef, scrollTo, setHelpTab, moveHelpTab, t };
   },
   template: /* html */`
-  <div class="modal-overlay" v-if="show" >
-    <div class="modal-box help-modal help-fullscreen">
+  <div ref="helpOverlayRef" class="modal-overlay" v-if="show" @click.self="$emit('close')">
+    <div ref="helpDialogRef" class="modal-box help-modal help-fullscreen workspace-modal" role="dialog" aria-modal="true" aria-labelledby="helpModalTitle">
       <div class="modal-header">
-        <h3><i class="bi bi-lightbulb"></i> {{t('help.title')}}</h3>
-        <button class="close-btn" @click="$emit('close')" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+        <div class="modal-heading"><span class="modal-heading-icon"><i class="bi bi-book" aria-hidden="true"></i></span><h3 id="helpModalTitle">{{t('help.title')}}</h3></div>
+        <div class="modal-header-actions">
+          <button type="button" class="btn btn-sm btn-secondary" @click="$emit('start-tour')"><i class="bi bi-signpost-split" aria-hidden="true"></i>{{t('help.startTour')}}</button>
+          <button ref="closeButtonRef" type="button" class="close-btn" @click="$emit('close')" :aria-label="t('modal.cancel')"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+        </div>
       </div>
-      <div class="modal-body" style="padding:0;flex:1;overflow:hidden;display:flex;flex-direction:column">
-        <div class="help-tabs">
-          <button :class="{active:helpTab==='start'}" @click="$emit('update:helpTab','start')"><i class="bi bi-rocket-takeoff"></i> {{t('help.tabStart')}}</button>
-          <button :class="{active:helpTab==='http'}" @click="$emit('update:helpTab','http')"><i class="bi bi-globe"></i> HTTP</button>
-          <button :class="{active:helpTab==='jms'}" @click="$emit('update:helpTab','jms')"><i class="bi bi-hdd-network"></i> JMS</button>
-          <button :class="{active:helpTab==='condition'}" @click="$emit('update:helpTab','condition')"><i class="bi bi-funnel"></i> {{t('help.tabCondition')}}</button>
-          <button :class="{active:helpTab==='advanced'}" @click="$emit('update:helpTab','advanced')"><i class="bi bi-gear"></i> {{t('help.tabAdvanced')}}</button>
+      <div class="modal-body help-modal-body">
+        <div ref="helpTabsRef" class="help-tabs" role="tablist" :aria-label="t('help.sections')">
+          <button type="button" id="help-tab-start" role="tab" :aria-selected="helpTab==='start'" :tabindex="helpTab==='start'?0:-1" aria-controls="help-panel-start" :class="{active:helpTab==='start'}" @click="setHelpTab('start')" @keydown="moveHelpTab"><i class="bi bi-rocket-takeoff" aria-hidden="true"></i>{{t('help.tabStart')}}</button>
+          <button type="button" id="help-tab-http" role="tab" :aria-selected="helpTab==='http'" :tabindex="helpTab==='http'?0:-1" aria-controls="help-panel-http" :class="{active:helpTab==='http'}" @click="setHelpTab('http')" @keydown="moveHelpTab"><i class="bi bi-globe" aria-hidden="true"></i>HTTP</button>
+          <button type="button" id="help-tab-jms" role="tab" :aria-selected="helpTab==='jms'" :tabindex="helpTab==='jms'?0:-1" aria-controls="help-panel-jms" :class="{active:helpTab==='jms'}" @click="setHelpTab('jms')" @keydown="moveHelpTab"><i class="bi bi-hdd-network" aria-hidden="true"></i>JMS</button>
+          <button type="button" id="help-tab-condition" role="tab" :aria-selected="helpTab==='condition'" :tabindex="helpTab==='condition'?0:-1" aria-controls="help-panel-condition" :class="{active:helpTab==='condition'}" @click="setHelpTab('condition')" @keydown="moveHelpTab"><i class="bi bi-funnel" aria-hidden="true"></i>{{t('help.tabCondition')}}</button>
+          <button type="button" id="help-tab-advanced" role="tab" :aria-selected="helpTab==='advanced'" :tabindex="helpTab==='advanced'?0:-1" aria-controls="help-panel-advanced" :class="{active:helpTab==='advanced'}" @click="setHelpTab('advanced')" @keydown="moveHelpTab"><i class="bi bi-gear" aria-hidden="true"></i>{{t('help.tabAdvanced')}}</button>
         </div>
         <div class="help-layout">
-          <nav class="help-toc" v-if="tocItems.length" aria-label="Table of contents">
-            <div
+          <nav class="help-toc" v-if="tocItems.length" :aria-label="t('help.tableOfContents')">
+            <button type="button"
               v-for="item in tocItems" :key="item.id"
               class="help-toc-item" :class="{active: activeTocId === item.id}"
               @click="scrollTo(item.id)"
+              :aria-current="activeTocId === item.id ? 'location' : null"
               :title="item.label"
-            >{{item.label}}</div>
+            >{{item.label}}</button>
           </nav>
-          <div class="help-content" ref="helpContentRef" tabindex="0" role="region" aria-label="Help content">
+          <div class="help-content" ref="helpContentRef" tabindex="0" role="region" :aria-label="t('help.content')">
           <!-- 快速開始 -->
-          <div v-if="helpTab==='start'">
+          <div v-if="helpTab==='start'" id="help-panel-start" role="tabpanel" aria-labelledby="help-tab-start">
             <div class="help-section" id="start-what">
               <h4>{{t('help.whatIsEcho')}}</h4>
               <p>{{t('help.whatIsEchoDesc')}}</p>
-              <pre class="help-diagram">┌──────────┐      ┌─────────────┐      ┌──────────┐
-│ Your App │─────▶│    Echo     │─────▶│ Real API │
-│          │      │ Mock Server │      │ (Proxy)  │
-└──────────┘      └─────────────┘      └──────────┘
-                         │
-                  Match Rule?
-                  ├─ Yes → Return Mock
-                  └─ No  → Forward</pre>
+              <pre class="help-diagram">{{t('help.diagramEchoFlow')}}</pre>
             </div>
             <div class="help-section" id="start-create">
               <h4>{{t('help.createFirstRule')}}</h4>
@@ -168,22 +243,16 @@ const PriorityHelpModal = {
               <p><strong>{{t('help.httpTest')}}</strong></p>
               <pre class="help-code">curl http://localhost:8080/mock/api/users \\
   -H "X-Original-Host: api.example.com"</pre>
-              <p v-html="'<strong>' + t('help.jmsTest') + '</strong>' + '：' + t('help.jmsTestDesc')"></p>
+              <p v-html="'<strong>' + t('help.jmsTest') + '</strong>' + t('help.labelSeparator') + t('help.jmsTestDesc')"></p>
             </div>
             <div class="help-section" id="start-response">
               <h4>{{t('help.responseManagement')}}</h4>
               <p>{{t('help.responseManagementDesc')}}</p>
-              <pre class="help-diagram">┌──────────┐     ┌──────────┐
-│  Rule A  │────▶│          │
-├──────────┤     │ Response │
-│  Rule B  │────▶│ (Shared) │
-├──────────┤     │          │
-│  Rule C  │────▶│          │
-└──────────┘     └──────────┘</pre>
+              <pre class="help-diagram">{{t('help.diagramSharedResponse')}}</pre>
               <ul>
-                <li><strong>{{t('modal.createNewResponse')}}</strong>：{{t('help.createNewResponseDesc')}}</li>
-                <li><strong>{{t('modal.useExisting')}}</strong>：{{t('help.useExistingResponseDesc')}}</li>
-                <li><strong>{{t('responses.title')}}</strong>：{{t('help.responsePageDesc')}}</li>
+                <li><strong>{{t('modal.createNewResponse')}}</strong>{{t('help.labelSeparator')}}{{t('help.createNewResponseDesc')}}</li>
+                <li><strong>{{t('modal.useExisting')}}</strong>{{t('help.labelSeparator')}}{{t('help.useExistingResponseDesc')}}</li>
+                <li><strong>{{t('responses.title')}}</strong>{{t('help.labelSeparator')}}{{t('help.responsePageDesc')}}</li>
               </ul>
             </div>
             <div class="help-section" id="start-keyboard">
@@ -201,10 +270,7 @@ const PriorityHelpModal = {
             <div class="help-section" id="start-tags">
               <h4>{{t('help.tagsAndGroups')}}</h4>
               <p>{{t('help.tagsAndGroupsDesc')}}</p>
-              <pre class="help-code">// Tag format (in rule editor)
-env:prod
-team:payment
-version:v2</pre>
+              <pre class="help-code">{{t('help.tagExample')}}</pre>
             </div>
             <div class="help-section" id="start-protect">
               <h4>{{t('help.ruleProtection')}}</h4>
@@ -212,72 +278,40 @@ version:v2</pre>
             </div>
           </div>
           <!-- HTTP -->
-          <div v-if="helpTab==='http'">
+          <div v-if="helpTab==='http'" id="help-panel-http" role="tabpanel" aria-labelledby="help-tab-http">
             <div class="help-section" id="http-flow">
               <h4>{{t('help.httpRequestFlow')}}</h4>
-              <pre class="help-diagram">┌─────────────────────────────────────────────┐
-│ curl http://localhost:8080/mock/api/users   │
-│      -H "X-Original-Host: api.example.com"  │
-└─────────────────────────────────────────────┘
-                        │
-                        ▼
-┌─────────────────────────────────────────────┐
-│ Echo Parse Request                          │
-│ • Host: api.example.com                     │
-│ • Method: GET                               │
-│ • Path: /api/users                          │
-└─────────────────────────────────────────────┘
-                        │
-                        ▼
-┌─────────────────────────────────────────────┐
-│ Find Matching Rule (by priority)            │
-│ 1. Match Host + Method + Path               │
-│ 2. Check Conditions (Body/Query/Header)     │
-│ 3. Fallback to unconditional rule           │
-└─────────────────────────────────────────────┘
-                        │
-        ┌───────────────┴───────────────┐
-        ▼                               ▼
-   Rule Found                      No Match
-   Return Mock                     Forward to Host</pre>
+              <pre class="help-diagram">{{t('help.diagramHttpFlow')}}</pre>
             </div>
             <div class="help-section" id="http-fields">
               <h4>{{t('help.httpRuleFields')}}</h4>
               <table class="help-table">
-                <tr><td><strong>{{t('modal.targetHost')}}</strong></td><td v-html="t('help.fieldTargetHost')"></td></tr>
+                <tr><td><strong>{{t('modal.sourceHostMatch')}}</strong></td><td v-html="t('help.fieldTargetHost')"></td></tr>
                 <tr><td><strong>{{t('modal.method')}}</strong></td><td>{{t('help.fieldMethod')}}</td></tr>
                 <tr><td><strong>{{t('modal.pathLabel')}}</strong></td><td v-html="t('help.fieldPath')"></td></tr>
                 <tr><td><strong>{{t('modal.statusCode')}}</strong></td><td>{{t('help.fieldStatus')}}</td></tr>
                 <tr><td><strong>{{t('modal.delay')}}</strong></td><td>{{t('help.fieldDelay')}}</td></tr>
-                <tr><td><strong>Headers</strong></td><td v-html="t('help.fieldHeaders')"></td></tr>
+                <tr><td><strong>{{t('help.headersLabel')}}</strong></td><td v-html="t('help.fieldHeaders')"></td></tr>
               </table>
             </div>
           </div>
           <!-- JMS -->
-          <div v-if="helpTab==='jms'">
+          <div v-if="helpTab==='jms'" id="help-panel-jms" role="tabpanel" aria-labelledby="help-tab-jms">
             <div class="help-section" id="jms-flow">
               <h4>{{t('help.jmsMessageFlow')}}</h4>
-              <pre class="help-diagram">┌──────────┐      ┌──────────┐      ┌──────────┐
-│ Your App │─────▶│   Echo   │─────▶│   ESB    │
-│          │ JMS  │ (Artemis)│ JMS  │(TIBCO/MQ)│
-└──────────┘      └──────────┘      └──────────┘
-                        │
-                 Match Rule?
-                 ├─ Yes → Reply Mock to ReplyTo
-                 └─ No  → Forward to ESB</pre>
+              <pre class="help-diagram">{{t('help.diagramJmsFlow')}}</pre>
             </div>
             <div class="help-section" id="jms-fields">
               <h4>{{t('help.jmsRuleFields')}}</h4>
               <table class="help-table">
-                <tr><td><strong>Queue</strong></td><td v-html="t('help.jmsFieldQueue')"></td></tr>
-                <tr><td><strong>Reply Queue</strong></td><td>{{t('help.jmsFieldReplyQueue')}}</td></tr>
+                <tr><td><strong>{{t('help.queueLabel')}}</strong></td><td v-html="t('help.jmsFieldQueue')"></td></tr>
+                <tr><td><strong>{{t('help.replyQueueLabel')}}</strong></td><td>{{t('help.jmsFieldReplyQueue')}}</td></tr>
                 <tr><td><strong>{{t('modal.delay')}}</strong></td><td>{{t('help.jmsFieldDelay')}}</td></tr>
               </table>
             </div>
             <div class="help-section" id="jms-conn">
               <h4>{{t('help.jmsConnectionInfo')}}</h4>
-              <pre class="help-code">// Java Connection Example
-ConnectionFactory cf = new ActiveMQConnectionFactory(
+              <pre class="help-code">ConnectionFactory cf = new ActiveMQConnectionFactory(
     "tcp://localhost:61616"
 );
 Connection conn = cf.createConnection();
@@ -287,24 +321,19 @@ MessageProducer producer = session.createProducer(queue);</pre>
             </div>
             <div class="help-section" id="jms-reply">
               <h4>{{t('help.jmsRequestReply')}}</h4>
-              <pre class="help-diagram">┌──────────┐  1. Send Request ┌──────────┐
-│  Client  │──────────────▶│   Echo   │
-│          │  Queue: REQ   │          │
-│          │◀──────────────│          │
-└──────────┘  2. Reply       └──────────┘
-              Queue: ReplyTo</pre>
+              <pre class="help-diagram">{{t('help.diagramJmsReply')}}</pre>
               <p class="sub-info">{{t('help.jmsReplyNote')}}</p>
             </div>
           </div>
           <!-- 條件匹配 -->
-          <div v-if="helpTab==='condition'">
+          <div v-if="helpTab==='condition'" id="help-panel-condition" role="tabpanel" aria-labelledby="help-tab-condition">
             <div class="help-section" id="cond-overview">
               <h4>{{t('help.condOverview')}}</h4>
               <p v-html="t('help.condOverviewDesc')"></p>
               <table class="help-table">
-                <tr><td><span class="cond-tag">Body</span></td><td v-html="t('help.condBody')"></td></tr>
-                <tr><td><span class="cond-tag query">Query</span></td><td v-html="t('help.condQuery')"></td></tr>
-                <tr><td><span class="cond-tag header">Header</span></td><td v-html="t('help.condHeader')"></td></tr>
+                <tr><td><span class="cond-tag">{{t('modal.condFieldBody')}}</span></td><td v-html="t('help.condBody')"></td></tr>
+                <tr><td><span class="cond-tag query">{{t('modal.condFieldQuery')}}</span></td><td v-html="t('help.condQuery')"></td></tr>
+                <tr><td><span class="cond-tag header">{{t('modal.condFieldHeader')}}</span></td><td v-html="t('help.condHeader')"></td></tr>
               </table>
               <p class="sub-info">{{t('help.jmsCondNote')}}</p>
             </div>
@@ -320,10 +349,10 @@ MessageProducer producer = session.createProducer(queue);</pre>
             </div>
             <div class="help-section" id="cond-json-basic">
               <h4>{{t('help.condJsonBasic')}}</h4>
-              <pre class="help-code">// Request Body
+              <pre class="help-code">// {{t('help.requestBodyLabel')}}
 {"type": "VIP", "name": "John", "age": 30}
 
-// Conditions
+// {{t('help.conditionsLabel')}}
 type=VIP             ✓ {{t('help.exSimpleMatch')}}
 name=John            ✓ {{t('help.exSimpleMatch')}}
 type=VIP;name=John   ✓ {{t('help.exAndMatch')}}
@@ -333,21 +362,21 @@ name~=^J.*n$         ✓ {{t('help.exRegexMatch')}}</pre>
             </div>
             <div class="help-section" id="cond-json-nested">
               <h4>{{t('help.condJsonNested')}}</h4>
-              <pre class="help-code">// Request Body
+              <pre class="help-code">// {{t('help.requestBodyLabel')}}
 {"user": {"name": "John", "address": {"city": "Taipei"}},
  "items": [{"id": 1, "name": "A"}, {"id": 2, "name": "B"}]}
 
-// Nested Object
+// {{t('help.nestedObjectLabel')}}
 user.name=John              ✓
 user.address.city=Taipei    ✓
 
-// Array Index
+// {{t('help.arrayIndexLabel')}}
 items[0].id=1               ✓
 items[1].name=B             ✓</pre>
             </div>
             <div class="help-section" id="cond-xml">
               <h4>{{t('help.condXml')}}</h4>
-              <pre class="help-code">// Request Body
+              <pre class="help-code">// {{t('help.requestBodyLabel')}}
 &lt;order id="123"&gt;
   &lt;customer&gt;&lt;name&gt;John&lt;/name&gt;&lt;/customer&gt;
   &lt;items&gt;
@@ -355,7 +384,7 @@ items[1].name=B             ✓</pre>
   &lt;/items&gt;
 &lt;/order&gt;
 
-// XPath Conditions
+// {{t('help.xpathConditionsLabel')}}
 //name=John              ✓ {{t('help.exXpathAnywhere')}}
 /order/@id=123           ✓ {{t('help.exXpathAttr')}}
 //customer/name=John     ✓ {{t('help.exXpathPath')}}
@@ -363,9 +392,9 @@ items[1].name=B             ✓</pre>
             </div>
             <div class="help-section" id="cond-query">
               <h4>{{t('help.condQuery')}}</h4>
-              <pre class="help-code">// Request: GET /api/users?page=1&size=20&sort=name
+              <pre class="help-code">// {{t('help.requestLabel')}}: GET /api/users?page=1&size=20&sort=name
 
-// Query Conditions
+// {{t('help.queryConditionsLabel')}}
 page=1               ✓
 size=20              ✓
 sort=name            ✓
@@ -373,12 +402,12 @@ page=1;size=20       ✓ {{t('help.exAndMatch')}}</pre>
             </div>
             <div class="help-section" id="cond-header">
               <h4>{{t('help.condHeaderTitle')}}</h4>
-              <pre class="help-code">// Request Headers
+              <pre class="help-code">// {{t('help.requestHeadersLabel')}}
 Authorization: Bearer eyJhbGciOi...
 Content-Type: application/json
 X-Request-Id: abc-123
 
-// Header Conditions (case-insensitive)
+// {{t('help.headerConditionsLabel')}}
 Content-Type=application/json     ✓
 Authorization*=Bearer             ✓ {{t('help.exContainsMatch')}}
 X-Request-Id~=^[a-z]+-\\d+$       ✓ {{t('help.exRegexMatch')}}
@@ -390,12 +419,11 @@ Authorization!=null               ✓ {{t('help.exNotMatch')}}</pre>
             </div>
           </div>
           <!-- 進階 -->
-          <div v-if="helpTab==='advanced'">
+          <div v-if="helpTab==='advanced'" id="help-panel-advanced" role="tabpanel" aria-labelledby="help-tab-advanced">
             <div class="help-section" id="adv-template">
               <h4>{{t('help.responseTemplate')}}</h4>
               <p v-html="t('help.responseTemplateDesc')"></p>
-              <pre class="help-code" v-pre>// Example: Dynamic Response
-{
+              <pre class="help-code" v-pre>{
   "requestId": "{{randomValue type='UUID'}}",
   "timestamp": "{{now format='yyyy-MM-dd HH:mm:ss'}}",
   "user": "{{jsonPath request.body '$.username'}}",
@@ -417,8 +445,7 @@ Authorization!=null               ✓ {{t('help.exNotMatch')}}</pre>
             <div class="help-section" id="adv-faker">
               <h4>{{t('help.fakerHelpers')}}</h4>
               <p>{{t('help.fakerHelpersDesc')}}</p>
-              <pre class="help-code" v-pre>// Example: Fake User Profile
-{
+              <pre class="help-code" v-pre>{
   "name": "{{randomFullName}}",
   "email": "{{randomEmail}}",
   "phone": "{{randomPhoneNumber}}",
@@ -441,14 +468,12 @@ Authorization!=null               ✓ {{t('help.exNotMatch')}}</pre>
             </div>
             <div class="help-section" id="adv-condloop">
               <h4>{{t('help.conditionAndLoop')}}</h4>
-              <pre class="help-code" v-pre>// Conditional
-{{#if (eq request.method 'POST')}}
+              <pre class="help-code" v-pre>{{#if (eq request.method 'POST')}}
   {"action": "created"}
 {{else}}
   {"action": "retrieved"}
 {{/if}}
 
-// Loop
 {"items": [
   {{#each (jsonPath request.body '$.items')}}
     {"id": {{this.id}}, "processed": true}{{#unless @last}},{{/unless}}
@@ -465,51 +490,18 @@ Authorization!=null               ✓ {{t('help.exNotMatch')}}</pre>
             </div>
             <div class="help-section" id="adv-priority">
               <h4>{{t('help.rulePriority')}}</h4>
-              <pre class="help-diagram">┌─────────────────────────────────────────┐
-│ Rule Sorting (higher = higher priority) │
-├─────────────────────────────────────────┤
-│ 1. priority field value                 │
-│ 2. Exact path > Wildcard (*)            │
-│ 3. Has targetHost > No targetHost       │
-│ 4. Created time (newer first)           │
-└─────────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────┐
-│ Matching Flow                           │
-│ 1. Check rules in sorted order          │
-│ 2. Has condition → match → return       │
-│ 3. No condition → mark as fallback      │
-│ 4. Return fallback if no match          │
-└─────────────────────────────────────────┘</pre>
+              <pre class="help-diagram">{{t('help.diagramPriority')}}</pre>
               <p class="sub-info">{{t('help.wildcardNote')}}</p>
             </div>
             <div class="help-section" id="adv-cache">
               <h4>{{t('help.multiInstanceCache')}}</h4>
-              <pre class="help-diagram">┌────────────┐                  ┌────────────┐
-│ Instance A │                  │ Instance B │
-│ (Caffeine) │                  │ (Caffeine) │
-└─────┬──────┘                  └─────┬──────┘
-      │ Update Rule                   │
-      ▼                               │
-┌─────────────────────────────────────────────┐
-│           cache_events table                │
-│ INSERT: RULE_CHANGED @ 20:05:01             │
-└─────────────────────────────────────────────┘
-                                      │
-                        Poll every 5s ┘
-                                      ▼
-                               Found event
-                               Clear cache</pre>
+              <pre class="help-diagram">{{t('help.diagramCache')}}</pre>
               <p class="sub-info" v-html="t('help.cacheIntervalNote')"></p>
             </div>
             <div class="help-section" id="adv-sse">
               <h4>{{t('help.sseStreaming')}}</h4>
               <p v-html="t('help.sseStreamingDesc')"></p>
-              <pre class="help-code">// SSE Event Sequence (configured in rule editor)
-Event 1: {"status": "processing"}  (delay: 0ms)
-Event 2: {"progress": 50}          (delay: 1000ms)
-Event 3: {"status": "done"}        (delay: 2000ms)</pre>
+              <pre class="help-code">{{t('help.sseSequenceExample')}}</pre>
             </div>
             <div class="help-section" id="adv-fault">
               <h4>{{t('help.faultInjection')}}</h4>

@@ -20,15 +20,14 @@
  * @param {Function} deps.loadBackupStatus - 載入備份狀態函式（來自 app.js）
  * @param {Function} deps.loadStatus - 載入系統狀態函式（來自 app.js）
  * @param {Function} deps.loadAccounts - 載入帳號清單函式（來自 useAccounts）
- * @param {Function} deps.stopAutoRefresh - 停止自動刷新函式（來自 useStats）
  * @returns {{ page: Ref, validPages: Array, parseHash: Function, updateUrl: Function, applyUrlParams: Function, setupRouterWatchers: Function }}
  */
 const useRouter = (deps) => {
     const { watch } = Vue;
-    const { page, ruleFilter, responseFilter, logFilter, auditFilter, isAdmin, loadRules, loadLogs, loadAudit, loadResponseSummary, loadBackupStatus, loadStatus, loadAccounts, stopAutoRefresh } = deps;
+    const { page, ruleFilter, responseFilter, logFilter, auditFilter, isAdmin, loadRules, loadLogs, loadAudit, loadResponseSummary, loadBackupStatus, loadStatus, loadAccounts, loadIssues } = deps;
 
     // --- 狀態 ---
-    const validPages = ['rules', 'responses', 'stats', 'audit', 'accounts', 'settings'];
+    const validPages = ['rules', 'responses', 'stats', 'audit', 'issues', 'accounts', 'settings'];
 
     /**
      * 解析目前的 hash，回傳頁面名稱與查詢參數
@@ -82,6 +81,8 @@ const useRouter = (deps) => {
             page.value = 'rules';
         } else if (targetPage === 'accounts' && !isAdmin.value) {
             page.value = 'rules';
+        } else if (targetPage === 'issues' && !deps.loadIssues) {
+            page.value = 'rules';
         } else {
             page.value = targetPage;
         }
@@ -89,8 +90,10 @@ const useRouter = (deps) => {
             ruleFilter.value.protocol = params.get('protocol') || '';
             ruleFilter.value.enabled = params.get('enabled') || '';
             ruleFilter.value.keyword = params.get('keyword') || '';
+            loadRules();
         } else if (page.value === 'responses') {
             responseFilter.value = params.get('keyword') || '';
+            loadResponseSummary();
         } else if (page.value === 'stats') {
             logFilter.value.protocol = params.get('protocol') || '';
             logFilter.value.matched = params.get('matched') || '';
@@ -103,6 +106,8 @@ const useRouter = (deps) => {
             loadAudit();
         } else if (page.value === 'accounts') {
             loadAccounts();
+        } else if (page.value === 'issues') {
+            loadIssues();
         }
         updateUrl(true);
     };
@@ -121,7 +126,7 @@ const useRouter = (deps) => {
         watch(logFilter, () => { if (page.value === 'stats') updateUrl(); }, { deep: true });
         watch(auditFilter, () => { if (page.value === 'audit') updateUrl(); }, { deep: true });
         // 頁面切換 → 載入對應資料
-        watch(page, (p, oldP) => { if (oldP === 'stats') stopAutoRefresh(); if (p === 'rules') loadRules(); if (p === 'stats') loadLogs(); if (p === 'audit') loadAudit(); if (p === 'responses') loadResponseSummary(); if (p === 'accounts') loadAccounts(); if (p === 'settings') { loadStatus(); loadBackupStatus(); } });
+        watch(page, p => { if (p === 'rules') loadRules(); if (p === 'stats') loadLogs(); if (p === 'audit') loadAudit(); if (p === 'responses') loadResponseSummary(); if (p === 'accounts') loadAccounts(); if (p === 'issues') loadIssues(); if (p === 'settings') { loadStatus(); loadBackupStatus(); } });
     };
 
     return {

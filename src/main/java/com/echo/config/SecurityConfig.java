@@ -64,6 +64,14 @@ public class SecurityConfig {
                 .requestMatchers("/api/admin/builtin-users/forgot-password", "/api/admin/builtin-users/register").permitAll()
                 // 內建帳號管理 — 僅 ADMIN
                 .requestMatchers("/api/admin/builtin-users/**").hasRole("ADMIN")
+                // JMS 轉發連線包含敏感設定 — 僅 ADMIN
+                .requestMatchers("/api/admin/jms-target-connections/**").hasRole("ADMIN")
+                .requestMatchers("/api/admin/http-target-connections/**").hasRole("ADMIN")
+                // Issue Report — 回覆/resolve/reopen/刪除 僅 ADMIN
+                .requestMatchers("/api/admin/issues/*/reply", "/api/admin/issues/*/resolve", "/api/admin/issues/*/reopen").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/admin/issues/*").hasRole("ADMIN")
+                // Issue Report — 建立/列表/查看 需登入
+                .requestMatchers("/api/admin/issues/**").authenticated()
                 // 使用者自行修改密碼 — 已登入即可
                 .requestMatchers("/api/account/change-password").authenticated()
                 // 批次操作僅 ADMIN (必須在 permitAll 之前)

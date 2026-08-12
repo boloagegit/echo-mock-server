@@ -36,6 +36,19 @@ import lombok.experimental.SuperBuilder;
 @AllArgsConstructor
 public class HttpRule extends BaseRule {
 
+    /** Existing rows with null are interpreted as MOCK for backward compatibility. */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    @lombok.Builder.Default
+    private HttpRuleAction action = HttpRuleAction.MOCK;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    @lombok.Builder.Default
+    private HttpForwardTargetMode forwardTargetMode = HttpForwardTargetMode.ORIGINAL_HOST;
+
+    private Long httpTargetConnectionId;
+
     /** 
      * 目標主機
      * <p>用於區分不同後端服務，可為空表示匹配所有主機
@@ -102,6 +115,8 @@ public class HttpRule extends BaseRule {
         if (httpStatus == null) {
             httpStatus = 200;
         }
+        if (action == null) action = HttpRuleAction.MOCK;
+        if (forwardTargetMode == null) forwardTargetMode = HttpForwardTargetMode.ORIGINAL_HOST;
     }
 
     /**

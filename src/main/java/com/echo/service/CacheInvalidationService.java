@@ -23,6 +23,7 @@ import java.util.Set;
  */
 @Service
 @ConditionalOnProperty(name = "echo.storage.mode", havingValue = "database", matchIfMissing = true)
+@ConditionalOnProperty(name = "echo.cache.sync-enabled", havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 @Slf4j
 public class CacheInvalidationService {
