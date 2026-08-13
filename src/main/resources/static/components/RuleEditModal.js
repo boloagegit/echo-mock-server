@@ -28,6 +28,11 @@ const RuleEditModal = {
         responsePickerSearch: String,
         responseDropdownOpen: Boolean,
         responsePickerSseOnly: Boolean,
+        responsePickerPage: Number,
+        responsePickerTotalElements: Number,
+        responsePickerTotalPages: Number,
+        responsePickerLoading: Boolean,
+        responsePickerError: Boolean,
         sseEvents: Array,
         ssePreview: String,
         testExpanded: Boolean,
@@ -57,6 +62,8 @@ const RuleEditModal = {
         'add-sse-event', 'remove-sse-event',
         'update:response-picker-search', 'update:response-dropdown-open',
         'update:response-picker-sse-only',
+        'open-response-picker', 'search-response-picker',
+        'change-response-picker-page', 'select-response',
         'toggle-preview-editing', 'save-preview-response', 'toggle-preview-format',
         'toggle-edit-format',
         'go-to-responses',
@@ -70,6 +77,7 @@ const RuleEditModal = {
         const { ref } = Vue;
         const t = Vue.inject('t');
         const dialogRef = ref(null);
+        const responsePickerLaunch = ref(null);
         const responsePickerInput = ref(null);
         const responsePickerActiveIndex = ref(-1);
         let previousFocus = null;
@@ -84,11 +92,12 @@ const RuleEditModal = {
             if (!dialogRef.value) return [];
             return [...dialogRef.value.querySelectorAll(
                 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])'
-            )].filter(element => element.offsetParent !== null);
+            )].filter(element => element.offsetParent !== null && !element.closest('[inert]'));
         };
         const closeResponsePicker = () => {
             responsePickerActiveIndex.value = -1;
             emit('update:response-dropdown-open', false);
+            Vue.nextTick(() => responsePickerLaunch.value?.focus());
         };
         const responseOptionId = response => response ? `rule-response-option-${String(response.id).replace(/[^a-zA-Z0-9_-]/g, '-')}` : undefined;
         const scrollActiveResponseIntoView = () => Vue.nextTick(() => {
@@ -96,15 +105,19 @@ const RuleEditModal = {
             if (response) document.getElementById(responseOptionId(response))?.scrollIntoView({ block: 'nearest' });
         });
         const openResponsePicker = () => {
-            emit('update:response-dropdown-open', true);
-            const selectedIndex = props.filteredResponsePicker.findIndex(response => response.id === props.form.responseId);
-            responsePickerActiveIndex.value = selectedIndex >= 0 ? selectedIndex : (props.filteredResponsePicker.length ? 0 : -1);
-            scrollActiveResponseIntoView();
+            responsePickerActiveIndex.value = -1;
+            emit('open-response-picker');
+        };
+        const toggleResponsePicker = () => {
+            if (props.responseDropdownOpen) closeResponsePicker();
+            else {
+                openResponsePicker();
+                Vue.nextTick(() => responsePickerInput.value?.focus());
+            }
         };
         const selectResponse = response => {
             if (!response) return;
-            props.form.responseId = response.id;
-            emit('update:response-picker-search', '');
+            emit('select-response', response);
             closeResponsePicker();
         };
         const moveResponsePicker = direction => {
@@ -135,6 +148,9 @@ const RuleEditModal = {
             } else if (event.key === 'Enter' && props.responseDropdownOpen && responsePickerActiveIndex.value >= 0) {
                 event.preventDefault();
                 selectResponse(props.filteredResponsePicker[responsePickerActiveIndex.value]);
+            } else if (event.key === 'Enter' && props.responseDropdownOpen) {
+                event.preventDefault();
+                emit('search-response-picker');
             } else if (event.key === 'Escape' && props.responseDropdownOpen) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -143,12 +159,15 @@ const RuleEditModal = {
         };
         const onResponseSearchInput = event => {
             emit('update:response-picker-search', event.target.value);
-            if (!props.responseDropdownOpen) openResponsePicker();
+            responsePickerActiveIndex.value = -1;
         };
         const clearResponseSearch = () => {
             emit('update:response-picker-search', '');
-            responsePickerInput.value?.focus();
-            openResponsePicker();
+            responsePickerActiveIndex.value = -1;
+            Vue.nextTick(() => {
+                responsePickerInput.value?.focus();
+                emit('search-response-picker');
+            });
         };
         const onDialogKeydown = event => {
             if (event.key === 'Escape') {
@@ -451,8 +470,8 @@ const RuleEditModal = {
             if (previousFocus instanceof HTMLElement && document.contains(previousFocus)) previousFocus.focus();
         });
         return {
-            dialogRef, responsePickerInput, responsePickerActiveIndex,
-            responseOptionId, openResponsePicker, closeResponsePicker, selectResponse,
+            dialogRef, responsePickerLaunch, responsePickerInput, responsePickerActiveIndex,
+            responseOptionId, openResponsePicker, closeResponsePicker, toggleResponsePicker, selectResponse,
             onResponsePickerKeydown, onResponseSearchInput, clearResponseSearch, onDialogKeydown,
             selectedResponse, forwardSelection, availableHttpTargetConnections, defaultHttpTargetConnection,
             availableJmsTargetConnections, defaultJmsTargetConnection, targetDisplayName,
@@ -737,6 +756,7 @@ const RuleEditModal = {
                     @keydown.right.prevent="resizeSplitterBy(0.02)"></div>
                 <!-- 右側：規則命中後的處理模式與對應設定 -->
                 <div class="rule-right">
+                    <div class="rule-right-content" :inert="responseDropdownOpen ? '' : null" :aria-hidden="responseDropdownOpen ? 'true' : undefined">
                     <div class="result-primary-row">
                         <div class="rule-pane-heading">
                             <span class="rule-pane-heading-icon"><i class="bi bi-sign-turn-right"></i></span>
@@ -939,43 +959,13 @@ const RuleEditModal = {
                             </div>
                         </div>
                         <div v-if="form.responseMode==='existing'" class="response-existing-panel" :class="{'has-selection':form.responseId}">
-                            <!-- 搜尋與篩選 -->
-                            <div class="response-select-wrapper">
-                                <div class="response-picker-heading">
-                                    <label for="ruleResponsePickerInput">{{t('modal.responsePickerLabel')}}</label>
-                                    <span>{{t('modal.responsesAvailable', {count: filteredResponsePicker.length})}}</span>
-                                </div>
-                                <div class="response-picker-control" :class="{'is-open':responseDropdownOpen}">
-                                    <i class="bi bi-search response-picker-search-icon" aria-hidden="true"></i>
-                                    <div class="response-picker-filters" role="group" :aria-label="t('modal.responseTypeFilter')">
-                                        <button type="button" class="response-picker-filter" :class="{'is-selected':!responsePickerSseOnly}" :aria-pressed="!responsePickerSseOnly" @click="$emit('update:response-picker-sse-only',false)">{{t('modal.all')}}</button>
-                                        <button type="button" class="response-picker-filter" :class="{'is-selected':responsePickerSseOnly}" :aria-pressed="responsePickerSseOnly" @click="$emit('update:response-picker-sse-only',true)">SSE</button>
-                                    </div>
-                                    <input id="ruleResponsePickerInput" ref="responsePickerInput" class="response-picker-input" role="combobox" aria-autocomplete="list" aria-controls="ruleResponsePickerList" :aria-expanded="responseDropdownOpen" :aria-activedescendant="responseDropdownOpen && responsePickerActiveIndex >= 0 ? responseOptionId(filteredResponsePicker[responsePickerActiveIndex]) : undefined" :value="responsePickerSearch" @input="onResponseSearchInput" @focus="openResponsePicker" @click="openResponsePicker" @keydown="onResponsePickerKeydown" :placeholder="t('modal.searchResponse')">
-                                    <button v-if="responsePickerSearch" type="button" class="response-picker-clear" @click="clearResponseSearch" :aria-label="t('modal.clearSearch')" :title="t('modal.clearSearch')"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
-                                    <i class="bi bi-chevron-down response-picker-chevron" :class="{'is-open':responseDropdownOpen}" aria-hidden="true"></i>
-                                </div>
-                                <div v-if="responseDropdownOpen" id="ruleResponsePickerList" class="response-dropdown" role="listbox" :aria-label="t('modal.responsePickerResults')">
-                                    <div v-for="(r,index) in filteredResponsePicker" :id="responseOptionId(r)" :key="r.id" role="option" :aria-selected="form.responseId===r.id" @mouseenter="responsePickerActiveIndex=index" @mousedown.prevent="selectResponse(r)" class="response-dropdown-item" :class="{selected:form.responseId===r.id,active:responsePickerActiveIndex===index}">
-                                        <div class="response-dropdown-row1">
-                                            <i class="bi response-dropdown-check" :class="form.responseId===r.id?'bi-check-lg':'bi-circle'" aria-hidden="true"></i>
-                                            <span class="response-dropdown-desc">{{r.description||t('responses.noDescription')}}</span>
-                                            <span v-if="r.contentType==='SSE'" class="response-type-label">SSE</span>
-                                        </div>
-                                        <div class="response-dropdown-row2">
-                                            <code>#{{r.id}}</code>
-                                            <span>{{fmtSize(r.bodySize||0)}}</span>
-                                            <span v-if="r.usageCount">· {{t('modal.rulesUsing', {count: r.usageCount})}}</span>
-                                            <span v-if="r.updatedAt">· {{fmtTime(r.updatedAt)}}</span>
-                                        </div>
-                                    </div>
-                                    <div v-if="!filteredResponsePicker.length" class="response-empty">{{t('modal.noMatchingResponse')}}</div>
-                                </div>
+                            <div class="response-picker-heading">
+                                <strong>{{t('modal.responsePickerLabel')}}</strong>
                             </div>
                             <!-- 已選擇的回應 -->
                             <div v-if="form.responseId" class="response-selected-card">
+                                <span class="response-selected-label"><i class="bi bi-check-circle-fill" aria-hidden="true"></i>{{t('modal.currentSelection')}}</span>
                                 <div class="response-selected-content">
-                                    <span class="response-selected-label"><i class="bi bi-check-circle-fill" aria-hidden="true"></i>{{t('modal.currentSelection')}}</span>
                                     <strong class="response-selected-desc">{{selectedResponse?.description||t('responses.noDescription')}}</strong>
                                     <div class="response-selected-meta">
                                         <code>#{{form.responseId}}</code>
@@ -983,14 +973,22 @@ const RuleEditModal = {
                                         <span>{{fmtSize(selectedResponse?.bodySize||0)}}</span>
                                         <span v-if="selectedResponse?.usageCount">{{t('modal.rulesUsing', {count: selectedResponse.usageCount})}}</span>
                                     </div>
-                                    <span v-if="(selectedResponse?.usageCount||previewResponseUsageCount) > 1" class="response-shared-warning" :title="t('modal.modifyAffectsAll')"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>{{t('modal.sharedCount', {count: selectedResponse?.usageCount||previewResponseUsageCount})}}</span>
-                                    <span v-if="form.sseEnabled && selectedResponse?.contentType!=='SSE'" class="response-shared-warning" :title="t('modal.notSseTooltip')"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>{{t('modal.notSse')}}</span>
+                                    <div v-if="(selectedResponse?.usageCount||previewResponseUsageCount) > 1 || (form.sseEnabled && selectedResponse?.contentType!=='SSE')" class="response-selection-warnings">
+                                        <span v-if="(selectedResponse?.usageCount||previewResponseUsageCount) > 1" class="response-shared-warning" :title="t('modal.modifyAffectsAll')"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>{{t('modal.sharedCount', {count: selectedResponse?.usageCount||previewResponseUsageCount})}}</span>
+                                        <span v-if="form.sseEnabled && selectedResponse?.contentType!=='SSE'" class="response-shared-warning" :title="t('modal.notSseTooltip')"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>{{t('modal.notSse')}}</span>
+                                    </div>
                                 </div>
                                 <div class="response-selected-actions">
+                                    <button ref="responsePickerLaunch" type="button" class="btn btn-sm btn-secondary response-picker-change" @click="toggleResponsePicker" aria-controls="ruleResponsePickerDrawer" :aria-expanded="responseDropdownOpen">
+                                        <i class="bi bi-search" aria-hidden="true"></i>{{t('modal.searchDifferentResponseLabel')}}
+                                    </button>
                                     <button type="button" class="btn btn-sm btn-icon btn-secondary" @click="$emit('go-to-responses',form.responseId)" :title="t('modal.goToResponseManagement')" :aria-label="t('modal.goToResponseManagement')"><i class="bi bi-box-arrow-up-right"></i></button>
                                     <button type="button" class="btn btn-sm btn-icon btn-secondary" @click="$emit('clear-response-selection')" :title="t('modal.clearSelection')" :aria-label="t('modal.clearSelection')"><i class="bi bi-x-lg"></i></button>
                                 </div>
                             </div>
+                            <button v-else ref="responsePickerLaunch" type="button" class="btn btn-secondary response-picker-empty-launch" @click="toggleResponsePicker" aria-controls="ruleResponsePickerDrawer" :aria-expanded="responseDropdownOpen">
+                                <i class="bi bi-search" aria-hidden="true"></i>{{t('modal.responsePickerDrawerTitle')}}
+                            </button>
                         </div>
                         <details class="result-advanced-disclosure" :open="mockAdvancedOpen" @toggle="setMockAdvancedOpen">
                             <summary>
@@ -1179,6 +1177,53 @@ const RuleEditModal = {
                         </div>
                         <div class="sub-info scenario-transition-hint">{{t('modal.scenarioTransitionHint')}}</div>
                     </div>
+                    </div>
+                    <section v-if="responseDropdownOpen" id="ruleResponsePickerDrawer" class="response-picker-drawer" role="region" :aria-label="t('modal.responsePickerDrawerTitle')">
+                        <header class="response-picker-drawer-header">
+                            <div>
+                                <h4>{{t('modal.responsePickerDrawerTitle')}}</h4>
+                                <p>{{t('modal.responsePickerDrawerHint')}}</p>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-icon btn-secondary" @click="closeResponsePicker" :aria-label="t('modal.closeResponsePicker')" :title="t('modal.closeResponsePicker')"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+                        </header>
+                        <form class="response-picker-drawer-search" @submit.prevent="$emit('search-response-picker')">
+                            <div class="response-picker-control is-open">
+                                <i class="bi bi-search response-picker-search-icon" aria-hidden="true"></i>
+                                <input id="ruleResponsePickerInput" ref="responsePickerInput" class="response-picker-input" role="combobox" aria-autocomplete="list" aria-controls="ruleResponsePickerList" aria-expanded="true" :aria-activedescendant="responsePickerActiveIndex >= 0 ? responseOptionId(filteredResponsePicker[responsePickerActiveIndex]) : undefined" :value="responsePickerSearch" @input="onResponseSearchInput" @keydown="onResponsePickerKeydown" :placeholder="t('modal.searchResponseByNameOrId')">
+                                <button v-if="responsePickerSearch" type="button" class="response-picker-clear" @click="clearResponseSearch" :aria-label="t('modal.clearSearch')" :title="t('modal.clearSearch')"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+                            </div>
+                            <button type="submit" class="btn btn-primary response-picker-search-submit"><i class="bi bi-search" aria-hidden="true"></i>{{t('common.searchAction')}}</button>
+                        </form>
+                        <div class="response-picker-drawer-toolbar">
+                            <div class="response-picker-filters" role="group" :aria-label="t('modal.responseTypeFilter')">
+                                <button type="button" class="response-picker-filter" :class="{'is-selected':!responsePickerSseOnly}" :aria-pressed="!responsePickerSseOnly" @click="$emit('update:response-picker-sse-only',false)">{{t('modal.all')}}</button>
+                                <button type="button" class="response-picker-filter" :class="{'is-selected':responsePickerSseOnly}" :aria-pressed="responsePickerSseOnly" @click="$emit('update:response-picker-sse-only',true)">SSE</button>
+                            </div>
+                        </div>
+                        <div id="ruleResponsePickerList" class="response-picker-drawer-results" role="listbox" :aria-label="t('modal.responsePickerResults')" :aria-busy="responsePickerLoading">
+                            <div v-if="responsePickerLoading" class="response-picker-state"><span class="spinner-sm" aria-hidden="true"></span>{{t('modal.loadingResponses')}}</div>
+                            <div v-else-if="responsePickerError" class="response-picker-state is-error">
+                                <span>{{t('modal.responsePickerLoadFailed')}}</span>
+                                <button type="button" class="btn btn-sm btn-secondary" @click="$emit('search-response-picker')">{{t('common.retry')}}</button>
+                            </div>
+                            <button v-else v-for="(r,index) in filteredResponsePicker" :id="responseOptionId(r)" :key="r.id" type="button" role="option" :aria-selected="form.responseId===r.id" @mouseenter="responsePickerActiveIndex=index" @focus="responsePickerActiveIndex=index" @click="selectResponse(r)" class="response-picker-drawer-item" :class="{selected:form.responseId===r.id,active:responsePickerActiveIndex===index}">
+                                <span class="response-dropdown-check" aria-hidden="true"><i class="bi" :class="form.responseId===r.id?'bi-check-circle-fill':'bi-circle'"></i></span>
+                                <span class="response-picker-drawer-copy">
+                                    <strong>{{r.description||t('responses.noDescription')}}</strong>
+                                    <small><code>#{{r.id}}</code><span>{{r.contentType==='SSE' ? 'SSE' : t('modal.responseTypeGeneral')}}</span><span>{{fmtSize(r.bodySize||0)}}</span><span v-if="r.usageCount">{{t('modal.rulesUsing', {count: r.usageCount})}}</span><span v-if="r.updatedAt">{{fmtTime(r.updatedAt)}}</span></small>
+                                </span>
+                                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                            </button>
+                            <div v-if="!responsePickerLoading && !responsePickerError && !filteredResponsePicker.length" class="response-picker-state">{{t('modal.noMatchingResponse')}}</div>
+                        </div>
+                        <footer class="response-picker-drawer-footer">
+                            <span>{{t('modal.responsePickerPageStatus', {page:responsePickerPage + 1, total:responsePickerTotalPages || 1})}}</span>
+                            <div>
+                                <button type="button" class="btn btn-sm btn-icon btn-secondary" :disabled="responsePickerPage <= 0 || responsePickerLoading" @click="$emit('change-response-picker-page',responsePickerPage - 1)" :aria-label="t('modal.previousPage')" :title="t('modal.previousPage')"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
+                                <button type="button" class="btn btn-sm btn-icon btn-secondary" :disabled="responsePickerPage + 1 >= responsePickerTotalPages || responsePickerLoading" @click="$emit('change-response-picker-page',responsePickerPage + 1)" :aria-label="t('modal.nextPage')" :title="t('modal.nextPage')"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+                            </div>
+                        </footer>
+                    </section>
                 </div>
             </div>
             <slot v-else name="declarative"></slot>
