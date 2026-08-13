@@ -99,6 +99,81 @@ class RuleEditModalResourceTest {
     }
 
     @Test
+    void rendersExistingResponseSelectionBeforeTheServerPagedDrawer() throws IOException {
+        String component = resourceText("static/components/RuleEditModal.js");
+        int existingPanel = component.indexOf("class=\"response-existing-panel\"");
+        int selectedSummary = component.indexOf("class=\"response-selected-card\"", existingPanel);
+        int drawerLaunch = component.indexOf("class=\"btn btn-sm btn-secondary response-picker-change\"", existingPanel);
+        int drawer = component.indexOf("id=\"ruleResponsePickerDrawer\"", drawerLaunch);
+
+        assertThat(existingPanel).isGreaterThanOrEqualTo(0);
+        assertThat(selectedSummary).isGreaterThan(existingPanel).isLessThan(drawerLaunch);
+        assertThat(component.substring(existingPanel, drawerLaunch))
+                .contains("t('modal.currentSelection')")
+                .contains("response-selected-actions");
+        assertThat(drawer).isGreaterThan(drawerLaunch);
+        assertThat(component.substring(drawerLaunch))
+                .contains("modal.searchDifferentResponseLabel")
+                .contains("class=\"response-picker-drawer\"")
+                .contains("@click=\"toggleResponsePicker\"")
+                .contains("aria-controls=\"ruleResponsePickerDrawer\"")
+                .contains("@submit.prevent=\"$emit('search-response-picker')\"")
+                .contains("@click=\"$emit('change-response-picker-page',responsePickerPage + 1)\"")
+                .contains("modal.closeResponsePicker")
+                .contains(":aria-expanded=\"responseDropdownOpen\"");
+        assertThat(component)
+                .doesNotContain("t('modal.responsesAvailable'")
+                .contains("v-else ref=\"responsePickerLaunch\"")
+                .contains("class=\"rule-right-content\" :inert=\"responseDropdownOpen ? '' : null\"")
+                .contains(":aria-hidden=\"responseDropdownOpen ? 'true' : undefined\"")
+                .contains("!element.closest('[inert]')")
+                .contains("if (props.responseDropdownOpen) closeResponsePicker();")
+                .contains("Vue.nextTick(() => responsePickerInput.value?.focus());")
+                .doesNotContain("class=\"modal-overlay response-picker");
+    }
+
+    @Test
+    void loadsResponsePickerWithServerSideSearchAndPagination() throws IOException {
+        String composable = resourceText("static/composables/useRuleForm.js");
+
+        assertThat(composable)
+                .contains("const responsePickerPageSize = 20;")
+                .contains("page: String(page)")
+                .contains("size: String(responsePickerPageSize)")
+                .contains("params.set('keyword', responsePickerAppliedSearch.value.trim())")
+                .contains("params.set('contentType', 'SSE')")
+                .contains("/api/admin/responses/summary?${params.toString()}")
+                .contains("responsePickerResults.value = data.results || []")
+                .contains("responsePickerTotalElements.value = Number(data.totalElements || 0)")
+                .contains("responsePickerAbortController?.abort()");
+    }
+
+    @Test
+    void appliesDensityTokensToRuleEditorChromeAndControls() throws IOException {
+        String stylesheet = resourceText("static/style.css");
+
+        assertThat(stylesheet)
+                .contains("--control-h: 38px;")
+                .contains("--control-h: 34px; --control-h-sm: 30px;")
+                .contains("--control-h: 42px; --control-h-sm: 36px;")
+                .contains("--editor-section-py: 6px; --editor-field-gap: 6px;")
+                .contains("--editor-section-py: 14px; --editor-field-gap: 12px;")
+                .contains("--editor-content-min-h: 380px;")
+                .contains("--editor-content-min-h: 460px;")
+                .contains("min-height: var(--control-h);")
+                .contains("min-height: var(--modal-header-h);")
+                .contains("min-height: var(--modal-footer-h);")
+                .contains("padding-inline-end: var(--editor-pane-inline)")
+                .contains("padding-inline-start: var(--editor-pane-inline)")
+                .contains("min-height: var(--editor-selection-h)")
+                .contains("padding: var(--editor-selection-py) var(--editor-selection-px)")
+                .contains("padding-block: var(--editor-toolbar-padding)")
+                .contains("gap: var(--editor-field-gap);")
+                .contains("padding: var(--editor-field-gap) var(--editor-selection-px);")
+                .contains("padding: 0 var(--editor-selection-px) var(--editor-field-gap);");
+    }
+
+    @Test
     void localizesRuleModeAndFaultPanelCopy() throws IOException {
         JsonNode zh = OBJECT_MAPPER.readTree(resourceText("static/i18n/zh-TW.json")).path("modal");
         JsonNode en = OBJECT_MAPPER.readTree(resourceText("static/i18n/en.json")).path("modal");

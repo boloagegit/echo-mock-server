@@ -23,8 +23,6 @@
  * @param {import('vue').Ref} deps.rulePreviewCache - 規則預覽快取（來自 useRules）
  * @param {import('vue').Ref} deps.rulePreviewExpanded - 規則預覽展開狀態（來自 useRules）
  * @param {Function} deps.rulesMarkDirty - 標記規則資料需重新載入（來自 useRules）
- * @param {Function} deps.loadResponseSummary - 載入回應摘要函式（來自 useResponses）
- * @param {import('vue').Ref} deps.responseSummary - 回應摘要列表（來自 useResponses）
  * @param {Function} deps.responsesMarkDirty - 標記回應資料需重新載入（來自 useResponses）
  * @param {import('vue').Ref} deps.responseSseEvents - 回應 SSE 事件（來自 useResponses）
  * @param {Function} deps.renderEditor - 渲染編輯器函式（來自 useEditor）
@@ -43,7 +41,7 @@ const useRuleForm = (deps) => {
     const { ref, computed, watch } = Vue;
     const { showToast, showConfirm, t, requireLogin, login,
             loadRules, rulePreviewCache, rulePreviewExpanded, rulesMarkDirty,
-            loadResponseSummary, responseSummary, responsesMarkDirty, responseSseEvents,
+            responsesMarkDirty, responseSseEvents,
             renderEditor, editEditorRef, editFormatted, previewEditorRef, previewFormatted,
             responseFormEditorRef, responseFormFormatted } = deps;
 
@@ -244,21 +242,96 @@ const useRuleForm = (deps) => {
 
     // --- 回應選擇器 ---
     const responsePickerSearch = ref('');
+    const responsePickerAppliedSearch = ref('');
     const responseDropdownOpen = ref(false);
     const responsePickerSseOnly = ref(false);
-    const filteredResponsePicker = computed(() => {
-        let list = responseSummary.value;
-        if (responsePickerSseOnly.value) { list = list.filter(r => r.contentType === 'SSE'); }
-        if (responsePickerSearch.value) {
-            const keywords = responsePickerSearch.value.toLowerCase().split(/\s+/).filter(k => k);
-            list = list.filter(r => matchAll(String(r.id) + ' ' + (r.description || '').toLowerCase(), keywords));
-        }
-        return [...list].sort((a, b) => {
-            const ta = a.updatedAt || a.createdAt || '';
-            const tb = b.updatedAt || b.createdAt || '';
-            return tb.localeCompare(ta);
-        });
+    const responsePickerResults = ref([]);
+    const responsePickerPage = ref(0);
+    const responsePickerPageSize = 20;
+    const responsePickerTotalElements = ref(0);
+    const responsePickerTotalPages = ref(0);
+    const responsePickerLoading = ref(false);
+    const responsePickerError = ref(false);
+    const selectedResponseSummary = ref(null);
+    let responsePickerRequestSequence = 0;
+    let responsePickerAbortController = null;
+
+    const filteredResponsePicker = computed(() => responsePickerResults.value);
+    const responsePickerSummary = computed(() => {
+        const selected = selectedResponseSummary.value;
+        if (!selected) return responsePickerResults.value;
+        return responsePickerResults.value.some(response => response.id === selected.id)
+            ? responsePickerResults.value
+            : [selected, ...responsePickerResults.value];
     });
+
+    const loadResponsePicker = async (requestedPage = responsePickerPage.value) => {
+        const requestId = ++responsePickerRequestSequence;
+        responsePickerAbortController?.abort();
+        const abortController = new AbortController();
+        responsePickerAbortController = abortController;
+        responsePickerLoading.value = true;
+        responsePickerError.value = false;
+        const page = Math.max(0, Number(requestedPage) || 0);
+        const params = new URLSearchParams({
+            page: String(page),
+            size: String(responsePickerPageSize),
+            sort: 'updatedAt',
+            direction: 'desc'
+        });
+        if (responsePickerAppliedSearch.value.trim()) params.set('keyword', responsePickerAppliedSearch.value.trim());
+        if (responsePickerSseOnly.value) params.set('contentType', 'SSE');
+        try {
+            const response = await apiCall(`/api/admin/responses/summary?${params.toString()}`, { signal: abortController.signal }, { silent: true });
+            if (requestId !== responsePickerRequestSequence) return false;
+            if (!response || !response.ok) {
+                responsePickerError.value = true;
+                return false;
+            }
+            const data = await response.json();
+            if (requestId !== responsePickerRequestSequence) return false;
+            responsePickerResults.value = data.results || [];
+            responsePickerPage.value = Number(data.page || 0);
+            responsePickerTotalElements.value = Number(data.totalElements || 0);
+            responsePickerTotalPages.value = Number(data.totalPages || 0);
+            return true;
+        } catch (error) {
+            if (error?.name !== 'AbortError' && requestId === responsePickerRequestSequence) responsePickerError.value = true;
+            return false;
+        } finally {
+            if (requestId === responsePickerRequestSequence) {
+                responsePickerLoading.value = false;
+                if (responsePickerAbortController === abortController) responsePickerAbortController = null;
+            }
+        }
+    };
+
+    const openResponsePickerDrawer = () => {
+        responseDropdownOpen.value = true;
+        loadResponsePicker(0);
+    };
+    const submitResponsePickerSearch = () => {
+        responsePickerAppliedSearch.value = responsePickerSearch.value.trim();
+        loadResponsePicker(0);
+    };
+    const setResponsePickerSseOnly = value => {
+        responsePickerSseOnly.value = Boolean(value);
+        loadResponsePicker(0);
+    };
+    const changeResponsePickerPage = page => loadResponsePicker(page);
+    const selectResponseOption = response => {
+        if (!response) return;
+        selectedResponseSummary.value = response;
+        form.value.responseId = response.id;
+        responseDropdownOpen.value = false;
+        responsePickerSearch.value = '';
+        responsePickerAppliedSearch.value = '';
+    };
+    const clearResponseSelection = () => {
+        form.value.responseId = null;
+        selectedResponseSummary.value = null;
+        sseEvents.value = [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }];
+    };
 
     // --- 回應預覽 ---
     const previewResponseId = ref(null);
@@ -514,7 +587,9 @@ const useRuleForm = (deps) => {
 
     const onResponseModeChange = () => {
         if (form.value.responseMode === 'existing') {
-            responsePickerSearch.value = ''; loadResponseSummary();
+            responsePickerSearch.value = '';
+            responsePickerAppliedSearch.value = '';
+            loadResponsePicker(0);
         }
         responseDropdownOpen.value = false;
     };
@@ -558,7 +633,6 @@ const useRuleForm = (deps) => {
         formErrors.value = {};
         catchAllConfirmed.value = false;
         showCatchAllWarning.value = false;
-        loadResponseSummary();
         loadTargetConnectionsForProtocol();
         showModal.value = true;
     };
@@ -573,7 +647,6 @@ const useRuleForm = (deps) => {
         showCatchAllWarning.value = false;
         sseEvents.value = (r.sseEnabled && r.responseBody) ? deserializeSseEvents(r.responseBody) : [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }];
         parseConditions(r);
-        loadResponseSummary();
         loadTargetConnectionsForProtocol();
         showModal.value = true;
     };
@@ -604,7 +677,6 @@ const useRuleForm = (deps) => {
         formErrors.value = {};
         catchAllConfirmed.value = false;
         showCatchAllWarning.value = false;
-        loadResponseSummary();
         loadTargetConnectionsForProtocol();
         showModal.value = true;
     };
@@ -628,12 +700,23 @@ const useRuleForm = (deps) => {
         conditions.value = [];
         sseEvents.value = (r.sseEnabled && r.responseBody) ? deserializeSseEvents(r.responseBody) : [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }];
         parseConditions(r);
-        loadResponseSummary();
+        if (form.value.responseMode === 'existing') loadResponsePicker(0);
         loadTargetConnectionsForProtocol();
         showModal.value = true;
     };
 
     const closeModal = () => {
+        responsePickerAbortController?.abort();
+        responsePickerAbortController = null;
+        responseDropdownOpen.value = false;
+        responsePickerSearch.value = '';
+        responsePickerAppliedSearch.value = '';
+        responsePickerResults.value = [];
+        responsePickerPage.value = 0;
+        responsePickerTotalElements.value = 0;
+        responsePickerTotalPages.value = 0;
+        responsePickerError.value = false;
+        selectedResponseSummary.value = null;
         showModal.value = false;
         editing.value = null;
         form.value = resetForm();
@@ -683,7 +766,7 @@ const useRuleForm = (deps) => {
         // 使用現有 Response 時：若正在編輯回應內容，先自動儲存
         const faulting = form.value.faultType && form.value.faultType !== 'NONE';
         if (!faulting && form.value.action !== 'FORWARD' && form.value.responseMode === 'existing' && form.value.responseId && previewEditing.value && previewEditBody.value !== previewResponseBody.value) {
-            const resp = responseSummary.value.find(r => r.id === form.value.responseId);
+            const resp = selectedResponseSummary.value;
             const rr = await apiCall(`/api/admin/responses/${form.value.responseId}`, { method: 'PUT', body: JSON.stringify({ description: resp?.description || '', body: previewEditBody.value }) }, { errorMsg: t('toast.responseSaveFailed') });
             if (!rr || !rr.ok) { saving.value = false; showToast(t('toast.responseSaveFailed'), 'error'); return; }
             previewResponseBody.value = previewEditBody.value;
@@ -771,7 +854,7 @@ const useRuleForm = (deps) => {
         if (!rid) return;
         previewSaving.value = true;
         try {
-            const resp = responseSummary.value.find(r => r.id === rid);
+            const resp = selectedResponseSummary.value;
             const payload = { description: resp?.description || '', body: previewEditBody.value };
             const r = await apiCall(`/api/admin/responses/${rid}`, { method: 'PUT', body: JSON.stringify(payload) }, { errorMsg: t('toast.responseSaveFailed') });
             if (r && r.ok) {
@@ -782,7 +865,7 @@ const useRuleForm = (deps) => {
                 renderEditor('preview', previewEditorRef, previewResponseBody.value, true);
                 responsesMarkDirty();
                 rulePreviewCache.value = {};
-                loadResponseSummary(true);
+                loadResponsePicker(responsePickerPage.value);
             }
         } catch { showToast(t('toast.responseSaveFailed'), 'error'); }
         previewSaving.value = false;
@@ -798,15 +881,31 @@ const useRuleForm = (deps) => {
         previewResponseLoading.value = Boolean(id);
         previewResponseLoadFailed.value = false;
         previewResponseBody.value = '';
-        if (!id) return;
+        if (!id) {
+            selectedResponseSummary.value = null;
+            return;
+        }
         try {
-            const response = await apiCall(`/api/admin/responses/${id}`, {}, { silent: true });
+            const [response, rulesResponse] = await Promise.all([
+                apiCall(`/api/admin/responses/${id}`, {}, { silent: true }),
+                apiCall(`/api/admin/responses/${id}/rules`, {}, { silent: true })
+            ]);
             if (sequence !== previewLoadSequence || form.value.responseId !== id) return;
             if (!response || !response.ok) {
                 previewResponseLoadFailed.value = true;
                 return;
             }
             const data = await response.json();
+            const rules = rulesResponse?.ok ? await rulesResponse.json() : [];
+            selectedResponseSummary.value = {
+                id: data.id,
+                description: data.description || '',
+                bodySize: Number(data.bodySize || 0),
+                contentType: data.contentType,
+                usageCount: Array.isArray(rules) ? rules.length : 0,
+                createdAt: data.createdAt,
+                updatedAt: data.updatedAt
+            };
             previewResponseBody.value = typeof data.body === 'string' ? data.body : '';
             previewResponseId.value = id;
             if (form.value.sseEnabled && previewResponseBody.value) {
@@ -921,8 +1020,13 @@ const useRuleForm = (deps) => {
         });
     };
 
-    // --- 回應 dropdown 關閉 ---
-    const closeResponseDropdown = e => { if (!e.target.closest('.response-select-wrapper')) responseDropdownOpen.value = false; };
+    // --- 回應選擇抽屜關閉 ---
+    const closeResponseDropdown = e => {
+        if (!responseDropdownOpen.value) return;
+        if (!e.target.closest('.response-picker-drawer, .response-picker-change, .response-picker-empty-launch')) {
+            responseDropdownOpen.value = false;
+        }
+    };
 
     return {
         // 表單狀態
@@ -949,7 +1053,11 @@ const useRuleForm = (deps) => {
         previewSaving, togglePreviewEditing, savePreviewResponse,
         // 回應選擇器
         responsePickerSearch, responseDropdownOpen, filteredResponsePicker,
-        responsePickerSseOnly,
+        responsePickerSseOnly, responsePickerSummary,
+        responsePickerPage, responsePickerTotalElements, responsePickerTotalPages,
+        responsePickerLoading, responsePickerError,
+        openResponsePickerDrawer, submitResponsePickerSearch,
+        setResponsePickerSseOnly, changeResponsePickerPage, selectResponseOption, clearResponseSelection,
         // 表單輔助
         newTag, addTag, removeTag, newHeader, addHeader, removeHeader,
         // SSE 回應預覽
@@ -960,7 +1068,7 @@ const useRuleForm = (deps) => {
         togglePreviewFormat, toggleEditFormat,
         // watchers
         setupFormWatchers,
-        // 回應 dropdown 關閉
+        // 回應選擇抽屜關閉
         closeResponseDropdown
     };
 };
