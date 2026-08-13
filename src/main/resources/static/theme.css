@@ -6,12 +6,12 @@
 /* 深色主題（預設） */
 :root {
     color-scheme: dark;
-    --bg: #0d1117;
-    --card: #161b22;
-    --border: #30363d;
-    --border2: #3d4a5c;
-    --primary: #818cf8;
-    --primary-rgb: 129, 140, 248;
+    --bg: #0b1016;
+    --card: #151b23;
+    --border: #2a3441;
+    --border2: #3b4859;
+    --primary: #8b93ff;
+    --primary-rgb: 139, 147, 255;
     --success: #3fb950;
     --success-rgb: 63, 185, 80;
     --warning: #f0b429;
@@ -19,26 +19,26 @@
     --danger: #f85149;
     --danger-rgb: 248, 81, 73;
     --danger-text: #ff8882;
-    --text: #e6edf3;
-    --muted: #9ca3af;
-    --muted-rgb: 139, 148, 158;
+    --text: #edf2f7;
+    --muted: #a6b0bd;
+    --muted-rgb: 166, 176, 189;
     --purple: #a371f7;
     --purple-rgb: 163, 113, 247;
-    --hover: #21262d;
-    --code-bg: #1f2428;
-    --btn-primary: #4f46e5;
-    --btn-primary-rgb: 79, 70, 229;
+    --hover: #202832;
+    --code-bg: #111821;
+    --btn-primary: #5148e5;
+    --btn-primary-rgb: 81, 72, 229;
 }
 
 /* 淺色主題 */
 :root[data-theme="light"] {
     color-scheme: light;
-    --bg: #f4f6f8;
-    --card: #ffffff;
-    --border: #dfe3e8;
-    --border2: #c9d0d8;
-    --primary: #4338ca;
-    --primary-rgb: 67, 56, 202;
+    --bg: #dde4ea;
+    --card: #eef2f5;
+    --border: #c3cdd7;
+    --border2: #b3bfcb;
+    --primary: #4940cc;
+    --primary-rgb: 73, 64, 204;
     --success: #166534;
     --success-rgb: 22, 101, 52;
     --warning: #854d0e;
@@ -46,13 +46,13 @@
     --danger: #cf222e;
     --danger-rgb: 207, 34, 46;
     --danger-text: #b91c28;
-    --text: #20252c;
-    --muted: #626b78;
-    --muted-rgb: 98, 107, 120;
+    --text: #202a35;
+    --muted: #596574;
+    --muted-rgb: 89, 101, 116;
     --purple: #6d28d9;
     --purple-rgb: 109, 40, 217;
-    --hover: #f0f2f5;
-    --code-bg: #f3f5f7;
-    --btn-primary: #4f46e5;
-    --btn-primary-rgb: 79, 70, 229;
+    --hover: #d4dde5;
+    --code-bg: #e2e8ed;
+    --btn-primary: #5148e5;
+    --btn-primary-rgb: 81, 72, 229;
 }

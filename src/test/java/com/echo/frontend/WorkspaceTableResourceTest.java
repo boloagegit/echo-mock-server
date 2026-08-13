@@ -31,7 +31,8 @@ class WorkspaceTableResourceTest {
         String audit = resourceText("static/components/AuditPage.js");
 
         assertThat(stylesheet)
-                .contains(".col-datetime { width: 120px; font-variant-numeric: tabular-nums }")
+                .contains(".col-datetime { width: 132px; font-variant-numeric: tabular-nums }")
+                .contains(".col-priority { width: 88px; text-align: center; white-space: nowrap }")
                 .contains("td.col-datetime .sub-info")
                 .contains("text-overflow: clip")
                 .contains(".table-date-stack");

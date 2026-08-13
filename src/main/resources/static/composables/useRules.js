@@ -365,8 +365,7 @@ const useRules = (deps) => {
                 const r = await apiCall('/api/admin/rules/import-excel', { method: 'POST', body: formData }, { silent: true });
                 if (r && r.ok) { const d = await r.json(); showToast(t('toast.importSuccess', {count: d.imported}), 'success'); markDirty(); loadRules(true); showImportModal.value = false; }
                 else {
-                    const error = r ? await r.json().catch(() => ({})) : {};
-                    deps.loading.value.importError = error.error || (r ? t('modal.importRequestFailed') : t('toast.networkError'));
+                    deps.loading.value.importError = r ? t('modal.importRequestFailed') : t('toast.networkError');
                     showToast(deps.loading.value.importError, 'error');
                 }
             }

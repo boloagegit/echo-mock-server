@@ -463,10 +463,10 @@ const SettingsPage = {
                 </div>
               </div>
               <div class="connection-actions">
-                <button class="btn btn-xs btn-secondary" @click="testHttpTarget(target)" :disabled="httpTargetTestingId===target.id"><i class="bi bi-plug" :class="{'spin':httpTargetTestingId===target.id}"></i> {{t('settings.httpTargetTest')}}</button>
-                <button v-if="!target.defaultConnection" class="btn btn-xs btn-secondary" @click="makeDefaultHttpTarget(target)" :disabled="!target.enabled"><i class="bi bi-check-circle"></i> {{t('settings.httpTargetSetDefault')}}</button>
-                <button class="btn btn-xs btn-secondary" @click="openEditHttpTarget(target)"><i class="bi bi-pencil"></i> {{t('rules.edit')}}</button>
-                <button class="btn btn-xs btn-outline-danger" @click="deleteHttpTarget(target)" :disabled="target.defaultConnection" :title="target.defaultConnection?t('settings.defaultConnectionDeleteDisabled'):t('rules.delete')"><i class="bi bi-trash"></i> {{t('rules.delete')}}</button>
+                <button class="btn btn-xs btn-secondary connection-action-test" @click="testHttpTarget(target)" :disabled="httpTargetTestingId===target.id"><i class="bi bi-plug" :class="{'spin':httpTargetTestingId===target.id}"></i> {{t('settings.httpTargetTest')}}</button>
+                <button v-if="!target.defaultConnection" class="btn btn-xs btn-secondary connection-action-default" @click="makeDefaultHttpTarget(target)" :disabled="!target.enabled"><i class="bi bi-check-circle"></i> {{t('settings.httpTargetSetDefault')}}</button>
+                <button class="btn btn-xs btn-secondary connection-action-edit" @click="openEditHttpTarget(target)"><i class="bi bi-pencil"></i> {{t('rules.edit')}}</button>
+                <button class="btn btn-xs btn-outline-danger connection-action-delete" @click="deleteHttpTarget(target)" :disabled="target.defaultConnection" :title="target.defaultConnection?t('settings.defaultConnectionDeleteDisabled'):t('rules.delete')"><i class="bi bi-trash"></i> {{t('rules.delete')}}</button>
               </div>
             </div>
             <div class="connection-guidance">
@@ -507,10 +507,10 @@ const SettingsPage = {
                 </div>
               </div>
               <div class="connection-actions">
-                <button class="btn btn-xs btn-secondary" @click="testJmsTarget(target)" :disabled="jmsTargetTestingId===target.id"><i class="bi bi-plug" :class="{'spin':jmsTargetTestingId===target.id}"></i> {{t('settings.jmsTargetTest')}}</button>
-                <button v-if="!target.legacy&&!target.defaultConnection" class="btn btn-xs btn-secondary" @click="makeDefaultJmsTarget(target)" :disabled="!target.enabled"><i class="bi bi-check-circle"></i> {{t(yamlJmsTargetConfigured?'settings.jmsTargetSetFallbackDefault':'settings.jmsTargetSetDefault')}}</button>
-                <button v-if="!target.legacy" class="btn btn-xs btn-secondary" @click="openEditJmsTarget(target)"><i class="bi bi-pencil"></i> {{t('rules.edit')}}</button>
-                <button v-if="!target.legacy" class="btn btn-xs btn-outline-danger" @click="deleteJmsTarget(target)" :disabled="target.defaultConnection" :title="target.defaultConnection?t('settings.defaultConnectionDeleteDisabled'):t('rules.delete')"><i class="bi bi-trash"></i> {{t('rules.delete')}}</button>
+                <button class="btn btn-xs btn-secondary connection-action-test" @click="testJmsTarget(target)" :disabled="jmsTargetTestingId===target.id"><i class="bi bi-plug" :class="{'spin':jmsTargetTestingId===target.id}"></i> {{t('settings.jmsTargetTest')}}</button>
+                <button v-if="!target.legacy&&!target.defaultConnection" class="btn btn-xs btn-secondary connection-action-default" @click="makeDefaultJmsTarget(target)" :disabled="!target.enabled"><i class="bi bi-check-circle"></i> {{t(yamlJmsTargetConfigured?'settings.jmsTargetSetFallbackDefault':'settings.jmsTargetSetDefault')}}</button>
+                <button v-if="!target.legacy" class="btn btn-xs btn-secondary connection-action-edit" @click="openEditJmsTarget(target)"><i class="bi bi-pencil"></i> {{t('rules.edit')}}</button>
+                <button v-if="!target.legacy" class="btn btn-xs btn-outline-danger connection-action-delete" @click="deleteJmsTarget(target)" :disabled="target.defaultConnection" :title="target.defaultConnection?t('settings.defaultConnectionDeleteDisabled'):t('rules.delete')"><i class="bi bi-trash"></i> {{t('rules.delete')}}</button>
               </div>
             </div>
             <div class="connection-guidance">
@@ -533,7 +533,7 @@ const SettingsPage = {
         <div class="settings-card">
           <div class="settings-card-header"><i class="bi bi-database"></i> {{t('settings.dataStorage')}}</div>
           <div class="settings-card-body">
-            <div class="settings-item"><span class="settings-label">{{t('settings.database')}}</span><span class="settings-value settings-value-sm settings-value-code" :title="status.datasourceUrl">{{ status.datasourceUrl }}</span></div>
+            <div class="settings-item"><span class="settings-label">{{t('settings.database')}}</span><span class="settings-value settings-value-sm settings-value-code" tabindex="0" :title="status.datasourceUrl" :aria-label="t('settings.database') + '：' + status.datasourceUrl">{{ status.datasourceUrl }}</span></div>
             <div class="settings-item"><span class="settings-label">{{t('settings.ruleRetention')}}</span><span class="settings-value">{{ status.cleanupRetentionDays || 180 }} {{t('settings.days')}}</span></div>
             <div class="settings-item"><span class="settings-label">{{t('settings.responseRetention')}}</span><span class="settings-value">{{ status.responseRetentionDays || 180 }} {{t('settings.days')}}</span></div>
             <div class="settings-item"><span class="settings-label">{{t('settings.auditRetention')}}</span><span class="settings-value">{{ status.auditRetentionDays || 30 }} {{t('settings.days')}}</span></div>
