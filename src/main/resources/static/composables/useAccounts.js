@@ -90,7 +90,11 @@ const useAccounts = (deps) => {
 
     const resetPassword = async (account) => {
         if (!await requireLogin()) { return null; }
-        if (!await showConfirm({ title: t('confirm.resetPasswordTitle'), message: t('confirm.resetPasswordMsg') })) { return null; }
+        if (!await showConfirm({
+            title: t('confirm.resetPasswordTitle'),
+            message: t('confirm.resetPasswordMsg'),
+            confirmText: t('accounts.resetPassword')
+        })) { return null; }
         const r = await apiCall(`/api/admin/builtin-users/${account.id}/reset-password`, { method: 'POST' }, { silent: true });
         if (r && r.ok) {
             const data = await r.json();

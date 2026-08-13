@@ -5,30 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Echo－登入</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" href="/theme.css?v=20260813.1">
     <link rel="stylesheet" href="/webjars/bootstrap-icons/font/bootstrap-icons.min.css">
     <style>
         /* 登入頁專用衍生變數（基於 theme.css 共用變數） */
-        :root{--input-bg:var(--bg);--login-shadow:rgba(0,0,0,0.32);--footer-bg:rgba(0,0,0,0.12);--logo-outer:var(--primary)}
-        :root[data-theme="light"]{--input-bg:var(--bg);--login-shadow:rgba(31,35,40,0.12);--footer-bg:rgba(31,35,40,0.025)}
+        :root{--input-bg:var(--bg);--login-shadow:rgba(0,0,0,0.32);--footer-bg:rgba(0,0,0,0.12);--logo-outer:var(--primary);--login-focus:0 0 0 2px rgba(var(--primary-rgb),0.42)}
+        :root[data-theme="light"]{--input-bg:var(--bg);--login-shadow:rgba(31,42,55,0.14);--footer-bg:rgba(89,101,116,0.07)}
         *{box-sizing:border-box;margin:0;padding:0}
         body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1rem;position:relative;overflow:hidden}
         
         /* 登入卡片 */
-        .login-card{background:var(--card);border:0;border-radius:16px;width:100%;max-width:380px;overflow:hidden;position:relative;z-index:1;box-shadow:0 20px 48px -18px var(--login-shadow)}
+        .login-card{background:var(--card);border:0;border-radius:12px;width:100%;max-width:400px;overflow:hidden;position:relative;z-index:1;box-shadow:0 24px 56px -22px var(--login-shadow)}
         .login-header{padding:2rem 2rem 0.25rem;text-align:center;position:relative}
         
-        .login-logo{width:52px;height:52px;display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;position:relative}
+        .login-logo{width:44px;height:44px;display:flex;align-items:center;justify-content:center;margin:0 auto 0.875rem;position:relative}
         
-        .login-header h1{font-size:1.5rem;font-weight:600;margin:0;color:var(--text)}
+        .login-header h1{font-size:1.375rem;font-weight:700;letter-spacing:-0.025em;line-height:1.25;margin:0;color:var(--text)}
         
-        .login-body{padding:1.25rem 2rem 1.75rem}
-        .form-group{margin-bottom:1.25rem}
-        .form-label{display:block;font-size:13px;font-weight:500;margin-bottom:0.5rem;color:var(--text)}
+        .login-body{padding:1.5rem 2rem 1.75rem}
+        .form-group{margin-bottom:1.125rem}
+        .form-label{display:block;font-size:13px;font-weight:600;margin-bottom:0.5rem;color:var(--text)}
         .input-wrapper{position:relative}
         .input-wrapper i{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:16px;transition:color 0.2s}
-        .form-control{width:100%;padding:0.875rem 1rem 0.875rem 44px;font-size:14px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;color:var(--text);transition:border-color 0.2s,box-shadow 0.2s}
-        .form-control:focus{outline:2px solid var(--primary);outline-offset:1px;border-color:transparent;box-shadow:none}
+        .form-control{width:100%;min-height:44px;padding:0.75rem 1rem 0.75rem 44px;font-size:14px;background:var(--input-bg);border:1px solid transparent;border-radius:8px;color:var(--text);transition:background-color 0.15s,box-shadow 0.15s}
+        .form-control:hover{background:var(--hover)}
+        .form-control:focus{outline:0;border-color:transparent;background:var(--card);box-shadow:var(--login-focus)}
         .form-control:focus + i,.input-wrapper:focus-within i{color:var(--primary)}
         .form-control::placeholder{color:var(--muted)}
         
@@ -37,26 +38,27 @@
         .remember-check input{width:18px;height:18px;accent-color:var(--primary);cursor:pointer}
         .remember-check label{font-size:13px;color:var(--muted);cursor:pointer}
         
-        .btn{width:100%;padding:0.875rem 1rem;font-size:14px;font-weight:600;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:0.5rem;transition:background-color 0.2s,border-color 0.2s,opacity 0.2s;position:relative}
+        .btn{width:100%;min-height:44px;padding:0.7rem 1rem;font-size:14px;font-weight:600;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:0.5rem;transition:background-color 0.15s,border-color 0.15s,opacity 0.15s,box-shadow 0.15s;position:relative;font-family:inherit}
         .btn-primary{background:var(--primary);color:#fff;margin-top:0.5rem}
         .btn-primary:hover{opacity:0.9}
         
-        .alert{padding:0.875rem 1rem;border-radius:10px;font-size:13px;margin-bottom:1.25rem;display:flex;align-items:center;gap:0.75rem}
-        .alert-danger{background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.2);color:var(--danger)}
+        .alert{padding:0.75rem 0.875rem;border-radius:8px;font-size:13px;margin-bottom:1.125rem;display:flex;align-items:center;gap:0.75rem}
+        .alert-danger{background:rgba(248,81,73,0.1);border:0;color:var(--danger)}
         
         .login-footer{padding:1rem 2rem;border:0;text-align:center;background:var(--footer-bg)}
         .login-footer p{color:var(--muted);font-size:12px;margin:0}
         
         /* 忘記密碼連結 */
-        .forgot-link{color:var(--primary);font-size:13px;text-decoration:none;cursor:pointer;transition:opacity 0.2s}
+        .forgot-link,.forgot-back{padding:0;border:0;background:transparent;font-family:inherit;color:var(--primary);font-size:13px;text-decoration:none;cursor:pointer;transition:opacity 0.15s}
         .forgot-link:hover{opacity:0.8}
+        .forgot-link:focus-visible,.forgot-back:focus-visible,.btn:focus-visible{outline:0;box-shadow:var(--login-focus)}
 
         /* 忘記密碼表單 */
         .forgot-section{display:none}
         .forgot-section.active{display:block}
         .forgot-title{font-size:1.1rem;font-weight:600;margin-bottom:1rem;color:var(--text);text-align:center}
         .forgot-success{padding:1rem;border-radius:10px;font-size:13px;background:rgba(63,185,80,0.1);border:1px solid rgba(63,185,80,0.2);color:var(--success,#3fb950);text-align:center;margin-bottom:1rem}
-        .forgot-back{display:inline-block;color:var(--primary);font-size:13px;text-decoration:none;cursor:pointer;margin-top:0.5rem}
+        .forgot-back{display:inline-block;margin-top:0.5rem}
         .forgot-back:hover{opacity:0.8}
         .btn-secondary{background:var(--input-bg);border:1px solid var(--border);color:var(--text);margin-top:0.5rem}
         .btn-secondary:hover{border-color:var(--primary);background:rgba(var(--primary-rgb),0.05)}
@@ -89,16 +91,16 @@
             
             <form action="/api/auth/login" method="POST">
                 <div class="form-group">
-                    <label class="form-label" data-i18n="login.username">帳號</label>
+                    <label class="form-label" for="login-username" data-i18n="login.username">帳號</label>
                     <div class="input-wrapper">
-                        <input type="text" class="form-control" name="username" autocomplete="off" data-i18n-placeholder="login.usernamePlaceholder" placeholder="請輸入帳號" required autofocus>
+                        <input id="login-username" type="text" class="form-control" name="username" autocomplete="username" data-i18n-placeholder="login.usernamePlaceholder" placeholder="請輸入帳號" required autofocus>
                         <i class="bi bi-person"></i>
                     </div>
                 </div>
                 <div class="form-group">
-                    <label class="form-label" data-i18n="login.password">密碼</label>
+                    <label class="form-label" for="login-password" data-i18n="login.password">密碼</label>
                     <div class="input-wrapper">
-                        <input type="password" class="form-control" name="password" autocomplete="off" data-i18n-placeholder="login.passwordPlaceholder" placeholder="請輸入密碼" required>
+                        <input id="login-password" type="password" class="form-control" name="password" autocomplete="current-password" data-i18n-placeholder="login.passwordPlaceholder" placeholder="請輸入密碼" required>
                         <i class="bi bi-lock"></i>
                     </div>
                 </div>
@@ -107,7 +109,7 @@
                         <input type="checkbox" name="remember-me" id="remember-me" checked>
                         <label for="remember-me" data-i18n="login.rememberMe">記住我</label>
                     </div>
-                    <a id="forgot-link" class="forgot-link" data-i18n="login.forgotPassword">忘記密碼？</a>
+                    <button type="button" id="forgot-link" class="forgot-link" data-i18n="login.forgotPassword">忘記密碼？</button>
                 </div>
                 <button type="submit" class="btn btn-primary">
                     <i class="bi bi-box-arrow-in-right"></i> <span data-i18n="login.submit">登入</span>
@@ -122,10 +124,11 @@
                 <div id="forgot-success" class="forgot-success" style="display:none">
                     <span data-i18n="login.forgotPasswordSuccess">已送出請求，請聯繫管理員協助重設密碼。</span>
                     <br>
-                    <a id="forgot-back-success" class="forgot-back" data-i18n="login.forgotPasswordBack">返回登入</a>
+                    <button type="button" id="forgot-back-success" class="forgot-back" data-i18n="login.forgotPasswordBack">返回登入</button>
                 </div>
                 <div id="forgot-form-fields">
                     <div class="form-group">
+                        <label class="form-label" for="forgot-username" data-i18n="login.username">帳號</label>
                         <div class="input-wrapper">
                             <input type="text" class="form-control" id="forgot-username" autocomplete="off" data-i18n-placeholder="login.forgotPasswordUsername" placeholder="請輸入您的帳號" required>
                             <i class="bi bi-person"></i>
@@ -146,19 +149,19 @@
                 <div id="register-success" class="forgot-success" style="display:none">
                     <span data-i18n="login.registerSuccess">帳號已建立，您現在可以登入了。</span>
                     <br>
-                    <a id="register-back-success" class="forgot-back" data-i18n="login.registerBack">返回登入</a>
+                    <button type="button" id="register-back-success" class="forgot-back" data-i18n="login.registerBack">返回登入</button>
                 </div>
                 <div id="register-error" class="register-error" style="display:none"></div>
                 <div id="register-form-fields">
                     <div class="form-group">
-                        <label class="form-label" data-i18n="login.username">帳號</label>
+                        <label class="form-label" for="register-username" data-i18n="login.username">帳號</label>
                         <div class="input-wrapper">
                             <input type="text" class="form-control" id="register-username" autocomplete="off" data-i18n-placeholder="login.registerUsername" placeholder="請輸入帳號" required>
                             <i class="bi bi-person"></i>
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="form-label" data-i18n="login.password">密碼</label>
+                        <label class="form-label" for="register-password" data-i18n="login.password">密碼</label>
                         <div class="input-wrapper">
                             <input type="password" class="form-control" id="register-password" autocomplete="off" data-i18n-placeholder="login.registerPassword" placeholder="請輸入密碼" required>
                             <i class="bi bi-lock"></i>
@@ -195,6 +198,7 @@
             // i18n - lightweight locale swap for login page
             var stored = localStorage.getItem('echo_locale');
             var locale = stored || (navigator.language.startsWith('zh') ? 'zh-TW' : 'en');
+            document.documentElement.lang = locale === 'zh-TW' ? 'zh-TW' : 'en';
             if (locale !== 'zh-TW') {
                 fetch('/i18n/' + locale + '.json').then(function(r) { return r.json(); }).then(function(msgs) {
                     var login = msgs.login;

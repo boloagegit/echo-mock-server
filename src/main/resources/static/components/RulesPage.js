@@ -260,7 +260,7 @@ const RulesPage = {
                 <th class="col-endpoint">{{t('rules.thEndpoint')}}</th>
                 <th class="col-cond col-hide-md">{{t('rules.thCondition')}}</th>
                 <th class="col-hide-sm" style="width:72px">{{t('rules.thEnabled')}}</th>
-                <th class="col-hide-md" style="width:56px;cursor:pointer" @click="$emit('toggle-rule-sort', 'priority')">{{t('rules.thPriority')}} <i class="bi" :class="ruleSortIcon('priority')"></i></th>
+                <th class="col-priority col-hide-md" style="cursor:pointer" @click="$emit('toggle-rule-sort', 'priority')">{{t('rules.thPriority')}} <i class="bi" :class="ruleSortIcon('priority')"></i></th>
                 <th class="col-datetime col-hide-md" style="cursor:pointer" @click="$emit('toggle-rule-sort', 'createdAt')">{{t('rules.thCreatedAt')}} <i class="bi" :class="ruleSortIcon('createdAt')"></i></th>
                 <th class="col-actions col-actions-4">{{t('rules.thActions')}}</th>
             </tr></thead>
@@ -301,7 +301,7 @@ const RulesPage = {
                             <span class="toggle-slider"></span>
                         </label>
                     </td>
-                    <td class="col-hide-md"><span class="badge badge-muted">{{r.priority ?? 0}}</span></td>
+                    <td class="col-priority col-hide-md"><span class="badge badge-muted">{{r.priority ?? 0}}</span></td>
                     <td class="col-datetime col-hide-md">
                         <div class="table-date-stack">
                             <span class="sub-info" :title="fmtTime(r.createdAt,false)">{{fmtTime(r.createdAt)}}</span>
@@ -431,7 +431,7 @@ const RulesPage = {
                         <th class="col-endpoint">{{t('rules.thEndpoint')}}</th>
                         <th class="col-cond col-hide-md">{{t('rules.thCondition')}}</th>
                         <th class="col-hide-sm" style="width:72px">{{t('rules.thEnabled')}}</th>
-                        <th class="col-hide-md" style="width:56px">{{t('rules.thPriority')}}</th>
+                        <th class="col-priority col-hide-md">{{t('rules.thPriority')}}</th>
                         <th class="col-datetime col-hide-md">{{t('rules.thCreatedAt')}}</th>
                         <th class="col-actions col-actions-4">{{t('rules.thActions')}}</th>
                     </tr></thead>
@@ -475,7 +475,7 @@ const RulesPage = {
                                 <th class="col-endpoint">{{t('rules.thEndpoint')}}</th>
                                 <th class="col-cond col-hide-md">{{t('rules.thCondition')}}</th>
                                 <th class="col-hide-sm" style="width:72px">{{t('rules.thEnabled')}}</th>
-                                <th class="col-hide-md" style="width:56px">{{t('rules.thPriority')}}</th>
+                                <th class="col-priority col-hide-md">{{t('rules.thPriority')}}</th>
                                 <th class="col-datetime col-hide-md">{{t('rules.thCreatedAt')}}</th>
                                 <th class="col-actions col-actions-4">{{t('rules.thActions')}}</th>
                             </tr></thead>

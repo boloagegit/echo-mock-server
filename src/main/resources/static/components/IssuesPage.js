@@ -241,17 +241,19 @@ const IssuesPage = {
             <div class="workspace-empty-hint">{{t('issues.emptyHint')}}</div>
           </div>
         </div>
-        <div v-if="!loading.issuesError" class="card-table-footer">
-          <span class="sub-info">{{t('issues.totalCount', {count: filteredIssues.length})}}</span>
-          <div class="pagination-controls">
-            <button class="btn btn-sm btn-secondary" @click="$emit('update:issuePage', 1)" :disabled="issuePage===1" :aria-label="t('stats.firstPage')"><i class="bi bi-chevron-double-left" aria-hidden="true"></i></button>
-            <button class="btn btn-sm btn-secondary" @click="$emit('update:issuePage', issuePage-1)" :disabled="issuePage===1" :aria-label="t('stats.previousPage')"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
-            <span>{{issuePage}} / {{issueTotalPages}}</span>
-            <button class="btn btn-sm btn-secondary" @click="$emit('update:issuePage', issuePage+1)" :disabled="issuePage>=issueTotalPages" :aria-label="t('stats.nextPage')"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
-            <button class="btn btn-sm btn-secondary" @click="$emit('update:issuePage', issueTotalPages)" :disabled="issuePage>=issueTotalPages" :aria-label="t('stats.lastPage')"><i class="bi bi-chevron-double-right" aria-hidden="true"></i></button>
-          </div>
-          <select :value="issuePageSize" @change="$emit('update:issuePageSize', Number($event.target.value))" class="form-control issue-page-size" :aria-label="t('stats.pageSize')"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option></select>
-        </div>
+        <workspace-pagination
+          v-if="!loading.issuesError"
+          :page="issuePage" :total-pages="issueTotalPages" :page-size="issuePageSize"
+          :pagination-label="t('stats.pagination')"
+          :page-status-label="t('stats.pageStatus', {page:issuePage, total:issueTotalPages})"
+          :page-size-label="t('stats.pageSize')"
+          :first-page-label="t('stats.firstPage')" :previous-page-label="t('stats.previousPage')"
+          :next-page-label="t('stats.nextPage')" :last-page-label="t('stats.lastPage')"
+          @update:page="$emit('update:issuePage', $event)"
+          @update:page-size="$emit('update:issuePageSize', $event)"
+        >
+          <template #summary><span class="sub-info">{{t('issues.totalCount', {count: filteredIssues.length})}}</span></template>
+        </workspace-pagination>
       </div>
 
       <!-- Create Modal -->

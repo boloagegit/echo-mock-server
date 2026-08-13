@@ -56,7 +56,7 @@ const RuleGroupRow = {
             <span class="toggle-slider"></span>
         </label>
     </td>
-    <td class="col-hide-md"><span class="badge badge-muted">{{rule.priority ?? 0}}</span></td>
+    <td class="col-priority col-hide-md"><span class="badge badge-muted">{{rule.priority ?? 0}}</span></td>
     <td class="col-datetime col-hide-md">
         <div class="table-date-stack">
             <span class="sub-info" :title="fmtTime(rule.createdAt,false)">{{fmtTime(rule.createdAt)}}</span>
