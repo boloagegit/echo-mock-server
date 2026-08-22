@@ -235,7 +235,10 @@ public class RuleQueryService {
             String pattern = "%" + escapeLike(keyword) + "%";
             List<Predicate> matches = new ArrayList<>();
             for (String field : searchFields) {
-                Expression<String> text = cb.lower(cb.coalesce(root.get(field).as(String.class), ""));
+                // SQL NULL never matches LIKE, so COALESCE is unnecessary here. Avoiding it is
+                // also important for databases which correctly reject mixing CLOB and VARCHAR
+                // operands (for example, a queryable long-text condition with an empty literal).
+                Expression<String> text = cb.lower(root.get(field).as(String.class));
                 matches.add(cb.like(text, pattern, '\\'));
             }
             result.add(cb.or(matches.toArray(Predicate[]::new)));

@@ -1,0 +1,235 @@
+name: echo-rdbms
+
+x-echo-common: &echo-common
+  build: .
+  image: ${ECHO_IMAGE:-echo-mock-server:rdbms}
+  ports:
+    - "${ECHO_HTTP_PORT:-18080}:8080"
+    - "${ECHO_JMS_PORT:-61616}:61616"
+  environment: &echo-environment
+    ECHO_ADMIN_USERNAME: ${ECHO_ADMIN_USERNAME:-admin}
+    ECHO_ADMIN_PASSWORD: ${ECHO_ADMIN_PASSWORD:-admin}
+    ECHO_REMEMBER_ME_KEY: ${ECHO_REMEMBER_ME_KEY:-local-compose-key}
+    ECHO_ENV_LABEL: ${ECHO_ENV_LABEL:-RDBMS}
+    ECHO_JMS_ENABLED: ${ECHO_JMS_ENABLED:-true}
+    ECHO_BACKUP_ENABLED: ${ECHO_BACKUP_ENABLED:-false}
+    ECHO_CLEANUP_ENABLED: ${ECHO_CLEANUP_ENABLED:-false}
+    ECHO_SCENARIOS_ENABLED: ${ECHO_SCENARIOS_ENABLED:-true}
+    ECHO_BULK_IMPORT_EXPORT_ENABLED: ${ECHO_BULK_IMPORT_EXPORT_ENABLED:-true}
+    ECHO_REQUEST_LOG_SPOOL_PATH: /app/data/request-log-spool.sqlite
+    TZ: ${TZ:-UTC}
+  healthcheck:
+    test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--header", "Accept: application/json", "http://localhost:8080/api/admin/status"]
+    interval: 5s
+    timeout: 3s
+    retries: 24
+    start_period: 15s
+  restart: unless-stopped
+
+services:
+  echo-h2:
+    <<: *echo-common
+    profiles: ["h2"]
+    environment:
+      <<: *echo-environment
+      SPRING_PROFILES_ACTIVE: h2
+      SPRING_DATASOURCE_URL: jdbc:h2:file:/app/data/mockdb;AUTO_RECONNECT=TRUE;DB_CLOSE_ON_EXIT=FALSE;WRITE_DELAY=100;TRACE_LEVEL_FILE=0
+    volumes:
+      - echo-h2-data:/app/data
+
+  echo-sqlite:
+    <<: *echo-common
+    profiles: ["sqlite"]
+    environment:
+      <<: *echo-environment
+      SPRING_PROFILES_ACTIVE: sqlite
+      SPRING_DATASOURCE_URL: jdbc:sqlite:/app/data/mockdb.sqlite?journal_mode=WAL&busy_timeout=10000&synchronous=NORMAL&foreign_keys=ON
+    volumes:
+      - echo-sqlite-data:/app/data
+
+  echo-postgresql:
+    <<: *echo-common
+    profiles: ["postgresql"]
+    environment:
+      <<: *echo-environment
+      SPRING_PROFILES_ACTIVE: postgresql
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgresql:5432/echo
+      SPRING_DATASOURCE_USERNAME: echo
+      SPRING_DATASOURCE_PASSWORD: ${ECHO_DB_PASSWORD:-echo-test-password}
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    volumes:
+      - echo-postgresql-data:/app/data
+
+  postgresql:
+    image: postgres:17-alpine
+    profiles: ["postgresql"]
+    environment:
+      POSTGRES_DB: echo
+      POSTGRES_USER: echo
+      POSTGRES_PASSWORD: ${ECHO_DB_PASSWORD:-echo-test-password}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U echo -d echo"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - postgresql-data:/var/lib/postgresql/data
+
+  echo-mysql:
+    <<: *echo-common
+    profiles: ["mysql"]
+    environment:
+      <<: *echo-environment
+      SPRING_PROFILES_ACTIVE: mysql
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/echo?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC&rewriteBatchedStatements=true
+      SPRING_DATASOURCE_USERNAME: echo
+      SPRING_DATASOURCE_PASSWORD: ${ECHO_DB_PASSWORD:-echo-test-password}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - echo-mysql-data:/app/data
+
+  mysql:
+    image: mysql:8.4
+    profiles: ["mysql"]
+    environment:
+      MYSQL_DATABASE: echo
+      MYSQL_USER: echo
+      MYSQL_PASSWORD: ${ECHO_DB_PASSWORD:-echo-test-password}
+      MYSQL_ROOT_PASSWORD: ${ECHO_DB_ROOT_PASSWORD:-echo-test-root-password}
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+      start_period: 10s
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  echo-mariadb:
+    <<: *echo-common
+    profiles: ["mariadb"]
+    environment:
+      <<: *echo-environment
+      SPRING_PROFILES_ACTIVE: mariadb
+      SPRING_DATASOURCE_URL: jdbc:mariadb://mariadb:3306/echo?useUnicode=true&characterEncoding=UTF-8
+      SPRING_DATASOURCE_USERNAME: echo
+      SPRING_DATASOURCE_PASSWORD: ${ECHO_DB_PASSWORD:-echo-test-password}
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    volumes:
+      - echo-mariadb-data:/app/data
+
+  mariadb:
+    image: mariadb:11.8
+    profiles: ["mariadb"]
+    environment:
+      MARIADB_DATABASE: echo
+      MARIADB_USER: echo
+      MARIADB_PASSWORD: ${ECHO_DB_PASSWORD:-echo-test-password}
+      MARIADB_ROOT_PASSWORD: ${ECHO_DB_ROOT_PASSWORD:-echo-test-root-password}
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh --connect --innodb_initialized"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+      start_period: 10s
+    volumes:
+      - mariadb-data:/var/lib/mysql
+
+  echo-sqlserver:
+    <<: *echo-common
+    profiles: ["sqlserver"]
+    environment:
+      <<: *echo-environment
+      SPRING_PROFILES_ACTIVE: sqlserver
+      SPRING_DATASOURCE_URL: jdbc:sqlserver://sqlserver:1433;databaseName=echo;encrypt=true;trustServerCertificate=true
+      SPRING_DATASOURCE_USERNAME: sa
+      SPRING_DATASOURCE_PASSWORD: ${ECHO_DB_PASSWORD:-Echo-Test-Password-1!}
+    depends_on:
+      sqlserver-init:
+        condition: service_completed_successfully
+    volumes:
+      - echo-sqlserver-data:/app/data
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    profiles: ["sqlserver"]
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${ECHO_DB_PASSWORD:-Echo-Test-Password-1!}
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q \"SELECT 1\" >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 20s
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+
+  sqlserver-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    profiles: ["sqlserver"]
+    environment:
+      MSSQL_SA_PASSWORD: ${ECHO_DB_PASSWORD:-Echo-Test-Password-1!}
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - >-
+        /opt/mssql-tools18/bin/sqlcmd -S sqlserver -U sa -P "$$MSSQL_SA_PASSWORD" -C
+        -Q "IF DB_ID(N'echo') IS NULL CREATE DATABASE echo"
+    restart: "no"
+
+  echo-oracle:
+    <<: *echo-common
+    profiles: ["oracle"]
+    environment:
+      <<: *echo-environment
+      SPRING_PROFILES_ACTIVE: oracle
+      SPRING_DATASOURCE_URL: jdbc:oracle:thin:@//oracle:1521/FREEPDB1
+      SPRING_DATASOURCE_USERNAME: echo
+      SPRING_DATASOURCE_PASSWORD: ${ECHO_DB_PASSWORD:-Echo-Test-Password-1!}
+    depends_on:
+      oracle:
+        condition: service_healthy
+    volumes:
+      - echo-oracle-data:/app/data
+
+  oracle:
+    image: gvenzl/oracle-free:23-slim-faststart
+    profiles: ["oracle"]
+    environment:
+      ORACLE_PASSWORD: ${ECHO_DB_ROOT_PASSWORD:-Echo-Test-Root-Password-1!}
+      APP_USER: echo
+      APP_USER_PASSWORD: ${ECHO_DB_PASSWORD:-Echo-Test-Password-1!}
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+
+volumes:
+  echo-h2-data:
+  echo-sqlite-data:
+  echo-postgresql-data:
+  echo-mysql-data:
+  echo-mariadb-data:
+  echo-sqlserver-data:
+  echo-oracle-data:
+  postgresql-data:
+  mysql-data:
+  mariadb-data:
+  sqlserver-data:
+  oracle-data:

@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.Length;
 
 import java.time.LocalDateTime;
 
@@ -32,8 +33,7 @@ public class IssueReport {
     @Column(nullable = false, length = 200)
     private String title;
 
-    @Lob
-    @Column(nullable = false)
+    @Column(nullable = false, length = Length.LONG32)
     private String description;
 
     @Enumerated(EnumType.STRING)
@@ -43,7 +43,7 @@ public class IssueReport {
     @Column(nullable = false)
     private String createdBy;
 
-    @Lob
+    @Column(length = Length.LONG32)
     private String adminReply;
 
     private String repliedBy;

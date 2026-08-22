@@ -210,6 +210,64 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
         assertThat(((Number) results.get(0).get("usageCount")).intValue()).isGreaterThan(0);
     }
 
+    @Test
+    @DisplayName("Response 摘要搜尋 → 支援精確 ID 且跳脫萬用字元")
+    @SuppressWarnings("unchecked")
+    void responseSummaryPage_shouldSearchByIdAndEscapeWildcards() {
+        Response literal = createResponse("摘要-100%_完成", "{\"literal\":true}");
+        createResponse("摘要-100X完成", "{\"wildcard\":true}");
+
+        ResponseEntity<Map<String, Object>> byId = adminClient().exchange(
+                "/api/admin/responses/summary?keyword=" + literal.getId() + "&page=0&size=20",
+                HttpMethod.GET, null, new ParameterizedTypeReference<>() {});
+        ResponseEntity<Map<String, Object>> byLiteral = adminClient().exchange(
+                "/api/admin/responses/summary?keyword={keyword}&page=0&size=20",
+                HttpMethod.GET, null, new ParameterizedTypeReference<>() {}, "100%_完成");
+
+        List<Map<String, Object>> idRows = (List<Map<String, Object>>) byId.getBody().get("results");
+        List<Map<String, Object>> literalRows = (List<Map<String, Object>>)
+                byLiteral.getBody().get("results");
+        assertThat(idRows).extracting(row -> ((Number) row.get("id")).longValue())
+                .contains(literal.getId());
+        assertThat(literalRows).extracting(row -> (String) row.get("description"))
+                .contains("摘要-100%_完成")
+                .doesNotContain("摘要-100X完成");
+    }
+
+    @Test
+    @DisplayName("Response 摘要內容類型 → SSE 與一般回應正確分開")
+    @SuppressWarnings("unchecked")
+    void responseSummaryPage_shouldFilterSseContentType() {
+        Response sse = Response.builder()
+                .description("摘要-SSE")
+                .body("[{\"data\":\"ready\"}]")
+                .contentType("SSE_EVENTS")
+                .build();
+        ResponseEntity<Response> createdSse = adminClient()
+                .postForEntity("/api/admin/responses", sse, Response.class);
+        assertThat(createdSse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        Long sseId = createdSse.getBody().getId();
+        Response general = createResponse("摘要-一般", "{\"ready\":true}");
+
+        ResponseEntity<Map<String, Object>> ssePage = adminClient().exchange(
+                "/api/admin/responses/summary?keyword=摘要-&contentType=SSE&page=0&size=20",
+                HttpMethod.GET, null, new ParameterizedTypeReference<>() {});
+        ResponseEntity<Map<String, Object>> generalPage = adminClient().exchange(
+                "/api/admin/responses/summary?keyword=摘要-&contentType=GENERAL&page=0&size=20",
+                HttpMethod.GET, null, new ParameterizedTypeReference<>() {});
+
+        List<Map<String, Object>> sseRows = (List<Map<String, Object>>)
+                ssePage.getBody().get("results");
+        List<Map<String, Object>> generalRows = (List<Map<String, Object>>)
+                generalPage.getBody().get("results");
+        assertThat(sseRows).extracting(row -> ((Number) row.get("id")).longValue())
+                .contains(sseId)
+                .doesNotContain(general.getId());
+        assertThat(generalRows).extracting(row -> ((Number) row.get("id")).longValue())
+                .contains(general.getId())
+                .doesNotContain(sseId);
+    }
+
     // ========== 9.5 Response 關聯規則查詢 ==========
 
     @Test

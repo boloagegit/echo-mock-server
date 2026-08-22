@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.Length;
 
 import java.time.LocalDateTime;
 
@@ -33,10 +34,10 @@ public class RuleAuditLog {
     @Column(nullable = false)
     private Action action;
 
-    @Lob
+    @Column(length = Length.LONG32)
     private String beforeJson;
 
-    @Lob
+    @Column(length = Length.LONG32)
     private String afterJson;
 
     @Column(nullable = false)

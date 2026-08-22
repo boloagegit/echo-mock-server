@@ -1,7 +1,5 @@
 # Echo Mock Server
 
-[![CI](https://github.com/boloagegit/echo-mock-server/actions/workflows/ci.yml/badge.svg)](https://github.com/boloagegit/echo-mock-server/actions/workflows/ci.yml)
-[![Docker](https://github.com/boloagegit/echo-mock-server/actions/workflows/push-docker.yml/badge.svg)](https://github.com/boloagegit/echo-mock-server/actions/workflows/push-docker.yml)
 ![Java 17](https://img.shields.io/badge/Java-17-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-green) ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 
 [中文版 README](README_zh-TW.md)
@@ -37,7 +35,7 @@ An enterprise-grade dual-protocol mock server supporting HTTP and JMS, designed 
 - **Faker Data** – Built-in name, email, phone, address, and integer template helpers
 - **Rule Testing** – Test rule matching directly from the admin UI
 - **Static Analysis** – SpotBugs code analysis
-- **No External Database Required** – Embedded H2 by default, with an optional SQLite WAL profile
+- **Database Profiles** – H2, SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle profiles
 - **Intranet Friendly** – Frontend uses WebJars, no CDN required
 - **Environment Identification** – Protocol aliases and environment labels for easy multi-environment deployment
 
@@ -83,24 +81,78 @@ On a Windows development machine, run the equivalent commands in PowerShell:
 java -jar (Get-ChildItem build\libs\echo-server-*.jar | Select-Object -First 1).FullName
 ```
 
-### Migrate H2 to SQLite
+### Database profiles
 
-The base configuration currently starts with H2. Stop Echo before migrating, and use a target SQLite path that does not already exist:
+The supported profiles are:
+
+| Profile | Database | Current Docker smoke-test target |
+|---------|----------|----------------------------------|
+| `h2` (or no database profile) | H2 file database | H2 2.x resolved by the build |
+| `sqlite` | SQLite WAL file | SQLite 3.x via the Xerial JDBC driver |
+| `postgresql` | PostgreSQL | PostgreSQL 17 |
+| `mysql` | MySQL | MySQL 8.4 |
+| `mariadb` | MariaDB | MariaDB 11.8 |
+| `sqlserver` | SQL Server | SQL Server 2022 |
+| `oracle` | Oracle | Oracle Free 23 |
+
+The listed versions are reproducible Docker smoke-test baselines, not a promise that every older or newer vendor release is certified. The Hibernate version used by Echo supports Oracle Database 19c or newer; older Oracle releases are not covered.
+
+Use exactly one database profile for each process. `dev` and `test` are non-database profiles and may be combined with one database profile. If no database profile is active, H2 is selected. Startup rejects multiple database profiles and rejects a JDBC URL whose vendor does not match the selected profile.
+
+Every supported path is currently documented and tested as starting with a new empty database. The profiles use Hibernate `ddl-auto=update` for convenience; this is not a general migration system and does not automatically move existing data between H2, SQLite, or an external database. The existing H2-to-SQLite utility is a separate, SQLite-specific offline tool, not a general multi-database converter. Review its table and version compatibility, take an independent backup, and validate the result before using it. For an existing production database, use a DBA/platform-controlled, versioned migration and then set `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`.
+
+#### Standard environment variables
 
 ```bash
-python3 scripts/migrate-h2-to-sqlite.py
-SPRING_PROFILES_ACTIVE=sqlite ./gradlew bootRun
+SPRING_PROFILES_ACTIVE=postgresql \
+SPRING_DATASOURCE_URL='jdbc:postgresql://db-host:5432/appdb' \
+SPRING_DATASOURCE_USERNAME='app_user' \
+SPRING_DATASOURCE_PASSWORD='<password>' \
+SPRING_JPA_HIBERNATE_DDL_AUTO=validate \
+./gradlew bootRun
 ```
 
-PowerShell:
+| Variable | Purpose |
+|----------|---------|
+| `SPRING_PROFILES_ACTIVE` | Select exactly one database profile (`h2`, `sqlite`, `postgresql`, `mysql`, `mariadb`, `sqlserver`, or `oracle`), optionally with `dev`/`test` |
+| `SPRING_DATASOURCE_URL` | Override the profile's JDBC URL |
+| `SPRING_DATASOURCE_USERNAME` | External database username |
+| `SPRING_DATASOURCE_PASSWORD` | External database password; inject it through the deployment secret mechanism |
+| `SPRING_JPA_HIBERNATE_DDL_AUTO` | Current profiles default to `update`; use `validate` after a controlled schema migration |
+| `ECHO_REQUEST_LOG_SPOOL_PATH` | Per-instance local SQLite request-log spool path; default `./data/request-log-spool.sqlite` |
+| `ECHO_DB_POOL_MAX_SIZE` / `ECHO_DB_POOL_MIN_IDLE` | Hikari connection-pool sizing for external profiles |
 
-```powershell
-python scripts\migrate-h2-to-sqlite.py
-$env:SPRING_PROFILES_ACTIVE="sqlite"
-.\gradlew.bat bootRun
+The remaining Hikari timeout and lifetime settings use the `ECHO_DB_*` variables in the profile files. Do not put multiple database profiles in `SPRING_PROFILES_ACTIVE`.
+
+#### Backup and request-log spool boundaries
+
+The application backup feature is for local H2/SQLite files. External database profiles disable it; PostgreSQL, MySQL/MariaDB, SQL Server, and Oracle backups, point-in-time recovery, retention, and restore drills are owned by the DBA or platform backup service.
+
+Request-log durability has a separate boundary: every Echo instance writes its local request-log spool to a SQLite file, including when the main database is external. Keep that file on a writable persistent volume, use one spool file per instance, and do not treat it as a shared database or cross-instance queue. The spool is not a substitute for the external database's backup policy.
+
+`ddl-auto=update` is suitable only for a new empty database or development bootstrap. It is not a versioned migration, and it cannot reliably express renames, backfills, type conversions, index/constraint changes, or vendor-specific identity/LOB/boolean/date/JSON behavior across all seven databases. It also requires DDL privileges and can fail when existing rows conflict with a new non-null column.
+
+### Docker RDBMS smoke test
+
+The disposable RDBMS Compose file exercises one database profile at a time, including readiness, API matching, large-response persistence, restart persistence, and log collection. Build the application artifact first so the Dockerfile can package it, then choose one profile per run:
+
+```bash
+./gradlew bootJar
+python3 scripts/test-rdbms-matrix.py --databases postgresql
 ```
 
-The migration verifies an H2 recovery backup, copies all application tables into a staged SQLite database in one transaction, compares row counts and per-table SHA-256 digests, runs SQLite integrity and foreign-key checks, and starts Echo for API smoke tests. It atomically publishes `mockdb.sqlite` only after every check passes and never deletes the H2 source. Run `python3 scripts/migrate-h2-to-sqlite.py --help` for non-default paths and automation options.
+Replace `postgresql` with one of `h2`, `sqlite`, `mysql`, `mariadb`, `sqlserver`, or `oracle`. The script can accept several names and runs them sequentially, but each individual Compose run still has only one active database profile. Results are written under `artifacts/rdbms-matrix/<run>/`, including `matrix-result.json`.
+
+For a manual smoke test:
+
+```bash
+docker compose -f docker-compose.rdbms.yml --profile postgresql up --build --wait --detach echo-postgresql
+curl -fsS http://localhost:18080/api/admin/status
+docker compose -f docker-compose.rdbms.yml --profile postgresql logs -f echo-postgresql
+docker compose -f docker-compose.rdbms.yml --profile postgresql down --volumes --remove-orphans
+```
+
+The Compose services use disposable test data. `down --volumes` removes those test volumes; never use this setup as an external database backup. SQL Server uses an amd64 image and Oracle/SQL Server may need additional Docker CPU and memory.
 
 ### Docker Deployment
 
@@ -147,7 +199,7 @@ The following user-facing features are intentionally disabled by default and can
 | Admin UI | http://localhost:8080/ | Mock rule management |
 | Login Page | http://localhost:8080/login.html | User login |
 | Mock Endpoint | http://localhost:8080/mock/** | Intercept HTTP requests |
-| Database | — | H2 is the default; enable the `sqlite` profile after migration to use SQLite WAL |
+| Database | — | H2 is the default; select exactly one database profile for SQLite or an external database |
 
 ## Rule Matching Priority
 
@@ -393,7 +445,7 @@ echo:
     rule-retention-days: 180    # Rule retention days
     response-retention-days: 180 # Response retention days
   backup:
-    enabled: true               # Enable SQLite auto backup
+    enabled: true               # Local-file backup for H2/SQLite only
     cron: "0 0 3 * * *"         # Daily at 3 AM
     path: ./backups             # Backup directory
     retention-days: 7           # Backup retention days
@@ -406,6 +458,8 @@ echo:
     base-dn: dc=example,dc=com
     user-pattern: uid={0},ou=users
 ```
+
+The backup settings above apply only to local H2/SQLite files. External database profiles set application backup to false; use the DBA or platform backup service for those databases.
 
 ## Authentication
 
@@ -580,6 +634,8 @@ Instance B polls every N seconds → Finds new event → Clears local cache
 
 ### Configuration Example
 
+Set `SPRING_PROFILES_ACTIVE` to exactly one database profile before starting the instances; the JDBC URL alone does not select a vendor profile. For example, use `postgresql` here and provide the credentials through environment variables or the deployment secret mechanism.
+
 ```yaml
 echo:
   storage:
@@ -591,6 +647,8 @@ spring:
   datasource:
     url: jdbc:postgresql://db-host:5432/echo  # Shared database
 ```
+
+The main database can be shared for rules, responses, and cache events. The request-log spool remains a separate local SQLite file for each instance and must not be placed on a shared path.
 
 ### Activation Conditions
 
@@ -712,7 +770,7 @@ python3 scripts/test-match-scenarios.py
 |----------|-----------|
 | Framework | Spring Boot 3.5.16 |
 | Web Server | Undertow |
-| Database | H2 (default), SQLite WAL profile available |
+| Database | H2, SQLite WAL, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle profiles |
 | Cache | Caffeine |
 | Messaging | Artemis (Embedded) |
 | Security | Spring Security |

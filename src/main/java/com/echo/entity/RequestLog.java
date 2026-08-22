@@ -2,6 +2,7 @@ package com.echo.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.Length;
 
 import java.time.LocalDateTime;
 
@@ -38,7 +39,7 @@ public class RequestLog {
     private String ruleId;
 
     /** 匹配鏈 (JSON 格式，記錄每個候選規則的匹配結果) */
-    @Lob
+    @Column(length = Length.LONG32)
     private String matchChain;
 
     @Enumerated(EnumType.STRING)
@@ -89,10 +90,10 @@ public class RequestLog {
 
     private Integer responseStatus;
 
-    @Lob
+    @Column(length = Length.LONG32)
     private String requestBody;
 
-    @Lob
+    @Column(length = Length.LONG32)
     private String responseBody;
 
     /** 故障注入類型（NONE / CONNECTION_RESET / EMPTY_RESPONSE） */

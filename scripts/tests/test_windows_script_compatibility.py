@@ -1,6 +1,5 @@
 import importlib.util
 from pathlib import Path
-import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -46,11 +45,15 @@ class MigrationWindowsCompatibilityTest(unittest.TestCase):
             database = base / "data with spaces" / "mockdb.sqlite"
             database.parent.mkdir()
             log_path = base / "startup.log"
+            formal_spool = base / "formal-request-log-spool.sqlite"
             with mock.patch.object(self.migration.sys, "platform", "win32"), \
                     mock.patch.object(self.migration, "free_port", return_value=18081), \
                     mock.patch.object(self.migration, "request_json", return_value=(200, {
                         "datasourceUrl": self.migration.sqlite_jdbc_url(database)
                     })), \
+                    mock.patch.dict(self.migration.os.environ, {
+                        "ECHO_REQUEST_LOG_SPOOL_PATH": str(formal_spool)
+                    }), \
                     mock.patch.object(self.migration, "terminate_process"), \
                     mock.patch.object(self.migration.subprocess, "Popen", return_value=fake_process) as popen:
                 self.migration.start_sqlite_app(database, log_path, expected=None)
@@ -61,7 +64,35 @@ class MigrationWindowsCompatibilityTest(unittest.TestCase):
         self.assertNotIn("--args", " ".join(command))
         self.assertIn("data with spaces", options["env"]["SPRING_DATASOURCE_URL"])
         self.assertEqual("sqlite", options["env"]["SPRING_PROFILES_ACTIVE"])
+        spool_path = Path(options["env"]["ECHO_REQUEST_LOG_SPOOL_PATH"])
+        self.assertNotEqual(database, spool_path)
+        self.assertNotEqual(
+            self.migration.PROJECT_ROOT / "data" / "request-log-spool.sqlite", spool_path
+        )
+        self.assertNotEqual(formal_spool, spool_path)
+        self.assertIn("request-log-spool-", spool_path.name)
         self.assertNotEqual(0, options["creationflags"])
+
+    def test_each_staging_start_gets_a_distinct_request_log_spool(self):
+        fake_process = FakeProcess()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir)
+            database = base / "staging.sqlite"
+            log_path = base / "startup.log"
+            with mock.patch.object(self.migration, "free_port", return_value=18081), \
+                    mock.patch.object(self.migration, "request_json", return_value=(200, {
+                        "datasourceUrl": self.migration.sqlite_jdbc_url(database)
+                    })), \
+                    mock.patch.object(self.migration, "terminate_process"), \
+                    mock.patch.object(self.migration.subprocess, "Popen", return_value=fake_process) as popen:
+                self.migration.start_sqlite_app(database, log_path, expected=None)
+                self.migration.start_sqlite_app(database, log_path, expected=None)
+
+        spool_paths = [
+            Path(call.kwargs["env"]["ECHO_REQUEST_LOG_SPOOL_PATH"])
+            for call in popen.call_args_list
+        ]
+        self.assertEqual(2, len(set(spool_paths)))
 
     def test_windows_publish_skips_unsupported_directory_fsync(self):
         with tempfile.TemporaryDirectory() as temp_dir:

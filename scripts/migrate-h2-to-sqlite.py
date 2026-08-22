@@ -21,7 +21,6 @@ import socket
 import sqlite3
 import subprocess
 import sys
-import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -43,6 +42,7 @@ APPLICATION_TABLES = (
     "request_log_checkpoint",
     "cache_events",
     "issue_reports",
+    "scenarios",
     "jms_target_connections",
     "http_target_connections",
 )
@@ -256,9 +256,16 @@ def process_group_options() -> dict[str, object]:
     return {"start_new_session": True}
 
 
+def staging_spool_path(db_path: Path) -> Path:
+    """Return a unique spool path that cannot overlap the live/default spool."""
+    resolved = db_path.expanduser().resolve()
+    return resolved.parent / f".{resolved.name}.request-log-spool-{uuid.uuid4().hex}.sqlite"
+
+
 def start_sqlite_app(db_path: Path, log_path: Path, expected: dict[str, int] | None) -> dict:
     port = free_port()
     command = [gradle_wrapper(), "bootRun", "--no-daemon"]
+    spool_path = staging_spool_path(db_path)
     environment = os.environ.copy()
     environment.update(
         {
@@ -268,6 +275,7 @@ def start_sqlite_app(db_path: Path, log_path: Path, expected: dict[str, int] | N
             "ECHO_BACKUP_ENABLED": "false",
             "ECHO_CLEANUP_ENABLED": "false",
             "ECHO_JMS_ENABLED": "false",
+            "ECHO_REQUEST_LOG_SPOOL_PATH": str(spool_path),
         }
     )
 
@@ -321,6 +329,7 @@ def start_sqlite_app(db_path: Path, log_path: Path, expected: dict[str, int] | N
             return status_data
         finally:
             terminate_process(process)
+            remove_sqlite_files(spool_path)
 
 
 def tail_text(path: Path, lines: int = 30) -> str:

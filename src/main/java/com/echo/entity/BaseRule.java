@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
+import org.hibernate.Length;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -44,7 +45,7 @@ public abstract class BaseRule {
      * <p>格式：field=value;field2=value2
      * <p>支援 JSONPath 或 XPath 表達式
      */
-    @Lob
+    @Column(length = Length.LONG32)
     private String bodyCondition;
 
     /**
@@ -85,7 +86,7 @@ public abstract class BaseRule {
      * 標籤（JSON 格式）
      * <p>用於規則分類與篩選，例如：{"env":"prod","team":"payment"}
      */
-    @Lob
+    @Column(length = Length.LONG32)
     private String tags;
 
     /** 建立時間 */

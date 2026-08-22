@@ -64,7 +64,11 @@ dependencies {
     implementation 'org.hibernate.orm:hibernate-community-dialects'
     runtimeOnly 'org.xerial:sqlite-jdbc:3.53.2.1'
     runtimeOnly 'com.h2database:h2'
-    // runtimeOnly 'com.oracle.database.jdbc:ojdbc11'  # 未來支援 Oracle
+    runtimeOnly 'org.postgresql:postgresql'
+    runtimeOnly 'com.mysql:mysql-connector-j'
+    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client'
+    runtimeOnly 'com.microsoft.sqlserver:mssql-jdbc'
+    runtimeOnly 'com.oracle.database.jdbc:ojdbc17:23.26.1.0.0'
 
     // Monitoring & Actuator
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
