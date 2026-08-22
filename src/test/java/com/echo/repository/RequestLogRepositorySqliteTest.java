@@ -42,6 +42,8 @@ class RequestLogRepositorySqliteTest {
                 .matched(true)
                 .responseTimeMs(7)
                 .requestTime(LocalDateTime.now())
+                .forwarded(true)
+                .forwardTarget("safe-target | tcp://127.0.0.1:61616 | queue.out")
                 .requestBody(largeBody)
                 .responseBody(largeBody)
                 .matchChain("[]")
@@ -50,11 +52,13 @@ class RequestLogRepositorySqliteTest {
         List<Object[]> rows = repository.findSummaryProjections(PageRequest.of(0, 10));
 
         assertThat(rows).hasSize(1);
-        assertThat(rows.get(0)).hasSize(21);
+        assertThat(rows.get(0)).hasSize(23);
         assertThat(Arrays.asList(rows.get(0))).doesNotContain(largeBody);
-        assertThat(rows.get(0)[18]).isEqualTo(true);
-        assertThat(rows.get(0)[19]).isEqualTo(true);
+        assertThat(rows.get(0)[11]).isEqualTo(true);
+        assertThat(rows.get(0)[12]).isEqualTo("safe-target | tcp://127.0.0.1:61616 | queue.out");
         assertThat(rows.get(0)[20]).isEqualTo(true);
+        assertThat(rows.get(0)[21]).isEqualTo(true);
+        assertThat(rows.get(0)[22]).isEqualTo(true);
         assertThat(repository.findById(saved.getId()))
                 .get()
                 .extracting(RequestLog::getRequestBody, RequestLog::getResponseBody)

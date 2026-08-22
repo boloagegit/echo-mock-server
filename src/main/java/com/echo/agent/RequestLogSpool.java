@@ -329,32 +329,37 @@ public class RequestLogSpool {
             if (deletedRows > 0) {
                 reservedItems.updateAndGet(current -> Math.max(0, current - deletedRows));
             }
-            cleanupCandidateSetsIfIdle();
+            cleanupUnreferencedCandidateSets();
         } catch (SQLException e) {
             throw new RequestLogUnavailableException(
                     "Cannot clean request-log spool: " + e.getMessage(), e);
         }
     }
 
-    private void cleanupCandidateSetsIfIdle() throws SQLException {
-        if (reservedItems.get() != 0) {
-            return;
-        }
+    private void cleanupUnreferencedCandidateSets() throws SQLException {
         candidateSetLifecycleLock.writeLock().lock();
         try {
-            if (reservedItems.get() != 0) {
-                return;
-            }
             try (Connection connection = openConnection(); Statement statement = connection.createStatement()) {
+                List<String> releasedIds = new ArrayList<>();
                 long released = 0;
                 try (ResultSet row = statement.executeQuery(
-                        "SELECT COALESCE(SUM(length(payload)), 0) FROM candidate_snapshot_sets")) {
-                    if (row.next()) {
-                        released = row.getLong(1);
+                        "SELECT candidate_set_id, length(payload) FROM candidate_snapshot_sets "
+                                + "WHERE NOT EXISTS (SELECT 1 FROM request_log_spool "
+                                + "WHERE request_log_spool.candidate_set_id "
+                                + "= candidate_snapshot_sets.candidate_set_id)")) {
+                    while (row.next()) {
+                        releasedIds.add(row.getString(1));
+                        released += row.getLong(2);
                     }
                 }
-                statement.executeUpdate("DELETE FROM candidate_snapshot_sets");
-                knownCandidateSetIds.clear();
+                if (releasedIds.isEmpty()) {
+                    return;
+                }
+                statement.executeUpdate("DELETE FROM candidate_snapshot_sets WHERE NOT EXISTS "
+                        + "(SELECT 1 FROM request_log_spool "
+                        + "WHERE request_log_spool.candidate_set_id "
+                        + "= candidate_snapshot_sets.candidate_set_id)");
+                knownCandidateSetIds.removeAll(releasedIds);
                 if (released > 0) {
                     long releasedBytes = released;
                     reservedBytes.updateAndGet(current -> Math.max(0, current - releasedBytes));
@@ -759,7 +764,8 @@ public class RequestLogSpool {
     private record SpoolTask(
             String ruleId, Protocol protocol, String method, String endpoint, boolean matched,
             int responseTimeMs, Integer matchTimeMs, String clientIp, LocalDateTime requestTime,
-            String matchChain, String targetHost, Integer proxyStatus, String proxyError,
+            String matchChain, String targetHost, boolean forwarded, String forwardTarget,
+            Integer proxyStatus, String proxyError,
             Integer responseStatus, String requestBody, String responseBody,
             String faultType, String scenarioName, String scenarioFromState, String scenarioToState,
             List<CandidateRecord> candidates, String analysisBody, String queryString,
@@ -771,7 +777,8 @@ public class RequestLogSpool {
                     && Objects.equals(task.getRequestBody(), task.getAnalysisBody());
             return new SpoolTask(task.getRuleId(), task.getProtocol(), task.getMethod(), task.getEndpoint(),
                     task.isMatched(), task.getResponseTimeMs(), task.getMatchTimeMs(), task.getClientIp(),
-                    task.getRequestTime(), task.getMatchChain(), task.getTargetHost(), task.getProxyStatus(),
+                    task.getRequestTime(), task.getMatchChain(), task.getTargetHost(),
+                    task.isForwarded(), task.getForwardTarget(), task.getProxyStatus(),
                     task.getProxyError(), task.getResponseStatus(), task.getRequestBody(), task.getResponseBody(),
                     task.getFaultType(), task.getScenarioName(), task.getScenarioFromState(), task.getScenarioToState(),
                     null, analysisUsesRequestBody ? null : task.getAnalysisBody(),
@@ -786,6 +793,7 @@ public class RequestLogSpool {
                     .ruleId(ruleId).protocol(protocol).method(method).endpoint(endpoint).matched(matched)
                     .responseTimeMs(responseTimeMs).matchTimeMs(matchTimeMs).clientIp(clientIp)
                     .requestTime(requestTime).matchChain(matchChain).targetHost(targetHost)
+                    .forwarded(forwarded).forwardTarget(forwardTarget)
                     .proxyStatus(proxyStatus).proxyError(proxyError).responseStatus(responseStatus)
                     .requestBody(requestBody).responseBody(responseBody)
                     .faultType(faultType).scenarioName(scenarioName)

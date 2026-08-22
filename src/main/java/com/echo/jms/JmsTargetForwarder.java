@@ -74,8 +74,10 @@ public class JmsTargetForwarder {
         targetConnection = null;
         closeFactory();
         activeTargetKey = null;
-        selectedTargetClients.values().forEach(TargetClient::close);
-        selectedTargetClients.clear();
+        synchronized (selectedTargetClients) {
+            selectedTargetClients.values().forEach(TargetClient::close);
+            selectedTargetClients.clear();
+        }
     }
 
     /**
@@ -83,16 +85,33 @@ public class JmsTargetForwarder {
      * 使用 target.queue 作為目標 Queue（非 source queue）
      */
     public String forward(String body, Message originalMessage) {
+        return forwardWithMetadata(body, originalMessage).body();
+    }
+
+    /** 轉發並回傳不含認證資訊的實際目標，供 Request Log 使用。 */
+    public ForwardResult forwardWithMetadata(String body, Message originalMessage) {
         Optional<JmsTargetConnectionService.ResolvedTarget> selected = targetResolver.get();
         if (selected.isEmpty()) {
-            return "<error>No default JMS target connection configured</error>";
+            return new ForwardResult(
+                    "<error>No default JMS target connection configured</error>", null);
         }
         JmsTargetConnectionService.ResolvedTarget resolved = selected.get();
+        return new ForwardResult(forwardResolved(body, originalMessage, resolved),
+                describeTarget(resolved));
+    }
+
+    private String forwardResolved(String body, Message originalMessage,
+                                   JmsTargetConnectionService.ResolvedTarget resolved) {
         JmsProperties.Target target = resolved.target();
         String targetQueue = target.getQueue();
         int timeoutMs = target.getTimeoutSeconds() * 1000;
 
         try {
+            if (connectionService != null) {
+                try (TargetClientUse client = acquireSelectedClient(resolved)) {
+                    return exchange(body, originalMessage, target, client.connection());
+                }
+            }
             ConnectionFactory factory = getOrCreateFactory(resolved);
             
             try (Session session = getConnection(factory, resolved.cacheKey())
@@ -132,7 +151,11 @@ public class JmsTargetForwarder {
             }
 
         } catch (JMSException e) {
-            resetConnection(resolved.cacheKey());
+            if (connectionService == null) {
+                resetConnection(resolved.cacheKey());
+            } else {
+                resetSelectedClientByCacheKey(resolved.cacheKey(), e);
+            }
             log.error("Failed to forward to target JMS (connection reset): {}", e.getMessage());
             return "<error>JMS forward error: " + e.getMessage() + "</error>";
         } catch (Exception e) {
@@ -148,26 +171,66 @@ public class JmsTargetForwarder {
      */
     public String forward(String body, Message originalMessage, String connectionId,
                           boolean useDefaultConnection) {
+        return forwardWithMetadata(body, originalMessage, connectionId, useDefaultConnection).body();
+    }
+
+    /** 依規則選定的連線轉發，並回傳安全的目標資訊。 */
+    public ForwardResult forwardWithMetadata(String body, Message originalMessage,
+                                             String connectionId,
+                                             boolean useDefaultConnection) {
         if (useDefaultConnection) {
-            return forward(body, originalMessage);
+            return forwardWithMetadata(body, originalMessage);
         }
         if (connectionService == null) {
-            return "<error>Named JMS target connections are unavailable</error>";
+            return new ForwardResult(
+                    "<error>Named JMS target connections are unavailable</error>", null);
         }
+        JmsTargetConnectionService.ResolvedTarget resolved = null;
         try {
-            JmsTargetConnectionService.ResolvedTarget resolved =
-                    connectionService.resolveEnabled(connectionId);
-            TargetClient client = getOrCreateSelectedClient(resolved);
-            return exchange(body, originalMessage, resolved.target(), client.connection());
+            resolved = connectionService.resolveEnabled(connectionId);
+            try (TargetClientUse client = acquireSelectedClient(resolved)) {
+                return new ForwardResult(
+                        exchange(body, originalMessage, resolved.target(), client.connection()),
+                        describeTarget(resolved));
+            }
         } catch (JMSException e) {
-            resetSelectedClient(connectionId, e);
+            resetSelectedClientByCacheKey(resolved.cacheKey(), e);
             log.error("Failed to forward to selected JMS target (connection reset): {}",
                     e.getMessage());
-            return "<error>JMS forward error: " + e.getMessage() + "</error>";
+            return new ForwardResult(
+                    "<error>JMS forward error: " + e.getMessage() + "</error>",
+                    describeTarget(resolved));
         } catch (Exception e) {
             log.error("Failed to forward to selected JMS target: {}", e.getMessage());
-            return "<error>JMS forward error: " + e.getMessage() + "</error>";
+            return new ForwardResult(
+                    "<error>JMS forward error: " + e.getMessage() + "</error>",
+                    resolved == null ? null : describeTarget(resolved));
         }
+    }
+
+    private static String describeTarget(JmsTargetConnectionService.ResolvedTarget resolved) {
+        JmsProperties.Target target = resolved.target();
+        return resolved.name() + " | " + sanitizeServerUrl(target.getServerUrl())
+                + " | " + target.getQueue();
+    }
+
+    static String sanitizeServerUrl(String serverUrl) {
+        if (serverUrl == null || serverUrl.isBlank()) {
+            return "-";
+        }
+        String sanitized = serverUrl.trim();
+        int queryStart = sanitized.indexOf('?');
+        if (queryStart >= 0) {
+            sanitized = sanitized.substring(0, queryStart);
+        }
+        int fragmentStart = sanitized.indexOf('#');
+        if (fragmentStart >= 0) {
+            sanitized = sanitized.substring(0, fragmentStart);
+        }
+        return sanitized.replaceAll("(?i)([a-z][a-z0-9+.-]*://)[^/@\\s]+@", "$1");
+    }
+
+    public record ForwardResult(String body, String target) {
     }
 
     private void resetConnection(String expectedTargetKey) {
@@ -279,18 +342,22 @@ public class JmsTargetForwarder {
         }
     }
 
-    private TargetClient getOrCreateSelectedClient(
+    private TargetClientUse acquireSelectedClient(
             JmsTargetConnectionService.ResolvedTarget resolved) throws Exception {
-        TargetClient current = selectedTargetClients.get(resolved.cacheKey());
-        if (current != null) return current;
-        synchronized (selectedTargetClients) {
-            current = selectedTargetClients.get(resolved.cacheKey());
-            if (current != null) return current;
-            retireSupersededClients(resolved.cacheKey());
-            TargetClient created = new TargetClient(createFactory(resolved.target()));
-            selectedTargetClients.put(resolved.cacheKey(), created);
-            log.info("Selected outbound JMS connection for rule: {}", resolved.name());
-            return created;
+        while (true) {
+            TargetClient current = selectedTargetClients.get(resolved.cacheKey());
+            TargetClientUse currentUse = current == null ? null : current.tryUse();
+            if (currentUse != null) return currentUse;
+            synchronized (selectedTargetClients) {
+                current = selectedTargetClients.get(resolved.cacheKey());
+                currentUse = current == null ? null : current.tryUse();
+                if (currentUse != null) return currentUse;
+                retireSupersededClients(resolved.cacheKey());
+                TargetClient created = new TargetClient(createFactory(resolved.target()));
+                selectedTargetClients.put(resolved.cacheKey(), created);
+                log.info("Selected outbound JMS connection: {}", resolved.name());
+                return created.tryUse();
+            }
         }
     }
 
@@ -301,32 +368,54 @@ public class JmsTargetForwarder {
         selectedTargetClients.entrySet().removeIf(entry -> {
             boolean superseded = !entry.getKey().equals(cacheKey)
                     && entry.getKey().startsWith(profilePrefix);
-            if (superseded) entry.getValue().close();
+            if (superseded) entry.getValue().retire();
             return superseded;
         });
     }
 
-    private void resetSelectedClient(String connectionId, Exception error) {
-        if (connectionId == null) return;
-        String numericPrefix = "db:" + connectionId + ":";
-        selectedTargetClients.entrySet().removeIf(entry -> {
-            boolean selected = entry.getKey().equals(connectionId)
-                    || entry.getKey().startsWith(numericPrefix);
-            if (selected) entry.getValue().close();
-            return selected;
-        });
+    private void resetSelectedClientByCacheKey(String cacheKey, Exception error) {
+        if (cacheKey == null) return;
+        synchronized (selectedTargetClients) {
+            TargetClient client = selectedTargetClients.remove(cacheKey);
+            if (client != null) client.retire();
+        }
         log.info("Selected JMS connection reset after failure: {}", error.getMessage());
+    }
+
+    /** Stops new work on a changed/deleted profile and closes it after active forwards finish. */
+    public void evict(Long connectionId) {
+        if (connectionId == null) return;
+        String prefix = "db:" + connectionId + ":";
+        synchronized (selectedTargetClients) {
+            selectedTargetClients.entrySet().removeIf(entry -> {
+                boolean selected = entry.getKey().startsWith(prefix);
+                if (selected) entry.getValue().retire();
+                return selected;
+            });
+        }
     }
 
     private static final class TargetClient {
         private final ConnectionFactory factory;
         private Connection connection;
+        private int users;
+        private boolean retired;
+        private boolean closed;
 
         private TargetClient(ConnectionFactory factory) {
             this.factory = factory;
         }
 
+        private synchronized TargetClientUse tryUse() {
+            if (retired || closed) return null;
+            users++;
+            return new TargetClientUse(this);
+        }
+
         private synchronized Connection connection() throws JMSException {
+            if (closed) {
+                throw new JMSException("Outbound JMS connection is no longer active");
+            }
             if (connection == null) {
                 Connection created = factory.createConnection();
                 try {
@@ -344,7 +433,28 @@ public class JmsTargetForwarder {
             return connection;
         }
 
+        private synchronized void release() {
+            users--;
+            if (users < 0) {
+                users++;
+                throw new IllegalStateException("JMS client use released twice");
+            }
+            if (retired && users == 0) closeResources();
+        }
+
+        private synchronized void retire() {
+            retired = true;
+            if (users == 0) closeResources();
+        }
+
         private synchronized void close() {
+            retired = true;
+            closeResources();
+        }
+
+        private void closeResources() {
+            if (closed) return;
+            closed = true;
             if (connection != null) {
                 try {
                     connection.close();
@@ -360,6 +470,28 @@ public class JmsTargetForwarder {
                     // Shutdown/reset must remain best-effort.
                 }
             }
+        }
+    }
+
+    private static final class TargetClientUse implements AutoCloseable {
+        private final TargetClient owner;
+        private boolean closed;
+
+        private TargetClientUse(TargetClient owner) {
+            this.owner = owner;
+        }
+
+        private Connection connection() throws JMSException {
+            return owner.connection();
+        }
+
+        @Override
+        public void close() {
+            synchronized (this) {
+                if (closed) return;
+                closed = true;
+            }
+            owner.release();
         }
     }
 

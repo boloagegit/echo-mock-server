@@ -40,11 +40,17 @@ const StatsPage = {
       bodySearchIdx: {},
       bodyFormatted: {},
       inspectorTab: 'body',
+      compactLogTable: false,
+      logTableMediaQuery: null,
+      logTableMediaListener: null,
     };
   },
   computed: {
     selectedLogItem() {
       return this.pagedLogs.find(item => !!this.logDetailExpanded[item.log.id]) || null;
+    },
+    logDetailColspan() {
+      return this.compactLogTable ? 4 : 5;
     }
   },
   watch: {
@@ -93,7 +99,25 @@ const StatsPage = {
       }
     });
   },
+  mounted() {
+    if (typeof window.matchMedia !== 'function') { return; }
+    this.logTableMediaQuery = window.matchMedia('(max-width: 1024px)');
+    this.logTableMediaListener = event => { this.compactLogTable = event.matches; };
+    this.compactLogTable = this.logTableMediaQuery.matches;
+    if (this.logTableMediaQuery.addEventListener) {
+      this.logTableMediaQuery.addEventListener('change', this.logTableMediaListener);
+    } else {
+      this.logTableMediaQuery.addListener(this.logTableMediaListener);
+    }
+  },
   beforeUnmount() {
+    if (this.logTableMediaQuery && this.logTableMediaListener) {
+      if (this.logTableMediaQuery.removeEventListener) {
+        this.logTableMediaQuery.removeEventListener('change', this.logTableMediaListener);
+      } else {
+        this.logTableMediaQuery.removeListener(this.logTableMediaListener);
+      }
+    }
     // 清理所有 CodeMirror instances 和 marks
     if (this.cmInstances) {
       for (const key of Object.keys(this.cmInstances)) {
@@ -123,6 +147,7 @@ const StatsPage = {
       return this.logSort.asc ? 'ascending' : 'descending';
     },
     logStatusCode(log) {
+      if (log.protocol !== 'HTTP') { return null; }
       return log.proxyStatus != null ? log.proxyStatus : log.responseStatus;
     },
     reasonIcon(reason) {
@@ -469,18 +494,22 @@ const StatsPage = {
                       <span>{{t('stats.hostLabel')}}</span>
                       <code :title="item.log.targetHost">{{item.log.targetHost}}</code>
                     </div>
+                    <div v-if="item.log.forwardTarget" class="log-request-secondary">
+                      <span>{{t('stats.forwardTargetLabel')}}</span>
+                      <code :title="item.log.forwardTarget">{{item.log.forwardTarget}}</code>
+                    </div>
                   </td>
                   <td class="col-hide-md log-duration-cell"><span>{{item.log.responseTimeMs}}</span><small>ms</small></td>
                   <td>
                     <div class="log-result">
-                      <template v-if="item.log.matched">
-                        <span class="log-outcome log-outcome-success"><i class="bi bi-check2-circle" aria-hidden="true"></i>{{t('stats.matched')}}</span>
-                      </template>
-                      <template v-else-if="item.log.targetHost && item.log.proxyError">
+                      <template v-if="item.log.forwarded && item.log.proxyError">
                         <span class="log-outcome log-outcome-danger" :title="item.log.proxyError"><i class="bi bi-x-circle" aria-hidden="true"></i>{{t('stats.forwardFailed')}}</span>
                       </template>
-                      <template v-else-if="item.log.targetHost">
+                      <template v-else-if="item.log.forwarded">
                         <span class="log-outcome"><i class="bi bi-arrow-right-circle" aria-hidden="true"></i>{{t('stats.forwarded')}}</span>
+                      </template>
+                      <template v-else-if="item.log.matched">
+                        <span class="log-outcome log-outcome-success"><i class="bi bi-check2-circle" aria-hidden="true"></i>{{t('stats.matched')}}</span>
                       </template>
                       <template v-else>
                         <span class="log-outcome log-outcome-danger"><i class="bi bi-x-circle" aria-hidden="true"></i>{{t('stats.unmatched')}}</span>
@@ -514,7 +543,7 @@ const StatsPage = {
                 </tr>
 
                 <tr v-if="logDetailExpanded[item.log.id]" class="log-detail-row">
-                  <td colspan="5" class="log-detail-cell" @click.stop>
+                  <td :colspan="logDetailColspan" class="log-detail-cell" @click.stop>
                     <div class="log-detail-slot" :id="'log-detail-slot-'+item.log.id"></div>
                   </td>
                 </tr>
@@ -685,6 +714,7 @@ const StatsPage = {
                 <div v-if="selectedLogItem.log.method"><dt>{{t('stats.detailMethod')}}</dt><dd><span class="log-method">{{selectedLogItem.log.method}}</span></dd></div>
                 <div><dt>{{t('stats.detailEndpoint')}}</dt><dd><code>{{selectedLogItem.log.endpoint}}</code></dd></div>
                 <div v-if="selectedLogItem.log.targetHost"><dt>{{t('stats.detailTargetHost')}}</dt><dd><code>{{selectedLogItem.log.targetHost}}</code></dd></div>
+                <div v-if="selectedLogItem.log.forwardTarget"><dt>{{t('stats.detailForwardTarget')}}</dt><dd><code>{{selectedLogItem.log.forwardTarget}}</code></dd></div>
                 <div v-if="selectedLogItem.log.clientIp"><dt>{{t('stats.detailClientIp')}}</dt><dd>{{selectedLogItem.log.clientIp}}</dd></div>
               </dl>
             </section>
@@ -700,13 +730,14 @@ const StatsPage = {
                 <div v-if="selectedLogItem.log.ruleId"><dt>{{t('stats.detailRuleId')}}</dt><dd><a href="#" class="log-rule-link" @click.prevent.stop="$emit('go-to-rule', selectedLogItem.log.ruleId)">{{selectedLogItem.log.ruleId}}</a></dd></div>
                 <div v-if="selectedLogItem.rule?.description"><dt>{{t('stats.detailRuleDesc')}}</dt><dd>{{selectedLogItem.rule.description}}</dd></div>
                 <div><dt>{{t('stats.detailDuration')}}</dt><dd class="tabular-nums">{{selectedLogItem.log.responseTimeMs}} ms</dd></div>
-                <div v-if="selectedLogItem.log.responseStatus != null"><dt>{{t('stats.detailResponseStatus')}}</dt><dd><span class="log-status-code" :class="selectedLogItem.log.responseStatus<400?'is-success':selectedLogItem.log.responseStatus<500?'is-warning':'is-danger'">{{selectedLogItem.log.responseStatus}}</span></dd></div>
+                <div><dt>{{t('stats.detailForwarded')}}</dt><dd>{{selectedLogItem.log.forwarded ? t('stats.forwarded') : t('stats.notForwarded')}}</dd></div>
+                <div v-if="selectedLogItem.log.protocol==='HTTP' && selectedLogItem.log.responseStatus != null"><dt>{{t('stats.detailResponseStatus')}}</dt><dd><span class="log-status-code" :class="selectedLogItem.log.responseStatus<400?'is-success':selectedLogItem.log.responseStatus<500?'is-warning':'is-danger'">{{selectedLogItem.log.responseStatus}}</span></dd></div>
                 <div v-if="selectedLogItem.log.faultType && selectedLogItem.log.faultType !== 'NONE'"><dt>{{t('stats.detailFaultType')}}</dt><dd><span class="log-outcome log-outcome-warning"><i class="bi bi-lightning" aria-hidden="true"></i>{{t('rules.fault_' + selectedLogItem.log.faultType)}}</span></dd></div>
                 <div v-if="scenarioEnabled && selectedLogItem.log.scenarioName"><dt>{{t('stats.detailScenario')}}</dt><dd>{{selectedLogItem.log.scenarioName}}</dd></div>
                 <div v-if="scenarioEnabled && selectedLogItem.log.scenarioToState"><dt>{{t('stats.detailScenarioTransition')}}</dt><dd class="log-scenario-transition"><span>{{selectedLogItem.log.scenarioFromState || 'Started'}}</span><i class="bi bi-arrow-right" aria-hidden="true"></i><strong>{{selectedLogItem.log.scenarioToState}}</strong></dd></div>
                 <div v-if="selectedLogItem.log.matchTimeMs != null"><dt>{{t('stats.detailMatchTime')}}</dt><dd class="tabular-nums">{{selectedLogItem.log.matchTimeMs}} ms</dd></div>
                 <div v-if="selectedLogItem.log.matchTimeMs != null && selectedLogItem.log.responseTimeMs > selectedLogItem.log.matchTimeMs"><dt>{{t('stats.detailOtherTime')}}</dt><dd class="tabular-nums">{{selectedLogItem.log.responseTimeMs - selectedLogItem.log.matchTimeMs}} ms</dd></div>
-                <div v-if="selectedLogItem.log.proxyStatus != null"><dt>{{t('stats.detailProxyStatus')}}</dt><dd><span class="log-status-code" :class="selectedLogItem.log.proxyStatus<400?'is-success':selectedLogItem.log.proxyStatus<500?'is-warning':'is-danger'">{{selectedLogItem.log.proxyStatus}}</span></dd></div>
+                <div v-if="selectedLogItem.log.protocol==='HTTP' && selectedLogItem.log.proxyStatus != null"><dt>{{t('stats.detailProxyStatus')}}</dt><dd><span class="log-status-code" :class="selectedLogItem.log.proxyStatus<400?'is-success':selectedLogItem.log.proxyStatus<500?'is-warning':'is-danger'">{{selectedLogItem.log.proxyStatus}}</span></dd></div>
                 <div v-if="selectedLogItem.log.proxyError"><dt>{{t('stats.detailProxyError')}}</dt><dd class="log-error-text">{{selectedLogItem.log.proxyError}}</dd></div>
               </dl>
             </section>

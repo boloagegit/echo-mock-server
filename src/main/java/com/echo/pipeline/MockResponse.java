@@ -29,6 +29,9 @@ public class MockResponse {
     /** 是否為轉發結果 */
     private final boolean forwarded;
 
+    /** 實際下游目標的安全顯示文字，不得包含帳密或 token */
+    private final String forwardTarget;
+
     /** 轉發錯誤訊息 */
     private final String proxyError;
 }

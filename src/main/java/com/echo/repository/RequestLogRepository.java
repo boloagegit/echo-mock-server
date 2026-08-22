@@ -67,7 +67,7 @@ public interface RequestLogRepository extends JpaRepository<RequestLog, Long> {
     /** 摘要投影查詢（排除 LOB 欄位：requestBody, responseBody, matchChain） */
     @Query("SELECT r.id, r.ruleId, r.protocol, r.method, r.endpoint, r.matched, " +
            "r.responseTimeMs, r.matchTimeMs, r.clientIp, r.requestTime, r.targetHost, " +
-           "r.proxyStatus, r.proxyError, r.responseStatus, " +
+           "r.forwarded, r.forwardTarget, r.proxyStatus, r.proxyError, r.responseStatus, " +
            "r.faultType, r.scenarioName, r.scenarioFromState, r.scenarioToState, " +
            "CASE WHEN r.requestBody IS NOT NULL THEN true ELSE false END, " +
            "CASE WHEN r.responseBody IS NOT NULL THEN true ELSE false END, " +
@@ -81,7 +81,7 @@ public interface RequestLogRepository extends JpaRepository<RequestLog, Long> {
      */
     @Query(value = "SELECT r.id, r.ruleId, r.protocol, r.method, r.endpoint, r.matched, " +
                    "r.responseTimeMs, r.matchTimeMs, r.clientIp, r.requestTime, r.targetHost, " +
-                   "r.proxyStatus, r.proxyError, r.responseStatus, " +
+                   "r.forwarded, r.forwardTarget, r.proxyStatus, r.proxyError, r.responseStatus, " +
                    "r.faultType, r.scenarioName, r.scenarioFromState, r.scenarioToState, " +
                    "CASE WHEN r.requestBody IS NOT NULL THEN true ELSE false END, " +
                    "CASE WHEN r.responseBody IS NOT NULL THEN true ELSE false END, " +
@@ -92,6 +92,7 @@ public interface RequestLogRepository extends JpaRepository<RequestLog, Long> {
                    "(:matched IS NULL OR r.matched = :matched) AND " +
                    "(:endpoint IS NULL OR LOWER(r.endpoint) LIKE LOWER(CONCAT('%', :endpoint, '%')) " +
                    "OR LOWER(r.targetHost) LIKE LOWER(CONCAT('%', :endpoint, '%')) " +
+                   "OR LOWER(r.forwardTarget) LIKE LOWER(CONCAT('%', :endpoint, '%')) " +
                    "OR LOWER(r.ruleId) LIKE LOWER(CONCAT('%', :endpoint, '%'))) AND " +
                    "(:afterId IS NULL OR r.id > :afterId)",
            countQuery = "SELECT COUNT(r) FROM RequestLog r WHERE " +
@@ -100,6 +101,7 @@ public interface RequestLogRepository extends JpaRepository<RequestLog, Long> {
                         "(:matched IS NULL OR r.matched = :matched) AND " +
                         "(:endpoint IS NULL OR LOWER(r.endpoint) LIKE LOWER(CONCAT('%', :endpoint, '%')) " +
                         "OR LOWER(r.targetHost) LIKE LOWER(CONCAT('%', :endpoint, '%')) " +
+                        "OR LOWER(r.forwardTarget) LIKE LOWER(CONCAT('%', :endpoint, '%')) " +
                         "OR LOWER(r.ruleId) LIKE LOWER(CONCAT('%', :endpoint, '%'))) AND " +
                         "(:afterId IS NULL OR r.id > :afterId)")
     Page<Object[]> findSummaryPage(@Param("ruleId") String ruleId,

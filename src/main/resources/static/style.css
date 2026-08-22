@@ -94,7 +94,7 @@
 body {
     background: var(--bg);
     color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+    font-family: var(--font-ui);
     font-size: var(--font-base);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
@@ -674,6 +674,9 @@ td.col-datetime .sub-info {
 /* Responsive table columns - hide on smaller screens */
 @media (max-width: 1024px) {
     .col-hide-md { display: none !important }
+}
+@media (max-width: 1280px) {
+    .rule-list-table .col-hide-md { display: none !important }
 }
 @media (max-width: 768px) {
     .col-hide-sm { display: none !important }
@@ -2380,8 +2383,23 @@ tr.active { background: var(--hover) }
 .logs-workspace .filter-chip .chip-remove:focus-visible,
 .logs-workspace .filter-chips .chip-clear:focus-visible { outline: 0; box-shadow: var(--focus-ring) }
 .logs-workspace .filter-chips .chip-clear { border-radius: var(--radius-control); text-decoration: none }
-
 .logs-table { min-width: 760px }
+
+@media (max-width: 1100px) {
+    .logs-workspace .workspace-filter-controls { flex-wrap: wrap }
+    .logs-workspace .workspace-filter-controls > .filter-divider { display: none }
+    .logs-workspace .workspace-search-field {
+        flex: 1 1 100%;
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+    }
+}
+
+@media (max-width: 1024px) {
+    .logs-table { min-width: 0 }
+}
+
 .logs-table th,
 .logs-table td { vertical-align: middle }
 .logs-table .log-time-column { width: 104px }
@@ -2596,6 +2614,12 @@ tr.active { background: var(--hover) }
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-md);
+}
+@media (max-width: 1024px) {
+    .log-inspector-body-grid {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: repeat(2, minmax(0, 1fr));
+    }
 }
 .log-inspector-pane {
     display: flex;
@@ -3361,7 +3385,7 @@ input[type="checkbox"] {
 .connection-jms-section .settings-card-header i { color: var(--muted) }
 .connection-row {
     display: grid;
-    grid-template-columns: 220px minmax(0, 1fr) 350px;
+    grid-template-columns: minmax(190px, 220px) minmax(240px, 1fr) 350px;
     column-gap: var(--space-xl);
     row-gap: var(--space-sm);
     align-items: start;
@@ -3382,7 +3406,7 @@ input[type="checkbox"] {
 .connection-name { font-size: var(--font-base); font-weight: 650; color: var(--text); line-height: 1.35 }
 .connection-address { overflow-wrap: anywhere; color: var(--text); font-family: var(--font-mono); font-size: var(--font-sm) }
 .connection-badges { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-sm); margin-top: 0 }
-.connection-test-result { margin-top: var(--space-xs) }
+.connection-test-result { margin-top: var(--space-xs); overflow-wrap: anywhere }
 .connection-test-result.success { color: var(--success) }
 .connection-test-result.error { color: var(--danger) }
 .connection-actions {
@@ -3403,7 +3427,7 @@ input[type="checkbox"] {
 .connection-guidance { display: grid; gap: var(--space-xs); margin-top: var(--space-md); color: var(--muted); font-size: var(--font-sm); line-height: 1.5 }
 .connection-guidance > div { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: var(--space-sm); align-items: start }
 .connection-guidance-label { color: var(--text); font-weight: 600 }
-@media (max-width: 1100px) {
+@media (max-width: 1200px) {
     .connection-row { grid-template-columns: minmax(120px, 1fr) minmax(180px, 2fr) }
     .connection-actions { grid-column: 1 / -1; justify-content: flex-start }
 }

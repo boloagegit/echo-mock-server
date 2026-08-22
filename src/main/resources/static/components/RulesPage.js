@@ -83,7 +83,7 @@ const RulesPage = {
     }
   },
   methods: {
-    shortId, fmtTime, daysLeft, condTooltip, condTags, parseTags, fmtCond,
+    shortId, fmtTime, daysLeft, condTooltip, condTags, parseTags, fmtCond, forwardTargetLabel,
     setFilter(key, value) {
       const f = { ...this.ruleFilter };
       f[key] = value;
@@ -251,7 +251,7 @@ const RulesPage = {
             </div>
         </div>
         <div class="card-table-body">
-        <table v-if="pagedRules.length" class="table-fixed">
+        <table v-if="pagedRules.length" class="table-fixed rule-list-table">
             <thead><tr>
                 <th v-if="canDragRules" style="width:28px"></th>
                 <th v-if="batchSelectMode" style="width:40px"><input type="checkbox" @change="$emit('toggle-select-all', $event)" :checked="selectedRules.length===pagedRules.length && pagedRules.length>0" :aria-label="t('rules.selectAll')"></th>
@@ -337,7 +337,7 @@ const RulesPage = {
                                 <div class="pv-fields">
                                     <div class="pv-section-title">{{t('rules.pvSectionSettings')}}</div>
                                     <div class="pv-field" v-if="rulePreviewCache[r.id].protocol==='HTTP'&&rulePreviewCache[r.id].action!=='FORWARD'&&rulePreviewCache[r.id].faultType!=='CONNECTION_RESET'"><span class="pv-label">{{t('rules.pvStatusCode')}}</span><span class="badge" :class="rulePreviewCache[r.id].status<400?'badge-success':rulePreviewCache[r.id].status<500?'badge-warning':'badge-danger'">{{rulePreviewCache[r.id].status}}</span></div>
-                                    <div class="pv-field" v-if="rulePreviewCache[r.id].action==='FORWARD'"><span class="pv-label">{{t('rules.forward')}}</span><span>{{rulePreviewCache[r.id].forwardTargetMode==='CONNECTION' ? '#'+rulePreviewCache[r.id].httpTargetConnectionId : rulePreviewCache[r.id].forwardTargetMode}}</span></div>
+                                    <div class="pv-field" v-if="rulePreviewCache[r.id].action==='FORWARD'"><span class="pv-label">{{t('rules.forward')}}</span><span>{{forwardTargetLabel(rulePreviewCache[r.id])}}</span></div>
                                     <div class="pv-field" v-if="rulePreviewCache[r.id].faultType&&rulePreviewCache[r.id].faultType!=='NONE'"><span class="pv-label">{{t('rules.faultInjection')}}</span><span class="pv-result-value"><i class="bi bi-lightning" aria-hidden="true"></i>{{t('rules.fault_'+rulePreviewCache[r.id].faultType)}}</span></div>
                                     <div class="pv-field" v-if="status?.scenariosEnabled && rulePreviewCache[r.id].scenarioName"><span class="pv-label">{{t('rules.pvScenario')}}</span><span class="pv-scenario-value" :title="t('rules.scenarioTooltip',{name:rulePreviewCache[r.id].scenarioName,required:rulePreviewCache[r.id].requiredScenarioState||'Started',newState:rulePreviewCache[r.id].newScenarioState||rulePreviewCache[r.id].requiredScenarioState||'Started'})"><strong>{{rulePreviewCache[r.id].scenarioName}}</strong><code>{{rulePreviewCache[r.id].requiredScenarioState||'Started'}}</code><i class="bi bi-arrow-right" aria-hidden="true"></i><code>{{rulePreviewCache[r.id].newScenarioState||rulePreviewCache[r.id].requiredScenarioState||'Started'}}</code></span></div>
                                     <div class="pv-field"><span class="pv-label">{{t('rules.pvDelay')}}</span><span>{{rulePreviewCache[r.id].delayMs||0}} ms</span></div>
@@ -424,7 +424,7 @@ const RulesPage = {
             </div>
             <div v-if="expandedTagGroups.includes('_untagged')" class="tag-group-content">
                 <div v-if="groupLoading['_untagged']" class="sub-info" style="padding:0.75rem 1rem"><i class="bi bi-arrow-clockwise spin"></i> {{t('rules.loading')}}</div>
-                <table v-if="rulesByTagGroup['_untagged']?.length" class="tag-group-table">
+                <table v-if="rulesByTagGroup['_untagged']?.length" class="tag-group-table rule-list-table">
                     <thead><tr>
                         <th class="col-id">{{t('rules.thId')}}</th>
                         <th class="col-type col-hide-sm">{{t('rules.thProtocol')}}</th>
@@ -468,7 +468,7 @@ const RulesPage = {
                         </div>
                         <template v-if="expandedTagSubgroups.includes(key+'='+val)">
                         <div v-if="groupLoading[key+'='+val]" class="sub-info" style="padding:0.75rem 1rem"><i class="bi bi-arrow-clockwise spin"></i> {{t('rules.loading')}}</div>
-                        <table v-if="rulesByTag[key+'='+val]?.length" class="tag-group-table">
+                        <table v-if="rulesByTag[key+'='+val]?.length" class="tag-group-table rule-list-table">
                             <thead><tr>
                                 <th class="col-id">{{t('rules.thId')}}</th>
                                 <th class="col-type col-hide-sm">{{t('rules.thProtocol')}}</th>

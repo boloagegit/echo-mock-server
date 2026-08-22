@@ -163,8 +163,9 @@ class JmsMockPipelineTest {
                     .thenReturn(Collections.emptyList());
 
             String forwardedBody = "<Response>Forwarded OK</Response>";
-            when(targetForwarder.forward(anyString(), isNull()))
-                    .thenReturn(forwardedBody);
+            when(targetForwarder.forwardWithMetadata(anyString(), isNull()))
+                    .thenReturn(new JmsTargetForwarder.ForwardResult(
+                            forwardedBody, "Primary | tcp://broker:61616 | TARGET.REQUEST"));
 
             PipelineResult result = pipeline.execute(defaultRequest());
 
@@ -174,6 +175,8 @@ class JmsMockPipelineTest {
             assertThat(response.isForwarded()).isTrue();
             assertThat(response.getStatus()).isEqualTo(200);
             assertThat(response.getBody()).isEqualTo(forwardedBody);
+            assertThat(response.getForwardTarget())
+                    .isEqualTo("Primary | tcp://broker:61616 | TARGET.REQUEST");
             assertThat(response.getProxyError()).isNull();
         }
 
@@ -188,15 +191,17 @@ class JmsMockPipelineTest {
             when(jmsProperties.getQueue()).thenReturn("ORDER.REQUEST");
             when(jmsRuleService.findPreparedJmsRules("ORDER.REQUEST"))
                     .thenReturn(List.of(rule));
-            when(targetForwarder.forward(anyString(), isNull(), eq("7"), eq(false)))
-                    .thenReturn("<Response>Selected target</Response>");
+            when(targetForwarder.forwardWithMetadata(anyString(), isNull(), eq("7"), eq(false)))
+                    .thenReturn(new JmsTargetForwarder.ForwardResult(
+                            "<Response>Selected target</Response>",
+                            "Selected | tcp://broker:61616 | SELECTED.REQUEST"));
 
             PipelineResult result = pipeline.execute(defaultRequest());
 
             assertThat(result.isMatched()).isTrue();
             assertThat(result.getResponse().isForwarded()).isTrue();
             assertThat(result.getResponse().getBody()).isEqualTo("<Response>Selected target</Response>");
-            verify(targetForwarder).forward(anyString(), isNull(), eq("7"), eq(false));
+            verify(targetForwarder).forwardWithMetadata(anyString(), isNull(), eq("7"), eq(false));
             verify(ruleService, never()).findResponseBodyById(anyLong());
         }
     }
@@ -217,8 +222,9 @@ class JmsMockPipelineTest {
                     .thenReturn(Collections.emptyList());
 
             String errorBody = "<error>JMS forward error: Connection refused</error>";
-            when(targetForwarder.forward(anyString(), isNull()))
-                    .thenReturn(errorBody);
+            when(targetForwarder.forwardWithMetadata(anyString(), isNull()))
+                    .thenReturn(new JmsTargetForwarder.ForwardResult(
+                            errorBody, "Primary | tcp://broker:61616 | TARGET.REQUEST"));
 
             PipelineResult result = pipeline.execute(defaultRequest());
 
@@ -355,6 +361,8 @@ class JmsMockPipelineTest {
                     eq("JMS"),                // clientIp
                     any(),                    // matchChainJson
                     isNull(),                 // targetHost (matched, but JMS request has no targetHost)
+                    eq(false),                // forwarded
+                    isNull(),                 // forwardTarget
                     any(),                    // proxyStatus
                     isNull(),                 // proxyError
                     eq(200),                  // responseStatus
@@ -392,6 +400,8 @@ class JmsMockPipelineTest {
                     eq("JMS"),                // clientIp
                     any(),                    // matchChainJson
                     isNull(),                 // targetHost = null (handleNoMatch path)
+                    eq(false),                // forwarded
+                    isNull(),                 // forwardTarget
                     isNull(),                 // proxyStatus
                     isNull(),                 // proxyError
                     eq(200),                  // responseStatus

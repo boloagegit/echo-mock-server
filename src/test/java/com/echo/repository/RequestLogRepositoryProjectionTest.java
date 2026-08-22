@@ -39,22 +39,22 @@ class RequestLogRepositoryProjectionTest {
 
         assertThat(rows).hasSize(3);
         assertThat(rows).allSatisfy(row -> {
-            assertThat(row).hasSize(21);
+            assertThat(row).hasSize(23);
             assertThat(Arrays.asList(row)).doesNotContain(largeBody);
         });
-        assertThat(byEndpoint.get("/large")[14]).isEqualTo("EMPTY_RESPONSE");
-        assertThat(byEndpoint.get("/large")[15]).isEqualTo("order-flow");
-        assertThat(byEndpoint.get("/large")[16]).isEqualTo("Started");
-        assertThat(byEndpoint.get("/large")[17]).isEqualTo("Paid");
-        assertThat(byEndpoint.get("/null")[18]).isEqualTo(false);
-        assertThat(byEndpoint.get("/null")[19]).isEqualTo(false);
+        assertThat(byEndpoint.get("/large")[16]).isEqualTo("EMPTY_RESPONSE");
+        assertThat(byEndpoint.get("/large")[17]).isEqualTo("order-flow");
+        assertThat(byEndpoint.get("/large")[18]).isEqualTo("Started");
+        assertThat(byEndpoint.get("/large")[19]).isEqualTo("Paid");
         assertThat(byEndpoint.get("/null")[20]).isEqualTo(false);
-        assertThat(byEndpoint.get("/empty")[18]).isEqualTo(true);
-        assertThat(byEndpoint.get("/empty")[19]).isEqualTo(true);
+        assertThat(byEndpoint.get("/null")[21]).isEqualTo(false);
+        assertThat(byEndpoint.get("/null")[22]).isEqualTo(false);
         assertThat(byEndpoint.get("/empty")[20]).isEqualTo(true);
-        assertThat(byEndpoint.get("/large")[18]).isEqualTo(true);
-        assertThat(byEndpoint.get("/large")[19]).isEqualTo(true);
+        assertThat(byEndpoint.get("/empty")[21]).isEqualTo(true);
+        assertThat(byEndpoint.get("/empty")[22]).isEqualTo(true);
         assertThat(byEndpoint.get("/large")[20]).isEqualTo(true);
+        assertThat(byEndpoint.get("/large")[21]).isEqualTo(true);
+        assertThat(byEndpoint.get("/large")[22]).isEqualTo(true);
     }
 
     @Test
@@ -63,6 +63,8 @@ class RequestLogRepositoryProjectionTest {
                 LocalDateTime.now().minusSeconds(3)));
         first.setRuleId("rule-orders");
         first.setTargetHost("PAYMENT.EXAMPLE");
+        first.setForwarded(true);
+        first.setForwardTarget("Primary downstream");
         first.setResponseTimeMs(30);
         RequestLog second = repository.save(log("/orders/second", null, null, null,
                 LocalDateTime.now().minusSeconds(2)));
@@ -85,6 +87,12 @@ class RequestLogRepositoryProjectionTest {
         Page<Object[]> targetHostSearch = repository.findSummaryPage(null, null, null, "payment", null,
                 PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "requestTime")));
         assertThat(targetHostSearch.getContent()).extracting(row -> row[4])
+                .containsExactly("/orders/first");
+
+        Page<Object[]> forwardTargetSearch = repository.findSummaryPage(
+                null, null, null, "downstream", null,
+                PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "requestTime")));
+        assertThat(forwardTargetSearch.getContent()).extracting(row -> row[4])
                 .containsExactly("/orders/first");
 
         Page<Object[]> incremental = repository.findSummaryPage(null, null, null, null, second.getId(),

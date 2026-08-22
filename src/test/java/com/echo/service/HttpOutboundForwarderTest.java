@@ -155,6 +155,15 @@ class HttpOutboundForwarderTest {
     }
 
     @Test
+    void originalHostLogMetadataRemovesCredentialsAndUrlSuffixes() {
+        assertThat(HttpOutboundForwarder.sanitizeOriginalHost(
+                "https://https://user:secret@downstream.example:8443/path?token=hidden#part"))
+                .isEqualTo("https://downstream.example:8443");
+        assertThat(HttpOutboundForwarder.sanitizeOriginalHost("user:secret@host.example?token=hidden"))
+                .isEqualTo("https://host.example");
+    }
+
+    @Test
     void stripsStandardAndConnectionNamedHopByHopHeaders() {
         Map<String, String> source = Map.ofEntries(
                 Map.entry("Connection", "X-Internal-Hop, X-Second-Hop"),
@@ -326,6 +335,9 @@ class HttpOutboundForwarderTest {
         var targetMetrics = forwarder.metricsSnapshot().targets().get("profile:18");
         assertThat(targetMetrics.failed()).isEqualTo(1);
         assertThat(targetMetrics.poolTimeouts()).isEqualTo(1);
+
+        forwarder.evict(18L);
+        assertThat(forwarder.metricsSnapshot().targets()).doesNotContainKey("profile:18");
     }
 
     @Test

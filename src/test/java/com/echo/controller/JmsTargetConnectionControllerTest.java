@@ -4,6 +4,7 @@ import com.echo.config.LdapConfig;
 import com.echo.config.SecurityConfig;
 import com.echo.dto.JmsTargetConnectionDto;
 import com.echo.dto.JmsTargetConnectionRequest;
+import com.echo.jms.JmsTargetForwarder;
 import com.echo.repository.BuiltinUserRepository;
 import com.echo.service.JmsTargetConnectionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,6 +24,8 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -41,6 +44,9 @@ class JmsTargetConnectionControllerTest {
     private JmsTargetConnectionService service;
 
     @MockitoBean
+    private JmsTargetForwarder forwarder;
+
+    @MockitoBean
     @SuppressWarnings("UnusedVariable")
     private BuiltinUserRepository builtinUserRepository;
 
@@ -55,9 +61,25 @@ class JmsTargetConnectionControllerTest {
 
     @Test
     @WithMockUser(roles = "USER")
-    void listRequiresAdminRole() throws Exception {
+    void listAllowsAuthenticatedUserWithoutPasswordMaterial() throws Exception {
+        when(service.list()).thenReturn(List.of(dto("1", true)));
+
         mockMvc.perform(get("/api/admin/jms-target-connections")
                         .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("Primary"))
+                .andExpect(jsonPath("$[0].passwordConfigured").value(true))
+                .andExpect(jsonPath("$[0].password").doesNotExist())
+                .andExpect(jsonPath("$[0].encryptedPassword").doesNotExist());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void createStillRequiresAdminRole() throws Exception {
+        mockMvc.perform(post("/api/admin/jms-target-connections")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request(null))))
                 .andExpect(status().isForbidden());
     }
 
@@ -116,6 +138,22 @@ class JmsTargetConnectionControllerTest {
                         .content(objectMapper.writeValueAsString(request(0L))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("OPTIMISTIC_LOCK_CONFLICT"));
+
+        verify(forwarder, never()).evict(1L);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void successfulUpdateEvictsThePreviousRuntimeClient() throws Exception {
+        when(service.update(eq(1L), any())).thenReturn(dto("1", true));
+
+        mockMvc.perform(put("/api/admin/jms-target-connections/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request(0L))))
+                .andExpect(status().isOk());
+
+        verify(forwarder).evict(1L);
     }
 
     @Test
@@ -149,6 +187,8 @@ class JmsTargetConnectionControllerTest {
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.deleted").value(true));
+
+        verify(forwarder).evict(2L);
     }
 
     private static JmsTargetConnectionRequest request(Long version) {

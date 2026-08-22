@@ -18,6 +18,19 @@ const condTagsGrouped = r => { const groups = []; const body = (r.bodyCondition|
 const parseTags = t => { try { return t ? JSON.parse(t) : {} } catch { return {} } };
 const parseHeaders = t => { try { return t ? JSON.parse(t) : {} } catch { return {} } };
 const fmtCond = s => s ? s.split(';').filter(x=>x).join('\n') : '';
+const forwardTargetLabel = rule => {
+    const mode = rule?.forwardTargetMode || '';
+    const protocol = String(rule?.protocol || '').toUpperCase();
+    if (mode === 'ORIGINAL_HOST') { return _t('modal.forwardOriginalHost'); }
+    if (mode === 'DEFAULT_CONNECTION') {
+        return _t(protocol === 'JMS' ? 'modal.forwardDefaultJmsConnection' : 'modal.forwardDefaultConnection');
+    }
+    if (mode !== 'CONNECTION') { return mode; }
+    const id = protocol === 'JMS'
+        ? rule?.jmsTargetConnectionId
+        : rule?.httpTargetConnectionId;
+    return id == null || id === '' ? '-' : '#' + id;
+};
 const debounce = (fn, delay = 300) => {
     let timer = null;
     const debounced = (...args) => { if (timer) { clearTimeout(timer); } timer = setTimeout(() => { fn(...args); timer = null; }, delay); };

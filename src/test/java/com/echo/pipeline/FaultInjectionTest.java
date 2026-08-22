@@ -131,6 +131,7 @@ class FaultInjectionTest {
             protected void recordLog(String ruleId, Protocol protocol, String method,
                                      String endpoint, boolean matched, int responseTimeMs,
                                      String clientIp, String matchChainJson, String targetHost,
+                                     boolean forwarded, String forwardTarget,
                                      Integer proxyStatus, String proxyError,
                                      Integer responseStatus, Integer matchTimeMs,
                                      String requestBody, String responseBody,

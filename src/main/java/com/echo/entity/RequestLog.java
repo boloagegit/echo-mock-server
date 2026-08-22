@@ -27,6 +27,8 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class RequestLog {
 
+    public static final int MAX_FORWARD_TARGET_LENGTH = 1000;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -70,6 +72,14 @@ public class RequestLog {
     @Column(length = 255)
     private String targetHost;
 
+    /** 是否實際嘗試轉發；nullable 讓既有 H2/SQLite schema 可安全新增欄位。 */
+    @Builder.Default
+    private Boolean forwarded = false;
+
+    /** 實際下游目標的安全顯示文字，不包含認證資料。 */
+    @Column(length = MAX_FORWARD_TARGET_LENGTH)
+    private String forwardTarget;
+
     /** 代理回應狀態碼 (無匹配轉發時) */
     private Integer proxyStatus;
 
@@ -104,10 +114,28 @@ public class RequestLog {
     @Column(nullable = false)
     private LocalDateTime requestTime;
 
+    public boolean isForwarded() {
+        return Boolean.TRUE.equals(forwarded);
+    }
+
     @PrePersist
     public void onCreate() {
         if (this.requestTime == null) {
             this.requestTime = LocalDateTime.now();
         }
+        this.forwardTarget = limitForwardTarget(this.forwardTarget);
+    }
+
+    @PreUpdate
+    public void onUpdate() {
+        this.forwardTarget = limitForwardTarget(this.forwardTarget);
+    }
+
+    /** 保護日誌寫入，避免合法但過長的下游描述使整批寫入回滾。 */
+    public static String limitForwardTarget(String value) {
+        if (value == null || value.length() <= MAX_FORWARD_TARGET_LENGTH) {
+            return value;
+        }
+        return value.substring(0, MAX_FORWARD_TARGET_LENGTH);
     }
 }

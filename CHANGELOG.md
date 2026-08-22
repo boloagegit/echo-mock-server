@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Built-in account management — CRUD, enable/disable, password reset, self-registration
 - Error Prone compile-time static analysis
 - Request log body search and formatted preview with CodeMirror highlighting
+- Forwarding observability in request logs, including the actual safe downstream target label
 - One-click maintainer release workflow with validated CalVer tags, release artifacts, checksums, generated notes, and GHCR images
 
 ### Changed
@@ -29,6 +30,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Request-log persistence is handled by a single background consumer rather than flushing the primary database on request threads
 - Scenario and bulk import/export user interfaces are controlled by feature flags and are disabled by default
 - Desktop UI surfaces, rule editing, request details, settings, accessibility, and light/dark design tokens were aligned without changing the main navigation model
+- Authenticated rule editors can read password-free forwarding target lists; target management remains administrator-only
+- Request logs require authentication because details can include request data and downstream topology
 - Spring Boot updated to 3.5.16 and the build aligned with the supported Gradle 8.14.5 line
 
 ### Fixed
@@ -40,6 +43,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Backup filename handling for root-like paths reported by static analysis
 - Docker Compose health check now targets the administrative status endpoint
 - Docker health checks send the required JSON accept header and include the curl runtime dependency
+- H2 response identity sequences are realigned after restoring an older database snapshot
+- JMS rule previews and request-log rule creation now use protocol-correct forwarding and match fields
+- Updated or deleted JMS forwarding profiles retire their cached connections after active messages finish
+- Request-log candidate snapshots and HTTP forwarding metrics are released when their profiles are no longer referenced
 
 ## [v2026.04.02] — 2026-04-02
 

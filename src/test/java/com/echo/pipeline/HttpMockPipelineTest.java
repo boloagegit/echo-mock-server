@@ -343,6 +343,8 @@ class HttpMockPipelineTest {
                     eq("127.0.0.1"),         // clientIp
                     any(),                   // matchChainJson
                     eq("default"),           // targetHost (matched → includes targetHost)
+                    eq(false),               // forwarded
+                    isNull(),                // forwardTarget
                     any(),                   // proxyStatus
                     isNull(),                // proxyError
                     eq(200),                 // responseStatus
@@ -378,6 +380,8 @@ class HttpMockPipelineTest {
                     eq("127.0.0.1"),         // clientIp
                     any(),                   // matchChainJson
                     isNull(),                // targetHost = null (handleNoMatch path)
+                    eq(false),               // forwarded
+                    isNull(),                // forwardTarget
                     isNull(),                // proxyStatus
                     isNull(),                // proxyError
                     eq(404),                 // responseStatus

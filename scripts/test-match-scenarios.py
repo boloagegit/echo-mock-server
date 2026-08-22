@@ -142,7 +142,7 @@ except Exception as e:
     print(f"  ⚠ 無法連線：{e}")
     sys.exit(1)
 
-# 固定連本機未開放的 port，避免公司 DNS wildcard / hijack 影響無匹配轉發測試。
+# 固定連本機未開放的 port，避免執行環境的 DNS wildcard / hijack 影響測試。
 # 規則有匹配時不會真的連線；沒有匹配時則能穩定驗證 Echo 回傳 502。
 HOST = "127.0.0.1:1"
 

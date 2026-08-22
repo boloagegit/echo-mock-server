@@ -62,6 +62,18 @@ An enterprise-grade dual-protocol mock server supporting HTTP and JMS, designed 
 java -jar build/libs/echo-server-*.jar
 ```
 
+For a packaged Linux/macOS deployment, `start-echo.sh` also verifies a writable
+SQLite temporary directory and applies private file permissions before Java starts.
+Copy the built JAR beside the script as `echo.jar`, or set `ECHO_JAR_PATH`, then
+pass normal Spring arguments:
+
+```bash
+./start-echo.sh --spring.profiles.active=sqlite
+```
+
+`SQLITE_TMPDIR` can override the default temporary path. This setting is harmless
+when Echo runs with H2 and does not change the configured database profile.
+
 On a Windows development machine, run the equivalent commands in PowerShell:
 
 ```powershell
@@ -480,8 +492,8 @@ ADMIN can manage built-in accounts via the admin UI:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | /api/admin/logs | Request logs (filter by ruleId/protocol/matched/endpoint; page/size/sort/direction; afterId for incremental refresh) |
-| GET | /api/admin/logs/summary | Request log summary |
+| GET | /api/admin/logs | Request logs (authenticated; filter by ruleId/protocol/matched/endpoint; page/size/sort/direction; afterId for incremental refresh) |
+| GET | /api/admin/logs/summary | Request log summary (authenticated) |
 | DELETE | /api/admin/logs/all | Delete all request logs (ADMIN) |
 | GET | /api/admin/rules/{id}/audit | Audit logs for a rule |
 | GET | /api/admin/audit | All audit logs |

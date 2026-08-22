@@ -45,8 +45,12 @@ class RequestLogBatchWriterIntegrationTest {
     void h2CommitsLogAndCheckpointTogether() {
         writer.persist("spool-h2", 7L, List.of(validLog("/h2")), 100);
 
-        assertThat(requestLogs.findAll()).singleElement()
-                .extracting(RequestLog::getEndpoint).isEqualTo("/h2");
+        assertThat(requestLogs.findAll()).singleElement().satisfies(saved -> {
+            assertThat(saved.getEndpoint()).isEqualTo("/h2");
+            assertThat(saved.isForwarded()).isTrue();
+            assertThat(saved.getForwardTarget())
+                    .isEqualTo("Primary HTTP | https://downstream.example");
+        });
         assertThat(writer.findCheckpoint("spool-h2")).isEqualTo(7L);
     }
 
@@ -62,12 +66,27 @@ class RequestLogBatchWriterIntegrationTest {
         assertThat(checkpoints.findById("spool-rollback")).isEmpty();
     }
 
+    @Test
+    void h2TruncatesOversizedForwardTargetWithoutRollingBackBatch() {
+        RequestLog log = validLog("/long-target");
+        log.setForwardTarget("x".repeat(RequestLog.MAX_FORWARD_TARGET_LENGTH + 200));
+
+        writer.persist("spool-long-target", 10L, List.of(log), 100);
+
+        assertThat(requestLogs.findAll()).singleElement().satisfies(saved ->
+                assertThat(saved.getForwardTarget())
+                        .hasSize(RequestLog.MAX_FORWARD_TARGET_LENGTH));
+        assertThat(writer.findCheckpoint("spool-long-target")).isEqualTo(10L);
+    }
+
     private RequestLog validLog(String endpoint) {
         return RequestLog.builder()
                 .protocol(Protocol.HTTP)
                 .method("GET")
                 .endpoint(endpoint)
                 .matched(true)
+                .forwarded(true)
+                .forwardTarget("Primary HTTP | https://downstream.example")
                 .responseTimeMs(5)
                 .responseStatus(200)
                 .requestTime(LocalDateTime.now())

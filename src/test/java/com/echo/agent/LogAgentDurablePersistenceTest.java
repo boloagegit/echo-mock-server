@@ -108,7 +108,12 @@ class LogAgentDurablePersistenceTest {
                 eq(stored.get(1).sequence()), logs.capture(), eq(1_000));
 
         assertThat(logs.getValue()).singleElement()
-                .extracting(RequestLog::getEndpoint).isEqualTo("/must-deliver");
+                .satisfies(log -> {
+                    assertThat(log.getEndpoint()).isEqualTo("/must-deliver");
+                    assertThat(log.isForwarded()).isTrue();
+                    assertThat(log.getForwardTarget())
+                            .isEqualTo("Primary HTTP | https://downstream.example");
+                });
         awaitSpoolEmpty();
     }
 
@@ -139,6 +144,8 @@ class LogAgentDurablePersistenceTest {
                 .method("GET")
                 .endpoint(endpoint)
                 .matched(true)
+                .forwarded(true)
+                .forwardTarget("Primary HTTP | https://downstream.example")
                 .responseTimeMs(5)
                 .requestTime(LocalDateTime.now())
                 .responseStatus(200)

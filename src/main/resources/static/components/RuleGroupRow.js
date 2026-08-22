@@ -24,7 +24,7 @@ const RuleGroupRow = {
     'clip-copy', 'export-rule-json',
   ],
   methods: {
-    shortId, fmtTime, daysLeft, condTooltip, condTags, parseTags, fmtCond,
+    shortId, fmtTime, daysLeft, condTooltip, condTags, parseTags, fmtCond, forwardTargetLabel,
   },
   template: /* html */`
 <tr :class="{'row-clickable':true}" @click="$emit('handle-rule-row-click', rule)" :title="t('rules.clickPreviewDblEdit')">
@@ -94,7 +94,7 @@ const RuleGroupRow = {
                 <div class="pv-fields">
                     <div class="pv-section-title">{{t('rules.pvSectionSettings')}}</div>
                     <div class="pv-field" v-if="rulePreviewCache[rule.id].protocol==='HTTP'&&rulePreviewCache[rule.id].action!=='FORWARD'&&rulePreviewCache[rule.id].faultType!=='CONNECTION_RESET'"><span class="pv-label">{{t('rules.pvStatusCode')}}</span><span class="badge" :class="rulePreviewCache[rule.id].status<400?'badge-success':rulePreviewCache[rule.id].status<500?'badge-warning':'badge-danger'">{{rulePreviewCache[rule.id].status}}</span></div>
-                    <div class="pv-field" v-if="rulePreviewCache[rule.id].action==='FORWARD'"><span class="pv-label">{{t('rules.forward')}}</span><span>{{rulePreviewCache[rule.id].forwardTargetMode==='CONNECTION' ? '#'+rulePreviewCache[rule.id].httpTargetConnectionId : rulePreviewCache[rule.id].forwardTargetMode}}</span></div>
+                    <div class="pv-field" v-if="rulePreviewCache[rule.id].action==='FORWARD'"><span class="pv-label">{{t('rules.forward')}}</span><span>{{forwardTargetLabel(rulePreviewCache[rule.id])}}</span></div>
                     <div class="pv-field" v-if="rulePreviewCache[rule.id].faultType&&rulePreviewCache[rule.id].faultType!=='NONE'"><span class="pv-label">{{t('rules.faultInjection')}}</span><span class="pv-result-value"><i class="bi bi-lightning" aria-hidden="true"></i>{{t('rules.fault_'+rulePreviewCache[rule.id].faultType)}}</span></div>
                     <div class="pv-field" v-if="status?.scenariosEnabled&&rulePreviewCache[rule.id].scenarioName"><span class="pv-label">{{t('rules.pvScenario')}}</span><span class="pv-scenario-value" :title="t('rules.scenarioTooltip',{name:rulePreviewCache[rule.id].scenarioName,required:rulePreviewCache[rule.id].requiredScenarioState||'Started',newState:rulePreviewCache[rule.id].newScenarioState||rulePreviewCache[rule.id].requiredScenarioState||'Started'})"><strong>{{rulePreviewCache[rule.id].scenarioName}}</strong><code>{{rulePreviewCache[rule.id].requiredScenarioState||'Started'}}</code><i class="bi bi-arrow-right" aria-hidden="true"></i><code>{{rulePreviewCache[rule.id].newScenarioState||rulePreviewCache[rule.id].requiredScenarioState||'Started'}}</code></span></div>
                     <div class="pv-field"><span class="pv-label">{{t('rules.pvDelay')}}</span><span>{{rulePreviewCache[rule.id].delayMs||0}} ms</span></div>

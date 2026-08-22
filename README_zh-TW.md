@@ -56,6 +56,17 @@
 java -jar build/libs/echo-server-*.jar
 ```
 
+Linux/macOS 的 JAR 部署可使用 `start-echo.sh`；它會在 Java 啟動前確認
+SQLite 暫存目錄可寫，並套用僅限當前使用者的檔案權限。將建置完成的 JAR
+複製到腳本旁並命名為 `echo.jar`，或設定 `ECHO_JAR_PATH`，之後照常傳入 Spring 參數：
+
+```bash
+./start-echo.sh --spring.profiles.active=sqlite
+```
+
+可用 `SQLITE_TMPDIR` 覆寫預設暫存路徑。使用 H2 時這個設定不會改變資料庫
+profile，也不影響既有啟動方式。
+
 Windows 開發機請在 PowerShell 使用：
 
 ```powershell
@@ -471,8 +482,8 @@ ADMIN 可透過管理介面管理內建帳號：
 
 | Method | Path | 說明 |
 |--------|------|------|
-| GET | /api/admin/logs | 請求紀錄（支援 ruleId/protocol/matched/endpoint 篩選） |
-| GET | /api/admin/logs/summary | 請求紀錄摘要 |
+| GET | /api/admin/logs | 請求紀錄（需登入；支援 ruleId/protocol/matched/endpoint 篩選） |
+| GET | /api/admin/logs/summary | 請求紀錄摘要（需登入） |
 | DELETE | /api/admin/logs/all | 刪除全部請求紀錄 (ADMIN) |
 | GET | /api/admin/rules/{id}/audit | 單筆規則修訂紀錄 |
 | GET | /api/admin/audit | 全部修訂紀錄 |

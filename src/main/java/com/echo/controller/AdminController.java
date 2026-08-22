@@ -910,7 +910,8 @@ public class AdminController {
                 .map(entry -> {
                     RuleDto.RuleDtoBuilder builder = RuleDto.builder()
                             .protocol(entry.getProtocol())
-                            .matchKey(entry.getEndpoint())
+                            .matchKey(entry.getProtocol() == Protocol.JMS
+                                    ? "*" : entry.getEndpoint())
                             .enabled(true)
                             .priority(0)
                             .delayMs(0L)
