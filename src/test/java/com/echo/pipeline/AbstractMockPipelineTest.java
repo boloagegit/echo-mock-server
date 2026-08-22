@@ -187,7 +187,7 @@ class AbstractMockPipelineTest {
             verify(requestLogService).record(
                     eq("rule-1"), eq(Protocol.HTTP), eq("POST"), eq("/api/test"),
                     eq(true), anyInt(), eq("127.0.0.1"),
-                    any(), any(), any(), any(), eq(200), anyInt(),
+                    any(), any(), eq(false), isNull(), any(), any(), eq(200), anyInt(),
                     eq("{\"key\":\"value\"}"), eq("OK"),
                     anyList(), any(), any(), any(),
                     any(), any(), any(), any());
@@ -221,7 +221,8 @@ class AbstractMockPipelineTest {
             verify(requestLogService).record(
                     isNull(), eq(Protocol.HTTP), eq("GET"), eq("/api/proxy"),
                     eq(false), anyInt(), eq("10.0.0.1"),
-                    any(), eq("remote-host"), eq(200), isNull(), eq(200), anyInt(),
+                    any(), eq("remote-host"), eq(true), isNull(),
+                    eq(200), isNull(), eq(200), anyInt(),
                     eq("{}"), eq("forwarded"),
                     anyList(), any(), any(), any(),
                     any(), any(), any(), any());
@@ -246,7 +247,8 @@ class AbstractMockPipelineTest {
             verify(requestLogService).record(
                     isNull(), eq(Protocol.HTTP), eq("POST"), eq("/api/test"),
                     eq(false), anyInt(), eq("127.0.0.1"),
-                    any(), isNull(), isNull(), isNull(), eq(404), anyInt(),
+                    any(), isNull(), eq(false), isNull(),
+                    isNull(), isNull(), eq(404), anyInt(),
                     eq("{\"key\":\"value\"}"), eq("Not Found"),
                     anyList(), any(), any(), any(),
                     any(), any(), any(), any());
@@ -505,6 +507,7 @@ class AbstractMockPipelineTest {
                             ArgumentMatchers.<String>any(), ArgumentMatchers.<String>any(),
                             anyBoolean(), anyInt(), ArgumentMatchers.<String>any(),
                             ArgumentMatchers.<String>any(), ArgumentMatchers.<String>any(),
+                            anyBoolean(), ArgumentMatchers.nullable(String.class),
                             ArgumentMatchers.<Integer>any(), ArgumentMatchers.<String>any(),
                             ArgumentMatchers.<Integer>any(), ArgumentMatchers.<Integer>any(),
                             ArgumentMatchers.<String>any(), ArgumentMatchers.<String>any(),

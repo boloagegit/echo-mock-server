@@ -56,6 +56,8 @@ class RequestLogBatchWriterSqliteIntegrationTest {
                 .method("POST")
                 .endpoint("/sqlite")
                 .matched(true)
+                .forwarded(true)
+                .forwardTarget("Primary HTTP | https://downstream.example")
                 .responseTimeMs(8)
                 .responseStatus(201)
                 .requestTime(LocalDateTime.now())
@@ -63,8 +65,12 @@ class RequestLogBatchWriterSqliteIntegrationTest {
 
         writer.persist("spool-sqlite", 11L, List.of(log), 100);
 
-        assertThat(requestLogs.findAll()).singleElement()
-                .extracting(RequestLog::getEndpoint).isEqualTo("/sqlite");
+        assertThat(requestLogs.findAll()).singleElement().satisfies(saved -> {
+            assertThat(saved.getEndpoint()).isEqualTo("/sqlite");
+            assertThat(saved.isForwarded()).isTrue();
+            assertThat(saved.getForwardTarget())
+                    .isEqualTo("Primary HTTP | https://downstream.example");
+        });
         assertThat(checkpoints.findById("spool-sqlite")).get()
                 .extracting(checkpoint -> checkpoint.getLastSequence()).isEqualTo(11L);
     }

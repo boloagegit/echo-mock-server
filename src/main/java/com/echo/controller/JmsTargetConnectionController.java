@@ -1,9 +1,11 @@
 package com.echo.controller;
 
 import com.echo.dto.JmsTargetConnectionRequest;
+import com.echo.jms.JmsTargetForwarder;
 import com.echo.service.JmsTargetConnectionService;
 import jakarta.persistence.OptimisticLockException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +27,7 @@ import java.util.Map;
 public class JmsTargetConnectionController {
 
     private final JmsTargetConnectionService service;
+    private final ObjectProvider<JmsTargetForwarder> forwarderProvider;
 
     @GetMapping
     public ResponseEntity<?> list() {
@@ -39,7 +42,11 @@ public class JmsTargetConnectionController {
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id,
                                     @RequestBody JmsTargetConnectionRequest request) {
-        return handle(() -> ResponseEntity.ok(service.update(id, request)));
+        return handle(() -> {
+            var updated = service.update(id, request);
+            evict(id);
+            return ResponseEntity.ok(updated);
+        });
     }
 
     @PutMapping("/{id}/default")
@@ -51,6 +58,7 @@ public class JmsTargetConnectionController {
     public ResponseEntity<?> delete(@PathVariable Long id) {
         return handle(() -> {
             service.delete(id);
+            evict(id);
             return ResponseEntity.ok(Map.of("deleted", true));
         });
     }
@@ -58,6 +66,11 @@ public class JmsTargetConnectionController {
     @PostMapping("/{id}/test")
     public ResponseEntity<?> test(@PathVariable String id) {
         return handle(() -> ResponseEntity.ok(service.test(id)));
+    }
+
+    private void evict(Long id) {
+        JmsTargetForwarder forwarder = forwarderProvider.getIfAvailable();
+        if (forwarder != null) forwarder.evict(id);
     }
 
     private ResponseEntity<?> handle(Action action) {

@@ -234,6 +234,8 @@ class PipelineLogParameterPropertyTest {
                 any(),                     // clientIp
                 any(),                     // matchChain
                 any(),                     // targetHost
+                anyBoolean(),              // forwarded
+                any(),                     // forwardTarget
                 any(),                     // proxyStatus
                 any(),                     // proxyError
                 any(),                     // responseStatus
@@ -307,6 +309,8 @@ class PipelineLogParameterPropertyTest {
                 any(),                     // clientIp
                 any(),                     // matchChain
                 any(),                     // targetHost
+                anyBoolean(),              // forwarded
+                any(),                     // forwardTarget
                 any(),                     // proxyStatus
                 any(),                     // proxyError
                 any(),                     // responseStatus
@@ -371,6 +375,8 @@ class PipelineLogParameterPropertyTest {
                 any(),                     // clientIp
                 any(),                     // matchChain
                 any(),                     // targetHost
+                anyBoolean(),              // forwarded
+                any(),                     // forwardTarget
                 any(),                     // proxyStatus
                 any(),                     // proxyError
                 any(),                     // responseStatus
@@ -439,6 +445,8 @@ class PipelineLogParameterPropertyTest {
                 any(),                     // clientIp
                 any(),                     // matchChain
                 any(),                     // targetHost
+                anyBoolean(),              // forwarded
+                any(),                     // forwardTarget
                 any(),                     // proxyStatus
                 any(),                     // proxyError
                 any(),                     // responseStatus

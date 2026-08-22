@@ -72,6 +72,9 @@ class RequestLogSpoolTest {
         assertThat(restored.getScenarioName()).isEqualTo("order-flow");
         assertThat(restored.getScenarioFromState()).isEqualTo("Started");
         assertThat(restored.getScenarioToState()).isEqualTo("Paid");
+        assertThat(restored.isForwarded()).isTrue();
+        assertThat(restored.getForwardTarget())
+                .isEqualTo("Primary | https://downstream.example");
         assertThat(restored.getCandidates()).singleElement()
                 .extracting(CandidateSnapshot::getBodyCondition).isEqualTo("id=1");
 
@@ -138,6 +141,26 @@ class RequestLogSpoolTest {
     }
 
     @Test
+    void deletedCandidateSnapshotsAreReleasedEvenWhileNewerLogsRemainPending() throws Exception {
+        Path path = tempDir.resolve("candidate-churn.sqlite");
+        spool = createSpool(path, 64 * 1024 * 1024);
+        spool.start();
+
+        spool.append(task("retired-rule", "/old"));
+        spool.append(task("active-rule", "/new"));
+        List<RequestLogSpool.SpoolEntry> entries = spool.readAfter(0, 10);
+        assertThat(queryLong(path, "SELECT COUNT(*) FROM candidate_snapshot_sets")).isEqualTo(2);
+
+        spool.deleteThrough(entries.get(0).sequence());
+
+        assertThat(spool.pendingItems()).isEqualTo(1);
+        assertThat(queryLong(path, "SELECT COUNT(*) FROM candidate_snapshot_sets")).isEqualTo(1);
+        assertThat(spool.readAfter(entries.get(0).sequence(), 10))
+                .singleElement()
+                .satisfies(entry -> assertThat(entry.task().getRuleId()).isEqualTo("active-rule"));
+    }
+
+    @Test
     void legacyEmbeddedCandidateRowsAreMigratedWithoutLosingMatchAnalysisData() throws Exception {
         Path path = tempDir.resolve("legacy.sqlite");
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + path);
@@ -177,6 +200,8 @@ class RequestLogSpoolTest {
         List<RequestLogSpool.SpoolEntry> entries = spool.readAfter(0, 10);
         assertThat(entries).singleElement().satisfies(entry -> {
             assertThat(entry.task().getRuleId()).isEqualTo("legacy-rule");
+            assertThat(entry.task().isForwarded()).isFalse();
+            assertThat(entry.task().getForwardTarget()).isNull();
             assertThat(entry.task().getAnalysisBody()).isEqualTo("{\"id\":1}");
             assertThat(entry.task().getCandidates()).singleElement().satisfies(candidate -> {
                 assertThat(candidate.getRuleId()).isEqualTo("near-miss-rule");
@@ -319,6 +344,8 @@ class RequestLogSpoolTest {
                 .requestTime(LocalDateTime.now())
                 .matchChain("[]")
                 .targetHost("api.internal")
+                .forwarded(true)
+                .forwardTarget("Primary | https://downstream.example")
                 .responseStatus(200)
                 .faultType("EMPTY_RESPONSE")
                 .scenarioName("order-flow")

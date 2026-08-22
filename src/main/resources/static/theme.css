@@ -6,6 +6,7 @@
 /* 深色主題（預設） */
 :root {
     color-scheme: dark;
+    --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
     --bg: #0b1016;
     --card: #151b23;
     --border: #2a3441;

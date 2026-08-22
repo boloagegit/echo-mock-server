@@ -220,7 +220,8 @@ public final class HttpOutboundForwarder {
                             () -> new IllegalArgumentException("DEFAULT_HTTP_CONNECTION_NOT_FOUND"))
                     : connectionService.resolveEnabled(connectionId);
             TargetMetrics metrics = metricsFor("profile:" + target.id(), target.name());
-            return submit(() -> exchange(request, target, true), true, metrics);
+            return submit(() -> exchange(request, target, true), true, metrics,
+                    describeTarget(target));
         } catch (Exception e) {
             return CompletableFuture.completedFuture(proxyError(e, true));
         }
@@ -244,7 +245,8 @@ public final class HttpOutboundForwarder {
             HttpTargetConnectionService.ResolvedTarget resolved = target.orElseThrow();
             TargetMetrics metrics = metricsFor("profile:" + resolved.id(), resolved.name());
             return CancellableStages.map(
-                    submit(() -> exchange(request, resolved, false), false, metrics),
+                    submit(() -> exchange(request, resolved, false), false, metrics,
+                            describeTarget(resolved)),
                     Optional::of);
         } catch (Exception e) {
             return CompletableFuture.completedFuture(Optional.of(proxyError(e, false)));
@@ -265,7 +267,7 @@ public final class HttpOutboundForwarder {
         }
         TargetMetrics metrics = metricsFor("original-host", "X-Original-Host");
         return submit(() -> exchangeOriginalHost(request, targetHost, matched),
-                matched, metrics);
+                matched, metrics, sanitizeOriginalHost(targetHost));
     }
 
     public ConnectionTestResult test(Long id) {
@@ -301,6 +303,7 @@ public final class HttpOutboundForwarder {
                         .body(response.body())
                         .matched(matched)
                         .forwarded(true)
+                        .forwardTarget(describeTarget(target))
                         .build());
     }
 
@@ -385,6 +388,7 @@ public final class HttpOutboundForwarder {
                         .body(response.body())
                         .matched(matched)
                         .forwarded(true)
+                        .forwardTarget(sanitizeOriginalHost(targetHost))
                         .build());
     }
 
@@ -488,13 +492,15 @@ public final class HttpOutboundForwarder {
     @SuppressWarnings("FutureReturnValueIgnored")
     private CompletionStage<MockResponse> submit(Supplier<Mono<MockResponse>> action,
                                                   boolean matched,
-                                                  TargetMetrics metrics) {
+                                                  TargetMetrics metrics,
+                                                  String forwardTarget) {
         if (forwardingSlots != null && !forwardingSlots.tryAcquire()) {
             rejectedForwards.increment();
             metrics.recordCapacityRejection();
             warnRejectedForward();
             MockResponse overloadResponse = proxyError(
-                    new IllegalStateException("HTTP_FORWARD_CAPACITY_EXHAUSTED"), matched);
+                    new IllegalStateException("HTTP_FORWARD_CAPACITY_EXHAUSTED"), matched,
+                    forwardTarget);
             CompletableFuture<MockResponse> rejected = new CompletableFuture<>();
             if (overloadBackoffMs == 0 || forwardScheduler.isShutdown()) {
                 rejected.complete(overloadResponse);
@@ -516,7 +522,7 @@ public final class HttpOutboundForwarder {
                     }
                     metrics.recordFailure(cause);
                     log.debug("HTTP proxy error: {}", cause.getMessage());
-                    return Mono.just(proxyError(cause, matched));
+                    return Mono.just(proxyError(cause, matched, forwardTarget));
                 })
                 .doFinally(signal -> finishForward(signal))
                 .toFuture();
@@ -615,6 +621,7 @@ public final class HttpOutboundForwarder {
             if (matches) retireClient(entry.getValue());
             return matches;
         });
+        targetMetrics.remove("profile:" + connectionId);
     }
 
     static HttpHeaders copyHeaders(Map<String, String> source,
@@ -661,14 +668,47 @@ public final class HttpOutboundForwarder {
     }
 
     private static MockResponse proxyError(Throwable exception, boolean matched) {
+        return proxyError(exception, matched, null);
+    }
+
+    private static MockResponse proxyError(Throwable exception, boolean matched,
+                                           String forwardTarget) {
         String error = safeError(exception);
         return MockResponse.builder()
                 .status(502)
                 .body("Proxy error: " + error)
                 .matched(matched)
                 .forwarded(true)
+                .forwardTarget(forwardTarget)
                 .proxyError(error)
                 .build();
+    }
+
+    private static String describeTarget(HttpTargetConnectionService.ResolvedTarget target) {
+        return target.name() + " | " + target.baseUrl();
+    }
+
+    static String sanitizeOriginalHost(String targetHost) {
+        String value = targetHost == null ? "" : targetHost.trim();
+        for (int count = 0; count < 3; count++) {
+            int schemeEnd = value.indexOf("://");
+            if (schemeEnd <= 0
+                    || !value.substring(0, schemeEnd).matches("(?i)[a-z][a-z0-9+.-]*")) {
+                break;
+            }
+            value = value.substring(schemeEnd + 3);
+        }
+        while (value.startsWith("//")) value = value.substring(2);
+
+        int boundary = value.length();
+        for (char separator : new char[]{'/', '?', '#'}) {
+            int index = value.indexOf(separator);
+            if (index >= 0) boundary = Math.min(boundary, index);
+        }
+        value = value.substring(0, boundary);
+        int userInfoEnd = value.lastIndexOf('@');
+        if (userInfoEnd >= 0) value = value.substring(userInfoEnd + 1);
+        return value.isBlank() ? null : "https://" + value;
     }
 
     private static String safeError(Throwable exception) {

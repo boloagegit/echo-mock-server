@@ -34,7 +34,8 @@ class LdapConfigTest {
     void ldapAuthenticationProvider_shouldReturnNull_whenConnectionFails() {
         LdapConfig config = new LdapConfig();
         ReflectionTestUtils.setField(config, "ldapEnabled", true);
-        ReflectionTestUtils.setField(config, "ldapUrl", "ldap://invalid-host:389");
+        // Use a local closed port so the failure is deterministic and independent of DNS.
+        ReflectionTestUtils.setField(config, "ldapUrl", "ldap://127.0.0.1:1");
         ReflectionTestUtils.setField(config, "baseDn", "dc=example,dc=com");
         ReflectionTestUtils.setField(config, "userPattern", "uid={0}");
 

@@ -1,6 +1,7 @@
 package com.echo.config;
 
 import org.apache.activemq.artemis.core.config.impl.ConfigurationImpl;
+import org.apache.activemq.artemis.core.settings.impl.AddressFullMessagePolicy;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.jms.artemis.ArtemisConfigurationCustomizer;
 import org.springframework.boot.autoconfigure.jms.artemis.ArtemisMode;
@@ -16,6 +17,7 @@ class ArtemisConfigTest {
         jmsProperties.setPort(61617);
         jmsProperties.setUsername("testuser");
         jmsProperties.setPassword("testpass");
+        jmsProperties.setPersistent(false);
 
         ArtemisConfig config = new ArtemisConfig();
         ArtemisProperties props = config.artemisProperties(jmsProperties);
@@ -25,6 +27,8 @@ class ArtemisConfigTest {
         assertThat(props.getUser()).isEqualTo("testuser");
         assertThat(props.getPassword()).isEqualTo("testpass");
         assertThat(props.getEmbedded().isEnabled()).isTrue();
+        assertThat(props.getEmbedded().isPersistent()).isFalse();
+        assertThat(props.getEmbedded().getDataDirectory()).isEqualTo("./data/artemis");
     }
 
     @Test
@@ -41,6 +45,7 @@ class ArtemisConfigTest {
     void artemisConfigurationCustomizer_shouldAddTcpAcceptor() throws Exception {
         JmsProperties jmsProperties = new JmsProperties();
         jmsProperties.setPort(61617);
+        jmsProperties.setBrokerMemoryPercent(10);
 
         ArtemisConfig config = new ArtemisConfig();
         ArtemisConfigurationCustomizer customizer = config.artemisConfigurationCustomizer(jmsProperties);
@@ -51,6 +56,11 @@ class ArtemisConfigTest {
         assertThat(artemisConfiguration.getAcceptorConfigurations()).hasSize(1);
         assertThat(artemisConfiguration.getAcceptorConfigurations().iterator().next().getParams())
                 .containsEntry("port", "61617");
+        assertThat(artemisConfiguration.getGlobalMaxSize())
+                .isEqualTo(Runtime.getRuntime().maxMemory() / 10);
+        assertThat(artemisConfiguration.getAddressSettings().get("#").getAddressFullMessagePolicy())
+                .isEqualTo(AddressFullMessagePolicy.PAGE);
+        assertThat(artemisConfiguration.isLargeMessageSync()).isFalse();
     }
 
     @Test

@@ -5,16 +5,12 @@ import com.echo.entity.Protocol;
 import com.echo.pipeline.JmsMockPipeline;
 import com.echo.pipeline.MockRequest;
 import com.echo.pipeline.PipelineResult;
-import com.echo.service.ConditionMatcher;
-import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.jms.*;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.activemq.artemis.jms.client.ActiveMQMessage;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jms.annotation.JmsListener;
 import org.springframework.stereotype.Component;
-import org.w3c.dom.Document;
-
-import javax.xml.xpath.XPathFactory;
 
 /**
  * JMS 訊息監聯器 - 攔截或轉發到目標 JMS Server
@@ -27,46 +23,25 @@ public class MockJmsListener {
     private final JmsConnectionManager connectionManager;
     private final JmsProperties jmsProperties;
     private final JmsMockPipeline jmsMockPipeline;
-    private final ConditionMatcher conditionMatcher;
+    private final JmsEndpointExtractor endpointExtractor;
+    private final JmsMessageMemoryBudget memoryBudget;
 
     public MockJmsListener(JmsConnectionManager connectionManager,
                            JmsProperties jmsProperties,
                            JmsMockPipeline jmsMockPipeline,
-                           ConditionMatcher conditionMatcher) {
+                           JmsEndpointExtractor endpointExtractor,
+                           JmsMessageMemoryBudget memoryBudget) {
         this.connectionManager = connectionManager;
         this.jmsProperties = jmsProperties;
         this.jmsMockPipeline = jmsMockPipeline;
-        this.conditionMatcher = conditionMatcher;
+        this.endpointExtractor = endpointExtractor;
+        this.memoryBudget = memoryBudget;
     }
 
     @JmsListener(destination = "${echo.jms.queue:ECHO.REQUEST}")
     public void onMessage(Message message) {
         try {
-            String body = extractBody(message);
-            String queue = jmsProperties.getQueue();
-
-            log.debug("JMS request received on queue: {}", queue);
-
-            // 一次性 parse body，後續 endpoint 提取與規則匹配共用
-            ConditionMatcher.PreparedBody prepared = conditionMatcher.prepareBody(body);
-
-            // 從已解析的 PreparedBody 提取 endpoint-field 值（不再重複 parse）
-            String endpointValue = extractEndpointValue(prepared);
-            String endpointLabel = (endpointValue != null && !endpointValue.isBlank())
-                    ? queue + " | " + endpointValue : queue;
-
-            // 建構 MockRequest
-            MockRequest mockRequest = MockRequest.builder()
-                    .protocol(Protocol.JMS)
-                    .path(endpointLabel)
-                    .body(body)
-                    .clientIp("JMS")
-                    .endpointValue(endpointValue)
-                    .preparedBody(prepared)
-                    .build();
-
-            // 委派給 pipeline 執行
-            PipelineResult result = jmsMockPipeline.execute(mockRequest);
+            PipelineResult result = processMessage(message);
 
             // JMS 延遲同步執行
             if (result.getDelayMs() > 0) {
@@ -90,9 +65,51 @@ public class MockJmsListener {
                 sendReply(message, result.getResponse().getBody());
             }
 
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("JMS processing interrupted before completion");
+            throw new JmsProcessingInterruptedException(e);
         } catch (Exception e) {
             log.error("JMS processing error", e);
             sendErrorReply(message, e.getMessage());
+        }
+    }
+
+    private PipelineResult processMessage(Message message) throws JMSException, InterruptedException {
+        JmsMessageMemoryBudget.Reservation reservation = null;
+        try {
+            long encodedBodyBytes = encodedTextBodyBytes(message);
+            if (encodedBodyBytes > 0) {
+                // getBodySize() 是完整訊息大小；不使用只代表目前已下載部分的 buffer size。
+                reservation = memoryBudget.reserveEncodedBody(encodedBodyBytes);
+            }
+
+            String body = extractBody(message);
+            if (reservation == null) {
+                reservation = memoryBudget.reserveText(body);
+            }
+
+            String queue = jmsProperties.getQueue();
+            log.debug("JMS request received on queue: {}", queue);
+
+            // endpoint 只掃描到目標欄位；規則條件由 pipeline 再做一次單趟串流比對，均不建立 DOM。
+            String endpointValue = endpointExtractor.extract(body, jmsProperties.getEndpointField());
+            String endpointLabel = (endpointValue != null && !endpointValue.isBlank())
+                    ? queue + " | " + endpointValue : queue;
+
+            MockRequest mockRequest = MockRequest.builder()
+                    .protocol(Protocol.JMS)
+                    .path(endpointLabel)
+                    .body(body)
+                    .clientIp("JMS")
+                    .endpointValue(endpointValue)
+                    .build();
+
+            return jmsMockPipeline.execute(mockRequest);
+        } finally {
+            if (reservation != null) {
+                reservation.close();
+            }
         }
     }
 
@@ -103,35 +120,12 @@ public class MockJmsListener {
         return null;
     }
 
-    /**
-     * 從已解析的 PreparedBody 提取 endpoint-field 的值（複用已 parse 的 DOM/JSON，不再重複解析）
-     * @return 欄位值，或 null
-     */
-    private String extractEndpointValue(ConditionMatcher.PreparedBody prepared) {
-        String field = jmsProperties.getEndpointField();
-        if (field == null || field.isBlank()) {
-            return null;
+    private long encodedTextBodyBytes(Message message) {
+        if (!(message instanceof TextMessage) || !(message instanceof ActiveMQMessage activeMQMessage)) {
+            return -1;
         }
-        try {
-            Document xmlDoc = prepared.getXmlDoc();
-            if (xmlDoc != null) {
-                var xpath = XPathFactory.newInstance().newXPath();
-                String value = xpath.evaluate("//" + field + "/text()", xmlDoc);
-                return (value != null && !value.isBlank()) ? value : null;
-            }
-            JsonNode jsonNode = prepared.getJsonNode();
-            if (jsonNode != null) {
-                var target = jsonNode.get(field);
-                if (target != null && !target.isNull()) {
-                    String value = target.asText();
-                    return (value != null && !value.isBlank()) ? value : null;
-                }
-            }
-            return null;
-        } catch (Exception e) {
-            log.debug("Failed to extract endpoint field '{}' from prepared body: {}", field, e.getMessage());
-            return null;
-        }
+        var coreMessage = activeMQMessage.getCoreMessage();
+        return coreMessage != null ? coreMessage.getBodySize() : -1;
     }
 
     private void sendReply(Message request, String responseBody) {
@@ -157,5 +151,11 @@ public class MockJmsListener {
 
     private void sendErrorReply(Message request, String error) {
         sendReply(request, "<error>" + error + "</error>");
+    }
+
+    private static final class JmsProcessingInterruptedException extends RuntimeException {
+        private JmsProcessingInterruptedException(InterruptedException cause) {
+            super("JMS processing interrupted", cause);
+        }
     }
 }

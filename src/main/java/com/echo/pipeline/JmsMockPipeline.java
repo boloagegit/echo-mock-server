@@ -63,6 +63,17 @@ public class JmsMockPipeline extends AbstractMockPipeline<JmsRule> {
         return jmsRuleService.findPreparedJmsRules(queueName);
     }
 
+    @Override
+    protected ConditionMatcher.PreparedBody prepareBody(
+            MockRequest request, List<JmsRule> candidates) {
+        List<String> bodyConditions = candidates.stream()
+                .filter(rule -> !Boolean.FALSE.equals(rule.getEnabled()))
+                .map(JmsRule::getBodyCondition)
+                .filter(condition -> condition != null && !condition.isBlank())
+                .toList();
+        return conditionMatcher.prepareBodyForConditions(request.getBody(), bodyConditions);
+    }
+
     /**
      * 覆寫匹配邏輯，保留 JMS 特有的三層 fallback：
      * <ol>
@@ -140,7 +151,8 @@ public class JmsMockPipeline extends AbstractMockPipeline<JmsRule> {
     protected MockResponse forward(MockRequest request) {
         log.debug("No rule matched, forwarding through the selected outbound JMS connection");
 
-        return forwardedResponse(targetForwarder.forward(request.getBody(), null), false);
+        return forwardedResponse(
+                targetForwarder.forwardWithMetadata(request.getBody(), null), false);
     }
 
     @Override
@@ -152,13 +164,15 @@ public class JmsMockPipeline extends AbstractMockPipeline<JmsRule> {
     protected MockResponse forwardMatchedRule(JmsRule rule, MockRequest request) {
         JmsForwardTargetMode mode = rule.getForwardTargetMode() == null
                 ? JmsForwardTargetMode.DEFAULT_CONNECTION : rule.getForwardTargetMode();
-        String responseBody = targetForwarder.forward(
+        JmsTargetForwarder.ForwardResult result = targetForwarder.forwardWithMetadata(
                 request.getBody(), null, rule.getJmsTargetConnectionId(),
                 mode == JmsForwardTargetMode.DEFAULT_CONNECTION);
-        return forwardedResponse(responseBody, true);
+        return forwardedResponse(result, true);
     }
 
-    private MockResponse forwardedResponse(String responseBody, boolean matched) {
+    private MockResponse forwardedResponse(JmsTargetForwarder.ForwardResult result,
+                                           boolean matched) {
+        String responseBody = result.body();
 
         String proxyError = null;
         if (responseBody != null && responseBody.contains("<error>")) {
@@ -170,6 +184,7 @@ public class JmsMockPipeline extends AbstractMockPipeline<JmsRule> {
                 .body(responseBody)
                 .matched(matched)
                 .forwarded(true)
+                .forwardTarget(result.target())
                 .proxyError(proxyError)
                 .build();
     }

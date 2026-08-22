@@ -211,6 +211,30 @@ public class RequestLogService {
                        String scenarioName,
                        String scenarioFromState,
                        String scenarioToState) {
+        record(ruleId, protocol, method, endpoint, matched, responseTimeMs, clientIp,
+                matchChain, targetHost, false, null, proxyStatus, proxyError,
+                responseStatus, matchTimeMs, requestBody, responseBody, candidates,
+                preparedBody, queryString, headers, faultType, scenarioName,
+                scenarioFromState, scenarioToState);
+    }
+
+    /** 記錄請求，並保留轉發、故障注入與 Scenario 狀態轉移資訊。 */
+    @SuppressWarnings("java:S107")
+    public <T extends BaseRule> void record(String ruleId, Protocol protocol, String method, String endpoint,
+                       boolean matched, int responseTimeMs, String clientIp,
+                       String matchChain, String targetHost,
+                       boolean forwarded, String forwardTarget,
+                       Integer proxyStatus, String proxyError,
+                       Integer responseStatus, Integer matchTimeMs,
+                       String requestBody, String responseBody,
+                       List<T> candidates,
+                       ConditionMatcher.PreparedBody preparedBody,
+                       String queryString,
+                       Map<String, String> headers,
+                       String faultType,
+                       String scenarioName,
+                       String scenarioFromState,
+                       String scenarioToState) {
         LogAgent agent = logAgentProvider.getIfAvailable();
         if (agent == null) {
             if (agentUnavailableWarned.compareAndSet(false, true)) {
@@ -221,7 +245,8 @@ public class RequestLogService {
         agentUnavailableWarned.set(false);
         agent.submitDurably(() -> buildLogTask(
                 ruleId, protocol, method, endpoint, matched, responseTimeMs, clientIp,
-                matchChain, targetHost, proxyStatus, proxyError, responseStatus, matchTimeMs,
+                matchChain, targetHost, forwarded, forwardTarget,
+                proxyStatus, proxyError, responseStatus, matchTimeMs,
                 requestBody, responseBody, candidates, preparedBody, queryString, headers,
                 faultType, scenarioName, scenarioFromState, scenarioToState));
     }
@@ -229,7 +254,8 @@ public class RequestLogService {
     private <T extends BaseRule> LogTask buildLogTask(
             String ruleId, Protocol protocol, String method, String endpoint,
             boolean matched, int responseTimeMs, String clientIp,
-            String matchChain, String targetHost, Integer proxyStatus, String proxyError,
+            String matchChain, String targetHost, boolean forwarded, String forwardTarget,
+            Integer proxyStatus, String proxyError,
             Integer responseStatus, Integer matchTimeMs, String requestBody, String responseBody,
             List<T> candidates, ConditionMatcher.PreparedBody preparedBody,
             String queryString, Map<String, String> headers,
@@ -260,6 +286,8 @@ public class RequestLogService {
                 .requestTime(LocalDateTime.now())
                 .matchChain(matchChain)
                 .targetHost(targetHost)
+                .forwarded(forwarded)
+                .forwardTarget(RequestLog.limitForwardTarget(forwardTarget))
                 .proxyStatus(proxyStatus)
                 .proxyError(proxyError)
                 .responseStatus(responseStatus)
@@ -303,8 +331,11 @@ public class RequestLogService {
             stream = stream.filter(e -> filter.getMatched() == e.isMatched());
         }
         if (filter.getEndpoint() != null && !filter.getEndpoint().isBlank()) {
-            String ep = filter.getEndpoint();
-            stream = stream.filter(e -> e.getEndpoint() != null && e.getEndpoint().contains(ep));
+            String keyword = filter.getEndpoint().toLowerCase(Locale.ROOT);
+            stream = stream.filter(e -> containsIgnoreCase(e.getEndpoint(), keyword)
+                    || containsIgnoreCase(e.getTargetHost(), keyword)
+                    || containsIgnoreCase(e.getForwardTarget(), keyword)
+                    || containsIgnoreCase(e.getRuleId(), keyword));
         }
 
         List<LogEntry> entries = stream.toList();
@@ -413,6 +444,7 @@ public class RequestLogService {
             String normalized = endpoint.toLowerCase(Locale.ROOT);
             stream = stream.filter(e -> containsIgnoreCase(e.getEndpoint(), normalized)
                     || containsIgnoreCase(e.getTargetHost(), normalized)
+                    || containsIgnoreCase(e.getForwardTarget(), normalized)
                     || containsIgnoreCase(e.getRuleId(), normalized));
         }
         if (filter.getAfterId() != null) {
@@ -513,6 +545,8 @@ public class RequestLogService {
                 .requestTime(log.getRequestTime())
                 .matchChain(log.getMatchChain())
                 .targetHost(log.getTargetHost())
+                .forwarded(log.isForwarded())
+                .forwardTarget(log.getForwardTarget())
                 .proxyStatus(log.getProxyStatus())
                 .proxyError(log.getProxyError())
                 .responseStatus(log.getResponseStatus())
@@ -538,6 +572,8 @@ public class RequestLogService {
                 .clientIp(e.getClientIp())
                 .requestTime(e.getRequestTime())
                 .targetHost(e.getTargetHost())
+                .forwarded(e.isForwarded())
+                .forwardTarget(e.getForwardTarget())
                 .proxyStatus(e.getProxyStatus())
                 .proxyError(e.getProxyError())
                 .responseStatus(e.getResponseStatus())
@@ -564,16 +600,18 @@ public class RequestLogService {
                 .clientIp((String) row[8])
                 .requestTime((LocalDateTime) row[9])
                 .targetHost((String) row[10])
-                .proxyStatus(row[11] != null ? ((Number) row[11]).intValue() : null)
-                .proxyError((String) row[12])
-                .responseStatus(row[13] != null ? ((Number) row[13]).intValue() : null)
-                .faultType((String) row[14])
-                .scenarioName((String) row[15])
-                .scenarioFromState((String) row[16])
-                .scenarioToState((String) row[17])
-                .hasRequestBody(Boolean.TRUE.equals(row[18]))
-                .hasResponseBody(Boolean.TRUE.equals(row[19]))
-                .hasMatchChain(Boolean.TRUE.equals(row[20]))
+                .forwarded(Boolean.TRUE.equals(row[11]))
+                .forwardTarget((String) row[12])
+                .proxyStatus(row[13] != null ? ((Number) row[13]).intValue() : null)
+                .proxyError((String) row[14])
+                .responseStatus(row[15] != null ? ((Number) row[15]).intValue() : null)
+                .faultType((String) row[16])
+                .scenarioName((String) row[17])
+                .scenarioFromState((String) row[18])
+                .scenarioToState((String) row[19])
+                .hasRequestBody(Boolean.TRUE.equals(row[20]))
+                .hasResponseBody(Boolean.TRUE.equals(row[21]))
+                .hasMatchChain(Boolean.TRUE.equals(row[22]))
                 .build();
     }
 
@@ -590,6 +628,8 @@ public class RequestLogService {
                 .clientIp(row.clientIp())
                 .requestTime(row.requestTime())
                 .targetHost(row.targetHost())
+                .forwarded(Boolean.TRUE.equals(row.forwarded()))
+                .forwardTarget(row.forwardTarget())
                 .proxyStatus(row.proxyStatus() != null ? row.proxyStatus().intValue() : null)
                 .proxyError(row.proxyError())
                 .responseStatus(row.responseStatus() != null ? row.responseStatus().intValue() : null)
@@ -619,6 +659,8 @@ public class RequestLogService {
         private LocalDateTime requestTime;
         private String matchChain;
         private String targetHost;
+        private boolean forwarded;
+        private String forwardTarget;
         private Integer proxyStatus;
         private String proxyError;
         private Integer responseStatus;
@@ -647,6 +689,8 @@ public class RequestLogService {
         private String clientIp;
         private LocalDateTime requestTime;
         private String targetHost;
+        private boolean forwarded;
+        private String forwardTarget;
         private Integer proxyStatus;
         private String proxyError;
         private Integer responseStatus;

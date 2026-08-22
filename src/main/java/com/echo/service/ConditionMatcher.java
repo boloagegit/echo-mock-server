@@ -19,16 +19,23 @@ import org.xml.sax.InputSource;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.XMLStreamReader;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpression;
 import javax.xml.xpath.XPathFactory;
 import jakarta.annotation.PreDestroy;
 import java.io.StringReader;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.regex.Pattern;
@@ -116,10 +123,19 @@ public class ConditionMatcher {
         XPathFactory.newInstance().newXPath()
     );
 
+    private static final ThreadLocal<XMLInputFactory> XML_INPUT_FACTORY = ThreadLocal.withInitial(() -> {
+        XMLInputFactory factory = XMLInputFactory.newFactory();
+        factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
+        factory.setProperty("javax.xml.stream.isSupportingExternalEntities", false);
+        factory.setProperty(XMLInputFactory.IS_REPLACING_ENTITY_REFERENCES, false);
+        return factory;
+    });
+
     @PreDestroy
     public void cleanup() {
         DOC_BUILDER.remove();
         XPATH.remove();
+        XML_INPUT_FACTORY.remove();
         patternCache.invalidateAll();
         jsonPathCache.invalidateAll();
         xpathExprCache.invalidateAll();
@@ -174,14 +190,27 @@ public class ConditionMatcher {
         private final BodyType type;
         private final Map<String, Boolean> matchOutcomes = new HashMap<>();
         private final Map<String, JsonPathResult> jsonPathResults = new HashMap<>();
+        private final Map<String, String> xmlActualValues = new HashMap<>();
 
         enum BodyType { XML, JSON, PLAIN, EMPTY, TOO_LARGE }
 
         private PreparedBody(String raw, Document xmlDoc, JsonNode jsonNode, BodyType type) {
+            this(raw, xmlDoc, jsonNode, type, null, null);
+        }
+
+        private PreparedBody(String raw, Document xmlDoc, JsonNode jsonNode, BodyType type,
+                             Map<String, Boolean> outcomes,
+                             Map<String, String> actualValues) {
             this.raw = raw;
             this.xmlDoc = xmlDoc;
             this.jsonNode = jsonNode;
             this.type = type;
+            if (outcomes != null) {
+                this.matchOutcomes.putAll(outcomes);
+            }
+            if (actualValues != null) {
+                this.xmlActualValues.putAll(actualValues);
+            }
         }
 
         public static PreparedBody empty() {
@@ -201,6 +230,13 @@ public class ConditionMatcher {
                 return empty();
             }
             return new PreparedBody(raw, null, null, BodyType.PLAIN);
+        }
+
+        private static PreparedBody streamingXml(
+                String raw, Map<String, Boolean> outcomes,
+                Map<String, String> actualValues) {
+            return new PreparedBody(raw, null, null, BodyType.XML,
+                    outcomes, actualValues);
         }
 
         /** 取得已解析的 XML Document，若非 XML 則為 null */
@@ -237,6 +273,14 @@ public class ConditionMatcher {
             if (outcomes != null && !outcomes.isEmpty()) {
                 matchOutcomes.putAll(outcomes);
             }
+        }
+
+        private String xmlActualValue(String field) {
+            return xmlActualValues.get(field);
+        }
+
+        private boolean hasXmlActualValue(String field) {
+            return xmlActualValues.containsKey(field);
         }
 
         private JsonPathResult cachedJsonPath(
@@ -286,6 +330,293 @@ public class ConditionMatcher {
             log.warn("Failed to prepare body: {}", e.getMessage());
         }
         return new PreparedBody(trimmed, null, null, PreparedBody.BodyType.PLAIN);
+    }
+
+    /**
+     * JMS XML 快速路徑：依候選規則一次串流掃描 XML，直接快取每個條件結果。
+     * <p>
+     * 一般 element、相對/絕對路徑與末端 attribute 不建立 DOM；只有含 XPath
+     * predicate/function 等複雜語法的條件，才建立一次由所有候選規則共用的 DOM。
+     */
+    public PreparedBody prepareBodyForConditions(
+            String body, List<String> bodyConditions) {
+        if (body == null || body.isBlank()) {
+            return PreparedBody.empty();
+        }
+        if (body.length() > MAX_JSON_SIZE) {
+            log.warn("Body too large for prepare: {} bytes", body.length());
+            return PreparedBody.tooLarge();
+        }
+
+        String trimmed = body.trim();
+        if (!trimmed.startsWith("<")) {
+            return prepareBody(body);
+        }
+
+        StreamingConditionPlan streamPlan = streamingConditions(bodyConditions);
+        List<StreamConditionState> streamStates = streamPlan.states();
+        if (!streamPlan.allStreamable()) {
+            // 只要有一個複雜 XPath，就建立一次 DOM 給所有規則共用。
+            // 監聽器外層的訊息記憶體額度仍會覆蓋這個 DOM 的生命週期。
+            return prepareBody(body);
+        }
+        try {
+            Map<String, Boolean> outcomes = new HashMap<>();
+            Map<String, String> actualValues = new HashMap<>();
+            if (!streamStates.isEmpty()) {
+                evaluateStreamingXml(trimmed, streamStates);
+                for (StreamConditionState state : streamStates) {
+                    outcomes.put("body:" + state.condition, state.matched);
+                    if (state.firstActual != null) {
+                        actualValues.putIfAbsent(state.parsed.field(), state.firstActual);
+                    }
+                }
+            }
+            return PreparedBody.streamingXml(trimmed, outcomes, actualValues);
+        } catch (Exception e) {
+            log.warn("Failed to prepare body: {}", e.getMessage());
+            return new PreparedBody(trimmed, null, null, PreparedBody.BodyType.PLAIN);
+        }
+    }
+
+    private StreamingConditionPlan streamingConditions(List<String> bodyConditions) {
+        if (bodyConditions == null || bodyConditions.isEmpty()) {
+            return new StreamingConditionPlan(List.of(), true);
+        }
+        Set<String> uniqueConditions = new LinkedHashSet<>();
+        for (String bodyCondition : bodyConditions) {
+            if (bodyCondition == null || bodyCondition.isBlank()) {
+                continue;
+            }
+            for (String condition : bodyCondition.split(";")) {
+                String trimmed = condition.trim();
+                if (!trimmed.isEmpty()) {
+                    uniqueConditions.add(trimmed);
+                }
+            }
+        }
+
+        List<StreamConditionState> states = new ArrayList<>();
+        boolean allStreamable = true;
+        for (String condition : uniqueConditions) {
+            ParsedCondition parsed = parseCondition(condition.replace("==", "="));
+            StreamXmlSelector selector = StreamXmlSelector.parse(parsed.field());
+            if (selector != null) {
+                states.add(new StreamConditionState(condition, parsed, selector));
+            } else {
+                allStreamable = false;
+            }
+        }
+        return new StreamingConditionPlan(states, allStreamable);
+    }
+
+    private record StreamingConditionPlan(
+            List<StreamConditionState> states, boolean allStreamable) {
+    }
+
+    private void evaluateStreamingXml(String body, List<StreamConditionState> states) throws Exception {
+        XMLStreamReader reader = XML_INPUT_FACTORY.get()
+                .createXMLStreamReader(new StringReader(body));
+        List<String> path = new ArrayList<>();
+        Deque<StreamCapture> captures = new ArrayDeque<>();
+        int unmatchedConditions = states.size();
+        try {
+            while (reader.hasNext()) {
+                int event = reader.next();
+                if (event == XMLStreamConstants.START_ELEMENT) {
+                    path.add(reader.getLocalName());
+                    List<StreamConditionState> elementStates = new ArrayList<>();
+                    for (StreamConditionState state : states) {
+                        if (!state.selector.matchesElementPath(path)) {
+                            continue;
+                        }
+                        if (state.selector.attributeName != null) {
+                            String attribute = attributeValue(reader, state.selector.attributeName);
+                            if (attribute != null) {
+                                if (evaluateStreamValue(state, attribute.trim())) {
+                                    unmatchedConditions--;
+                                }
+                            }
+                        } else {
+                            elementStates.add(state);
+                        }
+                    }
+                    if (!elementStates.isEmpty()) {
+                        captures.addLast(new StreamCapture(path.size(), elementStates));
+                    }
+                    if (unmatchedConditions == 0) {
+                        return;
+                    }
+                } else if (event == XMLStreamConstants.CHARACTERS
+                        || event == XMLStreamConstants.CDATA) {
+                    for (StreamCapture capture : captures) {
+                        capture.append(reader.getTextCharacters(), reader.getTextStart(),
+                                reader.getTextLength(), maxFieldValueLength);
+                    }
+                } else if (event == XMLStreamConstants.END_ELEMENT) {
+                    int depth = path.size();
+                    var iterator = captures.descendingIterator();
+                    while (iterator.hasNext()) {
+                        StreamCapture capture = iterator.next();
+                        if (capture.depth != depth) {
+                            continue;
+                        }
+                        iterator.remove();
+                        if (!capture.tooLarge) {
+                            String actual = capture.value.toString().trim();
+                            for (StreamConditionState state : capture.states) {
+                                if (evaluateStreamValue(state, actual)) {
+                                    unmatchedConditions--;
+                                }
+                            }
+                        }
+                    }
+                    path.remove(path.size() - 1);
+                    if (unmatchedConditions == 0) {
+                        return;
+                    }
+                }
+            }
+        } finally {
+            reader.close();
+        }
+    }
+
+    private boolean evaluateStreamValue(StreamConditionState state, String actual) {
+        if (actual.length() > maxFieldValueLength) {
+            return false;
+        }
+        if (state.firstActual == null) {
+            state.firstActual = actual;
+        }
+        if (!state.matched && matchValue(state.parsed, actual)) {
+            state.matched = true;
+            return true;
+        }
+        return false;
+    }
+
+    private static String attributeValue(XMLStreamReader reader, String localName) {
+        for (int i = 0; i < reader.getAttributeCount(); i++) {
+            if (localName.equals(reader.getAttributeLocalName(i))) {
+                return reader.getAttributeValue(i);
+            }
+        }
+        return null;
+    }
+
+    private static final class StreamConditionState {
+        private final String condition;
+        private final ParsedCondition parsed;
+        private final StreamXmlSelector selector;
+        private boolean matched;
+        private String firstActual;
+
+        private StreamConditionState(
+                String condition, ParsedCondition parsed, StreamXmlSelector selector) {
+            this.condition = condition;
+            this.parsed = parsed;
+            this.selector = selector;
+        }
+    }
+
+    private static final class StreamCapture {
+        private final int depth;
+        private final List<StreamConditionState> states;
+        private StringBuilder value = new StringBuilder();
+        private boolean tooLarge;
+
+        private StreamCapture(int depth, List<StreamConditionState> states) {
+            this.depth = depth;
+            this.states = states;
+        }
+
+        private void append(char[] chars, int start, int length, int maximumLength) {
+            if (tooLarge) {
+                return;
+            }
+            if (value.length() > maximumLength - length) {
+                tooLarge = true;
+                value = null;
+                return;
+            }
+            value.append(chars, start, length);
+        }
+    }
+
+    private static final class StreamXmlSelector {
+        private final List<String> elements;
+        private final boolean absolute;
+        private final String attributeName;
+
+        private StreamXmlSelector(List<String> elements, boolean absolute, String attributeName) {
+            this.elements = elements;
+            this.absolute = absolute;
+            this.attributeName = attributeName;
+        }
+
+        private static StreamXmlSelector parse(String field) {
+            if (field == null || field.isBlank() || field.startsWith("$.")) {
+                return null;
+            }
+            String path = field.trim();
+            if (path.endsWith("/text()")) {
+                path = path.substring(0, path.length() - "/text()".length());
+            }
+            if (path.contains("[") || path.contains("]") || path.contains("(")
+                    || path.contains(")") || path.contains("*") || path.contains("|")) {
+                return null;
+            }
+
+            boolean absolute = path.startsWith("/") && !path.startsWith("//");
+            if (path.startsWith("//")) {
+                path = path.substring(2);
+            } else if (path.startsWith("/")) {
+                path = path.substring(1);
+            }
+            if (path.isEmpty()) {
+                return null;
+            }
+
+            String[] parts = path.split("/");
+            List<String> elements = new ArrayList<>();
+            String attribute = null;
+            for (int i = 0; i < parts.length; i++) {
+                String part = parts[i];
+                if (part.isEmpty() || ".".equals(part) || "..".equals(part)
+                        || part.contains(":")) {
+                    return null;
+                }
+                if (part.startsWith("@")) {
+                    if (i != parts.length - 1 || part.length() == 1) {
+                        return null;
+                    }
+                    attribute = part.substring(1);
+                } else {
+                    if (attribute != null) {
+                        return null;
+                    }
+                    elements.add(part);
+                }
+            }
+            return elements.isEmpty() ? null : new StreamXmlSelector(elements, absolute, attribute);
+        }
+
+        private boolean matchesElementPath(List<String> currentPath) {
+            if (absolute) {
+                return currentPath.equals(elements);
+            }
+            if (currentPath.size() < elements.size()) {
+                return false;
+            }
+            int offset = currentPath.size() - elements.size();
+            for (int i = 0; i < elements.size(); i++) {
+                if (!elements.get(i).equals(currentPath.get(offset + i))) {
+                    return false;
+                }
+            }
+            return true;
+        }
     }
 
     /** Rebuilds parsed body state while reusing predicates already evaluated on the request path. */
@@ -414,6 +745,9 @@ public class ConditionMatcher {
                 if (prepared.xmlDoc != null) {
                     return extractXmlActual(parsed.field(), prepared.xmlDoc);
                 }
+                if (prepared.hasXmlActualValue(parsed.field())) {
+                    return prepared.xmlActualValue(parsed.field());
+                }
                 return "not found";
             }
             if (prepared.jsonNode != null) {
@@ -421,6 +755,10 @@ public class ConditionMatcher {
             }
             if (prepared.xmlDoc != null) {
                 return extractXmlActual(parsed.field(), prepared.xmlDoc);
+            }
+            if (prepared.type == PreparedBody.BodyType.XML
+                    && prepared.hasXmlActualValue(parsed.field())) {
+                return prepared.xmlActualValue(parsed.field());
             }
         } catch (Exception e) {
             // fall through
@@ -593,13 +931,16 @@ public class ConditionMatcher {
             if (prepared.xmlDoc != null) {
                 return matchXmlNodesPrepared(condition, prepared.xmlDoc);
             }
-            return matchXPath(condition, prepared.raw);
+            return matchXPath(condition, prepared);
         }
         if (prepared.jsonNode != null) {
             return matchJsonPrepared(condition, prepared.jsonNode);
         }
         if (prepared.xmlDoc != null) {
             return matchXmlNodesPrepared(condition, prepared.xmlDoc);
+        }
+        if (prepared.type == PreparedBody.BodyType.XML) {
+            return matchXPath(condition, prepared);
         }
         return prepared.raw != null && prepared.raw.contains(condition);
     }
@@ -705,7 +1046,11 @@ public class ConditionMatcher {
         }
     }
 
-    private boolean matchXPath(String condition, String body) {
+    private boolean matchXPath(String condition, PreparedBody prepared) {
+        String body = prepared.raw;
+        if (body == null) {
+            return false;
+        }
         if (body.length() > MAX_XML_SIZE) {
             log.warn("XML too large for processing: {} bytes", body.length());
             return false;

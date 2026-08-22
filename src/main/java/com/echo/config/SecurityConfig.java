@@ -64,7 +64,15 @@ public class SecurityConfig {
                 .requestMatchers("/api/admin/builtin-users/forgot-password", "/api/admin/builtin-users/register").permitAll()
                 // 內建帳號管理 — 僅 ADMIN
                 .requestMatchers("/api/admin/builtin-users/**").hasRole("ADMIN")
-                // JMS 轉發連線包含敏感設定 — 僅 ADMIN
+                // 已登入使用者可選擇安全的唯讀連線 DTO；管理與測試仍僅限 ADMIN
+                .requestMatchers(HttpMethod.GET,
+                        "/api/admin/jms-target-connections",
+                        "/api/admin/http-target-connections").authenticated()
+                // 請求日誌可能包含下游位址與請求內容，不可公開讀取
+                .requestMatchers(HttpMethod.GET,
+                        "/api/admin/logs",
+                        "/api/admin/logs/summary",
+                        "/api/admin/logs/*/detail").authenticated()
                 .requestMatchers("/api/admin/jms-target-connections/**").hasRole("ADMIN")
                 .requestMatchers("/api/admin/http-target-connections/**").hasRole("ADMIN")
                 // Issue Report — 回覆/resolve/reopen/刪除 僅 ADMIN
@@ -77,7 +85,7 @@ public class SecurityConfig {
                 // 批次操作僅 ADMIN (必須在 permitAll 之前)
                 .requestMatchers("/api/admin/rules/export", "/api/admin/rules/import-batch", "/api/admin/rules/import-excel", "/api/admin/rules/batch", "/api/admin/rules/batch/*", "/api/admin/rules/tag/*/*/*", "/api/admin/rules/all", "/api/admin/responses/all", "/api/admin/responses/export", "/api/admin/audit/all", "/api/admin/setup").hasRole("ADMIN")
                 // 唯讀 API 開放
-                .requestMatchers(HttpMethod.GET, "/", "/index.html", "/api/admin/status", "/api/admin/rules", "/api/admin/rules/*", "/api/admin/rules/import-template", "/api/admin/rules/*/audit", "/api/admin/audit", "/api/admin/logs", "/api/admin/logs/summary", "/api/admin/logs/*/detail", "/api/admin/responses", "/api/admin/responses/*", "/api/admin/responses/*/rules", "/api/admin/responses/summary").permitAll()
+                .requestMatchers(HttpMethod.GET, "/", "/index.html", "/api/admin/status", "/api/admin/rules", "/api/admin/rules/*", "/api/admin/rules/import-template", "/api/admin/rules/*/audit", "/api/admin/audit", "/api/admin/responses", "/api/admin/responses/*", "/api/admin/responses/*/rules", "/api/admin/responses/summary").permitAll()
                 // 其他需登入 (POST/PUT/DELETE)
                 .anyRequest().authenticated()
             )

@@ -35,6 +35,8 @@ public class LogTask {
     private final LocalDateTime requestTime;
     private final String matchChain;
     private final String targetHost;
+    private final boolean forwarded;
+    private final String forwardTarget;
     private final Integer proxyStatus;
     private final String proxyError;
     private final Integer responseStatus;
@@ -67,6 +69,8 @@ public class LogTask {
             LocalDateTime requestTime,
             String matchChain,
             String targetHost,
+            boolean forwarded,
+            String forwardTarget,
             Integer proxyStatus,
             String proxyError,
             Integer responseStatus,
@@ -92,6 +96,8 @@ public class LogTask {
         this.requestTime = requestTime;
         this.matchChain = matchChain;
         this.targetHost = targetHost;
+        this.forwarded = forwarded;
+        this.forwardTarget = forwardTarget;
         this.proxyStatus = proxyStatus;
         this.proxyError = proxyError;
         this.responseStatus = responseStatus;

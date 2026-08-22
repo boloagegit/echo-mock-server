@@ -153,7 +153,7 @@ class AdminControllerLogToRuleTest {
         RuleDto dto = response.getBody();
         assertThat(dto).isNotNull();
         assertThat(dto.getProtocol()).isEqualTo(Protocol.JMS);
-        assertThat(dto.getMatchKey()).isEqualTo("ORDER.REQUEST");
+        assertThat(dto.getMatchKey()).isEqualTo("*");
         assertThat(dto.getMethod()).isNull();
         assertThat(dto.getTargetHost()).isNull();
         assertThat(dto.getStatus()).isNull();

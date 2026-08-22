@@ -142,6 +142,28 @@ class SecurityIntegrationTest {
     }
 
     @Test
+    void requestLogs_shouldReturn401_whenNotAuthenticated() throws Exception {
+        mockMvc.perform(get("/api/admin/logs").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/admin/logs/summary").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/admin/logs/1/detail").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void requestLogs_shouldReturn200_whenAuthenticated() throws Exception {
+        when(requestLogService.querySummary(any())).thenReturn(
+                RequestLogService.SummaryQueryResult.builder()
+                        .results(List.of()).page(0).size(20).totalElements(0)
+                        .totalPages(0).build());
+
+        mockMvc.perform(get("/api/admin/logs").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void exportRules_shouldReturn401_whenNotAuthenticated() throws Exception {
         mockMvc.perform(get("/api/admin/rules/export").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized());

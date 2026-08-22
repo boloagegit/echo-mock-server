@@ -62,6 +62,18 @@ An enterprise-grade dual-protocol mock server supporting HTTP and JMS, designed 
 java -jar build/libs/echo-server-*.jar
 ```
 
+For a packaged Linux/macOS deployment, `start-echo.sh` also verifies a writable
+SQLite temporary directory and applies private file permissions before Java starts.
+Copy the built JAR beside the script as `echo.jar`, or set `ECHO_JAR_PATH`, then
+pass normal Spring arguments:
+
+```bash
+./start-echo.sh --spring.profiles.active=sqlite
+```
+
+`SQLITE_TMPDIR` can override the default temporary path. This setting is harmless
+when Echo runs with H2 and does not change the configured database profile.
+
 On a Windows development machine, run the equivalent commands in PowerShell:
 
 ```powershell
@@ -115,7 +127,8 @@ Environment variables:
 | `ECHO_ENV_LABEL` | DOCKER | Environment label |
 | `TZ` | Asia/Taipei | Timezone |
 
-JVM options are set in the Dockerfile (default `-Xms256m -Xmx512m`). Override by adding `JAVA_OPTS` to docker-compose.yml `environment`.
+JVM options are set in the Dockerfile (default `-Xms256m -Xmx512m`, with a heap dump and process exit on OOM). Override by adding `JAVA_OPTS` to docker-compose.yml `environment`.
+For production `java -jar` deployments, also pass `-XX:+HeapDumpOnOutOfMemoryError -XX:+ExitOnOutOfMemoryError` and let systemd, Kubernetes, or another supervisor restart the process.
 
 ### Optional Features
 
@@ -218,6 +231,8 @@ Application ──JMS──▶ Echo (Artemis)  ──JMS──▶ ESB (TIBCO/Art
 ```
 
 Administrators can create multiple Artemis/TIBCO profiles under **System Settings → JMS Forward Connections**, test them, and select one default. Only unmatched messages use this outbound default; Echo's inbound Embedded Artemis connection is unchanged. Once the first database profile is created, database profiles take precedence and the legacy `application.yml` target is used only while no database profile exists. Passwords are stored with AES-GCM encryption and are never returned by the API. Set a stable `ECHO_JMS_CREDENTIAL_KEY` in production; changing it requires re-entering every stored password.
+
+For Artemis Core clients that send XML, configure the sender URL as `tcp://echo-host:61616?minLargeMessageSize=524288`. Text payloads up to roughly 256 KB then use the regular-message path instead of creating one large-message file per request, while larger messages still spill to disk to protect the heap. This is a **sender-side** connection setting, not an Echo `application.yml` property.
 
 ## Condition Matching Syntax
 
@@ -349,6 +364,12 @@ echo:
     port: 61616                 # Artemis listen port
     queue: ECHO.REQUEST         # Queue to listen on
     endpoint-field: ServiceName # Field to extract endpoint identifier from message body
+    processing-memory-percent: 25 # Heap share available to in-flight JMS message parsing
+    xml-memory-expansion-factor: 8 # Conservative estimate for temporary XML parsing memory
+    broker-memory-percent: 15     # Artemis heap share before paging to disk
+    persistent: true              # Keep true outside tests so large messages cannot exhaust the heap
+    consumer-window-size: 65536   # Encoded bytes prefetched by each listener consumer
+    data-directory: ./data/artemis # Artemis paging and large-message files
     target:
       enabled: false            # Legacy fallback used until a database profile exists
       type: tibco               # artemis or tibco
@@ -471,8 +492,8 @@ ADMIN can manage built-in accounts via the admin UI:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | /api/admin/logs | Request logs (filter by ruleId/protocol/matched/endpoint; page/size/sort/direction; afterId for incremental refresh) |
-| GET | /api/admin/logs/summary | Request log summary |
+| GET | /api/admin/logs | Request logs (authenticated; filter by ruleId/protocol/matched/endpoint; page/size/sort/direction; afterId for incremental refresh) |
+| GET | /api/admin/logs/summary | Request log summary (authenticated) |
 | DELETE | /api/admin/logs/all | Delete all request logs (ADMIN) |
 | GET | /api/admin/rules/{id}/audit | Audit logs for a rule |
 | GET | /api/admin/audit | All audit logs |

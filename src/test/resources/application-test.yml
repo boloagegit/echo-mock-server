@@ -24,6 +24,7 @@ echo:
   jms:
     enabled: true
     port: 0
+    persistent: false
   ldap:
     enabled: false
   backup:

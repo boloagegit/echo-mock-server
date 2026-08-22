@@ -5,7 +5,6 @@ import com.echo.pipeline.JmsMockPipeline;
 import com.echo.pipeline.MockRequest;
 import com.echo.pipeline.MockResponse;
 import com.echo.pipeline.PipelineResult;
-import com.echo.service.ConditionMatcher;
 import jakarta.jms.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,9 +27,6 @@ class MockJmsListenerTest {
     private JmsMockPipeline jmsMockPipeline;
 
     @Mock
-    private ConditionMatcher conditionMatcher;
-
-    @Mock
     private JmsTemplate jmsTemplate;
 
     private MockJmsListener listener;
@@ -40,7 +36,8 @@ class MockJmsListenerTest {
     void setUp() {
         jmsProperties = new JmsProperties();
         jmsProperties.setQueue("ECHO.REQUEST");
-        listener = new MockJmsListener(connectionManager, jmsProperties, jmsMockPipeline, conditionMatcher);
+        listener = new MockJmsListener(connectionManager, jmsProperties, jmsMockPipeline,
+                new JmsEndpointExtractor(), new JmsMessageMemoryBudget(64 * 1024 * 1024L, 8));
     }
 
     @Test
@@ -51,7 +48,6 @@ class MockJmsListenerTest {
         when(message.getText()).thenReturn("<order>test</order>");
         when(message.getJMSReplyTo()).thenReturn(replyTo);
         when(connectionManager.getJmsTemplate()).thenReturn(jmsTemplate);
-        when(conditionMatcher.prepareBody(any())).thenReturn(ConditionMatcher.PreparedBody.empty());
 
         // Pipeline returns a matched result with response body
         when(jmsMockPipeline.execute(any(MockRequest.class))).thenReturn(
@@ -75,7 +71,6 @@ class MockJmsListenerTest {
         when(message.getText()).thenReturn("<order>test</order>");
         when(message.getJMSReplyTo()).thenReturn(replyTo);
         when(connectionManager.getJmsTemplate()).thenReturn(jmsTemplate);
-        when(conditionMatcher.prepareBody(any())).thenReturn(ConditionMatcher.PreparedBody.empty());
 
         // Pipeline returns a forwarded result
         when(jmsMockPipeline.execute(any(MockRequest.class))).thenReturn(
@@ -97,7 +92,6 @@ class MockJmsListenerTest {
         when(message.getText()).thenReturn("<order>test</order>");
         when(message.getJMSReplyTo()).thenReturn(replyTo);
         when(connectionManager.getJmsTemplate()).thenReturn(jmsTemplate);
-        when(conditionMatcher.prepareBody(any())).thenReturn(ConditionMatcher.PreparedBody.empty());
 
         // Pipeline returns a no-match result
         String errorBody = "<error>No mock rule found for queue: ECHO.REQUEST</error>";
@@ -120,7 +114,6 @@ class MockJmsListenerTest {
         when(message.getText()).thenReturn("<order>test</order>");
         when(message.getJMSReplyTo()).thenReturn(replyTo);
         when(connectionManager.getJmsTemplate()).thenReturn(jmsTemplate);
-        when(conditionMatcher.prepareBody(any())).thenReturn(ConditionMatcher.PreparedBody.empty());
 
         // Pipeline returns a matched result with response body from DB
         when(jmsMockPipeline.execute(any(MockRequest.class))).thenReturn(
@@ -140,7 +133,6 @@ class MockJmsListenerTest {
 
         when(message.getText()).thenReturn("<order>test</order>");
         when(message.getJMSReplyTo()).thenReturn(null);
-        when(conditionMatcher.prepareBody(any())).thenReturn(ConditionMatcher.PreparedBody.empty());
 
         // Pipeline returns a matched result
         when(jmsMockPipeline.execute(any(MockRequest.class))).thenReturn(

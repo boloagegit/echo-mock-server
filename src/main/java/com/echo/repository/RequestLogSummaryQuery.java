@@ -35,7 +35,8 @@ public class RequestLogSummaryQuery {
                 log.get("id"), log.get("ruleId"), log.get("protocol"), log.get("method"),
                 log.get("endpoint"), log.get("matched"), log.get("responseTimeMs"),
                 log.get("matchTimeMs"), log.get("clientIp"), log.get("requestTime"),
-                log.get("targetHost"), log.get("proxyStatus"), log.get("proxyError"),
+                log.get("targetHost"), log.get("forwarded"), log.get("forwardTarget"),
+                log.get("proxyStatus"), log.get("proxyError"),
                 log.get("responseStatus"), log.get("faultType"), log.get("scenarioName"),
                 log.get("scenarioFromState"), log.get("scenarioToState"),
                 builder.isNotNull(log.get("requestBody")),
@@ -78,6 +79,7 @@ public class RequestLogSummaryQuery {
             predicates.add(builder.or(
                     builder.like(builder.lower(log.get("endpoint")), pattern),
                     builder.like(builder.lower(log.get("targetHost")), pattern),
+                    builder.like(builder.lower(log.get("forwardTarget")), pattern),
                     builder.like(builder.lower(log.get("ruleId")), pattern)));
         }
         if (filter.afterId() != null) {
@@ -99,10 +101,10 @@ public class RequestLogSummaryQuery {
                 row.get(3, String.class), row.get(4, String.class), row.get(5, Boolean.class),
                 row.get(6, Number.class), row.get(7, Number.class), row.get(8, String.class),
                 row.get(9, java.time.LocalDateTime.class), row.get(10, String.class),
-                row.get(11, Number.class), row.get(12, String.class), row.get(13, Number.class),
-                row.get(14, String.class), row.get(15, String.class), row.get(16, String.class),
-                row.get(17, String.class), row.get(18, Boolean.class), row.get(19, Boolean.class),
-                row.get(20, Boolean.class));
+                row.get(11, Boolean.class), row.get(12, String.class), row.get(13, Number.class),
+                row.get(14, String.class), row.get(15, Number.class), row.get(16, String.class),
+                row.get(17, String.class), row.get(18, String.class), row.get(19, String.class),
+                row.get(20, Boolean.class), row.get(21, Boolean.class), row.get(22, Boolean.class));
     }
 
     public record Filter(String ruleId, Protocol protocol, Boolean matched,
@@ -112,8 +114,9 @@ public class RequestLogSummaryQuery {
     public record SummaryRow(
             Long id, String ruleId, Protocol protocol, String method, String endpoint,
             Boolean matched, Number responseTimeMs, Number matchTimeMs, String clientIp,
-            java.time.LocalDateTime requestTime, String targetHost, Number proxyStatus,
-            String proxyError, Number responseStatus, String faultType, String scenarioName,
+            java.time.LocalDateTime requestTime, String targetHost, Boolean forwarded,
+            String forwardTarget, Number proxyStatus, String proxyError,
+            Number responseStatus, String faultType, String scenarioName,
             String scenarioFromState, String scenarioToState, Boolean hasRequestBody,
             Boolean hasResponseBody, Boolean hasMatchChain) {
     }

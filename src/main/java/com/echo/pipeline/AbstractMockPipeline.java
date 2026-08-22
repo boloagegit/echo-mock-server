@@ -76,7 +76,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
             ConditionMatcher.PreparedBody preparedBody = request.getPreparedBody();
             if (preparedBody == null) {
                 preparedBody = requiresBodyParsing(candidates)
-                        ? conditionMatcher.prepareBody(request.getBody())
+                        ? prepareBody(request, candidates)
                         : ConditionMatcher.PreparedBody.rawOnly(request.getBody());
             }
 
@@ -205,7 +205,8 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                 ? null : response.getStatus();
         recordLog(ruleId, request.getProtocol(), request.getMethod(), request.getPath(),
                 matchResult.isMatched(), responseTimeMs, request.getClientIp(), matchChainJson,
-                logTargetHost, proxyStatus, response.getProxyError(), loggedResponseStatus,
+                logTargetHost, response.isForwarded(), response.getForwardTarget(),
+                proxyStatus, response.getProxyError(), loggedResponseStatus,
                 matchTimeMs, request.getBody(), response.getBody(), candidates, preparedBody,
                 request.getQueryString(), request.getHeaders(), faultType,
                 scenarioName, scenarioFromState, scenarioToState);
@@ -371,6 +372,13 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
         return false;
     }
 
+    /**
+     * 協定可覆寫 body 準備策略；HTTP 維持既有完整解析，JMS 可依候選條件走串流路徑。
+     */
+    protected ConditionMatcher.PreparedBody prepareBody(MockRequest request, List<T> candidates) {
+        return conditionMatcher.prepareBody(request.getBody());
+    }
+
     // ==================== 共用實作方法 ====================
 
     /**
@@ -416,6 +424,31 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                              String scenarioToState) {
         requestLogService.record(ruleId, protocol, method, endpoint,
                 matched, responseTimeMs, clientIp, matchChainJson, targetHost,
+                proxyStatus, proxyError, responseStatus, matchTimeMs,
+                requestBody, responseBody,
+                candidates, preparedBody, queryString, headers, faultType,
+                scenarioName, scenarioFromState, scenarioToState);
+    }
+
+    /** 記錄包含明確轉發狀態與安全目標資訊的請求日誌。 */
+    protected void recordLog(String ruleId, Protocol protocol, String method,
+                             String endpoint, boolean matched, int responseTimeMs,
+                             String clientIp, String matchChainJson, String targetHost,
+                             boolean forwarded, String forwardTarget,
+                             Integer proxyStatus, String proxyError,
+                             Integer responseStatus, Integer matchTimeMs,
+                             String requestBody, String responseBody,
+                             List<T> candidates,
+                             ConditionMatcher.PreparedBody preparedBody,
+                             String queryString,
+                             Map<String, String> headers,
+                             String faultType,
+                             String scenarioName,
+                             String scenarioFromState,
+                             String scenarioToState) {
+        requestLogService.record(ruleId, protocol, method, endpoint,
+                matched, responseTimeMs, clientIp, matchChainJson, targetHost,
+                forwarded, forwardTarget,
                 proxyStatus, proxyError, responseStatus, matchTimeMs,
                 requestBody, responseBody,
                 candidates, preparedBody, queryString, headers, faultType,

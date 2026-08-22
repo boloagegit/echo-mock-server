@@ -24,6 +24,7 @@ USER echo
 # 環境變數
 ENV JAVA_OPTS="-Xms256m -Xmx512m \
     -XX:+HeapDumpOnOutOfMemoryError \
+    -XX:+ExitOnOutOfMemoryError \
     -XX:HeapDumpPath=/tmp/heapdump.hprof \
     -Xlog:gc*:file=/tmp/gc.log:time,uptime,level,tags:filecount=5,filesize=10m" \
     TZ=Asia/Taipei

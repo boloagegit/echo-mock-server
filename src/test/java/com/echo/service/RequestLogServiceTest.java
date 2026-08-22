@@ -70,6 +70,8 @@ class RequestLogServiceTest {
                 .requestTime(task.getRequestTime())
                 .matchChain(task.getMatchChain())
                 .targetHost(task.getTargetHost())
+                .forwarded(task.isForwarded())
+                .forwardTarget(task.getForwardTarget())
                 .proxyStatus(task.getProxyStatus())
                 .proxyError(task.getProxyError())
                 .responseStatus(task.getResponseStatus())
@@ -121,6 +123,21 @@ class RequestLogServiceTest {
             assertThat(summary.getMethod()).isEqualTo("GET");
             assertThat(summary.isHasRequestBody()).isTrue();
             assertThat(summary.isHasResponseBody()).isTrue();
+        }
+
+        @Test
+        void record_shouldLimitForwardTargetToDatabaseColumnSize() {
+            String oversizedTarget = "x".repeat(RequestLog.MAX_FORWARD_TARGET_LENGTH + 200);
+
+            service.record("uuid-1", Protocol.HTTP, "GET", "/api", false, 10, "127.0.0.1",
+                    null, null, true, oversizedTarget, null, null, 502, 1,
+                    null, null, List.of(), null, null, java.util.Map.of(),
+                    null, null, null, null);
+
+            var result = service.querySummary(RequestLogService.QueryFilter.builder().build());
+            assertThat(result.getResults()).singleElement().satisfies(item ->
+                    assertThat(item.getLog().getForwardTarget())
+                            .hasSize(RequestLog.MAX_FORWARD_TARGET_LENGTH));
         }
 
         @Test
@@ -382,7 +399,8 @@ class RequestLogServiceTest {
         @Test
         void querySummary_shouldDelegateFilteringPaginationAndSortingToDb() {
             Object[] row = { 15L, "uuid-1", Protocol.HTTP, "GET", "/api", true,
-                    12, 3, "127.0.0.1", LocalDateTime.now(), "host", null, null, 200,
+                    12, 3, "127.0.0.1", LocalDateTime.now(), "host", true,
+                    "Primary | https://downstream.example", null, null, 200,
                     "EMPTY_RESPONSE", "order-flow", "Started", "Paid",
                     false, false, false };
             when(requestLogRepository.findSummaryPage(isNull(), eq(Protocol.HTTP), eq(true), eq("/api"),
@@ -397,6 +415,9 @@ class RequestLogServiceTest {
             assertThat(result.getResults()).singleElement()
                     .satisfies(item -> {
                         assertThat(item.getLog().getId()).isEqualTo(15L);
+                        assertThat(item.getLog().isForwarded()).isTrue();
+                        assertThat(item.getLog().getForwardTarget())
+                                .isEqualTo("Primary | https://downstream.example");
                         assertThat(item.getLog().getFaultType()).isEqualTo("EMPTY_RESPONSE");
                         assertThat(item.getLog().getScenarioName()).isEqualTo("order-flow");
                         assertThat(item.getLog().getScenarioFromState()).isEqualTo("Started");

@@ -40,13 +40,36 @@ class JmsTargetForwarderTest {
 
     @Test
     void forward_shouldReturnError_whenConnectionFails() {
-        // 使用無效的 server URL 測試錯誤處理（port 在合法範圍內）
-        jmsProperties.getTarget().setServerUrl("tcp://invalid-host:19999");
+        // 使用本機未監聽的 port 測試錯誤處理，避免測試依賴 DNS timeout。
+        jmsProperties.getTarget().setServerUrl("tcp://127.0.0.1:19999");
         jmsProperties.getTarget().setQueue("TARGET.REQUEST");
         
         String result = forwarder.forward("<test>body</test>", originalMessage);
         
         assertThat(result).contains("<error>");
+    }
+
+    @Test
+    void forwardWithMetadata_shouldRemoveCredentialsAndOptions() {
+        jmsProperties.getTarget().setServerUrl(
+                "tcp://user:secret@localhost:19999?password=hidden&sslEnabled=true");
+        jmsProperties.getTarget().setQueue("TARGET.REQUEST");
+
+        JmsTargetForwarder.ForwardResult result =
+                forwarder.forwardWithMetadata("<test>body</test>", originalMessage);
+
+        assertThat(result.body()).contains("<error>");
+        assertThat(result.target()).isEqualTo(
+                "Legacy application.yml | tcp://localhost:19999 | TARGET.REQUEST");
+        assertThat(result.target()).doesNotContain("user", "secret", "password", "hidden");
+    }
+
+    @Test
+    void sanitizeServerUrl_shouldHandleNullAndFragment() {
+        assertThat(JmsTargetForwarder.sanitizeServerUrl(null)).isEqualTo("-");
+        assertThat(JmsTargetForwarder.sanitizeServerUrl(
+                "tcp://name:key@broker:61616#credentials"))
+                .isEqualTo("tcp://broker:61616");
     }
 
     @Test
