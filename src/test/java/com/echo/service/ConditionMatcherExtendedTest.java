@@ -3,6 +3,7 @@ package com.echo.service;
 import com.echo.service.ConditionMatcher.PreparedBody;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -288,5 +289,75 @@ class ConditionMatcherExtendedTest {
 
         assertThat(matcher.matchesPrepared("userId=U001", null, null, prepared, null, null)).isTrue();
         assertThat(matcher.matchesPrepared("name=test", null, null, prepared, null, null)).isTrue();
+    }
+
+    @Test
+    void jmsStreamingXml_shouldMatchPathsAttributesAndOperators() {
+        String xml = "<root><header><ServiceName>PerfService</ServiceName>"
+                + "<Marker>TARGET</Marker></header><items><item sku=\"A001\">first</item>"
+                + "<item sku=\"B002\">second</item></items></root>";
+        PreparedBody prepared = matcher.prepareBodyForConditions(xml, List.of(
+                "ServiceName=PerfService;//header/Marker*=ARG;"
+                        + "/root/items/item/@sku=A001;//item~=first|second"));
+
+        assertThat(matcher.matchesPrepared("ServiceName=PerfService", null, null,
+                prepared, null, null)).isTrue();
+        assertThat(matcher.matchesPrepared("//header/Marker*=ARG", null, null,
+                prepared, null, null)).isTrue();
+        assertThat(matcher.matchesPrepared("/root/items/item/@sku=A001", null, null,
+                prepared, null, null)).isTrue();
+        assertThat(matcher.matchesPrepared("//item~=first|second", null, null,
+                prepared, null, null)).isTrue();
+    }
+
+    @Test
+    void jmsStreamingXml_largePayload_shouldNotCreateDom() {
+        String xml = "<root><ServiceName>PerfService</ServiceName><payload>"
+                + "x".repeat(1024 * 1024) + "</payload></root>";
+        PreparedBody prepared = matcher.prepareBodyForConditions(
+                xml, List.of("//ServiceName=PerfService"));
+
+        assertThat(matcher.matchesPrepared("//ServiceName=PerfService", null, null,
+                prepared, null, null)).isTrue();
+    }
+
+    @Test
+    void jmsComplexXpath_shouldBuildOneReusableDom() {
+        String xml = "<root><item>first</item><item>second</item></root>";
+
+        PreparedBody prepared = matcher.prepareBodyForConditions(
+                xml, List.of("//item[1]=first"));
+
+        assertThat(matcher.matchesPrepared("//item[1]=first", null, null,
+                prepared, null, null)).isTrue();
+        assertThat(prepared.getXmlDoc()).isNotNull();
+    }
+
+    @Test
+    void jmsStreamingXml_shouldPreserveNamespaceCdataAndMissingFieldSemantics() {
+        String xml = "<ns:root xmlns:ns='urn:test'><ns:item id='A1'><![CDATA[ OPEN ]]></ns:item>"
+                + "<ns:item id='A2'>CLOSED</ns:item></ns:root>";
+        PreparedBody prepared = matcher.prepareBodyForConditions(xml, List.of(
+                "//item=OPEN;/root/item/@id=A2;//item!=CLOSED;//missing!=anything"));
+
+        assertThat(matcher.matchesPrepared("//item=OPEN", null, null,
+                prepared, null, null)).isTrue();
+        assertThat(matcher.matchesPrepared("/root/item/@id=A2", null, null,
+                prepared, null, null)).isTrue();
+        assertThat(matcher.matchesPrepared("//item!=CLOSED", null, null,
+                prepared, null, null)).isTrue();
+        assertThat(matcher.matchesPrepared("//missing!=anything", null, null,
+                prepared, null, null)).isFalse();
+    }
+
+    @Test
+    void jmsStreamingXml_shouldRejectDtdAndExternalEntities() {
+        String xml = "<!DOCTYPE root [<!ENTITY xxe SYSTEM 'file:///etc/passwd'>]>"
+                + "<root><ServiceName>&xxe;</ServiceName></root>";
+        PreparedBody prepared = matcher.prepareBodyForConditions(
+                xml, List.of("//ServiceName=secret"));
+
+        assertThat(matcher.matchesPrepared("//ServiceName=secret", null, null,
+                prepared, null, null)).isFalse();
     }
 }

@@ -109,7 +109,8 @@ docker compose down
 | `ECHO_ENV_LABEL` | DOCKER | 環境標籤 |
 | `TZ` | Asia/Taipei | 時區 |
 
-JVM 參數在 Dockerfile 中設定（預設 `-Xms256m -Xmx512m`），可透過 docker-compose.yml 的 `environment` 加入 `JAVA_OPTS` 覆蓋。
+JVM 參數在 Dockerfile 中設定（預設 `-Xms256m -Xmx512m`，OOM 時保留 heap dump 並退出），可透過 docker-compose.yml 的 `environment` 加入 `JAVA_OPTS` 覆蓋。
+若產線直接用 `java -jar` 啟動，請同樣加上 `-XX:+HeapDumpOnOutOfMemoryError -XX:+ExitOnOutOfMemoryError`，並由 systemd/Kubernetes 等 supervisor 負責重啟。
 
 ### 選用功能
 
@@ -212,6 +213,8 @@ Echo 可作為 JMS Proxy，在開發環境攔截 JMS 訊息：
 ```
 
 管理員可在「系統設定 → JMS 轉發連線」建立多組 Artemis/TIBCO 連線、測試連線並指定一組預設值。只有無規則匹配時才會使用預設的**轉發端**連線；Echo 自己接收訊息的 Embedded Artemis 不受影響。第一次建立資料庫連線設定後，系統會改用資料庫設定，原本 `application.yml` 的 `target` 僅作為尚未建立任何設定時的相容備援。密碼以 AES-GCM 加密保存且不會由 API 回傳；正式環境請固定設定 `ECHO_JMS_CREDENTIAL_KEY`，更換此金鑰前必須先重新輸入所有已儲存密碼。
+
+使用 Artemis Core client 傳送 XML 時，建議在發送端連線 URL 設定 `tcp://echo-host:61616?minLargeMessageSize=524288`。這會讓約 256KB 以內的文字訊息走一般訊息路徑，避免中型 XML 每筆建立 large-message 檔案；更大的訊息仍會落盤保護 heap。此參數必須設在**發送端**，不是 Echo 的 `application.yml`。
 
 ## 條件匹配語法
 
@@ -340,6 +343,12 @@ echo:
     port: 61616                 # Artemis 監聽埠
     queue: ECHO.REQUEST         # 監聽的 Queue
     endpoint-field: ServiceName # 從訊息 body 提取端點識別欄位
+    processing-memory-percent: 25 # JMS 訊息解析最多使用的 heap 比例；超過時 listener 等待
+    xml-memory-expansion-factor: 8 # XML 解析期間暫存記憶體的保守估算倍率
+    broker-memory-percent: 15     # Artemis heap 比例；超過後 paging 到磁碟
+    persistent: true              # 正式環境必須保持 true，避免 large message 撐爆 heap
+    consumer-window-size: 65536   # 每個 listener 最多預取的 encoded bytes
+    data-directory: ./data/artemis # Artemis paging 與 large-message 檔案目錄
     target:
       enabled: false            # 舊版單一連線相容設定；未建立資料庫連線時使用
       type: tibco               # artemis 或 tibco

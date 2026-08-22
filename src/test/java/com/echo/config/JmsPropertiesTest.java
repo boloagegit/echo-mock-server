@@ -16,6 +16,12 @@ class JmsPropertiesTest {
         assertThat(props.getUsername()).isEqualTo("admin");
         assertThat(props.getPassword()).isEqualTo("admin");
         assertThat(props.getQueue()).isEqualTo("ECHO.REQUEST");
+        assertThat(props.getProcessingMemoryPercent()).isEqualTo(25);
+        assertThat(props.getXmlMemoryExpansionFactor()).isEqualTo(8);
+        assertThat(props.getBrokerMemoryPercent()).isEqualTo(15);
+        assertThat(props.isPersistent()).isTrue();
+        assertThat(props.getDataDirectory()).isEqualTo("./data/artemis");
+        assertThat(props.getConsumerWindowSize()).isEqualTo(64 * 1024);
     }
 
     @Test

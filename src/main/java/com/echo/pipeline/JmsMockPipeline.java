@@ -63,6 +63,17 @@ public class JmsMockPipeline extends AbstractMockPipeline<JmsRule> {
         return jmsRuleService.findPreparedJmsRules(queueName);
     }
 
+    @Override
+    protected ConditionMatcher.PreparedBody prepareBody(
+            MockRequest request, List<JmsRule> candidates) {
+        List<String> bodyConditions = candidates.stream()
+                .filter(rule -> !Boolean.FALSE.equals(rule.getEnabled()))
+                .map(JmsRule::getBodyCondition)
+                .filter(condition -> condition != null && !condition.isBlank())
+                .toList();
+        return conditionMatcher.prepareBodyForConditions(request.getBody(), bodyConditions);
+    }
+
     /**
      * 覆寫匹配邏輯，保留 JMS 特有的三層 fallback：
      * <ol>

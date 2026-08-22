@@ -97,6 +97,22 @@ class JmsMockPipelineTest {
     class NormalMatchResponse {
 
         @Test
+        @DisplayName("無 body 條件時不解析 XML DOM")
+        void unconditionalRuleSkipsBodyParsing() {
+            JmsRule rule = buildRule("jms-fallback", "ORDER.REQUEST", null, 99L);
+
+            when(jmsProperties.getQueue()).thenReturn("ORDER.REQUEST");
+            when(jmsRuleService.findPreparedJmsRules("ORDER.REQUEST"))
+                    .thenReturn(List.of(rule));
+            when(ruleService.findResponseBodyById(99L)).thenReturn(Optional.of("<Response>OK</Response>"));
+
+            PipelineResult result = pipeline.execute(defaultRequest());
+
+            assertThat(result.isMatched()).isTrue();
+            verify(conditionMatcher, never()).prepareBody(anyString());
+        }
+
+        @Test
         @DisplayName("匹配成功時回傳 status=200、正確 body、matched=true")
         void matchedReturnsCorrectResponse() {
             JmsRule rule = buildRule("jms-rule-1", "ORDER.REQUEST",
@@ -108,7 +124,8 @@ class JmsMockPipelineTest {
                     .thenReturn(List.of(rule));
 
             ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
+            when(conditionMatcher.prepareBodyForConditions(anyString(), anyList()))
+                    .thenReturn(prepared);
             when(conditionMatcher.matchesPrepared(
                     eq("ServiceName=CreateOrder"), isNull(), isNull(),
                     any(), isNull(), isNull()))
@@ -315,7 +332,8 @@ class JmsMockPipelineTest {
                     .thenReturn(List.of(rule));
 
             ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
+            when(conditionMatcher.prepareBodyForConditions(anyString(), anyList()))
+                    .thenReturn(prepared);
             when(conditionMatcher.matchesPrepared(
                     eq("ServiceName=CreateOrder"), isNull(), isNull(),
                     any(), isNull(), isNull()))

@@ -76,7 +76,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
             ConditionMatcher.PreparedBody preparedBody = request.getPreparedBody();
             if (preparedBody == null) {
                 preparedBody = requiresBodyParsing(candidates)
-                        ? conditionMatcher.prepareBody(request.getBody())
+                        ? prepareBody(request, candidates)
                         : ConditionMatcher.PreparedBody.rawOnly(request.getBody());
             }
 
@@ -369,6 +369,13 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
             }
         }
         return false;
+    }
+
+    /**
+     * 協定可覆寫 body 準備策略；HTTP 維持既有完整解析，JMS 可依候選條件走串流路徑。
+     */
+    protected ConditionMatcher.PreparedBody prepareBody(MockRequest request, List<T> candidates) {
+        return conditionMatcher.prepareBody(request.getBody());
     }
 
     // ==================== 共用實作方法 ====================

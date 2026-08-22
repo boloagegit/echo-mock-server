@@ -5,8 +5,9 @@ import com.echo.pipeline.JmsMockPipeline;
 import com.echo.pipeline.MockRequest;
 import com.echo.pipeline.MockResponse;
 import com.echo.pipeline.PipelineResult;
-import com.echo.service.ConditionMatcher;
 import jakarta.jms.*;
+import org.apache.activemq.artemis.api.core.client.ClientMessage;
+import org.apache.activemq.artemis.jms.client.ActiveMQTextMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,17 +34,16 @@ class MockJmsListenerExtendedTest {
     @Mock
     private JmsTemplate jmsTemplate;
 
-    private ConditionMatcher conditionMatcher;
     private MockJmsListener listener;
     private JmsProperties jmsProperties;
 
     @BeforeEach
     void setUp() {
-        conditionMatcher = new ConditionMatcher();
         jmsProperties = new JmsProperties();
         jmsProperties.setQueue("ECHO.REQUEST");
         jmsProperties.setEndpointField("ServiceName");
-        listener = new MockJmsListener(connectionManager, jmsProperties, jmsMockPipeline, conditionMatcher);
+        listener = new MockJmsListener(connectionManager, jmsProperties, jmsMockPipeline,
+                new JmsEndpointExtractor(), new JmsMessageMemoryBudget(64 * 1024 * 1024L, 8));
         lenient().when(connectionManager.getJmsTemplate()).thenReturn(jmsTemplate);
         // Default pipeline mock: return a basic result
         lenient().when(jmsMockPipeline.execute(any())).thenReturn(
@@ -74,6 +74,7 @@ class MockJmsListenerExtendedTest {
         MockRequest captured = captor.getValue();
         assertThat(captured.getEndpointValue()).isEqualTo("OrderService");
         assertThat(captured.getPath()).isEqualTo("ECHO.REQUEST | OrderService");
+        assertThat(captured.getPreparedBody()).isNull();
     }
 
     @Test
@@ -326,4 +327,63 @@ class MockJmsListenerExtendedTest {
         MockRequest captured = captor.getValue();
         assertThat(captured.getEndpointValue()).isNull();
     }
+
+    @Test
+    void shouldReleaseMemoryReservationBeforeSendingReply() throws Exception {
+        JmsMessageMemoryBudget budget = new JmsMessageMemoryBudget(64 * 1024 * 1024L, 8);
+        listener = new MockJmsListener(connectionManager, jmsProperties, jmsMockPipeline,
+                new JmsEndpointExtractor(), budget);
+        TextMessage message = mock(TextMessage.class);
+        Queue replyTo = mock(Queue.class);
+        when(message.getText()).thenReturn("<root><ServiceName>OrderService</ServiceName></root>");
+        when(message.getJMSReplyTo()).thenReturn(replyTo);
+
+        when(jmsMockPipeline.execute(any())).thenAnswer(invocation -> {
+            assertThat(budget.reservedBytes()).isPositive();
+            return PipelineResult.builder()
+                    .response(MockResponse.builder().status(200).body("<ok/>")
+                            .matched(true).forwarded(false).build())
+                    .matched(true).matchTimeMs(1).responseTimeMs(1).delayMs(0).build();
+        });
+        doAnswer(invocation -> {
+            assertThat(budget.reservedBytes()).isZero();
+            return null;
+        }).when(jmsTemplate).send(eq(replyTo), any(MessageCreator.class));
+
+        listener.onMessage(message);
+
+        assertThat(budget.reservedBytes()).isZero();
+    }
+
+    @Test
+    void shouldRejectSingleMessageLargerThanMemoryBudgetWithoutCallingPipeline() throws Exception {
+        TextMessage message = mock(TextMessage.class);
+        when(message.getText()).thenReturn("<root>" + "x".repeat(100) + "</root>");
+        JmsMessageMemoryBudget tinyBudget = new JmsMessageMemoryBudget(128, 1);
+        listener = new MockJmsListener(connectionManager, jmsProperties, jmsMockPipeline,
+                new JmsEndpointExtractor(), tinyBudget);
+
+        listener.onMessage(message);
+
+        verify(jmsMockPipeline, never()).execute(any());
+        assertThat(tinyBudget.reservedBytes()).isZero();
+    }
+
+    @Test
+    void artemisMessage_shouldUseCompleteBodySizeBeforeReadingText() {
+        ActiveMQTextMessage message = mock(ActiveMQTextMessage.class);
+        ClientMessage coreMessage = mock(ClientMessage.class);
+        when(message.getCoreMessage()).thenReturn(coreMessage);
+        when(coreMessage.getBodySize()).thenReturn(1024);
+        when(coreMessage.getBodyBufferSize()).thenReturn(1);
+        JmsMessageMemoryBudget tinyBudget = new JmsMessageMemoryBudget(512, 1);
+        listener = new MockJmsListener(connectionManager, jmsProperties, jmsMockPipeline,
+                new JmsEndpointExtractor(), tinyBudget);
+
+        listener.onMessage(message);
+
+        verify(message, never()).getText();
+        verify(jmsMockPipeline, never()).execute(any());
+    }
+
 }
