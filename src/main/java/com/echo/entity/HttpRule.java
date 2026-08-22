@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
+import org.hibernate.Length;
 
 /**
  * HTTP 協定模擬規則
@@ -100,7 +101,7 @@ public class HttpRule extends BaseRule {
      * HTTP 回應標頭（JSON 格式）
      * <p>例如：{"Content-Type":"application/json","X-Custom":"value"}
      */
-    @Lob
+    @Column(length = Length.LONG32)
     private String httpHeaders;
 
     @Override

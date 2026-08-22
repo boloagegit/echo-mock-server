@@ -3,6 +3,7 @@ package com.echo.entity;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.Length;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -45,7 +46,7 @@ public class Response {
      * 回應內容
      * <p>使用 Lazy Load 避免列表查詢時載入大型內容
      */
-    @Lob
+    @Column(length = Length.LONG32)
     @Basic(fetch = FetchType.LAZY)
     private String body;
 
@@ -57,7 +58,7 @@ public class Response {
 
     /** 
      * 回應內容類型
-     * <p>TEXT = 一般文字/JSON/XML，SSE = SSE 事件陣列
+     * <p>TEXT = 一般文字/JSON/XML，SSE_EVENTS = SSE 事件陣列
      */
     @Column(length = 20)
     private String contentType;

@@ -48,6 +48,7 @@ public final class H2ToSqliteMigrator {
             "request_log_checkpoint",
             "cache_events",
             "issue_reports",
+            "scenarios",
             "jms_target_connections",
             "http_target_connections"
     );
@@ -57,7 +58,8 @@ public final class H2ToSqliteMigrator {
     );
     // Older Echo databases legitimately predate these feature tables. Missing means zero rows.
     private static final Set<String> OPTIONAL_SOURCE_TABLES = Set.of(
-            "jms_target_connections", "http_target_connections", "request_log_checkpoint");
+            "jms_target_connections", "http_target_connections", "request_log_checkpoint",
+            "scenarios");
     // An older H2 database may predate matched-rule forwarding. Null preserves old MOCK behavior.
     private static final Map<String, Set<String>> ALLOWED_TARGET_ONLY_COLUMNS = Map.of(
             "http_rules", Set.of("action", "forward_target_mode", "http_target_connection_id"),

@@ -1,0 +1,26 @@
+# MariaDB. Standard SPRING_DATASOURCE_* variables can override every connection value.
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mariadb://localhost:3306/echo?useUnicode=true&characterEncoding=UTF-8}
+    driver-class-name: org.mariadb.jdbc.Driver
+    username: ${SPRING_DATASOURCE_USERNAME:echo}
+    password: ${SPRING_DATASOURCE_PASSWORD:echo}
+    hikari:
+      maximum-pool-size: ${ECHO_DB_POOL_MAX_SIZE:15}
+      minimum-idle: ${ECHO_DB_POOL_MIN_IDLE:3}
+      connection-timeout: ${ECHO_DB_CONNECTION_TIMEOUT_MS:10000}
+      validation-timeout: ${ECHO_DB_VALIDATION_TIMEOUT_MS:5000}
+      idle-timeout: ${ECHO_DB_IDLE_TIMEOUT_MS:600000}
+      max-lifetime: ${ECHO_DB_MAX_LIFETIME_MS:1800000}
+      keepalive-time: ${ECHO_DB_KEEPALIVE_TIME_MS:300000}
+  h2:
+    console:
+      enabled: false
+  jpa:
+    database-platform: org.hibernate.dialect.MariaDBDialect
+    hibernate:
+      ddl-auto: update
+
+echo:
+  backup:
+    enabled: false

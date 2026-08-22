@@ -252,6 +252,52 @@ class H2ToSqliteMigratorTest {
         });
     }
 
+    @Test
+    void migratesScenariosWhenTheSourceTableExists() throws Exception {
+        String h2Url = h2Url("scenarios-source");
+        String sqliteUrl = sqliteUrl("scenarios-target.sqlite");
+        createScenarioTable(h2Url, true);
+        createScenarioTable(sqliteUrl, false);
+
+        var report = H2ToSqliteMigrator.migrate(
+                h2Url, "sa", "", sqliteUrl, List.of("scenarios"));
+
+        assertThat(report.totalRows()).isEqualTo(1);
+        assertThat(report.tables()).singleElement().satisfies(table -> {
+            assertThat(table.sourceRows()).isEqualTo(1);
+            assertThat(table.targetRows()).isEqualTo(1);
+            assertThat(table.sourceSha256()).isEqualTo(table.targetSha256());
+        });
+        try (Connection sqlite = DriverManager.getConnection(sqliteUrl);
+             var row = sqlite.createStatement().executeQuery(
+                     "SELECT scenario_name, current_state, version FROM scenarios")) {
+            assertThat(row.next()).isTrue();
+            assertThat(row.getString("scenario_name")).isEqualTo("checkout");
+            assertThat(row.getString("current_state")).isEqualTo("Started");
+            assertThat(row.getLong("version")).isZero();
+        }
+    }
+
+    @Test
+    void treatsPreScenarioSourceAsEmpty() throws Exception {
+        String h2Url = h2Url("pre-scenarios-source");
+        String sqliteUrl = sqliteUrl("pre-scenarios-target.sqlite");
+        try (Connection h2 = DriverManager.getConnection(h2Url, "sa", "")) {
+            h2.createStatement().execute("CREATE TABLE responses (id BIGINT PRIMARY KEY)");
+        }
+        createScenarioTable(sqliteUrl, false);
+
+        var report = H2ToSqliteMigrator.migrate(
+                h2Url, "sa", "", sqliteUrl, List.of("scenarios"));
+
+        assertThat(report.totalRows()).isZero();
+        assertThat(report.tables()).singleElement().satisfies(table -> {
+            assertThat(table.sourceRows()).isZero();
+            assertThat(table.targetRows()).isZero();
+            assertThat(table.sourceSha256()).isEqualTo(table.targetSha256());
+        });
+    }
+
     private static void createJmsTargetTable(String jdbcUrl, boolean insert) throws Exception {
         try (Connection connection = jdbcUrl.startsWith("jdbc:h2:")
                 ? DriverManager.getConnection(jdbcUrl, "sa", "")
@@ -278,6 +324,30 @@ class H2ToSqliteMigratorTest {
                         INSERT INTO jms_target_connections VALUES (
                             1, 0, 'Primary JMS target', 'artemis', 'tcp://localhost:61616',
                             'echo', 'v1:ciphertext', 'TARGET.REQUEST', 30, TRUE, TRUE,
+                            TIMESTAMP '2026-08-08 12:00:00', TIMESTAMP '2026-08-08 12:00:00')
+                        """);
+            }
+        }
+    }
+
+    private static void createScenarioTable(String jdbcUrl, boolean insert) throws Exception {
+        try (Connection connection = jdbcUrl.startsWith("jdbc:h2:")
+                ? DriverManager.getConnection(jdbcUrl, "sa", "")
+                : DriverManager.getConnection(jdbcUrl)) {
+            connection.createStatement().execute("""
+                    CREATE TABLE scenarios (
+                        id BIGINT PRIMARY KEY,
+                        scenario_name VARCHAR(255) NOT NULL UNIQUE,
+                        current_state VARCHAR(255) NOT NULL,
+                        version BIGINT,
+                        created_at TIMESTAMP,
+                        updated_at TIMESTAMP
+                    )
+                    """);
+            if (insert) {
+                connection.createStatement().execute("""
+                        INSERT INTO scenarios VALUES (
+                            1, 'checkout', 'Started', 0,
                             TIMESTAMP '2026-08-08 12:00:00', TIMESTAMP '2026-08-08 12:00:00')
                         """);
             }

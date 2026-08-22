@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-/** Server-side response summary filtering and pagination shared by H2 and SQLite. */
+/** Server-side response summary filtering and pagination shared by all database profiles. */
 @Repository
 public class ResponseSummaryQuery {
 
@@ -29,14 +29,14 @@ public class ResponseSummaryQuery {
                     FROM jms_rules WHERE response_id IS NOT NULL GROUP BY response_id
                 ) usage_rows
                 GROUP BY usage_rows.response_id
-            ) usage ON usage.response_id = r.id
+            ) response_usage ON response_usage.response_id = r.id
             """;
 
     private static final Map<String, String> SORT_COLUMNS = Map.of(
             "id", "r.id",
             "description", "r.description",
             "bodySize", "r.body_size",
-            "usageCount", "COALESCE(usage.usage_count, 0)",
+            "usageCount", "COALESCE(response_usage.usage_count, 0)",
             "createdAt", "r.created_at",
             "updatedAt", "r.updated_at");
 
@@ -48,18 +48,21 @@ public class ResponseSummaryQuery {
                         String sortField, boolean ascending) {
         List<String> predicates = new ArrayList<>();
         if (filter.keyword() != null) {
-            predicates.add("(LOWER(COALESCE(r.description, '')) LIKE :keyword ESCAPE '\\' "
-                    + "OR CAST(r.id AS VARCHAR(32)) LIKE :keyword ESCAPE '\\')");
+            String keywordPredicate = "LOWER(r.description) LIKE :keyword ESCAPE '!'";
+            if (parseIdKeyword(filter.keyword()) != null) {
+                keywordPredicate = "(" + keywordPredicate + " OR r.id = :keywordId)";
+            }
+            predicates.add(keywordPredicate);
         }
         if ("SSE".equals(filter.contentType())) {
-            predicates.add("r.content_type = 'SSE'");
+            predicates.add("r.content_type = 'SSE_EVENTS'");
         } else if ("GENERAL".equals(filter.contentType())) {
-            predicates.add("(r.content_type IS NULL OR r.content_type <> 'SSE')");
+            predicates.add("(r.content_type IS NULL OR r.content_type <> 'SSE_EVENTS')");
         }
         if ("used".equals(filter.usage())) {
-            predicates.add("COALESCE(usage.usage_count, 0) > 0");
+            predicates.add("COALESCE(response_usage.usage_count, 0) > 0");
         } else if ("unused".equals(filter.usage())) {
-            predicates.add("COALESCE(usage.usage_count, 0) = 0");
+            predicates.add("COALESCE(response_usage.usage_count, 0) = 0");
         }
 
         String where = predicates.isEmpty() ? "" : " WHERE " + String.join(" AND ", predicates);
@@ -68,7 +71,7 @@ public class ResponseSummaryQuery {
         String selectSql = """
                 SELECT r.id, r.description, r.body_size, r.content_type,
                        r.created_at, r.updated_at, r.extended_at,
-                       COALESCE(usage.usage_count, 0)
+                       COALESCE(response_usage.usage_count, 0)
                 FROM responses r
                 """ + USAGE_JOIN + where
                 + " ORDER BY " + orderColumn + direction + ", r.id" + direction;
@@ -95,10 +98,25 @@ public class ResponseSummaryQuery {
     private void bindKeyword(Query query, String keyword) {
         if (keyword != null) {
             String escaped = keyword.toLowerCase(Locale.ROOT)
-                    .replace("\\", "\\\\")
-                    .replace("%", "\\%")
-                    .replace("_", "\\_");
+                    .replace("!", "!!")
+                    .replace("%", "!%")
+                    .replace("_", "!_");
             query.setParameter("keyword", "%" + escaped + "%");
+            Long keywordId = parseIdKeyword(keyword);
+            if (keywordId != null) {
+                query.setParameter("keywordId", keywordId);
+            }
+        }
+    }
+
+    private Long parseIdKeyword(String keyword) {
+        if (keyword == null || !keyword.trim().matches("[0-9]+")) {
+            return null;
+        }
+        try {
+            return Long.valueOf(keyword.trim());
+        } catch (NumberFormatException ignored) {
+            return null;
         }
     }
 

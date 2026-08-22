@@ -31,7 +31,7 @@
 - **假資料產生** - 內建姓名、Email、電話、地址與整數模板 helper
 - **規則測試** - 在管理介面直接測試規則匹配結果
 - **靜態分析** - SpotBugs 靜態程式碼分析
-- **不需外部資料庫** - 預設內嵌 H2，另提供 SQLite WAL profile
+- **資料庫 Profile** - 支援 H2、SQLite、PostgreSQL、MySQL、MariaDB、SQL Server 與 Oracle
 - **內網友善** - 前端使用 WebJars，無需 CDN
 - **環境識別** - 協定別名、環境標籤，多環境部署一目了然
 
@@ -76,24 +76,78 @@ Windows 開發機請在 PowerShell 使用：
 java -jar (Get-ChildItem build\libs\echo-server-*.jar | Select-Object -First 1).FullName
 ```
 
-### H2 遷移至 SQLite
+### 資料庫 Profile
 
-目前基礎設定仍以 H2 啟動；完成遷移後以 `sqlite` profile 啟動。遷移前必須先停止 Echo，且目標 SQLite 檔案不可已存在：
+目前支援的 profile 如下：
+
+| Profile | 資料庫 | 目前 Docker 實測基準 |
+|---------|--------|----------------------|
+| `h2`（或未指定資料庫 profile） | H2 檔案資料庫 | 建置解析的 H2 2.x |
+| `sqlite` | SQLite WAL 檔案 | Xerial JDBC 驅動的 SQLite 3.x |
+| `postgresql` | PostgreSQL | PostgreSQL 17 |
+| `mysql` | MySQL | MySQL 8.4 |
+| `mariadb` | MariaDB | MariaDB 11.8 |
+| `sqlserver` | SQL Server | SQL Server 2022 |
+| `oracle` | Oracle | Oracle Free 23 |
+
+表列版本是可重現的 Docker smoke test 基準，不代表每個更舊或更新的廠商版本都已認證。Echo 使用的 Hibernate 版本支援 Oracle Database 19c 以上；更舊的 Oracle 版本不在支援範圍內。
+
+每個程序只能啟用一個資料庫 profile。`dev` 與 `test` 是非資料庫 profile，可與一個資料庫 profile 一起使用。若未啟用任何資料庫 profile，系統會選擇 H2。啟動時會拒絕多個資料庫 profile，也會拒絕 JDBC URL 廠商與所選 profile 不一致的設定。
+
+目前各 profile 的文件與實測路徑都以「新建空資料庫」啟動為準。Profile 使用 Hibernate `ddl-auto=update` 方便建立結構；這不是通用遷移系統，也不會自動把 H2、SQLite 或外部資料庫之間的既有資料搬移。現有 H2-to-SQLite 工具是獨立的 SQLite 專用離線工具，不是通用的多資料庫轉換器；使用前應檢查資料表與版本相容性、另行備份並驗證結果。既有正式資料庫請由 DBA／平台以具版本控管的遷移方式處理，再設定 `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`。
+
+#### 標準環境變數
 
 ```bash
-python3 scripts/migrate-h2-to-sqlite.py
-SPRING_PROFILES_ACTIVE=sqlite ./gradlew bootRun
+SPRING_PROFILES_ACTIVE=postgresql \
+SPRING_DATASOURCE_URL='jdbc:postgresql://db-host:5432/appdb' \
+SPRING_DATASOURCE_USERNAME='app_user' \
+SPRING_DATASOURCE_PASSWORD='<password>' \
+SPRING_JPA_HIBERNATE_DDL_AUTO=validate \
+./gradlew bootRun
 ```
 
-PowerShell：
+| 變數 | 用途 |
+|------|------|
+| `SPRING_PROFILES_ACTIVE` | 選擇一個資料庫 profile（`h2`、`sqlite`、`postgresql`、`mysql`、`mariadb`、`sqlserver` 或 `oracle`），可另外加 `dev`／`test` |
+| `SPRING_DATASOURCE_URL` | 覆寫 profile 的 JDBC URL |
+| `SPRING_DATASOURCE_USERNAME` | 外部資料庫使用者名稱 |
+| `SPRING_DATASOURCE_PASSWORD` | 外部資料庫密碼；請透過部署平台的 secret 機制注入 |
+| `SPRING_JPA_HIBERNATE_DDL_AUTO` | 目前 profile 預設為 `update`；完成受控 schema 遷移後使用 `validate` |
+| `ECHO_REQUEST_LOG_SPOOL_PATH` | 每實例本機 SQLite request-log spool 路徑；預設 `./data/request-log-spool.sqlite` |
+| `ECHO_DB_POOL_MAX_SIZE`／`ECHO_DB_POOL_MIN_IDLE` | 外部 profile 的 Hikari connection pool 大小 |
 
-```powershell
-python scripts\migrate-h2-to-sqlite.py
-$env:SPRING_PROFILES_ACTIVE="sqlite"
-.\gradlew.bat bootRun
+其餘 Hikari timeout 與 lifetime 設定使用 profile 檔案中的 `ECHO_DB_*` 變數。請勿在 `SPRING_PROFILES_ACTIVE` 放入多個資料庫 profile。
+
+#### 備份與 request-log spool 邊界
+
+應用程式備份功能只處理本機 H2／SQLite 檔案；外部資料庫 profile 會關閉此功能。PostgreSQL、MySQL／MariaDB、SQL Server 與 Oracle 的備份、PITR、保留政策及還原演練由 DBA 或平台備份服務負責。
+
+即使主資料庫是外部資料庫，request-log 的耐久化仍會先寫入每個 Echo 實例自己的本機 SQLite spool。請將 spool 放在可寫入且具持久性的 volume，每個實例使用不同檔案；它不是共用資料庫，也不是跨實例 queue，不能取代外部資料庫的備份政策。
+
+`ddl-auto=update` 只適合新空資料庫或開發初始化，不是有版本的遷移工具，也不能可靠表達所有資料庫的欄位更名、回填、型別轉換、index／constraint 變更，以及 identity／LOB／boolean／date／JSON 等廠商差異。它也需要 DDL 權限；既有資料與新增非 NULL 欄位衝突時可能啟動失敗。
+
+### Docker RDBMS smoke test
+
+專用的 RDBMS Compose 檔會逐一測試單一資料庫 profile，包含 readiness、API matching、大型回應持久化、重啟後持久化與日誌收集。先建置應用程式 artifact，讓 Dockerfile 可以打包，再一次選一個 profile 執行：
+
+```bash
+./gradlew bootJar
+python3 scripts/test-rdbms-matrix.py --databases postgresql
 ```
 
-遷移程式會先建立並核對 H2 備份，再於暫存 SQLite 中以單一交易搬移所有應用資料表。逐表筆數、SHA-256、`integrity_check`、`foreign_key_check` 及啟動後查詢 API 全部通過後，才會原子發布 `mockdb.sqlite`；原 H2 不會被刪除。非預設路徑及自動化參數請執行 `python3 scripts/migrate-h2-to-sqlite.py --help` 查看。
+將 `postgresql` 替換為 `h2`、`sqlite`、`mysql`、`mariadb`、`sqlserver` 或 `oracle`。腳本可接受多個名稱並依序執行，但每一次 Compose 執行仍只啟用一個資料庫 profile。結果會寫在 `artifacts/rdbms-matrix/<run>/`，包括 `matrix-result.json`。
+
+手動 smoke test：
+
+```bash
+docker compose -f docker-compose.rdbms.yml --profile postgresql up --build --wait --detach echo-postgresql
+curl -fsS http://localhost:18080/api/admin/status
+docker compose -f docker-compose.rdbms.yml --profile postgresql logs -f echo-postgresql
+docker compose -f docker-compose.rdbms.yml --profile postgresql down --volumes --remove-orphans
+```
+
+Compose 服務只供拋棄式測試資料使用；`down --volumes` 會刪除測試 volume，不能當作外部資料庫備份。SQL Server 使用 amd64 映像，Oracle／SQL Server 可能需要額外 Docker CPU 與記憶體。
 
 ### Docker 部署
 
@@ -140,7 +194,7 @@ JVM 參數在 Dockerfile 中設定（預設 `-Xms256m -Xmx512m`，OOM 時保留 
 | 管理介面 | http://localhost:8080/ | Mock 規則管理 |
 | 登入頁面 | http://localhost:8080/login.html | 使用者登入 |
 | Mock 端點 | http://localhost:8080/mock/** | 攔截 HTTP 請求 |
-| 資料庫 | — | 預設使用 H2；完成遷移後啟用 `sqlite` profile 使用 SQLite WAL |
+| 資料庫 | — | 預設使用 H2；SQLite 或外部資料庫請選擇唯一的資料庫 profile |
 
 ## 規則匹配優先順序
 
@@ -383,7 +437,7 @@ echo:
     rule-retention-days: 180    # 規則保留天數
     response-retention-days: 180 # 回應保留天數
   backup:
-    enabled: true               # 啟用 SQLite 自動備份
+    enabled: true               # 僅對本機 H2/SQLite 啟用檔案備份
     cron: "0 0 3 * * *"         # 每天凌晨 3 點執行
     path: ./backups             # 備份目錄
     retention-days: 7           # 備份保留天數
@@ -396,6 +450,8 @@ echo:
     base-dn: dc=example,dc=com
     user-pattern: uid={0},ou=users
 ```
+
+上面的備份設定只適用於本機 H2／SQLite 檔案。外部資料庫 profile 會將應用程式備份關閉，請使用 DBA 或平台備份服務。
 
 ## 使用者認證
 
@@ -570,6 +626,8 @@ Database 模式支援多實例部署，透過 DB 同步 cache 失效事件。
 
 ### 設定範例
 
+啟動各實例前，請將 `SPRING_PROFILES_ACTIVE` 設為唯一一個資料庫 profile；只有 JDBC URL 並不會選擇資料庫廠商。以下範例使用 `postgresql`，帳密請透過環境變數或部署平台的 secret 機制提供。
+
 ```yaml
 echo:
   storage:
@@ -581,6 +639,8 @@ spring:
   datasource:
     url: jdbc:postgresql://db-host:5432/echo  # 共用資料庫
 ```
+
+主資料庫可供規則、回應及 cache event 共用；request-log spool 仍是每個實例獨立的本機 SQLite 檔案，不可放在共用路徑。
 
 ### 啟用條件
 
@@ -702,7 +762,7 @@ python3 scripts/test-match-scenarios.py
 |------|------|
 | Framework | Spring Boot 3.5.16 |
 | Web Server | Undertow |
-| Database | H2（預設），可切換 SQLite WAL profile |
+| Database | H2、SQLite WAL、PostgreSQL、MySQL、MariaDB、SQL Server 與 Oracle profile |
 | Cache | Caffeine |
 | Messaging | Artemis (Embedded) |
 | Security | Spring Security |
