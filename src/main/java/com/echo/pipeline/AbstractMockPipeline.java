@@ -57,7 +57,15 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
      * 步驟：findCandidateRules → prepareBody → matchRule → buildResponse/forward/handleNoMatch → recordLog → 回傳 PipelineResult
      */
     public PipelineResult execute(MockRequest request) {
-        return executeAsync(request).toCompletableFuture().join();
+        try {
+            return executeAsync(request).toCompletableFuture().join();
+        } catch (CompletionException e) {
+            Throwable cause = unwrap(e);
+            if (cause instanceof RequestLogUnavailableException logUnavailable) {
+                throw logUnavailable;
+            }
+            throw e;
+        }
     }
 
     /**
@@ -163,7 +171,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
             }
             return CancellableStages.handle(responseStage, (response, error) -> {
                 if (error != null) {
-                    return pipelineError(startTime, unwrap(error));
+                    return pipelineError(request, startTime, unwrap(error));
                 }
                 try {
                     return completeResult(request, startTime, candidates, finalPreparedBody,
@@ -172,12 +180,12 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                             finalFaultTypeName, finalScenarioName,
                             finalScenarioFromState, finalScenarioNewState);
                 } catch (Exception e) {
-                    return pipelineError(startTime, e);
+                    return pipelineError(request, startTime, e);
                 }
             });
 
         } catch (Exception e) {
-            return CompletableFuture.completedFuture(pipelineError(startTime, e));
+            return CompletableFuture.completedFuture(pipelineError(request, startTime, e));
         }
     }
 
@@ -225,10 +233,16 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                 .build();
     }
 
-    private PipelineResult pipelineError(long startTime, Throwable error) {
+    private PipelineResult pipelineError(MockRequest request, long startTime, Throwable error) {
         log.error("Pipeline execution error: {}", error.getMessage(), error);
         int responseTimeMs = (int) (System.currentTimeMillis() - startTime);
         boolean logUnavailable = error instanceof RequestLogUnavailableException;
+        if (logUnavailable && request.getProtocol() == Protocol.JMS) {
+            // A JMS listener must fail the delivery so Artemis retains/redelivers
+            // it after durable request logging recovers. HTTP callers instead
+            // receive the explicit 503 response below.
+            throw (RequestLogUnavailableException) error;
+        }
         MockResponse errorResponse = MockResponse.builder()
                 .status(logUnavailable ? 503 : 500)
                 .body(logUnavailable

@@ -97,6 +97,14 @@ echo:
       password: changeme       # 範例佔位符，請透過環境變數 ECHO_JMS_TARGET_PASSWORD 覆蓋
       timeout-seconds: 30
       queue: TARGET.REQUEST  # 目標 JMS Server 上的 Queue（轉發目的地）
+    # Listener 交易失敗時保留訊息並以退避間隔重送；-1 表示不自動丟棄。
+    redelivery-delay-ms: ${ECHO_JMS_REDELIVERY_DELAY_MS:250}
+    redelivery-multiplier: ${ECHO_JMS_REDELIVERY_MULTIPLIER:2.0}
+    max-redelivery-delay-ms: ${ECHO_JMS_MAX_REDELIVERY_DELAY_MS:5000}
+    max-delivery-attempts: ${ECHO_JMS_MAX_DELIVERY_ATTEMPTS:-1}
+    # 提前保留 512 MiB，讓 broker 阻擋 producer，避免實際寫到磁碟 0 bytes。
+    min-disk-free-bytes: ${ECHO_JMS_MIN_DISK_FREE_BYTES:536870912}
+    disk-scan-period-ms: ${ECHO_JMS_DISK_SCAN_PERIOD_MS:1000}
   http:
     alias: HTTP     # HTTP 協定顯示名稱
     # HTTP request 的總時間預算；連線設定的 pool + connect + read 必須小於此值

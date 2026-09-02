@@ -33,6 +33,11 @@ public class JmsConfig {
         DefaultJmsListenerContainerFactory factory = new DefaultJmsListenerContainerFactory();
         factory.setConnectionFactory(connectionFactory);
         factory.setConcurrency(concurrency);
+        // A listener exception must roll back the broker delivery. AUTO_ACK on
+        // a polling listener can acknowledge a message before the callback
+        // returns, which would make transient capacity/logging failures lose
+        // the request instead of allowing Artemis to redeliver it.
+        factory.setSessionTransacted(true);
         return factory;
     }
 }

@@ -1,0 +1,162 @@
+name: echo-resilience
+
+# Disposable validation fixture. The primary named volume is Docker-managed
+# and project-scoped so persistence can be tested across an Echo container
+# restart; it is removed with the unique Compose project. It never uses the
+# repository's mockdb.* files. Separate tmpfs services below validate bounded
+# capacity/full behavior without conflating tmpfs lifetime with persistence.
+x-echo-resilience-environment: &echo-resilience-environment
+  ECHO_ADMIN_USERNAME: ${ECHO_ADMIN_USERNAME:-admin}
+  ECHO_ADMIN_PASSWORD: ${ECHO_ADMIN_PASSWORD:-admin}
+  ECHO_REMEMBER_ME_KEY: ${ECHO_REMEMBER_ME_KEY:-resilience-local-only-key}
+  ECHO_ENV_LABEL: ${ECHO_ENV_LABEL:-RESILIENCE_TEST}
+  ECHO_JMS_ENABLED: "true"
+  ECHO_JMS_PORT: "61616"
+  ECHO_JMS_QUEUE: ${ECHO_RESILIENCE_QUEUE:-ECHO.RESILIENCE}
+  ECHO_JMS_CONCURRENCY: "1-1"
+  ECHO_JMS_PERSISTENT: "true"
+  ECHO_JMS_DATA_DIRECTORY: /app/data/artemis
+  ECHO_JMS_BROKER_MEMORY_PERCENT: "15"
+  ECHO_JMS_PROCESSING_MEMORY_PERCENT: "25"
+  ECHO_JMS_XML_MEMORY_EXPANSION_FACTOR: "8"
+  ECHO_JMS_CONSUMER_WINDOW_SIZE: "65536"
+  ECHO_JMS_DISK_SCAN_PERIOD_MS: "250"
+  ECHO_REQUEST_LOG_STORE: database
+  ECHO_REQUEST_LOG_INCLUDE_BODY: "true"
+  ECHO_REQUEST_LOG_MAX_BODY_SIZE: ${ECHO_RESILIENCE_MAX_BODY_BYTES:-262144}
+  ECHO_REQUEST_LOG_MAX_RECORDS: "20000"
+  ECHO_REQUEST_LOG_SPOOL_PATH: /app/data/request-log-spool.sqlite
+  ECHO_REQUEST_LOG_SPOOL_QUEUE_CAPACITY: "3000"
+  ECHO_REQUEST_LOG_SPOOL_BATCH_SIZE: "25"
+  ECHO_REQUEST_LOG_SPOOL_GROUP_COMMIT_MS: "2"
+  ECHO_REQUEST_LOG_SPOOL_OFFER_TIMEOUT_MS: "10000"
+  ECHO_REQUEST_LOG_SPOOL_RETRY_MS: "250"
+  ECHO_REQUEST_LOG_SPOOL_MAX_PENDING_BYTES: "536870912"
+  ECHO_AGENT_LOG_QUEUE_CAPACITY: "3000"
+  ECHO_AGENT_LOG_BATCH_SIZE: "25"
+  ECHO_AGENT_LOG_FLUSH_INTERVAL_SECONDS: "1"
+  ECHO_AGENT_ANALYSIS_ENABLED: "false"
+  ECHO_AGENT_LOG_MAX_WRITE_RATE_PER_SECOND: "5000"
+  ECHO_BACKUP_ENABLED: "false"
+  ECHO_BACKUP_ON_SHUTDOWN: "false"
+  ECHO_CLEANUP_ENABLED: "false"
+  ECHO_SCENARIOS_ENABLED: "false"
+  ECHO_BULK_IMPORT_EXPORT_ENABLED: "true"
+  SPRING_PROFILES_ACTIVE: sqlite
+  SPRING_DATASOURCE_URL: "jdbc:sqlite:/app/data/mockdb.sqlite?journal_mode=WAL&busy_timeout=10000&synchronous=NORMAL&foreign_keys=ON"
+  JAVA_OPTS: "-Xms${ECHO_RESILIENCE_HEAP:-256m} -Xmx${ECHO_RESILIENCE_HEAP:-256m} -XX:+HeapDumpOnOutOfMemoryError -XX:+ExitOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof -Xlog:gc*:file=/tmp/gc.log:time,uptime,level,tags:filecount=5,filesize=10m"
+  TZ: ${TZ:-UTC}
+
+services:
+  echo-resilience:
+    build: .
+    image: ${ECHO_IMAGE:-echo-mock-server:resilience}
+    # The runner supplies free host ports through these variables. Keeping
+    # container ports fixed makes all evidence commands deterministic.
+    ports:
+      - "127.0.0.1:${ECHO_RESILIENCE_HTTP_PORT:-0}:8080"
+      - "127.0.0.1:${ECHO_RESILIENCE_JMS_PORT:-0}:61616"
+    environment:
+      <<: *echo-resilience-environment
+    mem_limit: ${ECHO_RESILIENCE_CONTAINER_MEMORY:-768m}
+    volumes:
+      - resilience-data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - --show-error
+        - --header
+        - "Accept: application/json"
+        - http://localhost:8080/api/admin/status
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+    restart: "no"
+
+  # Bounded high-water fixture. The runner starts this same-image service only
+  # for the disk phase, after primary restart/recovery evidence is collected.
+  echo-resilience-disk:
+    image: ${ECHO_IMAGE:-echo-mock-server:resilience}
+    ports:
+      - "127.0.0.1:${ECHO_RESILIENCE_DISK_HTTP_PORT:-0}:8080"
+    environment:
+      <<: *echo-resilience-environment
+      ECHO_ENV_LABEL: ${ECHO_ENV_LABEL:-RESILIENCE_DISK_TEST}
+      ECHO_JMS_MIN_DISK_FREE_BYTES: "16777216"
+    mem_limit: ${ECHO_RESILIENCE_CONTAINER_MEMORY:-768m}
+    volumes:
+      - resilience-disk-data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - --show-error
+        - --header
+        - "Accept: application/json"
+        - http://localhost:8080/api/admin/status
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+    restart: "no"
+
+  # Deliberately small, separate capacity fixture. The runner starts this
+  # service only for --disk-full, so normal overload data cannot be crowded
+  # out by the disk-guard experiment. Despite the compatibility option name,
+  # this service retains 8 MiB and does not deliberately force ENOSPC.
+  echo-resilience-disk-full:
+    image: ${ECHO_IMAGE:-echo-mock-server:resilience}
+    ports:
+      - "127.0.0.1:${ECHO_RESILIENCE_FULL_HTTP_PORT:-0}:8080"
+    environment:
+      <<: *echo-resilience-environment
+      ECHO_ENV_LABEL: ${ECHO_ENV_LABEL:-RESILIENCE_DISK_FULL_TEST}
+      ECHO_JMS_MIN_DISK_FREE_BYTES: "8388608"
+    mem_limit: ${ECHO_RESILIENCE_CONTAINER_MEMORY:-768m}
+    volumes:
+      - resilience-disk-full-data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - --show-error
+        - --header
+        - "Accept: application/json"
+        - http://localhost:8080/api/admin/status
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+    restart: "no"
+
+volumes:
+  # Docker-managed project-scoped storage for the primary persistence/restart
+  # experiment. It is removed only by this generated project's `down
+  # --volumes`; no host bind mount or repository database is used.
+  resilience-data:
+    driver: local
+
+  # The configured data size bounds only this high-water fixture. tmpfs proves
+  # application-visible capacity/full handling, not physical disk reclamation
+  # or filesystem durability.
+  resilience-disk-data:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: "size=${ECHO_RESILIENCE_DATA_SIZE:-256m},mode=1777"
+
+  resilience-disk-full-data:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: "size=${ECHO_RESILIENCE_FULL_DATA_SIZE:-64m},mode=1777"

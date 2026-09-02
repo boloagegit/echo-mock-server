@@ -17,7 +17,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jms.core.JmsTemplate;
 import org.springframework.jms.core.MessageCreator;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -329,7 +334,7 @@ class MockJmsListenerExtendedTest {
     }
 
     @Test
-    void shouldReleaseMemoryReservationBeforeSendingReply() throws Exception {
+    void shouldHoldMemoryReservationUntilReplyCompletes() throws Exception {
         JmsMessageMemoryBudget budget = new JmsMessageMemoryBudget(64 * 1024 * 1024L, 8);
         listener = new MockJmsListener(connectionManager, jmsProperties, jmsMockPipeline,
                 new JmsEndpointExtractor(), budget);
@@ -346,13 +351,69 @@ class MockJmsListenerExtendedTest {
                     .matched(true).matchTimeMs(1).responseTimeMs(1).delayMs(0).build();
         });
         doAnswer(invocation -> {
-            assertThat(budget.reservedBytes()).isZero();
+            assertThat(budget.reservedBytes()).isPositive();
             return null;
         }).when(jmsTemplate).send(eq(replyTo), any(MessageCreator.class));
 
         listener.onMessage(message);
 
         assertThat(budget.reservedBytes()).isZero();
+    }
+
+    @Test
+    void oneWayMessageDoesNotReserveUnusedReplyMemory() throws Exception {
+        JmsMessageMemoryBudget tinyBudget = new JmsMessageMemoryBudget(256, 1);
+        listener = new MockJmsListener(connectionManager, jmsProperties, jmsMockPipeline,
+                new JmsEndpointExtractor(), tinyBudget);
+        TextMessage message = mock(TextMessage.class);
+        when(message.getText()).thenReturn("<test/>");
+        when(message.getJMSReplyTo()).thenReturn(null);
+        when(jmsMockPipeline.execute(any())).thenReturn(PipelineResult.builder()
+                .response(MockResponse.builder().status(200).body("x".repeat(1_000))
+                        .matched(true).forwarded(false).build())
+                .matched(true).matchTimeMs(1).responseTimeMs(1).delayMs(0).build());
+
+        listener.onMessage(message);
+
+        assertThat(tinyBudget.reservedBytes()).isZero();
+        verify(jmsTemplate, never()).send(any(Destination.class), any(MessageCreator.class));
+    }
+
+    @Test
+    void connectionResetDoesNotReserveOrSendLargeReply() throws Exception {
+        JmsMessageMemoryBudget tinyBudget = new JmsMessageMemoryBudget(256, 1);
+        listener = new MockJmsListener(connectionManager, jmsProperties, jmsMockPipeline,
+                new JmsEndpointExtractor(), tinyBudget);
+        TextMessage message = mock(TextMessage.class);
+        when(message.getText()).thenReturn("<test/>");
+        when(message.getJMSReplyTo()).thenReturn(mock(Queue.class));
+        when(jmsMockPipeline.execute(any())).thenReturn(PipelineResult.builder()
+                .response(MockResponse.builder().status(200).body("x".repeat(1_000))
+                        .matched(true).forwarded(false).build())
+                .faultType("CONNECTION_RESET")
+                .matched(true).matchTimeMs(1).responseTimeMs(1).delayMs(0).build());
+
+        listener.onMessage(message);
+
+        assertThat(tinyBudget.reservedBytes()).isZero();
+        verify(jmsTemplate, never()).send(any(Destination.class), any(MessageCreator.class));
+    }
+
+    @Test
+    void shouldPropagateTemporaryRequestLogFailureForBrokerRedelivery() {
+        TextMessage message = mock(TextMessage.class);
+        try {
+            when(message.getText()).thenReturn("<test/>");
+        } catch (JMSException e) {
+            throw new AssertionError(e);
+        }
+        when(jmsMockPipeline.execute(any()))
+                .thenThrow(new com.echo.service.RequestLogUnavailableException("disk full"));
+
+        assertThatThrownBy(() -> listener.onMessage(message))
+                .isInstanceOf(com.echo.service.RequestLogUnavailableException.class)
+                .hasMessageContaining("disk full");
+        verify(jmsTemplate, never()).send(any(Destination.class), any(MessageCreator.class));
     }
 
     @Test
@@ -370,6 +431,119 @@ class MockJmsListenerExtendedTest {
     }
 
     @Test
+    void shouldWaitForCapacityBeforeReadingArtemisTextAndResumeAfterRelease() throws Exception {
+        JmsMessageMemoryBudget budget = new JmsMessageMemoryBudget(100, 1);
+        listener = new MockJmsListener(connectionManager, jmsProperties, jmsMockPipeline,
+                new JmsEndpointExtractor(), budget);
+        var held = budget.reserveEncodedBody(90);
+        ActiveMQTextMessage message = mock(ActiveMQTextMessage.class);
+        ClientMessage coreMessage = mock(ClientMessage.class);
+        when(message.getCoreMessage()).thenReturn(coreMessage);
+        when(coreMessage.getBodySize()).thenReturn(20);
+        when(message.getText()).thenReturn("<test/>");
+        when(message.getJMSReplyTo()).thenReturn(null);
+
+        CountDownLatch finished = new CountDownLatch(1);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread worker = new Thread(() -> {
+            try {
+                listener.onMessage(message);
+            } catch (Throwable e) {
+                failure.set(e);
+            } finally {
+                finished.countDown();
+            }
+        });
+        worker.start();
+
+        awaitWaiting(budget);
+        verify(message, never()).getText();
+        verify(jmsMockPipeline, never()).execute(any());
+
+        held.close();
+        assertThat(finished.await(2, TimeUnit.SECONDS)).isTrue();
+        worker.join(1000);
+        assertThat(failure.get()).isNull();
+        verify(message).getText();
+        verify(jmsMockPipeline).execute(any());
+        assertThat(budget.reservedBytes()).isZero();
+    }
+
+    @Test
+    void shouldPropagateInterruptionWhileWaitingWithoutForwardingOrReplying() throws Exception {
+        JmsMessageMemoryBudget budget = new JmsMessageMemoryBudget(100, 1);
+        listener = new MockJmsListener(connectionManager, jmsProperties, jmsMockPipeline,
+                new JmsEndpointExtractor(), budget);
+        var held = budget.reserveEncodedBody(90);
+        ActiveMQTextMessage message = mock(ActiveMQTextMessage.class);
+        ClientMessage coreMessage = mock(ClientMessage.class);
+        when(message.getCoreMessage()).thenReturn(coreMessage);
+        when(coreMessage.getBodySize()).thenReturn(20);
+
+        CountDownLatch finished = new CountDownLatch(1);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread worker = new Thread(() -> {
+            try {
+                listener.onMessage(message);
+            } catch (Throwable e) {
+                failure.set(e);
+            } finally {
+                finished.countDown();
+            }
+        });
+        worker.start();
+
+        awaitWaiting(budget);
+        worker.interrupt();
+        assertThat(finished.await(2, TimeUnit.SECONDS)).isTrue();
+        worker.join(1000);
+        assertThat(failure.get()).isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("JMS processing interrupted");
+        verify(message, never()).getText();
+        verify(jmsMockPipeline, never()).execute(any());
+        verify(jmsTemplate, never()).send(any(Destination.class), any(MessageCreator.class));
+        held.close();
+        assertThat(budget.reservedBytes()).isZero();
+    }
+
+    @Test
+    void shouldWakeWaitingListenerWhenBudgetShutsDown() throws Exception {
+        JmsMessageMemoryBudget budget = new JmsMessageMemoryBudget(100, 1);
+        listener = new MockJmsListener(connectionManager, jmsProperties, jmsMockPipeline,
+                new JmsEndpointExtractor(), budget);
+        var held = budget.reserveEncodedBody(90);
+        ActiveMQTextMessage message = mock(ActiveMQTextMessage.class);
+        ClientMessage coreMessage = mock(ClientMessage.class);
+        when(message.getCoreMessage()).thenReturn(coreMessage);
+        when(coreMessage.getBodySize()).thenReturn(20);
+
+        CountDownLatch finished = new CountDownLatch(1);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread worker = new Thread(() -> {
+            try {
+                listener.onMessage(message);
+            } catch (Throwable e) {
+                failure.set(e);
+            } finally {
+                finished.countDown();
+            }
+        });
+        worker.start();
+
+        awaitWaiting(budget);
+        budget.shutdown();
+        assertThat(finished.await(2, TimeUnit.SECONDS)).isTrue();
+        worker.join(1000);
+        assertThat(failure.get()).isInstanceOf(
+                JmsMessageMemoryBudget.JmsMessageMemoryBudgetClosedException.class);
+        verify(message, never()).getText();
+        verify(jmsMockPipeline, never()).execute(any());
+        verify(jmsTemplate, never()).send(any(Destination.class), any(MessageCreator.class));
+        held.close();
+        assertThat(budget.reservedBytes()).isZero();
+    }
+
+    @Test
     void artemisMessage_shouldUseCompleteBodySizeBeforeReadingText() {
         ActiveMQTextMessage message = mock(ActiveMQTextMessage.class);
         ClientMessage coreMessage = mock(ClientMessage.class);
@@ -384,6 +558,14 @@ class MockJmsListenerExtendedTest {
 
         verify(message, never()).getText();
         verify(jmsMockPipeline, never()).execute(any());
+    }
+
+    private static void awaitWaiting(JmsMessageMemoryBudget budget) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+        while (budget.waitingThreads() == 0 && System.nanoTime() < deadline) {
+            Thread.sleep(5);
+        }
+        assertThat(budget.waitingThreads()).isPositive();
     }
 
 }

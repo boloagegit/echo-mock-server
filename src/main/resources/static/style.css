@@ -25,7 +25,7 @@
     --surface-success-soft: rgba(var(--success-rgb), 0.08);
     --surface-neutral-soft: rgba(var(--muted-rgb), 0.07);
     --separator: rgba(var(--muted-rgb), 0.2);
-    --focus-ring: 0 0 0 2px rgba(var(--primary-rgb), 0.42);
+    --focus-ring: 0 0 0 2px var(--primary);
     /* Type Scale */
     --font-xs: 12px;
     --font-sm: 13px;
@@ -4512,6 +4512,292 @@ tr.drag-over-after td {
 .rule-apply-footer { align-items: center }
 .rule-apply-shortcut { display: inline-flex; align-items: center; gap: 4px; margin-inline-end: auto; color: var(--muted); font-size: var(--font-xs) }
 .rule-apply-shortcut kbd { padding: 2px 5px; border: 0; border-radius: 4px; background: var(--surface-control); color: var(--text); box-shadow: none; font-family: inherit; font-size: 11px }
+
+/*
+ * Operational workspace refinement
+ *
+ * The component templates already provide the product's dense tables,
+ * two-column editors, keyboard affordances, and semantic states. Keep those
+ * contracts intact and centralise the visual pass here: neutral surfaces,
+ * crisp separators, restrained blue interaction states, and readable code.
+ */
+html { background: var(--bg) }
+body { background: var(--bg); letter-spacing: 0.002em }
+
+.main { padding: var(--space-lg) clamp(var(--space-lg), 2vw, 2rem) }
+.sidebar { background: var(--card); border-inline-end-color: var(--border) }
+.sidebar-header { border-bottom-color: var(--border) }
+.sidebar-toggle { border: 1px solid transparent }
+.sidebar-toggle:hover { border-color: var(--border) }
+.nav-section { letter-spacing: 0.06em; color: var(--muted) }
+.nav-item { border-radius: 6px; color: var(--muted) }
+.nav-item:hover { background: var(--hover); color: var(--text) }
+.nav-item.active {
+    background: var(--surface-primary-soft);
+    border: 1px solid var(--separator);
+    color: var(--text);
+    font-weight: 650;
+}
+.nav-item.active i { color: var(--primary) }
+.nav-item:focus-visible { outline: 0; box-shadow: var(--focus-ring); background: var(--surface-primary-soft) }
+.nav-user { border-top: 1px solid var(--separator) }
+
+.page-header { padding-bottom: var(--space-xs); border-bottom: 1px solid var(--separator) }
+.page-title { letter-spacing: -0.02em }
+.page-count {
+    height: 1.625rem;
+    min-width: 1.625rem;
+    border: 1px solid var(--separator);
+    border-radius: 5px;
+    background: var(--surface-control);
+}
+.page-actions .btn-secondary,
+.page-header .page-actions .btn-secondary {
+    border-color: var(--border);
+    background: var(--card);
+}
+.page-actions .btn-secondary:hover,
+.page-header .page-actions .btn-secondary:hover,
+.page-header .page-actions .btn-secondary.active {
+    border-color: var(--border2);
+    background: var(--surface-control);
+    color: var(--text);
+}
+
+.workspace-filter-card,
+.rule-filter-card {
+    border: 1px solid var(--separator);
+    border-radius: var(--radius-panel);
+    background: var(--card);
+}
+.workspace-filter-bar { background: transparent }
+.workspace-filter-bar .btn-group,
+.rule-filter-bar .btn-group {
+    border: 1px solid var(--separator);
+    border-radius: 6px;
+    background: var(--surface-control);
+}
+.workspace-filter-bar .btn-group .btn,
+.rule-filter-bar .btn-group .btn { border-radius: 4px }
+.workspace-filter-bar .btn-group .btn-secondary,
+.rule-filter-bar .btn-group .btn-secondary { border-color: transparent; background: transparent }
+.workspace-filter-bar .btn-group .btn-secondary.active,
+.rule-filter-bar .btn-group .btn-secondary.active {
+    border-color: rgba(var(--primary-rgb), 0.3);
+    background: var(--surface-primary-soft);
+    color: var(--primary);
+}
+.workspace-filter-bar .workspace-search-field .form-control {
+    border: 1px solid var(--separator);
+    border-radius: 6px;
+    background: var(--surface-control);
+}
+.workspace-filter-bar .workspace-search-field .form-control:focus {
+    border-color: var(--primary);
+    background: var(--card);
+}
+.workspace-search-submit {
+    border: 1px solid var(--btn-primary);
+    border-radius: 6px;
+    background: var(--btn-primary);
+}
+.workspace-search-submit:hover:not(:disabled) { border-color: var(--btn-primary-hover); background: var(--btn-primary-hover) }
+.workspace-search-submit:focus-visible { outline: 0; box-shadow: var(--focus-ring) }
+
+.workspace-detail-surface {
+    border: 1px solid var(--separator);
+    background: var(--bg);
+}
+.workspace-table-card,
+.card-table {
+    border: 1px solid var(--separator);
+    border-radius: var(--radius-panel);
+    background: var(--card);
+}
+.card-table thead { box-shadow: none }
+th { background: var(--surface-neutral-soft); border-bottom-color: var(--border) }
+td { border-bottom-color: var(--separator) }
+tr:not(.selected-row):not(.active):hover,
+tr.row-clickable:not(.selected-row):not(.active):hover,
+.workspace-table tbody > tr:not(.rule-preview-row):not(.audit-expand):not(.selected-row):not(.active):hover { background: var(--surface-neutral-soft) }
+tr.selected-row,
+.workspace-table tbody > tr.active,
+.card-table tbody > tr.active { background: var(--surface-primary-soft) }
+.rule-preview-row,
+.audit-expand,
+.log-detail-row { background: var(--bg) !important }
+
+/* Protocol/type labels are descriptive; reserve saturated colors for status. */
+.badge-http {
+    border: 1px solid rgba(var(--primary-rgb), 0.28);
+    background: var(--surface-primary-soft);
+    color: var(--primary);
+}
+.badge-jms,
+.badge-resp,
+.badge-method,
+.badge-muted,
+.badge-tag,
+.badge-id,
+.badge-secondary {
+    border: 1px solid var(--separator);
+    background: var(--surface-control);
+}
+.badge-jms { color: var(--text) }
+.badge-resp { color: var(--muted) }
+.badge-sse {
+    border: 1px solid var(--separator);
+    background: var(--surface-control);
+    color: var(--muted);
+}
+.badge-success { border: 1px solid rgba(var(--success-rgb), 0.24) }
+.badge-warning { border: 1px solid rgba(var(--warning-rgb), 0.26) }
+.badge-danger { border: 1px solid rgba(var(--danger-rgb), 0.24) }
+
+.filter-chip {
+    border: 1px solid var(--separator);
+    border-radius: 5px;
+    background: var(--surface-control);
+    color: var(--text);
+    animation: none;
+}
+.filter-chip .chip-remove { border-radius: 4px; opacity: 1 }
+.filter-chips .chip-clear { text-decoration: none; border-radius: 4px }
+.filter-chips .chip-clear:hover { color: var(--text); background: var(--surface-control) }
+
+.btn { border-radius: 6px }
+.btn-primary { border-color: var(--btn-primary); background: var(--btn-primary) }
+.btn-primary:hover:not(:disabled) { border-color: var(--btn-primary-hover); background: var(--btn-primary-hover) }
+.btn-secondary { border-color: var(--border); background: var(--card) }
+.btn-secondary:hover:not(:disabled) { border-color: var(--border2); background: var(--hover) }
+.btn-secondary.active { border-color: rgba(var(--primary-rgb), 0.3); background: var(--surface-primary-soft); color: var(--primary) }
+.btn-danger { border-color: rgba(var(--danger-rgb), 0.44) }
+.btn-danger:hover:not(:disabled) { background: rgba(var(--danger-rgb), 0.08) }
+.btn:focus-visible,
+.nav-item:focus-visible,
+.close-btn:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px }
+
+.form-control {
+    border-color: var(--border);
+    border-radius: 6px;
+    background: var(--card);
+}
+.form-control:hover { border-color: var(--border2) }
+.form-control:focus { border-color: var(--primary); background: var(--card) }
+.input-affix { border-color: var(--border); border-radius: 6px; background: var(--card) }
+.input-affix:focus-within { border-color: var(--primary); background: var(--card) }
+.rule-editor .form-control,
+.rule-editor .input-affix,
+.connection-form-modal .form-control {
+    border-color: var(--separator);
+    background: var(--surface-control);
+}
+.rule-editor .form-control:hover,
+.connection-form-modal .form-control:hover { border-color: var(--border2); background: var(--hover) }
+.rule-editor .form-control:focus,
+.connection-form-modal .form-control:focus {
+    border-color: var(--primary);
+    background: var(--card);
+}
+
+/* Keep editors recognisable as code blocks without adding decorative panels. */
+.preview-editor,
+.edit-editor,
+.rule-editor .preview-editor,
+.rule-editor .edit-editor {
+    border: 1px solid var(--separator);
+    border-radius: 6px;
+    background: var(--code-bg);
+}
+.rule-editor .form-block-header {
+    padding-bottom: var(--space-xs);
+    border-bottom: 1px solid var(--separator);
+}
+.rule-editor .protocol-switch,
+.rule-editor-mode-switch,
+.response-mode-toolbar,
+.result-action-selector {
+    border: 1px solid var(--separator);
+}
+.rule-editor .protocol-btn.active,
+.rule-editor-mode-switch button.active { background: var(--btn-primary); border-color: var(--btn-primary) }
+.rule-outcome-option { border: 1px solid transparent }
+.rule-outcome-option.is-selected { border-color: var(--separator); background: var(--card) }
+.response-mode-toolbar { background: var(--surface-neutral-soft) }
+.response-preview-loading,
+.response-preview-empty { border: 1px dashed var(--border2); background: var(--surface-neutral-soft) }
+.CodeMirror,
+.CodeMirror-gutters { background: var(--code-bg); color: var(--text) }
+.CodeMirror-gutters { border-right-color: var(--separator) }
+.CodeMirror-linenumber { color: var(--muted) }
+.CodeMirror-cursor { border-left-color: var(--primary) }
+.CodeMirror-selected { background: var(--surface-primary-strong) }
+
+.modal-box,
+.workspace-modal,
+.connection-form-modal,
+.tour-tooltip {
+    border: 1px solid var(--border2);
+    border-radius: var(--radius-panel);
+}
+.modal-header,
+.workspace-modal > .modal-header { border-bottom: 1px solid var(--separator) }
+.modal-footer,
+.workspace-modal > .modal-footer {
+    border-top: 1px solid var(--separator);
+    background: var(--surface-neutral-soft);
+}
+.rule-modal-fullscreen > .modal-footer { border-top: 1px solid var(--separator) }
+.close-btn { border-radius: 5px }
+.catch-all-warning { border: 1px solid rgba(var(--warning-rgb), 0.28); border-radius: 6px; background: rgba(var(--warning-rgb), 0.08) }
+.data-dropdown { border-color: var(--border2); border-radius: 6px; box-shadow: 0 14px 30px rgba(0, 0, 0, 0.2) }
+.import-format-option { border: 1px solid var(--separator); border-radius: 6px; background: var(--surface-control) }
+.import-format-option.active { border-color: rgba(var(--primary-rgb), 0.34); background: var(--surface-primary-soft) }
+.import-dropzone { border-color: var(--border2); border-radius: 6px; background: var(--bg) }
+.openapi-preview-table-wrap { border: 1px solid var(--separator); border-radius: 6px; background: var(--surface-neutral-soft) }
+.openapi-preview-table th { border-bottom: 1px solid var(--separator) }
+
+.settings-card {
+    border: 1px solid var(--separator);
+    border-radius: var(--radius-panel);
+}
+.settings-card-header { border-bottom: 1px solid var(--separator) }
+.connection-row + .connection-row { border-top: 1px solid var(--separator) }
+.settings-danger { border-color: rgba(var(--danger-rgb), 0.58); border-radius: 6px }
+.settings-danger-header { background: rgba(var(--danger-rgb), 0.08) }
+.scenario-row,
+.settings-state-row { border: 1px solid var(--separator); border-radius: 6px; background: var(--surface-neutral-soft) }
+.issue-message,
+.issue-reply-form { border: 1px solid var(--separator); border-radius: 6px }
+.issue-message-admin { border-color: rgba(var(--primary-rgb), 0.28); background: var(--surface-primary-soft) }
+
+.audit-workspace .ac-block { border: 1px solid var(--separator); border-radius: 6px; background: var(--card) }
+.audit-workspace .ac-block-label { border-bottom: 1px solid var(--separator); background: var(--surface-neutral-soft) }
+.audit-workspace .ac-block-panel + .ac-block-panel { border-left: 1px solid var(--separator) }
+.audit-workspace .ac-block-after { background: var(--surface-success-soft) }
+.help-code,
+.help-table { border-color: var(--separator) }
+.help-tabs { border: 1px solid var(--separator); border-radius: 6px; background: var(--surface-neutral-soft) }
+.help-tabs button { border-radius: 4px }
+
+.sk { border: 1px solid var(--separator); border-radius: 4px; background: var(--surface-neutral-soft) }
+.toast-wrap .toast { border-color: var(--border2); border-radius: 6px; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2) }
+
+@media (max-width: 768px) {
+    .main { padding: var(--space-sm) }
+    .page-header { padding-bottom: var(--space-sm) }
+    .modal-overlay { padding: var(--space-sm) }
+    .workspace-filter-card,
+    .rule-filter-card,
+    .workspace-table-card,
+    .card-table { border-radius: 6px }
+    .audit-workspace .ac-block-panel + .ac-block-panel {
+        border-left: 0;
+        border-top: 1px solid var(--separator);
+    }
+}
 
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {

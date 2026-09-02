@@ -13,4 +13,16 @@ public class AgentStats {
     private final int queueSize;
     private final long processedCount;
     private final long droppedCount;
+    /** Serialized durable backlog bytes, when the agent has one. */
+    private final long queueBytes;
+    /** Configured durable backlog byte limit, when the agent has one. */
+    private final long queueCapacityBytes;
+    /** Bytes retained in the bounded producer-to-spool hand-off. */
+    private final long inFlightBytes;
+    /** Heap byte limit for the producer-to-spool hand-off. */
+    private final long inFlightByteLimit;
+    /** Producers currently waiting for durable or heap capacity. */
+    private final int waitingProducers;
+    /** Hysteresis state for durable/heap backpressure. */
+    private final boolean backpressureActive;
 }

@@ -4,6 +4,7 @@ import jakarta.jms.ConnectionFactory;
 import org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.jms.config.DefaultJmsListenerContainerFactory;
+import org.springframework.jms.config.SimpleJmsListenerEndpoint;
 import org.springframework.jms.connection.SingleConnectionFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -21,6 +22,10 @@ class JmsConfigTest {
                 factory, new JmsProperties(), "1-5");
 
         assertThat(listenerFactory).isNotNull();
+        SimpleJmsListenerEndpoint endpoint = new SimpleJmsListenerEndpoint();
+        endpoint.setDestination("test.queue");
+        endpoint.setMessageListener(message -> { });
+        assertThat(listenerFactory.createListenerContainer(endpoint).isSessionTransacted()).isTrue();
     }
 
     @Test

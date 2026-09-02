@@ -44,6 +44,24 @@ public class JmsProperties {
     /** 每個 listener consumer 最多預取的 encoded bytes；避免 30 個 consumer 各囤 1 MiB。 */
     private int consumerWindowSize = 64 * 1024;
 
+    /** Broker 開始阻擋 producer 前必須保留的磁碟空間，避免真的寫到 ENOSPC。 */
+    private long minDiskFreeBytes = 512L * 1024 * 1024;
+
+    /** Artemis 重新檢查可用磁碟空間的間隔。 */
+    private int diskScanPeriodMs = 1_000;
+
+    /** 暫時性 listener 失敗的第一次重送等待時間。 */
+    private long redeliveryDelayMs = 250;
+
+    /** 重送等待時間的倍增倍率，避免儲存或記憶體故障時 busy-loop。 */
+    private double redeliveryMultiplier = 2.0;
+
+    /** 重送等待時間上限。負值不接受。 */
+    private long maxRedeliveryDelayMs = 5_000;
+
+    /** -1 表示不因重送次數自動丟棄訊息。 */
+    private int maxDeliveryAttempts = -1;
+
     private Target target = new Target();
 
     @Getter

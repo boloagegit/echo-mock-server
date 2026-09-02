@@ -24,6 +24,9 @@ import org.springframework.context.annotation.Primary;
 @Slf4j
 public class ArtemisConfig {
 
+    private static final int DEFAULT_PAGE_SIZE_BYTES = 1024 * 1024;
+    private static final int PAGE_CACHE_MAX_PAGES = 2;
+
     @Bean
     @Primary
     public ArtemisProperties artemisProperties(JmsProperties jmsProperties) {
@@ -44,32 +47,85 @@ public class ArtemisConfig {
     @Bean
     public ArtemisConfigurationCustomizer artemisConfigurationCustomizer(JmsProperties jmsProperties) {
         return configuration -> {
+            int port = jmsProperties.getPort();
+            String acceptorUrl = "tcp://0.0.0.0:" + port
+                    + "?protocols=CORE,OPENWIRE,AMQP"
+                    + "&anycastPrefix=jms.queue."
+                    + "&multicastPrefix=jms.topic.";
             try {
-                int port = jmsProperties.getPort();
-                String acceptorUrl = "tcp://0.0.0.0:" + port
-                        + "?protocols=CORE,OPENWIRE,AMQP"
-                        + "&anycastPrefix=jms.queue."
-                        + "&multicastPrefix=jms.topic.";
                 configuration.addAcceptorConfiguration("tcp", acceptorUrl);
-
-                int memoryPercent = jmsProperties.getBrokerMemoryPercent();
-                if (memoryPercent <= 0 || memoryPercent > 50) {
-                    throw new IllegalArgumentException("JMS broker memory percent must be between 1 and 50");
-                }
-                long maxHeapBytes = Runtime.getRuntime().maxMemory();
-                long brokerMaxBytes = maxHeapBytes / 100 * memoryPercent
-                        + maxHeapBytes % 100 * memoryPercent / 100;
-                configuration.setGlobalMaxSize(Math.max(1, brokerMaxBytes));
-                // Echo 是 transient mock broker；large message 仍落盤保護 heap，但不為每筆做 fsync。
-                configuration.setLargeMessageSync(false);
-                configuration.addAddressSetting("#", new AddressSettings()
-                        .setAddressFullMessagePolicy(AddressFullMessagePolicy.PAGE));
-
-                log.info("Artemis TCP acceptor configured on port {}, paging after {} MB",
-                        port, brokerMaxBytes / (1024 * 1024));
             } catch (Exception e) {
-                log.error("Failed to configure Artemis TCP acceptor: {}", e.getMessage(), e);
+                throw new IllegalStateException("Failed to configure Artemis TCP acceptor", e);
             }
+
+            int memoryPercent = jmsProperties.getBrokerMemoryPercent();
+            if (memoryPercent <= 0 || memoryPercent > 50) {
+                throw new IllegalArgumentException("JMS broker memory percent must be between 1 and 50");
+            }
+            long maxHeapBytes = Runtime.getRuntime().maxMemory();
+            long brokerMaxBytes = maxHeapBytes / 100 * memoryPercent
+                    + maxHeapBytes % 100 * memoryPercent / 100;
+            long boundedBrokerMaxBytes = Math.max(1, brokerMaxBytes);
+            configuration.setGlobalMaxSize(boundedBrokerMaxBytes);
+            configureDiskGuard(configuration, jmsProperties);
+            // Keep large-message writes synchronous so an acknowledged durable
+            // message is present on disk before the broker confirms delivery.
+            configuration.setLargeMessageSync(true);
+            AddressSettings addressSettings = new AddressSettings()
+                    .setAddressFullMessagePolicy(AddressFullMessagePolicy.PAGE)
+                    .setMaxSizeBytes(boundedBrokerMaxBytes)
+                    .setPageSizeBytes(pageSizeBytes(boundedBrokerMaxBytes))
+                    .setPageCacheMaxSize(PAGE_CACHE_MAX_PAGES)
+                    .setDefaultConsumerWindowSize(jmsProperties.getConsumerWindowSize());
+            configureRedelivery(addressSettings, jmsProperties);
+            configuration.addAddressSetting("#", addressSettings);
+
+            log.info("Artemis TCP acceptor configured on port {}, paging after {} MB",
+                    port, boundedBrokerMaxBytes / (1024 * 1024));
         };
+    }
+
+    private static int pageSizeBytes(long brokerMaxBytes) {
+        long maxPageSize = Math.max(1, Math.min(DEFAULT_PAGE_SIZE_BYTES, brokerMaxBytes));
+        return (int) maxPageSize;
+    }
+
+    private static void configureDiskGuard(
+            org.apache.activemq.artemis.core.config.Configuration configuration,
+            JmsProperties properties) {
+        long minDiskFreeBytes = properties.getMinDiskFreeBytes();
+        int diskScanPeriodMs = properties.getDiskScanPeriodMs();
+        if (minDiskFreeBytes <= 0) {
+            throw new IllegalArgumentException("JMS minimum free disk bytes must be positive");
+        }
+        if (diskScanPeriodMs < 100) {
+            throw new IllegalArgumentException("JMS disk scan period must be at least 100 ms");
+        }
+        // Artemis blocks producers at this guard before an ENOSPC can trigger
+        // its critical I/O shutdown path. Once space returns, producers resume.
+        configuration.setMinDiskFree(minDiskFreeBytes);
+        configuration.setDiskScanPeriod(diskScanPeriodMs);
+    }
+
+    private static void configureRedelivery(AddressSettings settings, JmsProperties properties) {
+        long delayMs = properties.getRedeliveryDelayMs();
+        long maxDelayMs = properties.getMaxRedeliveryDelayMs();
+        double multiplier = properties.getRedeliveryMultiplier();
+        int maxAttempts = properties.getMaxDeliveryAttempts();
+        if (delayMs < 0 || maxDelayMs < 0 || maxDelayMs < delayMs) {
+            throw new IllegalArgumentException(
+                    "JMS redelivery delays must be non-negative and max delay must not be smaller than delay");
+        }
+        if (!Double.isFinite(multiplier) || multiplier < 1.0) {
+            throw new IllegalArgumentException("JMS redelivery multiplier must be finite and at least 1");
+        }
+        if (maxAttempts == 0 || maxAttempts < -1) {
+            throw new IllegalArgumentException(
+                    "JMS max delivery attempts must be -1 or a positive number");
+        }
+        settings.setRedeliveryDelay(delayMs)
+                .setRedeliveryMultiplier(multiplier)
+                .setMaxRedeliveryDelay(maxDelayMs)
+                .setMaxDeliveryAttempts(maxAttempts);
     }
 }

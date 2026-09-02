@@ -80,12 +80,74 @@ class JmsMessageMemoryBudgetTest {
     }
 
     @Test
+    void shutdownWakesWaiterWithoutGrantingCapacity() throws Exception {
+        JmsMessageMemoryBudget budget = new JmsMessageMemoryBudget(100, 1);
+        var first = budget.reserveEncodedBody(80);
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch finished = new CountDownLatch(1);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+
+        Thread waiter = new Thread(() -> {
+            started.countDown();
+            try (var ignored = budget.reserveEncodedBody(30)) {
+                failure.set(new AssertionError("shutdown unexpectedly granted capacity"));
+            } catch (Throwable e) {
+                failure.set(e);
+            } finally {
+                finished.countDown();
+            }
+        });
+        waiter.start();
+
+        assertThat(started.await(1, TimeUnit.SECONDS)).isTrue();
+        long waitDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+        while (budget.waitingThreads() == 0 && System.nanoTime() < waitDeadline) {
+            Thread.sleep(5);
+        }
+        assertThat(budget.waitingThreads()).isPositive();
+        budget.shutdown();
+
+        assertThat(finished.await(1, TimeUnit.SECONDS)).isTrue();
+        waiter.join(1000);
+        assertThat(failure.get())
+                .isInstanceOf(JmsMessageMemoryBudget.JmsMessageMemoryBudgetClosedException.class);
+        assertThat(budget.reservedBytes()).isEqualTo(80);
+
+        first.close();
+        assertThat(budget.reservedBytes()).isZero();
+    }
+
+    @Test
+    void reserveAfterShutdownFailsImmediately() {
+        JmsMessageMemoryBudget budget = new JmsMessageMemoryBudget(100, 1);
+        budget.shutdown();
+
+        assertThatThrownBy(() -> budget.reserveEncodedBody(1))
+                .isInstanceOf(JmsMessageMemoryBudget.JmsMessageMemoryBudgetClosedException.class);
+    }
+
+    @Test
     void rejectsMessageThatCanNeverFitInsteadOfWaitingForever() {
         JmsMessageMemoryBudget budget = new JmsMessageMemoryBudget(100, 2);
 
         assertThatThrownBy(() -> budget.reserveEncodedBody(51))
                 .isInstanceOf(JmsMessageMemoryBudget.JmsMessageTooLargeException.class)
                 .hasMessageContaining("exceeding the processing budget");
+    }
+
+    @Test
+    void replyReservationIsNonBlockingAndReleased() throws Exception {
+        JmsMessageMemoryBudget budget = new JmsMessageMemoryBudget(100, 1);
+        var request = budget.reserveEncodedBody(80);
+
+        assertThatThrownBy(() -> budget.tryReserveReplyText("123456"))
+                .isInstanceOf(JmsMessageMemoryBudget.JmsMessageCapacityUnavailableException.class);
+
+        request.close();
+        try (var reply = budget.tryReserveReplyText("123456")) {
+            assertThat(budget.reservedBytes()).isEqualTo(24);
+        }
+        assertThat(budget.reservedBytes()).isZero();
     }
 
     @Test

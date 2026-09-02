@@ -22,6 +22,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -523,6 +524,16 @@ class AbstractMockPipelineTest {
             assertThat(result.getResponse().getBody())
                     .isEqualTo("Request logging is temporarily unavailable");
             assertThat(result.isMatched()).isFalse();
+
+            MockRequest jmsRequest = MockRequest.builder()
+                    .protocol(Protocol.JMS)
+                    .path("ECHO.REQUEST")
+                    .body("<request/>")
+                    .clientIp("JMS")
+                    .build();
+            assertThatThrownBy(() -> pipeline.execute(jmsRequest))
+                    .isInstanceOf(RequestLogUnavailableException.class)
+                    .hasMessageContaining("spool full");
         }
     }
 

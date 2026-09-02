@@ -178,10 +178,17 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
         if (durableSpool == null || configService.isRequestLogMemoryMode()) {
             return base;
         }
+        RequestLogSpool.StatusSnapshot durable = durableSpool.statusSnapshot();
         return AgentStats.builder()
-                .queueSize((int) Math.min(Integer.MAX_VALUE, durableSpool.pendingItems()))
+                .queueSize((int) Math.min(Integer.MAX_VALUE, durable.pendingItems()))
                 .processedCount(base.getProcessedCount())
                 .droppedCount(base.getDroppedCount())
+                .queueBytes(durable.pendingBytes())
+                .queueCapacityBytes(durable.pendingByteLimit())
+                .inFlightBytes(durable.inFlightBytes())
+                .inFlightByteLimit(durable.inFlightByteLimit())
+                .waitingProducers(durable.waitingProducers())
+                .backpressureActive(durable.backpressureActive())
                 .build();
     }
 
@@ -267,14 +274,17 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     }
 
     private void stopDurableConsumer() {
-        if (!durableConsumerRunning.compareAndSet(true, false)) {
+        boolean wasRunning = durableConsumerRunning.getAndSet(false);
+        if (!wasRunning && durableConsumerExecutor == null) {
             return;
         }
         durableWorkAvailable.release();
-        if (durableConsumerExecutor != null) {
-            durableConsumerExecutor.shutdownNow();
+        ExecutorService executor = durableConsumerExecutor;
+        durableConsumerExecutor = null;
+        if (executor != null) {
+            executor.shutdownNow();
             try {
-                durableConsumerExecutor.awaitTermination(10, TimeUnit.SECONDS);
+                executor.awaitTermination(10, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
@@ -297,7 +307,8 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 }
 
                 List<RequestLogSpool.SpoolEntry> fetched =
-                        durableSpool.readAfter(checkpoint, durableBatchSize + 1);
+                        durableSpool.readAfter(checkpoint, durableBatchSize + 1,
+                                durableSpool.statusSnapshot().inFlightByteLimit());
                 if (fetched.isEmpty()) {
                     if (checkpoint > lastCleanedCheckpoint) {
                         durableSpool.deleteThrough(checkpoint);
@@ -327,6 +338,15 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 afterBatchProcessed(batch.size(), System.nanoTime() - startedAt);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                break;
+            } catch (RequestLogSpool.UnrecoverableSpoolEntryException e) {
+                // A corrupt or oversized head cannot be made safe by retrying:
+                // keep it (and all following rows) durable and stop this
+                // consumer until an operator repairs the retained row.
+                log.error("Durable request-log consumer stopped at sequence {} ({}) {}; "
+                                + "the spool row was retained for recovery",
+                        e.sequence(), e.kind(), e.getMessage(), e);
+                durableConsumerRunning.set(false);
                 break;
             } catch (Exception e) {
                 log.warn("Durable request-log persistence paused; data remains in spool: {}",

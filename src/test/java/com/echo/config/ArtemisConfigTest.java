@@ -60,7 +60,17 @@ class ArtemisConfigTest {
                 .isEqualTo(Runtime.getRuntime().maxMemory() / 10);
         assertThat(artemisConfiguration.getAddressSettings().get("#").getAddressFullMessagePolicy())
                 .isEqualTo(AddressFullMessagePolicy.PAGE);
-        assertThat(artemisConfiguration.isLargeMessageSync()).isFalse();
+        assertThat(artemisConfiguration.isLargeMessageSync()).isTrue();
+        assertThat(artemisConfiguration.getAddressSettings().get("#").getRedeliveryDelay())
+                .isEqualTo(250);
+        assertThat(artemisConfiguration.getAddressSettings().get("#").getRedeliveryMultiplier())
+                .isEqualTo(2.0);
+        assertThat(artemisConfiguration.getAddressSettings().get("#").getMaxRedeliveryDelay())
+                .isEqualTo(5_000);
+        assertThat(artemisConfiguration.getAddressSettings().get("#").getMaxDeliveryAttempts())
+                .isEqualTo(-1);
+        assertThat(artemisConfiguration.getMinDiskFree()).isEqualTo(512L * 1024 * 1024);
+        assertThat(artemisConfiguration.getDiskScanPeriod()).isEqualTo(1_000);
     }
 
     @Test
