@@ -5,6 +5,7 @@ import com.echo.entity.Protocol;
 import com.echo.pipeline.JmsMockPipeline;
 import com.echo.pipeline.MockRequest;
 import com.echo.pipeline.PipelineResult;
+import com.echo.service.RequestLogUnavailableException;
 import jakarta.jms.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.activemq.artemis.jms.client.ActiveMQMessage;
@@ -40,8 +41,8 @@ public class MockJmsListener {
 
     @JmsListener(destination = "${echo.jms.queue:ECHO.REQUEST}")
     public void onMessage(Message message) {
-        try {
-            PipelineResult result = processMessage(message);
+        try (ReservedPipelineResult processing = processMessage(message)) {
+            PipelineResult result = processing.result();
 
             // JMS 延遲同步執行
             if (result.getDelayMs() > 0) {
@@ -69,24 +70,52 @@ public class MockJmsListener {
             Thread.currentThread().interrupt();
             log.warn("JMS processing interrupted before completion");
             throw new JmsProcessingInterruptedException(e);
+        } catch (JmsMessageMemoryBudget.JmsMessageTooLargeException e) {
+            // This is a deterministic poison input: it can never fit the hard
+            // processing budget. Return an explicit error (when a reply address
+            // exists) and acknowledge the failed request rather than creating
+            // an endless redelivery hot-loop. The message is never parsed or
+            // forwarded before this admission decision.
+            log.warn("JMS message exceeds processing budget and was not forwarded: {}",
+                    e.getMessage());
+            sendErrorReply(message, "JMS message exceeds the configured processing capacity");
+        } catch (JmsMessageMemoryBudget.JmsMessageMemoryBudgetClosedException e) {
+            // A shutdown/interruption is transient; let the JMS container keep
+            // its existing exception/redelivery semantics instead of acking.
+            log.warn("JMS message was not admitted because processing is stopping: {}",
+                    e.getMessage());
+            throw e;
+        } catch (JmsMessageMemoryBudget.JmsMessageCapacityUnavailableException e) {
+            // Transient pressure: do not acknowledge. Artemis keeps/redelivers
+            // the request after another listener releases its reply headroom.
+            log.warn("JMS reply is waiting for memory capacity: {}", e.getMessage());
+            throw e;
+        } catch (RequestLogUnavailableException e) {
+            // The request log is part of the accepted-delivery contract. Keep
+            // the JMS message on the broker until its durable hand-off recovers.
+            log.warn("JMS delivery retained because request logging is unavailable: {}",
+                    e.getMessage());
+            throw e;
         } catch (Exception e) {
             log.error("JMS processing error", e);
             sendErrorReply(message, e.getMessage());
         }
     }
 
-    private PipelineResult processMessage(Message message) throws JMSException, InterruptedException {
-        JmsMessageMemoryBudget.Reservation reservation = null;
+    private ReservedPipelineResult processMessage(Message message)
+            throws JMSException, InterruptedException {
+        JmsMessageMemoryBudget.Reservation requestReservation = null;
+        JmsMessageMemoryBudget.Reservation replyReservation = null;
         try {
             long encodedBodyBytes = encodedTextBodyBytes(message);
             if (encodedBodyBytes > 0) {
                 // getBodySize() 是完整訊息大小；不使用只代表目前已下載部分的 buffer size。
-                reservation = memoryBudget.reserveEncodedBody(encodedBodyBytes);
+                requestReservation = memoryBudget.reserveEncodedBody(encodedBodyBytes);
             }
 
             String body = extractBody(message);
-            if (reservation == null) {
-                reservation = memoryBudget.reserveText(body);
+            if (requestReservation == null) {
+                requestReservation = memoryBudget.reserveText(body);
             }
 
             String queue = jmsProperties.getQueue();
@@ -105,12 +134,30 @@ public class MockJmsListener {
                     .endpointValue(endpointValue)
                     .build();
 
-            return jmsMockPipeline.execute(mockRequest);
-        } finally {
-            if (reservation != null) {
-                reservation.close();
+            PipelineResult result = jmsMockPipeline.execute(mockRequest);
+            String replyBody = shouldReserveReply(message, result)
+                    ? result.getResponse().getBody()
+                    : null;
+            replyReservation = memoryBudget.tryReserveReplyText(replyBody);
+            return new ReservedPipelineResult(result, requestReservation, replyReservation);
+        } catch (RuntimeException | JMSException | InterruptedException e) {
+            if (replyReservation != null) {
+                replyReservation.close();
             }
+            if (requestReservation != null) {
+                requestReservation.close();
+            }
+            throw e;
         }
+    }
+
+    private boolean shouldReserveReply(Message message, PipelineResult result) throws JMSException {
+        if (message.getJMSReplyTo() == null || result.getResponse() == null) {
+            return false;
+        }
+        String faultType = result.getFaultType();
+        return !"CONNECTION_RESET".equals(faultType)
+                && !"EMPTY_RESPONSE".equals(faultType);
     }
 
     private String extractBody(Message message) throws JMSException {
@@ -156,6 +203,17 @@ public class MockJmsListener {
     private static final class JmsProcessingInterruptedException extends RuntimeException {
         private JmsProcessingInterruptedException(InterruptedException cause) {
             super("JMS processing interrupted", cause);
+        }
+    }
+
+    private record ReservedPipelineResult(
+            PipelineResult result,
+            JmsMessageMemoryBudget.Reservation requestReservation,
+            JmsMessageMemoryBudget.Reservation replyReservation) implements AutoCloseable {
+        @Override
+        public void close() {
+            replyReservation.close();
+            requestReservation.close();
         }
     }
 }

@@ -1,11 +1,13 @@
 package com.echo.jms;
 
 import com.echo.config.JmsProperties;
+import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -15,13 +17,14 @@ import java.util.concurrent.locks.ReentrantLock;
  * 正常流量只需一次加減計數；超載時 listener 等待，讓尚未派送的訊息留在 Artemis queue。
  */
 @Component
-public final class JmsMessageMemoryBudget {
+public final class JmsMessageMemoryBudget implements AutoCloseable {
 
     private static final long MINIMUM_BUDGET_BYTES = 16L * 1024 * 1024;
     private final long maximumBytes;
     private final int expansionFactor;
     private final AtomicLong reservedBytes = new AtomicLong();
     private final AtomicInteger waitingThreads = new AtomicInteger();
+    private final AtomicBoolean running = new AtomicBoolean(true);
     private final ReentrantLock waitLock = new ReentrantLock(true);
     private final Condition capacityAvailable = waitLock.newCondition();
 
@@ -58,7 +61,32 @@ public final class JmsMessageMemoryBudget {
         return reserve(estimateExpandedBytes(utf16Bytes));
     }
 
+    /**
+     * Accounts for an already materialized reply plus the encoded JMS copy.
+     * This is deliberately non-blocking: listeners still holding their input
+     * reservations must never deadlock while all wait for reply headroom.
+     */
+    public Reservation tryReserveReplyText(String body) {
+        if (body == null || body.isEmpty()) {
+            return Reservation.empty();
+        }
+        ensureRunning();
+        long utf16Bytes = saturatingMultiply(body.length(), Character.BYTES);
+        long estimatedBytes = saturatingMultiply(utf16Bytes, 2);
+        if (estimatedBytes > maximumBytes) {
+            throw new JmsMessageTooLargeException(
+                    "JMS reply needs an estimated " + estimatedBytes
+                            + " bytes, exceeding the processing budget of " + maximumBytes + " bytes");
+        }
+        if (!tryReserve(estimatedBytes)) {
+            throw new JmsMessageCapacityUnavailableException(
+                    "JMS reply memory capacity is temporarily unavailable");
+        }
+        return new Reservation(this, estimatedBytes);
+    }
+
     private Reservation reserve(long estimatedBytes) throws InterruptedException {
+        ensureRunning();
         if (estimatedBytes > maximumBytes) {
             throw new JmsMessageTooLargeException(
                     "JMS message needs an estimated " + estimatedBytes
@@ -66,15 +94,17 @@ public final class JmsMessageMemoryBudget {
         }
 
         // 已有訊息在等時不允許新訊息一直插隊，避免大訊息飢餓。
-        if (waitingThreads.get() == 0 && tryReserve(estimatedBytes)) {
+        if (running.get() && waitingThreads.get() == 0 && tryReserve(estimatedBytes)) {
             return new Reservation(this, estimatedBytes);
         }
 
         waitLock.lockInterruptibly();
         try {
+            ensureRunning();
             waitingThreads.incrementAndGet();
             try {
                 while (!tryReserve(estimatedBytes)) {
+                    ensureRunning();
                     capacityAvailable.await();
                 }
                 return new Reservation(this, estimatedBytes);
@@ -83,6 +113,13 @@ public final class JmsMessageMemoryBudget {
             }
         } finally {
             waitLock.unlock();
+        }
+    }
+
+    private void ensureRunning() {
+        if (!running.get()) {
+            throw new JmsMessageMemoryBudgetClosedException(
+                    "JMS message memory budget is shutting down");
         }
     }
 
@@ -111,12 +148,33 @@ public final class JmsMessageMemoryBudget {
             throw new IllegalStateException("JMS memory reservation released more than once");
         }
         if (waitingThreads.get() > 0) {
-            waitLock.lock();
-            try {
-                capacityAvailable.signalAll();
-            } finally {
-                waitLock.unlock();
-            }
+            signalCapacityAvailable();
+        }
+    }
+
+    /**
+     * Wakes blocked listeners during application shutdown. A blocked listener
+     * must leave without being acknowledged by a normal successful return.
+     */
+    @PreDestroy
+    public void shutdown() {
+        if (!running.compareAndSet(true, false)) {
+            return;
+        }
+        signalCapacityAvailable();
+    }
+
+    @Override
+    public void close() {
+        shutdown();
+    }
+
+    private void signalCapacityAvailable() {
+        waitLock.lock();
+        try {
+            capacityAvailable.signalAll();
+        } finally {
+            waitLock.unlock();
         }
     }
 
@@ -126,6 +184,14 @@ public final class JmsMessageMemoryBudget {
 
     long maximumBytes() {
         return maximumBytes;
+    }
+
+    int waitingThreads() {
+        return waitingThreads.get();
+    }
+
+    boolean isRunning() {
+        return running.get();
     }
 
     static long calculateMaximumBytes(long maxHeapBytes, int percent) {
@@ -169,8 +235,20 @@ public final class JmsMessageMemoryBudget {
         }
     }
 
-    static final class JmsMessageTooLargeException extends RuntimeException {
+    public static final class JmsMessageTooLargeException extends RuntimeException {
         JmsMessageTooLargeException(String message) {
+            super(message);
+        }
+    }
+
+    static final class JmsMessageMemoryBudgetClosedException extends RuntimeException {
+        JmsMessageMemoryBudgetClosedException(String message) {
+            super(message);
+        }
+    }
+
+    static final class JmsMessageCapacityUnavailableException extends RuntimeException {
+        JmsMessageCapacityUnavailableException(String message) {
             super(message);
         }
     }

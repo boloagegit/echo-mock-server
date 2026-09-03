@@ -104,6 +104,8 @@
     "clearFilter": "Clear Filter",
     "emptyNoRules": "No rules configured yet",
     "createFirstRule": "Create Your First Rule",
+    "pagination": "Rule pagination",
+    "moreActions": "More actions",
     "untagged": "Untagged",
     "noRules": "No Rules",
     "showMore": "Show More",
@@ -1462,6 +1464,9 @@
     "copySuffix": " (Copy)",
     "count": "{count} records",
     "searchAction": "Search",
+    "scrollForMore": "Scroll for more",
+    "scrollableRulesTable": "Scrollable rules table",
+    "scrollableResponsesTable": "Scrollable responses table",
     "retry": "Retry"
   }
 }

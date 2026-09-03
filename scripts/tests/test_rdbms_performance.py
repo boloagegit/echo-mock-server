@@ -165,6 +165,38 @@ class StressRpsJsonTest(unittest.TestCase):
         self.assertEqual(7, args.duration)
         self.assertEqual(11, args.concurrency)
         self.assertFalse(args.json_output)
+        self.assertFalse(args.request_log_disabled)
+
+    def test_request_log_disabled_mode_skips_agent_drain(self):
+        with mock.patch.object(self.stress, "verify_request_logging_disabled", return_value={
+                "passed": True, "status": 200,
+                "reason": "request logging is disabled"}), \
+                mock.patch.object(self.stress, "cleanup_api", return_value={
+                "passed": True, "status": 200, "attempts": 1}), \
+                mock.patch.object(self.stress, "run_scenario", return_value={
+                    "name": "test", "total": 1, "rps": 1.0, "errors": 0,
+                    "request_errors": 0, "non_2xx": 0, "body_size": 1,
+                    "avg": 1.0, "p50": 1.0, "p95": 1.0, "p99": 1.0,
+                }), \
+                mock.patch.object(self.stress, "wait_for_log_agent_drain") as drain, \
+                mock.patch.object(self.stress.time, "sleep"):
+            result = self.stress.run_benchmark(
+                duration=0, concurrency=1, verbose=False,
+                request_log_enabled=False)
+
+        self.assertTrue(result["passed"])
+        self.assertFalse(result["parameters"]["request_log_enabled"])
+        self.assertTrue(result["log_drain"]["skipped"])
+        drain.assert_not_called()
+
+    def test_request_log_disabled_mode_rejects_running_log_agent(self):
+        with mock.patch.object(self.stress, "api", return_value=(
+                200, [{"name": "log-agent", "status": "RUNNING"}])):
+            validation = self.stress.verify_request_logging_disabled(
+                "http://127.0.0.1:18080")
+
+        self.assertFalse(validation["passed"])
+        self.assertIn("restart Echo", validation["reason"])
 
     def test_cleanup_retries_a_transient_server_error(self):
         with mock.patch.object(

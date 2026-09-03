@@ -27,6 +27,7 @@ export ECHO_TEST_PASSWORD='your-local-password'
 | `migrate-h2-to-sqlite.py` | Offline, staged H2-to-SQLite migration with row/digest/integrity verification and startup smoke test |
 | `test-sqlite-crash-resilience.py` | SQLite WAL crash/restart and request-log durability regression |
 | `test-rdbms-matrix.py` | Disposable Docker Compose matrix for H2, SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle; runs E2E/persistence checks, restart verification, and evidence collection |
+| `test-container-resilience.py` | Disposable Compose JMS XML pressure, fixed-heap, SIGKILL/restart, ID accounting, Artemis paging, and bounded tmpfs high-water/full/recovery validation |
 | `perf-test-downstream.py` | Local downstream HTTP server for forwarding latency and body-limit tests |
 | `tests/test_windows_script_compatibility.py` | Windows path, command, and process compatibility checks for Python scripts |
 
@@ -60,11 +61,39 @@ python3 scripts/test-rdbms-matrix.py --databases h2,postgresql --performance
 # (non-2xx responses and request/transport errors return a non-zero exit code).
 python3 scripts/stress-test-rps.py http://localhost:8080 10 20 --json
 
+# If Echo was intentionally started with ECHO_REQUEST_LOG_ENABLED=false,
+# declare that mode so the benchmark does not wait for a nonexistent log agent.
+python3 scripts/stress-test-rps.py http://localhost:8080 10 20 \
+  --request-log-disabled --json
+
 # Validate cross-platform script behavior
 python3 -m unittest scripts/tests/test_windows_script_compatibility.py
+
+# Run the disposable container resilience harness (Docker and a built jar required)
+./gradlew bootJar
+python3 scripts/test-container-resilience.py --mode quick
+
+# Include the separate small-volume disk-full experiment
+python3 scripts/test-container-resilience.py --mode quick --skip-build --disk-full
+
+# Exercise a persistent XML body larger than 100 KiB through kill/restart
+python3 scripts/test-container-resilience.py --mode quick --messages 8 \
+  --recovery-messages 2 --payload-bytes 131072 --max-body-bytes 262144
+
+# Print the exact plan without starting Docker
+python3 scripts/test-container-resilience.py --dry-run
 ```
 
 Use disposable databases and ports for benchmarks. Do not point destructive or crash-resilience scripts at a production database.
+
+The container resilience harness generates an owned Compose project name and
+random host ports, stores primary data in a project-scoped named volume and
+capacity fixtures in separate tmpfs named volumes, and captures command
+stdout/stderr under
+`artifacts/container-resilience/<run>/`. By default it removes only that exact
+project with `down --volumes --remove-orphans`; `--keep` is available for
+inspection. See [`docs/container-resilience-validation.md`](../docs/container-resilience-validation.md)
+for the pass/fail evidence contract and limitations.
 
 ## RDBMS matrix contract
 

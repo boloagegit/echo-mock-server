@@ -42,6 +42,32 @@ class WorkspaceTableResourceTest {
         assertThat(audit).contains("class=\"col-datetime\"");
     }
 
+    @Test
+    void scrollableRuleAndResponseTablesExposeAnAccurateScrollHint() throws IOException {
+        String pagination = resourceText("static/components/WorkspacePagination.js");
+        String rules = resourceText("static/components/RulesPage.js");
+        String responses = resourceText("static/components/ResponsesPage.js");
+        String zhTw = resourceText("static/i18n/zh-TW.json");
+        String english = resourceText("static/i18n/en.json");
+
+        assertThat(pagination)
+                .contains("body.scrollHeight > body.clientHeight + 1")
+                .contains("remaining > 1")
+                .contains("class=\"workspace-scroll-hint\"")
+                .contains("if (overflowing && this.scrollRegionLabel)")
+                .contains("body.setAttribute('role', 'region')")
+                .contains("body.focus({ preventScroll: true })")
+                .contains("clearScrollAccessibility(body)")
+                .contains("this.scrollResizeObserver?.disconnect()")
+                .contains("this.scrollMutationObserver?.disconnect()");
+        assertThat(rules).contains(":scroll-hint-label=\"t('common.scrollForMore')\"");
+        assertThat(rules).contains(":scroll-region-label=\"t('common.scrollableRulesTable')\"");
+        assertThat(responses).contains(":scroll-hint-label=\"t('common.scrollForMore')\"");
+        assertThat(responses).contains(":scroll-region-label=\"t('common.scrollableResponsesTable')\"");
+        assertThat(zhTw).contains("\"scrollForMore\": \"向下捲動\"");
+        assertThat(english).contains("\"scrollForMore\": \"Scroll for more\"");
+    }
+
     private static String resourceText(String path) throws IOException {
         try (var input = new ClassPathResource(path).getInputStream()) {
             return new String(input.readAllBytes(), StandardCharsets.UTF_8);

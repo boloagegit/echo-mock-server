@@ -22,6 +22,12 @@ class JmsPropertiesTest {
         assertThat(props.isPersistent()).isTrue();
         assertThat(props.getDataDirectory()).isEqualTo("./data/artemis");
         assertThat(props.getConsumerWindowSize()).isEqualTo(64 * 1024);
+        assertThat(props.getMinDiskFreeBytes()).isEqualTo(512L * 1024 * 1024);
+        assertThat(props.getDiskScanPeriodMs()).isEqualTo(1_000);
+        assertThat(props.getRedeliveryDelayMs()).isEqualTo(250);
+        assertThat(props.getRedeliveryMultiplier()).isEqualTo(2.0);
+        assertThat(props.getMaxRedeliveryDelayMs()).isEqualTo(5_000);
+        assertThat(props.getMaxDeliveryAttempts()).isEqualTo(-1);
     }
 
     @Test

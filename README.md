@@ -119,6 +119,7 @@ SPRING_JPA_HIBERNATE_DDL_AUTO=validate \
 | `SPRING_DATASOURCE_USERNAME` | External database username |
 | `SPRING_DATASOURCE_PASSWORD` | External database password; inject it through the deployment secret mechanism |
 | `SPRING_JPA_HIBERNATE_DDL_AUTO` | Current profiles default to `update`; use `validate` after a controlled schema migration |
+| `ECHO_REQUEST_LOG_ENABLED` | Set to `false` to stop creating request logs, the log agent, and the local spool; defaults to `true` |
 | `ECHO_REQUEST_LOG_SPOOL_PATH` | Per-instance local SQLite request-log spool path; default `./data/request-log-spool.sqlite` |
 | `ECHO_DB_POOL_MAX_SIZE` / `ECHO_DB_POOL_MIN_IDLE` | Hikari connection-pool sizing for external profiles |
 
@@ -129,6 +130,24 @@ The remaining Hikari timeout and lifetime settings use the `ECHO_DB_*` variables
 The application backup feature is for local H2/SQLite files. External database profiles disable it; PostgreSQL, MySQL/MariaDB, SQL Server, and Oracle backups, point-in-time recovery, retention, and restore drills are owned by the DBA or platform backup service.
 
 Request-log durability has a separate boundary: every Echo instance writes its local request-log spool to a SQLite file, including when the main database is external. Keep that file on a writable persistent volume, use one spool file per instance, and do not treat it as a shared database or cross-instance queue. The spool is not a substitute for the external database's backup policy.
+
+For a core matcher/response throughput benchmark, start Echo with
+`ECHO_REQUEST_LOG_ENABLED=false`. This bypasses request-log object creation,
+background processing, database writes, and the local spool while leaving mock
+matching and replies enabled. It intentionally changes the observability and JMS
+durable-log acceptance contract, so also run a production-profile benchmark with
+request logging enabled before making a reliability or capacity claim. Existing
+database logs remain queryable while new logging is disabled.
+
+When using the bundled RPS script against that mode, add
+`--request-log-disabled` so it does not wait for a log-agent queue that is
+intentionally absent:
+
+```bash
+ECHO_REQUEST_LOG_ENABLED=false java -jar build/libs/echo-server-*.jar
+python3 scripts/stress-test-rps.py http://localhost:8080 10 20 \
+  --request-log-disabled
+```
 
 `ddl-auto=update` is suitable only for a new empty database or development bootstrap. It is not a versioned migration, and it cannot reliably express renames, backfills, type conversions, index/constraint changes, or vendor-specific identity/LOB/boolean/date/JSON behavior across all seven databases. It also requires DDL privileges and can fail when existing rows conflict with a new non-null column.
 
@@ -433,6 +452,7 @@ echo:
   stats:
     retention-days: 7           # Statistics retention days
   request-log:
+    enabled: true                  # Set false only when intentionally disabling new request logs
     store: database             # memory or database
     max-records: 10000          # Maximum log records
     include-body: true          # Whether to log request/response body
@@ -659,7 +679,31 @@ The main database can be shared for rules, responses, and cache events. The requ
 
 Benchmark numbers are workload-specific and should not be treated as universal product claims. The scripts under `scripts/` are the source of truth for reproducing them.
 
-### Current Echo vs WireMock A/B (2026-08-11)
+### Current no-request-log Echo vs WireMock A/B (2026-09-03)
+
+Echo and WireMock 3.13.2 were run in the same JDK 21 Alpine container image
+with a 512 MiB heap, a 1 GiB container limit, 50 concurrent clients, and 8
+seconds per server/scenario. Echo used `ECHO_REQUEST_LOG_ENABLED=false`;
+WireMock used `--no-request-journal --disable-request-logging`. Every non-2xx
+response and transport failure counted as an error, and both sides completed
+all four scenarios with zero errors and no OOM termination.
+
+| Scenario | Echo RPS | WireMock RPS | Ratio | Echo p95 | WireMock p95 |
+|----------|---------:|-------------:|------:|---------:|-------------:|
+| Simple JSON, no condition | 7,304 | 6,532 | 1.12x | 12.0ms | 13.9ms |
+| JSON, 10 candidate rules | 6,924 | 6,789 | 1.02x | 12.9ms | 12.1ms |
+| XML ~1KB + XPath | 6,466 | 4,593 | 1.41x | 13.5ms | 17.7ms |
+| XML ~80KB + XPath | 3,120 | 250 | 12.46x | 19.8ms | 312.8ms |
+
+In this workload, Echo was roughly even with or slightly faster than WireMock
+for JSON and materially faster for XML/XPath, especially for the 80KB body.
+This is a local synthetic result, not a universal product claim. The matcher
+implementations differ, and the short run is not a long-duration stability
+test. Echo's HTTP and JMS XML mock/reply paths were also integration-tested
+with request logging disabled; WireMock does not provide a directly comparable
+JMS mock protocol.
+
+### Request-log-enabled Echo vs WireMock A/B (2026-08-11)
 
 Echo and WireMock 3.13.2 were run on the same Apple Silicon host with Java 22.0.2, a 512 MiB heap, request journals enabled, 50 concurrent clients, and 8 seconds per server/scenario. Both sides completed with zero HTTP 5xx or connection errors.
 

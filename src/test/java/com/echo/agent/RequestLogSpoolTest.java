@@ -10,8 +10,10 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -25,10 +27,20 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 
 class RequestLogSpoolTest {
 
@@ -309,9 +321,308 @@ class RequestLogSpoolTest {
         assertThat(spool.readAfter(0, 10)).isEmpty();
     }
 
+    @Test
+    @Timeout(15)
+    void pendingByteBudgetWaitsAndRecoversAfterDurableRowsAreDeleted() throws Exception {
+        spool = createSpoolWithMemory(tempDir.resolve("backpressure.sqlite"),
+                32 * 1024, 64 * 1024 * 1024);
+        spool.start();
+        List<RequestLogSpool.SpoolEntry> initialRows = fillNearCapacity();
+        assertThat(initialRows).isNotEmpty();
+        assertThat(spool.statusSnapshot().pendingBytes())
+                .isGreaterThan(spool.statusSnapshot().pendingByteLimit() / 2);
+
+        ExecutorService executor = Executors.newFixedThreadPool(16);
+        try {
+            List<Future<?>> writes = new ArrayList<>();
+            for (int i = 0; i < 32; i++) {
+                int index = i;
+                writes.add(executor.submit(() -> spool.append(
+                        task("waiting-" + index, "/waiting/" + index))));
+            }
+
+            awaitSpoolWaiting(spool);
+            assertThat(spool.statusSnapshot().backpressureActive()).isTrue();
+
+            spool.deleteThrough(initialRows.get(initialRows.size() - 1).sequence());
+            for (Future<?> write : writes) {
+                write.get(5, TimeUnit.SECONDS);
+            }
+            assertThat(spool.statusSnapshot().waitingProducers()).isZero();
+
+            List<RequestLogSpool.SpoolEntry> remaining = spool.readAfter(0, 1_000);
+            assertThat(remaining).hasSize(32);
+            spool.deleteThrough(remaining.get(remaining.size() - 1).sequence());
+            assertThat(spool.statusSnapshot().pendingBytes()).isZero();
+            assertThat(spool.statusSnapshot().backpressureActive()).isFalse();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    @Timeout(15)
+    void interruptingPendingAppendReleasesOnlyItsReservations() throws Exception {
+        spool = createSpoolWithMemory(tempDir.resolve("interrupt.sqlite"),
+                32 * 1024, 64 * 1024 * 1024);
+        spool.start();
+        List<RequestLogSpool.SpoolEntry> initialRows = fillNearCapacity();
+        CountDownLatch finished = new CountDownLatch(32);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        List<Thread> waiters = new ArrayList<>();
+        for (int i = 0; i < 32; i++) {
+            Thread waiter = new Thread(() -> {
+                try {
+                    spool.append(task("interrupted", "/interrupted"));
+                } catch (Throwable e) {
+                    failure.compareAndSet(null, e);
+                } finally {
+                    finished.countDown();
+                }
+            });
+            waiters.add(waiter);
+            waiter.start();
+        }
+
+        awaitSpoolWaiting(spool);
+        waiters.forEach(Thread::interrupt);
+        assertThat(finished.await(2, TimeUnit.SECONDS)).isTrue();
+        for (Thread waiter : waiters) {
+            waiter.join(1_000);
+        }
+        assertThat(failure.get()).isInstanceOf(RequestLogUnavailableException.class)
+                .hasMessageContaining("Interrupted");
+        assertThat(spool.statusSnapshot().waitingProducers()).isZero();
+        assertThat(spool.statusSnapshot().pendingItems()).isGreaterThanOrEqualTo(initialRows.size());
+        assertThat(spool.statusSnapshot().inFlightBytes()).isZero();
+    }
+
+    @Test
+    @Timeout(15)
+    void shutdownWakesPendingAppendWithoutAcknowledgingIt() throws Exception {
+        spool = createSpoolWithMemory(tempDir.resolve("shutdown.sqlite"),
+                32 * 1024, 64 * 1024 * 1024);
+        spool.start();
+        fillNearCapacity();
+        CountDownLatch finished = new CountDownLatch(32);
+        ConcurrentLinkedQueue<Throwable> failures = new ConcurrentLinkedQueue<>();
+        List<Thread> waiters = new ArrayList<>();
+        for (int i = 0; i < 32; i++) {
+            Thread waiter = new Thread(() -> {
+                try {
+                    spool.append(task("shutdown", "/shutdown"));
+                } catch (Throwable e) {
+                    failures.add(e);
+                } finally {
+                    finished.countDown();
+                }
+            });
+            waiters.add(waiter);
+            waiter.start();
+        }
+
+        awaitSpoolWaiting(spool);
+        spool.stop();
+        assertThat(finished.await(2, TimeUnit.SECONDS)).isTrue();
+        for (Thread waiter : waiters) {
+            waiter.join(1_000);
+        }
+        // The setup intentionally leaves some headroom, so a few appends may
+        // commit before stop() is invoked. Every append that was still pending
+        // must wake with the explicit unavailable result.
+        assertThat(failures).isNotEmpty()
+                .allMatch(RequestLogUnavailableException.class::isInstance);
+        assertThat(spool.statusSnapshot().waitingProducers()).isZero();
+    }
+
+    @Test
+    @Timeout(15)
+    void storageFailureFailsQueuedAppendsWhileOnlyWriterBatchWaitsForRecovery() throws Exception {
+        Path path = tempDir.resolve("unavailable.sqlite");
+        spool = new RequestLogSpool(new ObjectMapper().findAndRegisterModules(),
+                path.toString(), 64, 1, 2, 2_000, 25,
+                64 * 1024 * 1024, 64 * 1024 * 1024);
+        spool.start();
+
+        // The spool is initialized but its writer has not opened a connection
+        // yet. Replacing this test-only database path with a directory makes
+        // the first writer batch fail deterministically.
+        Files.delete(path);
+        Files.createDirectory(path);
+
+        ExecutorService executor = Executors.newFixedThreadPool(16);
+        List<Future<?>> appends = new ArrayList<>();
+        try {
+            for (int i = 0; i < 16; i++) {
+                int index = i;
+                appends.add(executor.submit(() -> spool.append(
+                        task("unavailable-" + index, "/unavailable/" + index))));
+            }
+
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (System.nanoTime() < deadline
+                    && appends.stream().filter(Future::isDone).count() < 15) {
+                TimeUnit.MILLISECONDS.sleep(25);
+            }
+
+            List<Future<?>> completed = appends.stream().filter(Future::isDone).toList();
+            assertThat(completed).hasSizeGreaterThanOrEqualTo(15);
+            for (Future<?> append : completed) {
+                assertThatThrownBy(append::get)
+                        .isInstanceOf(ExecutionException.class)
+                        .hasCauseInstanceOf(RequestLogUnavailableException.class);
+            }
+        } finally {
+            spool.stop();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void readBatchByteBudgetStopsBeforeMaterializingFollowingRows() {
+        spool = createSpoolWithMemory(tempDir.resolve("read-budget.sqlite"),
+                64 * 1024, 64 * 1024 * 1024);
+        spool.start();
+        spool.append(minimalTask("one"));
+        spool.append(minimalTask("two"));
+        spool.append(minimalTask("three"));
+
+        List<RequestLogSpool.SpoolEntry> all = spool.readAfter(0, 10);
+        assertThat(all).hasSize(3);
+        List<RequestLogSpool.SpoolEntry> bounded = spool.readAfter(
+                0, 10, all.get(0).payloadBytes() + 1L);
+        assertThat(bounded).hasSize(1);
+        assertThat(bounded.get(0).sequence()).isEqualTo(all.get(0).sequence());
+
+        assertThatThrownBy(() -> spool.readAfter(0, 10, all.get(0).payloadBytes() - 1L))
+                .isInstanceOfSatisfying(RequestLogSpool.UnrecoverableSpoolEntryException.class,
+                        failure -> {
+                            assertThat(failure.kind()).isEqualTo(
+                                    RequestLogSpool.UnrecoverableSpoolEntryException.Kind.OVERSIZED);
+                            assertThat(failure.sequence()).isEqualTo(all.get(0).sequence());
+                        });
+        assertThat(spool.readAfter(0, 10)).hasSize(3);
+    }
+
+    @Test
+    @Timeout(20)
+    void concurrentLargeCandidateSerializationWaitsBehindHeapGate() throws Exception {
+        ObjectMapper mapper = spy(new ObjectMapper().findAndRegisterModules());
+        CountDownLatch firstSerializationStarted = new CountDownLatch(1);
+        CountDownLatch releaseFirstSerialization = new CountDownLatch(1);
+        AtomicBoolean blockFirstSerialization = new AtomicBoolean(true);
+        doAnswer(invocation -> {
+            if (blockFirstSerialization.compareAndSet(true, false)) {
+                firstSerializationStarted.countDown();
+                assertThat(releaseFirstSerialization.await(2, TimeUnit.SECONDS)).isTrue();
+            }
+            return invocation.callRealMethod();
+        }).when(mapper).writeValueAsBytes(any());
+
+        spool = new RequestLogSpool(mapper,
+                tempDir.resolve("large-concurrent.sqlite").toString(),
+                16, 16, 2, 2_000, 25,
+                64 * 1024 * 1024, 10 * 1024 * 1024);
+        spool.start();
+        String largeCondition = "x".repeat(1024 * 1024);
+        ExecutorService executor = Executors.newFixedThreadPool(8);
+        try {
+            List<Future<?>> appends = new ArrayList<>();
+            appends.add(executor.submit(() -> spool.append(
+                    taskWithCandidateCondition("large-1", largeCondition))));
+            assertThat(firstSerializationStarted.await(2, TimeUnit.SECONDS)).isTrue();
+
+            for (int i = 0; i < 7; i++) {
+                appends.add(executor.submit(() -> spool.append(
+                        taskWithCandidateCondition("large-1", largeCondition))));
+            }
+            awaitSpoolWaiting(spool);
+            assertThat(spool.statusSnapshot().inFlightBytes())
+                    .isLessThanOrEqualTo(spool.statusSnapshot().inFlightByteLimit());
+
+            releaseFirstSerialization.countDown();
+            for (Future<?> append : appends) {
+                append.get(10, TimeUnit.SECONDS);
+            }
+            assertThat(spool.candidateCacheEntries()).isEqualTo(1);
+        } finally {
+            releaseFirstSerialization.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    @Timeout(30)
+    void oversizedCandidateSnapshotIsPersistedButNotRetainedInHotCache() {
+        spool = createSpoolWithMemory(tempDir.resolve("large-cache.sqlite"),
+                64 * 1024 * 1024, 256 * 1024 * 1024);
+        spool.start();
+        String oversizedDescription = "d".repeat((int) RequestLogSpool.CANDIDATE_CACHE_MAX_BYTES + 1);
+        CandidateSnapshot candidate = CandidateSnapshot.builder()
+                .ruleId("oversized")
+                .endpoint("/oversized")
+                .description(oversizedDescription)
+                .enabled(true)
+                .priority(1)
+                .build();
+        LogTask task = minimalTask("oversized");
+        task = LogTask.builder()
+                .ruleId(task.getRuleId()).protocol(task.getProtocol()).endpoint(task.getEndpoint())
+                .requestTime(task.getRequestTime()).candidates(List.of(candidate)).build();
+
+        spool.append(task);
+
+        assertThat(spool.candidateCacheEntries()).isZero();
+        assertThat(spool.pendingBytes()).isGreaterThan(RequestLogSpool.CANDIDATE_CACHE_MAX_BYTES);
+    }
+
     private RequestLogSpool createSpool(Path path, long maxPendingBytes) {
         return new RequestLogSpool(new ObjectMapper().findAndRegisterModules(),
                 path.toString(), 256, 32, 2, 2_000, 25, maxPendingBytes);
+    }
+
+    private RequestLogSpool createSpoolWithMemory(
+            Path path, long maxPendingBytes, long maxInMemoryBytes) {
+        return new RequestLogSpool(new ObjectMapper().findAndRegisterModules(),
+                path.toString(), 256, 32, 2, 2_000, 25,
+                maxPendingBytes, maxInMemoryBytes);
+    }
+
+    private List<RequestLogSpool.SpoolEntry> fillNearCapacity() throws Exception {
+        int attempts = 0;
+        long target = spool.statusSnapshot().pendingByteLimit() * 3 / 4;
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            while (spool.pendingBytes() < target && attempts++ < 100) {
+                int index = attempts;
+                Future<?> append = executor.submit(() -> spool.append(
+                        task("initial-" + index, "/initial/" + index)));
+                try {
+                    append.get(2, TimeUnit.SECONDS);
+                } catch (TimeoutException e) {
+                    // The last payload can be larger than the remaining byte
+                    // allowance even when the target watermark was not reached.
+                    // Cancel that setup append and retain the already committed rows.
+                    append.cancel(true);
+                    break;
+                }
+            }
+        } finally {
+            executor.shutdownNow();
+            executor.awaitTermination(2, TimeUnit.SECONDS);
+        }
+        return spool.readAfter(0, 1_000);
+    }
+
+    private static void awaitSpoolWaiting(RequestLogSpool spool) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+        while (spool.statusSnapshot().waitingProducers() == 0 && System.nanoTime() < deadline) {
+            Thread.sleep(5);
+        }
+        RequestLogSpool.StatusSnapshot status = spool.statusSnapshot();
+        assertThat(status.waitingProducers())
+                .withFailMessage("expected an append waiter, status=%s", status)
+                .isPositive();
     }
 
     private long queryLong(Path path, String sql) throws Exception {
@@ -358,6 +669,36 @@ class RequestLogSpoolTest {
                 .queryString("trace=1")
                 .headers(Map.of("X-Test", "value"))
                 .matchOutcomes(Map.of("body:id=1", true))
+                .build();
+    }
+
+    private LogTask taskWithCandidateCondition(String ruleId, String condition) {
+        CandidateSnapshot candidate = CandidateSnapshot.builder()
+                .ruleId(ruleId)
+                .endpoint("/large")
+                .description("candidate")
+                .enabled(true)
+                .bodyCondition(condition)
+                .priority(10)
+                .build();
+        return LogTask.builder()
+                .ruleId(ruleId)
+                .protocol(Protocol.HTTP)
+                .method("POST")
+                .endpoint("/large")
+                .matched(true)
+                .responseTimeMs(12)
+                .requestTime(LocalDateTime.now())
+                .candidates(List.of(candidate))
+                .build();
+    }
+
+    private LogTask minimalTask(String ruleId) {
+        return LogTask.builder()
+                .ruleId(ruleId)
+                .protocol(Protocol.HTTP)
+                .endpoint("/minimal")
+                .requestTime(LocalDateTime.now())
                 .build();
     }
 }

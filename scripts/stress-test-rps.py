@@ -156,6 +156,31 @@ def api(method, path, data=None, base_url=None):
         return status, raw.decode("utf-8", errors="replace")
 
 
+def verify_request_logging_disabled(base_url):
+    """Fail closed if the benchmark flag does not match the running server."""
+    status, agents = api("GET", "/api/admin/agents", base_url=base_url)
+    if not is_success_status(status) or not isinstance(agents, list):
+        return {
+            "passed": False,
+            "status": status,
+            "reason": "agent status endpoint unavailable",
+        }
+    log_agent = next(
+        (agent for agent in agents
+         if isinstance(agent, dict) and agent.get("name") == "log-agent"),
+        None,
+    )
+    return {
+        "passed": log_agent is None,
+        "status": status,
+        "reason": (
+            "request logging is disabled"
+            if log_agent is None
+            else "log-agent is still running; restart Echo with ECHO_REQUEST_LOG_ENABLED=false"
+        ),
+    }
+
+
 def mock_request(base_url, path, query, headers, body_bytes):
     """Issue one mock request, returning status 0 for transport failures."""
     url = f"{base_url.rstrip('/')}/mock{path}{query}"
@@ -442,12 +467,16 @@ def run_scenario(scenario, base_url=None, duration=None, concurrency=None, verbo
 
 
 def run_benchmark(base_url=BASE_URL, duration=DURATION, concurrency=CONCURRENCY,
-                  verbose=True):
+                  verbose=True, request_log_enabled=True):
     """Run all scenarios and return the JSON-serializable benchmark result."""
     if duration < 0:
         raise ValueError("duration must be zero or greater")
     if concurrency < 1:
         raise ValueError("concurrency must be at least 1")
+    if not request_log_enabled:
+        validation = verify_request_logging_disabled(base_url)
+        if not validation["passed"]:
+            raise RuntimeError(validation["reason"])
 
     if verbose:
         print("=" * 65)
@@ -495,7 +524,16 @@ def run_benchmark(base_url=BASE_URL, duration=DURATION, concurrency=CONCURRENCY,
         cleanup("/api/admin/responses/orphans")
         time.sleep(0.3)
 
-    log_drain = wait_for_log_agent_drain(base_url)
+    log_drain = (
+        wait_for_log_agent_drain(base_url)
+        if request_log_enabled
+        else {
+            "passed": True,
+            "skipped": True,
+            "reason": "request logging disabled for this benchmark",
+            "duration_seconds": 0.0,
+        }
+    )
     cleanup("/api/admin/logs/all")
     total_errors = sum(result["errors"] for result in all_results) + cleanup_errors
     if not log_drain["passed"]:
@@ -512,6 +550,7 @@ def run_benchmark(base_url=BASE_URL, duration=DURATION, concurrency=CONCURRENCY,
             "duration_seconds": duration,
             "concurrency": concurrency,
             "scenario_count": len(SCENARIOS),
+            "request_log_enabled": request_log_enabled,
         },
         "duration": duration,
         "duration_seconds": duration,
@@ -564,6 +603,11 @@ def make_parser():
                         help="emit one machine-readable JSON document on stdout")
     parser.add_argument("--json-output", "--json-file", dest="json_file", type=os.fspath,
                         help="also write the machine-readable JSON document to PATH")
+    parser.add_argument(
+        "--request-log-disabled",
+        action="store_true",
+        help="target was started with ECHO_REQUEST_LOG_ENABLED=false; skip log-agent drain",
+    )
     return parser
 
 
@@ -576,8 +620,13 @@ def main(argv=None):
         print("error: concurrency must be at least 1", file=sys.stderr)
         return 2
     try:
-        payload = run_benchmark(args.base_url, args.duration, args.concurrency,
-                                verbose=not args.json_output)
+        payload = run_benchmark(
+            args.base_url,
+            args.duration,
+            args.concurrency,
+            verbose=not args.json_output,
+            request_log_enabled=not args.request_log_disabled,
+        )
     except Exception as error:
         payload = {
             "schema_version": 1,
@@ -586,6 +635,7 @@ def main(argv=None):
             "parameters": {
                 "duration_seconds": args.duration,
                 "concurrency": args.concurrency,
+                "request_log_enabled": not args.request_log_disabled,
             },
             "duration": args.duration,
             "duration_seconds": args.duration,

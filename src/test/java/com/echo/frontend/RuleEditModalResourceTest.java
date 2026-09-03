@@ -84,18 +84,36 @@ class RuleEditModalResourceTest {
     }
 
     @Test
-    void keepsPaneScrollingWhileHidingScrollbarsAroundTheSplitter() throws IOException {
+    void keepsPaneScrollingVisibleAndStacksTheEditorBeforeItBecomesCramped() throws IOException {
         String stylesheet = resourceText("static/style.css");
 
         assertThat(stylesheet)
-                .contains("scrollbar-gutter: auto;")
-                .contains("scrollbar-width: none;")
+                .contains("scrollbar-gutter: stable;")
+                .contains("scrollbar-width: thin;")
+                .contains("scrollbar-color: var(--border2) transparent;")
                 .contains(".rule-left::-webkit-scrollbar")
-                .contains(".rule-right::-webkit-scrollbar { display: none; width: 0; height: 0 }")
+                .contains(".rule-right::-webkit-scrollbar { width: 8px; height: 8px }")
+                .contains("background-attachment: local, local, scroll, scroll;")
+                .contains("@media (max-width: 1080px)")
                 .contains("flex: 0 0 12px;")
                 .contains(".rule-splitter::before")
-                .doesNotContain("scrollbar-gutter: stable both-edges;")
+                .doesNotContain("scrollbar-width: none;")
                 .doesNotContain(".rule-splitter::after");
+    }
+
+    @Test
+    void alignsPaneHeadingsAboveTheirPrimaryControls() throws IOException {
+        String component = resourceText("static/components/RuleEditModal.js");
+        String stylesheet = resourceText("static/style.css");
+        int rightPane = component.indexOf("<div class=\"rule-right\">");
+        int rightHeading = component.indexOf("<div class=\"rule-pane-heading\">", rightPane);
+        int primaryControls = component.indexOf("<div class=\"result-primary-row\">", rightPane);
+
+        assertThat(rightPane).isGreaterThanOrEqualTo(0);
+        assertThat(rightHeading).isGreaterThan(rightPane).isLessThan(primaryControls);
+        assertThat(stylesheet)
+                .contains(".rule-pane-heading { min-height: 32px;")
+                .contains(".result-primary-row { display: block;");
     }
 
     @Test
@@ -146,6 +164,19 @@ class RuleEditModalResourceTest {
                 .contains("responsePickerResults.value = data.results || []")
                 .contains("responsePickerTotalElements.value = Number(data.totalElements || 0)")
                 .contains("responsePickerAbortController?.abort()");
+    }
+
+    @Test
+    void offersUsefulNextStepsWhenTheResponsePickerIsEmpty() throws IOException {
+        String component = resourceText("static/components/RuleEditModal.js");
+
+        assertThat(component)
+                .contains("class=\"response-picker-state response-picker-empty-state\"")
+                .contains("class=\"response-picker-empty-actions\"")
+                .contains("form.responseMode='new';closeResponsePicker();$emit('on-response-mode-change')")
+                .contains("closeResponsePicker();$emit('close');$emit('go-to-responses','')")
+                .contains("t('modal.createNewResponse')")
+                .contains("t('modal.goToResponseManagement')");
     }
 
     @Test

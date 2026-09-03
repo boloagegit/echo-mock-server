@@ -306,6 +306,12 @@ public class AdminController {
                         .queueSize(a.getStats().getQueueSize())
                         .processedCount(a.getStats().getProcessedCount())
                         .droppedCount(a.getStats().getDroppedCount())
+                        .queueBytes(a.getStats().getQueueBytes())
+                        .queueCapacityBytes(a.getStats().getQueueCapacityBytes())
+                        .inFlightBytes(a.getStats().getInFlightBytes())
+                        .inFlightByteLimit(a.getStats().getInFlightByteLimit())
+                        .waitingProducers(a.getStats().getWaitingProducers())
+                        .backpressureActive(a.getStats().isBackpressureActive())
                         .build())
                 .toList();
         return ResponseEntity.ok(result);

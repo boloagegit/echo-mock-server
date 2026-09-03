@@ -5,17 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Echo－登入</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="stylesheet" href="/theme.css?v=20260822.2">
+    <link rel="stylesheet" href="/theme.css?v=20260902.1">
     <link rel="stylesheet" href="/webjars/bootstrap-icons/font/bootstrap-icons.min.css">
     <style>
         /* 登入頁專用衍生變數（基於 theme.css 共用變數） */
-        :root{--input-bg:var(--bg);--login-shadow:rgba(0,0,0,0.32);--footer-bg:rgba(0,0,0,0.12);--logo-outer:var(--primary);--login-focus:0 0 0 2px rgba(var(--primary-rgb),0.42)}
-        :root[data-theme="light"]{--input-bg:var(--bg);--login-shadow:rgba(31,42,55,0.14);--footer-bg:rgba(89,101,116,0.07)}
+        :root{--input-bg:var(--bg);--login-shadow:rgba(0,0,0,0.24);--footer-bg:rgba(var(--muted-rgb),0.08);--logo-outer:var(--primary);--login-focus:0 0 0 2px rgba(var(--primary-rgb),0.42)}
+        :root[data-theme="light"]{--input-bg:var(--bg);--login-shadow:rgba(29,35,45,0.14);--footer-bg:rgba(var(--muted-rgb),0.07)}
         *{box-sizing:border-box;margin:0;padding:0}
-        body{background:var(--bg);color:var(--text);font-family:var(--font-ui);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1rem;position:relative;overflow:hidden}
+        body{background:var(--bg);color:var(--text);font-family:var(--font-ui);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1.5rem;position:relative;overflow:hidden}
         
         /* 登入卡片 */
-        .login-card{background:var(--card);border:0;border-radius:12px;width:100%;max-width:400px;overflow:hidden;position:relative;z-index:1;box-shadow:0 24px 56px -22px var(--login-shadow)}
+        .login-card{background:var(--card);border:1px solid var(--border);border-radius:10px;width:100%;max-width:400px;overflow:hidden;position:relative;z-index:1;box-shadow:0 24px 56px -22px var(--login-shadow)}
         .login-header{padding:2rem 2rem 0.25rem;text-align:center;position:relative}
         
         .login-logo{width:44px;height:44px;display:flex;align-items:center;justify-content:center;margin:0 auto 0.875rem;position:relative}
@@ -27,9 +27,9 @@
         .form-label{display:block;font-size:13px;font-weight:600;margin-bottom:0.5rem;color:var(--text)}
         .input-wrapper{position:relative}
         .input-wrapper i{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:16px;transition:color 0.2s}
-        .form-control{width:100%;min-height:44px;padding:0.75rem 1rem 0.75rem 44px;font-size:14px;background:var(--input-bg);border:1px solid transparent;border-radius:8px;color:var(--text);transition:background-color 0.15s,box-shadow 0.15s}
-        .form-control:hover{background:var(--hover)}
-        .form-control:focus{outline:0;border-color:transparent;background:var(--card);box-shadow:var(--login-focus)}
+        .form-control{width:100%;min-height:44px;padding:0.75rem 1rem 0.75rem 44px;font-size:14px;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;color:var(--text);transition:background-color 0.15s,border-color 0.15s,box-shadow 0.15s}
+        .form-control:hover{background:var(--hover);border-color:var(--border2)}
+        .form-control:focus{outline:0;border-color:var(--primary);background:var(--card);box-shadow:var(--login-focus)}
         .form-control:focus + i,.input-wrapper:focus-within i{color:var(--primary)}
         .form-control::placeholder{color:var(--muted)}
         
@@ -38,14 +38,14 @@
         .remember-check input{width:18px;height:18px;accent-color:var(--primary);cursor:pointer}
         .remember-check label{font-size:13px;color:var(--muted);cursor:pointer}
         
-        .btn{width:100%;min-height:44px;padding:0.7rem 1rem;font-size:14px;font-weight:600;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:0.5rem;transition:background-color 0.15s,border-color 0.15s,opacity 0.15s,box-shadow 0.15s;position:relative;font-family:inherit}
-        .btn-primary{background:var(--primary);color:#fff;margin-top:0.5rem}
-        .btn-primary:hover{opacity:0.9}
+        .btn{width:100%;min-height:44px;padding:0.7rem 1rem;font-size:14px;font-weight:600;border:1px solid transparent;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:0.5rem;transition:background-color 0.15s,border-color 0.15s,opacity 0.15s,box-shadow 0.15s;position:relative;font-family:inherit}
+        .btn-primary{background:var(--btn-primary);border-color:var(--btn-primary);color:#fff;margin-top:0.5rem}
+        .btn-primary:hover{background:var(--btn-primary-hover);border-color:var(--btn-primary-hover);opacity:1}
         
         .alert{padding:0.75rem 0.875rem;border-radius:8px;font-size:13px;margin-bottom:1.125rem;display:flex;align-items:center;gap:0.75rem}
-        .alert-danger{background:rgba(248,81,73,0.1);border:0;color:var(--danger)}
+        .alert-danger{background:rgba(var(--danger-rgb),0.08);border:1px solid rgba(var(--danger-rgb),0.3);color:var(--danger)}
         
-        .login-footer{padding:1rem 2rem;border:0;text-align:center;background:var(--footer-bg)}
+        .login-footer{padding:1rem 2rem;border-top:1px solid var(--border);text-align:center;background:var(--footer-bg)}
         .login-footer p{color:var(--muted);font-size:12px;margin:0}
         
         /* 忘記密碼連結 */
@@ -57,11 +57,11 @@
         .forgot-section{display:none}
         .forgot-section.active{display:block}
         .forgot-title{font-size:1.1rem;font-weight:600;margin-bottom:1rem;color:var(--text);text-align:center}
-        .forgot-success{padding:1rem;border-radius:10px;font-size:13px;background:rgba(63,185,80,0.1);border:1px solid rgba(63,185,80,0.2);color:var(--success,#3fb950);text-align:center;margin-bottom:1rem}
+        .forgot-success{padding:1rem;border-radius:6px;font-size:13px;background:rgba(var(--success-rgb),0.08);border:1px solid rgba(var(--success-rgb),0.25);color:var(--success);text-align:center;margin-bottom:1rem}
         .forgot-back{display:inline-block;margin-top:0.5rem}
         .forgot-back:hover{opacity:0.8}
-        .btn-secondary{background:var(--input-bg);border:1px solid var(--border);color:var(--text);margin-top:0.5rem}
-        .btn-secondary:hover{border-color:var(--primary);background:rgba(var(--primary-rgb),0.05)}
+        .btn-secondary{background:var(--card);border:1px solid var(--border);color:var(--text);margin-top:0.5rem}
+        .btn-secondary:hover{border-color:var(--border2);background:var(--hover)}
 
         /* LDAP 提示 */
         .ldap-hint{display:none;color:var(--muted);font-size:12px;text-align:center;margin-top:0.75rem}
@@ -69,11 +69,11 @@
         /* 註冊表單 */
         .register-section{display:none}
         .register-section.active{display:block}
-        .register-error{padding:0.875rem 1rem;border-radius:10px;font-size:13px;background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.2);color:var(--danger);margin-bottom:1rem;text-align:center}
+        .register-error{padding:0.875rem 1rem;border-radius:6px;font-size:13px;background:rgba(var(--danger-rgb),0.08);border:1px solid rgba(var(--danger-rgb),0.25);color:var(--danger);margin-bottom:1rem;text-align:center}
         .register-link{display:none;margin-top:0.5rem}
 
         /* 響應式 */
-        @media(max-width:480px){.login-card{border-radius:12px;margin:0 0.5rem}.login-header{padding:2rem 1.5rem 1.25rem}.login-body{padding:1.25rem 1.5rem 1.5rem}}
+        @media(max-width:480px){.login-card{border-radius:8px;margin:0 0.5rem}.login-header{padding:2rem 1.5rem 1.25rem}.login-body{padding:1.25rem 1.5rem 1.5rem}}
     </style>
 </head>
 <body>
@@ -200,7 +200,7 @@
             var locale = stored || (navigator.language.startsWith('zh') ? 'zh-TW' : 'en');
             document.documentElement.lang = locale === 'zh-TW' ? 'zh-TW' : 'en';
             if (locale !== 'zh-TW') {
-                fetch('/i18n/' + locale + '.json').then(function(r) { return r.json(); }).then(function(msgs) {
+                fetch('/i18n/' + locale + '.json?v=20260902.1').then(function(r) { return r.json(); }).then(function(msgs) {
                     var login = msgs.login;
                     if (!login) return;
                     document.title = login.title || document.title;

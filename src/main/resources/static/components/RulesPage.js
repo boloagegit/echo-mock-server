@@ -228,10 +228,6 @@ const RulesPage = {
         <span class="filter-chip" v-for="c in ruleFilterChips" :key="c.key">{{c.label}} <button class="chip-remove" @click="$emit('remove-rule-chip', c.key)"><i class="bi bi-x"></i></button></span>
         <button class="chip-clear" @click="$emit('clear-rule-filters')">{{t('rules.clearAll')}}</button>
     </div>
-    <div v-if="showDblClickHint && pagedRules.length" class="dblclick-hint">
-        <i class="bi bi-info-circle"></i> {{t('rules.dblClickHint')}}
-        <button class="hint-dismiss" @click="$emit('dismiss-dblclick-hint')" :title="t('rules.close')"><i class="bi bi-x"></i></button>
-    </div>
     <div class="card card-table">
         <div v-if="loading.rulesError && !loading.rules" class="workspace-load-error" role="alert">
             <i class="bi bi-cloud-slash" aria-hidden="true"></i>
@@ -262,7 +258,16 @@ const RulesPage = {
                 <th class="col-hide-sm" style="width:72px">{{t('rules.thEnabled')}}</th>
                 <th class="col-priority col-hide-md" style="cursor:pointer" @click="$emit('toggle-rule-sort', 'priority')">{{t('rules.thPriority')}} <i class="bi" :class="ruleSortIcon('priority')"></i></th>
                 <th class="col-datetime col-hide-md" style="cursor:pointer" @click="$emit('toggle-rule-sort', 'createdAt')">{{t('rules.thCreatedAt')}} <i class="bi" :class="ruleSortIcon('createdAt')"></i></th>
-                <th class="col-actions col-actions-4">{{t('rules.thActions')}}</th>
+                <th class="col-actions rule-row-action-column">
+                    <span>{{t('rules.thActions')}}</span>
+                    <details v-if="showDblClickHint" class="rule-table-hint" @click.stop>
+                        <summary :aria-label="t('rules.dblClickHint')" :title="t('rules.dblClickHint')"><i class="bi bi-info-circle" aria-hidden="true"></i></summary>
+                        <span class="rule-table-hint-popover">
+                            <span>{{t('rules.dblClickHint')}}</span>
+                            <button type="button" @click="$emit('dismiss-dblclick-hint')" :aria-label="t('rules.close')" :title="t('rules.close')"><i class="bi bi-x" aria-hidden="true"></i></button>
+                        </span>
+                    </details>
+                </th>
             </tr></thead>
             <tbody>
                 <template v-for="r in pagedRules" :key="r.id">
@@ -308,12 +313,17 @@ const RulesPage = {
                             <span v-if="!r.isProtected && daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays) != null" class="badge" :class="daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays) <= 7 ? 'badge-warning' : 'badge-muted'">{{t('rules.daysLeft', {days: daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays)})}}</span>
                         </div>
                     </td>
-                    <td class="col-actions col-actions-4">
-                        <div style="display:flex;gap:0.25rem">
-                            <button class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('toggle-rule-preview', r)" :title="rulePreviewExpanded[r.id]?t('rules.collapsePreview'):t('rules.expandPreview')" :aria-label="rulePreviewExpanded[r.id]?t('rules.collapsePreview'):t('rules.expandPreview')"><i class="bi" :class="rulePreviewExpanded[r.id]?'bi-chevron-up':'bi-chevron-down'"></i></button>
-                            <button class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('show-rule-history', r)" :title="t('rules.history')" :aria-label="t('rules.history')"><i class="bi bi-clock-history"></i></button>
-                            <button class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('copy-rule', r)" :title="!isLoggedIn?t('rules.loginRequired'):t('rules.quickCopy')" :aria-label="t('rules.quickCopy')" :disabled="!isLoggedIn"><i class="bi bi-copy"></i></button>
-                            <button class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('open-edit', r)" :title="!isLoggedIn?t('rules.loginRequired'):t('rules.edit')" :aria-label="t('rules.edit')" :disabled="!isLoggedIn"><i class="bi bi-pencil"></i></button>
+                    <td class="col-actions rule-row-action-column">
+                        <div class="rule-row-actions">
+                            <button class="btn btn-sm btn-secondary rule-row-edit" @click.stop="$emit('open-edit', r)" :title="!isLoggedIn?t('rules.loginRequired'):t('rules.edit')" :disabled="!isLoggedIn"><i class="bi bi-pencil" aria-hidden="true"></i><span>{{t('rules.edit')}}</span></button>
+                            <details class="rule-row-more" @click.stop>
+                                <summary class="btn btn-sm btn-icon btn-secondary" :aria-label="t('rules.moreActions')" :title="t('rules.moreActions')"><i class="bi bi-three-dots-vertical" aria-hidden="true"></i></summary>
+                                <div class="rule-row-more-popover">
+                                    <button type="button" @click="$emit('toggle-rule-preview', r);$event.currentTarget.closest('details').removeAttribute('open')"><i class="bi" :class="rulePreviewExpanded[r.id]?'bi-chevron-up':'bi-chevron-down'" aria-hidden="true"></i><span>{{rulePreviewExpanded[r.id]?t('rules.collapsePreview'):t('rules.expandPreview')}}</span></button>
+                                    <button type="button" @click="$emit('show-rule-history', r);$event.currentTarget.closest('details').removeAttribute('open')"><i class="bi bi-clock-history" aria-hidden="true"></i><span>{{t('rules.history')}}</span></button>
+                                    <button type="button" @click="$emit('copy-rule', r);$event.currentTarget.closest('details').removeAttribute('open')" :disabled="!isLoggedIn"><i class="bi bi-copy" aria-hidden="true"></i><span>{{t('rules.quickCopy')}}</span></button>
+                                </div>
+                            </details>
                         </div>
                     </td>
                 </tr>
@@ -394,17 +404,20 @@ const RulesPage = {
                 </div>
             </div>
             <div v-else>
-                {{t('rules.emptyNoRules')}}
+                <div>{{t('rules.emptyNoRules')}}</div>
+                <button type="button" class="btn btn-primary" @click="$emit('open-create')" :disabled="!isLoggedIn" :title="!isLoggedIn?t('rules.loginRequired'):t('rules.createFirstRule')"><i class="bi bi-plus-lg" aria-hidden="true"></i>{{t('rules.createFirstRule')}}</button>
             </div>
         </div>
         </div>
         <workspace-pagination
             :page="rulePage" :total-pages="ruleTotalPages" :page-size="rulePageSize"
-            :pagination-label="t('stats.pagination')"
+            :pagination-label="t('rules.pagination')"
             :page-status-label="t('stats.pageStatus', {page:rulePage, total:ruleTotalPages})"
             :page-size-label="t('stats.pageSize')"
             :first-page-label="t('stats.firstPage')" :previous-page-label="t('stats.previousPage')"
             :next-page-label="t('stats.nextPage')" :last-page-label="t('stats.lastPage')"
+            :scroll-hint-label="t('common.scrollForMore')"
+            :scroll-region-label="t('common.scrollableRulesTable')"
             @update:page="$emit('update:rulePage', $event)"
             @update:page-size="$emit('update:rulePageSize', $event); $emit('update:rulePage', 1)"
         >
