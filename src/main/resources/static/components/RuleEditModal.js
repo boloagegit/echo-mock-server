@@ -757,16 +757,16 @@ const RuleEditModal = {
                 <!-- 右側：規則命中後的處理模式與對應設定 -->
                 <div class="rule-right">
                     <div class="rule-right-content" :inert="responseDropdownOpen ? '' : null" :aria-hidden="responseDropdownOpen ? 'true' : undefined">
+                    <div class="rule-pane-heading">
+                        <span class="rule-pane-heading-icon"><i class="bi bi-sign-turn-right"></i></span>
+                        <span class="rule-pane-title-row">
+                            <strong>{{t('modal.ruleMode')}}</strong>
+                            <button type="button" class="help-tooltip tooltip-align-start" :data-tooltip="t('modal.ruleModeHint')" :aria-label="t('modal.ruleMode') + '：' + t('modal.ruleModeHint')" @keydown.esc="$event.currentTarget.blur()">
+                                <i class="bi bi-question-circle" aria-hidden="true"></i>
+                            </button>
+                        </span>
+                    </div>
                     <div class="result-primary-row">
-                        <div class="rule-pane-heading">
-                            <span class="rule-pane-heading-icon"><i class="bi bi-sign-turn-right"></i></span>
-                            <span class="rule-pane-title-row">
-                                <strong>{{t('modal.ruleMode')}}</strong>
-                                <button type="button" class="help-tooltip tooltip-align-start" :data-tooltip="t('modal.ruleModeHint')" :aria-label="t('modal.ruleMode') + '：' + t('modal.ruleModeHint')" @keydown.esc="$event.currentTarget.blur()">
-                                    <i class="bi bi-question-circle" aria-hidden="true"></i>
-                                </button>
-                            </span>
-                        </div>
                         <fieldset class="result-action-selector">
                             <legend class="visually-hidden">{{t('modal.ruleMode')}}</legend>
                             <div class="rule-outcome-options" role="radiogroup" :aria-label="t('modal.ruleMode')">
@@ -1214,7 +1214,13 @@ const RuleEditModal = {
                                 </span>
                                 <i class="bi bi-chevron-right" aria-hidden="true"></i>
                             </button>
-                            <div v-if="!responsePickerLoading && !responsePickerError && !filteredResponsePicker.length" class="response-picker-state">{{t('modal.noMatchingResponse')}}</div>
+                            <div v-if="!responsePickerLoading && !responsePickerError && !filteredResponsePicker.length" class="response-picker-state response-picker-empty-state">
+                                <span>{{t('modal.noMatchingResponse')}}</span>
+                                <div class="response-picker-empty-actions">
+                                    <button type="button" class="btn btn-sm btn-primary" @click="form.responseMode='new';closeResponsePicker();$emit('on-response-mode-change')"><i class="bi bi-file-earmark-plus" aria-hidden="true"></i>{{t('modal.createNewResponse')}}</button>
+                                    <button type="button" class="btn btn-sm btn-secondary" @click="closeResponsePicker();$emit('close');$emit('go-to-responses','')"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>{{t('modal.goToResponseManagement')}}</button>
+                                </div>
+                            </div>
                         </div>
                         <footer class="response-picker-drawer-footer">
                             <span>{{t('modal.responsePickerPageStatus', {page:responsePickerPage + 1, total:responsePickerTotalPages || 1})}}</span>

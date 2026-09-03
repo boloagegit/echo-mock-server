@@ -34,6 +34,9 @@ public class SystemConfigService {
     @Value("${echo.request-log.max-records:10000}")
     private int requestLogMaxRecords;
 
+    @Value("${echo.request-log.enabled:true}")
+    private boolean requestLogEnabled;
+
     @Value("${echo.request-log.store:database}")
     private String requestLogStore;
 
@@ -45,6 +48,15 @@ public class SystemConfigService {
 
     public boolean isRequestLogMemoryMode() {
         return "memory".equalsIgnoreCase(requestLogStore);
+    }
+
+    /**
+     * Separate helper keeps callers explicit about the disabled fast path.
+     * The public setting remains positive ({@code enabled=true}) so existing
+     * deployments retain request logging by default.
+     */
+    public boolean isRequestLogDisabled() {
+        return !requestLogEnabled;
     }
 
     public int getAuditRetentionDays() {

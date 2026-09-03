@@ -104,6 +104,8 @@
     "clearFilter": "清除篩選",
     "emptyNoRules": "尚未設定任何規則",
     "createFirstRule": "建立第一個規則",
+    "pagination": "規則分頁",
+    "moreActions": "更多操作",
     "untagged": "未標籤",
     "noRules": "無規則",
     "showMore": "顯示更多",
@@ -1462,6 +1464,9 @@
     "copySuffix": "（複製）",
     "count": "{count} 筆",
     "searchAction": "搜尋",
+    "scrollForMore": "向下捲動",
+    "scrollableRulesTable": "可捲動的規則資料表",
+    "scrollableResponsesTable": "可捲動的回應資料表",
     "retry": "重試"
   }
 }

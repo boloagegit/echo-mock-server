@@ -61,6 +61,11 @@ python3 scripts/test-rdbms-matrix.py --databases h2,postgresql --performance
 # (non-2xx responses and request/transport errors return a non-zero exit code).
 python3 scripts/stress-test-rps.py http://localhost:8080 10 20 --json
 
+# If Echo was intentionally started with ECHO_REQUEST_LOG_ENABLED=false,
+# declare that mode so the benchmark does not wait for a nonexistent log agent.
+python3 scripts/stress-test-rps.py http://localhost:8080 10 20 \
+  --request-log-disabled --json
+
 # Validate cross-platform script behavior
 python3 -m unittest scripts/tests/test_windows_script_compatibility.py
 

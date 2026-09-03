@@ -200,7 +200,7 @@
             var locale = stored || (navigator.language.startsWith('zh') ? 'zh-TW' : 'en');
             document.documentElement.lang = locale === 'zh-TW' ? 'zh-TW' : 'en';
             if (locale !== 'zh-TW') {
-                fetch('/i18n/' + locale + '.json').then(function(r) { return r.json(); }).then(function(msgs) {
+                fetch('/i18n/' + locale + '.json?v=20260902.1').then(function(r) { return r.json(); }).then(function(msgs) {
                     var login = msgs.login;
                     if (!login) return;
                     document.title = login.title || document.title;

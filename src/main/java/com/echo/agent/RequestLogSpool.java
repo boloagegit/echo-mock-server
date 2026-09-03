@@ -56,6 +56,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * outage cannot silently discard accepted request logs.</p>
  */
 @Component
+@ConditionalOnProperty(name = "echo.request-log.enabled", havingValue = "true", matchIfMissing = true)
 @ConditionalOnProperty(name = "echo.request-log.store", havingValue = "database", matchIfMissing = true)
 @Slf4j
 public class RequestLogSpool {

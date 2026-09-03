@@ -34,7 +34,8 @@ import java.util.stream.Stream;
 /**
  * 請求記錄服務
  * 
- * 支援兩種儲存模式:
+ * 可用 {@code echo.request-log.enabled=false} 完全停止新增請求記錄。
+ * 啟用時支援兩種儲存模式:
  * - memory: 純記憶體環形緩衝區
  * - database: 寫入 DB，定期清理超過 max-records 的舊資料
  *
@@ -95,6 +96,10 @@ public class RequestLogService {
         this.maxRecords = configService.getRequestLogMaxRecords();
         if (configService.isRequestLogMemoryMode()) {
             this.memoryBuffer = new ConcurrentLinkedDeque<>();
+        }
+        if (configService.isRequestLogDisabled()) {
+            log.info("Request logging is disabled; existing logs remain queryable");
+        } else if (configService.isRequestLogMemoryMode()) {
             log.info("Request log service initialized (memory mode, max {} records)", maxRecords);
         } else {
             log.info("Request log service initialized (database mode, max {} records)", maxRecords);
@@ -177,6 +182,7 @@ public class RequestLogService {
      * <p>
      * 當 LogAgent 可用時，延遲建構 LogTask 並委派給 durable spool。
      * Agent 或 spool 不可用時 fail fast，避免回覆成功卻遺失請求紀錄。
+     * 明確停用請求記錄時則在取得 Agent 或建立任何記錄資料前返回。
      */
     @SuppressWarnings("java:S107") // 參數數量多是因為需要傳遞完整的匹配上下文
     public <T extends BaseRule> void record(String ruleId, Protocol protocol, String method, String endpoint,
@@ -235,6 +241,9 @@ public class RequestLogService {
                        String scenarioName,
                        String scenarioFromState,
                        String scenarioToState) {
+        if (configService.isRequestLogDisabled()) {
+            return;
+        }
         LogAgent agent = logAgentProvider.getIfAvailable();
         if (agent == null) {
             if (agentUnavailableWarned.compareAndSet(false, true)) {

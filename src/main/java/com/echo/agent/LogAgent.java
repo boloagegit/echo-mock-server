@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -44,6 +45,7 @@ import java.util.function.Supplier;
  * queue 積壓時會暫停這項可選分析，優先保護 Mock／轉發流量。
  */
 @Component
+@ConditionalOnProperty(name = "echo.request-log.enabled", havingValue = "true", matchIfMissing = true)
 @Slf4j
 public class LogAgent extends AbstractBatchAgent<LogTask> {
 

@@ -490,6 +490,30 @@ class RequestLogServiceTest {
     }
 
     @Nested
+    class DisabledTests {
+        @Test
+        void record_shouldBypassAgentAndPersistence() {
+            when(configService.isRequestLogDisabled()).thenReturn(true);
+            when(configService.isRequestLogMemoryMode()).thenReturn(false);
+            when(configService.getRequestLogMaxRecords()).thenReturn(10000);
+            @SuppressWarnings("unchecked")
+            ObjectProvider<LogAgent> provider = mock(ObjectProvider.class);
+            service = new RequestLogService(
+                    requestLogRepository, configService, protocolHandlerRegistry, provider);
+            service.init();
+
+            service.record("uuid-1", Protocol.JMS, null, "ECHO.REQUEST", true,
+                    10, "JMS", "[]", null, false, null,
+                    null, null, null, 1,
+                    "<root><type>ORDER</type></root>", "<ok/>",
+                    List.of(new HttpRule()), null, null, Collections.emptyMap(),
+                    null, null, null, null);
+
+            verifyNoInteractions(provider, logAgent, requestLogRepository);
+        }
+    }
+
+    @Nested
     class FallbackTests {
         @BeforeEach
         void setUp() {

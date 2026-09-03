@@ -207,6 +207,8 @@ const ResponsesPage = {
           :page-size-label="t('stats.pageSize')"
           :first-page-label="t('stats.firstPage')" :previous-page-label="t('stats.previousPage')"
           :next-page-label="t('stats.nextPage')" :last-page-label="t('stats.lastPage')"
+          :scroll-hint-label="t('common.scrollForMore')"
+          :scroll-region-label="t('common.scrollableResponsesTable')"
           @update:page="$emit('update:responsePage', $event)"
           @update:page-size="$emit('update:responsePageSize', $event)"
         >

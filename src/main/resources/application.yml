@@ -122,6 +122,7 @@ echo:
   stats:
     retention-days: 7  # 統計資料保留天數
   request-log:
+    enabled: ${ECHO_REQUEST_LOG_ENABLED:true} # false 時完全停止新增請求記錄，供隔離核心效能壓測
     store: database    # memory 或 database
     max-records: 10000 # 最大記錄數
     durable:

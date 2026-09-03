@@ -128,8 +128,7 @@ def run_rps(base_url, path, method, headers, body_bytes, duration, concurrency):
             except urllib.error.HTTPError as e:
                 e.read()
                 local_lat.append((time.time() - start) * 1000)
-                if e.code >= 500:
-                    local_err += 1
+                local_err += 1
             except:
                 local_err += 1
         with lock:
@@ -390,5 +389,5 @@ wm_api("POST", "/__admin/mappings/reset", {})
 print("\n完成")
 
 if any(result["echo"]["errors"] or result["wm"]["errors"] for result in all_results):
-    print("錯誤：至少一個效能場景發生 HTTP 5xx 或連線錯誤", file=sys.stderr)
+    print("錯誤：至少一個效能場景發生非 2xx 回應或連線錯誤", file=sys.stderr)
     sys.exit(1)

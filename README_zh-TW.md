@@ -114,6 +114,7 @@ SPRING_JPA_HIBERNATE_DDL_AUTO=validate \
 | `SPRING_DATASOURCE_USERNAME` | 外部資料庫使用者名稱 |
 | `SPRING_DATASOURCE_PASSWORD` | 外部資料庫密碼；請透過部署平台的 secret 機制注入 |
 | `SPRING_JPA_HIBERNATE_DDL_AUTO` | 目前 profile 預設為 `update`；完成受控 schema 遷移後使用 `validate` |
+| `ECHO_REQUEST_LOG_ENABLED` | 設為 `false` 會停止建立請求記錄、Log Agent 與本機 spool；預設為 `true` |
 | `ECHO_REQUEST_LOG_SPOOL_PATH` | 每實例本機 SQLite request-log spool 路徑；預設 `./data/request-log-spool.sqlite` |
 | `ECHO_DB_POOL_MAX_SIZE`／`ECHO_DB_POOL_MIN_IDLE` | 外部 profile 的 Hikari connection pool 大小 |
 
@@ -124,6 +125,17 @@ SPRING_JPA_HIBERNATE_DDL_AUTO=validate \
 應用程式備份功能只處理本機 H2／SQLite 檔案；外部資料庫 profile 會關閉此功能。PostgreSQL、MySQL／MariaDB、SQL Server 與 Oracle 的備份、PITR、保留政策及還原演練由 DBA 或平台備份服務負責。
 
 即使主資料庫是外部資料庫，request-log 的耐久化仍會先寫入每個 Echo 實例自己的本機 SQLite spool。請將 spool 放在可寫入且具持久性的 volume，每個實例使用不同檔案；它不是共用資料庫，也不是跨實例 queue，不能取代外部資料庫的備份政策。
+
+若要單獨量測核心規則比對與回應吞吐量，可用
+`ECHO_REQUEST_LOG_ENABLED=false` 啟動 Echo。此模式會略過請求記錄物件、背景處理、資料庫寫入與本機 spool，但不會停用 mock 比對與回應。這同時會改變可觀測性與 JMS 耐久記錄的驗收條件，因此正式容量評估仍應另外測試啟用 request log 的實際部署設定。已存在的資料庫記錄仍可查詢，只有新記錄停止寫入。
+
+搭配內附的 RPS 腳本時，請加上 `--request-log-disabled`，避免等待刻意不啟動的 Log Agent queue：
+
+```bash
+ECHO_REQUEST_LOG_ENABLED=false java -jar build/libs/echo-server-*.jar
+python3 scripts/stress-test-rps.py http://localhost:8080 10 20 \
+  --request-log-disabled
+```
 
 `ddl-auto=update` 只適合新空資料庫或開發初始化，不是有版本的遷移工具，也不能可靠表達所有資料庫的欄位更名、回填、型別轉換、index／constraint 變更，以及 identity／LOB／boolean／date／JSON 等廠商差異。它也需要 DDL 權限；既有資料與新增非 NULL 欄位衝突時可能啟動失敗。
 
@@ -425,6 +437,7 @@ echo:
   stats:
     retention-days: 7           # 統計資料保留天數
   request-log:
+    enabled: true               # 只有刻意停止新增請求記錄時才設為 false
     store: database             # memory 或 database
     max-records: 10000          # 最大記錄數
     include-body: true          # 是否記錄請求/回應 body
@@ -651,7 +664,20 @@ spring:
 
 效能數字只代表指定負載，不應視為通用產品宣稱；`scripts/` 下的腳本才是重現基準的依據。
 
-### 目前 Echo vs WireMock A/B（2026-08-11）
+### 目前關閉請求記錄的 Echo vs WireMock A/B（2026-09-03）
+
+Echo 與 WireMock 3.13.2 使用相同的 JDK 21 Alpine container image、512 MiB heap、1 GiB container 上限、50 個並行連線，且每個服務／場景執行 8 秒。Echo 使用 `ECHO_REQUEST_LOG_ENABLED=false`；WireMock 使用 `--no-request-journal --disable-request-logging`。所有非 2xx 回應與傳輸錯誤都會計為錯誤；雙方四個場景均為 0 錯誤，且沒有因 OOM 終止。
+
+| 場景 | Echo RPS | WireMock RPS | 比值 | Echo p95 | WireMock p95 |
+|------|---------:|-------------:|-----:|---------:|-------------:|
+| 簡單 JSON、無條件 | 7,304 | 6,532 | 1.12x | 12.0ms | 13.9ms |
+| JSON、10 個候選規則 | 6,924 | 6,789 | 1.02x | 12.9ms | 12.1ms |
+| XML 約 1KB + XPath | 6,466 | 4,593 | 1.41x | 13.5ms | 17.7ms |
+| XML 約 80KB + XPath | 3,120 | 250 | 12.46x | 19.8ms | 312.8ms |
+
+在這組負載中，Echo 的 JSON 吞吐量與 WireMock 相近或略高，XML／XPath 則明顯較快，尤其是 80KB body。這是本機合成測試，不是通用產品宣稱；雙方 matcher 實作不同，短時間測試也不能取代長時間穩定性測試。關閉請求記錄後，Echo 的 HTTP 與 JMS XML mock／reply 路徑也通過整合測試；WireMock 沒有可直接比較的 JMS mock protocol。
+
+### 開啟請求記錄的 Echo vs WireMock A/B（2026-08-11）
 
 Echo 與 WireMock 3.13.2 在相同 Apple Silicon 主機、Java 22.0.2、512 MiB heap、開啟請求紀錄、50 並行及每個服務／場景 8 秒的條件下測試。兩邊 HTTP 5xx 與連線錯誤皆為 0。
 
