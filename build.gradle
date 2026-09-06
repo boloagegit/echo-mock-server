@@ -103,7 +103,7 @@ dependencies {
 
     // WebJars for Intranet-friendly Frontend (NO CDN)
     implementation 'org.webjars:webjars-locator-core'
-    implementation 'org.webjars.npm:vue:3.5.41'
+    implementation 'org.webjars.npm:vue:3.5.42'
     implementation 'org.webjars.npm:bootstrap:5.3.8'
     implementation 'org.webjars.npm:bootstrap-icons:1.13.1'
     // The UI uses CodeMirror 5's global API and /lib paths; 5.65.21 is the latest compatible release.
