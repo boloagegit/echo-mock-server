@@ -6,6 +6,7 @@ import com.echo.entity.JmsRule;
 import com.echo.entity.Protocol;
 import com.echo.protocol.jms.JmsProtocolHandler;
 import com.echo.repository.JmsRuleRepository;
+import com.echo.util.CurrentOperator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -244,6 +245,11 @@ public class JmsRuleService {
     @CacheEvict(cacheNames = CacheConfig.JMS_RULES_CACHE, allEntries = true)
     public JmsRule saveJmsRule(JmsRule rule) {
         log.info("Saving JMS rule and clearing cache: {}", rule.getQueueName());
+        if (rule.getId() != null) {
+            requireJmsHandler().findById(rule.getId())
+                    .ifPresent(existing -> rule.setCreatedBy(existing.getCreatedBy()));
+        }
+        rule.setUpdatedBy(CurrentOperator.username());
         JmsRule saved = (JmsRule) requireJmsHandler().save(rule);
         cacheInvalidationService.ifPresent(s -> s.publishInvalidation(Protocol.JMS));
         return saved;

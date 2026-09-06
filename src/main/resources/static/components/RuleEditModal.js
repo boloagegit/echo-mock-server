@@ -362,7 +362,7 @@ const RuleEditModal = {
         });
         // Splitter drag logic (local to component)
         const savedSplitRatio = parseFloat(localStorage.getItem('echo_modal_split_ratio'));
-        const splitRatio = ref(savedSplitRatio > 0 && savedSplitRatio < 1 ? savedSplitRatio : 0.35);
+        const splitRatio = ref(savedSplitRatio > 0 && savedSplitRatio < 1 ? savedSplitRatio : 0.42);
         const splitterDragging = ref(false);
         const applySplitRatio = () => {
             const editor = document.querySelector('.rule-editor');

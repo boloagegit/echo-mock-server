@@ -7,15 +7,23 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class IssueReportService {
+
+    private static final int MAX_PAGE_SIZE = 100;
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
+            "createdAt", "updatedAt", "status", "title", "createdBy");
 
     private final IssueReportRepository issueReportRepository;
 
@@ -25,6 +33,26 @@ public class IssueReportService {
 
     public List<IssueReport> findByStatus(IssueStatus status) {
         return issueReportRepository.findByStatusOrderByCreatedAtDesc(status);
+    }
+
+    public Page<IssueReport> query(IssueStatus status, String keyword, int page, int size,
+                                   String sortField, String direction) {
+        int boundedPage = Math.max(0, page);
+        int boundedSize = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
+        String safeSort = ALLOWED_SORT_FIELDS.contains(sortField) ? sortField : "createdAt";
+        Sort.Direction safeDirection = "asc".equalsIgnoreCase(direction)
+                ? Sort.Direction.ASC : Sort.Direction.DESC;
+        PageRequest request = PageRequest.of(boundedPage, boundedSize,
+                Sort.by(safeDirection, safeSort).and(Sort.by(Sort.Direction.ASC, "id")));
+        String keywordPattern = keyword == null || keyword.isBlank() ? null
+                : "%" + escapeLike(keyword.trim().toLowerCase(java.util.Locale.ROOT)) + "%";
+        return issueReportRepository.queryIssues(status, keywordPattern, request);
+    }
+
+    private String escapeLike(String value) {
+        return value.replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
     }
 
     public Optional<IssueReport> findById(String id) {

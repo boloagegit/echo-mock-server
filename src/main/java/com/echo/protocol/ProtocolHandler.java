@@ -66,17 +66,17 @@ public interface ProtocolHandler {
     /**
      * 批次更新啟用狀態
      */
-    int updateEnabled(List<String> ids, boolean enabled);
+    int updateEnabled(List<String> ids, boolean enabled, LocalDateTime updatedAt, String updatedBy);
 
     /**
      * 批次更新保護狀態
      */
-    int updateProtected(List<String> ids, boolean isProtected);
+    int updateProtected(List<String> ids, boolean isProtected, LocalDateTime updatedAt, String updatedBy);
 
     /**
      * 批次更新展延時間
      */
-    int extendRules(List<String> ids, LocalDateTime extendedAt);
+    int extendRules(List<String> ids, LocalDateTime extendedAt, String updatedBy);
 
     /**
      * 依 responseId 分組計數

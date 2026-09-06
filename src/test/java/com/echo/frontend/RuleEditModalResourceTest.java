@@ -93,10 +93,10 @@ class RuleEditModalResourceTest {
                 .contains("scrollbar-color: var(--border2) transparent;")
                 .contains(".rule-left::-webkit-scrollbar")
                 .contains(".rule-right::-webkit-scrollbar { width: 8px; height: 8px }")
-                .contains("background-attachment: local, local, scroll, scroll;")
                 .contains("@media (max-width: 1080px)")
                 .contains("flex: 0 0 12px;")
                 .contains(".rule-splitter::before")
+                .doesNotContain("background-attachment: local, local, scroll, scroll;")
                 .doesNotContain("scrollbar-width: none;")
                 .doesNotContain(".rule-splitter::after");
     }

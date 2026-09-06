@@ -12,7 +12,7 @@
  * @param {Ref} deps.isAdmin - 是否為管理員
  */
 const useIssues = (deps) => {
-    const { ref, computed } = Vue;
+    const { ref, computed, watch } = Vue;
     const { showToast, showConfirm, t, requireLogin, loading, isAdmin } = deps;
 
     // --- 資料快取 ---
@@ -23,41 +23,87 @@ const useIssues = (deps) => {
 
     // --- 狀態 ---
     const issues = ref([]);
-    const issueFilter = ref({ status: '' });
+    const issueFilter = ref({ status: '', keyword: '' });
+    const issueSort = ref({ field: 'createdAt', asc: false });
     const issuePage = ref(1);
     const issuePageSize = ref(20);
+    const issueTotalElements = ref(0);
+    const issueServerTotalPages = ref(0);
+    const openCount = ref(0);
+    let listRequestSequence = 0;
+    let listAbortController = null;
 
     // --- 篩選與分頁 ---
-    const filteredIssues = computed(() => {
-        let arr = issues.value;
-        if (issueFilter.value.status) {
-            arr = arr.filter(i => i.status === issueFilter.value.status);
-        }
-        return arr;
-    });
+    const filteredIssues = computed(() => issues.value);
+    const pagedIssues = computed(() => issues.value);
+    const issueTotalPages = computed(() => Math.max(1, issueServerTotalPages.value));
 
-    const pagedIssues = computed(() => {
-        const start = (issuePage.value - 1) * issuePageSize.value;
-        return filteredIssues.value.slice(start, start + issuePageSize.value);
-    });
+    const buildIssueQuery = () => {
+        const params = new URLSearchParams();
+        params.set('page', String(Math.max(0, issuePage.value - 1)));
+        params.set('size', String(issuePageSize.value));
+        params.set('sort', issueSort.value.field);
+        params.set('direction', issueSort.value.asc ? 'asc' : 'desc');
+        if (issueFilter.value.status) { params.set('status', issueFilter.value.status); }
+        const keyword = (issueFilter.value.keyword || '').trim();
+        if (keyword) { params.set('keyword', keyword); }
+        return '/api/admin/issues/page?' + params.toString();
+    };
 
-    const issueTotalPages = computed(() => Math.ceil(filteredIssues.value.length / issuePageSize.value) || 1);
+    const toggleIssueSort = field => {
+        issueSort.value = issueSort.value.field === field
+            ? { field, asc: !issueSort.value.asc }
+            : { field, asc: true };
+    };
 
-    const openCount = computed(() => issues.value.filter(i => i.status === 'OPEN').length);
+    const issueSortIcon = field => issueSort.value.field === field
+        ? (issueSort.value.asc ? 'bi-caret-up-fill' : 'bi-caret-down-fill')
+        : 'bi-arrow-down-up';
 
     // --- 載入 ---
     const loadIssues = async (force) => {
         if (!force && !shouldLoad()) { return; }
+        const requestId = ++listRequestSequence;
+        if (listAbortController) { listAbortController.abort(); }
+        const abortController = new AbortController();
+        listAbortController = abortController;
         loading.value.issues = true;
         loading.value.issuesError = '';
-        const r = await apiCall('/api/admin/issues', {}, { silent: true });
-        if (r && r.ok) {
-            issues.value = await r.json();
-            issuePage.value = 1;
-            markLoaded();
-        } else { loading.value.issuesError = t('issues.loadFailed'); }
-        loading.value.issues = false;
+        try {
+            const r = await apiCall(buildIssueQuery(), { signal: abortController.signal }, { silent: true });
+            if (requestId !== listRequestSequence) { return false; }
+            if (r && r.ok) {
+                const data = await r.json();
+                issueTotalElements.value = Number(data.totalElements || 0);
+                issueServerTotalPages.value = Number(data.totalPages || 0);
+                if (issueServerTotalPages.value > 0 && issuePage.value > issueServerTotalPages.value) {
+                    issuePage.value = issueServerTotalPages.value;
+                    return false;
+                }
+                issues.value = data.results || [];
+                openCount.value = Number(data.openCount || 0);
+                markLoaded();
+                return true;
+            }
+            loading.value.issuesError = t('issues.loadFailed');
+            return false;
+        } finally {
+            if (requestId === listRequestSequence) {
+                if (listAbortController === abortController) { listAbortController = null; }
+                loading.value.issues = false;
+            }
+        }
     };
+
+    const reloadIssuesFromFirstPage = () => {
+        if (issuePage.value !== 1) { issuePage.value = 1; }
+        else { loadIssues(true); }
+    };
+
+    watch(issueFilter, reloadIssuesFromFirstPage, { deep: true });
+    watch(issueSort, reloadIssuesFromFirstPage, { deep: true });
+    watch(issuePage, () => loadIssues(true));
+    watch(issuePageSize, reloadIssuesFromFirstPage);
 
     // --- 建立 ---
     const createIssue = async (title, description) => {
@@ -135,12 +181,16 @@ const useIssues = (deps) => {
     return {
         issues,
         issueFilter,
+        issueSort,
         issuePage,
         issuePageSize,
+        issueTotalElements,
         filteredIssues,
         pagedIssues,
         issueTotalPages,
         openCount,
+        toggleIssueSort,
+        issueSortIcon,
         loadIssues,
         createIssue,
         replyIssue,

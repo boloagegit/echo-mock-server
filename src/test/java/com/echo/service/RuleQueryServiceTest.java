@@ -1,8 +1,11 @@
 package com.echo.service;
 
 import com.echo.entity.HttpRule;
+import com.echo.entity.BaseRule;
 import com.echo.entity.JmsRule;
 import com.echo.entity.Protocol;
+import com.echo.entity.FaultType;
+import com.echo.entity.HttpRuleAction;
 import com.echo.repository.HttpRuleRepository;
 import com.echo.repository.JmsRuleRepository;
 import jakarta.persistence.EntityManager;
@@ -16,6 +19,7 @@ import org.springframework.context.annotation.Import;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -125,6 +129,39 @@ class RuleQueryServiceTest {
         assertThat(result.size()).isEqualTo(100);
         assertThat(result.totalPages()).isEqualTo(1);
         assertThat(result.rules()).extracting(r -> r.getId()).containsExactly("only-rule");
+    }
+
+    @Test
+    void query_shouldFilterByBehaviorAndExpiringWindow() {
+        HttpRule mock = http("mock", "/mock", "mock", null, null, true, false, 1);
+        HttpRule forward = http("forward", "/forward", "forward", null, null, true, false, 2);
+        forward.setAction(HttpRuleAction.FORWARD);
+        HttpRule fault = http("fault", "/fault", "fault", null, null, true, false, 3);
+        fault.setFaultType(FaultType.EMPTY_RESPONSE);
+        httpRepository.saveAll(List.of(mock, forward, fault));
+        httpRepository.flush();
+
+        RuleQueryService.RuleQueryResult forwardResult = service.query(new RuleQueryService.RuleQuery(
+                Protocol.HTTP, null, null, null, 0, 20, "updatedAt", "desc",
+                RuleQueryService.RuleMode.FORWARD, null));
+        RuleQueryService.RuleQueryResult faultResult = service.query(new RuleQueryService.RuleQuery(
+                Protocol.HTTP, null, null, null, 0, 20, "updatedAt", "desc",
+                RuleQueryService.RuleMode.FAULT, null));
+
+        assertThat(forwardResult.rules()).extracting(BaseRule::getId).containsExactly("forward");
+        assertThat(faultResult.rules()).extracting(BaseRule::getId).containsExactly("fault");
+
+        entityManager.createQuery("UPDATE HttpRule r SET r.createdAt = :createdAt WHERE r.id = :id")
+                .setParameter("createdAt", LocalDateTime.now().minusDays(179))
+                .setParameter("id", "mock")
+                .executeUpdate();
+        entityManager.flush();
+        entityManager.clear();
+
+        RuleQueryService.RuleQueryResult expiring = service.query(new RuleQueryService.RuleQuery(
+                Protocol.HTTP, null, null, null, 0, 20, "updatedAt", "desc",
+                null, true));
+        assertThat(expiring.rules()).extracting(BaseRule::getId).containsExactly("mock");
     }
 
     @Test

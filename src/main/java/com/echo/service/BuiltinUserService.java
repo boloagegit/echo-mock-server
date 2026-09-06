@@ -5,12 +5,16 @@ import com.echo.repository.BuiltinUserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 內建帳號管理服務
@@ -22,6 +26,10 @@ import java.util.List;
 @RequiredArgsConstructor
 @Slf4j
 public class BuiltinUserService {
+
+    private static final int MAX_PAGE_SIZE = 100;
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
+            "username", "role", "enabled", "createdAt", "updatedAt", "lastLoginAt");
 
     private final BuiltinUserRepository builtinUserRepository;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
@@ -76,6 +84,31 @@ public class BuiltinUserService {
             return builtinUserRepository.findAll();
         }
         return builtinUserRepository.findByUsernameContainingIgnoreCase(keyword);
+    }
+
+    /** Server-side account query used by the administration table. */
+    public Page<BuiltinUser> queryUsers(String keyword, String role, Boolean enabled,
+                                        Boolean passwordResetRequested, int page, int size,
+                                        String sortField, String direction) {
+        int boundedPage = Math.max(0, page);
+        int boundedSize = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
+        String safeSort = ALLOWED_SORT_FIELDS.contains(sortField) ? sortField : "username";
+        Sort.Direction safeDirection = "desc".equalsIgnoreCase(direction)
+                ? Sort.Direction.DESC : Sort.Direction.ASC;
+
+        PageRequest request = PageRequest.of(boundedPage, boundedSize,
+                Sort.by(safeDirection, safeSort).and(Sort.by(Sort.Direction.ASC, "id")));
+        String keywordPattern = keyword == null || keyword.isBlank() ? null
+                : "%" + escapeLike(keyword.trim().toLowerCase(java.util.Locale.ROOT)) + "%";
+        String roleFilter = role == null || role.isBlank() ? null : role;
+        return builtinUserRepository.queryUsers(keywordPattern, roleFilter, enabled,
+                passwordResetRequested, request);
+    }
+
+    private String escapeLike(String value) {
+        return value.replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
     }
 
     private static final String TEMP_PASSWORD_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";

@@ -5,6 +5,7 @@ import com.echo.entity.HttpRule;
 import com.echo.entity.Protocol;
 import com.echo.protocol.http.HttpProtocolHandler;
 import com.echo.repository.HttpRuleRepository;
+import com.echo.util.CurrentOperator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -151,6 +152,10 @@ public class HttpRuleService {
     @CacheEvict(cacheNames = CacheConfig.HTTP_RULES_CACHE, allEntries = true)
     public HttpRule saveHttpRule(HttpRule rule) {
         log.info("Saving HTTP rule and clearing cache: {}", rule.getMatchKey());
+        if (rule.getId() != null) {
+            httpHandler.findById(rule.getId()).ifPresent(existing -> rule.setCreatedBy(existing.getCreatedBy()));
+        }
+        rule.setUpdatedBy(CurrentOperator.username());
         HttpRule saved = (HttpRule) httpHandler.save(rule);
         cacheInvalidationService.ifPresent(s -> s.publishInvalidation(Protocol.HTTP));
         return saved;

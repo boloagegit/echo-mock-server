@@ -205,6 +205,18 @@ const RulesPage = {
                     <button class="btn btn-sm" :class="ruleFilter.isProtected==='true'?'btn-primary':'btn-secondary'" @click="toggleFilter('isProtected','true')">{{t('rules.filterProtected')}}</button>
                     <button class="btn btn-sm" :class="ruleFilter.isProtected==='false'?'btn-primary':'btn-secondary'" @click="toggleFilter('isProtected','false')">{{t('rules.filterUnprotected')}}</button>
                 </div>
+                <label class="rule-filter-select">
+                    <span class="visually-hidden">{{t('rules.filterMode')}}</span>
+                    <select class="form-control" :value="ruleFilter.mode" @change="setFilter('mode', $event.target.value)" :aria-label="t('rules.filterMode')">
+                        <option value="">{{t('rules.filterAllModes')}}</option>
+                        <option value="MOCK">{{t('rules.mode_MOCK')}}</option>
+                        <option value="FORWARD">{{t('rules.mode_FORWARD')}}</option>
+                        <option value="FAULT">{{t('rules.mode_FAULT')}}</option>
+                    </select>
+                </label>
+                <button class="btn btn-sm" :class="ruleFilter.expiring==='true'?'btn-primary':'btn-secondary'" @click="toggleFilter('expiring','true')" :title="t('rules.filterExpiringHint')">
+                    <i class="bi bi-hourglass-split" aria-hidden="true"></i>{{t('rules.filterExpiring')}}
+                </button>
                 <workspace-search-field
                     input-id="ruleSearch"
                     :model-value="ruleFilter.keyword"
@@ -257,7 +269,7 @@ const RulesPage = {
                 <th class="col-cond col-hide-md">{{t('rules.thCondition')}}</th>
                 <th class="col-hide-sm" style="width:72px">{{t('rules.thEnabled')}}</th>
                 <th class="col-priority col-hide-md" style="cursor:pointer" @click="$emit('toggle-rule-sort', 'priority')">{{t('rules.thPriority')}} <i class="bi" :class="ruleSortIcon('priority')"></i></th>
-                <th class="col-datetime col-hide-md" style="cursor:pointer" @click="$emit('toggle-rule-sort', 'createdAt')">{{t('rules.thCreatedAt')}} <i class="bi" :class="ruleSortIcon('createdAt')"></i></th>
+                <th class="col-datetime col-hide-md" style="cursor:pointer" @click="$emit('toggle-rule-sort', 'updatedAt')">{{t('rules.thUpdated')}} <i class="bi" :class="ruleSortIcon('updatedAt')"></i></th>
                 <th class="col-actions rule-row-action-column">
                     <span>{{t('rules.thActions')}}</span>
                     <details v-if="showDblClickHint" class="rule-table-hint" @click.stop>
@@ -309,7 +321,8 @@ const RulesPage = {
                     <td class="col-priority col-hide-md"><span class="badge badge-muted">{{r.priority ?? 0}}</span></td>
                     <td class="col-datetime col-hide-md">
                         <div class="table-date-stack">
-                            <span class="sub-info" :title="fmtTime(r.createdAt,false)">{{fmtTime(r.createdAt)}}</span>
+                            <span class="rule-updated-by" :title="r.updatedBy||t('rules.unknownOperator')"><i class="bi bi-person" aria-hidden="true"></i>{{r.updatedBy||t('rules.unknownOperator')}}</span>
+                            <span class="sub-info" :title="fmtTime(r.updatedAt,false)">{{fmtTime(r.updatedAt)}}</span>
                             <span v-if="!r.isProtected && daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays) != null" class="badge" :class="daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays) <= 7 ? 'badge-warning' : 'badge-muted'">{{t('rules.daysLeft', {days: daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays)})}}</span>
                         </div>
                     </td>
@@ -355,7 +368,7 @@ const RulesPage = {
                                     <div class="pv-field"><span class="pv-label">{{t('rules.pvProtected')}}</span><span><i class="bi" :class="rulePreviewCache[r.id].isProtected ? 'bi-shield-fill-check text-success' : 'bi-shield'" style="margin-right:2px"></i> {{rulePreviewCache[r.id].isProtected ? t('rules.pvYes') : t('rules.pvNo')}}</span></div>
                                     <div class="pv-field" v-if="!rulePreviewCache[r.id].isProtected && daysLeft(rulePreviewCache[r.id].createdAt, rulePreviewCache[r.id].extendedAt, status?.cleanupRetentionDays) != null"><span class="pv-label">{{t('rules.pvDaysLeft')}}</span><span><span class="badge" :class="daysLeft(rulePreviewCache[r.id].createdAt, rulePreviewCache[r.id].extendedAt, status?.cleanupRetentionDays) <= 7 ? 'badge-warning' : 'badge-muted'">{{t('rules.daysLeft', {days: daysLeft(rulePreviewCache[r.id].createdAt, rulePreviewCache[r.id].extendedAt, status?.cleanupRetentionDays)})}}</span> <button v-if="isLoggedIn" class="btn btn-sm btn-secondary" style="margin-left:0.5rem;padding:0.1rem 0.4rem;font-size:0.75rem" @click.stop="$emit('extend-rule', rulePreviewCache[r.id].id)"><i class="bi bi-calendar-plus"></i> {{t('rules.extend')}}</button></span></div>
                                     <div class="pv-field" v-if="rulePreviewCache[r.id].createdAt"><span class="pv-label">{{t('rules.pvCreated')}}</span><span>{{fmtTime(rulePreviewCache[r.id].createdAt, false)}}</span></div>
-                                    <div class="pv-field" v-if="rulePreviewCache[r.id].updatedAt"><span class="pv-label">{{t('rules.pvUpdated')}}</span><span>{{fmtTime(rulePreviewCache[r.id].updatedAt, false)}}</span></div>
+                                    <div class="pv-field" v-if="rulePreviewCache[r.id].updatedAt"><span class="pv-label">{{t('rules.pvUpdated')}}</span><span>{{fmtTime(rulePreviewCache[r.id].updatedAt, false)}} · {{rulePreviewCache[r.id].updatedBy||t('rules.unknownOperator')}}</span></div>
                                     <div class="pv-section-title pv-section-conditions">{{t('rules.pvSectionConditions')}}</div>
                                     <div class="pv-field pv-field-cond" v-if="rulePreviewCache[r.id].bodyCondition"><span class="pv-label">{{t('rules.pvBodyCondition')}}</span><div class="pv-cond-list"><code v-for="(c,i) in rulePreviewCache[r.id].bodyCondition.split(';').filter(x=>x)" :key="'b'+i" class="pv-cond-item body" @click="$emit('clip-copy', c.trim())" :title="t('rules.clickToCopy')">{{c.trim()}}</code></div></div>
                                     <div class="pv-field pv-field-cond" v-if="rulePreviewCache[r.id].queryCondition"><span class="pv-label">{{t('rules.pvQueryCondition')}}</span><div class="pv-cond-list"><code v-for="(c,i) in rulePreviewCache[r.id].queryCondition.split(';').filter(x=>x)" :key="'q'+i" class="pv-cond-item query" @click="$emit('clip-copy', c.trim())" :title="t('rules.clickToCopy')">{{c.trim()}}</code></div></div>
@@ -397,7 +410,7 @@ const RulesPage = {
         </table>
         <div v-if="!pagedRules.length && !loading.rules" class="empty">
             <i class="bi bi-inbox"></i>
-            <div v-if="ruleFilter.keyword || ruleFilter.protocol || ruleFilter.enabled || ruleFilter.isProtected">
+            <div v-if="ruleFilter.keyword || ruleFilter.protocol || ruleFilter.enabled || ruleFilter.isProtected || ruleFilter.mode || ruleFilter.expiring">
                 {{t('rules.emptyFilterResult')}}
                 <div style="margin-top:0.5rem">
                     <button class="btn btn-sm btn-secondary" @click="clearFilters()">{{t('rules.clearFilter')}}</button>
@@ -423,7 +436,7 @@ const RulesPage = {
         >
             <template #summary>
                 <span class="sub-info">{{t('rules.totalCount', {count: ruleTotalElements})}}</span>
-                <button v-if="ruleFilter.protocol||ruleFilter.enabled||ruleFilter.isProtected||ruleFilter.keyword" type="button" class="workspace-filter-reset" :title="t('rules.clickClearFilter')" @click="clearFilters()"><i class="bi bi-funnel-fill" aria-hidden="true"></i> {{t('rules.filtering')}}</button>
+                <button v-if="ruleFilter.protocol||ruleFilter.enabled||ruleFilter.isProtected||ruleFilter.mode||ruleFilter.expiring||ruleFilter.keyword" type="button" class="workspace-filter-reset" :title="t('rules.clickClearFilter')" @click="clearFilters()"><i class="bi bi-funnel-fill" aria-hidden="true"></i> {{t('rules.filtering')}}</button>
             </template>
         </workspace-pagination>
         </template>
@@ -445,7 +458,7 @@ const RulesPage = {
                         <th class="col-cond col-hide-md">{{t('rules.thCondition')}}</th>
                         <th class="col-hide-sm" style="width:72px">{{t('rules.thEnabled')}}</th>
                         <th class="col-priority col-hide-md">{{t('rules.thPriority')}}</th>
-                        <th class="col-datetime col-hide-md">{{t('rules.thCreatedAt')}}</th>
+                        <th class="col-datetime col-hide-md">{{t('rules.thUpdated')}}</th>
                         <th class="col-actions col-actions-4">{{t('rules.thActions')}}</th>
                     </tr></thead>
                     <tbody>
@@ -489,7 +502,7 @@ const RulesPage = {
                                 <th class="col-cond col-hide-md">{{t('rules.thCondition')}}</th>
                                 <th class="col-hide-sm" style="width:72px">{{t('rules.thEnabled')}}</th>
                                 <th class="col-priority col-hide-md">{{t('rules.thPriority')}}</th>
-                                <th class="col-datetime col-hide-md">{{t('rules.thCreatedAt')}}</th>
+                                <th class="col-datetime col-hide-md">{{t('rules.thUpdated')}}</th>
                                 <th class="col-actions col-actions-4">{{t('rules.thActions')}}</th>
                             </tr></thead>
                             <tbody>

@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Echo Mock Server</title>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=20260906.2">
     <link rel="stylesheet" href="/webjars/bootstrap/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="/webjars/bootstrap-icons/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="/webjars/codemirror/lib/codemirror.css">
-    <link rel="stylesheet" href="/theme.css?v=20260902.1">
-    <link rel="stylesheet" href="/style.css?v=20260902.2">
+    <link rel="stylesheet" href="/theme.css?v=20260906.2">
+    <link rel="stylesheet" href="/style.css?v=20260906.2">
 </head>
 <body>
 <div id="app" v-cloak>
@@ -143,9 +143,10 @@
             <!-- Issues Page -->
             <issues-page v-if="page==='issues'"
                 :issues="issues" :loading="loading"
-                :issue-filter="issueFilter" :issue-page="issuePage"
+                :issue-filter="issueFilter" :issue-sort="issueSort" :issue-page="issuePage"
                 :issue-page-size="issuePageSize" :paged-issues="pagedIssues"
-                :issue-total-pages="issueTotalPages" :filtered-issues="filteredIssues"
+                :issue-total-pages="issueTotalPages" :issue-total-elements="issueTotalElements" :filtered-issues="filteredIssues"
+                :issue-sort-icon="issueSortIcon"
                 :is-admin="isAdmin"
                 @load-issues="loadIssues($event)"
                 @create-issue="(...args) => createIssue(args[0], args[1]).then(args[2])"
@@ -156,6 +157,7 @@
                 @update:issue-filter="issueFilter=$event"
                 @update:issue-page="issuePage=$event"
                 @update:issue-page-size="issuePageSize=$event"
+                @toggle-issue-sort="toggleIssueSort($event)"
             ></issues-page>
 
             <!-- Responses Page -->
@@ -352,13 +354,13 @@
 <script src="/composables/useStats.js?v=20260812.1"></script>
 <script src="/composables/useAudit.js?v=20260812.1"></script>
 <script src="/composables/useResponses.js?v=20260812.1"></script>
-<script src="/composables/useRules.js?v=20260812.1"></script>
+<script src="/composables/useRules.js?v=20260904.1"></script>
 <script src="/composables/useRuleApply.js?v=20260809.3"></script>
 <script src="/composables/useRuleForm.js?v=20260809.5"></script>
-<script src="/composables/useAccounts.js?v=20260809.5"></script>
-<script src="/composables/useIssues.js?v=20260809.5"></script>
+<script src="/composables/useAccounts.js?v=20260904.1"></script>
+<script src="/composables/useIssues.js?v=20260904.1"></script>
 <script src="/composables/useRouter.js"></script>
-<script src="/components/SidebarNav.js"></script>
+<script src="/components/SidebarNav.js?v=20260906.1"></script>
 <script src="/components/ToastContainer.js"></script>
 <script src="/components/WorkspaceSearchField.js?v=20260812.1"></script>
 <script src="/components/WorkspacePagination.js?v=20260811.2"></script>
@@ -366,19 +368,19 @@
 <script src="/components/TourOverlay.js?v=20260809.6"></script>
 <script src="/components/ImportModal.js?v=20260809.6"></script>
 <script src="/components/AuditPage.js?v=20260812.1"></script>
-<script src="/components/IssuesPage.js?v=20260809.6"></script>
+<script src="/components/IssuesPage.js?v=20260904.1"></script>
 <script src="/components/StatsPage.js?v=20260822.2"></script>
 <script src="/components/ResponseEditModal.js?v=20260809.6"></script>
 <script src="/components/ChangePasswordModal.js?v=20260809.5"></script>
 <script src="/components/ResponsesPage.js?v=20260812.1"></script>
 <script src="/components/SettingsPage.js"></script>
 <script src="/components/PriorityHelpModal.js?v=20260809.7"></script>
-<script src="/components/RulesPage.js?v=20260902.1"></script>
-<script src="/components/RuleGroupRow.js?v=20260822.2"></script>
-<script src="/components/AccountsPage.js?v=20260812.1"></script>
-<script src="/components/RuleEditModal.js?v=20260902.1"></script>
+<script src="/components/RulesPage.js?v=20260904.1"></script>
+<script src="/components/RuleGroupRow.js?v=20260904.1"></script>
+<script src="/components/AccountsPage.js?v=20260904.1"></script>
+<script src="/components/RuleEditModal.js?v=20260906.1"></script>
 <script src="/components/RuleApplyModal.js?v=20260809.3"></script>
 <script src="/components/OpenApiPreviewModal.js"></script>
-<script src="/app.js?v=20260812.1"></script>
+<script src="/app.js?v=20260904.1"></script>
 </body>
 </html>

@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import com.echo.util.CurrentOperator;
 
 /**
  * 協定處理器註冊中心
@@ -93,37 +94,49 @@ public class ProtocolHandlerRegistry {
     /**
      * 批次更新啟用狀態（跨協定）
      */
-    public int updateEnabled(List<String> ids, boolean enabled) {
+    public int updateEnabled(List<String> ids, boolean enabled, LocalDateTime updatedAt, String updatedBy) {
         if (ids.isEmpty()) {
             return 0;
         }
         return handlers.stream()
-                .mapToInt(h -> h.updateEnabled(ids, enabled))
+                .mapToInt(h -> h.updateEnabled(ids, enabled, updatedAt, updatedBy))
                 .sum();
+    }
+
+    public int updateEnabled(List<String> ids, boolean enabled) {
+        return updateEnabled(ids, enabled, LocalDateTime.now(), CurrentOperator.username());
     }
 
     /**
      * 批次更新保護狀態（跨協定）
      */
-    public int updateProtected(List<String> ids, boolean isProtected) {
+    public int updateProtected(List<String> ids, boolean isProtected, LocalDateTime updatedAt, String updatedBy) {
         if (ids.isEmpty()) {
             return 0;
         }
         return handlers.stream()
-                .mapToInt(h -> h.updateProtected(ids, isProtected))
+                .mapToInt(h -> h.updateProtected(ids, isProtected, updatedAt, updatedBy))
                 .sum();
+    }
+
+    public int updateProtected(List<String> ids, boolean isProtected) {
+        return updateProtected(ids, isProtected, LocalDateTime.now(), CurrentOperator.username());
     }
 
     /**
      * 批次展延規則（跨協定）
      */
-    public int extendRules(List<String> ids, LocalDateTime extendedAt) {
+    public int extendRules(List<String> ids, LocalDateTime extendedAt, String updatedBy) {
         if (ids.isEmpty()) {
             return 0;
         }
         return handlers.stream()
-                .mapToInt(h -> h.extendRules(ids, extendedAt))
+                .mapToInt(h -> h.extendRules(ids, extendedAt, updatedBy))
                 .sum();
+    }
+
+    public int extendRules(List<String> ids, LocalDateTime extendedAt) {
+        return extendRules(ids, extendedAt, CurrentOperator.username());
     }
 
     /**

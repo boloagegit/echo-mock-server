@@ -33,7 +33,7 @@ const useRules = (deps) => {
     // --- 狀態 ---
     const rules = ref([]);
     const savedRuleSort = JSON.parse(localStorage.getItem('ruleSort') || 'null');
-    const ruleFilter = ref({ protocol: '', enabled: '', isProtected: '', keyword: '' });
+    const ruleFilter = ref({ protocol: '', enabled: '', isProtected: '', mode: '', expiring: '', keyword: '' });
     const ruleSort = ref(savedRuleSort || { field: 'updatedAt', asc: false });
     const rulePage = ref(1);
     const rulePageSize = ref(20);
@@ -117,6 +117,8 @@ const useRules = (deps) => {
         if (ruleFilter.value.protocol) { params.set('protocol', ruleFilter.value.protocol); }
         if (ruleFilter.value.enabled !== '') { params.set('enabled', ruleFilter.value.enabled); }
         if (ruleFilter.value.isProtected !== '') { params.set('isProtected', ruleFilter.value.isProtected); }
+        if (ruleFilter.value.mode) { params.set('mode', ruleFilter.value.mode); }
+        if (ruleFilter.value.expiring !== '') { params.set('expiring', ruleFilter.value.expiring); }
         const keyword = (ruleFilter.value.keyword || '').trim();
         if (keyword) { params.set('keyword', keyword); }
         return '/api/admin/rules/page?' + params.toString();
@@ -127,6 +129,8 @@ const useRules = (deps) => {
         if (ruleFilter.value.protocol) { params.set('protocol', ruleFilter.value.protocol); }
         if (ruleFilter.value.enabled !== '') { params.set('enabled', ruleFilter.value.enabled); }
         if (ruleFilter.value.isProtected !== '') { params.set('isProtected', ruleFilter.value.isProtected); }
+        if (ruleFilter.value.mode) { params.set('mode', ruleFilter.value.mode); }
+        if (ruleFilter.value.expiring !== '') { params.set('expiring', ruleFilter.value.expiring); }
         const keyword = (ruleFilter.value.keyword || '').trim();
         if (keyword) { params.set('keyword', keyword); }
         return '/api/admin/rules/groups?' + params.toString();
@@ -143,6 +147,8 @@ const useRules = (deps) => {
         if (ruleFilter.value.protocol) { params.set('protocol', ruleFilter.value.protocol); }
         if (ruleFilter.value.enabled !== '') { params.set('enabled', ruleFilter.value.enabled); }
         if (ruleFilter.value.isProtected !== '') { params.set('isProtected', ruleFilter.value.isProtected); }
+        if (ruleFilter.value.mode) { params.set('mode', ruleFilter.value.mode); }
+        if (ruleFilter.value.expiring !== '') { params.set('expiring', ruleFilter.value.expiring); }
         const keyword = (ruleFilter.value.keyword || '').trim();
         if (keyword) { params.set('keyword', keyword); }
         return '/api/admin/rules/group?' + params.toString();
@@ -225,12 +231,15 @@ const useRules = (deps) => {
         else { loadRules(true); }
     };
 
-    watch(ruleFilter, reloadRulesFromFirstPage, { deep: true });
-    watch(ruleSort, reloadRulesFromFirstPage, { deep: true });
+    const clearRuleSelection = () => { selectedRules.value = []; };
+    watch(ruleFilter, () => { clearRuleSelection(); reloadRulesFromFirstPage(); }, { deep: true });
+    watch(ruleSort, () => { clearRuleSelection(); reloadRulesFromFirstPage(); }, { deep: true });
     watch(rulePage, () => {
+        clearRuleSelection();
         if (ruleViewMode.value === 'list') { loadRules(true); }
     });
     watch(rulePageSize, () => {
+        clearRuleSelection();
         if (ruleViewMode.value === 'list') { reloadRulesFromFirstPage(); }
     });
     watch(ruleViewMode, v => {
@@ -571,11 +580,13 @@ const useRules = (deps) => {
         if (ruleFilter.value.protocol) chips.push({ key: 'protocol', label: t('filterChips.protocol') + (ruleFilter.value.protocol === 'HTTP' ? httpLabel.value : jmsLabel.value) });
         if (ruleFilter.value.enabled) chips.push({ key: 'enabled', label: t('filterChips.status') + (ruleFilter.value.enabled === 'true' ? t('rules.filterEnabled') : t('rules.filterDisabled')) });
         if (ruleFilter.value.isProtected) chips.push({ key: 'isProtected', label: t('filterChips.protection') + (ruleFilter.value.isProtected === 'true' ? t('rules.filterProtected') : t('rules.filterUnprotected')) });
+        if (ruleFilter.value.mode) chips.push({ key: 'mode', label: t('filterChips.mode') + t('rules.mode_' + ruleFilter.value.mode) });
+        if (ruleFilter.value.expiring) chips.push({ key: 'expiring', label: t('rules.filterExpiring') });
         if (ruleFilter.value.keyword) chips.push({ key: 'keyword', label: t('filterChips.keyword') + ruleFilter.value.keyword });
         return chips;
     });
     const removeRuleChip = key => { ruleFilter.value[key] = ''; };
-    const clearRuleFilters = () => { ruleFilter.value = { protocol: '', enabled: '', isProtected: '', keyword: '' }; };
+    const clearRuleFilters = () => { ruleFilter.value = { protocol: '', enabled: '', isProtected: '', mode: '', expiring: '', keyword: '' }; };
 
     // --- 其他 ---
     const showPriorityHelp = ref(false);

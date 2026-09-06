@@ -580,6 +580,8 @@ class AdminControllerTest {
         when(responseService.save(any())).thenReturn(com.echo.entity.Response.builder().id(1L).build());
         var handler = mock(com.echo.protocol.ProtocolHandler.class);
         when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
+        when(handler.fromDto(any())).thenAnswer(i -> com.echo.entity.HttpRule.builder()
+                .matchKey(((RuleDto) i.getArgument(0)).getMatchKey()).build());
         when(handler.save(any())).thenAnswer(i -> i.getArgument(0));
         List<RuleDto> rules = List.of(
             RuleDto.builder().protocol(Protocol.HTTP).matchKey("/a").build(),
@@ -599,6 +601,8 @@ class AdminControllerTest {
         when(responseService.save(any())).thenReturn(com.echo.entity.Response.builder().id(1L).build());
         var handler = mock(com.echo.protocol.ProtocolHandler.class);
         when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
+        when(handler.fromDto(any())).thenAnswer(i -> com.echo.entity.HttpRule.builder()
+                .matchKey(((RuleDto) i.getArgument(0)).getMatchKey()).build());
         when(handler.save(any())).thenAnswer(i -> i.getArgument(0));
         List<RuleDto> rules = List.of(
             RuleDto.builder().protocol(Protocol.HTTP).matchKey("/a").build(),

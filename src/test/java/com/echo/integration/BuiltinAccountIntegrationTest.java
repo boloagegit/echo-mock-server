@@ -115,6 +115,30 @@ class BuiltinAccountIntegrationTest {
                 .andExpect(jsonPath("$[0].enabled").value(true));
     }
 
+    @Test
+    @DisplayName("帳號管理分頁 API 支援搜尋、狀態篩選與排序")
+    void accountPage_shouldFilterSortAndPaginate() throws Exception {
+        BuiltinUser alpha = builtinUserService.createUser("alpha-user", "secret123");
+        builtinUserService.createUser("beta-user", "secret123");
+        builtinUserService.createUser("gamma-admin", "secret123");
+        builtinUserService.disableUser(alpha.getId());
+
+        mockMvc.perform(get("/api/admin/builtin-users/page")
+                        .with(user("admin").roles("ADMIN"))
+                        .param("keyword", "user")
+                        .param("enabled", "true")
+                        .param("page", "0")
+                        .param("size", "1")
+                        .param("sort", "username")
+                        .param("direction", "desc")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1))
+                .andExpect(jsonPath("$.results[0].username").value("beta-user"))
+                .andExpect(jsonPath("$.results[0].password").doesNotExist());
+    }
+
     // ========== Test 4: 完整密碼重設流程 ==========
 
     @Test

@@ -11,11 +11,11 @@ import java.util.List;
 public abstract class AbstractProtocolHandler implements ProtocolHandler {
 
     @Override
-    public abstract int updateEnabled(List<String> ids, boolean enabled);
+    public abstract int updateEnabled(List<String> ids, boolean enabled, LocalDateTime updatedAt, String updatedBy);
 
     @Override
-    public abstract int updateProtected(List<String> ids, boolean isProtected);
+    public abstract int updateProtected(List<String> ids, boolean isProtected, LocalDateTime updatedAt, String updatedBy);
 
     @Override
-    public abstract int extendRules(List<String> ids, LocalDateTime extendedAt);
+    public abstract int extendRules(List<String> ids, LocalDateTime extendedAt, String updatedBy);
 }

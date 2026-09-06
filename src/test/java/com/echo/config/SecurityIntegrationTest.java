@@ -36,6 +36,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AdminController.class)
@@ -115,6 +116,13 @@ class SecurityIntegrationTest {
     private com.echo.service.ScenarioService scenarioService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Test
+    void appLogo_shouldRemainPublicForTheLoginPage() throws Exception {
+        mockMvc.perform(get("/favicon.ico"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("image/x-icon"));
+    }
 
     // ========== 匯出 API ==========
 
