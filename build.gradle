@@ -110,8 +110,8 @@ dependencies {
     implementation 'org.webjars.npm:codemirror:5.65.21'
 
     // Feign (compileOnly - for MockRedirectClient reference code)
-    compileOnly 'io.github.openfeign:feign-core:13.13'
-    testImplementation 'io.github.openfeign:feign-core:13.13'
+    compileOnly 'io.github.openfeign:feign-core:13.14'
+    testImplementation 'io.github.openfeign:feign-core:13.14'
 
     // Lombok
     compileOnly 'org.projectlombok:lombok'
