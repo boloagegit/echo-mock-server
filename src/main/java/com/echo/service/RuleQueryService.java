@@ -2,7 +2,10 @@ package com.echo.service;
 
 import com.echo.entity.BaseRule;
 import com.echo.entity.HttpRule;
+import com.echo.entity.HttpRuleAction;
 import com.echo.entity.JmsRule;
+import com.echo.entity.JmsRuleAction;
+import com.echo.entity.FaultType;
 import com.echo.entity.Protocol;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,6 +31,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.time.LocalDateTime;
 
 /** Performs bounded, cross-protocol queries for the rule administration list. */
 @Service
@@ -49,6 +53,9 @@ public class RuleQueryService {
     @Value("${echo.jms.enabled:false}")
     private boolean jmsEnabled;
 
+    @Value("${echo.cleanup.rule-retention-days:180}")
+    private int ruleRetentionDays;
+
     @Transactional(readOnly = true)
     public RuleQueryResult query(RuleQuery query) {
         int requestedPage = Math.max(0, query.page());
@@ -56,15 +63,19 @@ public class RuleQueryService {
         String sortField = normalizeSortField(query.sortField());
         boolean ascending = "asc".equalsIgnoreCase(query.direction());
         List<String> keywords = tokenize(query.keyword());
+        LocalDateTime expiringCutoff = Boolean.TRUE.equals(query.expiring())
+                ? LocalDateTime.now().minusDays(Math.max(0, ruleRetentionDays - 7L)) : null;
 
         boolean includeHttp = query.protocol() == null || query.protocol() == Protocol.HTTP;
         boolean includeJms = jmsEnabled && (query.protocol() == null || query.protocol() == Protocol.JMS);
 
         long httpCount = includeHttp
-                ? count(HttpRule.class, query.enabled(), query.isProtected(), keywords, HTTP_SEARCH_FIELDS)
+                ? count(HttpRule.class, query.enabled(), query.isProtected(), query.mode(),
+                        expiringCutoff, keywords, HTTP_SEARCH_FIELDS)
                 : 0;
         long jmsCount = includeJms
-                ? count(JmsRule.class, query.enabled(), query.isProtected(), keywords, JMS_SEARCH_FIELDS)
+                ? count(JmsRule.class, query.enabled(), query.isProtected(), query.mode(),
+                        expiringCutoff, keywords, JMS_SEARCH_FIELDS)
                 : 0;
         long totalElements = httpCount + jmsCount;
         int totalPages = totalElements == 0 ? 0
@@ -76,12 +87,14 @@ public class RuleQueryService {
         List<BaseRule> candidates = new ArrayList<>();
         if (httpCount > 0) {
             int limit = Math.toIntExact(Math.min(httpCount, prefixSize));
-            candidates.addAll(fetch(HttpRule.class, query.enabled(), query.isProtected(), keywords,
+            candidates.addAll(fetch(HttpRule.class, query.enabled(), query.isProtected(), query.mode(),
+                    expiringCutoff, keywords,
                     HTTP_SEARCH_FIELDS, sortField, ascending, limit));
         }
         if (jmsCount > 0) {
             int limit = Math.toIntExact(Math.min(jmsCount, prefixSize));
-            candidates.addAll(fetch(JmsRule.class, query.enabled(), query.isProtected(), keywords,
+            candidates.addAll(fetch(JmsRule.class, query.enabled(), query.isProtected(), query.mode(),
+                    expiringCutoff, keywords,
                     JMS_SEARCH_FIELDS, sortField, ascending, limit));
         }
 
@@ -145,13 +158,17 @@ public class RuleQueryService {
 
     private List<TagRow> findTagRows(RuleQuery query) {
         List<String> keywords = tokenize(query.keyword());
+        LocalDateTime expiringCutoff = Boolean.TRUE.equals(query.expiring())
+                ? LocalDateTime.now().minusDays(Math.max(0, ruleRetentionDays - 7L)) : null;
         List<TagRow> rows = new ArrayList<>();
         if (query.protocol() == null || query.protocol() == Protocol.HTTP) {
             rows.addAll(findTagRows(HttpRule.class, Protocol.HTTP, query.enabled(), query.isProtected(),
+                    query.mode(), expiringCutoff,
                     keywords, HTTP_SEARCH_FIELDS));
         }
         if (jmsEnabled && (query.protocol() == null || query.protocol() == Protocol.JMS)) {
             rows.addAll(findTagRows(JmsRule.class, Protocol.JMS, query.enabled(), query.isProtected(),
+                    query.mode(), expiringCutoff,
                     keywords, JMS_SEARCH_FIELDS));
         }
         return rows;
@@ -159,13 +176,15 @@ public class RuleQueryService {
 
     private <T extends BaseRule> List<TagRow> findTagRows(Class<T> entityType, Protocol protocol,
                                                            Boolean enabled, Boolean isProtected,
+                                                           RuleMode mode, LocalDateTime expiringCutoff,
                                                            List<String> keywords,
                                                            List<String> searchFields) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Object[]> criteria = cb.createQuery(Object[].class);
         Root<T> root = criteria.from(entityType);
         criteria.multiselect(root.get("id"), root.get("tags"));
-        criteria.where(predicates(cb, root, enabled, isProtected, keywords, searchFields));
+        criteria.where(predicates(cb, root, entityType, enabled, isProtected, mode,
+                expiringCutoff, keywords, searchFields));
         return entityManager.createQuery(criteria).getResultList().stream()
                 .map(row -> new TagRow((String) row[0], (String) row[1], protocol))
                 .toList();
@@ -193,25 +212,29 @@ public class RuleQueryService {
     }
 
     private <T extends BaseRule> long count(Class<T> entityType, Boolean enabled,
-                                             Boolean isProtected, List<String> keywords,
+                                             Boolean isProtected, RuleMode mode,
+                                             LocalDateTime expiringCutoff, List<String> keywords,
                                              List<String> searchFields) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Long> criteria = cb.createQuery(Long.class);
         Root<T> root = criteria.from(entityType);
         criteria.select(cb.count(root));
-        criteria.where(predicates(cb, root, enabled, isProtected, keywords, searchFields));
+        criteria.where(predicates(cb, root, entityType, enabled, isProtected, mode,
+                expiringCutoff, keywords, searchFields));
         return entityManager.createQuery(criteria).getSingleResult();
     }
 
     private <T extends BaseRule> List<T> fetch(Class<T> entityType, Boolean enabled,
-                                                Boolean isProtected, List<String> keywords,
+                                                Boolean isProtected, RuleMode mode,
+                                                LocalDateTime expiringCutoff, List<String> keywords,
                                                 List<String> searchFields, String sortField,
                                                 boolean ascending, int limit) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<T> criteria = cb.createQuery(entityType);
         Root<T> root = criteria.from(entityType);
         criteria.select(root);
-        criteria.where(predicates(cb, root, enabled, isProtected, keywords, searchFields));
+        criteria.where(predicates(cb, root, entityType, enabled, isProtected, mode,
+                expiringCutoff, keywords, searchFields));
         List<Order> order = ascending
                 ? List.of(cb.asc(root.get(sortField)), cb.asc(root.get("id")))
                 : List.of(cb.desc(root.get(sortField)), cb.desc(root.get("id")));
@@ -221,8 +244,9 @@ public class RuleQueryService {
         return typedQuery.getResultList();
     }
 
-    private Predicate[] predicates(CriteriaBuilder cb, Root<?> root, Boolean enabled,
-                                   Boolean isProtected, List<String> keywords,
+    private Predicate[] predicates(CriteriaBuilder cb, Root<?> root, Class<?> entityType,
+                                   Boolean enabled, Boolean isProtected, RuleMode mode,
+                                   LocalDateTime expiringCutoff, List<String> keywords,
                                    List<String> searchFields) {
         List<Predicate> result = new ArrayList<>();
         if (enabled != null) {
@@ -230,6 +254,26 @@ public class RuleQueryService {
         }
         if (isProtected != null) {
             result.add(isProtected ? cb.isTrue(root.get("isProtected")) : cb.isFalse(root.get("isProtected")));
+        }
+        if (mode != null) {
+            Object mockAction = entityType == HttpRule.class ? HttpRuleAction.MOCK : JmsRuleAction.MOCK;
+            Object forwardAction = entityType == HttpRule.class ? HttpRuleAction.FORWARD : JmsRuleAction.FORWARD;
+            Predicate noFault = cb.or(cb.isNull(root.get("faultType")), cb.equal(root.get("faultType"), FaultType.NONE));
+            switch (mode) {
+                case MOCK -> result.add(cb.and(
+                        cb.or(cb.isNull(root.get("action")), cb.equal(root.get("action"), mockAction)),
+                        noFault));
+                case FORWARD -> result.add(cb.equal(root.get("action"), forwardAction));
+                case FAULT -> result.add(cb.and(cb.isNotNull(root.get("faultType")),
+                        cb.notEqual(root.get("faultType"), FaultType.NONE)));
+            }
+        }
+        if (expiringCutoff != null) {
+            Expression<LocalDateTime> retentionBase = cb.<LocalDateTime>coalesce()
+                    .value(root.get("extendedAt"))
+                    .value(root.get("createdAt"));
+            result.add(cb.isFalse(root.get("isProtected")));
+            result.add(cb.lessThanOrEqualTo(retentionBase, expiringCutoff));
         }
         for (String keyword : keywords) {
             String pattern = "%" + escapeLike(keyword) + "%";
@@ -312,9 +356,16 @@ public class RuleQueryService {
         return key + "=" + value;
     }
 
+    public enum RuleMode { MOCK, FORWARD, FAULT }
+
     public record RuleQuery(Protocol protocol, Boolean enabled, Boolean isProtected,
                             String keyword, int page, int size, String sortField,
-                            String direction) {
+                            String direction, RuleMode mode, Boolean expiring) {
+        public RuleQuery(Protocol protocol, Boolean enabled, Boolean isProtected,
+                         String keyword, int page, int size, String sortField,
+                         String direction) {
+            this(protocol, enabled, isProtected, keyword, page, size, sortField, direction, null, null);
+        }
     }
 
     public record RuleQueryResult(List<BaseRule> rules, int page, int size,

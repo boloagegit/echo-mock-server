@@ -33,15 +33,7 @@ const SidebarNav = {
     <aside class="sidebar" :class="{collapsed: sidebarCollapsed, 'mobile-open': mobileMenu}" @click.stop>
       <div class="sidebar-header">
         <div class="sidebar-brand">
-          <svg class="brand-icon" viewBox="0 0 24 24" width="20" height="20">
-            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <path d="M6 17a8 8 0 0 1 0-10" opacity=".5"/>
-              <path d="M9 15a5 5 0 0 1 0-6" opacity=".75"/>
-              <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
-              <path d="M15 9a5 5 0 0 1 0 6" opacity=".75"/>
-              <path d="M18 7a8 8 0 0 1 0 10" opacity=".5"/>
-            </g>
-          </svg>
+          <img class="brand-icon" src="/favicon.ico?v=20260906.2" alt="" width="22" height="22">
           <span>Echo</span>
           <span v-if="envLabel" class="env-label">{{envLabel}}</span>
         </div>

@@ -516,6 +516,9 @@ ADMIN can manage built-in accounts via the admin UI:
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | /api/admin/rules | List all rules |
+| GET | /api/admin/rules/page | Bounded rule page; supports protocol/enabled/isProtected/mode/expiring/keyword/page/size/sort/direction |
+| GET | /api/admin/rules/groups | Rule group counts with the same filters |
+| GET | /api/admin/rules/group | Bounded content for one rule group with the same filters |
 | GET | /api/admin/rules/{id} | Get rule (with response body) |
 | POST | /api/admin/rules | Create rule |
 | PUT | /api/admin/rules/{id} | Update rule |
@@ -541,6 +544,8 @@ ADMIN can manage built-in accounts via the admin UI:
 | GET | /api/admin/rules/import-template | Download Excel import template |
 | DELETE | /api/admin/rules/batch | Batch delete (ADMIN) |
 | DELETE | /api/admin/rules/all | Delete all (ADMIN) |
+
+Rule responses include durable `createdBy` and `updatedBy` metadata. Existing rows remain readable after upgrade; an old row reports no operator until it is next modified.
 
 ### Response Management
 
@@ -586,6 +591,7 @@ ADMIN can manage built-in accounts via the admin UI:
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | /api/admin/builtin-users | List built-in accounts (ADMIN) |
+| GET | /api/admin/builtin-users/page | Bounded account page; supports keyword/role/enabled/passwordResetRequested/page/size/sort/direction (ADMIN) |
 | POST | /api/admin/builtin-users | Create account (ADMIN) |
 | PUT | /api/admin/builtin-users/{id}/enable | Enable account (ADMIN) |
 | PUT | /api/admin/builtin-users/{id}/disable | Disable account (ADMIN) |
@@ -594,6 +600,19 @@ ADMIN can manage built-in accounts via the admin UI:
 | POST | /api/admin/builtin-users/forgot-password | Forgot password (public) |
 | POST | /api/admin/builtin-users/register | Self-register (public, must be enabled) |
 | PUT | /api/account/change-password | Change own password (authenticated) |
+
+### Issue Reports
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/admin/issues | List issue reports (authenticated; legacy unpaged API) |
+| GET | /api/admin/issues/page | Bounded issue page; supports status/keyword/page/size/sort/direction and returns the global open count |
+| GET | /api/admin/issues/{id} | Get one issue report |
+| POST | /api/admin/issues | Create an issue report (authenticated) |
+| PUT | /api/admin/issues/{id}/reply | Reply to an issue (ADMIN) |
+| PUT | /api/admin/issues/{id}/resolve | Resolve an issue (ADMIN) |
+| PUT | /api/admin/issues/{id}/reopen | Reopen an issue (ADMIN) |
+| DELETE | /api/admin/issues/{id} | Delete an issue (ADMIN) |
 
 ### JMS Testing
 

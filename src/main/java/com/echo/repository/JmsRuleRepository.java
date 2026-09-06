@@ -40,18 +40,21 @@ public interface JmsRuleRepository extends JpaRepository<JmsRule, String> {
 
     /** 批次啟用/停用 */
     @Modifying
-    @Query("UPDATE JmsRule r SET r.enabled = :enabled WHERE r.id IN :ids")
-    int updateEnabledByIds(@Param("ids") List<String> ids, @Param("enabled") boolean enabled);
+    @Query("UPDATE JmsRule r SET r.enabled = :enabled, r.updatedAt = :updatedAt, r.updatedBy = :updatedBy WHERE r.id IN :ids")
+    int updateEnabledByIds(@Param("ids") List<String> ids, @Param("enabled") boolean enabled,
+                           @Param("updatedAt") LocalDateTime updatedAt, @Param("updatedBy") String updatedBy);
 
     /** 批次更新保護狀態 */
     @Modifying
-    @Query("UPDATE JmsRule r SET r.isProtected = :isProtected WHERE r.id IN :ids")
-    int updateProtectedByIds(@Param("ids") List<String> ids, @Param("isProtected") boolean isProtected);
+    @Query("UPDATE JmsRule r SET r.isProtected = :isProtected, r.updatedAt = :updatedAt, r.updatedBy = :updatedBy WHERE r.id IN :ids")
+    int updateProtectedByIds(@Param("ids") List<String> ids, @Param("isProtected") boolean isProtected,
+                             @Param("updatedAt") LocalDateTime updatedAt, @Param("updatedBy") String updatedBy);
 
     /** 批次展延 */
     @Modifying
-    @Query("UPDATE JmsRule r SET r.extendedAt = :extendedAt WHERE r.id IN :ids")
-    int extendByIds(@Param("ids") List<String> ids, @Param("extendedAt") LocalDateTime extendedAt);
+    @Query("UPDATE JmsRule r SET r.extendedAt = :extendedAt, r.updatedAt = :updatedAt, r.updatedBy = :updatedBy WHERE r.id IN :ids")
+    int extendByIds(@Param("ids") List<String> ids, @Param("extendedAt") LocalDateTime extendedAt,
+                    @Param("updatedAt") LocalDateTime updatedAt, @Param("updatedBy") String updatedBy);
 
     /** 依標籤 pattern 查詢規則 ID（避免全表載入） */
     @Query("SELECT r.id FROM JmsRule r WHERE r.tags LIKE :pattern ESCAPE '\\'")

@@ -33,6 +33,10 @@ const AccountsPage = {
       if (!this.createAttempted) { return ''; }
       return this.createForm.password.length < 6 ? this.t('accounts.passwordInvalid') : '';
     },
+    hasActiveFilters() {
+      return Boolean(this.accounts.searchKeyword.value || this.accounts.roleFilter.value
+        || this.accounts.enabledFilter.value !== '' || this.accounts.resetFilter.value !== '');
+    },
   },
   beforeUnmount() {
     restoreOverlaySiblings(this.inertSiblings);
@@ -115,7 +119,7 @@ const AccountsPage = {
       <div class="page-header">
         <div class="page-heading">
           <h1 class="page-title">{{t('accounts.title')}}</h1>
-          <span class="page-count">{{accounts.filteredAccounts.value.length}}</span>
+          <span class="page-count">{{accounts.accountTotalElements.value}}</span>
         </div>
         <div class="page-actions">
           <button class="btn btn-secondary" @click="accounts.loadAccounts()" :disabled="loading.accounts"><i class="bi bi-arrow-clockwise" :class="{'spin':loading.accounts}"></i> {{t('accounts.refresh')}}</button>
@@ -126,6 +130,22 @@ const AccountsPage = {
       <!-- Search -->
       <div class="card workspace-filter-card">
         <div class="card-body filter-row workspace-filter-bar">
+          <div class="workspace-filter-controls">
+            <div class="btn-group" :aria-label="t('accounts.filterRole')">
+              <button class="btn btn-sm" :class="accounts.roleFilter.value===''?'btn-primary':'btn-secondary'" @click="accounts.roleFilter.value=''">{{t('accounts.filterAllRoles')}}</button>
+              <button class="btn btn-sm" :class="accounts.roleFilter.value==='ROLE_ADMIN'?'btn-primary':'btn-secondary'" @click="accounts.roleFilter.value='ROLE_ADMIN'">{{t('accounts.roleAdmin')}}</button>
+              <button class="btn btn-sm" :class="accounts.roleFilter.value==='ROLE_USER'?'btn-primary':'btn-secondary'" @click="accounts.roleFilter.value='ROLE_USER'">{{t('accounts.roleUser')}}</button>
+            </div>
+            <div class="filter-divider" aria-hidden="true"></div>
+            <div class="btn-group" :aria-label="t('accounts.filterStatus')">
+              <button class="btn btn-sm" :class="accounts.enabledFilter.value===''?'btn-primary':'btn-secondary'" @click="accounts.enabledFilter.value=''">{{t('accounts.filterAllStatuses')}}</button>
+              <button class="btn btn-sm" :class="accounts.enabledFilter.value==='true'?'btn-primary':'btn-secondary'" @click="accounts.enabledFilter.value='true'">{{t('accounts.enabled')}}</button>
+              <button class="btn btn-sm" :class="accounts.enabledFilter.value==='false'?'btn-primary':'btn-secondary'" @click="accounts.enabledFilter.value='false'">{{t('accounts.disabled')}}</button>
+            </div>
+            <div class="filter-divider" aria-hidden="true"></div>
+            <button class="btn btn-sm" :class="accounts.resetFilter.value==='true'?'btn-primary':'btn-secondary'" @click="accounts.resetFilter.value=accounts.resetFilter.value==='true'?'':'true'">
+              <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>{{t('accounts.filterResetRequested')}}
+            </button>
           <workspace-search-field
             input-id="accountSearch"
             :model-value="accounts.searchKeyword.value"
@@ -136,6 +156,7 @@ const AccountsPage = {
             :submit-label="t('common.searchAction')"
             @search="accounts.searchKeyword.value=$event"
           ></workspace-search-field>
+          </div>
         </div>
       </div>
 
@@ -159,11 +180,11 @@ const AccountsPage = {
           </div>
           <table v-if="accounts.filteredAccounts.value.length" class="table-fixed workspace-table">
             <thead><tr>
-              <th>{{t('accounts.thUsername')}}</th>
-              <th style="width:80px">{{t('accounts.thRole')}}</th>
-              <th class="col-hide-sm" style="width:80px">{{t('accounts.thEnabled')}}</th>
-              <th class="col-datetime col-hide-md">{{t('accounts.thCreatedAt')}}</th>
-              <th class="col-datetime col-hide-md">{{t('accounts.thLastLoginAt')}}</th>
+              <th><button type="button" class="table-sort-button" @click="accounts.toggleAccountSort('username')">{{t('accounts.thUsername')}} <i class="bi" :class="accounts.accountSortIcon('username')"></i></button></th>
+              <th style="width:80px"><button type="button" class="table-sort-button" @click="accounts.toggleAccountSort('role')">{{t('accounts.thRole')}} <i class="bi" :class="accounts.accountSortIcon('role')"></i></button></th>
+              <th class="col-hide-sm" style="width:80px"><button type="button" class="table-sort-button" @click="accounts.toggleAccountSort('enabled')">{{t('accounts.thEnabled')}} <i class="bi" :class="accounts.accountSortIcon('enabled')"></i></button></th>
+              <th class="col-datetime col-hide-md"><button type="button" class="table-sort-button" @click="accounts.toggleAccountSort('createdAt')">{{t('accounts.thCreatedAt')}} <i class="bi" :class="accounts.accountSortIcon('createdAt')"></i></button></th>
+              <th class="col-datetime col-hide-md"><button type="button" class="table-sort-button" @click="accounts.toggleAccountSort('lastLoginAt')">{{t('accounts.thLastLoginAt')}} <i class="bi" :class="accounts.accountSortIcon('lastLoginAt')"></i></button></th>
               <th class="col-actions col-actions-3">{{t('accounts.thActions')}}</th>
             </tr></thead>
             <tbody>
@@ -175,7 +196,7 @@ const AccountsPage = {
                 <td><span class="badge" :class="a.role==='ROLE_ADMIN'?'badge-http':'badge-muted'">{{a.role==='ROLE_ADMIN'?t('accounts.roleAdmin'):t('accounts.roleUser')}}</span></td>
                 <td class="col-hide-sm"><span class="badge" :class="a.enabled?'badge-success':'badge-danger'">{{a.enabled?t('accounts.enabled'):t('accounts.disabled')}}</span></td>
                 <td class="col-datetime col-hide-md"><span class="sub-info" :title="fmtTime(a.createdAt,false)">{{fmtTime(a.createdAt)}}</span></td>
-                <td class="col-datetime col-hide-md"><span class="sub-info" :title="fmtTime(a.lastLoginAt,false)">{{fmtTime(a.lastLoginAt)}}</span></td>
+                <td class="col-datetime col-hide-md"><span class="sub-info" :title="a.lastLoginAt?fmtTime(a.lastLoginAt,false):t('accounts.neverLoggedIn')">{{a.lastLoginAt?fmtTime(a.lastLoginAt):t('accounts.neverLoggedIn')}}</span></td>
                 <td class="col-actions col-actions-3">
                   <div style="display:flex;gap:0.25rem">
                     <button v-if="a.enabled" class="btn btn-sm btn-icon btn-secondary" :title="t('accounts.disable')" :aria-label="t('accounts.disable')" @click="accounts.disableAccount(a)"><i class="bi bi-pause-circle"></i></button>
@@ -189,11 +210,29 @@ const AccountsPage = {
           </table>
           <div v-if="!accounts.filteredAccounts.value.length && !loading.accounts" class="empty workspace-empty">
             <i class="bi bi-people"></i>
-            <div class="workspace-empty-title">{{accounts.searchKeyword.value?t('accounts.emptySearch'):t('accounts.emptyTitle')}}</div>
-            <div class="workspace-empty-hint">{{accounts.searchKeyword.value?t('accounts.emptySearchHint'):t('accounts.emptyHint')}}</div>
-            <button v-if="!accounts.searchKeyword.value" class="btn btn-sm btn-primary" @click="openCreateModal()"><i class="bi bi-person-plus"></i> {{t('accounts.addAccount')}}</button>
+            <div class="workspace-empty-title">{{hasActiveFilters?t('accounts.emptySearch'):t('accounts.emptyTitle')}}</div>
+            <div class="workspace-empty-hint">{{hasActiveFilters?t('accounts.emptySearchHint'):t('accounts.emptyHint')}}</div>
+            <button v-if="hasActiveFilters" class="btn btn-sm btn-secondary" @click="accounts.clearAccountFilters()">{{t('accounts.clearFilters')}}</button>
+            <button v-else class="btn btn-sm btn-primary" @click="openCreateModal()"><i class="bi bi-person-plus"></i> {{t('accounts.addAccount')}}</button>
           </div>
         </div>
+        <workspace-pagination
+          v-if="!loading.accountsError"
+          :page="accounts.accountPage.value" :total-pages="accounts.accountTotalPages.value" :page-size="accounts.accountPageSize.value"
+          :pagination-label="t('accounts.pagination')"
+          :page-status-label="t('stats.pageStatus', {page:accounts.accountPage.value, total:accounts.accountTotalPages.value})"
+          :page-size-label="t('stats.pageSize')"
+          :first-page-label="t('stats.firstPage')" :previous-page-label="t('stats.previousPage')"
+          :next-page-label="t('stats.nextPage')" :last-page-label="t('stats.lastPage')"
+          :scroll-hint-label="t('common.scrollForMore')" :scroll-region-label="t('accounts.scrollableTable')"
+          @update:page="accounts.accountPage.value=$event"
+          @update:page-size="accounts.accountPageSize.value=$event"
+        >
+          <template #summary>
+            <span class="sub-info">{{t('accounts.totalCount', {count:accounts.accountTotalElements.value})}}</span>
+            <button v-if="hasActiveFilters" type="button" class="workspace-filter-reset" @click="accounts.clearAccountFilters()"><i class="bi bi-funnel-fill" aria-hidden="true"></i>{{t('accounts.filtering')}}</button>
+          </template>
+        </workspace-pagination>
       </div>
 
       <!-- Create Account Modal -->

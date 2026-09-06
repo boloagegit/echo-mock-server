@@ -2,7 +2,7 @@
  * useAccounts - 帳號管理 Composable
  */
 const useAccounts = (deps) => {
-    const { ref, computed } = Vue;
+    const { ref, computed, watch } = Vue;
     const { showToast, showConfirm, t, requireLogin, login, loading } = deps;
 
     const errorCodeMap = {
@@ -16,12 +16,50 @@ const useAccounts = (deps) => {
 
     const accounts = ref([]);
     const searchKeyword = ref('');
+    const roleFilter = ref('');
+    const enabledFilter = ref('');
+    const resetFilter = ref('');
+    const accountSort = ref({ field: 'username', asc: true });
+    const accountPage = ref(1);
+    const accountPageSize = ref(20);
+    const accountTotalElements = ref(0);
+    const accountServerTotalPages = ref(0);
+    let listRequestSequence = 0;
+    let listAbortController = null;
 
-    const filteredAccounts = computed(() => {
-        const kw = searchKeyword.value.trim().toLowerCase();
-        if (!kw) { return accounts.value; }
-        return accounts.value.filter(a => a.username.toLowerCase().includes(kw));
-    });
+    const filteredAccounts = computed(() => accounts.value);
+    const accountTotalPages = computed(() => Math.max(1, accountServerTotalPages.value));
+
+    const buildAccountQuery = () => {
+        const params = new URLSearchParams();
+        params.set('page', String(Math.max(0, accountPage.value - 1)));
+        params.set('size', String(accountPageSize.value));
+        params.set('sort', accountSort.value.field);
+        params.set('direction', accountSort.value.asc ? 'asc' : 'desc');
+        const keyword = searchKeyword.value.trim();
+        if (keyword) { params.set('keyword', keyword); }
+        if (roleFilter.value) { params.set('role', roleFilter.value); }
+        if (enabledFilter.value !== '') { params.set('enabled', enabledFilter.value); }
+        if (resetFilter.value !== '') { params.set('passwordResetRequested', resetFilter.value); }
+        return '/api/admin/builtin-users/page?' + params.toString();
+    };
+
+    const toggleAccountSort = field => {
+        accountSort.value = accountSort.value.field === field
+            ? { field, asc: !accountSort.value.asc }
+            : { field, asc: true };
+    };
+
+    const accountSortIcon = field => accountSort.value.field === field
+        ? (accountSort.value.asc ? 'bi-caret-up-fill' : 'bi-caret-down-fill')
+        : 'bi-arrow-down-up';
+
+    const clearAccountFilters = () => {
+        searchKeyword.value = '';
+        roleFilter.value = '';
+        enabledFilter.value = '';
+        resetFilter.value = '';
+    };
 
     const resolveError = async (r, fallbackKey) => {
         try {
@@ -49,13 +87,46 @@ const useAccounts = (deps) => {
     };
 
     const loadAccounts = async () => {
+        const requestId = ++listRequestSequence;
+        if (listAbortController) { listAbortController.abort(); }
+        const abortController = new AbortController();
+        listAbortController = abortController;
         loading.value.accounts = true;
         loading.value.accountsError = '';
-        const r = await apiCall('/api/admin/builtin-users', {}, { silent: true });
-        if (r && r.ok) { accounts.value = await r.json(); }
-        else { loading.value.accountsError = t('accounts.loadFailed'); }
-        loading.value.accounts = false;
+        try {
+            const r = await apiCall(buildAccountQuery(), { signal: abortController.signal }, { silent: true });
+            if (requestId !== listRequestSequence) { return false; }
+            if (r && r.ok) {
+                const data = await r.json();
+                if (requestId !== listRequestSequence) { return false; }
+                accountTotalElements.value = Number(data.totalElements || 0);
+                accountServerTotalPages.value = Number(data.totalPages || 0);
+                if (accountServerTotalPages.value > 0 && accountPage.value > accountServerTotalPages.value) {
+                    accountPage.value = accountServerTotalPages.value;
+                    return false;
+                }
+                accounts.value = data.results || [];
+                return true;
+            }
+            loading.value.accountsError = t('accounts.loadFailed');
+            return false;
+        } finally {
+            if (requestId === listRequestSequence) {
+                if (listAbortController === abortController) { listAbortController = null; }
+                loading.value.accounts = false;
+            }
+        }
     };
+
+    const reloadAccountsFromFirstPage = () => {
+        if (accountPage.value !== 1) { accountPage.value = 1; }
+        else { loadAccounts(); }
+    };
+
+    watch([searchKeyword, roleFilter, enabledFilter, resetFilter], reloadAccountsFromFirstPage);
+    watch(accountSort, reloadAccountsFromFirstPage, { deep: true });
+    watch(accountPage, loadAccounts);
+    watch(accountPageSize, reloadAccountsFromFirstPage);
 
     const createAccount = async (username, password) => {
         const r = await exec('/api/admin/builtin-users',
@@ -109,5 +180,10 @@ const useAccounts = (deps) => {
         return null;
     };
 
-    return { accounts, searchKeyword, filteredAccounts, loadAccounts, createAccount, deleteAccount, enableAccount, disableAccount, resetPassword };
+    return {
+        accounts, searchKeyword, roleFilter, enabledFilter, resetFilter,
+        accountSort, accountPage, accountPageSize, accountTotalElements, accountTotalPages,
+        filteredAccounts, toggleAccountSort, accountSortIcon, clearAccountFilters,
+        loadAccounts, createAccount, deleteAccount, enableAccount, disableAccount, resetPassword
+    };
 };

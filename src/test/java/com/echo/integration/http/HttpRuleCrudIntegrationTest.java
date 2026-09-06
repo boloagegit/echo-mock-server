@@ -46,6 +46,8 @@ class HttpRuleCrudIntegrationTest extends BaseIntegrationTest {
         assertThat(created.getProtocol()).isEqualTo(Protocol.HTTP);
         assertThat(created.getMatchKey()).isEqualTo("/api/test");
         assertThat(created.getResponseId()).isNotNull();
+        assertThat(created.getCreatedBy()).isEqualTo("admin");
+        assertThat(created.getUpdatedBy()).isEqualTo("admin");
     }
 
     @Test
@@ -93,6 +95,8 @@ class HttpRuleCrudIntegrationTest extends BaseIntegrationTest {
                 .getForEntity("/api/admin/rules/" + created.getId(), RuleDto.class);
         assertThat(verifyResponse.getBody()).isNotNull();
         assertThat(verifyResponse.getBody().getDescription()).isEqualTo("已更新的描述");
+        assertThat(verifyResponse.getBody().getCreatedBy()).isEqualTo("admin");
+        assertThat(verifyResponse.getBody().getUpdatedBy()).isEqualTo("admin");
     }
 
     @Test

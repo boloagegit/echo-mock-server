@@ -2,6 +2,7 @@ package com.echo.controller;
 
 import com.echo.entity.IssueReport;
 import com.echo.entity.IssueReport.IssueStatus;
+import com.echo.dto.IssueReportPageDto;
 import com.echo.service.IssueReportService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -50,6 +51,27 @@ public class IssueReportController {
         return issueReportService.findById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/page")
+    public ResponseEntity<IssueReportPageDto> query(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "createdAt") String sort,
+            @RequestParam(defaultValue = "desc") String direction) {
+        IssueStatus parsedStatus = null;
+        if (status != null && !status.isBlank()) {
+            try {
+                parsedStatus = IssueStatus.valueOf(status.toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().build();
+            }
+        }
+        var result = issueReportService.query(parsedStatus, keyword, page, size, sort, direction);
+        return ResponseEntity.ok(new IssueReportPageDto(result.getContent(), result.getNumber(),
+                result.getSize(), result.getTotalElements(), result.getTotalPages(), issueReportService.countOpen()));
     }
 
     @GetMapping("/count")

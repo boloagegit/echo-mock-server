@@ -8,17 +8,20 @@ const IssuesPage = {
     issues: Array,
     loading: Object,
     issueFilter: Object,
+    issueSort: Object,
     issuePage: Number,
     issuePageSize: Number,
+    issueTotalElements: Number,
     pagedIssues: Array,
     issueTotalPages: Number,
     filteredIssues: Array,
+    issueSortIcon: Function,
     isAdmin: Boolean
   },
   emits: [
     'load-issues', 'create-issue', 'reply-issue',
     'resolve-issue', 'reopen-issue', 'delete-issue',
-    'update:issueFilter', 'update:issuePage', 'update:issuePageSize'
+    'update:issueFilter', 'update:issuePage', 'update:issuePageSize', 'toggle-issue-sort'
   ],
   inject: ['t'],
   data() {
@@ -119,7 +122,7 @@ const IssuesPage = {
       <div class="page-header">
         <div class="page-heading">
           <h1 class="page-title">{{t('issues.title')}}</h1>
-          <span class="page-count">{{filteredIssues.length}}</span>
+          <span class="page-count">{{issueTotalElements}}</span>
         </div>
         <div class="page-actions">
           <button class="btn btn-secondary" @click="$emit('load-issues', true)" :disabled="loading.issues">
@@ -136,10 +139,20 @@ const IssuesPage = {
         <div class="card-body filter-row workspace-filter-bar">
           <div class="workspace-filter-controls">
             <div class="btn-group">
-              <button class="btn btn-sm" :class="!issueFilter.status?'btn-primary':'btn-secondary'" @click="$emit('update:issueFilter', {status:''})">{{t('issues.all')}}</button>
-              <button class="btn btn-sm" :class="issueFilter.status==='OPEN'?'btn-primary':'btn-secondary'" @click="$emit('update:issueFilter', {status:'OPEN'})">{{t('issues.open')}}</button>
-              <button class="btn btn-sm" :class="issueFilter.status==='RESOLVED'?'btn-primary':'btn-secondary'" @click="$emit('update:issueFilter', {status:'RESOLVED'})">{{t('issues.resolved')}}</button>
+              <button class="btn btn-sm" :class="!issueFilter.status?'btn-primary':'btn-secondary'" @click="$emit('update:issueFilter', {...issueFilter,status:''})">{{t('issues.all')}}</button>
+              <button class="btn btn-sm" :class="issueFilter.status==='OPEN'?'btn-primary':'btn-secondary'" @click="$emit('update:issueFilter', {...issueFilter,status:'OPEN'})">{{t('issues.open')}}</button>
+              <button class="btn btn-sm" :class="issueFilter.status==='RESOLVED'?'btn-primary':'btn-secondary'" @click="$emit('update:issueFilter', {...issueFilter,status:'RESOLVED'})">{{t('issues.resolved')}}</button>
             </div>
+            <div class="filter-divider" aria-hidden="true"></div>
+            <workspace-search-field
+              input-id="issueSearch"
+              :model-value="issueFilter.keyword"
+              :placeholder="t('issues.searchPlaceholder')"
+              :aria-label="t('issues.searchPlaceholder')"
+              :clear-label="t('issues.clearSearch')"
+              :submit-mode="true" :submit-label="t('common.searchAction')"
+              @search="$emit('update:issueFilter', {...issueFilter,keyword:$event})"
+            ></workspace-search-field>
           </div>
         </div>
       </div>
@@ -162,10 +175,10 @@ const IssuesPage = {
           </div>
           <table v-if="pagedIssues.length" class="table-fixed workspace-table">
             <thead><tr>
-              <th style="width:80px">{{t('issues.thStatus')}}</th>
-              <th>{{t('issues.thTitle')}}</th>
-              <th class="col-hide-md" style="width:100px">{{t('issues.thCreatedBy')}}</th>
-              <th class="col-datetime">{{t('issues.thTime')}}</th>
+              <th style="width:94px"><button type="button" class="table-sort-button" @click="$emit('toggle-issue-sort','status')">{{t('issues.thStatus')}} <i class="bi" :class="issueSortIcon('status')"></i></button></th>
+              <th><button type="button" class="table-sort-button" @click="$emit('toggle-issue-sort','title')">{{t('issues.thTitle')}} <i class="bi" :class="issueSortIcon('title')"></i></button></th>
+              <th class="col-hide-md" style="width:120px"><button type="button" class="table-sort-button" @click="$emit('toggle-issue-sort','createdBy')">{{t('issues.thCreatedBy')}} <i class="bi" :class="issueSortIcon('createdBy')"></i></button></th>
+              <th class="col-datetime"><button type="button" class="table-sort-button" @click="$emit('toggle-issue-sort','createdAt')">{{t('issues.thTime')}} <i class="bi" :class="issueSortIcon('createdAt')"></i></button></th>
               <th class="col-actions col-actions-1">{{t('issues.thActions')}}</th>
             </tr></thead>
             <tbody>
@@ -237,14 +250,15 @@ const IssuesPage = {
           </table>
           <div v-if="!pagedIssues.length && !loading.issues" class="empty workspace-empty">
             <i class="bi bi-inbox"></i>
-            <div class="workspace-empty-title">{{t('issues.empty')}}</div>
-            <div class="workspace-empty-hint">{{t('issues.emptyHint')}}</div>
+            <div class="workspace-empty-title">{{issueFilter.status||issueFilter.keyword?t('issues.emptyFiltered'):t('issues.empty')}}</div>
+            <div class="workspace-empty-hint">{{issueFilter.status||issueFilter.keyword?t('issues.emptyFilteredHint'):t('issues.emptyHint')}}</div>
+            <button v-if="issueFilter.status||issueFilter.keyword" class="btn btn-sm btn-secondary" @click="$emit('update:issueFilter',{status:'',keyword:''})">{{t('issues.clearFilters')}}</button>
           </div>
         </div>
         <workspace-pagination
           v-if="!loading.issuesError"
           :page="issuePage" :total-pages="issueTotalPages" :page-size="issuePageSize"
-          :pagination-label="t('stats.pagination')"
+          :pagination-label="t('issues.pagination')"
           :page-status-label="t('stats.pageStatus', {page:issuePage, total:issueTotalPages})"
           :page-size-label="t('stats.pageSize')"
           :first-page-label="t('stats.firstPage')" :previous-page-label="t('stats.previousPage')"
@@ -252,7 +266,7 @@ const IssuesPage = {
           @update:page="$emit('update:issuePage', $event)"
           @update:page-size="$emit('update:issuePageSize', $event)"
         >
-          <template #summary><span class="sub-info">{{t('issues.totalCount', {count: filteredIssues.length})}}</span></template>
+          <template #summary><span class="sub-info">{{t('issues.totalCount', {count: issueTotalElements})}}</span></template>
         </workspace-pagination>
       </div>
 

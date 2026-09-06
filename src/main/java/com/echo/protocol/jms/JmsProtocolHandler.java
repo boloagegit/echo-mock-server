@@ -58,6 +58,8 @@ public class JmsProtocolHandler extends AbstractProtocolHandler {
                 .tags(r.getTags())
                 .createdAt(r.getCreatedAt())
                 .updatedAt(r.getUpdatedAt())
+                .createdBy(r.getCreatedBy())
+                .updatedBy(r.getUpdatedBy())
                 .extendedAt(r.getExtendedAt())
                 .condition(r.getCondition())
                 .responseId(r.getResponseId())
@@ -174,18 +176,18 @@ public class JmsProtocolHandler extends AbstractProtocolHandler {
     }
 
     @Override
-    public int updateEnabled(List<String> ids, boolean enabled) {
-        return repository.updateEnabledByIds(ids, enabled);
+    public int updateEnabled(List<String> ids, boolean enabled, LocalDateTime updatedAt, String updatedBy) {
+        return repository.updateEnabledByIds(ids, enabled, updatedAt, updatedBy);
     }
 
     @Override
-    public int updateProtected(List<String> ids, boolean isProtected) {
-        return repository.updateProtectedByIds(ids, isProtected);
+    public int updateProtected(List<String> ids, boolean isProtected, LocalDateTime updatedAt, String updatedBy) {
+        return repository.updateProtectedByIds(ids, isProtected, updatedAt, updatedBy);
     }
 
     @Override
-    public int extendRules(List<String> ids, LocalDateTime extendedAt) {
-        return repository.extendByIds(ids, extendedAt);
+    public int extendRules(List<String> ids, LocalDateTime extendedAt, String updatedBy) {
+        return repository.extendByIds(ids, extendedAt, extendedAt, updatedBy);
     }
 
     @Override

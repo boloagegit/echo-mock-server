@@ -39,6 +39,7 @@ import com.echo.service.JmsTargetConnectionService;
 import com.echo.service.OpenApiImportService;
 import com.echo.service.ResponseContentValidatorRegistry;
 import com.echo.service.ScenarioService;
+import com.echo.util.CurrentOperator;
 import com.echo.config.CacheConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -368,13 +369,15 @@ public class AdminController {
             @RequestParam(required = false) Protocol protocol,
             @RequestParam(required = false) Boolean enabled,
             @RequestParam(required = false) Boolean isProtected,
+            @RequestParam(required = false) RuleQueryService.RuleMode mode,
+            @RequestParam(required = false) Boolean expiring,
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false, name = "sort") String sortField,
             @RequestParam(required = false) String direction) {
         var result = ruleQueryService.query(new RuleQueryService.RuleQuery(
-                protocol, enabled, isProtected, keyword, page, size, sortField, direction));
+                protocol, enabled, isProtected, keyword, page, size, sortField, direction, mode, expiring));
         List<RuleDto> rules = result.rules().stream()
                 .map(rule -> protocolHandlerRegistry.toDto(rule, null))
                 .toList();
@@ -382,16 +385,30 @@ public class AdminController {
                 result.totalElements(), result.totalPages()));
     }
 
+    ResponseEntity<RulePageDto> queryRules(Protocol protocol, Boolean enabled, Boolean isProtected,
+                                           String keyword, int page, int size,
+                                           String sortField, String direction) {
+        return queryRules(protocol, enabled, isProtected, null, null, keyword,
+                page, size, sortField, direction);
+    }
+
     @GetMapping("/rules/groups")
     public ResponseEntity<RuleGroupSummaryDto> queryRuleGroups(
             @RequestParam(required = false) Protocol protocol,
             @RequestParam(required = false) Boolean enabled,
             @RequestParam(required = false) Boolean isProtected,
+            @RequestParam(required = false) RuleQueryService.RuleMode mode,
+            @RequestParam(required = false) Boolean expiring,
             @RequestParam(required = false) String keyword) {
         var result = ruleQueryService.queryGroupSummary(new RuleQueryService.RuleQuery(
-                protocol, enabled, isProtected, keyword, 0, 20, null, null));
+                protocol, enabled, isProtected, keyword, 0, 20, null, null, mode, expiring));
         return ResponseEntity.ok(new RuleGroupSummaryDto(
                 result.tagKeys(), result.counts(), result.totalElements()));
+    }
+
+    ResponseEntity<RuleGroupSummaryDto> queryRuleGroups(Protocol protocol, Boolean enabled,
+                                                        Boolean isProtected, String keyword) {
+        return queryRuleGroups(protocol, enabled, isProtected, null, null, keyword);
     }
 
     @GetMapping("/rules/group")
@@ -401,13 +418,15 @@ public class AdminController {
             @RequestParam(required = false) Protocol protocol,
             @RequestParam(required = false) Boolean enabled,
             @RequestParam(required = false) Boolean isProtected,
+            @RequestParam(required = false) RuleQueryService.RuleMode mode,
+            @RequestParam(required = false) Boolean expiring,
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "20") int limit,
             @RequestParam(required = false, name = "sort") String sortField,
             @RequestParam(required = false) String direction) {
         int effectiveLimit = Math.max(1, limit);
         var result = ruleQueryService.queryGroup(new RuleQueryService.RuleQuery(
-                protocol, enabled, isProtected, keyword, 0, effectiveLimit, sortField, direction),
+                protocol, enabled, isProtected, keyword, 0, effectiveLimit, sortField, direction, mode, expiring),
                 key, value, effectiveLimit);
         List<RuleDto> rules = result.rules().stream()
                 .map(rule -> protocolHandlerRegistry.toDto(rule, null))
@@ -416,6 +435,13 @@ public class AdminController {
                 : (int) Math.ceil((double) result.totalElements() / effectiveLimit);
         return ResponseEntity.ok(new RulePageDto(
                 rules, 0, effectiveLimit, result.totalElements(), totalPages));
+    }
+
+    ResponseEntity<RulePageDto> queryRuleGroup(String key, String value, Protocol protocol,
+                                               Boolean enabled, Boolean isProtected, String keyword,
+                                               int limit, String sortField, String direction) {
+        return queryRuleGroup(key, value, protocol, enabled, isProtected, null, null,
+                keyword, limit, sortField, direction);
     }
 
     @GetMapping("/rules/{id}")
@@ -620,6 +646,7 @@ public class AdminController {
                     if (!protocolHandlerRegistry.isEnabled(baseRule.getProtocol())) {
                         continue;
                     }
+                    stampRuleForSave(baseRule);
                     protocolHandlerRegistry.getHandler(baseRule.getProtocol())
                             .ifPresent(h -> h.save(baseRule));
                     imported++;
@@ -1010,8 +1037,7 @@ public class AdminController {
         return findRuleById(id)
                 .map(dto -> {
                     ruleService.updateEnabled(List.of(id), true);
-                    dto.setEnabled(true);
-                    return ResponseEntity.ok(dto);
+                    return ResponseEntity.ok(findRuleById(id).orElse(dto));
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -1021,8 +1047,7 @@ public class AdminController {
         return findRuleById(id)
                 .map(dto -> {
                     ruleService.updateEnabled(List.of(id), false);
-                    dto.setEnabled(false);
-                    return ResponseEntity.ok(dto);
+                    return ResponseEntity.ok(findRuleById(id).orElse(dto));
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -1332,10 +1357,25 @@ public class AdminController {
         
         ProtocolHandler handler = protocolHandlerRegistry.getHandler(dto.getProtocol())
                 .orElseThrow(() -> new IllegalArgumentException("Unknown protocol: " + dto.getProtocol()));
-        BaseRule saved = handler.save(handler.fromDto(dto));
+        BaseRule candidate = handler.fromDto(dto);
+        stampRuleForSave(candidate);
+        BaseRule saved = handler.save(candidate);
         evictCacheByProtocol(dto.getProtocol());
         cacheInvalidationService.ifPresent(s -> s.publishInvalidation(dto.getProtocol()));
         return new SaveResult(saved, handler.toDto(saved, response, false));
+    }
+
+    private void stampRuleForSave(BaseRule candidate) {
+        String operator = CurrentOperator.username();
+        if (candidate.getId() == null) {
+            candidate.setCreatedBy(operator);
+        } else {
+            Optional<? extends BaseRule> existing = protocolHandlerRegistry.findById(candidate.getId());
+            if (existing != null) {
+                existing.ifPresent(rule -> candidate.setCreatedBy(rule.getCreatedBy()));
+            }
+        }
+        candidate.setUpdatedBy(operator);
     }
 
     static Optional<Path> databaseFilePath(String url) {

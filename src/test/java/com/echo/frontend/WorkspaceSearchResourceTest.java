@@ -50,6 +50,7 @@ class WorkspaceSearchResourceTest {
         assertExplicitSearch("static/components/StatsPage.js");
         assertExplicitSearch("static/components/AuditPage.js");
         assertExplicitSearch("static/components/AccountsPage.js");
+        assertExplicitSearch("static/components/IssuesPage.js");
     }
 
     @Test
@@ -59,6 +60,24 @@ class WorkspaceSearchResourceTest {
 
         assertThat(zh.path("common").path("searchAction").asText()).isEqualTo("搜尋");
         assertThat(en.path("common").path("searchAction").asText()).isEqualTo("Search");
+    }
+
+    @Test
+    void stickyTableHeadersUseAnOpaqueThemeSurface() throws IOException {
+        String styles = resourceText("static/style.css");
+        String theme = resourceText("static/theme.css");
+
+        assertThat(styles)
+                .contains(".card-table table { border-collapse: separate; border-spacing: 0 }")
+                .contains(".card-table thead {")
+                .contains(".card-table th {")
+                .contains("background: var(--table-head);")
+                .contains("background-clip: padding-box;")
+                .contains("z-index: 4;")
+                .contains("position: static;");
+        assertThat(theme)
+                .contains("--table-head: #1d2430;")
+                .contains("--table-head: #f1f4f8;");
     }
 
     private static void assertExplicitSearch(String path) throws IOException {

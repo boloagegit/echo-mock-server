@@ -36,6 +36,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import sys
 import tempfile
@@ -71,6 +72,7 @@ class ApiClient:
     def __init__(self, base_url: str, username: str, password: str,
                  timeout: float = DEFAULT_TIMEOUT_SECONDS) -> None:
         self.base_url = base_url.rstrip("/")
+        self.username = username
         self.timeout = timeout
         token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
         self.authorization = f"Basic {token}"
@@ -154,11 +156,27 @@ def query_path(path: str, params: Dict[str, Any]) -> str:
 
 
 def iso_timestamp(value: Any) -> Optional[datetime]:
+    # Spring/Jackson deployments may serialize LocalDateTime either as ISO-8601
+    # text or as [year, month, day, hour, minute, second, nanosecond].
+    if isinstance(value, list) and 3 <= len(value) <= 7:
+        if not all(isinstance(part, int) and not isinstance(part, bool) for part in value):
+            return None
+        parts = list(value) + [0] * (7 - len(value))
+        try:
+            return datetime(parts[0], parts[1], parts[2], parts[3], parts[4],
+                            parts[5], parts[6] // 1000)
+        except (TypeError, ValueError, OverflowError):
+            return None
     if not isinstance(value, str) or not value.strip():
         return None
     normalized = value.strip()
     if normalized.endswith("Z"):
         normalized = normalized[:-1] + "+00:00"
+    # Python 3.9 rejects Java's nanosecond precision. datetime stores
+    # microseconds, so truncate only the excess fractional digits.
+    normalized = re.sub(
+        r"(\.\d{6})\d+(?=(?:[+-]\d{2}:?\d{2})?$)", r"\1", normalized
+    )
     try:
         return datetime.fromisoformat(normalized)
     except ValueError:
@@ -323,8 +341,12 @@ class PersistenceTest:
                     f"bodySize={large.get('bodySize')}")
         self.check("response contentType enum persisted", large.get("contentType") == "TEXT",
                     f"contentType={large.get('contentType')!r}")
-        self.check("response createdAt is a timestamp", iso_timestamp(large.get("createdAt")) is not None)
-        self.check("response updatedAt is a timestamp", iso_timestamp(large.get("updatedAt")) is not None)
+        self.check("response createdAt is a timestamp",
+                   iso_timestamp(large.get("createdAt")) is not None,
+                   f"createdAt={large.get('createdAt')!r}")
+        self.check("response updatedAt is a timestamp",
+                   iso_timestamp(large.get("updatedAt")) is not None,
+                   f"updatedAt={large.get('updatedAt')!r}")
 
         fetched_large = self.get_response(large_id)
         self.check("large response read round-trip is exact", fetched_large.get("body") == large_body)
@@ -348,7 +370,8 @@ class PersistenceTest:
                     int_value(updated_large_data.get("version")) >= 1,
                     f"version={updated_large_data.get('version')}")
         self.check("response updatedAt remains valid",
-                    iso_timestamp(updated_large_data.get("updatedAt")) is not None)
+                    iso_timestamp(updated_large_data.get("updatedAt")) is not None,
+                    f"updatedAt={updated_large_data.get('updatedAt')!r}")
 
         # Main rule references the large response but is not invoked, so the
         # log durability test remains small and focused.
@@ -380,8 +403,16 @@ class PersistenceTest:
         self.check("rule protected boolean persisted", bool_is(main_rule.get("isProtected"), True))
         self.check("rule faultType enum persisted", main_rule.get("faultType") == "NONE",
                     f"faultType={main_rule.get('faultType')!r}")
-        self.check("rule createdAt is a timestamp", iso_timestamp(main_rule.get("createdAt")) is not None)
-        self.check("rule updatedAt is a timestamp", iso_timestamp(main_rule.get("updatedAt")) is not None)
+        self.check("rule createdAt is a timestamp",
+                   iso_timestamp(main_rule.get("createdAt")) is not None,
+                   f"createdAt={main_rule.get('createdAt')!r}")
+        self.check("rule updatedAt is a timestamp",
+                   iso_timestamp(main_rule.get("updatedAt")) is not None,
+                   f"updatedAt={main_rule.get('updatedAt')!r}")
+        self.check("rule creator is persisted", main_rule.get("createdBy") == self.client.username,
+                   f"createdBy={main_rule.get('createdBy')!r}")
+        self.check("rule last updater is persisted", main_rule.get("updatedBy") == self.client.username,
+                   f"updatedBy={main_rule.get('updatedBy')!r}")
 
         fetched_main = self.get_rule(main_rule_id)
         initial_rule_version = int_value(fetched_main.get("version"))
@@ -426,7 +457,15 @@ class PersistenceTest:
                     f"before={initial_rule_version}, after={updated_rule_version}")
         self.check("rule update timestamps are valid",
                     iso_timestamp(updated_rule_data.get("createdAt")) is not None and
-                    iso_timestamp(updated_rule_data.get("updatedAt")) is not None)
+                    iso_timestamp(updated_rule_data.get("updatedAt")) is not None,
+                    f"createdAt={updated_rule_data.get('createdAt')!r}, "
+                    f"updatedAt={updated_rule_data.get('updatedAt')!r}")
+        self.check("rule update preserves creator",
+                   updated_rule_data.get("createdBy") == self.client.username,
+                   f"createdBy={updated_rule_data.get('createdBy')!r}")
+        self.check("rule update stores last updater",
+                   updated_rule_data.get("updatedBy") == self.client.username,
+                   f"updatedBy={updated_rule_data.get('updatedBy')!r}")
         self.state["main_rule_version"] = updated_rule_version
 
         # Small response/rule pair used for durable request-log checks.
@@ -469,6 +508,7 @@ class PersistenceTest:
         # Verify rules-page filtering/pagination and response summary filtering.
         self.test_rule_query(run_id)
         self.test_response_summary(large_id, len(large_body.encode("utf-8")))
+        self.test_admin_list_queries(run_id)
 
         # Three unique requests make both durable log insertion and pagination
         # observable without touching unrelated request logs.
@@ -559,6 +599,7 @@ class PersistenceTest:
         path = query_path("/api/admin/rules/page", {
             "protocol": "HTTP",
             "enabled": "true",
+            "mode": "MOCK",
             "keyword": f"rdbms-persist-{run_id}",
             "page": 0,
             "size": 1,
@@ -577,6 +618,69 @@ class PersistenceTest:
                     f"totalPages={data.get('totalPages')}")
         self.check("rule page respects size=1", isinstance(rows, list) and len(rows) == 1,
                     f"rows={len(rows) if isinstance(rows, list) else rows!r}")
+
+    def test_admin_list_queries(self, run_id: str) -> None:
+        username = f"rdbms-{run_id}"[:50]
+        account = self.require_dict(self.client.request(
+            "POST", "/api/admin/builtin-users", {
+                "username": username,
+                "password": "matrix-test-password",
+            }), (201,), "create account pagination sentinel")
+        account_id = int_value(account.get("id"))
+        if account_id is None:
+            raise TestFailure("account pagination sentinel did not return a numeric id")
+        self.state["account_id"] = account_id
+        self.state["account_username"] = username
+
+        account_page = self.require_dict(self.client.request("GET", query_path(
+            "/api/admin/builtin-users/page", {
+                "keyword": username,
+                "role": "ROLE_USER",
+                "enabled": "true",
+                "page": 0,
+                "size": 1,
+                "sort": "username",
+                "direction": "desc",
+            })), (200,), "query account page")
+        account_rows = account_page.get("results")
+        matching_accounts = [row for row in account_rows or []
+                             if isinstance(row, dict) and int_value(row.get("id")) == account_id]
+        self.check("account page filters and paginates the sentinel",
+                   int_value(account_page.get("totalElements")) == 1 and len(matching_accounts) == 1,
+                   f"total={account_page.get('totalElements')}, rows={account_rows!r}")
+        self.check("account page never exposes password data",
+                   bool(matching_accounts) and "password" not in matching_accounts[0])
+
+        issue_title = f"RDBMS {run_id} issue"
+        issue = self.require_dict(self.client.request("POST", "/api/admin/issues", {
+            "title": issue_title,
+            "description": f"rdbms-persist-{run_id}-issue",
+        }), (201,), "create issue pagination sentinel")
+        issue_id = issue.get("id")
+        if not isinstance(issue_id, str) or not issue_id:
+            raise TestFailure("issue pagination sentinel did not return a valid id")
+        self.state["issue_id"] = issue_id
+        self.state["issue_title"] = issue_title
+
+        issue_page = self.require_dict(self.client.request("GET", query_path(
+            "/api/admin/issues/page", {
+                "keyword": issue_title,
+                "status": "OPEN",
+                "page": 0,
+                "size": 1,
+                "sort": "title",
+                "direction": "asc",
+            })), (200,), "query issue page")
+        issue_rows = issue_page.get("results")
+        matching_issues = [row for row in issue_rows or []
+                           if isinstance(row, dict) and row.get("id") == issue_id]
+        self.check("issue page filters and paginates the sentinel",
+                   int_value(issue_page.get("totalElements")) == 1 and len(matching_issues) == 1,
+                   f"total={issue_page.get('totalElements')}, rows={issue_rows!r}")
+        self.check("issue page includes the global open count",
+                   int_value(issue_page.get("openCount")) is not None and
+                   int_value(issue_page.get("openCount")) >= 1,
+                   f"openCount={issue_page.get('openCount')!r}")
 
     def test_response_summary(self, response_id: int, expected_body_size: int) -> None:
         path = query_path("/api/admin/responses/summary", {
@@ -834,7 +938,8 @@ class PersistenceTest:
                     int_value(large.get("bodySize")) == state.get("large_body_bytes"))
         self.check("sentinel response timestamp remains valid",
                     iso_timestamp(large.get("createdAt")) is not None and
-                    iso_timestamp(large.get("updatedAt")) is not None)
+                    iso_timestamp(large.get("updatedAt")) is not None,
+                    f"createdAt={large.get('createdAt')!r}, updatedAt={large.get('updatedAt')!r}")
         self.check("sentinel response description survives restart",
                     large.get("description") == state.get("large_description"))
 
@@ -848,7 +953,34 @@ class PersistenceTest:
                     main.get("faultType") == "NONE")
         self.check("sentinel main rule timestamps remain valid",
                     iso_timestamp(main.get("createdAt")) is not None and
-                    iso_timestamp(main.get("updatedAt")) is not None)
+                    iso_timestamp(main.get("updatedAt")) is not None,
+                    f"createdAt={main.get('createdAt')!r}, updatedAt={main.get('updatedAt')!r}")
+        self.check("sentinel rule operator metadata survives restart",
+                   main.get("createdBy") == self.client.username and
+                   main.get("updatedBy") == self.client.username,
+                   f"createdBy={main.get('createdBy')!r}, updatedBy={main.get('updatedBy')!r}")
+
+        account_id = int_value(state.get("account_id"))
+        account_username = state.get("account_username")
+        if account_id is not None and isinstance(account_username, str):
+            account_page = self.require_dict(self.client.request("GET", query_path(
+                "/api/admin/builtin-users/page", {
+                    "keyword": account_username, "page": 0, "size": 1,
+                })), (200,), "verify account page after restart")
+            self.check("account pagination sentinel survives restart",
+                       any(isinstance(row, dict) and int_value(row.get("id")) == account_id
+                           for row in account_page.get("results", [])))
+
+        issue_id = state.get("issue_id")
+        issue_title = state.get("issue_title")
+        if isinstance(issue_id, str) and isinstance(issue_title, str):
+            issue_page = self.require_dict(self.client.request("GET", query_path(
+                "/api/admin/issues/page", {
+                    "keyword": issue_title, "page": 0, "size": 1,
+                })), (200,), "verify issue page after restart")
+            self.check("issue pagination sentinel survives restart",
+                       any(isinstance(row, dict) and row.get("id") == issue_id
+                           for row in issue_page.get("results", [])))
 
         log_rule = self.get_rule(log_rule_id)
         log_response_id = int_value(state.get("log_response_id"))
@@ -929,6 +1061,36 @@ class PersistenceTest:
             result = self.delete_response(response_id)
             self.check(f"cleanup response {response_id}", result.status in (200, 404),
                        f"status={result.status}, body={short_result(result)}")
+        issue_id = state.get("issue_id")
+        if isinstance(issue_id, str):
+            existing = self.client.request("GET", f"/api/admin/issues/{issue_id}")
+            if existing.status == 404:
+                self.check(f"cleanup issue {issue_id}", True, "already absent")
+            elif (existing.status == 200 and isinstance(existing.data, dict) and
+                  run_id in str(existing.data.get("description", ""))):
+                result = self.client.request("DELETE", f"/api/admin/issues/{issue_id}")
+                self.check(f"cleanup issue {issue_id}", result.status in (200, 404),
+                           f"status={result.status}, body={short_result(result)}")
+            else:
+                self.check(f"cleanup issue {issue_id}", False,
+                           "refused: record could not be verified as this run")
+        account_id = int_value(state.get("account_id"))
+        account_username = state.get("account_username")
+        if account_id is not None and isinstance(account_username, str):
+            page = self.client.request("GET", query_path(
+                "/api/admin/builtin-users/page", {
+                    "keyword": account_username, "page": 0, "size": 10,
+                }))
+            rows = page.data.get("results", []) if isinstance(page.data, dict) else []
+            owned = any(isinstance(row, dict) and int_value(row.get("id")) == account_id and
+                        row.get("username") == account_username for row in rows)
+            if not owned:
+                self.check(f"cleanup account {account_id}", page.status == 200 and not rows,
+                           "record absent or ownership could not be verified")
+            else:
+                result = self.client.request("DELETE", f"/api/admin/builtin-users/{account_id}")
+                self.check(f"cleanup account {account_id}", result.status in (200, 404),
+                           f"status={result.status}, body={short_result(result)}")
         if self.failures:
             self.report("cleanup")
             raise TestFailure("cleanup did not remove every recorded sentinel")

@@ -35,6 +35,8 @@ public class RuleDto {
     private String tags;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private String createdBy;
+    private String updatedBy;
     private LocalDateTime extendedAt;
     private String condition;
     private Long responseId;

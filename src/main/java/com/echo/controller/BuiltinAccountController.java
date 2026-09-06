@@ -1,6 +1,8 @@
 package com.echo.controller;
 
 import com.echo.entity.BuiltinUser;
+import com.echo.dto.BuiltinUserPageDto;
+import com.echo.dto.BuiltinUserSummaryDto;
 import com.echo.service.BuiltinUserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -50,6 +52,23 @@ public class BuiltinAccountController {
     @GetMapping
     public ResponseEntity<List<BuiltinUser>> listUsers() {
         return ResponseEntity.ok(builtinUserService.listUsers());
+    }
+
+    @GetMapping("/page")
+    public ResponseEntity<BuiltinUserPageDto> queryUsers(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String role,
+            @RequestParam(required = false) Boolean enabled,
+            @RequestParam(required = false) Boolean passwordResetRequested,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "username") String sort,
+            @RequestParam(defaultValue = "asc") String direction) {
+        var result = builtinUserService.queryUsers(keyword, role, enabled,
+                passwordResetRequested, page, size, sort, direction);
+        return ResponseEntity.ok(new BuiltinUserPageDto(
+                result.getContent().stream().map(BuiltinUserSummaryDto::from).toList(),
+                result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages()));
     }
 
     @PostMapping

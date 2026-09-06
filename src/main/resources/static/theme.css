@@ -7,13 +7,13 @@
 :root {
     color-scheme: dark;
     --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
-    --bg: #101318;
-    --card: #171a20;
-    --border: #2b3039;
-    --border2: #3c434e;
+    --bg: #0d1117;
+    --card: #151a22;
+    --border: #2b3441;
+    --border2: #414d5e;
     /* Echo blue is reserved for interaction, focus, and selected state. */
-    --primary: #7899f4;
-    --primary-rgb: 120, 153, 244;
+    --primary: #82a8f7;
+    --primary-rgb: 130, 168, 247;
     --success: #4fbd82;
     --success-rgb: 79, 189, 130;
     --warning: #d8a94d;
@@ -21,27 +21,28 @@
     --danger: #ed7773;
     --danger-rgb: 237, 119, 115;
     --danger-text: #ff9a95;
-    --text: #f1f3f5;
-    --muted: #a6adb8;
-    --muted-rgb: 166, 173, 184;
+    --text: #eef2f7;
+    --muted: #a7b0bd;
+    --muted-rgb: 167, 176, 189;
     --purple: #b08ae8;
     --purple-rgb: 176, 138, 232;
-    --hover: #20242b;
-    --code-bg: #11151b;
-    --btn-primary: #526fc9;
-    --btn-primary-hover: #4664bd;
-    --btn-primary-rgb: 82, 111, 201;
+    --hover: #1d2430;
+    --code-bg: #0f141b;
+    --table-head: #1d2430;
+    --btn-primary: #426fc1;
+    --btn-primary-hover: #4f7ed1;
+    --btn-primary-rgb: 66, 111, 193;
 }
 
 /* 淺色主題 */
 :root[data-theme="light"] {
     color-scheme: light;
-    --bg: #f4f5f7;
+    --bg: #f3f6fa;
     --card: #ffffff;
-    --border: #d6dbe3;
-    --border2: #b9c1ce;
-    --primary: #315da9;
-    --primary-rgb: 49, 93, 169;
+    --border: #d7dee8;
+    --border2: #b4bfce;
+    --primary: #2862a8;
+    --primary-rgb: 40, 98, 168;
     --success: #1f7a4d;
     --success-rgb: 31, 122, 77;
     --warning: #8b641f;
@@ -49,14 +50,15 @@
     --danger: #c43f48;
     --danger-rgb: 196, 63, 72;
     --danger-text: #ad303a;
-    --text: #1d232d;
-    --muted: #5e6877;
-    --muted-rgb: 94, 104, 119;
+    --text: #182230;
+    --muted: #5d6a7b;
+    --muted-rgb: 93, 106, 123;
     --purple: #7048aa;
     --purple-rgb: 112, 72, 170;
-    --hover: #edf0f4;
-    --code-bg: #f1f3f6;
-    --btn-primary: #315da9;
-    --btn-primary-hover: #264d94;
-    --btn-primary-rgb: 49, 93, 169;
+    --hover: #edf2f7;
+    --code-bg: #f1f4f8;
+    --table-head: #f1f4f8;
+    --btn-primary: #2862a8;
+    --btn-primary-hover: #1f518f;
+    --btn-primary-rgb: 40, 98, 168;
 }

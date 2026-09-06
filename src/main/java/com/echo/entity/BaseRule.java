@@ -1,5 +1,6 @@
 package com.echo.entity;
 
+import com.echo.util.CurrentOperator;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -96,6 +97,12 @@ public abstract class BaseRule {
     /** 最後更新時間 */
     private LocalDateTime updatedAt;
 
+    /** 建立規則的帳號；舊資料可能為空。 */
+    private String createdBy;
+
+    /** 最後修改規則的帳號；舊資料可能為空。 */
+    private String updatedBy;
+
     /** 展延時間（用於計算自動清除日期） */
     private LocalDateTime extendedAt;
 
@@ -125,6 +132,8 @@ public abstract class BaseRule {
         }
         createdAt = LocalDateTime.now();
         updatedAt = createdAt;
+        createdBy = CurrentOperator.username();
+        updatedBy = createdBy;
         if (priority == null) {
             priority = 0;
         }
