@@ -119,7 +119,7 @@ dependencies {
 
     // Error Prone (compile-time only, does NOT affect runtime)
     // 2.42.0 is the newest Error Prone release that can run on the Java 17 toolchain.
-    errorprone 'com.google.errorprone:error_prone_core:2.42.0'
+    errorprone 'com.google.errorprone:error_prone_core:2.50.0'
 
     // Testing
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
