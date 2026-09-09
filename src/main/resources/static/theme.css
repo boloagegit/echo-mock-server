@@ -13,10 +13,14 @@
     --border2: #414d5e;
     /* Echo blue is reserved for interaction, focus, and selected state. */
     --primary: #82a8f7;
+    --primary-strong: #82a8f7;
     --primary-rgb: 130, 168, 247;
     --success: #4fbd82;
+    --success-strong: #4fbd82;
     --success-rgb: 79, 189, 130;
     --warning: #d8a94d;
+    --warning-strong: #d8a94d;
+    --warning-text: #e3ba63;
     --warning-rgb: 216, 169, 77;
     --danger: #ed7773;
     --danger-rgb: 237, 119, 115;
@@ -42,10 +46,14 @@
     --border: #d7dee8;
     --border2: #b4bfce;
     --primary: #2862a8;
+    --primary-strong: #174b87;
     --primary-rgb: 40, 98, 168;
     --success: #1f7a4d;
+    --success-strong: #145f3a;
     --success-rgb: 31, 122, 77;
     --warning: #8b641f;
+    --warning-strong: #684709;
+    --warning-text: #684709;
     --warning-rgb: 139, 100, 31;
     --danger: #c43f48;
     --danger-rgb: 196, 63, 72;

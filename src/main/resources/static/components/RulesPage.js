@@ -70,6 +70,50 @@ const RulesPage = {
       pvOverflow: {},
     };
   },
+  computed: {
+    hasRuleFilters() {
+      return Boolean(this.ruleFilter.keyword || this.ruleFilter.protocol || this.ruleFilter.enabled
+        || this.ruleFilter.isProtected || this.ruleFilter.mode || this.ruleFilter.expiring);
+    },
+    protocolFilterOptions() {
+      return [
+        { value: 'HTTP', label: this.httpLabel },
+        { value: 'JMS', label: this.jmsLabel, disabled: !this.jmsEnabled },
+      ];
+    },
+    enabledFilterOptions() {
+      return [
+        { value: 'true', label: this.t('rules.filterEnabled') },
+        { value: 'false', label: this.t('rules.filterDisabled') },
+      ];
+    },
+    protectionFilterOptions() {
+      return [
+        { value: 'true', label: this.t('rules.filterProtected') },
+        { value: 'false', label: this.t('rules.filterUnprotected') },
+      ];
+    },
+    expiringFilterOptions() {
+      return [{
+        value: 'true',
+        label: this.t('rules.filterExpiring'),
+        icon: 'bi-hourglass-split',
+        title: this.t('rules.filterExpiringHint'),
+      }];
+    },
+    viewModeOptions() {
+      return [
+        { value: 'list', label: this.t('rules.listView'), title: this.t('rules.listView'), icon: 'bi-list', iconOnly: true },
+        { value: 'group', label: this.t('rules.groupView'), title: this.t('rules.groupView'), icon: 'bi-collection', iconOnly: true },
+      ];
+    },
+    dataMenuItems() {
+      return [
+        { key: 'export', label: this.t('rules.exportRules'), icon: 'bi-box-arrow-up' },
+        { key: 'import', label: this.t('rules.importRules'), icon: 'bi-box-arrow-in-down' },
+      ];
+    },
+  },
   updated() {
     for (const key of Object.keys(this.rulePreviewExpanded)) {
       if (!this.rulePreviewExpanded[key]) { continue; }
@@ -95,7 +139,11 @@ const RulesPage = {
       this.$emit('update:ruleFilter', f);
     },
     clearFilters() {
-      this.$emit('update:ruleFilter', { protocol: '', enabled: '', isProtected: '', keyword: '' });
+      this.$emit('update:ruleFilter', { protocol: '', enabled: '', isProtected: '', mode: '', expiring: '', keyword: '' });
+    },
+    handleDataMenuAction(action) {
+      if (action === 'export') { this.$emit('export-rules'); }
+      if (action === 'import') { this.$emit('show-import'); }
     },
     toggleSelection(id) {
       const arr = [...this.selectedRules];
@@ -172,39 +220,33 @@ const RulesPage = {
             <span class="page-count">{{ruleTotalElements}}</span>
         </div>
         <div class="page-actions">
-            <button class="btn btn-secondary" @click="$emit('load-rules', true)" :disabled="loading.rules"><i class="bi bi-arrow-clockwise" :class="{'spin':loading.rules}"></i> {{t('rules.refresh')}}</button>
-            <button class="btn btn-secondary" @click="$emit('toggle-batch-select')" :disabled="!isLoggedIn" :title="!isLoggedIn?t('rules.loginRequired'):t('rules.batchSelect')" :class="{'active':batchSelectMode}"><i class="bi bi-check2-square"></i> {{t('rules.batchSelect')}}</button>
+            <ui-button class="btn btn-secondary" @click="$emit('load-rules', true)" :disabled="loading.rules"><i class="bi bi-arrow-clockwise" :class="{'spin':loading.rules}"></i> {{t('rules.refresh')}}</ui-button>
+            <ui-button class="btn btn-secondary" @click="$emit('toggle-batch-select')" :disabled="!isLoggedIn" :title="!isLoggedIn?t('rules.loginRequired'):t('rules.batchSelect')" :class="{'active':batchSelectMode}"><i class="bi bi-check2-square"></i> {{t('rules.batchSelect')}}</ui-button>
             <template v-if="batchSelectMode && selectedRules.length">
-                <button class="btn btn-secondary" @click="$emit('batch-protect', true)"><i class="bi bi-shield-check"></i> {{t('rules.protectCount', {count: selectedRules.length})}}</button>
-                <button class="btn btn-secondary" @click="$emit('batch-protect', false)"><i class="bi bi-shield"></i> {{t('rules.unprotect')}}</button>
-                <button class="btn btn-danger" @click="$emit('delete-selected')"><i class="bi bi-trash"></i> {{t('rules.deleteCount', {count: selectedRules.length})}}</button>
+                <ui-button class="btn btn-secondary" @click="$emit('batch-protect', true)"><i class="bi bi-shield-check"></i> {{t('rules.protectCount', {count: selectedRules.length})}}</ui-button>
+                <ui-button class="btn btn-secondary" @click="$emit('batch-protect', false)"><i class="bi bi-shield"></i> {{t('rules.unprotect')}}</ui-button>
+                <ui-button class="btn btn-danger" @click="$emit('delete-selected')"><i class="bi bi-trash"></i> {{t('rules.deleteCount', {count: selectedRules.length})}}</ui-button>
             </template>
-            <button class="btn btn-primary" @click="$emit('open-create')" :disabled="!isLoggedIn" :title="!isLoggedIn?t('rules.loginRequired'):t('rules.addRule')"><i class="bi bi-plus-lg"></i> {{t('rules.addRule')}}</button>
-            <div v-if="isLoggedIn && bulkImportExportEnabled" class="data-dropdown-wrapper">
-                <button type="button" class="btn btn-secondary btn-icon" @click.stop="$emit('toggle-data-dropdown')" :title="t('rules.exportImport')" :aria-label="t('rules.exportImport')" :aria-expanded="showDataDropdown?'true':'false'" aria-haspopup="menu"><i class="bi bi-three-dots-vertical" aria-hidden="true"></i></button>
-                <div v-if="showDataDropdown" class="data-dropdown" role="menu">
-                    <button type="button" class="data-dropdown-item" role="menuitem" @click="$emit('export-rules')"><i class="bi bi-box-arrow-up" aria-hidden="true"></i> {{t('rules.exportRules')}}</button>
-                    <button type="button" class="data-dropdown-item" role="menuitem" @click="$emit('show-import')"><i class="bi bi-box-arrow-in-down" aria-hidden="true"></i> {{t('rules.importRules')}}</button>
-                </div>
-            </div>
+            <ui-button class="btn btn-primary" @click="$emit('open-create')" :disabled="!isLoggedIn" :title="!isLoggedIn?t('rules.loginRequired'):t('rules.addRule')"><i class="bi bi-plus-lg"></i> {{t('rules.addRule')}}</ui-button>
+            <ui-dropdown-menu v-if="isLoggedIn && bulkImportExportEnabled"
+                :open="showDataDropdown" :items="dataMenuItems" :trigger-label="t('rules.exportImport')"
+                @toggle="$emit('toggle-data-dropdown')" @close="$emit('toggle-data-dropdown')"
+                @select="handleDataMenuAction"></ui-dropdown-menu>
         </div>
     </div>
     <div v-if="!jmsEnabled" class="warning-banner"><i class="bi bi-exclamation-triangle"></i> {{t('rules.jmsNotEnabled', {jmsLabel: jmsLabel})}}</div>
     <div class="card rule-filter-card workspace-filter-card">
         <div class="card-body filter-row rule-filter-bar workspace-filter-bar">
             <div class="rule-filter-controls workspace-filter-controls">
-                <div class="btn-group">
-                    <button class="btn btn-sm" :class="ruleFilter.protocol==='HTTP'?'btn-primary':'btn-secondary'" @click="toggleFilter('protocol','HTTP')">{{httpLabel}}</button>
-                    <button class="btn btn-sm" :class="ruleFilter.protocol==='JMS'?'btn-primary':'btn-secondary'" @click="toggleFilter('protocol','JMS')" :disabled="!jmsEnabled">{{jmsLabel}}</button>
-                </div>
-                <div class="btn-group">
-                    <button class="btn btn-sm" :class="ruleFilter.enabled==='true'?'btn-primary':'btn-secondary'" @click="toggleFilter('enabled','true')">{{t('rules.filterEnabled')}}</button>
-                    <button class="btn btn-sm" :class="ruleFilter.enabled==='false'?'btn-primary':'btn-secondary'" @click="toggleFilter('enabled','false')">{{t('rules.filterDisabled')}}</button>
-                </div>
-                <div class="btn-group">
-                    <button class="btn btn-sm" :class="ruleFilter.isProtected==='true'?'btn-primary':'btn-secondary'" @click="toggleFilter('isProtected','true')">{{t('rules.filterProtected')}}</button>
-                    <button class="btn btn-sm" :class="ruleFilter.isProtected==='false'?'btn-primary':'btn-secondary'" @click="toggleFilter('isProtected','false')">{{t('rules.filterUnprotected')}}</button>
-                </div>
+                <ui-toggle-group :model-value="ruleFilter.protocol" :options="protocolFilterOptions"
+                    :aria-label="t('rules.protocolFilter')"
+                    @update:model-value="setFilter('protocol', $event)"></ui-toggle-group>
+                <ui-toggle-group :model-value="ruleFilter.enabled" :options="enabledFilterOptions"
+                    :aria-label="t('rules.statusFilter')"
+                    @update:model-value="setFilter('enabled', $event)"></ui-toggle-group>
+                <ui-toggle-group :model-value="ruleFilter.isProtected" :options="protectionFilterOptions"
+                    :aria-label="t('rules.protectionFilter')"
+                    @update:model-value="setFilter('isProtected', $event)"></ui-toggle-group>
                 <label class="rule-filter-select">
                     <span class="visually-hidden">{{t('rules.filterMode')}}</span>
                     <select class="form-control" :value="ruleFilter.mode" @change="setFilter('mode', $event.target.value)" :aria-label="t('rules.filterMode')">
@@ -214,9 +256,9 @@ const RulesPage = {
                         <option value="FAULT">{{t('rules.mode_FAULT')}}</option>
                     </select>
                 </label>
-                <button class="btn btn-sm" :class="ruleFilter.expiring==='true'?'btn-primary':'btn-secondary'" @click="toggleFilter('expiring','true')" :title="t('rules.filterExpiringHint')">
-                    <i class="bi bi-hourglass-split" aria-hidden="true"></i>{{t('rules.filterExpiring')}}
-                </button>
+                <ui-toggle-group :model-value="ruleFilter.expiring" :options="expiringFilterOptions"
+                    :aria-label="t('rules.filterExpiring')"
+                    @update:model-value="setFilter('expiring', $event)"></ui-toggle-group>
                 <workspace-search-field
                     input-id="ruleSearch"
                     :model-value="ruleFilter.keyword"
@@ -229,27 +271,24 @@ const RulesPage = {
                 ></workspace-search-field>
             </div>
             <div class="rule-view-controls">
-                <div class="btn-group">
-                    <button class="btn btn-sm btn-secondary" :class="{'active':ruleViewMode==='list'}" @click="$emit('update:ruleViewMode', 'list')" :title="t('rules.listView')" :aria-label="t('rules.listView')"><i class="bi bi-list"></i></button>
-                    <button class="btn btn-sm btn-secondary" :class="{'active':ruleViewMode==='group'}" @click="$emit('update:ruleViewMode', 'group')" :title="t('rules.groupView')" :aria-label="t('rules.groupView')"><i class="bi bi-collection"></i></button>
-                </div>
+                <ui-segmented-control :model-value="ruleViewMode" :options="viewModeOptions"
+                    name="ruleViewMode" size="compact" :aria-label="t('rules.viewMode')"
+                    @update:model-value="$emit('update:ruleViewMode', $event)"></ui-segmented-control>
             </div>
         </div>
     </div>
-    <div v-if="ruleFilterChips.length" class="filter-chips">
-        <span class="filter-chip" v-for="c in ruleFilterChips" :key="c.key">{{c.label}} <button class="chip-remove" @click="$emit('remove-rule-chip', c.key)"><i class="bi bi-x"></i></button></span>
-        <button class="chip-clear" @click="$emit('clear-rule-filters')">{{t('rules.clearAll')}}</button>
-    </div>
+    <ui-filter-chip-list :items="ruleFilterChips" :aria-label="t('common.activeFilters')"
+        :clear-label="t('rules.clearAll')"
+        @remove="$emit('remove-rule-chip', $event)"
+        @clear="$emit('clear-rule-filters')"></ui-filter-chip-list>
     <div class="card card-table">
-        <div v-if="loading.rulesError && !loading.rules" class="workspace-load-error" role="alert">
-            <i class="bi bi-cloud-slash" aria-hidden="true"></i>
-            <strong>{{t('rules.loadFailed')}}</strong>
-            <button type="button" class="btn btn-sm btn-secondary" @click="$emit('load-rules', true)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</button>
-        </div>
+        <ui-load-state v-if="loading.rulesError && !loading.rules" kind="error" icon="bi-cloud-slash" :title="t('rules.loadFailed')" has-action>
+            <template #action><ui-button type="button" class="btn btn-sm btn-secondary" @click="$emit('load-rules', true)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</ui-button></template>
+        </ui-load-state>
         <!-- 列表檢視 -->
         <template v-else-if="ruleViewMode==='list'">
         <!-- Skeleton -->
-        <div v-if="loading.rules && !rules.length" class="card-table-body">
+        <div v-if="loading.rules && !rules.length" class="card-table-body" role="status" :aria-label="t('common.loading')">
             <div v-for="i in 6" :key="'sk-rule-'+i" class="sk-row">
                 <span class="sk sk-badge" style="width:60px"></span>
                 <span class="sk sk-badge" style="width:38px"></span>
@@ -263,13 +302,11 @@ const RulesPage = {
             <thead><tr>
                 <th v-if="canDragRules" style="width:28px"></th>
                 <th v-if="batchSelectMode" style="width:40px"><input type="checkbox" @change="$emit('toggle-select-all', $event)" :checked="selectedRules.length===pagedRules.length && pagedRules.length>0" :aria-label="t('rules.selectAll')"></th>
-                <th class="col-id">{{t('rules.thId')}}</th>
-                <th class="col-type col-hide-sm">{{t('rules.thProtocol')}}</th>
                 <th class="col-endpoint">{{t('rules.thEndpoint')}}</th>
                 <th class="col-cond col-hide-md">{{t('rules.thCondition')}}</th>
                 <th class="col-hide-sm" style="width:72px">{{t('rules.thEnabled')}}</th>
-                <th class="col-priority col-hide-md" style="cursor:pointer" @click="$emit('toggle-rule-sort', 'priority')">{{t('rules.thPriority')}} <i class="bi" :class="ruleSortIcon('priority')"></i></th>
-                <th class="col-datetime col-hide-md" style="cursor:pointer" @click="$emit('toggle-rule-sort', 'updatedAt')">{{t('rules.thUpdated')}} <i class="bi" :class="ruleSortIcon('updatedAt')"></i></th>
+                <th class="col-priority col-hide-md" :aria-sort="ruleSort.field==='priority'?(ruleSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('rules.thPriority')" :active="ruleSort.field==='priority'" :ascending="ruleSort.asc" @toggle="$emit('toggle-rule-sort', 'priority')"></ui-table-sort-header></th>
+                <th class="col-datetime col-hide-md" :aria-sort="ruleSort.field==='updatedAt'?(ruleSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('rules.thUpdated')" :active="ruleSort.field==='updatedAt'" :ascending="ruleSort.asc" @toggle="$emit('toggle-rule-sort', 'updatedAt')"></ui-table-sort-header></th>
                 <th class="col-actions rule-row-action-column">
                     <span>{{t('rules.thActions')}}</span>
                     <details v-if="showDblClickHint" class="rule-table-hint" @click.stop>
@@ -286,62 +323,28 @@ const RulesPage = {
                 <tr :class="[{'selected-row':batchSelectMode && selectedRules.includes(r.id), 'row-clickable':!batchSelectMode}, dragRowClass(r)]" @click="!batchSelectMode && $emit('handle-rule-row-click', r)" :title="!batchSelectMode ? t('rules.clickPreviewDblEdit') : ''" @dragover="(e) => $emit('drag-over', e, r)" @dragleave="(e) => $emit('drag-leave', e, r)" @drop="$emit('drop', $event)">
                     <td v-if="canDragRules" class="drag-handle-cell" draggable="true" :aria-label="t('rules.dragRule', {id:shortId(r.id)})" :title="t('rules.dragRule', {id:shortId(r.id)})" @dragstart="(e) => $emit('drag-start', e, r)" @dragend="$emit('drag-end')"><i class="bi bi-grip-vertical" aria-hidden="true"></i></td>
                     <td v-if="batchSelectMode"><input type="checkbox" :checked="selectedRules.includes(r.id)" @change="toggleSelection(r.id)" :aria-label="t('rules.selectRule', {id:shortId(r.id)})"></td>
-                    <td class="col-id">
-                        <span class="badge badge-id" :title="r.id">{{shortId(r.id)}}</span>
-                        <i v-if="r.isProtected" class="bi bi-shield-fill-check text-success" :title="t('rules.isProtected')" style="margin-left:4px"></i>
-                    </td>
-                    <td class="col-type col-hide-sm"><span class="badge" :class="'badge-'+r.protocol.toLowerCase()">{{r.protocol==='HTTP'?httpLabel:jmsLabel}}</span></td>
-                    <td class="col-endpoint">
-                        <div class="rule-endpoint-main">
-                            <span v-if="r.protocol==='HTTP'" class="badge badge-method">{{r.method}}</span>
-                            <code :title="r.matchKey">{{r.matchKey}}</code>
-                            <span v-if="r.sseEnabled" class="badge badge-sse" :title="t('rules.sseStream')">SSE</span>
-                            <span v-if="r.action==='FORWARD'" class="badge badge-muted"><i class="bi bi-box-arrow-up-right"></i> {{t('rules.forward')}}</span>
-                            <span v-if="r.faultType&&r.faultType!=='NONE'" class="badge badge-muted" :title="t('rules.fault_'+r.faultType)"><i class="bi bi-lightning" aria-hidden="true"></i> {{t('rules.faultInjection')}}</span>
-                        </div>
-                        <div v-if="r.description" class="sub-info rule-description" :title="r.description">{{r.description}}</div>
-                        <div v-if="r.targetHost || (status?.scenariosEnabled && r.scenarioName) || r.tags" class="rule-endpoint-meta">
-                            <span v-if="r.targetHost" class="rule-source-host" :title="t('rules.targetPrefix')+r.targetHost"><span>{{t('rules.targetPrefix')}}</span><code>{{r.targetHost}}</code></span>
-                            <span v-if="status?.scenariosEnabled && r.scenarioName" class="rule-scenario-meta" :title="t('rules.scenarioTooltip',{name:r.scenarioName,required:r.requiredScenarioState||'Started',newState:r.newScenarioState||r.requiredScenarioState||'Started'})"><i class="bi bi-diagram-3" aria-hidden="true"></i><code>{{r.scenarioName}}</code></span>
-                            <span v-for="(v,k) in parseTags(r.tags)" :key="k" class="badge badge-tag" :title="k+'='+v">{{k}}:{{v}}</span>
-                        </div>
-                    </td>
-                    <td class="col-cond col-hide-md" :title="condTooltip(r)">
+                    <td class="col-endpoint"><rule-list-identity :rule="r" :http-label="httpLabel" :jms-label="jmsLabel" :status="status" @clip-copy="$emit('clip-copy',$event)"></rule-list-identity></td>
+    <td class="col-cond col-hide-md" :title="condTooltip(r)">
                         <div v-if="condTags(r).length" class="cond-list">
                             <span v-for="(c,i) in condTags(r)" :key="i" class="cond-tag" :class="c.t" :title="c.v"><span class="cond-label">{{c.label}}</span>{{c.v}}</span>
                         </div>
                         <span v-else class="sub-info">{{t('rules.noCondition')}}</span>
                     </td>
                     <td class="col-hide-sm">
-                        <label class="toggle" @click.stop :class="{'disabled':!isLoggedIn}">
-                            <input type="checkbox" :checked="r.enabled!==false" @click.prevent="$emit('toggle-enabled', r)" :disabled="!isLoggedIn" :aria-label="t('rules.thEnabled')">
-                            <span class="toggle-slider"></span>
-                        </label>
+                        <ui-toggle :checked="r.enabled!==false" :disabled="!isLoggedIn" :aria-label="t('rules.toggleEnabled', {id:shortId(r.id)})" @toggle="$emit('toggle-enabled', r)"></ui-toggle>
                     </td>
-                    <td class="col-priority col-hide-md"><span class="badge badge-muted">{{r.priority ?? 0}}</span></td>
+                    <td class="col-priority col-hide-md"><span class="table-metadata">{{r.priority ?? 0}}</span></td>
                     <td class="col-datetime col-hide-md">
                         <div class="table-date-stack">
-                            <span class="rule-updated-by" :title="r.updatedBy||t('rules.unknownOperator')"><i class="bi bi-person" aria-hidden="true"></i>{{r.updatedBy||t('rules.unknownOperator')}}</span>
                             <span class="sub-info" :title="fmtTime(r.updatedAt,false)">{{fmtTime(r.updatedAt)}}</span>
-                            <span v-if="!r.isProtected && daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays) != null" class="badge" :class="daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays) <= 7 ? 'badge-warning' : 'badge-muted'">{{t('rules.daysLeft', {days: daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays)})}}</span>
+                            <span class="rule-updated-by" :title="r.updatedBy||t('rules.unknownOperator')"><i class="bi bi-person" aria-hidden="true"></i>{{r.updatedBy||t('rules.unknownOperator')}}</span>
+                            <ui-badge v-if="!r.isProtected && daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays) != null && daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays) <= 7" class="badge badge-warning">{{t('rules.daysLeft', {days: daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays)})}}</ui-badge>
                         </div>
                     </td>
-                    <td class="col-actions rule-row-action-column">
-                        <div class="rule-row-actions">
-                            <button class="btn btn-sm btn-secondary rule-row-edit" @click.stop="$emit('open-edit', r)" :title="!isLoggedIn?t('rules.loginRequired'):t('rules.edit')" :disabled="!isLoggedIn"><i class="bi bi-pencil" aria-hidden="true"></i><span>{{t('rules.edit')}}</span></button>
-                            <details class="rule-row-more" @click.stop>
-                                <summary class="btn btn-sm btn-icon btn-secondary" :aria-label="t('rules.moreActions')" :title="t('rules.moreActions')"><i class="bi bi-three-dots-vertical" aria-hidden="true"></i></summary>
-                                <div class="rule-row-more-popover">
-                                    <button type="button" @click="$emit('toggle-rule-preview', r);$event.currentTarget.closest('details').removeAttribute('open')"><i class="bi" :class="rulePreviewExpanded[r.id]?'bi-chevron-up':'bi-chevron-down'" aria-hidden="true"></i><span>{{rulePreviewExpanded[r.id]?t('rules.collapsePreview'):t('rules.expandPreview')}}</span></button>
-                                    <button type="button" @click="$emit('show-rule-history', r);$event.currentTarget.closest('details').removeAttribute('open')"><i class="bi bi-clock-history" aria-hidden="true"></i><span>{{t('rules.history')}}</span></button>
-                                    <button type="button" @click="$emit('copy-rule', r);$event.currentTarget.closest('details').removeAttribute('open')" :disabled="!isLoggedIn"><i class="bi bi-copy" aria-hidden="true"></i><span>{{t('rules.quickCopy')}}</span></button>
-                                </div>
-                            </details>
-                        </div>
-                    </td>
+                    <td class="col-actions rule-row-action-column"><rule-row-actions :rule="r" :is-logged-in="isLoggedIn" :expanded="!!rulePreviewExpanded[r.id]" :preview-id="'rule-preview-'+r.id" @open-edit="$emit('open-edit',$event)" @toggle-rule-preview="$emit('toggle-rule-preview',$event)" @show-rule-history="$emit('show-rule-history',$event)" @copy-rule="$emit('copy-rule',$event)"></rule-row-actions></td>
                 </tr>
-                <tr v-if="rulePreviewExpanded[r.id]" class="rule-preview-row">
-                    <td :colspan="(canDragRules ? 1 : 0) + (batchSelectMode ? 9 : 8)" class="rule-preview-cell">
+                <tr v-if="rulePreviewExpanded[r.id]" :id="'rule-preview-'+r.id" class="rule-preview-row">
+                    <td :colspan="(canDragRules ? 1 : 0) + (batchSelectMode ? 7 : 6)" class="rule-preview-cell">
                         <div v-if="rulePreviewLoading[r.id]" class="rule-preview-content rule-preview-state" role="status">
                             <i class="bi bi-arrow-clockwise spin" aria-hidden="true"></i><span>{{t('rules.loading')}}</span>
                         </div>
@@ -350,36 +353,36 @@ const RulesPage = {
                                 <button type="button" class="pv-id" @click="$emit('clip-copy', rulePreviewCache[r.id].id)" :title="t('rules.copyId')"><i class="bi bi-fingerprint" aria-hidden="true"></i><span>{{rulePreviewCache[r.id].id}}</span><i class="bi bi-clipboard pv-copy-icon" aria-hidden="true"></i></button>
                                 <span v-if="rulePreviewCache[r.id].description" class="pv-desc">— {{rulePreviewCache[r.id].description}}</span>
                                 <div class="pv-header-actions">
-                                    <button class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('open-edit', rulePreviewCache[r.id])" :disabled="!isLoggedIn" :title="t('rules.edit')" :aria-label="t('rules.edit')"><i class="bi bi-pencil" aria-hidden="true"></i></button>
-                                    <button class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('export-rule-json', rulePreviewCache[r.id].id)" :title="t('rules.exportJson')" :aria-label="t('rules.exportJson')"><i class="bi bi-download" aria-hidden="true"></i></button>
-                                    <button v-if="rulePreviewCache[r.id].responseId && isLoggedIn" class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('go-to-responses', rulePreviewCache[r.id].responseId)" :title="t('rules.viewResponse')" :aria-label="t('rules.viewResponse')"><i class="bi bi-file-earmark-text" aria-hidden="true"></i></button>
-                                    <button class="btn btn-sm btn-icon btn-danger" @click.stop="$emit('delete-rule', rulePreviewCache[r.id].id)" :disabled="!isLoggedIn" :title="t('rules.delete')" :aria-label="t('rules.delete')"><i class="bi bi-trash" aria-hidden="true"></i></button>
+                                    <ui-button class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('open-edit', rulePreviewCache[r.id])" :disabled="!isLoggedIn" :title="t('rules.edit')" :aria-label="t('rules.edit')"><i class="bi bi-pencil" aria-hidden="true"></i></ui-button>
+                                    <ui-button class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('export-rule-json', rulePreviewCache[r.id].id)" :title="t('rules.exportJson')" :aria-label="t('rules.exportJson')"><i class="bi bi-download" aria-hidden="true"></i></ui-button>
+                                    <ui-button v-if="rulePreviewCache[r.id].responseId && isLoggedIn" class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('go-to-responses', rulePreviewCache[r.id].responseId)" :title="t('rules.viewResponse')" :aria-label="t('rules.viewResponse')"><i class="bi bi-file-earmark-text" aria-hidden="true"></i></ui-button>
+                                    <ui-button class="btn btn-sm btn-icon btn-danger" @click.stop="$emit('delete-rule', rulePreviewCache[r.id].id)" :disabled="!isLoggedIn" :title="t('rules.delete')" :aria-label="t('rules.delete')"><i class="bi bi-trash" aria-hidden="true"></i></ui-button>
                                 </div>
                             </div>
                             <div class="pv-main">
                                 <div class="pv-fields">
                                     <div class="pv-section-title">{{t('rules.pvSectionSettings')}}</div>
-                                    <div class="pv-field" v-if="rulePreviewCache[r.id].protocol==='HTTP'&&rulePreviewCache[r.id].action!=='FORWARD'&&rulePreviewCache[r.id].faultType!=='CONNECTION_RESET'"><span class="pv-label">{{t('rules.pvStatusCode')}}</span><span class="badge" :class="rulePreviewCache[r.id].status<400?'badge-success':rulePreviewCache[r.id].status<500?'badge-warning':'badge-danger'">{{rulePreviewCache[r.id].status}}</span></div>
+<div class="pv-field" v-if="rulePreviewCache[r.id].targetHost"><span class="pv-label">{{t('rules.targetPrefix')}}</span><code>{{rulePreviewCache[r.id].targetHost}}</code></div>
+                                    <div class="pv-field" v-if="rulePreviewCache[r.id].protocol==='HTTP'&&rulePreviewCache[r.id].action!=='FORWARD'&&rulePreviewCache[r.id].faultType!=='CONNECTION_RESET'"><span class="pv-label">{{t('rules.pvStatusCode')}}</span><ui-badge class="badge" :class="rulePreviewCache[r.id].status<400?'badge-success':rulePreviewCache[r.id].status<500?'badge-warning':'badge-danger'">{{rulePreviewCache[r.id].status}}</ui-badge></div>
                                     <div class="pv-field" v-if="rulePreviewCache[r.id].action==='FORWARD'"><span class="pv-label">{{t('rules.forward')}}</span><span>{{forwardTargetLabel(rulePreviewCache[r.id])}}</span></div>
                                     <div class="pv-field" v-if="rulePreviewCache[r.id].faultType&&rulePreviewCache[r.id].faultType!=='NONE'"><span class="pv-label">{{t('rules.faultInjection')}}</span><span class="pv-result-value"><i class="bi bi-lightning" aria-hidden="true"></i>{{t('rules.fault_'+rulePreviewCache[r.id].faultType)}}</span></div>
                                     <div class="pv-field" v-if="status?.scenariosEnabled && rulePreviewCache[r.id].scenarioName"><span class="pv-label">{{t('rules.pvScenario')}}</span><span class="pv-scenario-value" :title="t('rules.scenarioTooltip',{name:rulePreviewCache[r.id].scenarioName,required:rulePreviewCache[r.id].requiredScenarioState||'Started',newState:rulePreviewCache[r.id].newScenarioState||rulePreviewCache[r.id].requiredScenarioState||'Started'})"><strong>{{rulePreviewCache[r.id].scenarioName}}</strong><code>{{rulePreviewCache[r.id].requiredScenarioState||'Started'}}</code><i class="bi bi-arrow-right" aria-hidden="true"></i><code>{{rulePreviewCache[r.id].newScenarioState||rulePreviewCache[r.id].requiredScenarioState||'Started'}}</code></span></div>
                                     <div class="pv-field"><span class="pv-label">{{t('rules.pvDelay')}}</span><span>{{rulePreviewCache[r.id].delayMs||0}} ms</span></div>
                                     <div class="pv-field"><span class="pv-label">{{t('rules.pvPriority')}}</span><span>{{rulePreviewCache[r.id].priority||0}}</span></div>
                                     <div class="pv-field"><span class="pv-label">{{t('rules.pvProtected')}}</span><span><i class="bi" :class="rulePreviewCache[r.id].isProtected ? 'bi-shield-fill-check text-success' : 'bi-shield'" style="margin-right:2px"></i> {{rulePreviewCache[r.id].isProtected ? t('rules.pvYes') : t('rules.pvNo')}}</span></div>
-                                    <div class="pv-field" v-if="!rulePreviewCache[r.id].isProtected && daysLeft(rulePreviewCache[r.id].createdAt, rulePreviewCache[r.id].extendedAt, status?.cleanupRetentionDays) != null"><span class="pv-label">{{t('rules.pvDaysLeft')}}</span><span><span class="badge" :class="daysLeft(rulePreviewCache[r.id].createdAt, rulePreviewCache[r.id].extendedAt, status?.cleanupRetentionDays) <= 7 ? 'badge-warning' : 'badge-muted'">{{t('rules.daysLeft', {days: daysLeft(rulePreviewCache[r.id].createdAt, rulePreviewCache[r.id].extendedAt, status?.cleanupRetentionDays)})}}</span> <button v-if="isLoggedIn" class="btn btn-sm btn-secondary" style="margin-left:0.5rem;padding:0.1rem 0.4rem;font-size:0.75rem" @click.stop="$emit('extend-rule', rulePreviewCache[r.id].id)"><i class="bi bi-calendar-plus"></i> {{t('rules.extend')}}</button></span></div>
+                                    <div class="pv-field" v-if="!rulePreviewCache[r.id].isProtected && daysLeft(rulePreviewCache[r.id].createdAt, rulePreviewCache[r.id].extendedAt, status?.cleanupRetentionDays) != null"><span class="pv-label">{{t('rules.pvDaysLeft')}}</span><span><ui-badge class="badge" :class="daysLeft(rulePreviewCache[r.id].createdAt, rulePreviewCache[r.id].extendedAt, status?.cleanupRetentionDays) <= 7 ? 'badge-warning' : 'badge-muted'">{{t('rules.daysLeft', {days: daysLeft(rulePreviewCache[r.id].createdAt, rulePreviewCache[r.id].extendedAt, status?.cleanupRetentionDays)})}}</ui-badge> <ui-button v-if="isLoggedIn" class="btn btn-sm btn-secondary" style="margin-left:0.5rem;padding:0.1rem 0.4rem;font-size:0.75rem" @click.stop="$emit('extend-rule', rulePreviewCache[r.id].id)"><i class="bi bi-calendar-plus"></i> {{t('rules.extend')}}</ui-button></span></div>
                                     <div class="pv-field" v-if="rulePreviewCache[r.id].createdAt"><span class="pv-label">{{t('rules.pvCreated')}}</span><span>{{fmtTime(rulePreviewCache[r.id].createdAt, false)}}</span></div>
                                     <div class="pv-field" v-if="rulePreviewCache[r.id].updatedAt"><span class="pv-label">{{t('rules.pvUpdated')}}</span><span>{{fmtTime(rulePreviewCache[r.id].updatedAt, false)}} · {{rulePreviewCache[r.id].updatedBy||t('rules.unknownOperator')}}</span></div>
-                                    <div class="pv-section-title pv-section-conditions">{{t('rules.pvSectionConditions')}}</div>
+                                    <div class="pv-section-title pv-section-conditions"><span>{{t('rules.pvSectionConditions')}}</span><span v-if="!rulePreviewCache[r.id].bodyCondition && !rulePreviewCache[r.id].queryCondition && !rulePreviewCache[r.id].headerCondition" class="pv-section-summary">{{t('rules.noCondition')}}</span></div>
                                     <div class="pv-field pv-field-cond" v-if="rulePreviewCache[r.id].bodyCondition"><span class="pv-label">{{t('rules.pvBodyCondition')}}</span><div class="pv-cond-list"><code v-for="(c,i) in rulePreviewCache[r.id].bodyCondition.split(';').filter(x=>x)" :key="'b'+i" class="pv-cond-item body" @click="$emit('clip-copy', c.trim())" :title="t('rules.clickToCopy')">{{c.trim()}}</code></div></div>
                                     <div class="pv-field pv-field-cond" v-if="rulePreviewCache[r.id].queryCondition"><span class="pv-label">{{t('rules.pvQueryCondition')}}</span><div class="pv-cond-list"><code v-for="(c,i) in rulePreviewCache[r.id].queryCondition.split(';').filter(x=>x)" :key="'q'+i" class="pv-cond-item query" @click="$emit('clip-copy', c.trim())" :title="t('rules.clickToCopy')">{{c.trim()}}</code></div></div>
                                     <div class="pv-field pv-field-cond" v-if="rulePreviewCache[r.id].headerCondition"><span class="pv-label">{{t('rules.pvHeaderCondition')}}</span><div class="pv-cond-list"><code v-for="(c,i) in rulePreviewCache[r.id].headerCondition.split(';').filter(x=>x)" :key="'h'+i" class="pv-cond-item header" @click="$emit('clip-copy', c.trim())" :title="t('rules.clickToCopy')">{{c.trim()}}</code></div></div>
                                     <div class="pv-field" v-if="rulePreviewCache[r.id].responseHeaders"><span class="pv-label">{{t('rules.pvResponseHeaders')}}</span><code class="pv-code-copy" @click="$emit('clip-copy', rulePreviewCache[r.id].responseHeaders)" :title="t('rules.clickToCopy')">{{rulePreviewCache[r.id].responseHeaders}}</code></div>
-                                    <div class="pv-field" v-if="rulePreviewCache[r.id].tags"><span class="pv-label">{{t('rules.pvTags')}}</span><span><span class="tag-badge" v-for="(v,k) in parseTags(rulePreviewCache[r.id].tags)" :key="k">{{k}}:{{v}}</span></span></div>
-                                    <div class="pv-field" v-if="!rulePreviewCache[r.id].bodyCondition && !rulePreviewCache[r.id].queryCondition && !rulePreviewCache[r.id].headerCondition"><span class="pv-label"></span><span class="sub-info">{{t('rules.noCondition')}}</span></div>
+                                    <div class="pv-field" v-if="Object.keys(parseTags(rulePreviewCache[r.id].tags)||{}).length"><span class="pv-label">{{t('rules.pvTags')}}</span><span><span class="tag-badge" v-for="(v,k) in parseTags(rulePreviewCache[r.id].tags)" :key="k">{{k}}:{{v}}</span></span></div>
                                 </div>
                                 <div class="pv-body">
                                     <div class="pv-body-header">
-                                        <span class="pv-label">{{rulePreviewCache[r.id].faultType&&rulePreviewCache[r.id].faultType!=='NONE'?t('rules.faultInjection'):t('rules.pvResponseContent')}} <span v-if="rulePreviewCache[r.id]._isSse" class="badge badge-sse pv-sse-badge">SSE</span></span>
+                                        <span class="pv-label">{{rulePreviewCache[r.id].faultType&&rulePreviewCache[r.id].faultType!=='NONE'?t('rules.faultInjection'):t('rules.pvResponseContent')}} <ui-badge v-if="rulePreviewCache[r.id]._isSse" class="badge badge-sse pv-sse-badge">SSE</ui-badge></span>
                                         <div v-if="!rulePreviewCache[r.id].faultType||rulePreviewCache[r.id].faultType==='NONE'" class="pv-body-tools">
                                             <div v-if="rulePreviewCache[r.id]._previewBody" class="pv-search-bar">
                                                 <input :value="pvSearch[r.id]||''" @input="setPvSearch(r.id, $event.target.value)" :placeholder="t('rules.pvSearchBody')" :aria-label="t('rules.pvSearchBody')" @keydown.enter.prevent="pvNavSearch(r.id, rulePreviewCache[r.id]._previewBody, 1)" @keydown.shift.enter.prevent="pvNavSearch(r.id, rulePreviewCache[r.id]._previewBody, -1)">
@@ -387,10 +390,11 @@ const RulesPage = {
                                                 <button v-if="pvSearch[r.id]" type="button" @click="pvNavSearch(r.id, rulePreviewCache[r.id]._previewBody, -1)" :title="t('rules.pvSearchPrev')" :aria-label="t('rules.pvSearchPrev')"><i class="bi bi-chevron-up" aria-hidden="true"></i></button>
                                                 <button v-if="pvSearch[r.id]" type="button" @click="pvNavSearch(r.id, rulePreviewCache[r.id]._previewBody, 1)" :title="t('rules.pvSearchNext')" :aria-label="t('rules.pvSearchNext')"><i class="bi bi-chevron-down" aria-hidden="true"></i></button>
                                             </div>
-                                            <button v-if="rulePreviewCache[r.id]._previewBody" class="btn btn-sm btn-icon btn-secondary" @click="$emit('clip-copy', rulePreviewCache[r.id].responseBody||rulePreviewCache[r.id]._previewBody)" :title="t('rules.copyFullContent')" :aria-label="t('rules.copyFullContent')"><i class="bi bi-clipboard"></i></button>
+                                            <ui-button v-if="rulePreviewCache[r.id]._previewBody" class="btn btn-sm btn-icon btn-secondary" @click="$emit('clip-copy', rulePreviewCache[r.id].responseBody||rulePreviewCache[r.id]._previewBody)" :title="t('rules.copyFullContent')" :aria-label="t('rules.copyFullContent')"><i class="bi bi-clipboard"></i></ui-button>
                                         </div>
                                     </div>
                                     <div v-if="rulePreviewCache[r.id].faultType&&rulePreviewCache[r.id].faultType!=='NONE'" class="pv-fault-preview"><i class="bi bi-lightning" aria-hidden="true"></i><strong>{{t('rules.fault_'+rulePreviewCache[r.id].faultType)}}</strong><span>{{rulePreviewCache[r.id].faultType==='EMPTY_RESPONSE' ? t('modal.faultEmptyResponse'+(rulePreviewCache[r.id].protocol==='JMS'?'Jms':'Http')+'Hint') : t('modal.faultConnectionReset'+(rulePreviewCache[r.id].protocol==='JMS'?'Jms':'Http')+'Hint')}}</span></div>
+                                    <div v-else-if="!rulePreviewCache[r.id]._previewBody" class="pv-body-empty">{{t('rules.empty')}}</div>
                                     <pre v-else :ref="'pvPre_'+r.id" class="pv-pre" :class="{'expanded': pvExpanded[r.id]}"><template v-if="pvSearch[r.id] && rulePreviewCache[r.id]._previewBody"><template v-for="(seg,si) in pvHighlight(r.id, rulePreviewCache[r.id]._previewBody)" :key="si"><span v-if="seg.hl" class="pv-highlight" :class="{'pv-highlight-current': pvHlIsCurrent(r.id, si)}">{{seg.text}}</span><template v-else>{{seg.text}}</template></template></template><template v-else>{{rulePreviewCache[r.id]._previewBody || t('rules.empty')}}</template></pre>
                                     <button v-if="(!rulePreviewCache[r.id].faultType||rulePreviewCache[r.id].faultType==='NONE')&&rulePreviewCache[r.id]._previewBody && (pvExpanded[r.id] || pvOverflow[r.id])" class="pv-expand-btn" @click="togglePvExpand(r.id)">
                                         <i class="bi" :class="pvExpanded[r.id]?'bi-chevron-compact-up':'bi-chevron-compact-down'" aria-hidden="true"></i>
@@ -401,26 +405,21 @@ const RulesPage = {
                         </div>
                         <div v-else-if="rulePreviewError[r.id]" class="rule-preview-content rule-preview-state rule-preview-error" role="alert">
                             <i class="bi bi-exclamation-circle" aria-hidden="true"></i><span>{{t('rules.previewLoadFailed')}}</span>
-                            <button type="button" class="btn btn-sm btn-secondary" @click.stop="$emit('toggle-rule-preview', r)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</button>
+                            <ui-button type="button" class="btn btn-sm btn-secondary" @click.stop="$emit('toggle-rule-preview', r)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</ui-button>
                         </div>
                     </td>
                 </tr>
                 </template>
             </tbody>
         </table>
-        <div v-if="!pagedRules.length && !loading.rules" class="empty">
-            <i class="bi bi-inbox"></i>
-            <div v-if="ruleFilter.keyword || ruleFilter.protocol || ruleFilter.enabled || ruleFilter.isProtected || ruleFilter.mode || ruleFilter.expiring">
-                {{t('rules.emptyFilterResult')}}
-                <div style="margin-top:0.5rem">
-                    <button class="btn btn-sm btn-secondary" @click="clearFilters()">{{t('rules.clearFilter')}}</button>
-                </div>
-            </div>
-            <div v-else>
-                <div>{{t('rules.emptyNoRules')}}</div>
-                <button type="button" class="btn btn-primary" @click="$emit('open-create')" :disabled="!isLoggedIn" :title="!isLoggedIn?t('rules.loginRequired'):t('rules.createFirstRule')"><i class="bi bi-plus-lg" aria-hidden="true"></i>{{t('rules.createFirstRule')}}</button>
-            </div>
-        </div>
+        <ui-load-state v-if="!pagedRules.length && !loading.rules" kind="empty" has-action
+            :icon="hasRuleFilters?'bi-search':'bi-inbox'"
+            :title="hasRuleFilters?t('rules.emptyFilterResult'):t('rules.emptyNoRules')">
+            <template #action>
+                <ui-button v-if="hasRuleFilters" class="btn btn-sm btn-secondary" @click="clearFilters()">{{t('rules.clearFilter')}}</ui-button>
+                <ui-button v-else type="button" class="btn btn-primary" @click="$emit('open-create')" :disabled="!isLoggedIn" :title="!isLoggedIn?t('rules.loginRequired'):t('rules.createFirstRule')"><i class="bi bi-plus-lg" aria-hidden="true"></i>{{t('rules.createFirstRule')}}</ui-button>
+            </template>
+        </ui-load-state>
         </div>
         <workspace-pagination
             :page="rulePage" :total-pages="ruleTotalPages" :page-size="rulePageSize"
@@ -436,36 +435,34 @@ const RulesPage = {
         >
             <template #summary>
                 <span class="sub-info">{{t('rules.totalCount', {count: ruleTotalElements})}}</span>
-                <button v-if="ruleFilter.protocol||ruleFilter.enabled||ruleFilter.isProtected||ruleFilter.mode||ruleFilter.expiring||ruleFilter.keyword" type="button" class="workspace-filter-reset" :title="t('rules.clickClearFilter')" @click="clearFilters()"><i class="bi bi-funnel-fill" aria-hidden="true"></i> {{t('rules.filtering')}}</button>
+                <ui-button v-if="ruleFilter.protocol||ruleFilter.enabled||ruleFilter.isProtected||ruleFilter.mode||ruleFilter.expiring||ruleFilter.keyword" type="button" variant="quiet" size="compact" class="workspace-filter-reset" :title="t('rules.clickClearFilter')" @click="clearFilters()"><i class="bi bi-funnel-fill" aria-hidden="true"></i> {{t('rules.filtering')}}</ui-button>
             </template>
         </workspace-pagination>
         </template>
         <!-- 分組檢視 -->
         <template v-else>
         <div class="card-body page-scroll" style="padding:0">
-            <div class="tag-group-header" @click="$emit('toggle-tag-group', '_untagged')">
+            <div class="tag-group-header" role="button" tabindex="0" @keydown.enter.prevent="$event.currentTarget.click()" @keydown.space.prevent="$event.currentTarget.click()" @click="$emit('toggle-tag-group', '_untagged')" :aria-expanded="expandedTagGroups.includes('_untagged')">
                 <i class="bi" :class="expandedTagGroups.includes('_untagged')?'bi-chevron-down':'bi-chevron-right'"></i>
                 <span>{{t('rules.untagged')}}</span>
-                <span class="badge badge-muted">{{groupCounts['_untagged'] || 0}}</span>
+                <ui-badge class="badge badge-muted">{{groupCounts['_untagged'] || 0}}</ui-badge>
             </div>
             <div v-if="expandedTagGroups.includes('_untagged')" class="tag-group-content">
                 <div v-if="groupLoading['_untagged']" class="sub-info" style="padding:0.75rem 1rem"><i class="bi bi-arrow-clockwise spin"></i> {{t('rules.loading')}}</div>
                 <table v-if="rulesByTagGroup['_untagged']?.length" class="tag-group-table rule-list-table">
                     <thead><tr>
-                        <th class="col-id">{{t('rules.thId')}}</th>
-                        <th class="col-type col-hide-sm">{{t('rules.thProtocol')}}</th>
                         <th class="col-endpoint">{{t('rules.thEndpoint')}}</th>
                         <th class="col-cond col-hide-md">{{t('rules.thCondition')}}</th>
                         <th class="col-hide-sm" style="width:72px">{{t('rules.thEnabled')}}</th>
                         <th class="col-priority col-hide-md">{{t('rules.thPriority')}}</th>
                         <th class="col-datetime col-hide-md">{{t('rules.thUpdated')}}</th>
-                        <th class="col-actions col-actions-4">{{t('rules.thActions')}}</th>
+                        <th class="col-actions rule-row-action-column">{{t('rules.thActions')}}</th>
                     </tr></thead>
                     <tbody>
                         <rule-group-row v-for="r in rulesByTagGroup['_untagged'].slice(0, getGroupLimit('_untagged'))" :key="r.id"
                             :rule="r" :is-logged-in="isLoggedIn" :http-label="httpLabel" :jms-label="jmsLabel" :status="status"
                             :rule-preview-expanded="rulePreviewExpanded" :rule-preview-loading="rulePreviewLoading" :rule-preview-error="rulePreviewError" :rule-preview-cache="rulePreviewCache"
-                            @open-edit="$emit('open-edit', $event)" @copy-rule="$emit('copy-rule', $event)"
+                            @open-edit="$emit('open-edit', $event)" @copy-rule="$emit('copy-rule', $event)" @show-rule-history="$emit('show-rule-history', $event)"
                             @delete-rule="$emit('delete-rule', $event)" @toggle-enabled="$emit('toggle-enabled', $event)"
                             @go-to-responses="$emit('go-to-responses', $event)" @extend-rule="$emit('extend-rule', $event)"
                             @toggle-rule-preview="$emit('toggle-rule-preview', $event)" @handle-rule-row-click="$emit('handle-rule-row-click', $event)"
@@ -474,42 +471,40 @@ const RulesPage = {
                     </tbody>
                 </table>
                 <div v-if="(groupCounts['_untagged'] || 0) > (rulesByTagGroup['_untagged']?.length || 0)" class="tag-group-more">
-                    <button class="btn btn-sm btn-secondary" @click="$emit('show-more-group', '_untagged')">{{t('rules.showMore')}} ({{rulesByTagGroup['_untagged']?.length || 0}}/{{groupCounts['_untagged'] || 0}})</button>
-                    <button class="btn btn-sm btn-secondary" @click="$emit('show-all-group', '_untagged', groupCounts['_untagged'] || 0)">{{t('rules.showAll')}}</button>
+                    <ui-button class="btn btn-sm btn-secondary" @click="$emit('show-more-group', '_untagged')">{{t('rules.showMore')}} ({{rulesByTagGroup['_untagged']?.length || 0}}/{{groupCounts['_untagged'] || 0}})</ui-button>
+                    <ui-button class="btn btn-sm btn-secondary" @click="$emit('show-all-group', '_untagged', groupCounts['_untagged'] || 0)">{{t('rules.showAll')}}</ui-button>
                 </div>
                 <div v-if="!groupLoading['_untagged'] && !(groupCounts['_untagged'] || 0)" class="sub-info" style="padding:0.5rem 1rem">{{t('rules.noRules')}}</div>
             </div>
             <template v-for="(values, key) in tagKeys" :key="key">
-                <div class="tag-group-header" @click="$emit('toggle-tag-group', key)">
+                <div class="tag-group-header" role="button" tabindex="0" @keydown.enter.prevent="$event.currentTarget.click()" @keydown.space.prevent="$event.currentTarget.click()" @click="$emit('toggle-tag-group', key)" :aria-expanded="expandedTagGroups.includes(key)">
                     <i class="bi" :class="expandedTagGroups.includes(key)?'bi-chevron-down':'bi-chevron-right'"></i>
                     <span style="font-weight:500">{{key}}</span>
-                    <span class="badge badge-muted">{{values.reduce((sum, val) => sum + (groupCounts[key+'='+val] || 0), 0)}}</span>
+                    <ui-badge class="badge badge-muted">{{values.reduce((sum, val) => sum + (groupCounts[key+'='+val] || 0), 0)}}</ui-badge>
                 </div>
                 <template v-if="expandedTagGroups.includes(key)">
                     <div v-for="val in values" :key="val" class="tag-subgroup">
-                        <div class="tag-subgroup-header" @click="$emit('toggle-tag-subgroup', key+'='+val)">
+                        <div class="tag-subgroup-header" role="button" tabindex="0" @keydown.enter.prevent="$event.currentTarget.click()" @keydown.space.prevent="$event.currentTarget.click()" @click="$emit('toggle-tag-subgroup', key+'='+val)" :aria-expanded="expandedTagSubgroups.includes(key+'='+val)">
                             <i class="bi" :class="expandedTagSubgroups.includes(key+'='+val)?'bi-chevron-down':'bi-chevron-right'" style="font-size:0.7rem;color:var(--muted)"></i>
-                            <span class="badge badge-tag">{{val}}</span>
+                            <ui-badge class="badge badge-tag">{{val}}</ui-badge>
                             <span class="sub-info">{{t('common.count', {count: groupCounts[key+'='+val] || 0})}}</span>
                         </div>
                         <template v-if="expandedTagSubgroups.includes(key+'='+val)">
                         <div v-if="groupLoading[key+'='+val]" class="sub-info" style="padding:0.75rem 1rem"><i class="bi bi-arrow-clockwise spin"></i> {{t('rules.loading')}}</div>
                         <table v-if="rulesByTag[key+'='+val]?.length" class="tag-group-table rule-list-table">
                             <thead><tr>
-                                <th class="col-id">{{t('rules.thId')}}</th>
-                                <th class="col-type col-hide-sm">{{t('rules.thProtocol')}}</th>
                                 <th class="col-endpoint">{{t('rules.thEndpoint')}}</th>
                                 <th class="col-cond col-hide-md">{{t('rules.thCondition')}}</th>
                                 <th class="col-hide-sm" style="width:72px">{{t('rules.thEnabled')}}</th>
                                 <th class="col-priority col-hide-md">{{t('rules.thPriority')}}</th>
                                 <th class="col-datetime col-hide-md">{{t('rules.thUpdated')}}</th>
-                                <th class="col-actions col-actions-4">{{t('rules.thActions')}}</th>
+                                <th class="col-actions rule-row-action-column">{{t('rules.thActions')}}</th>
                             </tr></thead>
                             <tbody>
                                 <rule-group-row v-for="r in rulesByTag[key+'='+val].slice(0, getGroupLimit(key+'='+val))" :key="r.id"
                                     :rule="r" :is-logged-in="isLoggedIn" :http-label="httpLabel" :jms-label="jmsLabel" :status="status"
                                     :rule-preview-expanded="rulePreviewExpanded" :rule-preview-loading="rulePreviewLoading" :rule-preview-error="rulePreviewError" :rule-preview-cache="rulePreviewCache"
-                                    @open-edit="$emit('open-edit', $event)" @copy-rule="$emit('copy-rule', $event)"
+                                    @open-edit="$emit('open-edit', $event)" @copy-rule="$emit('copy-rule', $event)" @show-rule-history="$emit('show-rule-history', $event)"
                                     @delete-rule="$emit('delete-rule', $event)" @toggle-enabled="$emit('toggle-enabled', $event)"
                                     @go-to-responses="$emit('go-to-responses', $event)" @extend-rule="$emit('extend-rule', $event)"
                                     @toggle-rule-preview="$emit('toggle-rule-preview', $event)" @handle-rule-row-click="$emit('handle-rule-row-click', $event)"
@@ -518,8 +513,8 @@ const RulesPage = {
                             </tbody>
                         </table>
                         <div v-if="(groupCounts[key+'='+val] || 0) > (rulesByTag[key+'='+val]?.length || 0)" class="tag-group-more">
-                            <button class="btn btn-sm btn-secondary" @click="$emit('show-more-group', key+'='+val)">{{t('rules.showMore')}} ({{rulesByTag[key+'='+val]?.length || 0}}/{{groupCounts[key+'='+val] || 0}})</button>
-                            <button class="btn btn-sm btn-secondary" @click="$emit('show-all-group', key+'='+val, groupCounts[key+'='+val] || 0)">{{t('rules.showAll')}}</button>
+                            <ui-button class="btn btn-sm btn-secondary" @click="$emit('show-more-group', key+'='+val)">{{t('rules.showMore')}} ({{rulesByTag[key+'='+val]?.length || 0}}/{{groupCounts[key+'='+val] || 0}})</ui-button>
+                            <ui-button class="btn btn-sm btn-secondary" @click="$emit('show-all-group', key+'='+val, groupCounts[key+'='+val] || 0)">{{t('rules.showAll')}}</ui-button>
                         </div>
                         </template>
                     </div>

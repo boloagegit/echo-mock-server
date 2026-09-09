@@ -11,6 +11,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 class WorkspaceTableResourceTest {
 
     @Test
+    void distinguishesRoutineMetadataFromRetentionWarningsInBothRuleViews() throws IOException {
+        for (String path : new String[]{"static/components/RulesPage.js", "static/components/RuleGroupRow.js"}) {
+            assertThat(resourceText(path)).contains("<= 7\" class=\"badge badge-warning\"")
+                    .contains("t('rules.pvDaysLeft')")
+                    .contains("class=\"table-metadata\"");
+        }
+        assertThat(resourceText("static/components/ResponsesPage.js"))
+                .contains("v-if=\"r.usageCount\" class=\"table-metadata\"");
+    }
+
+    @Test
     void actionColumnsReserveButtonsGapsAndDensityAwarePadding() throws IOException {
         String stylesheet = resourceText("static/style.css");
 
@@ -32,7 +43,7 @@ class WorkspaceTableResourceTest {
 
         assertThat(stylesheet)
                 .contains(".col-datetime { width: 132px; font-variant-numeric: tabular-nums }")
-                .contains(".col-priority { width: 88px; text-align: center; white-space: nowrap }")
+                .contains(".col-priority { width: 64px; text-align: center; white-space: nowrap }")
                 .contains("td.col-datetime .sub-info")
                 .contains("text-overflow: clip")
                 .contains(".table-date-stack");

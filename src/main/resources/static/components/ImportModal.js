@@ -15,6 +15,13 @@ const ImportModal = {
   emits: ['close', 'update:importFormat', 'handle-file', 'do-import'],
   inject: ['t'],
   computed: {
+    formatOptions() {
+      return [
+        { value: 'json', label: 'JSON', description: this.t('modal.importJsonHint'), icon: 'bi-filetype-json' },
+        { value: 'excel', label: 'Excel', description: this.t('modal.importExcelHint'), icon: 'bi-file-earmark-excel' },
+        { value: 'openapi', label: 'OpenAPI', description: this.t('modal.openApiHint'), icon: 'bi-filetype-yml' },
+      ];
+    },
     fileAccept() {
       if (this.importFormat === 'openapi') { return '.json,.yaml,.yml'; }
       return this.importFormat === 'json' ? '.json' : '.xlsx,.xls';
@@ -33,7 +40,7 @@ const ImportModal = {
         this.previousFocus = document.activeElement;
         this.$nextTick(() => {
           this.inertSiblings = makeOverlaySiblingsInert(this.$refs.overlay);
-          this.$refs.jsonFormat?.focus();
+          this.$refs.formatChoices?.focusSelected();
         });
         return;
       }
@@ -76,29 +83,15 @@ const ImportModal = {
     <div ref="overlay" class="modal-overlay" v-if="show" @keydown="handleKeydown">
       <div ref="dialog" class="modal-box workspace-modal import-modal" role="dialog" aria-modal="true" aria-labelledby="importModalTitle" tabindex="-1">
         <div class="modal-header">
-          <div class="modal-heading"><span class="modal-heading-icon"><i class="bi bi-upload" aria-hidden="true"></i></span><h3 id="importModalTitle">{{t('modal.importRule')}}</h3></div>
-          <button type="button" class="close-btn" @click="$emit('close')" :aria-label="t('modal.cancel')"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+          <div class="modal-heading"><span class="modal-heading-icon"><i class="bi bi-upload" aria-hidden="true"></i></span><h2 id="importModalTitle">{{t('modal.importRule')}}</h2></div>
+          <ui-button type="button" class="close-btn" @click="$emit('close')" :aria-label="t('modal.cancel')"><i class="bi bi-x-lg" aria-hidden="true"></i></ui-button>
         </div>
         <div class="modal-body import-modal-body">
           <fieldset class="import-format-fieldset">
             <legend class="form-label">{{t('modal.selectFormat')}}</legend>
-            <div class="import-format-options">
-              <button ref="jsonFormat" type="button" class="import-format-option" :class="{active:importFormat==='json'}" :aria-pressed="importFormat==='json'" @click="selectFormat('json')">
-                <i class="bi bi-filetype-json" aria-hidden="true"></i>
-                <span><strong>JSON</strong><small>{{t('modal.importJsonHint')}}</small></span>
-                <i v-if="importFormat==='json'" class="bi bi-check2" aria-hidden="true"></i>
-              </button>
-              <button type="button" class="import-format-option" :class="{active:importFormat==='excel'}" :aria-pressed="importFormat==='excel'" @click="selectFormat('excel')">
-                <i class="bi bi-file-earmark-excel" aria-hidden="true"></i>
-                <span><strong>Excel</strong><small>{{t('modal.importExcelHint')}}</small></span>
-                <i v-if="importFormat==='excel'" class="bi bi-check2" aria-hidden="true"></i>
-              </button>
-              <button type="button" class="import-format-option" :class="{active:importFormat==='openapi'}" :aria-pressed="importFormat==='openapi'" @click="selectFormat('openapi')">
-                <i class="bi bi-filetype-yml" aria-hidden="true"></i>
-                <span><strong>OpenAPI</strong><small>{{t('modal.openApiHint')}}</small></span>
-                <i v-if="importFormat==='openapi'" class="bi bi-check2" aria-hidden="true"></i>
-              </button>
-            </div>
+            <ui-choice-group ref="formatChoices" class="import-format-options" option-class="import-format-option"
+              variant="cards" show-check :model-value="importFormat" :options="formatOptions"
+              :aria-label="t('modal.selectFormat')" @update:model-value="selectFormat"></ui-choice-group>
           </fieldset>
 
           <div class="form-group import-upload-field">
@@ -115,11 +108,11 @@ const ImportModal = {
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" @click="$emit('close')">{{t('modal.cancel')}}</button>
-          <button type="button" class="btn btn-primary" @click="$emit('do-import')" :disabled="!importFile||loading">
+          <ui-button type="button" variant="quiet" @click="$emit('close')">{{t('modal.cancel')}}</ui-button>
+          <ui-button type="button" class="btn btn-primary" @click="$emit('do-import')" :disabled="!importFile||loading">
             <i class="bi" :class="loading?'bi-arrow-clockwise spin':(importFormat==='openapi'?'bi-eye':'bi-upload')" aria-hidden="true"></i>
             {{importFormat==='openapi' ? t('modal.previewImport') : t('modal.startImport')}}
-          </button>
+          </ui-button>
         </div>
       </div>
     </div>

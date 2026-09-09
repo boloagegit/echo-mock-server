@@ -14,7 +14,7 @@ const ToastContainer = {
       <div v-for="toast in toasts" :key="toast.id" class="toast" :class="[toast.type, {leaving: toast.leaving}]" style="position:relative;overflow:hidden">
         <i class="bi toast-icon" :class="toast.type==='success'?'bi-check-circle-fill':toast.type==='error'?'bi-x-circle-fill':'bi-info-circle-fill'"></i>
         <span class="toast-msg">{{toast.msg}}</span>
-        <button class="toast-close" @click="$emit('dismiss', toast.id)" :aria-label="t('common.close')"><i class="bi bi-x"></i></button>
+        <ui-button type="button" variant="quiet" size="compact" icon-only class="toast-close" @click="$emit('dismiss', toast.id)" :aria-label="t('common.close')"><i class="bi bi-x"></i></ui-button>
         <div class="toast-progress"></div>
       </div>
     </div>

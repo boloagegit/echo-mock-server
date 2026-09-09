@@ -59,7 +59,7 @@ const WorkspaceSearchField = {
         <i class="bi" :class="icon" aria-hidden="true"></i>
         <input
           :id="inputId || null"
-          class="form-control"
+          class="form-control form-control-sm"
           type="search"
           :value="draftValue"
           :placeholder="placeholder"
@@ -68,21 +68,26 @@ const WorkspaceSearchField = {
           @input="onInput"
           @keydown.enter.prevent="submitSearch"
         >
-        <button
+        <ui-button
           v-if="showClear && draftValue"
           type="button"
+          variant="quiet"
+          size="compact"
+          icon-only
           class="workspace-search-clear"
           :title="clearLabel"
           :aria-label="clearLabel"
           @click="clearSearch"
-        ><i class="bi bi-x" aria-hidden="true"></i></button>
+        ><i class="bi bi-x" aria-hidden="true"></i></ui-button>
       </div>
-      <button
+      <ui-button
         v-if="submitMode"
         type="submit"
+        variant="secondary"
+        size="compact"
         class="workspace-search-submit"
         :disabled="searchUnchanged"
-      ><i class="bi bi-search" aria-hidden="true"></i><span>{{submitLabel}}</span></button>
+      ><i class="bi bi-search" aria-hidden="true"></i><span>{{submitLabel}}</span></ui-button>
     </form>
   `,
 };

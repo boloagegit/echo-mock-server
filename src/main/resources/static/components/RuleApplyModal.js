@@ -30,6 +30,12 @@ const RuleApplyModal = {
     spec() { return this.parsedDocument?.spec || {}; },
     resourceMode() { return this.metadata.id ? this.t('rules.applyUpdateMode') : this.t('rules.applyCreateMode'); },
     visibleError() { return this.localFormatError || this.error || this.validationErrors[0]?.message || ''; },
+    inspectorTabs() {
+      return [
+        { value: 'summary', label: this.t('rules.applySummaryTab'), id: 'rule-apply-tab-summary', panelId: 'rule-apply-panel-summary' },
+        { value: 'fields', label: this.t('rules.applyFieldReference'), id: 'rule-apply-tab-fields', panelId: 'rule-apply-panel-fields' },
+      ];
+    },
     applicableFields() {
       const protocol = this.spec.protocol;
       const action = this.spec.action || 'MOCK';
@@ -122,16 +128,16 @@ const RuleApplyModal = {
           <div class="rule-apply-editor-pane">
             <div class="rule-apply-toolbar">
               <div class="rule-apply-template-controls" role="group" :aria-label="t('rules.applyTemplates')">
-                <button class="btn btn-sm btn-secondary" @click="$emit('replace-template','HTTP_MOCK')"><i class="bi bi-reply" aria-hidden="true"></i> {{t('rules.applyHttpMockTemplate')}}</button>
-                <button class="btn btn-sm btn-secondary" @click="$emit('replace-template','HTTP_FORWARD')"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> {{t('rules.applyHttpForwardTemplate')}}</button>
-                <button class="btn btn-sm btn-secondary" @click="$emit('replace-template','HTTP_FAULT')"><i class="bi bi-lightning" aria-hidden="true"></i> {{t('rules.applyHttpFaultTemplate')}}</button>
-                <button class="btn btn-sm btn-secondary" @click="$emit('replace-template','JMS')" :disabled="!jmsEnabled"><i class="bi bi-envelope" aria-hidden="true"></i> {{t('rules.applyJmsTemplate')}}</button>
+                <ui-button class="btn btn-sm btn-secondary" @click="$emit('replace-template','HTTP_MOCK')"><i class="bi bi-reply" aria-hidden="true"></i> {{t('rules.applyHttpMockTemplate')}}</ui-button>
+                <ui-button class="btn btn-sm btn-secondary" @click="$emit('replace-template','HTTP_FORWARD')"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> {{t('rules.applyHttpForwardTemplate')}}</ui-button>
+                <ui-button class="btn btn-sm btn-secondary" @click="$emit('replace-template','HTTP_FAULT')"><i class="bi bi-lightning" aria-hidden="true"></i> {{t('rules.applyHttpFaultTemplate')}}</ui-button>
+                <ui-button class="btn btn-sm btn-secondary" @click="$emit('replace-template','JMS')" :disabled="!jmsEnabled"><i class="bi bi-envelope" aria-hidden="true"></i> {{t('rules.applyJmsTemplate')}}</ui-button>
               </div>
               <span class="rule-apply-document-state">
                 <i class="bi" :class="metadata.id ? 'bi-pencil-square' : 'bi-plus-circle'" aria-hidden="true"></i>
                 {{resourceMode}}
               </span>
-              <button class="btn btn-sm btn-secondary" @click="formatDocument" :disabled="loading"><i class="bi bi-braces" aria-hidden="true"></i> {{t('rules.applyFormat')}}</button>
+              <ui-button class="btn btn-sm btn-secondary" @click="formatDocument" :disabled="loading"><i class="bi bi-braces" aria-hidden="true"></i> {{t('rules.applyFormat')}}</ui-button>
             </div>
 
             <div class="rule-apply-system-area">
@@ -167,12 +173,10 @@ const RuleApplyModal = {
           </div>
 
           <aside class="rule-apply-inspector" :aria-label="t('rules.applyInspector')">
-            <div class="rule-apply-inspector-switch" role="group" :aria-label="t('rules.applyInspector')">
-              <button type="button" :class="{active:inspectorMode==='summary'}" :aria-pressed="inspectorMode==='summary'" @click="inspectorMode='summary'">{{t('rules.applySummaryTab')}}</button>
-              <button type="button" :class="{active:inspectorMode==='fields'}" :aria-pressed="inspectorMode==='fields'" @click="inspectorMode='fields'">{{t('rules.applyFieldReference')}}</button>
-            </div>
+            <ui-tabs class="rule-apply-inspector-switch" variant="compact" v-model="inspectorMode"
+              :items="inspectorTabs" :aria-label="t('rules.applyInspector')"></ui-tabs>
 
-            <div v-if="inspectorMode==='summary'" class="rule-apply-inspector-content">
+            <div v-if="inspectorMode==='summary'" id="rule-apply-panel-summary" class="rule-apply-inspector-content" role="tabpanel" aria-labelledby="rule-apply-tab-summary">
               <section v-if="validationErrors.length" class="rule-apply-issues" aria-labelledby="ruleApplyIssuesHeading">
                 <div id="ruleApplyIssuesHeading" class="rule-apply-section-heading">{{t('rules.applyIssues', {count:validationErrors.length})}}</div>
                 <ol>
@@ -204,7 +208,7 @@ const RuleApplyModal = {
               </section>
             </div>
 
-            <div v-else class="rule-apply-field-reference">
+            <div v-else id="rule-apply-panel-fields" class="rule-apply-field-reference" role="tabpanel" aria-labelledby="rule-apply-tab-fields">
               <label class="visually-hidden" for="ruleApplyFieldSearch">{{t('rules.applyFieldSearch')}}</label>
               <div class="rule-apply-field-search">
                 <i class="bi bi-search" aria-hidden="true"></i>
@@ -237,11 +241,11 @@ const RuleApplyModal = {
 
         <div class="modal-footer rule-apply-footer">
           <span class="rule-apply-shortcut"><kbd>{{t('rules.applyShortcutControlKey')}}</kbd><span>+</span><kbd>{{t('rules.applyShortcutEnterKey')}}</kbd> {{t('rules.applyShortcut')}}</span>
-          <button class="btn btn-secondary" @click="$emit('close')" :disabled="saving">{{t('modal.cancel')}}</button>
-          <button class="btn btn-primary" @click="$emit('apply')" :disabled="saving || loading">
+          <ui-button variant="quiet" @click="$emit('close')" :disabled="saving">{{t('modal.cancel')}}</ui-button>
+          <ui-button class="btn btn-primary" @click="$emit('apply')" :disabled="saving || loading">
             <i class="bi" :class="saving ? 'bi-arrow-clockwise spin' : 'bi-check2-circle'" aria-hidden="true"></i>
             {{saving ? t('rules.applying') : t('rules.applyAction')}}
-          </button>
+          </ui-button>
         </div>
     </div>
   `

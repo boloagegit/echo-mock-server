@@ -35,12 +35,18 @@ class WorkspaceSearchResourceTest {
 
         assertThat(component)
                 .contains("<div class=\"workspace-search-input\">")
-                .contains("class=\"workspace-search-submit\"");
+                .contains("class=\"form-control form-control-sm\"")
+                .contains("class=\"workspace-search-submit\"")
+                .contains("size=\"compact\"");
         assertThat(styles)
                 .contains(".workspace-search-submit-mode {")
                 .contains("gap: var(--space-sm);")
                 .contains(".workspace-search-input { position: relative; flex: 1; min-width: 0 }")
-                .doesNotContain(".workspace-search-submit-mode .workspace-search-clear");
+                .contains(".workspace-search-field .form-control { height: 32px; min-height: 32px }")
+                .contains(".rule-filter-select .form-control { width: auto; min-width: 104px; height: 32px; min-height: 32px }")
+                .doesNotContain(".workspace-search-submit-mode .workspace-search-clear")
+                .doesNotContain(".workspace-filter-bar .workspace-search-submit,")
+                .doesNotContain(".workspace-filter-controls > .btn { height: var(--toolbar-h)");
     }
 
     @Test
