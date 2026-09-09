@@ -109,16 +109,16 @@ const WorkspacePagination = {
     <div class="card-table-footer workspace-pagination">
       <div class="workspace-pagination-summary">
         <slot name="summary"></slot>
-        <button v-if="showScrollHint" type="button" class="workspace-scroll-hint" @click="scrollForward" :title="scrollHintLabel">
+        <ui-button v-if="showScrollHint" type="button" variant="quiet" size="compact" class="workspace-scroll-hint" @click="scrollForward" :title="scrollHintLabel">
           <i class="bi bi-chevron-down" aria-hidden="true"></i><span>{{scrollHintLabel}}</span>
-        </button>
+        </ui-button>
       </div>
       <div class="pagination-controls" role="navigation" :aria-label="paginationLabel">
-        <button type="button" class="btn btn-sm btn-secondary" @click="$emit('update:page', 1)" :disabled="currentPage===1" :aria-label="firstPageLabel"><i class="bi bi-chevron-double-left" aria-hidden="true"></i></button>
-        <button type="button" class="btn btn-sm btn-secondary" @click="$emit('update:page', currentPage-1)" :disabled="currentPage===1" :aria-label="previousPageLabel"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
+        <ui-button type="button" class="btn btn-sm btn-secondary" @click="$emit('update:page', 1)" :disabled="currentPage===1" :aria-label="firstPageLabel"><i class="bi bi-chevron-double-left" aria-hidden="true"></i></ui-button>
+        <ui-button type="button" class="btn btn-sm btn-secondary" @click="$emit('update:page', currentPage-1)" :disabled="currentPage===1" :aria-label="previousPageLabel"><i class="bi bi-chevron-left" aria-hidden="true"></i></ui-button>
         <span class="tabular-nums">{{pageStatusLabel || (currentPage + ' / ' + lastPage)}}</span>
-        <button type="button" class="btn btn-sm btn-secondary" @click="$emit('update:page', currentPage+1)" :disabled="currentPage>=lastPage" :aria-label="nextPageLabel"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
-        <button type="button" class="btn btn-sm btn-secondary" @click="$emit('update:page', lastPage)" :disabled="currentPage>=lastPage" :aria-label="lastPageLabel"><i class="bi bi-chevron-double-right" aria-hidden="true"></i></button>
+        <ui-button type="button" class="btn btn-sm btn-secondary" @click="$emit('update:page', currentPage+1)" :disabled="currentPage>=lastPage" :aria-label="nextPageLabel"><i class="bi bi-chevron-right" aria-hidden="true"></i></ui-button>
+        <ui-button type="button" class="btn btn-sm btn-secondary" @click="$emit('update:page', lastPage)" :disabled="currentPage>=lastPage" :aria-label="lastPageLabel"><i class="bi bi-chevron-double-right" aria-hidden="true"></i></ui-button>
       </div>
       <label class="workspace-page-size">
         <span class="visually-hidden">{{pageSizeLabel}}</span>

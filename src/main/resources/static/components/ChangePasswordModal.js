@@ -111,8 +111,8 @@ const ChangePasswordModal = {
     <div v-if="show" class="modal-overlay" @keydown="handleKeydown">
       <div ref="dialog" class="modal-box workspace-modal credential-modal" role="dialog" aria-modal="true" aria-labelledby="changePasswordTitle">
         <div class="modal-header">
-          <div class="modal-heading"><span class="modal-heading-icon"><i class="bi bi-shield-lock" aria-hidden="true"></i></span><h3 id="changePasswordTitle">{{t('accounts.changePassword.title')}}</h3></div>
-          <button v-if="!required" type="button" class="close-btn" @click="$emit('close')" :aria-label="t('modal.cancel')"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+          <div class="modal-heading"><span class="modal-heading-icon"><i class="bi bi-shield-lock" aria-hidden="true"></i></span><h2 id="changePasswordTitle">{{t('accounts.changePassword.title')}}</h2></div>
+          <ui-button v-if="!required" type="button" class="close-btn" @click="$emit('close')" :aria-label="t('modal.cancel')"><i class="bi bi-x-lg" aria-hidden="true"></i></ui-button>
         </div>
         <div class="modal-body credential-modal-body">
           <p class="credential-intro">{{required ? t('accounts.changePassword.requiredDescription') : t('accounts.changePassword.description')}}</p>
@@ -129,9 +129,9 @@ const ChangePasswordModal = {
           <div v-if="error" class="credential-error" role="alert"><i class="bi bi-exclamation-circle" aria-hidden="true"></i><span>{{error}}</span></div>
         </div>
         <div class="modal-footer">
-          <button v-if="!required" type="button" class="btn btn-secondary" @click="$emit('close')">{{t('modal.cancel')}}</button>
-          <button v-else type="button" class="btn btn-secondary" @click="$emit('logout')"><i class="bi bi-box-arrow-right" aria-hidden="true"></i>{{t('sidebar.logout')}}</button>
-          <button type="button" class="btn btn-primary" @click="submit" :disabled="submitting"><i class="bi" :class="submitting?'bi-arrow-clockwise spin':'bi-check2-circle'" aria-hidden="true"></i>{{t('accounts.changePassword.submit')}}</button>
+          <ui-button v-if="!required" type="button" variant="quiet" @click="$emit('close')">{{t('modal.cancel')}}</ui-button>
+          <ui-button v-else type="button" class="btn btn-secondary" @click="$emit('logout')"><i class="bi bi-box-arrow-right" aria-hidden="true"></i>{{t('sidebar.logout')}}</ui-button>
+          <ui-button type="button" class="btn btn-primary" @click="submit" :disabled="submitting"><i class="bi" :class="submitting?'bi-arrow-clockwise spin':'bi-check2-circle'" aria-hidden="true"></i>{{t('accounts.changePassword.submit')}}</ui-button>
         </div>
       </div>
     </div>

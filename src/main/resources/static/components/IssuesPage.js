@@ -40,6 +40,16 @@ const IssuesPage = {
     };
   },
   computed: {
+    hasIssueFilters() {
+      return Boolean(this.issueFilter.status || this.issueFilter.keyword);
+    },
+    issueStatusFilterOptions() {
+      return [
+        { value: '', label: this.t('issues.all') },
+        { value: 'OPEN', label: this.t('issues.open') },
+        { value: 'RESOLVED', label: this.t('issues.resolved') },
+      ];
+    },
     createTitleError() {
       if (!this.createAttempted) { return ''; }
       const length = this.newTitle.trim().length;
@@ -125,12 +135,12 @@ const IssuesPage = {
           <span class="page-count">{{issueTotalElements}}</span>
         </div>
         <div class="page-actions">
-          <button class="btn btn-secondary" @click="$emit('load-issues', true)" :disabled="loading.issues">
+          <ui-button class="btn btn-secondary" @click="$emit('load-issues', true)" :disabled="loading.issues">
             <i class="bi bi-arrow-clockwise" :class="{'spin':loading.issues}"></i> {{t('issues.refresh')}}
-          </button>
-          <button class="btn btn-primary" @click="openCreate">
+          </ui-button>
+          <ui-button class="btn btn-primary" @click="openCreate">
             <i class="bi bi-plus-lg"></i> {{t('issues.create')}}
-          </button>
+          </ui-button>
         </div>
       </div>
 
@@ -138,11 +148,9 @@ const IssuesPage = {
       <div class="card workspace-filter-card">
         <div class="card-body filter-row workspace-filter-bar">
           <div class="workspace-filter-controls">
-            <div class="btn-group">
-              <button class="btn btn-sm" :class="!issueFilter.status?'btn-primary':'btn-secondary'" @click="$emit('update:issueFilter', {...issueFilter,status:''})">{{t('issues.all')}}</button>
-              <button class="btn btn-sm" :class="issueFilter.status==='OPEN'?'btn-primary':'btn-secondary'" @click="$emit('update:issueFilter', {...issueFilter,status:'OPEN'})">{{t('issues.open')}}</button>
-              <button class="btn btn-sm" :class="issueFilter.status==='RESOLVED'?'btn-primary':'btn-secondary'" @click="$emit('update:issueFilter', {...issueFilter,status:'RESOLVED'})">{{t('issues.resolved')}}</button>
-            </div>
+            <ui-segmented-control :model-value="issueFilter.status" :options="issueStatusFilterOptions"
+              name="issueStatusFilter" size="compact" :aria-label="t('issues.statusFilter')"
+              @update:model-value="$emit('update:issueFilter', {...issueFilter,status:$event})"></ui-segmented-control>
             <div class="filter-divider" aria-hidden="true"></div>
             <workspace-search-field
               input-id="issueSearch"
@@ -159,13 +167,11 @@ const IssuesPage = {
 
       <!-- List -->
       <div class="card card-table workspace-table-card">
-        <div v-if="loading.issuesError && !loading.issues" class="workspace-load-error" role="alert">
-          <i class="bi bi-cloud-slash" aria-hidden="true"></i>
-          <strong>{{t('issues.loadFailed')}}</strong>
-          <button type="button" class="btn btn-sm btn-secondary" @click="$emit('load-issues', true)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</button>
-        </div>
+        <ui-load-state v-if="loading.issuesError && !loading.issues" kind="error" icon="bi-cloud-slash" :title="t('issues.loadFailed')" has-action>
+          <template #action><ui-button type="button" class="btn btn-sm btn-secondary" @click="$emit('load-issues', true)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</ui-button></template>
+        </ui-load-state>
         <div v-else class="card-table-body">
-          <div v-if="loading.issues && !issues.length">
+          <div v-if="loading.issues && !issues.length" role="status" :aria-label="t('common.loading')">
             <div v-for="i in 5" :key="'sk-issue-'+i" class="sk-row">
               <span class="sk sk-badge" style="width:70px"></span>
               <span class="sk sk-text" style="width:40%"></span>
@@ -175,17 +181,17 @@ const IssuesPage = {
           </div>
           <table v-if="pagedIssues.length" class="table-fixed workspace-table">
             <thead><tr>
-              <th style="width:94px"><button type="button" class="table-sort-button" @click="$emit('toggle-issue-sort','status')">{{t('issues.thStatus')}} <i class="bi" :class="issueSortIcon('status')"></i></button></th>
-              <th><button type="button" class="table-sort-button" @click="$emit('toggle-issue-sort','title')">{{t('issues.thTitle')}} <i class="bi" :class="issueSortIcon('title')"></i></button></th>
-              <th class="col-hide-md" style="width:120px"><button type="button" class="table-sort-button" @click="$emit('toggle-issue-sort','createdBy')">{{t('issues.thCreatedBy')}} <i class="bi" :class="issueSortIcon('createdBy')"></i></button></th>
-              <th class="col-datetime"><button type="button" class="table-sort-button" @click="$emit('toggle-issue-sort','createdAt')">{{t('issues.thTime')}} <i class="bi" :class="issueSortIcon('createdAt')"></i></button></th>
+              <th style="width:94px" :aria-sort="issueSort.field==='status'?(issueSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('issues.thStatus')" :active="issueSort.field==='status'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','status')"></ui-table-sort-header></th>
+              <th :aria-sort="issueSort.field==='title'?(issueSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('issues.thTitle')" :active="issueSort.field==='title'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','title')"></ui-table-sort-header></th>
+              <th class="col-hide-md" style="width:120px" :aria-sort="issueSort.field==='createdBy'?(issueSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('issues.thCreatedBy')" :active="issueSort.field==='createdBy'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','createdBy')"></ui-table-sort-header></th>
+              <th class="col-datetime" :aria-sort="issueSort.field==='createdAt'?(issueSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('issues.thTime')" :active="issueSort.field==='createdAt'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','createdAt')"></ui-table-sort-header></th>
               <th class="col-actions col-actions-1">{{t('issues.thActions')}}</th>
             </tr></thead>
             <tbody>
               <template v-for="issue in pagedIssues" :key="issue.id">
                 <tr @click="toggleExpand(issue.id)" style="cursor:pointer" :class="{active:expandedId===issue.id}">
                   <td>
-                    <span class="badge" :class="issue.status==='OPEN'?'badge-warning':'badge-success'">{{issue.status==='OPEN'?t('issues.open'):t('issues.resolved')}}</span>
+                    <ui-badge class="badge" :class="issue.status==='OPEN'?'badge-warning':'badge-success'">{{issue.status==='OPEN'?t('issues.open'):t('issues.resolved')}}</ui-badge>
                   </td>
                   <td>
                     <div style="font-weight:500">{{issue.title}}</div>
@@ -193,9 +199,9 @@ const IssuesPage = {
                   <td class="col-hide-md"><span class="sub-info">{{issue.createdBy}}</span></td>
                   <td class="col-datetime"><span class="sub-info" :title="fmtTime(issue.createdAt,false)">{{fmtTime(issue.createdAt)}}</span></td>
                   <td class="col-actions col-actions-1">
-                    <button class="btn btn-sm btn-icon btn-secondary" :title="expandedId===issue.id?t('issues.collapse'):t('issues.expand')" :aria-label="expandedId===issue.id?t('issues.collapse'):t('issues.expand')" :aria-expanded="expandedId===issue.id" :aria-controls="'issue-detail-'+issue.id">
+                    <ui-button class="btn btn-sm btn-icon btn-secondary" :title="expandedId===issue.id?t('issues.collapse'):t('issues.expand')" :aria-label="expandedId===issue.id?t('issues.collapse'):t('issues.expand')" :aria-expanded="expandedId===issue.id" :aria-controls="'issue-detail-'+issue.id">
                       <i class="bi" :class="expandedId===issue.id?'bi-chevron-up':'bi-chevron-down'"></i>
-                    </button>
+                    </ui-button>
                   </td>
                 </tr>
                 <tr v-if="expandedId===issue.id" class="rule-preview-row">
@@ -223,24 +229,24 @@ const IssuesPage = {
                       <div v-if="isAdmin && replyingId===issue.id" class="issue-reply-form">
                         <textarea v-model="replyText" class="form-control" rows="3" :placeholder="t('issues.replyPlaceholder')" style="margin-bottom:0.5rem"></textarea>
                         <div style="display:flex;gap:0.5rem">
-                          <button class="btn btn-sm btn-primary" @click.stop="submitReply(issue.id)" :disabled="!replyText.trim()">{{t('issues.submitReply')}}</button>
-                          <button class="btn btn-sm btn-secondary" @click.stop="replyingId=null">{{t('issues.cancel')}}</button>
+                          <ui-button class="btn btn-sm btn-primary" @click.stop="submitReply(issue.id)" :disabled="!replyText.trim()">{{t('issues.submitReply')}}</ui-button>
+                          <ui-button variant="quiet" size="compact" @click.stop="replyingId=null">{{t('issues.cancel')}}</ui-button>
                         </div>
                       </div>
                       <!-- Admin actions -->
                       <div v-if="isAdmin" class="issue-actions">
-                        <button v-if="replyingId!==issue.id" class="btn btn-sm btn-secondary" @click.stop="startReply(issue.id, issue.adminReply)">
+                        <ui-button v-if="replyingId!==issue.id" class="btn btn-sm btn-secondary" @click.stop="startReply(issue.id, issue.adminReply)">
                           <i class="bi bi-reply"></i> {{t('issues.reply')}}
-                        </button>
-                        <button v-if="issue.status==='OPEN'" class="btn btn-sm btn-success" @click.stop="$emit('resolve-issue', issue.id)">
+                        </ui-button>
+                        <ui-button v-if="issue.status==='OPEN'" class="btn btn-sm btn-success" @click.stop="$emit('resolve-issue', issue.id)">
                           <i class="bi bi-check-lg"></i> {{t('issues.resolve')}}
-                        </button>
-                        <button v-if="issue.status==='RESOLVED'" class="btn btn-sm btn-warning" @click.stop="$emit('reopen-issue', issue.id)">
+                        </ui-button>
+                        <ui-button v-if="issue.status==='RESOLVED'" class="btn btn-sm btn-warning" @click.stop="$emit('reopen-issue', issue.id)">
                           <i class="bi bi-arrow-counterclockwise"></i> {{t('issues.reopen')}}
-                        </button>
-                        <button class="btn btn-sm btn-danger" @click.stop="$emit('delete-issue', issue.id)">
+                        </ui-button>
+                        <ui-button class="btn btn-sm btn-danger" @click.stop="$emit('delete-issue', issue.id)">
                           <i class="bi bi-trash"></i> {{t('issues.delete')}}
-                        </button>
+                        </ui-button>
                       </div>
                     </div>
                   </td>
@@ -248,12 +254,12 @@ const IssuesPage = {
               </template>
             </tbody>
           </table>
-          <div v-if="!pagedIssues.length && !loading.issues" class="empty workspace-empty">
-            <i class="bi bi-inbox"></i>
-            <div class="workspace-empty-title">{{issueFilter.status||issueFilter.keyword?t('issues.emptyFiltered'):t('issues.empty')}}</div>
-            <div class="workspace-empty-hint">{{issueFilter.status||issueFilter.keyword?t('issues.emptyFilteredHint'):t('issues.emptyHint')}}</div>
-            <button v-if="issueFilter.status||issueFilter.keyword" class="btn btn-sm btn-secondary" @click="$emit('update:issueFilter',{status:'',keyword:''})">{{t('issues.clearFilters')}}</button>
-          </div>
+          <ui-load-state v-if="!pagedIssues.length && !loading.issues" kind="empty" :has-action="hasIssueFilters"
+            :icon="hasIssueFilters?'bi-search':'bi-inbox'"
+            :title="hasIssueFilters?t('issues.emptyFiltered'):t('issues.empty')"
+            :hint="hasIssueFilters?t('issues.emptyFilteredHint'):t('issues.emptyHint')">
+            <template #action><ui-button class="btn btn-sm btn-secondary" @click="$emit('update:issueFilter',{status:'',keyword:''})">{{t('issues.clearFilters')}}</ui-button></template>
+          </ui-load-state>
         </div>
         <workspace-pagination
           v-if="!loading.issuesError"
@@ -274,8 +280,8 @@ const IssuesPage = {
       <div ref="issueCreateOverlay" v-if="showCreateModal" class="modal-overlay" @click.self="closeCreate" @keydown="handleCreateKeydown">
         <div ref="issueCreateDialog" class="modal-box workspace-modal issue-create-modal" role="dialog" aria-modal="true" aria-labelledby="issueCreateTitle" tabindex="-1">
           <div class="modal-header">
-            <div class="modal-heading"><span class="modal-heading-icon"><i class="bi bi-flag" aria-hidden="true"></i></span><h3 id="issueCreateTitle">{{t('issues.createTitle')}}</h3></div>
-            <button type="button" class="close-btn" @click="closeCreate" :disabled="creating" :aria-label="t('issues.cancel')"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+            <div class="modal-heading"><span class="modal-heading-icon"><i class="bi bi-flag" aria-hidden="true"></i></span><h2 id="issueCreateTitle">{{t('issues.createTitle')}}</h2></div>
+            <ui-button type="button" class="close-btn" @click="closeCreate" :disabled="creating" :aria-label="t('issues.cancel')"><i class="bi bi-x-lg" aria-hidden="true"></i></ui-button>
           </div>
           <div class="modal-body issue-create-body">
             <div v-if="createError" class="issue-create-error" role="alert"><i class="bi bi-exclamation-circle" aria-hidden="true"></i><span>{{createError}}</span></div>
@@ -291,8 +297,8 @@ const IssuesPage = {
             </div>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="closeCreate" :disabled="creating">{{t('issues.cancel')}}</button>
-            <button type="button" class="btn btn-primary" @click="submitCreate" :disabled="creating"><i class="bi" :class="creating?'bi-arrow-clockwise spin':'bi-send'" aria-hidden="true"></i>{{t('issues.submit')}}</button>
+            <ui-button type="button" variant="quiet" @click="closeCreate" :disabled="creating">{{t('issues.cancel')}}</ui-button>
+            <ui-button type="button" class="btn btn-primary" @click="submitCreate" :disabled="creating"><i class="bi" :class="creating?'bi-arrow-clockwise spin':'bi-send'" aria-hidden="true"></i>{{t('issues.submit')}}</ui-button>
           </div>
         </div>
       </div>

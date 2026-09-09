@@ -26,6 +26,7 @@ export ECHO_TEST_PASSWORD='your-local-password'
 | `test-match-scenarios.py` | End-to-end regression — 55 scenarios / 138 assertions covering HTTP, JMS, logs, SSE, fault injection, and Scenario |
 | `migrate-h2-to-sqlite.py` | Offline, staged H2-to-SQLite migration with row/digest/integrity verification and startup smoke test |
 | `test-sqlite-crash-resilience.py` | SQLite WAL crash/restart and request-log durability regression |
+| `test-sqlite-recovery-resilience.py` | Disposable SQLite lock, bounded JVM OOM, corruption fail-fast, verified-backup restore, and post-recovery writes |
 | `test-rdbms-matrix.py` | Disposable Docker Compose matrix for H2, SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle; runs E2E/persistence checks, restart verification, and evidence collection |
 | `test-container-resilience.py` | Disposable Compose JMS XML pressure, fixed-heap, SIGKILL/restart, ID accounting, Artemis paging, and bounded tmpfs high-water/full/recovery validation |
 | `perf-test-downstream.py` | Local downstream HTTP server for forwarding latency and body-limit tests |
@@ -82,6 +83,11 @@ python3 scripts/test-container-resilience.py --mode quick --messages 8 \
 
 # Print the exact plan without starting Docker
 python3 scripts/test-container-resilience.py --dry-run
+
+# Validate SQLite lock recovery, deliberate bounded JVM OOM/restart, corruption
+# fail-fast, and opt-in verified-backup restore. All databases are temporary.
+./gradlew bootJar
+python3 scripts/test-sqlite-recovery-resilience.py
 ```
 
 Use disposable databases and ports for benchmarks. Do not point destructive or crash-resilience scripts at a production database.

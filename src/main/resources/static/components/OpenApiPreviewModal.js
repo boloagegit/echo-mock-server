@@ -107,8 +107,8 @@ const OpenApiPreviewModal = {
     <div ref="overlay" class="modal-overlay" v-if="show" @keydown="handleKeydown">
       <div ref="dialog" class="modal-box workspace-modal openapi-preview-modal" role="dialog" aria-modal="true" aria-labelledby="openApiPreviewTitle" tabindex="-1">
         <div class="modal-header">
-          <div class="modal-heading"><span class="modal-heading-icon"><i class="bi bi-filetype-yml" aria-hidden="true"></i></span><h3 id="openApiPreviewTitle">{{t('modal.openApiPreviewTitle')}}</h3></div>
-          <button type="button" class="close-btn" @click="$emit('close')" :disabled="loading" :aria-label="t('modal.cancel')"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+          <div class="modal-heading"><span class="modal-heading-icon"><i class="bi bi-filetype-yml" aria-hidden="true"></i></span><h2 id="openApiPreviewTitle">{{t('modal.openApiPreviewTitle')}}</h2></div>
+          <ui-button type="button" class="close-btn" @click="$emit('close')" :disabled="loading" :aria-label="t('modal.cancel')"><i class="bi bi-x-lg" aria-hidden="true"></i></ui-button>
         </div>
         <div class="modal-body openapi-preview-body">
           <div class="openapi-preview-info">
@@ -143,11 +143,11 @@ const OpenApiPreviewModal = {
         </div>
         <div class="modal-footer">
           <span class="openapi-preview-footer-count">{{t('modal.openApiRuleCount', {total: rules.length, selected: selectedIndices.length})}}</span>
-          <button type="button" class="btn btn-secondary" @click="$emit('close')" :disabled="loading">{{t('modal.cancel')}}</button>
-          <button type="button" class="btn btn-primary" @click="confirm" :disabled="!selectedIndices.length || loading">
+          <ui-button type="button" variant="quiet" @click="$emit('close')" :disabled="loading">{{t('modal.cancel')}}</ui-button>
+          <ui-button type="button" class="btn btn-primary" @click="confirm" :disabled="!selectedIndices.length || loading">
             <i class="bi" :class="loading?'bi-arrow-clockwise spin':'bi-upload'" aria-hidden="true"></i>
             {{t('modal.openApiConfirmImport', {count: selectedIndices.length})}}
-          </button>
+          </ui-button>
         </div>
       </div>
     </div>

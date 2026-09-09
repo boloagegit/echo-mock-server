@@ -47,17 +47,23 @@ class RulesPageResourceTest {
 
     @Test
     void prioritizesEditingAndKeepsSecondaryRowActionsInACompactDisclosure() throws IOException {
-        String component = resourceText("static/components/RulesPage.js");
+        String component = resourceText("static/components/RuleListParts.js");
 
         assertThat(component)
                 .contains("class=\"btn btn-sm btn-secondary rule-row-edit\"")
                 .contains("class=\"rule-row-more\"")
                 .contains("t('rules.moreActions')")
                 .contains("class=\"rule-row-more-popover\"")
-                .contains("$emit('toggle-rule-preview', r)")
-                .contains("$emit('show-rule-history', r)")
-                .contains("$emit('copy-rule', r)")
+                .contains("invoke('toggle-rule-preview',$event)")
+                .contains("invoke('show-rule-history',$event)")
+                .contains("invoke('copy-rule',$event)")
                 .doesNotContain("class=\"dblclick-hint\"");
+        for (String page : new String[]{"RulesPage", "RuleGroupRow"}) {
+            assertThat(resourceText("static/components/" + page + ".js"))
+                    .contains("<rule-row-actions")
+                    .contains("<rule-list-identity")
+                    .contains("@show-rule-history=\"$emit('show-rule-history',$event)\"");
+        }
     }
 
     @Test

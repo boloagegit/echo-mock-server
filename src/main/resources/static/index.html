@@ -8,8 +8,8 @@
     <link rel="stylesheet" href="/webjars/bootstrap/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="/webjars/bootstrap-icons/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="/webjars/codemirror/lib/codemirror.css">
-    <link rel="stylesheet" href="/theme.css?v=20260906.2">
-    <link rel="stylesheet" href="/style.css?v=20260906.2">
+    <link rel="stylesheet" href="/theme.css?v=20260909.2">
+    <link rel="stylesheet" href="/style.css?v=20260909.23">
 </head>
 <body>
 <div id="app" v-cloak>
@@ -31,7 +31,7 @@
         ></sidebar-nav>
         <div class="mobile-overlay" v-if="mobileMenu" @click="mobileMenu=false"></div>
         <main class="main" @click="mobileMenu=false">
-            <button class="mobile-menu-btn" @click.stop="mobileMenu=!mobileMenu"><i class="bi bi-list"></i></button>
+            <button class="mobile-menu-btn" :aria-label="t('sidebar.openMenu')" @click.stop="mobileMenu=!mobileMenu"><i class="bi bi-list" aria-hidden="true"></i></button>
             <!-- Rules Page -->
             <rules-page v-if="page==='rules'"
                 :rules="rules" :loading="loading" :status="status"
@@ -199,6 +199,7 @@
                 @remove-response-chip="removeResponseChip($event)"
                 @clear-response-filters="clearResponseFilters"
                 @go-to-rule="page='rules';ruleFilter.keyword=$event"
+                @clip-copy="clipCopy($event)"
                 @extend-response="extendResponse($event)"
             ></responses-page>
 
@@ -345,7 +346,7 @@
 <script src="/webjars/codemirror/mode/xml/xml.js"></script>
 <script src="/utils.js?v=20260822.2"></script>
 <!-- Composables (載入順序：utils.js → composables → components → app.js) -->
-<script src="/composables/useI18n.js"></script>
+<script src="/composables/useI18n.js?v=20260909.7"></script>
 <script src="/composables/useToast.js"></script>
 <script src="/composables/useAuth.js"></script>
 <script src="/composables/useTheme.js"></script>
@@ -354,33 +355,46 @@
 <script src="/composables/useStats.js?v=20260812.1"></script>
 <script src="/composables/useAudit.js?v=20260812.1"></script>
 <script src="/composables/useResponses.js?v=20260812.1"></script>
-<script src="/composables/useRules.js?v=20260904.1"></script>
+<script src="/composables/useRules.js?v=20260909.1"></script>
 <script src="/composables/useRuleApply.js?v=20260809.3"></script>
 <script src="/composables/useRuleForm.js?v=20260809.5"></script>
 <script src="/composables/useAccounts.js?v=20260904.1"></script>
 <script src="/composables/useIssues.js?v=20260904.1"></script>
 <script src="/composables/useRouter.js"></script>
-<script src="/components/SidebarNav.js?v=20260906.1"></script>
-<script src="/components/ToastContainer.js"></script>
-<script src="/components/WorkspaceSearchField.js?v=20260812.1"></script>
-<script src="/components/WorkspacePagination.js?v=20260811.2"></script>
-<script src="/components/ConfirmModal.js?v=20260809.5"></script>
-<script src="/components/TourOverlay.js?v=20260809.6"></script>
-<script src="/components/ImportModal.js?v=20260809.6"></script>
-<script src="/components/AuditPage.js?v=20260812.1"></script>
-<script src="/components/IssuesPage.js?v=20260904.1"></script>
-<script src="/components/StatsPage.js?v=20260822.2"></script>
-<script src="/components/ResponseEditModal.js?v=20260809.6"></script>
-<script src="/components/ChangePasswordModal.js?v=20260809.5"></script>
-<script src="/components/ResponsesPage.js?v=20260812.1"></script>
-<script src="/components/SettingsPage.js"></script>
-<script src="/components/PriorityHelpModal.js?v=20260809.7"></script>
-<script src="/components/RulesPage.js?v=20260904.1"></script>
-<script src="/components/RuleGroupRow.js?v=20260904.1"></script>
-<script src="/components/AccountsPage.js?v=20260904.1"></script>
-<script src="/components/RuleEditModal.js?v=20260906.1"></script>
-<script src="/components/RuleApplyModal.js?v=20260809.3"></script>
-<script src="/components/OpenApiPreviewModal.js"></script>
-<script src="/app.js?v=20260904.1"></script>
+<script src="/components/UiButton.js?v=20260909.4"></script>
+<script src="/components/UiBadge.js?v=20260909.2"></script>
+<script src="/components/UiStatus.js?v=20260909.1"></script>
+<script src="/components/UiToggle.js?v=20260909.1"></script>
+<script src="/components/UiSegmentedControl.js?v=20260909.2"></script>
+<script src="/components/UiToggleGroup.js?v=20260909.3"></script>
+<script src="/components/UiFilterChipList.js?v=20260909.3"></script>
+<script src="/components/UiTableSortHeader.js?v=20260909.1"></script>
+<script src="/components/UiDropdownMenu.js?v=20260909.2"></script>
+<script src="/components/UiLoadState.js?v=20260909.1"></script>
+<script src="/components/UiTabs.js?v=20260909.1"></script>
+<script src="/components/UiChoiceGroup.js?v=20260909.1"></script>
+<script src="/components/SidebarNav.js?v=20260909.5"></script>
+<script src="/components/ToastContainer.js?v=20260909.4"></script>
+<script src="/components/WorkspaceSearchField.js?v=20260909.5"></script>
+<script src="/components/WorkspacePagination.js?v=20260909.4"></script>
+<script src="/components/ConfirmModal.js?v=20260909.5"></script>
+<script src="/components/TourOverlay.js?v=20260909.4"></script>
+<script src="/components/ImportModal.js?v=20260909.6"></script>
+<script src="/components/AuditPage.js?v=20260909.6"></script>
+<script src="/components/IssuesPage.js?v=20260909.7"></script>
+<script src="/components/StatsPage.js?v=20260909.9"></script>
+<script src="/components/ResponseEditModal.js?v=20260909.6"></script>
+<script src="/components/ChangePasswordModal.js?v=20260909.5"></script>
+<script src="/components/ResponsesPage.js?v=20260909.7"></script>
+<script src="/components/SettingsPage.js?v=20260909.7"></script>
+<script src="/components/PriorityHelpModal.js?v=20260909.7"></script>
+<script src="/components/RuleListParts.js?v=20260909.4"></script>
+<script src="/components/RulesPage.js?v=20260909.6"></script>
+<script src="/components/RuleGroupRow.js?v=20260909.4"></script>
+<script src="/components/AccountsPage.js?v=20260909.7"></script>
+<script src="/components/RuleEditModal.js?v=20260909.7"></script>
+<script src="/components/RuleApplyModal.js?v=20260909.5"></script>
+<script src="/components/OpenApiPreviewModal.js?v=20260909.5"></script>
+<script src="/app.js?v=20260909.8"></script>
 </body>
 </html>

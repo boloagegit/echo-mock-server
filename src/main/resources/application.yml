@@ -142,7 +142,7 @@ echo:
     rule-retention-days: 180  # 規則保留天數 (預設半年)
     response-retention-days: 180  # 回應保留天數
   backup:
-    enabled: true             # 啟用 H2 自動備份 (僅 H2 Embedded 模式)
+    enabled: true             # 啟用內嵌式 H2／SQLite 自動備份
     cron: "0 0 3 * * *"       # 每天凌晨 3 點執行
     path: ./backups           # 備份目錄
     retention-days: 7         # 備份保留天數

@@ -33,7 +33,9 @@ const SidebarNav = {
     <aside class="sidebar" :class="{collapsed: sidebarCollapsed, 'mobile-open': mobileMenu}" @click.stop>
       <div class="sidebar-header">
         <div class="sidebar-brand">
-          <img class="brand-icon" src="/favicon.ico?v=20260906.2" alt="" width="22" height="22">
+          <span class="brand-mark" aria-hidden="true">
+            <img class="brand-icon" src="/favicon.ico?v=20260906.2" alt="" width="22" height="22">
+          </span>
           <span>Echo</span>
           <span v-if="envLabel" class="env-label">{{envLabel}}</span>
         </div>

@@ -28,6 +28,12 @@ const ResponseEditModal = {
     };
   },
   computed: {
+    responseTypeOptions() {
+      return [
+        { value: 'text', label: this.t('modal.responseTypeGeneral'), icon: 'bi-file-earmark-text' },
+        { value: 'sse', label: this.t('modal.responseTypeSse'), icon: 'bi-broadcast' },
+      ];
+    },
     sseErrors() {
       if (!this.attemptedSave || this.form.contentType !== 'sse') { return []; }
       return this.sseEvents.map(event => {
@@ -210,33 +216,28 @@ const ResponseEditModal = {
         <div class="modal-header">
           <div class="modal-heading">
             <span class="modal-heading-icon"><i class="bi" :class="editing?'bi-pencil-square':'bi-plus-circle'" aria-hidden="true"></i></span>
-            <h3 id="responseEditorTitle">{{editing ? t('modal.editResponse') : t('modal.addResponse')}}</h3>
+            <h2 id="responseEditorTitle">{{editing ? t('modal.editResponse') : t('modal.addResponse')}}</h2>
           </div>
           <div class="response-modal-actions">
-            <button type="button" class="close-btn" @click="$emit('update:maximized', !maximized)" :title="maximized ? t('modal.restoreWindow') : t('modal.fullscreen')" :aria-label="maximized ? t('modal.restoreWindow') : t('modal.fullscreen')"><i class="bi" :class="maximized?'bi-fullscreen-exit':'bi-arrows-fullscreen'" aria-hidden="true"></i></button>
-            <button type="button" class="close-btn" @click="$emit('close')" :title="t('modal.cancel')" :aria-label="t('modal.cancel')"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+            <ui-button type="button" class="close-btn" @click="$emit('update:maximized', !maximized)" :title="maximized ? t('modal.restoreWindow') : t('modal.fullscreen')" :aria-label="maximized ? t('modal.restoreWindow') : t('modal.fullscreen')"><i class="bi" :class="maximized?'bi-fullscreen-exit':'bi-arrows-fullscreen'" aria-hidden="true"></i></ui-button>
+            <ui-button type="button" class="close-btn" @click="$emit('close')" :title="t('modal.cancel')" :aria-label="t('modal.cancel')"><i class="bi bi-x-lg" aria-hidden="true"></i></ui-button>
           </div>
         </div>
         <div class="modal-body">
           <div class="form-group"><label class="form-label" for="responseDescription">{{t('modal.description')}}</label><input ref="descriptionInput" id="responseDescription" class="form-control" :value="form.description" @input="updateDescription($event.target.value)" :placeholder="t('modal.descriptionPlaceholder')" maxlength="255"></div>
           <div class="form-group">
             <span class="form-label" id="responseTypeLabel">{{t('modal.responseType')}}</span>
-            <div class="protocol-switch response-type-switch" role="group" aria-labelledby="responseTypeLabel">
-              <button type="button" class="protocol-btn" :class="{active:form.contentType==='text'}" :aria-pressed="form.contentType==='text'" @click="updateContentType('text')">
-                <i class="bi bi-file-earmark-text" aria-hidden="true"></i><span>{{t('modal.responseTypeGeneral')}}</span><i v-if="form.contentType==='text'" class="bi bi-check2 response-type-check" aria-hidden="true"></i>
-              </button>
-              <button type="button" class="protocol-btn" :class="{active:form.contentType==='sse'}" :aria-pressed="form.contentType==='sse'" @click="updateContentType('sse')">
-                <i class="bi bi-broadcast" aria-hidden="true"></i><span>{{t('modal.responseTypeSse')}}</span><i v-if="form.contentType==='sse'" class="bi bi-check2 response-type-check" aria-hidden="true"></i>
-              </button>
-            </div>
+            <ui-choice-group class="protocol-switch response-type-switch" option-class="protocol-btn" variant="compact" show-check
+              :model-value="form.contentType" :options="responseTypeOptions" :aria-label="t('modal.responseType')"
+              @update:model-value="updateContentType"></ui-choice-group>
           </div>
           <div v-if="form.contentType==='text'" class="form-group response-text-editor">
             <div class="response-editor-toolbar">
               <label class="form-label">{{t('modal.responseContent')}}</label>
-              <button type="button" class="btn btn-xs btn-secondary" @click="$emit('toggle-format')">
+              <ui-button type="button" class="btn btn-xs btn-secondary" @click="$emit('toggle-format')">
                 <i class="bi" :class="responseFormFormatted?'bi-code':'bi-braces'" aria-hidden="true"></i>
                 {{responseFormFormatted ? t('modal.plainText') : t('modal.format')}}
-              </button>
+              </ui-button>
               <span class="sub-info response-content-size">{{fmtSize(form.body?.length || 0)}}</span>
               <span v-if="(form.body?.length || 0) > 5242880" class="badge badge-warning" :title="t('modal.exceedCacheTooltip')"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> {{t('modal.exceedCacheThreshold')}}</span>
             </div>
@@ -246,13 +247,13 @@ const ResponseEditModal = {
             <section class="response-sse-editor-pane" aria-labelledby="sseEventsTitle">
               <div class="response-sse-section-header">
                 <div class="response-sse-section-title">
-                  <h4 id="sseEventsTitle">{{t('modal.sseEventsTitle')}}</h4>
+                  <h3 id="sseEventsTitle">{{t('modal.sseEventsTitle')}}</h3>
                   <button type="button" class="help-tooltip tooltip-align-start" :data-tooltip="t('modal.sseEventsHelp')" :aria-label="t('modal.sseEventsHelp')"><i class="bi bi-question-circle" aria-hidden="true"></i></button>
                   <span class="response-sse-count">{{t('modal.sseEventCount', {count: sseEvents.length})}}</span>
                 </div>
-                <button type="button" class="btn btn-sm btn-secondary response-sse-add" @click="addSseEvent()"><i class="bi bi-plus-lg" aria-hidden="true"></i> {{t('modal.addSseEvent')}}</button>
+                <ui-button type="button" class="btn btn-sm btn-secondary response-sse-add" @click="addSseEvent()"><i class="bi bi-plus-lg" aria-hidden="true"></i> {{t('modal.addSseEvent')}}</ui-button>
               </div>
-              <div class="sse-table response-sse-table" tabindex="0" :aria-label="t('modal.sseEventsTableLabel')">
+              <div class="sse-table response-sse-table" role="region" tabindex="0" :aria-label="t('modal.sseEventsTableLabel')">
                 <table>
                   <caption class="visually-hidden">{{t('modal.sseEventsTableLabel')}}</caption>
                   <thead><tr>
@@ -281,7 +282,7 @@ const ResponseEditModal = {
                         </div>
                         <div v-if="sseError(idx, 'delayInvalid')" class="invalid-feedback" :id="'sse-delay-error-'+idx">{{t('modal.sseEventDelayInvalid')}}</div>
                       </td>
-                      <td class="sse-event-actions"><button type="button" class="btn btn-icon sse-remove-event" @click="removeSseEvent(idx)" :disabled="sseEvents.length<=1" :title="t('modal.deleteSseEventAt', {index: idx + 1})" :aria-label="t('modal.deleteSseEventAt', {index: idx + 1})"><i class="bi bi-trash" aria-hidden="true"></i></button></td>
+                      <td class="sse-event-actions"><ui-button type="button" class="btn btn-icon sse-remove-event" @click="removeSseEvent(idx)" :disabled="sseEvents.length<=1" :title="t('modal.deleteSseEventAt', {index: idx + 1})" :aria-label="t('modal.deleteSseEventAt', {index: idx + 1})"><i class="bi bi-trash" aria-hidden="true"></i></ui-button></td>
                     </tr>
                   </tbody>
                 </table>
@@ -314,8 +315,8 @@ const ResponseEditModal = {
         </div>
         <div class="modal-footer">
           <span class="response-save-shortcut">{{t('modal.saveShortcutHint')}}</span>
-          <button type="button" class="btn btn-secondary" @click="$emit('close')">{{t('modal.cancel')}}</button>
-          <button type="button" class="btn btn-primary" @click="requestSave" :disabled="saving"><i class="bi" :class="saving?'bi-arrow-clockwise spin':'bi-check-lg'" aria-hidden="true"></i> {{editing ? t('modal.update') : t('modal.create')}}</button>
+          <ui-button type="button" variant="quiet" @click="$emit('close')">{{t('modal.cancel')}}</ui-button>
+          <ui-button type="button" class="btn btn-primary" @click="requestSave" :disabled="saving"><i class="bi" :class="saving?'bi-arrow-clockwise spin':'bi-check-lg'" aria-hidden="true"></i> {{editing ? t('modal.update') : t('modal.create')}}</ui-button>
         </div>
       </div>
     </div>

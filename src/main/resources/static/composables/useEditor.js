@@ -50,6 +50,7 @@ const useEditor = (t) => {
             const formatted = key === 'preview' ? previewFormatted.value : key === 'edit' ? editFormatted.value : responseFormFormatted.value;
             if (formatted) {
                 editors[key] = CodeMirror(elRef.value, { value: text || '', mode: detectMode(text), readOnly, lineNumbers: true, lineWrapping: true, theme: 'default' });
+                editors[key].getInputField().setAttribute('aria-label', t('modal.responseContent'));
                 if (onChange) editors[key].on('change', () => onChange(editors[key].getValue()));
             } else if (readOnly) {
                 const pre = document.createElement('pre');
@@ -59,6 +60,7 @@ const useEditor = (t) => {
             } else {
                 const ta = document.createElement('textarea');
                 ta.className = 'form-control response-body-editor';
+                ta.setAttribute('aria-label', t('modal.responseContent'));
                 ta.placeholder = key === 'responseForm' ? t('modal.responseBodyPlaceholder') : t('modal.editorPlaceholder');
                 ta.value = text || '';
                 if (onChange) ta.addEventListener('input', e => onChange(e.target.value));

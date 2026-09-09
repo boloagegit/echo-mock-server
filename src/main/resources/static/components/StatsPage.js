@@ -46,12 +46,36 @@ const StatsPage = {
     };
   },
   computed: {
+    hasLogFilters() {
+      return Boolean(this.logFilter.protocol || this.logFilter.matched || this.logFilter.endpoint);
+    },
     selectedLogItem() {
       return this.pagedLogs.find(item => !!this.logDetailExpanded[item.log.id]) || null;
     },
     logDetailColspan() {
       return this.compactLogTable ? 4 : 5;
-    }
+    },
+    inspectorTabs() {
+      const id = this.selectedLogItem?.log?.id || 'none';
+      return [
+        { value: 'body', label: this.t('stats.inspectorBodyTab'), icon: 'bi-braces', id: 'log-tab-body-' + id, panelId: 'log-inspector-body-' + id },
+        { value: 'overview', label: this.t('stats.inspectorOverviewTab'), icon: 'bi-list-ul', id: 'log-tab-overview-' + id, panelId: 'log-inspector-overview-' + id },
+        { value: 'trace', label: this.t('stats.matchChainTitle'), icon: 'bi-diagram-3', count: this.selectedLogItem?.matchChainData?.length || null,
+          disabled: !this.selectedLogItem?.matchChainData?.length, id: 'log-tab-trace-' + id, panelId: 'log-inspector-trace-' + id },
+      ];
+    },
+    protocolFilterOptions() {
+      return [
+        { value: 'HTTP', label: this.httpLabel },
+        { value: 'JMS', label: this.jmsLabel, disabled: !this.jmsEnabled },
+      ];
+    },
+    resultFilterOptions() {
+      return [
+        { value: 'true', label: this.t('stats.filterMatched') },
+        { value: 'false', label: this.t('stats.filterUnmatched') },
+      ];
+    },
   },
   watch: {
     selectedLogItem(item) {
@@ -197,6 +221,10 @@ const StatsPage = {
         lineWrapping: false,
         theme: 'default'
       });
+      this.cmInstances[refKey].getInputField()?.setAttribute(
+        'aria-label',
+        refKey.startsWith('reqBody-') ? this.t('stats.detailRequestBody') : this.t('stats.detailResponseBody')
+      );
     },
     setBodySearch(refKey, val) {
       this.bodySearch = { ...this.bodySearch, [refKey]: val };
@@ -316,6 +344,10 @@ const StatsPage = {
             lineWrapping: false,
             theme: 'default'
           });
+          this.cmInstances[refKey].getInputField()?.setAttribute(
+            'aria-label',
+            refKey.startsWith('reqBody-') ? this.t('stats.detailRequestBody') : this.t('stats.detailResponseBody')
+          );
         });
       } else {
         if (this.cmInstances && this.cmInstances[refKey]) {
@@ -349,19 +381,6 @@ const StatsPage = {
     copyBody(text) {
       this.$emit('clip-copy', text);
     },
-    moveInspectorTab(event) {
-      const tabs = ['body', 'overview'];
-      if (this.selectedLogItem?.matchChainData?.length) { tabs.push('trace'); }
-      const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
-      if (!keys.includes(event.key)) { return; }
-      event.preventDefault();
-      const current = Math.max(0, tabs.indexOf(this.inspectorTab));
-      const next = event.key === 'Home' ? 0
-        : event.key === 'End' ? tabs.length - 1
-        : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
-      this.inspectorTab = tabs[next];
-      this.$nextTick(() => this.$refs.inspectorTabs?.querySelector('[role="tab"][aria-selected="true"]')?.focus());
-    },
   },
   template: /* html */`
     <div class="page workspace-page logs-workspace" :class="{active:true}">
@@ -376,33 +395,23 @@ const StatsPage = {
           </button>
         </div>
         <div class="page-actions">
-          <button type="button" class="btn btn-secondary" @click="$emit('load-logs', true)" :disabled="loading.logs">
+          <ui-button type="button" class="btn btn-secondary" @click="$emit('load-logs', true)" :disabled="loading.logs">
             <i class="bi bi-arrow-clockwise" :class="{'spin':loading.logs}" aria-hidden="true"></i>
             {{t('stats.refresh')}}
-          </button>
+          </ui-button>
         </div>
       </div>
 
       <div class="card workspace-filter-card">
         <div class="card-body filter-row workspace-filter-bar">
           <div class="workspace-filter-controls">
-            <div class="btn-group" role="group" :aria-label="t('stats.protocolFilter')">
-              <button type="button" class="btn btn-sm" :class="logFilter.protocol==='HTTP'?'btn-primary':'btn-secondary'"
-                :aria-pressed="logFilter.protocol==='HTTP'"
-                @click="$emit('update:logFilter', {...logFilter, protocol: logFilter.protocol==='HTTP'?'':'HTTP'})">{{httpLabel}}</button>
-              <button type="button" class="btn btn-sm" :class="logFilter.protocol==='JMS'?'btn-primary':'btn-secondary'"
-                :aria-pressed="logFilter.protocol==='JMS'" :disabled="!jmsEnabled"
-                @click="$emit('update:logFilter', {...logFilter, protocol: logFilter.protocol==='JMS'?'':'JMS'})">{{jmsLabel}}</button>
-            </div>
+            <ui-toggle-group :model-value="logFilter.protocol" :options="protocolFilterOptions"
+              :aria-label="t('stats.protocolFilter')"
+              @update:model-value="$emit('update:logFilter', {...logFilter, protocol:$event})"></ui-toggle-group>
             <div class="filter-divider" aria-hidden="true"></div>
-            <div class="btn-group" role="group" :aria-label="t('stats.resultFilter')">
-              <button type="button" class="btn btn-sm" :class="logFilter.matched==='true'?'btn-primary':'btn-secondary'"
-                :aria-pressed="logFilter.matched==='true'"
-                @click="$emit('update:logFilter', {...logFilter, matched: logFilter.matched==='true'?'':'true'})">{{t('stats.filterMatched')}}</button>
-              <button type="button" class="btn btn-sm" :class="logFilter.matched==='false'?'btn-primary':'btn-secondary'"
-                :aria-pressed="logFilter.matched==='false'"
-                @click="$emit('update:logFilter', {...logFilter, matched: logFilter.matched==='false'?'':'false'})">{{t('stats.filterUnmatched')}}</button>
-            </div>
+            <ui-toggle-group :model-value="logFilter.matched" :options="resultFilterOptions"
+              :aria-label="t('stats.resultFilter')"
+              @update:model-value="$emit('update:logFilter', {...logFilter, matched:$event})"></ui-toggle-group>
             <div class="filter-divider" aria-hidden="true"></div>
             <workspace-search-field
               input-id="logSearch"
@@ -418,21 +427,15 @@ const StatsPage = {
         </div>
       </div>
 
-      <div v-if="logFilterChips.length" class="filter-chips" role="group" :aria-label="t('stats.activeFilters')">
-        <span class="filter-chip" v-for="c in logFilterChips" :key="c.key">
-          {{c.label}}
-          <button type="button" class="chip-remove" @click="$emit('remove-log-chip', c.key)"
-            :aria-label="t('stats.removeFilter', {filter: c.label})"><i class="bi bi-x" aria-hidden="true"></i></button>
-        </span>
-        <button type="button" class="chip-clear" @click="$emit('clear-log-filters')">{{t('stats.clearAll')}}</button>
-      </div>
+      <ui-filter-chip-list :items="logFilterChips" :aria-label="t('common.activeFilters')"
+        :clear-label="t('stats.clearAll')"
+        @remove="$emit('remove-log-chip', $event)"
+        @clear="$emit('clear-log-filters')"></ui-filter-chip-list>
 
       <div class="card card-table workspace-table-card">
-        <div v-if="loading.logsError && !loading.logs" class="workspace-load-error" role="alert">
-          <i class="bi bi-cloud-slash" aria-hidden="true"></i>
-          <strong>{{t('stats.loadFailed')}}</strong>
-          <button type="button" class="btn btn-sm btn-secondary" @click="$emit('load-logs', true)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</button>
-        </div>
+        <ui-load-state v-if="loading.logsError && !loading.logs" kind="error" icon="bi-cloud-slash" :title="t('stats.loadFailed')" has-action>
+          <template #action><ui-button type="button" class="btn btn-sm btn-secondary" @click="$emit('load-logs', true)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</ui-button></template>
+        </ui-load-state>
         <div v-else class="card-table-body">
           <div v-if="loading.logs && !logs.length" role="status" :aria-label="t('stats.loadingLogs')">
             <div v-for="i in 6" :key="'sk-log-'+i" class="sk-row">
@@ -451,25 +454,16 @@ const StatsPage = {
             <thead>
               <tr>
                 <th class="log-time-column" :aria-sort="sortAria('requestTime')">
-                  <button type="button" class="table-sort-button" @click="$emit('toggle-sort','requestTime')"
-                    :aria-label="t('stats.sortBy', {field: t('stats.thTime')})">
-                    <span>{{t('stats.thTime')}}</span>
-                    <i class="bi" :class="logSort.field==='requestTime'?(logSort.asc?'bi-caret-up-fill':'bi-caret-down-fill'):'bi-arrow-down-up'" aria-hidden="true"></i>
-                  </button>
+                  <ui-table-sort-header :label="t('stats.thTime')" :active="logSort.field==='requestTime'" :ascending="logSort.asc"
+                    :aria-label="t('stats.sortBy', {field:t('stats.thTime')})" @toggle="$emit('toggle-sort','requestTime')"></ui-table-sort-header>
                 </th>
                 <th :aria-sort="sortAria('endpoint')">
-                  <button type="button" class="table-sort-button" @click="$emit('toggle-sort','endpoint')"
-                    :aria-label="t('stats.sortBy', {field: t('stats.thRequest')})">
-                    <span>{{t('stats.thRequest')}}</span>
-                    <i class="bi" :class="logSort.field==='endpoint'?(logSort.asc?'bi-caret-up-fill':'bi-caret-down-fill'):'bi-arrow-down-up'" aria-hidden="true"></i>
-                  </button>
+                  <ui-table-sort-header :label="t('stats.thRequest')" :active="logSort.field==='endpoint'" :ascending="logSort.asc"
+                    :aria-label="t('stats.sortBy', {field:t('stats.thRequest')})" @toggle="$emit('toggle-sort','endpoint')"></ui-table-sort-header>
                 </th>
                 <th class="col-hide-md log-duration-column" :aria-sort="sortAria('responseTimeMs')">
-                  <button type="button" class="table-sort-button" @click="$emit('toggle-sort','responseTimeMs')"
-                    :aria-label="t('stats.sortBy', {field: t('stats.thDuration')})">
-                    <span>{{t('stats.thDuration')}}</span>
-                    <i class="bi" :class="logSort.field==='responseTimeMs'?(logSort.asc?'bi-caret-up-fill':'bi-caret-down-fill'):'bi-arrow-down-up'" aria-hidden="true"></i>
-                  </button>
+                  <ui-table-sort-header :label="t('stats.thDuration')" :active="logSort.field==='responseTimeMs'" :ascending="logSort.asc"
+                    :aria-label="t('stats.sortBy', {field:t('stats.thDuration')})" @toggle="$emit('toggle-sort','responseTimeMs')"></ui-table-sort-header>
                 </th>
                 <th>{{t('stats.thResult')}}</th>
                 <th class="col-actions col-actions-2">{{t('stats.thActions')}}</th>
@@ -486,7 +480,7 @@ const StatsPage = {
                   </td>
                   <td>
                     <div class="log-request-primary">
-                      <span class="badge" :class="'badge-'+item.log.protocol?.toLowerCase()">{{item.log.protocol}}</span>
+                      <ui-badge class="badge" :class="'badge-'+item.log.protocol?.toLowerCase()">{{item.log.protocol}}</ui-badge>
                       <span v-if="item.log.protocol==='HTTP' && item.log.method" class="log-method">{{item.log.method}}</span>
                       <code :title="item.log.endpoint">{{item.log.endpoint}}</code>
                     </div>
@@ -529,15 +523,15 @@ const StatsPage = {
                   </td>
                   <td class="col-actions col-actions-2">
                     <div class="log-row-actions">
-                      <button v-if="item.log.hasResponseBody || (item._detail && item._detail.responseBody)" type="button"
+                      <ui-button v-if="item.log.hasResponseBody || (item._detail && item._detail.responseBody)" type="button"
                         class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('create-rule-from-log', item._detail || item.log)"
-                        :title="t('stats.createRuleFromLog')" :aria-label="t('stats.createRuleFromLog')"><i class="bi bi-plus-circle" aria-hidden="true"></i></button>
-                      <button type="button" class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('toggle-log-detail', item)"
+                        :title="t('stats.createRuleFromLog')" :aria-label="t('stats.createRuleFromLog')"><i class="bi bi-plus-circle" aria-hidden="true"></i></ui-button>
+                      <ui-button type="button" class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('toggle-log-detail', item)"
                         :aria-expanded="!!logDetailExpanded[item.log.id]" :aria-controls="'log-detail-'+item.log.id"
                         :title="logDetailExpanded[item.log.id]?t('stats.collapseTrace'):t('stats.expandTrace')"
                         :aria-label="logDetailExpanded[item.log.id]?t('stats.collapseTrace'):t('stats.expandTrace')">
                         <i class="bi" :class="logDetailExpanded[item.log.id]?'bi-chevron-up':'bi-chevron-down'" aria-hidden="true"></i>
-                      </button>
+                      </ui-button>
                     </div>
                   </td>
                 </tr>
@@ -552,12 +546,12 @@ const StatsPage = {
             </tbody>
           </table>
 
-          <div v-if="!pagedLogs.length && !loading.logs" class="empty workspace-empty">
-            <i class="bi" :class="(logFilter.protocol||logFilter.matched||logFilter.endpoint)?'bi-search':'bi-inbox'" aria-hidden="true"></i>
-            <div class="workspace-empty-title">{{(logFilter.protocol||logFilter.matched||logFilter.endpoint) ? t('stats.emptyNoMatch') : t('stats.emptyNoLogs')}}</div>
-            <div class="workspace-empty-hint">{{(logFilter.protocol||logFilter.matched||logFilter.endpoint) ? t('stats.emptyNoMatchHint') : t('stats.emptyHint')}}</div>
-            <button v-if="logFilter.protocol||logFilter.matched||logFilter.endpoint" type="button" class="btn btn-secondary" @click="$emit('clear-log-filters')">{{t('stats.clearAll')}}</button>
-          </div>
+          <ui-load-state v-if="!pagedLogs.length && !loading.logs" kind="empty" :has-action="hasLogFilters"
+            :icon="hasLogFilters?'bi-search':'bi-inbox'"
+            :title="hasLogFilters?t('stats.emptyNoMatch'):t('stats.emptyNoLogs')"
+            :hint="hasLogFilters?t('stats.emptyNoMatchHint'):t('stats.emptyHint')">
+            <template #action><ui-button type="button" class="btn btn-secondary" @click="$emit('clear-log-filters')">{{t('stats.clearAll')}}</ui-button></template>
+          </ui-load-state>
         </div>
 
         <workspace-pagination v-if="!loading.logsError"
@@ -572,8 +566,8 @@ const StatsPage = {
         >
           <template #summary>
             <span class="sub-info">{{t('stats.totalCount', {count: logSummary.filteredRequests ?? logs.length})}}</span>
-            <button v-if="logFilter.protocol||logFilter.matched||logFilter.endpoint" type="button" class="workspace-filter-reset"
-              :title="t('stats.clickClearFilter')" @click="$emit('clear-log-filters')"><i class="bi bi-funnel-fill" aria-hidden="true"></i> {{t('stats.filtering')}}</button>
+            <ui-button v-if="logFilter.protocol||logFilter.matched||logFilter.endpoint" type="button" variant="quiet" size="compact" class="workspace-filter-reset"
+              :title="t('stats.clickClearFilter')" @click="$emit('clear-log-filters')"><i class="bi bi-funnel-fill" aria-hidden="true"></i> {{t('stats.filtering')}}</ui-button>
           </template>
         </workspace-pagination>
 
@@ -582,7 +576,7 @@ const StatsPage = {
           :aria-labelledby="'log-summary-'+selectedLogItem.log.id">
           <header class="log-inspector-header">
             <div class="log-inspector-identity">
-              <span class="badge" :class="'badge-'+selectedLogItem.log.protocol?.toLowerCase()">{{selectedLogItem.log.protocol}}</span>
+              <ui-badge class="badge" :class="'badge-'+selectedLogItem.log.protocol?.toLowerCase()">{{selectedLogItem.log.protocol}}</ui-badge>
               <span v-if="selectedLogItem.log.protocol==='HTTP' && selectedLogItem.log.method" class="log-method">{{selectedLogItem.log.method}}</span>
               <code :title="selectedLogItem.log.endpoint">{{selectedLogItem.log.endpoint}}</code>
               <span v-if="logStatusCode(selectedLogItem.log) != null" class="log-status-code"
@@ -590,37 +584,20 @@ const StatsPage = {
               <span class="log-inspector-duration tabular-nums">{{selectedLogItem.log.responseTimeMs}} ms</span>
             </div>
             <div class="log-inspector-actions">
-              <button v-if="selectedLogItem.log.hasResponseBody || selectedLogItem._detail?.responseBody" type="button"
+              <ui-button v-if="selectedLogItem.log.hasResponseBody || selectedLogItem._detail?.responseBody" type="button"
                 class="btn btn-sm btn-secondary" @click.stop="$emit('create-rule-from-log', selectedLogItem._detail || selectedLogItem.log)">
                 <i class="bi bi-plus-circle" aria-hidden="true"></i>{{t('stats.createRuleFromLog')}}
-              </button>
-              <button type="button" class="btn btn-sm btn-icon btn-secondary"
+              </ui-button>
+              <ui-button type="button" class="btn btn-sm btn-icon btn-secondary"
                 @click.stop="$emit('toggle-log-detail', selectedLogItem)"
                 :title="t('stats.closeInspector')" :aria-label="t('stats.closeInspector')">
                 <i class="bi bi-x-lg" aria-hidden="true"></i>
-              </button>
+              </ui-button>
             </div>
           </header>
 
-          <div ref="inspectorTabs" class="log-inspector-tabs" role="tablist" :aria-label="t('stats.inspectorViews')">
-            <button type="button" role="tab" :aria-selected="inspectorTab==='body'" :tabindex="inspectorTab==='body'?0:-1"
-              :aria-controls="'log-inspector-body-'+selectedLogItem.log.id"
-              :class="{'is-active': inspectorTab==='body'}" @click="inspectorTab='body'" @keydown="moveInspectorTab">
-              <i class="bi bi-braces" aria-hidden="true"></i>{{t('stats.inspectorBodyTab')}}
-            </button>
-            <button type="button" role="tab" :aria-selected="inspectorTab==='overview'" :tabindex="inspectorTab==='overview'?0:-1"
-              :aria-controls="'log-inspector-overview-'+selectedLogItem.log.id"
-              :class="{'is-active': inspectorTab==='overview'}" @click="inspectorTab='overview'" @keydown="moveInspectorTab">
-              <i class="bi bi-list-ul" aria-hidden="true"></i>{{t('stats.inspectorOverviewTab')}}
-            </button>
-            <button type="button" role="tab" :aria-selected="inspectorTab==='trace'" :tabindex="inspectorTab==='trace'?0:-1"
-              :aria-controls="'log-inspector-trace-'+selectedLogItem.log.id"
-              :class="{'is-active': inspectorTab==='trace'}" :disabled="!selectedLogItem.matchChainData?.length"
-              @click="inspectorTab='trace'" @keydown="moveInspectorTab">
-              <i class="bi bi-diagram-3" aria-hidden="true"></i>{{t('stats.matchChainTitle')}}
-              <span v-if="selectedLogItem.matchChainData?.length" class="log-inspector-tab-count">{{selectedLogItem.matchChainData.length}}</span>
-            </button>
-          </div>
+          <ui-tabs class="log-inspector-tabs" variant="compact" v-model="inspectorTab"
+            :items="inspectorTabs" :aria-label="t('stats.inspectorViews')"></ui-tabs>
 
           <div v-if="selectedLogItem._detailLoading" class="log-inspector-loading" role="status" aria-live="polite">
             <i class="bi bi-arrow-clockwise spin" aria-hidden="true"></i>{{t('stats.loadingDetail')}}
@@ -628,16 +605,16 @@ const StatsPage = {
 
           <div v-else-if="selectedLogItem._detailError" class="log-inspector-loading log-inspector-error" role="alert">
             <i class="bi bi-cloud-slash" aria-hidden="true"></i><span>{{t('stats.detailLoadFailed')}}</span>
-            <button type="button" class="btn btn-sm btn-secondary" @click="$emit('toggle-log-detail', selectedLogItem)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</button>
+            <ui-button type="button" class="btn btn-sm btn-secondary" @click="$emit('toggle-log-detail', selectedLogItem)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</ui-button>
           </div>
 
           <div v-else-if="inspectorTab==='body'" class="log-inspector-content log-inspector-body-grid"
-            role="tabpanel" :id="'log-inspector-body-'+selectedLogItem.log.id">
+            role="tabpanel" :id="'log-inspector-body-'+selectedLogItem.log.id" :aria-labelledby="'log-tab-body-'+selectedLogItem.log.id">
             <section class="log-inspector-pane" :aria-labelledby="'request-body-heading-'+selectedLogItem.log.id">
               <div class="log-inspector-pane-header">
-                <h3 :id="'request-body-heading-'+selectedLogItem.log.id">
+                <h2 :id="'request-body-heading-'+selectedLogItem.log.id">
                   <i class="bi bi-arrow-up-circle" aria-hidden="true"></i>{{t('stats.detailRequestBody')}}
-                </h3>
+                </h2>
                 <span class="log-body-size tabular-nums">{{fmtSize(selectedLogItem._detail?.requestBody?.length || 0)}}</span>
                 <div v-if="selectedLogItem._detail?.requestBody" class="log-body-tools">
                   <div class="pv-search-bar">
@@ -653,13 +630,13 @@ const StatsPage = {
                       @click="bodyNavSearch('reqBody-'+selectedLogItem.log.id, bodyFormatted['reqBody-'+selectedLogItem.log.id] ? getFormattedText('reqBody-'+selectedLogItem.log.id, selectedLogItem._detail.requestBody) : selectedLogItem._detail.requestBody, 1)"
                       :title="t('rules.pvSearchNext')" :aria-label="t('rules.pvSearchNext')"><i class="bi bi-chevron-down" aria-hidden="true"></i></button>
                   </div>
-                  <button type="button" class="btn btn-sm btn-icon btn-secondary"
+                  <ui-button type="button" class="btn btn-sm btn-icon btn-secondary"
                     :class="{'active': bodyFormatted['reqBody-'+selectedLogItem.log.id]}"
                     :aria-pressed="!!bodyFormatted['reqBody-'+selectedLogItem.log.id]"
                     @click.stop="toggleBodyFormat('reqBody-'+selectedLogItem.log.id, selectedLogItem._detail.requestBody)"
-                    :title="t('rules.pvFormat')" :aria-label="t('rules.pvFormat')"><i class="bi bi-braces" aria-hidden="true"></i></button>
-                  <button type="button" class="btn btn-sm btn-icon btn-secondary" @click.stop="copyBody(selectedLogItem._detail.requestBody)"
-                    :title="t('rules.copyFullContent')" :aria-label="t('rules.copyFullContent')"><i class="bi bi-clipboard" aria-hidden="true"></i></button>
+                    :title="t('rules.pvFormat')" :aria-label="t('rules.pvFormat')"><i class="bi bi-braces" aria-hidden="true"></i></ui-button>
+                  <ui-button type="button" class="btn btn-sm btn-icon btn-secondary" @click.stop="copyBody(selectedLogItem._detail.requestBody)"
+                    :title="t('rules.copyFullContent')" :aria-label="t('rules.copyFullContent')"><i class="bi bi-clipboard" aria-hidden="true"></i></ui-button>
                 </div>
               </div>
               <div v-if="selectedLogItem._detail?.requestBody && bodyFormatted['reqBody-'+selectedLogItem.log.id]"
@@ -670,9 +647,9 @@ const StatsPage = {
 
             <section class="log-inspector-pane" :aria-labelledby="'response-body-heading-'+selectedLogItem.log.id">
               <div class="log-inspector-pane-header">
-                <h3 :id="'response-body-heading-'+selectedLogItem.log.id">
+                <h2 :id="'response-body-heading-'+selectedLogItem.log.id">
                   <i class="bi bi-arrow-down-circle" aria-hidden="true"></i>{{t('stats.detailResponseBody')}}
-                </h3>
+                </h2>
                 <span class="log-body-size tabular-nums">{{fmtSize(selectedLogItem._detail?.responseBody?.length || 0)}}</span>
                 <div v-if="selectedLogItem._detail?.responseBody" class="log-body-tools">
                   <div class="pv-search-bar">
@@ -688,13 +665,13 @@ const StatsPage = {
                       @click="bodyNavSearch('resBody-'+selectedLogItem.log.id, bodyFormatted['resBody-'+selectedLogItem.log.id] ? getFormattedText('resBody-'+selectedLogItem.log.id, selectedLogItem._detail.responseBody) : selectedLogItem._detail.responseBody, 1)"
                       :title="t('rules.pvSearchNext')" :aria-label="t('rules.pvSearchNext')"><i class="bi bi-chevron-down" aria-hidden="true"></i></button>
                   </div>
-                  <button type="button" class="btn btn-sm btn-icon btn-secondary"
+                  <ui-button type="button" class="btn btn-sm btn-icon btn-secondary"
                     :class="{'active': bodyFormatted['resBody-'+selectedLogItem.log.id]}"
                     :aria-pressed="!!bodyFormatted['resBody-'+selectedLogItem.log.id]"
                     @click.stop="toggleBodyFormat('resBody-'+selectedLogItem.log.id, selectedLogItem._detail.responseBody)"
-                    :title="t('rules.pvFormat')" :aria-label="t('rules.pvFormat')"><i class="bi bi-braces" aria-hidden="true"></i></button>
-                  <button type="button" class="btn btn-sm btn-icon btn-secondary" @click.stop="copyBody(selectedLogItem._detail.responseBody)"
-                    :title="t('rules.copyFullContent')" :aria-label="t('rules.copyFullContent')"><i class="bi bi-clipboard" aria-hidden="true"></i></button>
+                    :title="t('rules.pvFormat')" :aria-label="t('rules.pvFormat')"><i class="bi bi-braces" aria-hidden="true"></i></ui-button>
+                  <ui-button type="button" class="btn btn-sm btn-icon btn-secondary" @click.stop="copyBody(selectedLogItem._detail.responseBody)"
+                    :title="t('rules.copyFullContent')" :aria-label="t('rules.copyFullContent')"><i class="bi bi-clipboard" aria-hidden="true"></i></ui-button>
                 </div>
               </div>
               <div v-if="selectedLogItem._detail?.responseBody && bodyFormatted['resBody-'+selectedLogItem.log.id]"
@@ -705,12 +682,12 @@ const StatsPage = {
           </div>
 
           <div v-else-if="inspectorTab==='overview'" class="log-inspector-content log-overview-surface"
-            role="tabpanel" :id="'log-inspector-overview-'+selectedLogItem.log.id">
+            role="tabpanel" :id="'log-inspector-overview-'+selectedLogItem.log.id" :aria-labelledby="'log-tab-overview-'+selectedLogItem.log.id">
             <section class="log-overview-section" :aria-labelledby="'request-heading-'+selectedLogItem.log.id">
-              <h3 class="log-detail-heading" :id="'request-heading-'+selectedLogItem.log.id">{{t('stats.sectionRequest')}}</h3>
+              <h2 class="log-detail-heading" :id="'request-heading-'+selectedLogItem.log.id">{{t('stats.sectionRequest')}}</h2>
               <dl class="log-detail-fields">
                 <div><dt>{{t('stats.detailTime')}}</dt><dd class="tabular-nums">{{fmtTime(selectedLogItem.log.requestTime, false)}}</dd></div>
-                <div><dt>{{t('stats.detailProtocol')}}</dt><dd><span class="badge" :class="'badge-'+selectedLogItem.log.protocol?.toLowerCase()">{{selectedLogItem.log.protocol}}</span></dd></div>
+                <div><dt>{{t('stats.detailProtocol')}}</dt><dd><ui-badge class="badge" :class="'badge-'+selectedLogItem.log.protocol?.toLowerCase()">{{selectedLogItem.log.protocol}}</ui-badge></dd></div>
                 <div v-if="selectedLogItem.log.method"><dt>{{t('stats.detailMethod')}}</dt><dd><span class="log-method">{{selectedLogItem.log.method}}</span></dd></div>
                 <div><dt>{{t('stats.detailEndpoint')}}</dt><dd><code>{{selectedLogItem.log.endpoint}}</code></dd></div>
                 <div v-if="selectedLogItem.log.targetHost"><dt>{{t('stats.detailTargetHost')}}</dt><dd><code>{{selectedLogItem.log.targetHost}}</code></dd></div>
@@ -719,7 +696,7 @@ const StatsPage = {
               </dl>
             </section>
             <section class="log-overview-section" :aria-labelledby="'result-heading-'+selectedLogItem.log.id">
-              <h3 class="log-detail-heading" :id="'result-heading-'+selectedLogItem.log.id">{{t('stats.sectionMatch')}}</h3>
+              <h2 class="log-detail-heading" :id="'result-heading-'+selectedLogItem.log.id">{{t('stats.sectionMatch')}}</h2>
               <dl class="log-detail-fields">
                 <div><dt>{{t('stats.detailMatched')}}</dt><dd>
                   <span class="log-outcome" :class="selectedLogItem.log.matched?'log-outcome-success':'log-outcome-danger'">
@@ -744,10 +721,10 @@ const StatsPage = {
           </div>
 
           <div v-else class="log-inspector-content log-inspector-trace" role="tabpanel"
-            :id="'log-inspector-trace-'+selectedLogItem.log.id">
+            :id="'log-inspector-trace-'+selectedLogItem.log.id" :aria-labelledby="'log-tab-trace-'+selectedLogItem.log.id">
             <ol class="match-chain-list">
               <li v-for="(c,i) in selectedLogItem.matchChainData" :key="c.ruleId" class="match-chain-item" :class="{'match-chain-match':c.reason==='match'}">
-                <span class="match-chain-num" :aria-label="t('stats.matchChainStep', {step:i+1})">{{i+1}}</span>
+                <span class="match-chain-num" role="img" :aria-label="t('stats.matchChainStep', {step:i+1})">{{i+1}}</span>
                 <div class="match-chain-identity">
                   <div class="match-chain-rule">
                     <a v-if="c.endpoint" href="#" @click.prevent.stop="$emit('go-to-rule', c.ruleId)" class="match-chain-id" :title="c.ruleId">{{shortId(c.ruleId)}}</a>

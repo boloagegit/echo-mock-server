@@ -38,7 +38,11 @@ const ConfirmModal = {
         document.addEventListener('keydown', this._onKey);
         this.$nextTick(() => {
           this.makeBackgroundInert();
-          this.$refs.cancelButton?.focus();
+          const cancelButton = this.$refs.cancelButton;
+          const cancelElement = cancelButton?.$el
+            || this.$refs.dialog?.querySelector('.confirm-cancel')
+            || cancelButton;
+          cancelElement?.focus?.();
         });
         return;
       }
@@ -108,9 +112,9 @@ const ConfirmModal = {
         <div class="modal-header">
           <div class="modal-heading">
             <span class="modal-heading-icon"><i class="bi" :class="confirmState.danger?'bi-exclamation-triangle':'bi-question-circle'" aria-hidden="true"></i></span>
-            <h3 id="confirmDialogTitle">{{confirmState.title}}</h3>
+            <h2 id="confirmDialogTitle">{{confirmState.title}}</h2>
           </div>
-          <button type="button" class="close-btn" @click="confirmState.onCancel" :aria-label="confirmState.cancelText"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+          <ui-button type="button" class="close-btn" @click="confirmState.onCancel" :aria-label="confirmState.cancelText"><i class="bi bi-x-lg" aria-hidden="true"></i></ui-button>
         </div>
         <div class="modal-body confirm-modal-body">
           <p id="confirmDialogMessage" class="confirm-modal-message">{{confirmState.message}}</p>
@@ -123,8 +127,8 @@ const ConfirmModal = {
           </div>
         </div>
         <div class="modal-footer">
-          <button ref="cancelButton" type="button" class="btn btn-secondary confirm-cancel" @click="confirmState.onCancel">{{confirmState.cancelText}}</button>
-          <button type="button" class="btn" :class="confirmState.danger?'btn-danger':'btn-primary'" @click="submitConfirm"><i v-if="confirmState.danger" class="bi bi-trash" aria-hidden="true"></i>{{confirmState.confirmText}}</button>
+          <ui-button ref="cancelButton" type="button" variant="quiet" class="confirm-cancel" @click="confirmState.onCancel">{{confirmState.cancelText}}</ui-button>
+          <ui-button type="button" class="btn" :class="confirmState.danger?'btn-danger':'btn-primary'" @click="submitConfirm"><i v-if="confirmState.danger" class="bi bi-trash" aria-hidden="true"></i>{{confirmState.confirmText}}</ui-button>
         </div>
       </div>
     </div>

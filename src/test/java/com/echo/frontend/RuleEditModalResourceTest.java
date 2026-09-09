@@ -15,20 +15,55 @@ class RuleEditModalResourceTest {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Test
+    void exposesRunTestToTheRootTemplate() throws IOException {
+        String app = resourceText("static/app.js");
+        assertThat(app.substring(app.indexOf("return { locale,")))
+                .contains("testSseMode, runTest, stopSseTest");
+        assertThat(resourceText("static/index.html")).contains("@run-test=\"runTest\"");
+    }
+
+    @Test
+    void associatesMatchingFieldsAndAnnouncesMethodSelection() throws IOException {
+        String component = resourceText("static/components/RuleEditModal.js");
+        for (String field : new String[]{"rule-http-path", "rule-source-host", "rule-jms-queue", "rule-jms-reply"}) {
+            assertThat(component).contains("for=\"" + field + "\"").contains("id=\"" + field + "\"");
+        }
+        assertThat(component).contains("<ui-choice-group class=\"method-group\"")
+                .contains("v-model=\"form.method\"")
+                .contains(":aria-label=\"t('modal.method')\"");
+        assertThat(resourceText("static/components/UiChoiceGroup.js"))
+                .contains("role=\"radiogroup\"")
+                .contains(":aria-checked=\"isSelected(option)\"");
+    }
+
+    @Test
+    void restoresPaneRatioAfterReturningFromDeclarativeMode() throws IOException {
+        assertThat(resourceText("static/components/RuleEditModal.js"))
+                .contains("Vue.watch(() => props.editorMode, mode => {")
+                .contains("props.show && mode === 'form'")
+                .contains("Vue.nextTick(applySplitRatio)");
+    }
+
+    @Test
     void exposesMockForwardAndFaultAsMutuallyExclusiveRuleModes() throws IOException {
         String component = resourceText("static/components/RuleEditModal.js");
-        int modeOptionsStart = component.indexOf("<div class=\"rule-outcome-options\"");
-        int modeOptionsEnd = component.indexOf("</fieldset>", modeOptionsStart);
+        String segmentedControl = resourceText("static/components/UiSegmentedControl.js");
 
         assertThat(component)
-                .contains("name=\"ruleMode\" value=\"MOCK\"")
-                .contains("name=\"ruleMode\" value=\"FORWARD\"")
-                .contains("name=\"ruleMode\" value=\"FAULT\"")
+                .contains("{ value: 'MOCK'")
+                .contains("{ value: 'FORWARD'")
+                .contains("{ value: 'FAULT'")
+                .contains("<ui-segmented-control")
                 .contains("v-model=\"ruleMode\"")
+                .contains(":description=\"ruleModeDescription\"")
                 .doesNotContain("name=\"ruleAction\"");
-        assertThat(modeOptionsStart).isGreaterThanOrEqualTo(0);
-        assertThat(modeOptionsEnd).isGreaterThan(modeOptionsStart);
-        assertThat(component.substring(modeOptionsStart, modeOptionsEnd)).doesNotContain("<i ");
+        assertThat(segmentedControl)
+                .contains("role=\"radiogroup\"")
+                .contains("type=\"radio\"")
+                .contains(":checked=\"isSelected(option)\"")
+                .contains("@change=\"select(option)\"")
+                .contains("bi-check-lg")
+                .contains(":aria-describedby=\"description ? descriptionId : undefined\"");
     }
 
     @Test
@@ -113,7 +148,8 @@ class RuleEditModalResourceTest {
         assertThat(rightHeading).isGreaterThan(rightPane).isLessThan(primaryControls);
         assertThat(stylesheet)
                 .contains(".rule-pane-heading { min-height: 32px;")
-                .contains(".result-primary-row { display: block;");
+                .contains(".result-primary-row { display: block;")
+                .contains(".result-primary-row > .ui-segmented-control-field { width: 100% }");
     }
 
     @Test
@@ -184,7 +220,7 @@ class RuleEditModalResourceTest {
         String stylesheet = resourceText("static/style.css");
 
         assertThat(stylesheet)
-                .contains("--control-h: 38px;")
+                .contains("--control-h: 36px;")
                 .contains("--control-h: 34px; --control-h-sm: 30px;")
                 .contains("--control-h: 42px; --control-h-sm: 36px;")
                 .contains("--editor-section-py: 6px; --editor-field-gap: 6px;")

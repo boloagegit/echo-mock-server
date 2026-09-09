@@ -41,8 +41,31 @@ class LoginAccessibilityResourceTest {
                 .contains("type=\"image/x-icon\" href=\"/favicon.ico?v=20260906.2\"")
                 .contains("<div class=\"login-logo\"><img src=\"/favicon.ico?v=20260906.2\" alt=\"\"></div>");
         assertThat(sidebar)
+                .contains("class=\"brand-mark\" aria-hidden=\"true\"")
                 .contains("<img class=\"brand-icon\" src=\"/favicon.ico?v=20260906.2\" alt=\"\" width=\"22\" height=\"22\">");
         assertThat(new ClassPathResource("static/favicon.ico").exists()).isTrue();
+    }
+
+    @Test
+    void appLogoMotionIsSubtleAndCanBeReduced() throws IOException {
+        String index = resourceText("static/index.html");
+        String login = resourceText("static/login.html");
+        String sidebar = resourceText("static/components/SidebarNav.js");
+        String css = resourceText("static/style.css");
+
+        assertThat(index)
+                .contains("/style.css?v=20260909.23")
+                .contains("/components/SidebarNav.js?v=20260909.5");
+        assertThat(sidebar).contains("class=\"brand-mark\" aria-hidden=\"true\"");
+        assertThat(css)
+                .contains(".sidebar-brand:hover .brand-icon { transform: scale(1.06) rotate(-3deg) }")
+                .contains("animation: brandEcho var(--motion-slow) var(--ease-standard)")
+                .contains("@keyframes brandEcho")
+                .doesNotContain("animation: brandEcho infinite");
+        assertThat(login)
+                .contains(".login-logo:hover img{transform:scale(1.05) rotate(-3deg)}")
+                .contains("@media(prefers-reduced-motion:reduce)")
+                .contains(".login-logo:hover::after{animation:none}");
     }
 
     private static String resourceText(String path) throws IOException {
