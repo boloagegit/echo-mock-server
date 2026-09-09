@@ -15,3 +15,12 @@ spring:
     database-platform: org.hibernate.community.dialect.SQLiteDialect
     hibernate:
       ddl-auto: update
+
+echo:
+  sqlite:
+    recovery:
+      # fail-fast: 保留損壞資料庫並停止啟動；restore-latest: 從最新有效備份還原
+      mode: ${ECHO_SQLITE_RECOVERY_MODE:fail-fast}
+      # 確認 runtime corruption 時退出，交由 supervisor 重啟並執行上述啟動復原
+      runtime-check-enabled: ${ECHO_SQLITE_RUNTIME_CHECK_ENABLED:true}
+      runtime-check-interval-ms: ${ECHO_SQLITE_RUNTIME_CHECK_INTERVAL_MS:30000}
