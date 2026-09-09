@@ -80,9 +80,9 @@ class RuleEditModalResourceTest {
     @Test
     void rendersFaultConfigurationAsItsOwnModePanel() throws IOException {
         String component = resourceText("static/components/RuleEditModal.js");
-        int faultPanel = component.indexOf("<template v-else-if=\"ruleMode==='FAULT'\">");
+        int faultPanel = component.indexOf("<div v-else-if=\"ruleMode==='FAULT'\"");
         int faultType = component.indexOf("id=\"ruleFaultType\"", faultPanel);
-        int mockPanel = component.indexOf("<template v-else>", faultPanel);
+        int mockPanel = component.indexOf("<div v-else key=\"mock\"", faultPanel);
 
         assertThat(faultPanel).isGreaterThanOrEqualTo(0);
         assertThat(faultType).isGreaterThan(faultPanel).isLessThan(mockPanel);

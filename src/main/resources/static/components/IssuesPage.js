@@ -204,6 +204,7 @@ const IssuesPage = {
                     </ui-button>
                   </td>
                 </tr>
+                <Transition name="ui-detail-row-motion">
                 <tr v-if="expandedId===issue.id" class="rule-preview-row">
                   <td colspan="5" style="padding:0">
                     <div :id="'issue-detail-'+issue.id" class="rule-preview-content workspace-detail-surface issue-detail">
@@ -251,6 +252,7 @@ const IssuesPage = {
                     </div>
                   </td>
                 </tr>
+                </Transition>
               </template>
             </tbody>
           </table>
@@ -277,6 +279,7 @@ const IssuesPage = {
       </div>
 
       <!-- Create Modal -->
+      <ui-modal-transition>
       <div ref="issueCreateOverlay" v-if="showCreateModal" class="modal-overlay" @click.self="closeCreate" @keydown="handleCreateKeydown">
         <div ref="issueCreateDialog" class="modal-box workspace-modal issue-create-modal" role="dialog" aria-modal="true" aria-labelledby="issueCreateTitle" tabindex="-1">
           <div class="modal-header">
@@ -302,6 +305,7 @@ const IssuesPage = {
           </div>
         </div>
       </div>
+      </ui-modal-transition>
     </div>
   `
 };

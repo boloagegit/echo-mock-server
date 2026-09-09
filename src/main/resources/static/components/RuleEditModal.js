@@ -530,6 +530,7 @@ const RuleEditModal = {
         };
     },
     template: /* html */`
+    <ui-modal-transition>
     <div class="modal-overlay" v-if="show" :style="maximized?'padding:0':''" @keydown="onDialogKeydown">
         <div ref="dialogRef" class="modal-box rule-modal-fullscreen workspace-modal" :class="{maximized:maximized}" role="dialog" aria-modal="true" aria-labelledby="ruleEditorTitle" tabindex="-1">
             <div class="modal-header">
@@ -805,8 +806,8 @@ const RuleEditModal = {
                             :options="ruleModeOptions" :aria-label="t('modal.ruleMode')"
                             :description="ruleModeDescription"></ui-segmented-control>
                     </div>
-                    <template v-if="ruleMode==='FORWARD'">
-                        <div class="form-block forward-settings">
+                    <Transition name="ui-mode-panel-motion" mode="out-in">
+                        <div v-if="ruleMode==='FORWARD'" key="forward" class="form-block forward-settings">
                             <div class="form-block-header"><i class="bi bi-hdd-network"></i> {{t('modal.forwardTarget')}}</div>
                             <div class="form-group forward-connection-field">
                                 <label class="form-label" for="ruleForwardConnection">{{form.protocol==='JMS' ? t('modal.forwardJmsConnection') : t('modal.forwardConnection')}}</label>
@@ -882,9 +883,7 @@ const RuleEditModal = {
                                 <span>{{form.protocol==='JMS' ? t('modal.forwardJmsNoMockHint') : ((form.forwardTargetMode||'ORIGINAL_HOST')==='ORIGINAL_HOST' ? t('modal.forwardOriginalHostRequired') : t('modal.forwardNoMockHint'))}}</span>
                             </div>
                         </div>
-                    </template>
-                    <template v-else-if="ruleMode==='FAULT'">
-                        <div class="form-block fault-settings">
+                        <div v-else-if="ruleMode==='FAULT'" key="fault" class="form-block fault-settings">
                             <div class="form-block-header"><i class="bi bi-exclamation-diamond"></i> {{t('modal.faultSettings')}}</div>
                             <div class="fault-core-settings" :class="{'has-status':form.protocol==='HTTP' && form.faultType==='EMPTY_RESPONSE'}">
                                 <div class="form-group">
@@ -940,10 +939,8 @@ const RuleEditModal = {
                                 </div>
                             </details>
                         </div>
-                    </template>
-                    <template v-else>
                     <!-- 回應模式 + 統一選擇器 -->
-                    <div class="form-block mock-result-settings" data-tour="response">
+                    <div v-else key="mock" class="form-block mock-result-settings" data-tour="response">
                         <div class="response-mode-toolbar">
                             <span class="response-mode-label"><i class="bi bi-arrow-left-right" aria-hidden="true"></i>{{t('modal.responseMode')}}</span>
                             <ui-choice-group class="protocol-switch" option-class="protocol-btn" variant="compact"
@@ -1170,7 +1167,7 @@ const RuleEditModal = {
                             <div id="ruleEditEditor" class="edit-editor"></div>
                         </div>
                     </div>
-                    </template>
+                    </Transition>
                     <div v-if="scenarioEnabled && form.scenarioName" class="form-block result-scenario-transition">
                         <div class="form-block-header"><i class="bi bi-arrow-repeat"></i> {{t('modal.scenarioTransition')}}</div>
                         <div class="scenario-transition-row">
@@ -1252,10 +1249,11 @@ const RuleEditModal = {
             <div v-if="editorMode==='form'" class="modal-footer" data-tour="save">
                 <span v-if="!canSave" class="sub-info" style="margin-right:auto"><i class="bi bi-info-circle"></i> {{t('modal.requiredFieldsHint')}}</span>
                 <ui-button variant="quiet" @click="$emit('close')">{{t('modal.cancel')}}</ui-button>
-                <ui-button class="btn btn-secondary" @click="$emit('save',false)" :disabled="!canSave||saving"><i class="bi" :class="saving?'bi-arrow-clockwise spin':'bi-floppy'"></i> {{t('modal.save')}}</ui-button>
-                <ui-button class="btn btn-primary" @click="$emit('save',true)" :disabled="!canSave||saving"><i class="bi" :class="saving?'bi-arrow-clockwise spin':'bi-check2-circle'"></i> {{t('modal.saveAndClose')}}</ui-button>
+                <ui-button class="btn btn-secondary" @click="$emit('save',false)" :disabled="!canSave||saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-floppy'" :spin="saving"></ui-motion-icon> {{t('modal.save')}}</ui-button>
+                <ui-button class="btn btn-primary" @click="$emit('save',true)" :disabled="!canSave||saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-check2-circle'" :spin="saving"></ui-motion-icon> {{t('modal.saveAndClose')}}</ui-button>
             </div>
         </div>
     </div>
+    </ui-modal-transition>
     `
 };

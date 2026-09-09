@@ -190,6 +190,7 @@ const ResponsesPage = {
                   </div>
                 </td>
               </tr>
+              <Transition name="ui-detail-row-motion">
               <tr v-if="r.expanded && r.rules" :id="'response-rules-'+r.id" class="rule-preview-row">
                 <td :colspan="batchSelectResponseMode?8:7" style="padding:0">
                   <div class="rule-preview-content">
@@ -209,6 +210,7 @@ const ResponsesPage = {
                   </div>
                 </td>
               </tr>
+              </Transition>
             </template>
           </tbody>
         </table>

@@ -79,6 +79,25 @@ class WorkspaceTableResourceTest {
         assertThat(english).contains("\"scrollForMore\": \"Scroll for more\"");
     }
 
+    @Test
+    void expandedRuleRowsSpanOnlyColumnsThatRemainVisibleAtEachBreakpoint() throws IOException {
+        String rules = resourceText("static/components/RulesPage.js");
+        String groupedRules = resourceText("static/components/RuleGroupRow.js");
+        String stylesheet = resourceText("static/style.css");
+
+        assertThat(rules)
+                .contains("ruleViewportWidth <= 768 ? 2 : this.ruleViewportWidth <= 1280 ? 3 : 6")
+                .contains("ruleViewportWidth <= 768 ? 2 : this.ruleViewportWidth <= 1024 ? 3 : 6")
+                .contains(":colspan=\"rulePreviewColspan\"")
+                .contains(":preview-colspan=\"groupRulePreviewColspan\"")
+                .contains("window.addEventListener('resize', this.syncRuleViewportWidth")
+                .contains("window.removeEventListener('resize', this.syncRuleViewportWidth)");
+        assertThat(groupedRules).contains(":colspan=\"previewColspan\"");
+        assertThat(stylesheet)
+                .contains("container-type: inline-size")
+                .contains("@container (min-width: 600px)");
+    }
+
     private static String resourceText(String path) throws IOException {
         try (var input = new ClassPathResource(path).getInputStream()) {
             return new String(input.readAllBytes(), StandardCharsets.UTF_8);

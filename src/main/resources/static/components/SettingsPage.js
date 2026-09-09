@@ -469,10 +469,14 @@ const SettingsPage = {
                 </div>
               </div>
               <div class="connection-actions">
-                <ui-button variant="quiet" size="compact" class="connection-action-test" @click="testHttpTarget(target)" :disabled="httpTargetTestingId===target.id"><i class="bi bi-plug" :class="{'spin':httpTargetTestingId===target.id}"></i> {{t('settings.httpTargetTest')}}</ui-button>
-                <ui-button v-if="!target.defaultConnection" variant="quiet" size="compact" class="connection-action-default" @click="makeDefaultHttpTarget(target)" :disabled="!target.enabled"><i class="bi bi-check-circle"></i> {{t('settings.httpTargetSetDefault')}}</ui-button>
-                <ui-button variant="quiet" size="compact" class="connection-action-edit" @click="openEditHttpTarget(target)"><i class="bi bi-pencil"></i> {{t('rules.edit')}}</ui-button>
-                <ui-button variant="danger" size="compact" class="connection-action-delete" @click="deleteHttpTarget(target)" :disabled="target.defaultConnection" :title="target.defaultConnection?t('settings.defaultConnectionDeleteDisabled'):t('rules.delete')"><i class="bi bi-trash"></i> {{t('rules.delete')}}</ui-button>
+                <div class="connection-action-group connection-action-operational">
+                  <ui-button variant="secondary" size="compact" class="connection-action-test" @click="testHttpTarget(target)" :disabled="httpTargetTestingId===target.id"><i class="bi bi-plug" :class="{'spin':httpTargetTestingId===target.id}"></i> {{t('settings.httpTargetTest')}}</ui-button>
+                  <ui-button v-if="!target.defaultConnection" variant="secondary" size="compact" class="connection-action-default" @click="makeDefaultHttpTarget(target)" :disabled="!target.enabled"><i class="bi bi-check-circle"></i> {{t('settings.httpTargetSetDefault')}}</ui-button>
+                </div>
+                <div class="connection-action-group connection-action-management">
+                  <ui-button variant="quiet" size="compact" class="connection-action-edit" @click="openEditHttpTarget(target)"><i class="bi bi-pencil"></i> {{t('rules.edit')}}</ui-button>
+                  <ui-button variant="danger" size="compact" class="connection-action-delete" @click="deleteHttpTarget(target)" :disabled="target.defaultConnection" :title="target.defaultConnection?t('settings.defaultConnectionDeleteDisabled'):t('rules.delete')"><i class="bi bi-trash"></i> {{t('rules.delete')}}</ui-button>
+                </div>
               </div>
             </div>
             <div class="connection-guidance">
@@ -513,10 +517,14 @@ const SettingsPage = {
                 </div>
               </div>
               <div class="connection-actions">
-                <ui-button variant="quiet" size="compact" class="connection-action-test" @click="testJmsTarget(target)" :disabled="jmsTargetTestingId===target.id"><i class="bi bi-plug" :class="{'spin':jmsTargetTestingId===target.id}"></i> {{t('settings.jmsTargetTest')}}</ui-button>
-                <ui-button v-if="!target.legacy&&!target.defaultConnection" variant="quiet" size="compact" class="connection-action-default" @click="makeDefaultJmsTarget(target)" :disabled="!target.enabled"><i class="bi bi-check-circle"></i> {{t(yamlJmsTargetConfigured?'settings.jmsTargetSetFallbackDefault':'settings.jmsTargetSetDefault')}}</ui-button>
-                <ui-button v-if="!target.legacy" variant="quiet" size="compact" class="connection-action-edit" @click="openEditJmsTarget(target)"><i class="bi bi-pencil"></i> {{t('rules.edit')}}</ui-button>
-                <ui-button v-if="!target.legacy" variant="danger" size="compact" class="connection-action-delete" @click="deleteJmsTarget(target)" :disabled="target.defaultConnection" :title="target.defaultConnection?t('settings.defaultConnectionDeleteDisabled'):t('rules.delete')"><i class="bi bi-trash"></i> {{t('rules.delete')}}</ui-button>
+                <div class="connection-action-group connection-action-operational">
+                  <ui-button variant="secondary" size="compact" class="connection-action-test" @click="testJmsTarget(target)" :disabled="jmsTargetTestingId===target.id"><i class="bi bi-plug" :class="{'spin':jmsTargetTestingId===target.id}"></i> {{t('settings.jmsTargetTest')}}</ui-button>
+                  <ui-button v-if="!target.legacy&&!target.defaultConnection" variant="secondary" size="compact" class="connection-action-default" @click="makeDefaultJmsTarget(target)" :disabled="!target.enabled"><i class="bi bi-check-circle"></i> {{t(yamlJmsTargetConfigured?'settings.jmsTargetSetFallbackDefault':'settings.jmsTargetSetDefault')}}</ui-button>
+                </div>
+                <div v-if="!target.legacy" class="connection-action-group connection-action-management">
+                  <ui-button variant="quiet" size="compact" class="connection-action-edit" @click="openEditJmsTarget(target)"><i class="bi bi-pencil"></i> {{t('rules.edit')}}</ui-button>
+                  <ui-button variant="danger" size="compact" class="connection-action-delete" @click="deleteJmsTarget(target)" :disabled="target.defaultConnection" :title="target.defaultConnection?t('settings.defaultConnectionDeleteDisabled'):t('rules.delete')"><i class="bi bi-trash"></i> {{t('rules.delete')}}</ui-button>
+                </div>
               </div>
             </div>
             <div class="connection-guidance">
@@ -652,6 +660,7 @@ const SettingsPage = {
           </div>
         </div>
       </div>
+      <ui-modal-transition>
       <div v-if="showHttpTargetForm" class="modal-overlay" @click.self="showHttpTargetForm=false">
         <div class="modal-box workspace-modal connection-form-modal" style="max-width:680px" role="dialog" aria-modal="true" aria-labelledby="httpTargetFormTitle">
           <div class="modal-header"><h2 id="httpTargetFormTitle"><i class="bi bi-globe2"></i> {{editingHttpTarget?t('settings.httpTargetEdit'):t('settings.httpTargetAdd')}}</h2><ui-button type="button" variant="quiet" size="compact" icon-only class="modal-close" @click="showHttpTargetForm=false" :aria-label="t('rules.close')" :title="t('rules.close')"><i class="bi bi-x-lg"></i></ui-button></div>
@@ -673,6 +682,8 @@ const SettingsPage = {
           <div class="modal-footer"><ui-button variant="quiet" @click="showHttpTargetForm=false">{{t('rules.close')}}</ui-button><ui-button class="btn btn-primary" @click="saveHttpTarget" :disabled="httpTargetSaving||!canSaveHttpTarget"><i class="bi bi-check-lg"></i> {{t('modal.save')}}</ui-button></div>
         </div>
       </div>
+      </ui-modal-transition>
+      <ui-modal-transition>
       <div v-if="showJmsTargetForm" class="modal-overlay" @click.self="showJmsTargetForm=false">
         <div class="modal-box workspace-modal connection-form-modal connection-jms-form-modal" style="max-width:620px" role="dialog" aria-modal="true" aria-labelledby="jmsTargetFormTitle">
           <div class="modal-header"><h2 id="jmsTargetFormTitle"><i class="bi bi-diagram-2"></i> {{editingJmsTarget?t('settings.jmsTargetEdit'):t('settings.jmsTargetAdd')}}</h2><ui-button type="button" variant="quiet" size="compact" icon-only class="modal-close" @click="showJmsTargetForm=false" :aria-label="t('rules.close')" :title="t('rules.close')"><i class="bi bi-x-lg"></i></ui-button></div>
@@ -687,6 +698,7 @@ const SettingsPage = {
           <div class="modal-footer"><ui-button variant="quiet" @click="showJmsTargetForm=false">{{t('rules.close')}}</ui-button><ui-button class="btn btn-primary" @click="saveJmsTarget" :disabled="jmsTargetSaving||!canSaveJmsTarget"><i class="bi bi-check-lg"></i> {{t('modal.save')}}</ui-button></div>
         </div>
       </div>
+      </ui-modal-transition>
       </template>
       </div>
     </div>

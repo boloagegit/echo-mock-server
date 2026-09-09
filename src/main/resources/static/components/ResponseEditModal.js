@@ -211,6 +211,7 @@ const ResponseEditModal = {
     },
   },
   template: /* html */`
+    <ui-modal-transition>
     <div ref="overlay" class="modal-overlay" v-if="show" :style="maximized?'padding:0':''">
       <div ref="dialog" class="modal-box response-modal workspace-modal response-editor-modal" :class="{maximized:maximized}" role="dialog" aria-modal="true" aria-labelledby="responseEditorTitle" @keydown="handleDialogKeydown">
         <div class="modal-header">
@@ -316,9 +317,10 @@ const ResponseEditModal = {
         <div class="modal-footer">
           <span class="response-save-shortcut">{{t('modal.saveShortcutHint')}}</span>
           <ui-button type="button" variant="quiet" @click="$emit('close')">{{t('modal.cancel')}}</ui-button>
-          <ui-button type="button" class="btn btn-primary" @click="requestSave" :disabled="saving"><i class="bi" :class="saving?'bi-arrow-clockwise spin':'bi-check-lg'" aria-hidden="true"></i> {{editing ? t('modal.update') : t('modal.create')}}</ui-button>
+          <ui-button type="button" class="btn btn-primary" @click="requestSave" :disabled="saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-check-lg'" :spin="saving"></ui-motion-icon> {{editing ? t('modal.update') : t('modal.create')}}</ui-button>
         </div>
       </div>
     </div>
+    </ui-modal-transition>
   `
 };

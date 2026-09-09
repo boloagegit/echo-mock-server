@@ -40,7 +40,7 @@ const SidebarNav = {
           <span v-if="envLabel" class="env-label">{{envLabel}}</span>
         </div>
         <button class="sidebar-toggle" :aria-label="mobileMenu ? t('sidebar.closeMenu') : (sidebarCollapsed ? t('sidebar.expandSidebar') : t('sidebar.collapseSidebar'))" @click="mobileMenu ? $emit('update:mobileMenu', false) : $emit('update:sidebarCollapsed', !sidebarCollapsed)">
-          <i class="bi" :class="mobileMenu ? 'bi-x-lg' : (sidebarCollapsed ? 'bi-chevron-right' : 'bi-chevron-left')"></i>
+          <ui-motion-icon :icon="mobileMenu ? 'bi-x-lg' : (sidebarCollapsed ? 'bi-chevron-right' : 'bi-chevron-left')"></ui-motion-icon>
         </button>
       </div>
       <div class="sidebar-nav">

@@ -446,6 +446,8 @@ _app.component('ui-dropdown-menu', UiDropdownMenu);
 _app.component('ui-load-state', UiLoadState);
 _app.component('ui-tabs', UiTabs);
 _app.component('ui-choice-group', UiChoiceGroup);
+_app.component('ui-modal-transition', UiModalTransition);
+_app.component('ui-motion-icon', UiMotionIcon);
 _app.component('sidebar-nav', SidebarNav);
 _app.component('toast-container', ToastContainer);
 _app.component('workspace-search-field', WorkspaceSearchField);

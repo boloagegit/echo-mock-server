@@ -26,7 +26,9 @@ class ListRefinementResourceTest {
                 .contains(".btn-xs.btn-icon { width: max(32px, var(--control-h-sm)); height: max(32px, var(--control-h-sm));")
                 .contains(".workspace-pagination .pagination-controls .btn { width: max(32px, var(--control-h-sm)); height: max(32px, var(--control-h-sm)); min-height: max(32px, var(--control-h-sm));")
                 .contains(".workspace-page-size .form-control {\n    width: 76px;\n    min-height: var(--control-h-sm);")
-                .contains(".connection-actions {\n    display: grid;")
+                .contains(".connection-actions {\n    display: flex;")
+                .contains(".connection-action-group { display: flex;")
+                .contains(".connection-action-management {\n    padding-inline-start: var(--space-md);")
                 .contains("min-height: var(--control-h-sm);")
                 .contains(".btn:disabled, .btn.disabled { opacity: 0.55;")
                 .contains(".tag-add-inline input {\n    width: 65px;\n    min-height: var(--control-h-sm);")
@@ -189,6 +191,9 @@ class ListRefinementResourceTest {
         }
         assertThat(text("components/SettingsPage.js"))
                 .contains("<ui-status")
+                .contains("connection-action-group connection-action-operational")
+                .contains("connection-action-group connection-action-management")
+                .contains("variant=\"secondary\" size=\"compact\" class=\"connection-action-test\"")
                 .doesNotContain("status-on")
                 .doesNotContain("status-off");
         assertThat(text("components/RulesPage.js")).contains("<ui-toggle").doesNotContain("toggle-slider");
