@@ -536,11 +536,13 @@ const StatsPage = {
                   </td>
                 </tr>
 
+                <Transition name="ui-detail-row-motion">
                 <tr v-if="logDetailExpanded[item.log.id]" class="log-detail-row">
                   <td :colspan="logDetailColspan" class="log-detail-cell" @click.stop>
                     <div class="log-detail-slot" :id="'log-detail-slot-'+item.log.id"></div>
                   </td>
                 </tr>
+                </Transition>
 
               </template>
             </tbody>

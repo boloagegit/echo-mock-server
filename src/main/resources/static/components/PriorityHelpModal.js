@@ -187,6 +187,7 @@ const PriorityHelpModal = {
     return { tocItems, helpTabItems, activeTocId, helpContentRef, helpDialogRef, helpOverlayRef, closeButtonRef, scrollTo, setHelpTab, t };
   },
   template: /* html */`
+  <ui-modal-transition>
   <div ref="helpOverlayRef" class="modal-overlay" v-if="show" @click.self="$emit('close')">
     <div ref="helpDialogRef" class="modal-box help-modal help-fullscreen workspace-modal" role="dialog" aria-modal="true" aria-labelledby="helpModalTitle">
       <div class="modal-header">
@@ -517,5 +518,6 @@ Authorization!=null               ✓ {{t('help.exNotMatch')}}</pre>
       </div>
     </div>
   </div>
+  </ui-modal-transition>
   `
 };

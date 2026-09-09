@@ -68,9 +68,17 @@ const RulesPage = {
       pvSearch: {},
       pvSearchIdx: {},
       pvOverflow: {},
+      ruleViewportWidth: window.innerWidth,
     };
   },
   computed: {
+    rulePreviewColspan() {
+      const visibleColumns = this.ruleViewportWidth <= 768 ? 2 : this.ruleViewportWidth <= 1280 ? 3 : 6;
+      return visibleColumns + (this.canDragRules ? 1 : 0) + (this.batchSelectMode ? 1 : 0);
+    },
+    groupRulePreviewColspan() {
+      return this.ruleViewportWidth <= 768 ? 2 : this.ruleViewportWidth <= 1024 ? 3 : 6;
+    },
     hasRuleFilters() {
       return Boolean(this.ruleFilter.keyword || this.ruleFilter.protocol || this.ruleFilter.enabled
         || this.ruleFilter.isProtected || this.ruleFilter.mode || this.ruleFilter.expiring);
@@ -114,6 +122,12 @@ const RulesPage = {
       ];
     },
   },
+  mounted() {
+    window.addEventListener('resize', this.syncRuleViewportWidth, { passive: true });
+  },
+  beforeUnmount() {
+    window.removeEventListener('resize', this.syncRuleViewportWidth);
+  },
   updated() {
     for (const key of Object.keys(this.rulePreviewExpanded)) {
       if (!this.rulePreviewExpanded[key]) { continue; }
@@ -128,6 +142,9 @@ const RulesPage = {
   },
   methods: {
     shortId, fmtTime, daysLeft, condTooltip, condTags, parseTags, fmtCond, forwardTargetLabel,
+    syncRuleViewportWidth() {
+      this.ruleViewportWidth = window.innerWidth;
+    },
     setFilter(key, value) {
       const f = { ...this.ruleFilter };
       f[key] = value;
@@ -343,8 +360,9 @@ const RulesPage = {
                     </td>
                     <td class="col-actions rule-row-action-column"><rule-row-actions :rule="r" :is-logged-in="isLoggedIn" :expanded="!!rulePreviewExpanded[r.id]" :preview-id="'rule-preview-'+r.id" @open-edit="$emit('open-edit',$event)" @toggle-rule-preview="$emit('toggle-rule-preview',$event)" @show-rule-history="$emit('show-rule-history',$event)" @copy-rule="$emit('copy-rule',$event)"></rule-row-actions></td>
                 </tr>
+                <Transition name="ui-detail-row-motion">
                 <tr v-if="rulePreviewExpanded[r.id]" :id="'rule-preview-'+r.id" class="rule-preview-row">
-                    <td :colspan="(canDragRules ? 1 : 0) + (batchSelectMode ? 7 : 6)" class="rule-preview-cell">
+                    <td :colspan="rulePreviewColspan" class="rule-preview-cell">
                         <div v-if="rulePreviewLoading[r.id]" class="rule-preview-content rule-preview-state" role="status">
                             <i class="bi bi-arrow-clockwise spin" aria-hidden="true"></i><span>{{t('rules.loading')}}</span>
                         </div>
@@ -409,6 +427,7 @@ const RulesPage = {
                         </div>
                     </td>
                 </tr>
+                </Transition>
                 </template>
             </tbody>
         </table>
@@ -461,6 +480,7 @@ const RulesPage = {
                     <tbody>
                         <rule-group-row v-for="r in rulesByTagGroup['_untagged'].slice(0, getGroupLimit('_untagged'))" :key="r.id"
                             :rule="r" :is-logged-in="isLoggedIn" :http-label="httpLabel" :jms-label="jmsLabel" :status="status"
+                            :preview-colspan="groupRulePreviewColspan"
                             :rule-preview-expanded="rulePreviewExpanded" :rule-preview-loading="rulePreviewLoading" :rule-preview-error="rulePreviewError" :rule-preview-cache="rulePreviewCache"
                             @open-edit="$emit('open-edit', $event)" @copy-rule="$emit('copy-rule', $event)" @show-rule-history="$emit('show-rule-history', $event)"
                             @delete-rule="$emit('delete-rule', $event)" @toggle-enabled="$emit('toggle-enabled', $event)"
@@ -503,6 +523,7 @@ const RulesPage = {
                             <tbody>
                                 <rule-group-row v-for="r in rulesByTag[key+'='+val].slice(0, getGroupLimit(key+'='+val))" :key="r.id"
                                     :rule="r" :is-logged-in="isLoggedIn" :http-label="httpLabel" :jms-label="jmsLabel" :status="status"
+                                    :preview-colspan="groupRulePreviewColspan"
                                     :rule-preview-expanded="rulePreviewExpanded" :rule-preview-loading="rulePreviewLoading" :rule-preview-error="rulePreviewError" :rule-preview-cache="rulePreviewCache"
                                     @open-edit="$emit('open-edit', $event)" @copy-rule="$emit('copy-rule', $event)" @show-rule-history="$emit('show-rule-history', $event)"
                                     @delete-rule="$emit('delete-rule', $event)" @toggle-enabled="$emit('toggle-enabled', $event)"

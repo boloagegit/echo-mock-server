@@ -108,6 +108,7 @@ const ChangePasswordModal = {
     },
   },
   template: /* html */`
+    <ui-modal-transition>
     <div v-if="show" class="modal-overlay" @keydown="handleKeydown">
       <div ref="dialog" class="modal-box workspace-modal credential-modal" role="dialog" aria-modal="true" aria-labelledby="changePasswordTitle">
         <div class="modal-header">
@@ -135,5 +136,6 @@ const ChangePasswordModal = {
         </div>
       </div>
     </div>
+    </ui-modal-transition>
   `,
 };

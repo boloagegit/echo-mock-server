@@ -104,6 +104,7 @@ const OpenApiPreviewModal = {
     }
   },
   template: /* html */`
+    <ui-modal-transition>
     <div ref="overlay" class="modal-overlay" v-if="show" @keydown="handleKeydown">
       <div ref="dialog" class="modal-box workspace-modal openapi-preview-modal" role="dialog" aria-modal="true" aria-labelledby="openApiPreviewTitle" tabindex="-1">
         <div class="modal-header">
@@ -151,5 +152,6 @@ const OpenApiPreviewModal = {
         </div>
       </div>
     </div>
+    </ui-modal-transition>
   `
 };

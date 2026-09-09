@@ -107,6 +107,7 @@ const ConfirmModal = {
     }
   },
   template: /* html */`
+    <ui-modal-transition>
     <div v-if="confirmState.show" class="modal-overlay" @click.self="confirmState.onCancel">
       <div ref="dialog" class="modal-box workspace-modal confirm-modal" :class="{'confirm-modal-danger':confirmState.danger}" role="alertdialog" aria-modal="true" aria-labelledby="confirmDialogTitle" aria-describedby="confirmDialogMessage">
         <div class="modal-header">
@@ -132,5 +133,6 @@ const ConfirmModal = {
         </div>
       </div>
     </div>
+    </ui-modal-transition>
   `
 };

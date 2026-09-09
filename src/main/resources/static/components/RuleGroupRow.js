@@ -15,6 +15,7 @@ const RuleGroupRow = {
     httpLabel: String,
     jmsLabel: String,
     status: Object,
+    previewColspan: { type: Number, default: 6 },
     rulePreviewExpanded: Object,
     rulePreviewLoading: Object,
     rulePreviewError: Object,
@@ -51,8 +52,9 @@ const RuleGroupRow = {
     </td>
     <td class="col-actions rule-row-action-column"><rule-row-actions :rule="rule" :is-logged-in="isLoggedIn" :expanded="!!rulePreviewExpanded[rule.id]" :preview-id="previewId" @open-edit="$emit('open-edit',$event)" @toggle-rule-preview="$emit('toggle-rule-preview',$event)" @show-rule-history="$emit('show-rule-history',$event)" @copy-rule="$emit('copy-rule',$event)"></rule-row-actions></td>
 </tr>
+<Transition name="ui-detail-row-motion">
 <tr v-if="rulePreviewExpanded[rule.id]" :id="previewId" class="rule-preview-row">
-    <td colspan="6" class="rule-preview-cell">
+    <td :colspan="previewColspan" class="rule-preview-cell">
         <div v-if="rulePreviewLoading[rule.id]" class="rule-preview-content rule-preview-state" role="status">
             <i class="bi bi-arrow-clockwise spin" aria-hidden="true"></i><span>{{t('rules.loading')}}</span>
         </div>
@@ -106,5 +108,6 @@ const RuleGroupRow = {
         </div>
     </td>
 </tr>
+</Transition>
 `
 };

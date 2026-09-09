@@ -129,6 +129,7 @@ const AuditPage = {
                 <td class="col-hide-md"><span class="sub-info">{{log.operator}}</span></td>
                 <td class="col-actions col-actions-1"><ui-button class="btn btn-sm btn-icon btn-secondary" :title="selectedAudit===log.id?t('audit.collapse'):t('audit.expand')" :aria-label="selectedAudit===log.id?t('audit.collapse'):t('audit.expand')" :aria-expanded="selectedAudit===log.id" :aria-controls="selectedAudit===log.id?'audit-detail-'+log.id:undefined"><i class="bi" :class="selectedAudit===log.id?'bi-chevron-up':'bi-chevron-down'"></i></ui-button></td>
               </tr>
+              <Transition name="ui-detail-row-motion">
               <tr v-if="selectedAudit===log.id" :id="'audit-detail-'+log.id" class="rule-preview-row">
                 <td colspan="5" style="padding:0">
                   <div class="rule-preview-content workspace-detail-surface">
@@ -184,6 +185,7 @@ const AuditPage = {
                   </div>
                 </td>
               </tr>
+              </Transition>
             </template>
           </tbody>
         </table>

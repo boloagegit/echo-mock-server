@@ -253,6 +253,7 @@ const AccountsPage = {
       </div>
 
       <!-- Create Account Modal -->
+      <ui-modal-transition>
       <div ref="createAccountOverlay" v-if="showCreateModal" class="modal-overlay" @click.self="closeCreateModal()" @keydown="handleDialogKeydown($event, () => $refs.createAccountDialog, closeCreateModal)">
         <div ref="createAccountDialog" class="modal-box workspace-modal account-modal" role="dialog" aria-modal="true" aria-labelledby="createAccountTitle" tabindex="-1">
           <div class="modal-header">
@@ -277,8 +278,10 @@ const AccountsPage = {
           </div>
         </div>
       </div>
+      </ui-modal-transition>
 
       <!-- Temp Password Modal -->
+      <ui-modal-transition>
       <div ref="tempPasswordOverlay" v-if="showTempPasswordModal" class="modal-overlay" @click.self="closeTempPasswordModal()" @keydown="handleDialogKeydown($event, () => $refs.tempPasswordDialog, closeTempPasswordModal)">
         <div ref="tempPasswordDialog" class="modal-box workspace-modal account-modal" role="dialog" aria-modal="true" aria-labelledby="tempPasswordTitle" tabindex="-1">
           <div class="modal-header">
@@ -289,7 +292,7 @@ const AccountsPage = {
             <p class="temp-password-message">{{t('accounts.tempPasswordMsg')}}</p>
             <div class="temp-password-field">
               <code class="temp-password-value">{{tempPassword}}</code>
-              <ui-button type="button" class="btn btn-secondary temp-password-copy" @click="copyTempPassword"><i class="bi" :class="passwordCopied?'bi-check2':'bi-clipboard'" aria-hidden="true"></i>{{passwordCopied?t('accounts.passwordCopied'):t('accounts.copyPassword')}}</ui-button>
+              <ui-button type="button" class="btn btn-secondary temp-password-copy" @click="copyTempPassword"><ui-motion-icon :icon="passwordCopied?'bi-check2':'bi-clipboard'"></ui-motion-icon>{{passwordCopied?t('accounts.passwordCopied'):t('accounts.copyPassword')}}</ui-button>
             </div>
             <p class="temp-password-note"><i class="bi bi-exclamation-circle" aria-hidden="true"></i>{{t('accounts.tempPasswordOnce')}}</p>
           </div>
@@ -298,6 +301,7 @@ const AccountsPage = {
           </div>
         </div>
       </div>
+      </ui-modal-transition>
     </div>
   `
 };
