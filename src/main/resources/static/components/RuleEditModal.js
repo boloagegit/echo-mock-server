@@ -1047,8 +1047,9 @@ const RuleEditModal = {
                             </div>
                         </details>
                     </div>
+                    </Transition>
                     <!-- 回應內容 -->
-                    <div class="form-block response-content-block">
+                    <div v-if="ruleMode==='MOCK'" class="form-block response-content-block">
                         <!-- SSE 表格編輯器 -->
                         <div v-if="form.sseEnabled && form.protocol==='HTTP'" class="sse-editor-wrap rule-sse-editor">
                             <div class="rule-sse-toolbar">
@@ -1167,7 +1168,6 @@ const RuleEditModal = {
                             <div id="ruleEditEditor" class="edit-editor"></div>
                         </div>
                     </div>
-                    </Transition>
                     <div v-if="scenarioEnabled && form.scenarioName" class="form-block result-scenario-transition">
                         <div class="form-block-header"><i class="bi bi-arrow-repeat"></i> {{t('modal.scenarioTransition')}}</div>
                         <div class="scenario-transition-row">

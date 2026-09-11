@@ -67,6 +67,23 @@ class RuleEditModalResourceTest {
     }
 
     @Test
+    void keepsNewResponseEditorOutsideTheModeTransitionRoot() throws IOException {
+        String component = resourceText("static/components/RuleEditModal.js");
+        int modeTransition = component.indexOf("<Transition name=\"ui-mode-panel-motion\" mode=\"out-in\">");
+        int modeTransitionEnd = component.indexOf("</Transition>", modeTransition);
+        int responseContent = component.indexOf("<div v-if=\"ruleMode==='MOCK'\" class=\"form-block response-content-block\">");
+
+        assertThat(modeTransition).isGreaterThanOrEqualTo(0);
+        assertThat(modeTransitionEnd).isGreaterThan(modeTransition);
+        assertThat(responseContent).isGreaterThan(modeTransitionEnd);
+        assertThat(component.substring(modeTransition, modeTransitionEnd))
+                .doesNotContain("response-content-block");
+        assertThat(component.substring(responseContent))
+                .contains("class=\"response-content-mode\"")
+                .contains("id=\"ruleEditEditor\"");
+    }
+
+    @Test
     void mapsFaultModeToExistingActionAndFaultTypeContract() throws IOException {
         String component = resourceText("static/components/RuleEditModal.js");
 
