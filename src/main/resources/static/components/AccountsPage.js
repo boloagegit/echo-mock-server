@@ -155,11 +155,9 @@ const AccountsPage = {
             <ui-segmented-control :model-value="accounts.roleFilter.value" :options="roleFilterOptions"
               name="accountRoleFilter" size="compact" :aria-label="t('accounts.filterRole')"
               @update:model-value="accounts.roleFilter.value=$event"></ui-segmented-control>
-            <div class="filter-divider" aria-hidden="true"></div>
             <ui-segmented-control :model-value="accounts.enabledFilter.value" :options="accountStatusFilterOptions"
               name="accountStatusFilter" size="compact" :aria-label="t('accounts.filterStatus')"
               @update:model-value="accounts.enabledFilter.value=$event"></ui-segmented-control>
-            <div class="filter-divider" aria-hidden="true"></div>
             <ui-toggle-group :model-value="accounts.resetFilter.value" :options="resetFilterOptions"
               :aria-label="t('accounts.filterResetRequested')"
               @update:model-value="accounts.resetFilter.value=$event"></ui-toggle-group>
@@ -185,19 +183,19 @@ const AccountsPage = {
         <div v-else class="card-table-body">
           <div v-if="loading.accounts && !accounts.filteredAccounts.value.length" role="status" :aria-label="t('common.loading')">
             <div v-for="i in 4" :key="'sk-acc-'+i" class="sk-row">
-              <span class="sk sk-text" style="width:120px"></span>
-              <span class="sk sk-badge" style="width:60px"></span>
-              <span class="sk sk-badge" style="width:50px"></span>
-              <span class="sk sk-text-sm" style="width:100px"></span>
-              <span class="sk sk-text-sm" style="width:100px"></span>
+              <span class="sk sk-text sk-w-120"></span>
+              <span class="sk sk-badge sk-w-60"></span>
+              <span class="sk sk-badge sk-w-50"></span>
+              <span class="sk sk-text-sm sk-w-100"></span>
+              <span class="sk sk-text-sm sk-w-100"></span>
               <span class="sk sk-btn"></span>
             </div>
           </div>
           <table v-if="accounts.filteredAccounts.value.length" class="table-fixed workspace-table">
             <thead><tr>
               <th :aria-sort="accounts.accountSort.value.field==='username'?(accounts.accountSort.value.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('accounts.thUsername')" :active="accounts.accountSort.value.field==='username'" :ascending="accounts.accountSort.value.asc" @toggle="accounts.toggleAccountSort('username')"></ui-table-sort-header></th>
-              <th style="width:80px" :aria-sort="accounts.accountSort.value.field==='role'?(accounts.accountSort.value.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('accounts.thRole')" :active="accounts.accountSort.value.field==='role'" :ascending="accounts.accountSort.value.asc" @toggle="accounts.toggleAccountSort('role')"></ui-table-sort-header></th>
-              <th class="col-hide-sm" style="width:80px" :aria-sort="accounts.accountSort.value.field==='enabled'?(accounts.accountSort.value.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('accounts.thEnabled')" :active="accounts.accountSort.value.field==='enabled'" :ascending="accounts.accountSort.value.asc" @toggle="accounts.toggleAccountSort('enabled')"></ui-table-sort-header></th>
+              <th class="table-compact-column" :aria-sort="accounts.accountSort.value.field==='role'?(accounts.accountSort.value.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('accounts.thRole')" :active="accounts.accountSort.value.field==='role'" :ascending="accounts.accountSort.value.asc" @toggle="accounts.toggleAccountSort('role')"></ui-table-sort-header></th>
+              <th class="table-compact-column col-hide-sm" :aria-sort="accounts.accountSort.value.field==='enabled'?(accounts.accountSort.value.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('accounts.thEnabled')" :active="accounts.accountSort.value.field==='enabled'" :ascending="accounts.accountSort.value.asc" @toggle="accounts.toggleAccountSort('enabled')"></ui-table-sort-header></th>
               <th class="col-datetime col-hide-md" :aria-sort="accounts.accountSort.value.field==='createdAt'?(accounts.accountSort.value.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('accounts.thCreatedAt')" :active="accounts.accountSort.value.field==='createdAt'" :ascending="accounts.accountSort.value.asc" @toggle="accounts.toggleAccountSort('createdAt')"></ui-table-sort-header></th>
               <th class="col-datetime col-hide-md" :aria-sort="accounts.accountSort.value.field==='lastLoginAt'?(accounts.accountSort.value.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('accounts.thLastLoginAt')" :active="accounts.accountSort.value.field==='lastLoginAt'" :ascending="accounts.accountSort.value.asc" @toggle="accounts.toggleAccountSort('lastLoginAt')"></ui-table-sort-header></th>
               <th class="col-actions col-actions-3">{{t('accounts.thActions')}}</th>
@@ -206,14 +204,14 @@ const AccountsPage = {
               <tr v-for="a in accounts.filteredAccounts.value" :key="a.id">
                 <td class="list-identity-cell">
                   <span class="list-record-name">{{a.username}}</span>
-                  <ui-badge v-if="a.passwordResetRequested" class="badge badge-warning" style="margin-left:6px"><i class="bi bi-exclamation-triangle-fill"></i> {{t('accounts.forgotPasswordBadge')}}</ui-badge>
+                  <ui-badge v-if="a.passwordResetRequested" class="badge badge-warning inline-badge"><i class="bi bi-exclamation-triangle-fill"></i> {{t('accounts.forgotPasswordBadge')}}</ui-badge>
                 </td>
                 <td><ui-badge class="badge" :class="a.role==='ROLE_ADMIN'?'badge-http':'badge-muted'">{{a.role==='ROLE_ADMIN'?t('accounts.roleAdmin'):t('accounts.roleUser')}}</ui-badge></td>
                 <td class="col-hide-sm"><ui-badge class="badge" :class="a.enabled?'badge-success':'badge-danger'">{{a.enabled?t('accounts.enabled'):t('accounts.disabled')}}</ui-badge></td>
                 <td class="col-datetime col-hide-md"><span class="sub-info" :title="fmtTime(a.createdAt,false)">{{fmtTime(a.createdAt)}}</span></td>
                 <td class="col-datetime col-hide-md"><span class="sub-info" :title="a.lastLoginAt?fmtTime(a.lastLoginAt,false):t('accounts.neverLoggedIn')">{{a.lastLoginAt?fmtTime(a.lastLoginAt):t('accounts.neverLoggedIn')}}</span></td>
                 <td class="col-actions col-actions-3">
-                  <div style="display:flex;gap:0.25rem">
+                  <div class="table-row-actions">
                     <ui-button v-if="a.enabled" class="btn btn-sm btn-icon btn-secondary" :title="t('accounts.disable')" :aria-label="t('accounts.disable')+' '+a.username" @click="accounts.disableAccount(a)"><i class="bi bi-pause-circle"></i></ui-button>
                     <ui-button v-else class="btn btn-sm btn-icon btn-secondary" :title="t('accounts.enable')" :aria-label="t('accounts.enable')+' '+a.username" @click="accounts.enableAccount(a)"><i class="bi bi-play-circle"></i></ui-button>
                     <ui-button class="btn btn-sm btn-icon btn-secondary" :title="t('accounts.resetPassword')" :aria-label="t('accounts.resetPassword')+' '+a.username" @click="handleResetPassword(a)"><i class="bi bi-key"></i></ui-button>

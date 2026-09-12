@@ -590,30 +590,30 @@ const RuleEditModal = {
                     <div class="form-block" data-tour="match">
                         <div class="form-block-header"><i class="bi bi-signpost-2"></i> {{form.protocol==='HTTP' ? t('modal.matchPath') : t('modal.matchQueue')}}</div>
                         <template v-if="form.protocol==='HTTP'">
-                            <div class="form-group" style="margin-bottom:0.5rem">
+                            <div class="form-group form-group--tight">
                                 <label class="form-label">{{t('modal.method')}} <span class="required">*</span></label>
                                 <ui-choice-group class="method-group" option-class="method-btn" variant="compact"
                                     v-model="form.method" :options="methodOptions" :aria-label="t('modal.method')"></ui-choice-group>
-                                <div v-if="formErrors.method" class="invalid-feedback" style="display:block">{{formErrors.method}}</div>
+                                <div v-if="formErrors.method" class="invalid-feedback validation-message--visible">{{formErrors.method}}</div>
                             </div>
-                            <div class="form-group" style="margin-bottom:0.5rem">
+                            <div class="form-group form-group--tight">
                                 <label class="form-label" for="rule-http-path">{{t('modal.pathLabel')}} <span class="required">*</span></label>
                                 <input id="rule-http-path" class="form-control" v-model="form.matchKey" :class="{'is-invalid':formErrors.matchKey}" placeholder="/api/users/{id}">
-                                <div v-if="formErrors.matchKey" class="invalid-feedback" style="display:block">{{formErrors.matchKey}}</div>
+                                <div v-if="formErrors.matchKey" class="invalid-feedback validation-message--visible">{{formErrors.matchKey}}</div>
                             </div>
-                            <div class="form-group" style="margin-bottom:0">
+                            <div class="form-group form-group--flush">
                                 <label class="form-label" for="rule-source-host">{{t('modal.sourceHostMatch')}}</label>
                                 <input id="rule-source-host" class="form-control" v-model="form.targetHost" placeholder="api.example.com">
-                                <div class="sub-info source-host-hint" style="margin-top:0.3rem">{{t('modal.sourceHostMatchHint')}}</div>
+                                <div class="sub-info source-host-hint">{{t('modal.sourceHostMatchHint')}}</div>
                             </div>
                         </template>
                         <template v-else>
-                            <div class="form-group" style="margin-bottom:0.5rem">
+                            <div class="form-group form-group--tight">
                                 <label class="form-label" for="rule-jms-queue">{{t('modal.queue')}} <span class="required">*</span></label>
                                 <input id="rule-jms-queue" class="form-control" v-model="form.matchKey" :class="{'is-invalid':formErrors.matchKey}" placeholder="QUEUE.NAME">
-                                <div v-if="formErrors.matchKey" class="invalid-feedback" style="display:block">{{formErrors.matchKey}}</div>
+                                <div v-if="formErrors.matchKey" class="invalid-feedback validation-message--visible">{{formErrors.matchKey}}</div>
                             </div>
-                            <div class="form-group" style="margin-bottom:0">
+                            <div class="form-group form-group--flush">
                                 <label class="form-label" for="rule-jms-reply">{{t('modal.replyQueue')}}</label>
                                 <input id="rule-jms-reply" class="form-control" v-model="form.replyQueue" placeholder="REPLY.QUEUE">
                             </div>
@@ -822,8 +822,8 @@ const RuleEditModal = {
                                     </select>
                                     <span class="forward-connection-select-indicator" aria-hidden="true"><i class="bi bi-chevron-down"></i></span>
                                 </div>
-                                <div v-if="formErrors.httpTargetConnectionId" class="invalid-feedback" style="display:block">{{formErrors.httpTargetConnectionId}}</div>
-                                <div v-if="formErrors.jmsTargetConnectionId" class="invalid-feedback" style="display:block">{{formErrors.jmsTargetConnectionId}}</div>
+                                <div v-if="formErrors.httpTargetConnectionId" class="invalid-feedback validation-message--visible">{{formErrors.httpTargetConnectionId}}</div>
+                                <div v-if="formErrors.jmsTargetConnectionId" class="invalid-feedback validation-message--visible">{{formErrors.jmsTargetConnectionId}}</div>
                             </div>
                             <dl class="forward-summary" aria-live="polite">
                                 <div class="forward-summary-row">
@@ -1103,7 +1103,7 @@ const RuleEditModal = {
                                                 <div class="input-affix rule-sse-delay"><input class="form-control form-control-sm" type="number" v-model.number="evt.delayMs" min="0" max="30000" placeholder="0" :aria-label="t('modal.sseFieldLabel', {index:idx+1, field:t('modal.sseEventDelay')})"><span class="input-affix-postfix">{{t('modal.millisecondsShort')}}</span></div>
                                             </td>
                                             <td class="rule-sse-action-cell">
-                                                <ui-button type="button" class="btn btn-sm btn-icon btn-secondary" @click="$emit('remove-sse-event',idx)" :disabled="sseEvents.length<=1" :title="t('modal.deleteSseEventAt', {index:idx+1})" :aria-label="t('modal.deleteSseEventAt', {index:idx+1})">
+                                                <ui-button type="button" variant="danger" size="compact" icon-only @click="$emit('remove-sse-event',idx)" :disabled="sseEvents.length<=1" :title="t('modal.deleteSseEventAt', {index:idx+1})" :aria-label="t('modal.deleteSseEventAt', {index:idx+1})">
                                                     <i class="bi bi-trash" aria-hidden="true"></i>
                                                 </ui-button>
                                             </td>
@@ -1132,7 +1132,7 @@ const RuleEditModal = {
                                         <i class="bi" :class="previewEditing?'bi-x-lg':'bi-pencil'"></i>
                                         {{previewEditing ? t('modal.cancelEdit') : ((selectedResponse?.usageCount||previewResponseUsageCount) > 1 ? t('modal.editSharedResponse') : t('modal.editResponse2'))}}
                                     </ui-button>
-                                    <span v-if="previewEditing && previewResponseUsageCount > 1" class="badge badge-warning" style="font-size:10px" :title="t('modal.modifyAffectsAll')">
+                                    <span v-if="previewEditing && previewResponseUsageCount > 1" class="badge badge-warning response-shared-warning" :title="t('modal.modifyAffectsAll')">
                                         <i class="bi bi-exclamation-triangle"></i> {{t('modal.sharedWarning', {count: previewResponseUsageCount})}}
                                     </span>
                                     <ui-button type="button" class="btn btn-xs btn-secondary" @click="$emit('toggle-preview-format')">
@@ -1142,7 +1142,7 @@ const RuleEditModal = {
                                     </ui-button>
                                     <span v-if="!previewResponseBody.length" class="response-body-state"><i class="bi bi-file-earmark" aria-hidden="true"></i>{{t('modal.emptyResponseBody')}}</span>
                                     <span class="response-body-size">{{fmtSize(previewResponseBody.length)}}</span>
-                                    <ui-button v-if="previewEditing" type="button" class="btn btn-xs btn-primary" @click="$emit('save-preview-response')" :disabled="previewSaving" style="margin-left:auto">
+                                    <ui-button v-if="previewEditing" type="button" class="btn btn-xs btn-primary preview-save-action" @click="$emit('save-preview-response')" :disabled="previewSaving">
                                         <i class="bi" :class="previewSaving?'bi-hourglass-split':'bi-check-lg'"></i> {{t('modal.saveResponse')}}
                                     </ui-button>
                                 </template>
@@ -1162,7 +1162,7 @@ const RuleEditModal = {
                                     <i class="bi" :class="editFormatted?'bi-code':'bi-braces'"></i>
                                     {{editFormatted ? t('modal.plainText') : t('modal.format')}}
                                 </ui-button>
-                                <span class="sub-info" style="margin-left:auto">{{fmtSize(form.responseBody?.length || 0)}}</span>
+                                <span class="sub-info response-content-size">{{fmtSize(form.responseBody?.length || 0)}}</span>
                                 <span v-if="(form.responseBody?.length || 0) > 5242880" class="badge badge-warning" :title="t('modal.exceedCacheTooltip')"><i class="bi bi-exclamation-triangle"></i></span>
                             </div>
                             <div id="ruleEditEditor" class="edit-editor"></div>
@@ -1247,7 +1247,7 @@ const RuleEditModal = {
                 </label>
             </div>
             <div v-if="editorMode==='form'" class="modal-footer" data-tour="save">
-                <span v-if="!canSave" class="sub-info" style="margin-right:auto"><i class="bi bi-info-circle"></i> {{t('modal.requiredFieldsHint')}}</span>
+                <span v-if="!canSave" class="sub-info modal-footer-status"><i class="bi bi-info-circle"></i> {{t('modal.requiredFieldsHint')}}</span>
                 <ui-button variant="quiet" @click="$emit('close')">{{t('modal.cancel')}}</ui-button>
                 <ui-button class="btn btn-secondary" @click="$emit('save',false)" :disabled="!canSave||saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-floppy'" :spin="saving"></ui-motion-icon> {{t('modal.save')}}</ui-button>
                 <ui-button class="btn btn-primary" @click="$emit('save',true)" :disabled="!canSave||saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-check2-circle'" :spin="saving"></ui-motion-icon> {{t('modal.saveAndClose')}}</ui-button>

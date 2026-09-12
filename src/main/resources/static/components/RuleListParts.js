@@ -3,7 +3,12 @@ const RuleListIdentity = {
   inject: ['t'],
   props: { rule: Object, httpLabel: String, jmsLabel: String, status: Object },
   emits: ['clip-copy'],
-  methods: { shortId, parseTags },
+  methods: {
+    shortId, parseTags, condTags,
+    tagEntries(rule) {
+      return Object.entries(parseTags(rule.tags));
+    },
+  },
   template: /* html */`
     <div class="list-identity">
       <div class="rule-endpoint-main">
@@ -18,11 +23,10 @@ const RuleListIdentity = {
       <div class="list-identity-secondary">
         <span v-if="rule.description" class="rule-description" :title="rule.description">{{rule.description}}</span>
         <button type="button" class="list-id-copy" @click.stop="$emit('clip-copy',rule.id)" @dblclick.stop :title="rule.id" :aria-label="t('rules.copyId')+' '+rule.id">{{shortId(rule.id)}}<i class="bi bi-copy" aria-hidden="true"></i></button>
-      </div>
-      <div v-if="(rule.targetHost && rule.targetHost!=='default') || (status?.scenariosEnabled && rule.scenarioName) || Object.keys(parseTags(rule.tags)).length" class="rule-endpoint-meta">
         <span v-if="rule.targetHost && rule.targetHost!=='default'" class="rule-source-host" :title="t('rules.targetPrefix')+rule.targetHost"><span>{{t('rules.targetPrefix')}}</span><code>{{rule.targetHost}}</code></span>
         <span v-if="status?.scenariosEnabled && rule.scenarioName" class="rule-scenario-meta" :title="t('rules.scenarioTooltip',{name:rule.scenarioName,required:rule.requiredScenarioState||'Started',newState:rule.newScenarioState||rule.requiredScenarioState||'Started'})"><i class="bi bi-diagram-3" aria-hidden="true"></i><code>{{rule.scenarioName}}</code></span>
-        <ui-badge v-for="(v,k) in parseTags(rule.tags)" :key="k" class="badge badge-tag" :title="k+'='+v">{{k}}:{{v}}</ui-badge>
+        <span v-if="tagEntries(rule).length" class="rule-tag-summary" :title="tagEntries(rule).map(([k,v])=>k+'='+v).join(', ')">{{tagEntries(rule)[0][0]}}:{{tagEntries(rule)[0][1]}}<span v-if="tagEntries(rule).length>1"> +{{tagEntries(rule).length-1}}</span></span>
+        <span class="rule-responsive-meta"><span class="rule-compact-condition" :title="condTags(rule).length?condTags(rule).map(c=>c.label+' '+c.v).join('; '):t('rules.noCondition')">{{condTags(rule).length ? condTags(rule)[0].label+' '+condTags(rule)[0].v : t('rules.noCondition')}}<span v-if="condTags(rule).length>1"> +{{condTags(rule).length-1}}</span> · P{{rule.priority ?? 0}}</span><span class="rule-compact-enabled"> · {{rule.enabled!==false?t('rules.filterEnabled'):t('rules.filterDisabled')}}</span></span>
       </div>
     </div>`
 };
@@ -41,10 +45,10 @@ const RuleRowActions = {
   template: /* html */`
     <div class="rule-row-actions" @click.stop @dblclick.stop>
       <ui-button type="button" class="btn btn-sm btn-secondary rule-row-edit" @click="$emit('open-edit',rule)" :title="!isLoggedIn?t('rules.loginRequired'):t('rules.edit')" :disabled="!isLoggedIn"><i class="bi bi-pencil" aria-hidden="true"></i><span>{{t('rules.edit')}}</span></ui-button>
+      <ui-button type="button" class="btn btn-sm btn-icon btn-secondary rule-row-disclosure" @click="$emit('toggle-rule-preview',rule)" :aria-expanded="expanded" :aria-controls="expanded?previewId:undefined" :title="expanded?t('rules.collapsePreview'):t('rules.expandPreview')" :aria-label="expanded?t('rules.collapsePreview'):t('rules.expandPreview')"><i class="bi" :class="expanded?'bi-chevron-up':'bi-chevron-down'" aria-hidden="true"></i></ui-button>
       <details class="rule-row-more" @keydown.esc.stop.prevent="$event.currentTarget.open=false;$event.currentTarget.querySelector('summary').focus()">
         <summary class="btn btn-sm btn-icon btn-secondary" :aria-label="t('rules.moreActions')+' '+rule.id" :title="t('rules.moreActions')"><i class="bi bi-three-dots-vertical" aria-hidden="true"></i></summary>
         <div class="rule-row-more-popover">
-          <button type="button" @click="invoke('toggle-rule-preview',$event)" :aria-expanded="expanded" :aria-controls="expanded?previewId:undefined"><i class="bi" :class="expanded?'bi-chevron-up':'bi-chevron-down'" aria-hidden="true"></i><span>{{expanded?t('rules.collapsePreview'):t('rules.expandPreview')}}</span></button>
           <button type="button" @click="invoke('show-rule-history',$event)"><i class="bi bi-clock-history" aria-hidden="true"></i><span>{{t('rules.history')}}</span></button>
           <button type="button" @click="invoke('copy-rule',$event)" :disabled="!isLoggedIn"><i class="bi bi-copy" aria-hidden="true"></i><span>{{t('rules.quickCopy')}}</span></button>
         </div>

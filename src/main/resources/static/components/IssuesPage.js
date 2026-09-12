@@ -35,11 +35,15 @@ const IssuesPage = {
       expandedId: null,
       replyText: '',
       replyingId: null,
+      issueViewportWidth: window.innerWidth,
       previousFocus: null,
       inertSiblings: []
     };
   },
   computed: {
+    issueDetailColspan() {
+      return this.issueViewportWidth <= 1024 ? 4 : 5;
+    },
     hasIssueFilters() {
       return Boolean(this.issueFilter.status || this.issueFilter.keyword);
     },
@@ -60,11 +64,18 @@ const IssuesPage = {
       return this.newDescription.trim() ? '' : this.t('issues.descriptionRequired');
     }
   },
+  mounted() {
+    window.addEventListener('resize', this.syncIssueViewportWidth, { passive: true });
+  },
   beforeUnmount() {
+    window.removeEventListener('resize', this.syncIssueViewportWidth);
     restoreOverlaySiblings(this.inertSiblings);
   },
   methods: {
     fmtTime,
+    syncIssueViewportWidth() {
+      this.issueViewportWidth = window.innerWidth;
+    },
     openCreate() {
       this.previousFocus = document.activeElement;
       this.newTitle = '';
@@ -151,7 +162,6 @@ const IssuesPage = {
             <ui-segmented-control :model-value="issueFilter.status" :options="issueStatusFilterOptions"
               name="issueStatusFilter" size="compact" :aria-label="t('issues.statusFilter')"
               @update:model-value="$emit('update:issueFilter', {...issueFilter,status:$event})"></ui-segmented-control>
-            <div class="filter-divider" aria-hidden="true"></div>
             <workspace-search-field
               input-id="issueSearch"
               :model-value="issueFilter.keyword"
@@ -173,32 +183,32 @@ const IssuesPage = {
         <div v-else class="card-table-body">
           <div v-if="loading.issues && !issues.length" role="status" :aria-label="t('common.loading')">
             <div v-for="i in 5" :key="'sk-issue-'+i" class="sk-row">
-              <span class="sk sk-badge" style="width:70px"></span>
-              <span class="sk sk-text" style="width:40%"></span>
-              <span class="sk sk-text-sm" style="width:80px"></span>
-              <span class="sk sk-text-sm" style="width:100px"></span>
+              <span class="sk sk-badge sk-w-70"></span>
+              <span class="sk sk-text sk-w-40p"></span>
+              <span class="sk sk-text-sm sk-w-80"></span>
+              <span class="sk sk-text-sm sk-w-100"></span>
             </div>
           </div>
-          <table v-if="pagedIssues.length" class="table-fixed workspace-table">
+          <table v-if="pagedIssues.length" class="table-fixed workspace-table issues-list-table">
             <thead><tr>
-              <th style="width:94px" :aria-sort="issueSort.field==='status'?(issueSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('issues.thStatus')" :active="issueSort.field==='status'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','status')"></ui-table-sort-header></th>
-              <th :aria-sort="issueSort.field==='title'?(issueSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('issues.thTitle')" :active="issueSort.field==='title'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','title')"></ui-table-sort-header></th>
-              <th class="col-hide-md" style="width:120px" :aria-sort="issueSort.field==='createdBy'?(issueSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('issues.thCreatedBy')" :active="issueSort.field==='createdBy'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','createdBy')"></ui-table-sort-header></th>
-              <th class="col-datetime" :aria-sort="issueSort.field==='createdAt'?(issueSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('issues.thTime')" :active="issueSort.field==='createdAt'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','createdAt')"></ui-table-sort-header></th>
-              <th class="col-actions col-actions-1">{{t('issues.thActions')}}</th>
+              <th class="table-status-column issue-status-column" :aria-sort="issueSort.field==='status'?(issueSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('issues.thStatus')" :active="issueSort.field==='status'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','status')"></ui-table-sort-header></th>
+              <th class="issue-title-column" :aria-sort="issueSort.field==='title'?(issueSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('issues.thTitle')" :active="issueSort.field==='title'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','title')"></ui-table-sort-header></th>
+              <th class="table-owner-column col-hide-md" :aria-sort="issueSort.field==='createdBy'?(issueSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('issues.thCreatedBy')" :active="issueSort.field==='createdBy'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','createdBy')"></ui-table-sort-header></th>
+              <th class="col-datetime issue-time-column" :aria-sort="issueSort.field==='createdAt'?(issueSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('issues.thTime')" :active="issueSort.field==='createdAt'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','createdAt')"></ui-table-sort-header></th>
+              <th class="col-actions col-actions-1 issue-disclosure-column">{{t('issues.thActions')}}</th>
             </tr></thead>
             <tbody>
               <template v-for="issue in pagedIssues" :key="issue.id">
-                <tr @click="toggleExpand(issue.id)" style="cursor:pointer" :class="{active:expandedId===issue.id}">
-                  <td>
+                <tr @click="toggleExpand(issue.id)" class="row-clickable" :class="{active:expandedId===issue.id}">
+                  <td class="issue-status-column">
                     <ui-badge class="badge" :class="issue.status==='OPEN'?'badge-warning':'badge-success'">{{issue.status==='OPEN'?t('issues.open'):t('issues.resolved')}}</ui-badge>
                   </td>
-                  <td>
-                    <div style="font-weight:500">{{issue.title}}</div>
+                  <td class="issue-title-column">
+                    <div class="list-record-name">{{issue.title}}</div>
                   </td>
                   <td class="col-hide-md"><span class="sub-info">{{issue.createdBy}}</span></td>
-                  <td class="col-datetime"><span class="sub-info" :title="fmtTime(issue.createdAt,false)">{{fmtTime(issue.createdAt)}}</span></td>
-                  <td class="col-actions col-actions-1">
+                  <td class="col-datetime issue-time-column"><span class="sub-info" :title="fmtTime(issue.createdAt,false)">{{fmtTime(issue.createdAt)}}</span></td>
+                  <td class="col-actions col-actions-1 issue-disclosure-column">
                     <ui-button class="btn btn-sm btn-icon btn-secondary" :title="expandedId===issue.id?t('issues.collapse'):t('issues.expand')" :aria-label="expandedId===issue.id?t('issues.collapse'):t('issues.expand')" :aria-expanded="expandedId===issue.id" :aria-controls="'issue-detail-'+issue.id">
                       <i class="bi" :class="expandedId===issue.id?'bi-chevron-up':'bi-chevron-down'"></i>
                     </ui-button>
@@ -206,7 +216,7 @@ const IssuesPage = {
                 </tr>
                 <Transition name="ui-detail-row-motion">
                 <tr v-if="expandedId===issue.id" class="rule-preview-row">
-                  <td colspan="5" style="padding:0">
+                  <td :colspan="issueDetailColspan" class="detail-row-cell">
                     <div :id="'issue-detail-'+issue.id" class="rule-preview-content workspace-detail-surface issue-detail">
                       <!-- Description -->
                       <div class="issue-message issue-message-user">
@@ -223,13 +233,13 @@ const IssuesPage = {
                         <div class="issue-message-content">{{issue.adminReply}}</div>
                       </div>
                       <!-- Resolved info -->
-                      <div v-if="issue.resolvedAt" style="margin-bottom:1rem" class="sub-info">
+                      <div v-if="issue.resolvedAt" class="sub-info issue-resolved-meta">
                         <i class="bi bi-check-circle"></i> {{t('issues.resolvedAt')}} {{fmtTime(issue.resolvedAt, false)}}
                       </div>
                       <!-- Reply form (admin) -->
                       <div v-if="isAdmin && replyingId===issue.id" class="issue-reply-form">
-                        <textarea v-model="replyText" class="form-control" rows="3" :placeholder="t('issues.replyPlaceholder')" style="margin-bottom:0.5rem"></textarea>
-                        <div style="display:flex;gap:0.5rem">
+                        <textarea v-model="replyText" class="form-control issue-reply-input" rows="3" :placeholder="t('issues.replyPlaceholder')"></textarea>
+                        <div class="issue-reply-actions">
                           <ui-button class="btn btn-sm btn-primary" @click.stop="submitReply(issue.id)" :disabled="!replyText.trim()">{{t('issues.submitReply')}}</ui-button>
                           <ui-button variant="quiet" size="compact" @click.stop="replyingId=null">{{t('issues.cancel')}}</ui-button>
                         </div>

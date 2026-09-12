@@ -418,11 +418,11 @@ const SettingsPage = {
       <!-- Skeleton -->
       <div v-if="!status" class="settings-grid">
         <div class="settings-card" v-for="i in 6" :key="'sk-'+i">
-          <div class="settings-card-header"><span class="sk sk-text" style="width:120px"></span></div>
+          <div class="settings-card-header"><span class="sk sk-text sk-w-120"></span></div>
           <div class="settings-card-body">
             <div class="sk-row" v-for="j in 4" :key="'skr-'+i+'-'+j">
-              <span class="sk sk-text" style="width:80px"></span>
-              <span class="sk sk-text" style="width:120px"></span>
+              <span class="sk sk-text sk-w-80"></span>
+              <span class="sk sk-text sk-w-120"></span>
             </div>
           </div>
         </div>
@@ -568,8 +568,8 @@ const SettingsPage = {
             <div class="settings-item"><span class="settings-label">{{t('settings.ruleCount')}}</span><span class="settings-value">{{ formatNum(status.ruleCount) }}</span></div>
             <div class="settings-item"><span class="settings-label">{{t('settings.responseCount')}}</span><span class="settings-value">{{ formatNum(status.responseCount) }}</span></div>
             <div class="settings-item"><span class="settings-label">{{t('settings.requestLogCount')}}</span><span class="settings-value">{{ formatNum(status.requestLogCount) }}</span></div>
-            <div class="settings-item" v-if="status.orphanRules"><span class="settings-label">{{t('settings.orphanRules')}}</span><span class="settings-value" style="color:var(--warning)">{{ status.orphanRules }}</span></div>
-            <div class="settings-item" v-if="status.orphanResponses"><span class="settings-label">{{t('settings.orphanResponses')}}</span><span class="settings-value" style="color:var(--warning)">{{ status.orphanResponses }}</span></div>
+            <div class="settings-item" v-if="status.orphanRules"><span class="settings-label">{{t('settings.orphanRules')}}</span><span class="settings-value settings-warning-value">{{ status.orphanRules }}</span></div>
+            <div class="settings-item" v-if="status.orphanResponses"><span class="settings-label">{{t('settings.orphanResponses')}}</span><span class="settings-value settings-warning-value">{{ status.orphanResponses }}</span></div>
             <div class="settings-item" v-if="status.dbFileSize"><span class="settings-label">{{t('settings.dbFileSize')}}</span><span class="settings-value">{{ formatMB(status.dbFileSize) }}</span></div>
           </div>
         </div>
@@ -587,8 +587,8 @@ const SettingsPage = {
           <div class="settings-card-header"><i class="bi bi-robot"></i> {{t('settings.agentStatus')}}</div>
           <div class="settings-card-body" v-if="agents.length">
             <template v-for="(a, idx) in agents" :key="a.name">
-              <div v-if="idx > 0" style="border-top:1px solid var(--border);margin:0.5rem 0"></div>
-              <div class="settings-item"><span class="settings-label">{{t('settings.agentName')}}</span><span class="settings-value" style="font-weight:600">{{ a.name }} <span :class="agentStatusBadgeClass(a.status)" style="margin-left:0.5rem"><i v-if="a.status !== 'RUNNING'" class="bi bi-exclamation-triangle me-1"></i>{{ agentStatusText(a.status) }}</span></span></div>
+              <div v-if="idx > 0" class="settings-card-divider"></div>
+              <div class="settings-item"><span class="settings-label">{{t('settings.agentName')}}</span><span class="settings-value settings-agent-name">{{ a.name }} <span :class="agentStatusBadgeClass(a.status)" class="inline-badge"><i v-if="a.status !== 'RUNNING'" class="bi bi-exclamation-triangle me-1"></i>{{ agentStatusText(a.status) }}</span></span></div>
               <p class="settings-inline-note" v-if="a.description">{{ a.name==='log-agent' ? t('settings.agentLogDescription') : a.description }}</p>
               <div class="settings-item"><span class="settings-label">{{t('settings.agentQueueSize')}}</span><span class="settings-value">{{ formatNum(a.queueSize) }}</span></div>
               <div class="settings-item"><span class="settings-label">{{t('settings.agentProcessed')}}</span><span class="settings-value">{{ formatNum(a.processedCount) }}</span></div>
@@ -614,9 +614,9 @@ const SettingsPage = {
           </div>
           <div class="settings-card-body" v-else>
             <div class="settings-item"><span class="settings-label">{{t('settings.status')}}</span><span class="settings-value"><ui-status tone="neutral">{{t('settings.backupDisabled')}}</ui-status></span></div>
-            <div class="settings-item" style="flex-direction:column;align-items:flex-start">
-              <span class="settings-label" style="margin-bottom:0.5rem">{{t('settings.enableMethod')}}</span>
-              <pre class="sub-info" style="margin:0;font-size:12px;white-space:pre-wrap">echo:
+            <div class="settings-item settings-item--stacked">
+              <span class="settings-label settings-label--spaced">{{t('settings.enableMethod')}}</span>
+              <pre class="sub-info settings-config-example">echo:
   backup:
     enabled: true
     cron: "0 0 3 * * *"
@@ -650,19 +650,19 @@ const SettingsPage = {
         </div>
         <div class="settings-card settings-danger-zone">
           <div class="settings-card-header settings-danger-zone-header"><i class="bi bi-exclamation-triangle"></i> {{t('settings.dangerZone')}}</div>
-          <div class="settings-card-body" style="display:flex;flex-direction:column;gap:0.5rem">
+          <div class="settings-card-body settings-danger-actions">
             <div class="settings-danger-warning"><i class="bi bi-info-circle" aria-hidden="true"></i><span>{{t('settings.dangerHint')}}</span></div>
-            <ui-button class="btn btn-danger" style="width:100%;text-align:left" @click="$emit('delete-all-rules', status.ruleCount)"><i class="bi bi-trash"></i> {{t('settings.deleteAllRules')}}</ui-button>
-            <ui-button class="btn btn-danger" style="width:100%;text-align:left" @click="$emit('delete-all-responses')"><i class="bi bi-trash"></i> {{t('settings.deleteAllResponses')}}</ui-button>
-            <ui-button class="btn btn-outline-danger" style="width:100%;text-align:left" @click="$emit('delete-orphan-responses')"><i class="bi bi-trash"></i> {{t('settings.deleteOrphanResponses')}}</ui-button>
-            <ui-button class="btn btn-outline-danger" style="width:100%;text-align:left" @click="$emit('delete-all-audit')"><i class="bi bi-trash"></i> {{t('settings.deleteAllAudit')}}</ui-button>
-            <ui-button class="btn btn-outline-danger" style="width:100%;text-align:left" @click="$emit('delete-all-logs')"><i class="bi bi-trash"></i> {{t('settings.deleteAllLogs')}}</ui-button>
+            <ui-button variant="danger" class="settings-danger-action" @click="$emit('delete-all-rules', status.ruleCount)"><i class="bi bi-trash"></i> {{t('settings.deleteAllRules')}}</ui-button>
+            <ui-button variant="danger" class="settings-danger-action" @click="$emit('delete-all-responses')"><i class="bi bi-trash"></i> {{t('settings.deleteAllResponses')}}</ui-button>
+            <ui-button variant="danger" class="settings-danger-action" @click="$emit('delete-orphan-responses')"><i class="bi bi-trash"></i> {{t('settings.deleteOrphanResponses')}}</ui-button>
+            <ui-button variant="danger" class="settings-danger-action" @click="$emit('delete-all-audit')"><i class="bi bi-trash"></i> {{t('settings.deleteAllAudit')}}</ui-button>
+            <ui-button variant="danger" class="settings-danger-action" @click="$emit('delete-all-logs')"><i class="bi bi-trash"></i> {{t('settings.deleteAllLogs')}}</ui-button>
           </div>
         </div>
       </div>
       <ui-modal-transition>
       <div v-if="showHttpTargetForm" class="modal-overlay" @click.self="showHttpTargetForm=false">
-        <div class="modal-box workspace-modal connection-form-modal" style="max-width:680px" role="dialog" aria-modal="true" aria-labelledby="httpTargetFormTitle">
+        <div class="modal-box workspace-modal connection-form-modal connection-http-form-modal" role="dialog" aria-modal="true" aria-labelledby="httpTargetFormTitle">
           <div class="modal-header"><h2 id="httpTargetFormTitle"><i class="bi bi-globe2"></i> {{editingHttpTarget?t('settings.httpTargetEdit'):t('settings.httpTargetAdd')}}</h2><ui-button type="button" variant="quiet" size="compact" icon-only class="modal-close" @click="showHttpTargetForm=false" :aria-label="t('rules.close')" :title="t('rules.close')"><i class="bi bi-x-lg"></i></ui-button></div>
           <div class="modal-body">
             <div class="form-row"><div class="form-group"><label class="form-label" for="httpTargetName">{{t('settings.httpTargetName')}} <span class="required">*</span></label><input id="httpTargetName" class="form-control" v-model="httpTargetForm.name" maxlength="100" required></div><div class="form-group"><label class="form-label" for="httpAuthType">{{t('settings.httpAuthType')}}</label><select id="httpAuthType" class="form-control" v-model="httpTargetForm.authType"><option value="NONE">{{t('settings.authNone')}}</option><option value="BASIC">{{t('settings.authBasic')}}</option><option value="BEARER">{{t('settings.authBearerToken')}}</option></select></div></div>
@@ -671,12 +671,12 @@ const SettingsPage = {
             <label v-if="editingHttpTarget&&editingHttpTarget.secretConfigured" class="form-check"><input type="checkbox" v-model="httpTargetForm.clearSecret"> {{t('settings.httpTargetClearSecret')}}</label>
             <div class="form-row"><div class="form-group"><label class="form-label" for="httpConnectTimeout">{{t('settings.httpConnectTimeout')}}</label><input id="httpConnectTimeout" type="number" min="1" max="300" class="form-control" v-model.number="httpTargetForm.connectTimeoutSeconds"></div><div class="form-group"><label class="form-label" for="httpReadTimeout">{{t('settings.httpReadTimeout')}}</label><input id="httpReadTimeout" type="number" min="1" max="300" class="form-control" v-model.number="httpTargetForm.readTimeoutSeconds"></div></div>
             <div class="connection-form-options"><label class="form-check"><input type="checkbox" v-model="httpTargetForm.enabled" :disabled="editingHttpTarget?.defaultConnection" @change="onHttpTargetEnabledChange"> {{t('settings.enabled')}}</label><label class="form-check"><input type="checkbox" v-model="httpTargetForm.defaultConnection" :disabled="!httpTargetForm.enabled||editingHttpTarget?.defaultConnection"> {{t('settings.httpTargetDefault')}}</label></div>
-            <div class="form-group" style="margin-top:1rem;margin-bottom:0">
+            <div class="form-group connection-form-section">
               <label class="form-label">{{t('settings.tlsModeLabel')}}</label>
               <ui-choice-group class="protocol-switch" option-class="protocol-btn" variant="compact"
                 v-model="httpTargetForm.tlsVerificationEnabled" :options="tlsModeOptions"
                 :aria-label="t('settings.tlsModeLabel')"></ui-choice-group>
-              <div class="sub-info" style="margin-top:0.5rem"><i class="bi bi-info-circle"></i> {{httpTargetForm.tlsVerificationEnabled?t('settings.tlsVerificationStrictHint'):t('settings.tlsVerificationCompatibilityHint')}}</div>
+              <div class="sub-info connection-form-hint"><i class="bi bi-info-circle"></i> {{httpTargetForm.tlsVerificationEnabled?t('settings.tlsVerificationStrictHint'):t('settings.tlsVerificationCompatibilityHint')}}</div>
             </div>
           </div>
           <div class="modal-footer"><ui-button variant="quiet" @click="showHttpTargetForm=false">{{t('rules.close')}}</ui-button><ui-button class="btn btn-primary" @click="saveHttpTarget" :disabled="httpTargetSaving||!canSaveHttpTarget"><i class="bi bi-check-lg"></i> {{t('modal.save')}}</ui-button></div>
@@ -685,7 +685,7 @@ const SettingsPage = {
       </ui-modal-transition>
       <ui-modal-transition>
       <div v-if="showJmsTargetForm" class="modal-overlay" @click.self="showJmsTargetForm=false">
-        <div class="modal-box workspace-modal connection-form-modal connection-jms-form-modal" style="max-width:620px" role="dialog" aria-modal="true" aria-labelledby="jmsTargetFormTitle">
+        <div class="modal-box workspace-modal connection-form-modal connection-jms-form-modal" role="dialog" aria-modal="true" aria-labelledby="jmsTargetFormTitle">
           <div class="modal-header"><h2 id="jmsTargetFormTitle"><i class="bi bi-diagram-2"></i> {{editingJmsTarget?t('settings.jmsTargetEdit'):t('settings.jmsTargetAdd')}}</h2><ui-button type="button" variant="quiet" size="compact" icon-only class="modal-close" @click="showJmsTargetForm=false" :aria-label="t('rules.close')" :title="t('rules.close')"><i class="bi bi-x-lg"></i></ui-button></div>
           <div class="modal-body">
             <div class="form-row"><div class="form-group"><label class="form-label" for="jmsTargetName">{{t('settings.jmsTargetName')}} <span class="required">*</span></label><input id="jmsTargetName" class="form-control" v-model="jmsTargetForm.name" maxlength="100" required></div><div class="form-group"><label class="form-label" for="jmsTargetProvider">{{t('settings.jmsTargetProvider')}}</label><select id="jmsTargetProvider" class="form-control" v-model="jmsTargetForm.providerType"><option value="artemis">Artemis</option><option value="tibco">TIBCO EMS</option></select></div></div>
