@@ -29,9 +29,6 @@ const UiToggleGroup = {
         @click="select(option)">
         <i v-if="option.icon" class="bi ui-toggle-group__icon" :class="option.icon" aria-hidden="true"></i>
         <span class="ui-toggle-group__label">{{option.label}}</span>
-        <Transition name="ui-context-icon">
-          <i v-if="isSelected(option)" class="bi bi-check-lg ui-toggle-group__check" aria-hidden="true"></i>
-        </Transition>
       </ui-button>
     </div>
   `,

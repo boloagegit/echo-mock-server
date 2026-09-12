@@ -77,7 +77,7 @@ const RulesPage = {
       return visibleColumns + (this.canDragRules ? 1 : 0) + (this.batchSelectMode ? 1 : 0);
     },
     groupRulePreviewColspan() {
-      return this.ruleViewportWidth <= 768 ? 2 : this.ruleViewportWidth <= 1024 ? 3 : 6;
+      return this.ruleViewportWidth <= 768 ? 2 : this.ruleViewportWidth <= 1280 ? 3 : 6;
     },
     hasRuleFilters() {
       return Boolean(this.ruleFilter.keyword || this.ruleFilter.protocol || this.ruleFilter.enabled
@@ -307,21 +307,21 @@ const RulesPage = {
         <!-- Skeleton -->
         <div v-if="loading.rules && !rules.length" class="card-table-body" role="status" :aria-label="t('common.loading')">
             <div v-for="i in 6" :key="'sk-rule-'+i" class="sk-row">
-                <span class="sk sk-badge" style="width:60px"></span>
-                <span class="sk sk-badge" style="width:38px"></span>
-                <span class="sk sk-text" style="width:40%;min-width:80px"></span>
-                <span class="sk sk-text" style="width:15%"></span>
-                <span style="margin-left:auto;display:flex;gap:4px"><span class="sk sk-btn"></span><span class="sk sk-btn"></span></span>
+                <span class="sk sk-badge sk-w-60"></span>
+                <span class="sk sk-badge sk-w-38"></span>
+                <span class="sk sk-text sk-w-40p sk-min-w-80"></span>
+                <span class="sk sk-text sk-w-15p"></span>
+                <span class="sk-actions"><span class="sk sk-btn"></span><span class="sk sk-btn"></span></span>
             </div>
         </div>
         <div class="card-table-body">
         <table v-if="pagedRules.length" class="table-fixed rule-list-table">
             <thead><tr>
-                <th v-if="canDragRules" style="width:28px"></th>
-                <th v-if="batchSelectMode" style="width:40px"><input type="checkbox" @change="$emit('toggle-select-all', $event)" :checked="selectedRules.length===pagedRules.length && pagedRules.length>0" :aria-label="t('rules.selectAll')"></th>
+                <th v-if="canDragRules" class="table-drag-column"></th>
+                <th v-if="batchSelectMode" class="table-select-column"><input type="checkbox" @change="$emit('toggle-select-all', $event)" :checked="selectedRules.length===pagedRules.length && pagedRules.length>0" :aria-label="t('rules.selectAll')"></th>
                 <th class="col-endpoint">{{t('rules.thEndpoint')}}</th>
                 <th class="col-cond col-hide-md">{{t('rules.thCondition')}}</th>
-                <th class="col-hide-sm" style="width:72px">{{t('rules.thEnabled')}}</th>
+                <th class="table-enabled-column col-hide-sm">{{t('rules.thEnabled')}}</th>
                 <th class="col-priority col-hide-md" :aria-sort="ruleSort.field==='priority'?(ruleSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('rules.thPriority')" :active="ruleSort.field==='priority'" :ascending="ruleSort.asc" @toggle="$emit('toggle-rule-sort', 'priority')"></ui-table-sort-header></th>
                 <th class="col-datetime col-hide-md" :aria-sort="ruleSort.field==='updatedAt'?(ruleSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('rules.thUpdated')" :active="ruleSort.field==='updatedAt'" :ascending="ruleSort.asc" @toggle="$emit('toggle-rule-sort', 'updatedAt')"></ui-table-sort-header></th>
                 <th class="col-actions rule-row-action-column">
@@ -343,7 +343,8 @@ const RulesPage = {
                     <td class="col-endpoint"><rule-list-identity :rule="r" :http-label="httpLabel" :jms-label="jmsLabel" :status="status" @clip-copy="$emit('clip-copy',$event)"></rule-list-identity></td>
     <td class="col-cond col-hide-md" :title="condTooltip(r)">
                         <div v-if="condTags(r).length" class="cond-list">
-                            <span v-for="(c,i) in condTags(r)" :key="i" class="cond-tag" :class="c.t" :title="c.v"><span class="cond-label">{{c.label}}</span>{{c.v}}</span>
+                            <span class="cond-tag" :class="condTags(r)[0].t" :title="condTags(r)[0].v"><span class="cond-label">{{condTags(r)[0].label}}</span>{{condTags(r)[0].v}}</span>
+                            <span v-if="condTags(r).length>1" class="cond-more" :title="condTooltip(r)">+{{condTags(r).length-1}}</span>
                         </div>
                         <span v-else class="sub-info">{{t('rules.noCondition')}}</span>
                     </td>
@@ -354,7 +355,7 @@ const RulesPage = {
                     <td class="col-datetime col-hide-md">
                         <div class="table-date-stack">
                             <span class="sub-info" :title="fmtTime(r.updatedAt,false)">{{fmtTime(r.updatedAt)}}</span>
-                            <span class="rule-updated-by" :title="r.updatedBy||t('rules.unknownOperator')"><i class="bi bi-person" aria-hidden="true"></i>{{r.updatedBy||t('rules.unknownOperator')}}</span>
+                            <span class="rule-updated-by" :title="r.updatedBy||t('rules.unknownOperator')"><i v-if="r.updatedBy" class="bi bi-person" aria-hidden="true"></i>{{r.updatedBy||t('rules.unknownOperator')}}</span>
                             <ui-badge v-if="!r.isProtected && daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays) != null && daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays) <= 7" class="badge badge-warning">{{t('rules.daysLeft', {days: daysLeft(r.createdAt, r.extendedAt, status?.cleanupRetentionDays)})}}</ui-badge>
                         </div>
                     </td>
@@ -387,8 +388,8 @@ const RulesPage = {
                                     <div class="pv-field" v-if="status?.scenariosEnabled && rulePreviewCache[r.id].scenarioName"><span class="pv-label">{{t('rules.pvScenario')}}</span><span class="pv-scenario-value" :title="t('rules.scenarioTooltip',{name:rulePreviewCache[r.id].scenarioName,required:rulePreviewCache[r.id].requiredScenarioState||'Started',newState:rulePreviewCache[r.id].newScenarioState||rulePreviewCache[r.id].requiredScenarioState||'Started'})"><strong>{{rulePreviewCache[r.id].scenarioName}}</strong><code>{{rulePreviewCache[r.id].requiredScenarioState||'Started'}}</code><i class="bi bi-arrow-right" aria-hidden="true"></i><code>{{rulePreviewCache[r.id].newScenarioState||rulePreviewCache[r.id].requiredScenarioState||'Started'}}</code></span></div>
                                     <div class="pv-field"><span class="pv-label">{{t('rules.pvDelay')}}</span><span>{{rulePreviewCache[r.id].delayMs||0}} ms</span></div>
                                     <div class="pv-field"><span class="pv-label">{{t('rules.pvPriority')}}</span><span>{{rulePreviewCache[r.id].priority||0}}</span></div>
-                                    <div class="pv-field"><span class="pv-label">{{t('rules.pvProtected')}}</span><span><i class="bi" :class="rulePreviewCache[r.id].isProtected ? 'bi-shield-fill-check text-success' : 'bi-shield'" style="margin-right:2px"></i> {{rulePreviewCache[r.id].isProtected ? t('rules.pvYes') : t('rules.pvNo')}}</span></div>
-                                    <div class="pv-field" v-if="!rulePreviewCache[r.id].isProtected && daysLeft(rulePreviewCache[r.id].createdAt, rulePreviewCache[r.id].extendedAt, status?.cleanupRetentionDays) != null"><span class="pv-label">{{t('rules.pvDaysLeft')}}</span><span><ui-badge class="badge" :class="daysLeft(rulePreviewCache[r.id].createdAt, rulePreviewCache[r.id].extendedAt, status?.cleanupRetentionDays) <= 7 ? 'badge-warning' : 'badge-muted'">{{t('rules.daysLeft', {days: daysLeft(rulePreviewCache[r.id].createdAt, rulePreviewCache[r.id].extendedAt, status?.cleanupRetentionDays)})}}</ui-badge> <ui-button v-if="isLoggedIn" class="btn btn-sm btn-secondary" style="margin-left:0.5rem;padding:0.1rem 0.4rem;font-size:0.75rem" @click.stop="$emit('extend-rule', rulePreviewCache[r.id].id)"><i class="bi bi-calendar-plus"></i> {{t('rules.extend')}}</ui-button></span></div>
+                                    <div class="pv-field"><span class="pv-label">{{t('rules.pvProtected')}}</span><span class="pv-inline-value"><i class="bi pv-leading-icon" :class="rulePreviewCache[r.id].isProtected ? 'bi-shield-fill-check text-success' : 'bi-shield'"></i>{{rulePreviewCache[r.id].isProtected ? t('rules.pvYes') : t('rules.pvNo')}}</span></div>
+                                    <div class="pv-field" v-if="!rulePreviewCache[r.id].isProtected && daysLeft(rulePreviewCache[r.id].createdAt, rulePreviewCache[r.id].extendedAt, status?.cleanupRetentionDays) != null"><span class="pv-label">{{t('rules.pvDaysLeft')}}</span><span class="pv-inline-value"><ui-badge class="badge" :class="daysLeft(rulePreviewCache[r.id].createdAt, rulePreviewCache[r.id].extendedAt, status?.cleanupRetentionDays) <= 7 ? 'badge-warning' : 'badge-muted'">{{t('rules.daysLeft', {days: daysLeft(rulePreviewCache[r.id].createdAt, rulePreviewCache[r.id].extendedAt, status?.cleanupRetentionDays)})}}</ui-badge><ui-button v-if="isLoggedIn" variant="secondary" size="compact" class="pv-inline-action" @click.stop="$emit('extend-rule', rulePreviewCache[r.id].id)"><i class="bi bi-calendar-plus"></i> {{t('rules.extend')}}</ui-button></span></div>
                                     <div class="pv-field" v-if="rulePreviewCache[r.id].createdAt"><span class="pv-label">{{t('rules.pvCreated')}}</span><span>{{fmtTime(rulePreviewCache[r.id].createdAt, false)}}</span></div>
                                     <div class="pv-field" v-if="rulePreviewCache[r.id].updatedAt"><span class="pv-label">{{t('rules.pvUpdated')}}</span><span>{{fmtTime(rulePreviewCache[r.id].updatedAt, false)}} · {{rulePreviewCache[r.id].updatedBy||t('rules.unknownOperator')}}</span></div>
                                     <div class="pv-section-title pv-section-conditions"><span>{{t('rules.pvSectionConditions')}}</span><span v-if="!rulePreviewCache[r.id].bodyCondition && !rulePreviewCache[r.id].queryCondition && !rulePreviewCache[r.id].headerCondition" class="pv-section-summary">{{t('rules.noCondition')}}</span></div>
@@ -460,19 +461,19 @@ const RulesPage = {
         </template>
         <!-- 分組檢視 -->
         <template v-else>
-        <div class="card-body page-scroll" style="padding:0">
+        <div class="card-body page-scroll grouped-rule-scroll">
             <div class="tag-group-header" role="button" tabindex="0" @keydown.enter.prevent="$event.currentTarget.click()" @keydown.space.prevent="$event.currentTarget.click()" @click="$emit('toggle-tag-group', '_untagged')" :aria-expanded="expandedTagGroups.includes('_untagged')">
                 <i class="bi" :class="expandedTagGroups.includes('_untagged')?'bi-chevron-down':'bi-chevron-right'"></i>
                 <span>{{t('rules.untagged')}}</span>
                 <ui-badge class="badge badge-muted">{{groupCounts['_untagged'] || 0}}</ui-badge>
             </div>
             <div v-if="expandedTagGroups.includes('_untagged')" class="tag-group-content">
-                <div v-if="groupLoading['_untagged']" class="sub-info" style="padding:0.75rem 1rem"><i class="bi bi-arrow-clockwise spin"></i> {{t('rules.loading')}}</div>
+                <div v-if="groupLoading['_untagged']" class="sub-info tag-group-state tag-group-state--loading"><i class="bi bi-arrow-clockwise spin"></i> {{t('rules.loading')}}</div>
                 <table v-if="rulesByTagGroup['_untagged']?.length" class="tag-group-table rule-list-table">
                     <thead><tr>
                         <th class="col-endpoint">{{t('rules.thEndpoint')}}</th>
                         <th class="col-cond col-hide-md">{{t('rules.thCondition')}}</th>
-                        <th class="col-hide-sm" style="width:72px">{{t('rules.thEnabled')}}</th>
+                        <th class="table-enabled-column col-hide-sm">{{t('rules.thEnabled')}}</th>
                         <th class="col-priority col-hide-md">{{t('rules.thPriority')}}</th>
                         <th class="col-datetime col-hide-md">{{t('rules.thUpdated')}}</th>
                         <th class="col-actions rule-row-action-column">{{t('rules.thActions')}}</th>
@@ -494,28 +495,28 @@ const RulesPage = {
                     <ui-button class="btn btn-sm btn-secondary" @click="$emit('show-more-group', '_untagged')">{{t('rules.showMore')}} ({{rulesByTagGroup['_untagged']?.length || 0}}/{{groupCounts['_untagged'] || 0}})</ui-button>
                     <ui-button class="btn btn-sm btn-secondary" @click="$emit('show-all-group', '_untagged', groupCounts['_untagged'] || 0)">{{t('rules.showAll')}}</ui-button>
                 </div>
-                <div v-if="!groupLoading['_untagged'] && !(groupCounts['_untagged'] || 0)" class="sub-info" style="padding:0.5rem 1rem">{{t('rules.noRules')}}</div>
+                <div v-if="!groupLoading['_untagged'] && !(groupCounts['_untagged'] || 0)" class="sub-info tag-group-state">{{t('rules.noRules')}}</div>
             </div>
             <template v-for="(values, key) in tagKeys" :key="key">
                 <div class="tag-group-header" role="button" tabindex="0" @keydown.enter.prevent="$event.currentTarget.click()" @keydown.space.prevent="$event.currentTarget.click()" @click="$emit('toggle-tag-group', key)" :aria-expanded="expandedTagGroups.includes(key)">
                     <i class="bi" :class="expandedTagGroups.includes(key)?'bi-chevron-down':'bi-chevron-right'"></i>
-                    <span style="font-weight:500">{{key}}</span>
+                    <span class="tag-group-key">{{key}}</span>
                     <ui-badge class="badge badge-muted">{{values.reduce((sum, val) => sum + (groupCounts[key+'='+val] || 0), 0)}}</ui-badge>
                 </div>
                 <template v-if="expandedTagGroups.includes(key)">
                     <div v-for="val in values" :key="val" class="tag-subgroup">
                         <div class="tag-subgroup-header" role="button" tabindex="0" @keydown.enter.prevent="$event.currentTarget.click()" @keydown.space.prevent="$event.currentTarget.click()" @click="$emit('toggle-tag-subgroup', key+'='+val)" :aria-expanded="expandedTagSubgroups.includes(key+'='+val)">
-                            <i class="bi" :class="expandedTagSubgroups.includes(key+'='+val)?'bi-chevron-down':'bi-chevron-right'" style="font-size:0.7rem;color:var(--muted)"></i>
+                            <i class="bi tag-subgroup-chevron" :class="expandedTagSubgroups.includes(key+'='+val)?'bi-chevron-down':'bi-chevron-right'"></i>
                             <ui-badge class="badge badge-tag">{{val}}</ui-badge>
                             <span class="sub-info">{{t('common.count', {count: groupCounts[key+'='+val] || 0})}}</span>
                         </div>
                         <template v-if="expandedTagSubgroups.includes(key+'='+val)">
-                        <div v-if="groupLoading[key+'='+val]" class="sub-info" style="padding:0.75rem 1rem"><i class="bi bi-arrow-clockwise spin"></i> {{t('rules.loading')}}</div>
+                        <div v-if="groupLoading[key+'='+val]" class="sub-info tag-group-state tag-group-state--loading"><i class="bi bi-arrow-clockwise spin"></i> {{t('rules.loading')}}</div>
                         <table v-if="rulesByTag[key+'='+val]?.length" class="tag-group-table rule-list-table">
                             <thead><tr>
                                 <th class="col-endpoint">{{t('rules.thEndpoint')}}</th>
                                 <th class="col-cond col-hide-md">{{t('rules.thCondition')}}</th>
-                                <th class="col-hide-sm" style="width:72px">{{t('rules.thEnabled')}}</th>
+                                <th class="table-enabled-column col-hide-sm">{{t('rules.thEnabled')}}</th>
                                 <th class="col-priority col-hide-md">{{t('rules.thPriority')}}</th>
                                 <th class="col-datetime col-hide-md">{{t('rules.thUpdated')}}</th>
                                 <th class="col-actions rule-row-action-column">{{t('rules.thActions')}}</th>

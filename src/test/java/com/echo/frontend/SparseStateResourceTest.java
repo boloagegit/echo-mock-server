@@ -45,7 +45,8 @@ class SparseStateResourceTest {
         assertThat(text("style.css")).doesNotContain("tr.unused-row .sub-info { color: var(--danger)")
                 .doesNotContain("tr.unused-row td { background: rgba(var(--danger-rgb)");
         assertThat(text("components/ResponsesPage.js"))
-                .contains("<= 7 ? 'badge-warning' : 'badge-muted'");
+                .contains("class=\"response-usage-state is-unused\"")
+                .contains("t('responses.orphanDaysLeft'");
     }
 
     @Test

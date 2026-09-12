@@ -268,22 +268,22 @@ const ResponseEditModal = {
                   </tr></thead>
                   <tbody>
                     <tr v-for="(evt, idx) in sseEvents" :key="idx">
-                      <td class="sse-event-index">{{idx + 1}}</td>
-                      <td><select class="form-select form-select-sm" :data-sse-type="idx" :value="evt.type" @change="updateSseEvent(idx, 'type', $event.target.value)" :title="sseTypeHelp(evt.type)" :aria-label="sseFieldLabel(t('modal.sseEventType'), idx)"><option value="normal">{{t('modal.sseTypeNormal')}}</option><option value="error">{{t('modal.sseTypeError')}}</option><option value="abort">{{t('modal.sseTypeAbort')}}</option></select></td>
-                      <td><input class="form-control form-control-sm" :data-sse-event-name="idx" :value="evt.type==='error' ? 'error' : (evt.type==='abort' ? '' : evt.event)" @input="updateSseEvent(idx, 'event', $event.target.value)" :placeholder="evt.type==='abort' ? t('modal.notApplicableShort') : t('modal.sseEventNamePlaceholder')" :disabled="evt.type!=='normal'" :title="evt.type==='normal' ? '' : sseTypeHelp(evt.type)" :aria-label="sseFieldLabel(t('modal.sseEventName'), idx)"></td>
-                      <td>
+                      <td class="sse-event-index" data-label="#">{{idx + 1}}</td>
+                      <td :data-label="t('modal.sseEventType')"><select class="form-select form-select-sm" :data-sse-type="idx" :value="evt.type" @change="updateSseEvent(idx, 'type', $event.target.value)" :title="sseTypeHelp(evt.type)" :aria-label="sseFieldLabel(t('modal.sseEventType'), idx)"><option value="normal">{{t('modal.sseTypeNormal')}}</option><option value="error">{{t('modal.sseTypeError')}}</option><option value="abort">{{t('modal.sseTypeAbort')}}</option></select></td>
+                      <td :data-label="t('modal.sseEventName')"><input class="form-control form-control-sm" :data-sse-event-name="idx" :value="evt.type==='error' ? 'error' : (evt.type==='abort' ? '' : evt.event)" @input="updateSseEvent(idx, 'event', $event.target.value)" :placeholder="evt.type==='abort' ? t('modal.notApplicableShort') : t('modal.sseEventNamePlaceholder')" :disabled="evt.type!=='normal'" :title="evt.type==='normal' ? '' : sseTypeHelp(evt.type)" :aria-label="sseFieldLabel(t('modal.sseEventName'), idx)"></td>
+                      <td :data-label="t('modal.sseEventData')">
                         <textarea class="form-control form-control-sm sse-data-input" :class="{'is-invalid':sseError(idx, 'dataRequired')}" :data-sse-invalid="sseError(idx, 'dataRequired')" :value="evt.data" @input="updateSseEvent(idx, 'data', $event.target.value)" :placeholder="t('modal.sseEventDataPlaceholder')" :aria-label="sseFieldLabel(t('modal.sseEventData'), idx)" :aria-invalid="sseError(idx, 'dataRequired') ? 'true' : 'false'" :aria-describedby="sseError(idx, 'dataRequired') ? 'sse-data-error-'+idx : null" rows="4"></textarea>
                         <div v-if="sseError(idx, 'dataRequired')" class="invalid-feedback" :id="'sse-data-error-'+idx">{{t('modal.sseEventDataRequired')}}</div>
                       </td>
-                      <td><input class="form-control form-control-sm" :value="evt.type==='abort' ? '' : evt.id" @input="updateSseEvent(idx, 'id', $event.target.value)" :placeholder="evt.type==='abort' ? t('modal.notApplicableShort') : t('modal.sseEventIdPlaceholder')" :disabled="evt.type==='abort'" :title="evt.type==='abort' ? sseTypeHelp(evt.type) : ''" :aria-label="sseFieldLabel(t('modal.sseEventId'), idx)"></td>
-                      <td>
+                      <td :data-label="t('modal.sseEventId')"><input class="form-control form-control-sm" :value="evt.type==='abort' ? '' : evt.id" @input="updateSseEvent(idx, 'id', $event.target.value)" :placeholder="evt.type==='abort' ? t('modal.notApplicableShort') : t('modal.sseEventIdPlaceholder')" :disabled="evt.type==='abort'" :title="evt.type==='abort' ? sseTypeHelp(evt.type) : ''" :aria-label="sseFieldLabel(t('modal.sseEventId'), idx)"></td>
+                      <td :data-label="t('modal.sseEventDelay')">
                         <div class="input-affix sse-delay-affix" :class="{'is-invalid':sseError(idx, 'delayInvalid')}">
                           <input class="form-control form-control-sm" type="number" :data-sse-invalid="sseError(idx, 'delayInvalid')" :value="evt.delayMs" @input="updateSseDelay(idx, $event.target.value)" min="0" max="30000" step="1" inputmode="numeric" placeholder="0" :aria-label="sseFieldLabel(t('modal.sseEventDelay'), idx)" :aria-invalid="sseError(idx, 'delayInvalid') ? 'true' : 'false'" :aria-describedby="sseError(idx, 'delayInvalid') ? 'sse-delay-error-'+idx : null">
                           <span class="input-affix-postfix" aria-hidden="true">{{t('modal.millisecondsShort')}}</span>
                         </div>
                         <div v-if="sseError(idx, 'delayInvalid')" class="invalid-feedback" :id="'sse-delay-error-'+idx">{{t('modal.sseEventDelayInvalid')}}</div>
                       </td>
-                      <td class="sse-event-actions"><ui-button type="button" class="btn btn-icon sse-remove-event" @click="removeSseEvent(idx)" :disabled="sseEvents.length<=1" :title="t('modal.deleteSseEventAt', {index: idx + 1})" :aria-label="t('modal.deleteSseEventAt', {index: idx + 1})"><i class="bi bi-trash" aria-hidden="true"></i></ui-button></td>
+                      <td class="sse-event-actions"><ui-button type="button" variant="danger" icon-only class="sse-remove-event" @click="removeSseEvent(idx)" :disabled="sseEvents.length<=1" :title="t('modal.deleteSseEventAt', {index: idx + 1})" :aria-label="t('modal.deleteSseEventAt', {index: idx + 1})"><i class="bi bi-trash" aria-hidden="true"></i></ui-button></td>
                     </tr>
                   </tbody>
                 </table>

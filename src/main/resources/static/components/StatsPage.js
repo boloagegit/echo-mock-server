@@ -408,11 +408,9 @@ const StatsPage = {
             <ui-toggle-group :model-value="logFilter.protocol" :options="protocolFilterOptions"
               :aria-label="t('stats.protocolFilter')"
               @update:model-value="$emit('update:logFilter', {...logFilter, protocol:$event})"></ui-toggle-group>
-            <div class="filter-divider" aria-hidden="true"></div>
             <ui-toggle-group :model-value="logFilter.matched" :options="resultFilterOptions"
               :aria-label="t('stats.resultFilter')"
               @update:model-value="$emit('update:logFilter', {...logFilter, matched:$event})"></ui-toggle-group>
-            <div class="filter-divider" aria-hidden="true"></div>
             <workspace-search-field
               input-id="logSearch"
               :model-value="logFilter.endpoint"
@@ -466,7 +464,7 @@ const StatsPage = {
                     :aria-label="t('stats.sortBy', {field:t('stats.thDuration')})" @toggle="$emit('toggle-sort','responseTimeMs')"></ui-table-sort-header>
                 </th>
                 <th>{{t('stats.thResult')}}</th>
-                <th class="col-actions col-actions-2">{{t('stats.thActions')}}</th>
+                <th class="col-actions col-actions-1">{{t('stats.thActions')}}</th>
               </tr>
             </thead>
             <tbody>
@@ -480,17 +478,15 @@ const StatsPage = {
                   </td>
                   <td>
                     <div class="log-request-primary">
-                      <ui-badge class="badge" :class="'badge-'+item.log.protocol?.toLowerCase()">{{item.log.protocol}}</ui-badge>
-                      <span v-if="item.log.protocol==='HTTP' && item.log.method" class="log-method">{{item.log.method}}</span>
+                      <span class="rule-protocol">{{item.log.protocol}}</span>
+                      <ui-badge v-if="item.log.protocol==='HTTP' && item.log.method" class="badge badge-method">{{item.log.method}}</ui-badge>
                       <code :title="item.log.endpoint">{{item.log.endpoint}}</code>
                     </div>
-                    <div v-if="item.log.targetHost" class="log-request-secondary">
-                      <span>{{t('stats.hostLabel')}}</span>
-                      <code :title="item.log.targetHost">{{item.log.targetHost}}</code>
-                    </div>
-                    <div v-if="item.log.forwardTarget" class="log-request-secondary">
-                      <span>{{t('stats.forwardTargetLabel')}}</span>
-                      <code :title="item.log.forwardTarget">{{item.log.forwardTarget}}</code>
+                    <div v-if="item.log.targetHost || item.log.forwardTarget || item.log.responseTimeMs != null" class="log-request-secondary">
+                      <template v-if="item.log.targetHost"><span>{{t('stats.hostLabel')}}</span><code :title="item.log.targetHost">{{item.log.targetHost}}</code></template>
+                      <span v-if="item.log.targetHost && item.log.forwardTarget" class="log-meta-separator" aria-hidden="true">·</span>
+                      <template v-if="item.log.forwardTarget"><span>{{t('stats.forwardTargetLabel')}}</span><code :title="item.log.forwardTarget">{{item.log.forwardTarget}}</code></template>
+                      <span class="log-responsive-duration tabular-nums">{{item.log.targetHost || item.log.forwardTarget ? '· ' : ''}}{{item.log.responseTimeMs}} ms</span>
                     </div>
                   </td>
                   <td class="col-hide-md log-duration-cell"><span>{{item.log.responseTimeMs}}</span><small>ms</small></td>
@@ -521,11 +517,8 @@ const StatsPage = {
                     </div>
                     <div v-else-if="item.log.proxyError" class="log-result-secondary" :title="item.log.proxyError">{{item.log.proxyError}}</div>
                   </td>
-                  <td class="col-actions col-actions-2">
+                  <td class="col-actions col-actions-1">
                     <div class="log-row-actions">
-                      <ui-button v-if="item.log.hasResponseBody || (item._detail && item._detail.responseBody)" type="button"
-                        class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('create-rule-from-log', item._detail || item.log)"
-                        :title="t('stats.createRuleFromLog')" :aria-label="t('stats.createRuleFromLog')"><i class="bi bi-plus-circle" aria-hidden="true"></i></ui-button>
                       <ui-button type="button" class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('toggle-log-detail', item)"
                         :aria-expanded="!!logDetailExpanded[item.log.id]" :aria-controls="'log-detail-'+item.log.id"
                         :title="logDetailExpanded[item.log.id]?t('stats.collapseTrace'):t('stats.expandTrace')"

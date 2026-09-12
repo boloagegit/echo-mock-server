@@ -39,8 +39,9 @@ const UiSegmentedControl = {
             @change="select(option)">
           <i v-if="option.icon" class="bi ui-segmented-control__icon" :class="option.icon" aria-hidden="true"></i>
           <span class="ui-segmented-control__label" :class="{'visually-hidden':option.iconOnly}">{{option.label}}</span>
-          <i v-if="!option.iconOnly" class="bi bi-check-lg ui-segmented-control__check"
-            :class="{'is-visible':isSelected(option)}" aria-hidden="true"></i>
+          <Transition name="ui-context-icon">
+            <i v-if="!option.iconOnly && isSelected(option)" class="bi bi-check-lg ui-segmented-control__check is-visible" aria-hidden="true"></i>
+          </Transition>
         </label>
       </div>
       <p v-if="description" :id="descriptionId" class="ui-segmented-control__description">{{description}}</p>

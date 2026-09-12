@@ -18,7 +18,9 @@ class WorkspaceTableResourceTest {
                     .contains("class=\"table-metadata\"");
         }
         assertThat(resourceText("static/components/ResponsesPage.js"))
-                .contains("v-if=\"r.usageCount\" class=\"table-metadata\"");
+                .contains("class=\"response-reference-control\"")
+                .contains("t('responses.referenceRules')")
+                .contains(":aria-expanded=\"!!r.expanded\"");
     }
 
     @Test
@@ -30,7 +32,8 @@ class WorkspaceTableResourceTest {
                 .contains(".col-actions-1 { width: max(72px, calc(32px + var(--cell-px) + var(--cell-px))) }")
                 .contains(".col-actions-2 { width: calc(64px + var(--space-xs) + var(--cell-px) + var(--cell-px)) }")
                 .contains(".col-actions-3 { width: calc(96px + var(--space-xs) + var(--space-xs) + var(--cell-px) + var(--cell-px)) }")
-                .doesNotContain(".logs-table .col-actions-2 {");
+                .doesNotContain(".logs-table .col-actions-2 {")
+                .contains(".logs-table .col-actions-1 { text-align: end }");
     }
 
     @Test
@@ -50,7 +53,7 @@ class WorkspaceTableResourceTest {
         assertThat(rules).contains("class=\"col-datetime col-hide-md\"").contains("class=\"table-date-stack\"");
         assertThat(groupedRules).contains("class=\"col-datetime col-hide-md\"").contains("class=\"table-date-stack\"");
         assertThat(responses).contains("class=\"col-datetime col-hide-md\"");
-        assertThat(audit).contains("class=\"col-datetime\"");
+        assertThat(audit).contains("class=\"col-datetime audit-time-column\"");
     }
 
     @Test
@@ -87,7 +90,7 @@ class WorkspaceTableResourceTest {
 
         assertThat(rules)
                 .contains("ruleViewportWidth <= 768 ? 2 : this.ruleViewportWidth <= 1280 ? 3 : 6")
-                .contains("ruleViewportWidth <= 768 ? 2 : this.ruleViewportWidth <= 1024 ? 3 : 6")
+                .contains("ruleViewportWidth <= 768 ? 2 : this.ruleViewportWidth <= 1280 ? 3 : 6")
                 .contains(":colspan=\"rulePreviewColspan\"")
                 .contains(":preview-colspan=\"groupRulePreviewColspan\"")
                 .contains("window.addEventListener('resize', this.syncRuleViewportWidth")

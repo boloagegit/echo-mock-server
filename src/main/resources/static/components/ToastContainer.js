@@ -11,7 +11,7 @@ const ToastContainer = {
   emits: ['dismiss'],
   template: /* html */`
     <div class="toast-wrap">
-      <div v-for="toast in toasts" :key="toast.id" class="toast" :class="[toast.type, {leaving: toast.leaving}]" style="position:relative;overflow:hidden">
+      <div v-for="toast in toasts" :key="toast.id" class="toast toast-item" :class="[toast.type, {leaving: toast.leaving}]">
         <i class="bi toast-icon" :class="toast.type==='success'?'bi-check-circle-fill':toast.type==='error'?'bi-x-circle-fill':'bi-info-circle-fill'"></i>
         <span class="toast-msg">{{toast.msg}}</span>
         <ui-button type="button" variant="quiet" size="compact" icon-only class="toast-close" @click="$emit('dismiss', toast.id)" :aria-label="t('common.close')"><i class="bi bi-x"></i></ui-button>

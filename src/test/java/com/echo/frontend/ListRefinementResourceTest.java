@@ -118,8 +118,8 @@ class ListRefinementResourceTest {
                 .contains("/components/UiBadge.js?v=20260909.2")
                 .contains("/components/UiStatus.js?v=20260909.1")
                 .contains("/components/UiToggle.js?v=20260909.1")
-                .contains("/components/UiSegmentedControl.js?v=20260909.2")
-                .contains("/components/UiToggleGroup.js?v=20260909.3")
+                .contains("/components/UiSegmentedControl.js?v=20260912.1")
+                .contains("/components/UiToggleGroup.js?v=20260912.1")
                 .contains("/components/UiFilterChipList.js?v=20260909.3");
         assertThat(text("app.js"))
                 .contains("_app.component('ui-badge', UiBadge);")
@@ -150,7 +150,7 @@ class ListRefinementResourceTest {
                 .contains("role=\"group\"")
                 .contains(":aria-pressed=\"isSelected(option)\"")
                 .contains("this.clearable && this.isSelected(option) ? '' : option.value")
-                .contains("v-if=\"isSelected(option)\" class=\"bi bi-check-lg ui-toggle-group__check\"")
+                .doesNotContain("ui-toggle-group__check")
                 .doesNotContain(":class=\"{'is-visible':isSelected(option)}\"");
         assertThat(text("components/UiFilterChipList.js"))
                 .contains("role=\"group\"")
@@ -170,14 +170,18 @@ class ListRefinementResourceTest {
                 .contains(".ui-segmented-control--compact {")
                 .contains(".ui-toggle-group {")
                 .contains(".ui-toggle-group__option.ui-button.is-selected")
-                .contains("box-shadow: inset 0 0 0 1px rgba(var(--primary-rgb), 0.42);")
-                .contains(".ui-toggle-group__check { color: currentColor }")
+                .contains("box-shadow: inset 0 0 0 1px rgba(var(--primary-rgb), 0.48);")
+                .contains(".ui-toggle-group__option.ui-button:first-child { border-radius: 5px 0 0 5px }")
+                .contains(".ui-toggle-group__option.ui-button:last-child { border-radius: 0 5px 5px 0 }")
+                .contains(".ui-toggle-group__option.ui-button:only-child { border-radius: 5px }")
+                .doesNotContain("inset 0 -2px 0 var(--primary)")
+                .doesNotContain(".ui-toggle-group__check { color: currentColor }")
                 .doesNotContain(".ui-toggle-group__check { width: 13px; opacity: 0 }")
                 .contains(".ui-filter-chip-list { min-height: 32px; margin: 0 0 var(--space-sm);")
                 .doesNotContain(".filter-chips { min-height: 28px; margin: calc(var(--space-xs) * -1)")
                 .doesNotContain("margin: -0.5rem 0 0.5rem 0;")
                 .contains(".ui-filter-chip-list .ui-filter-chip .chip-remove {")
-                .contains("input.form-control:not([type=\"checkbox\"]):not([type=\"radio\"]),\nselect.form-control { height: 36px;")
+                .contains("input.form-control:not([type=\"checkbox\"]):not([type=\"radio\"]),\nselect.form-control,\nselect.form-select { height: 36px;")
                 .contains(".form-control-sm,\ninput.form-control-sm:not([type=\"checkbox\"]):not([type=\"radio\"]),")
                 .contains(".form-label { font-size: 12px;")
                 .contains(".invalid-feedback { font-size: 11px;");
@@ -230,7 +234,6 @@ class ListRefinementResourceTest {
     @Test
     void sharedMotionSystemIsRestrainedAndHonorsReducedMotion() throws IOException {
         String css = text("style.css");
-        String toggleGroup = text("components/UiToggleGroup.js");
         String filterChips = text("components/UiFilterChipList.js");
         String dropdown = text("components/UiDropdownMenu.js");
 
@@ -246,15 +249,52 @@ class ListRefinementResourceTest {
                 .contains("@media (prefers-reduced-motion: reduce)")
                 .doesNotContain("transition: all")
                 .doesNotContain("transition: 0.2s;");
-        assertThat(toggleGroup)
-                .contains("<Transition name=\"ui-context-icon\">")
-                .contains("v-if=\"isSelected(option)\"");
         assertThat(filterChips)
                 .contains("<TransitionGroup v-if=\"items.length\" name=\"ui-filter-chip-motion\"")
                 .contains("key=\"__clear_filters__\"");
         assertThat(dropdown)
                 .contains("<Transition name=\"ui-popover-motion\">")
                 .contains("v-if=\"open\"");
+    }
+
+    @Test
+    void detailFinishingUsesSemanticLayoutHooksAndSelectedOnlyIndicators() throws IOException {
+        String css = text("style.css");
+        String segmentedControl = text("components/UiSegmentedControl.js");
+
+        assertThat(segmentedControl)
+                .contains("v-if=\"!option.iconOnly && isSelected(option)\"")
+                .contains("<Transition name=\"ui-context-icon\">");
+        assertThat(css)
+                .contains(".ui-segmented-control__check {\n    position: absolute;")
+                .contains(".ui-segmented-control--compact .ui-segmented-control__check { display: none }")
+                .contains(".ui-segmented-control--compact .ui-segmented-control__option.is-selected {")
+                .contains(".pv-header {\n        display: grid;")
+                .contains(".pv-header-actions {\n        grid-column: 1 / -1;")
+                .contains(".audit-list-table .audit-time-column,")
+                .contains(".issues-list-table .issue-disclosure-column { width: 48px }")
+                .contains("select.form-select-sm { height: 32px;")
+                .contains(".response-editor-modal .response-sse-table .form-control-sm {\n    min-height: 32px;")
+                .contains(".response-editor-modal .response-sse-table tbody tr {")
+                .contains("grid-template-areas:")
+                .contains(".detail-row-cell { padding: 0 !important }")
+                .contains(".table-row-actions {")
+                .contains(".workspace-modal[tabindex=\"-1\"]:focus-visible { outline: 0 }")
+                .contains(".rule-apply-inline > .rule-apply-body {")
+                .contains("grid-template-columns: repeat(2, minmax(0, 1fr))")
+                .contains(".rule-apply-kv > div,");
+
+        for (String page : new String[]{
+                "AccountsPage", "AuditPage", "IssuesPage", "ResponsesPage", "RuleEditModal",
+                "RuleGroupRow", "RulesPage", "SettingsPage", "SidebarNav", "StatsPage", "ToastContainer"
+        }) {
+            assertThat(text("components/" + page + ".js"))
+                    .as(page + " static inline styles")
+                    .doesNotContain(" style=\"");
+        }
+        assertThat(text("components/ResponsesPage.js"))
+                .contains("variant=\"danger\" size=\"compact\" icon-only")
+                .contains("class=\"detail-row-cell\"");
     }
 
     @Test
@@ -371,15 +411,56 @@ class ListRefinementResourceTest {
     }
 
     @Test
-    void responseIdentityRetainsIdSortingWithoutDuplicatingUsage() throws IOException {
+    void responseIdentityRetainsSortingAndExposesUsageAcrossBreakpoints() throws IOException {
         String source = text("components/ResponsesPage.js");
         assertThat(source).contains("list-identity-heading")
                 .contains("toggle-response-sort', 'id'")
                 .contains("$emit('clip-copy',String(r.id))")
-                .doesNotContain("t('responses.usageCount', {count: r.usageCount})")
-                .contains("class=\"table-metadata\"")
+                .contains("class=\"response-mobile-state\"")
+                .contains("class=\"response-usage-state is-unused\"")
+                .contains("class=\"response-reference-control\"")
+                .contains("t('responses.usageCount',{count:r.usageCount})")
+                .contains("t('responses.referenceRules')")
                 .contains("t('responses.orphanDaysLeft'")
-                .contains(":colspan=\"batchSelectResponseMode?8:7\"");
+                .contains("responseViewportWidth: window.innerWidth")
+                .contains("this.responseViewportWidth <= 768 ? 2 : this.responseViewportWidth <= 1024 ? 3 : 7")
+                .contains(":colspan=\"responseDetailColspan\"")
+                .contains("class=\"linked-rule-primary\"")
+                .contains("class=\"linked-rule-secondary\"")
+                .contains("class=\"response-linked-rules-header\"")
+                .contains("class=\"bi bi-arrow-right linked-rule-open-icon\"")
+                .contains(":aria-label=\"[rule.protocol, rule.method, rule.matchKey, rule.description].filter(Boolean).join(' ')\"");
+    }
+
+    @Test
+    void primaryWorkspaceListsUseTheSharedDenseInformationLanguage() throws IOException {
+        assertThat(text("components/RuleListParts.js"))
+                .contains("class=\"rule-responsive-meta\"")
+                .contains("class=\"btn btn-sm btn-icon btn-secondary rule-row-disclosure\"")
+                .contains("class=\"rule-row-more-popover\"")
+                .doesNotContain("invoke('toggle-rule-preview',$event)");
+        assertThat(text("components/RulesPage.js"))
+                .contains("class=\"cond-more\"");
+        assertThat(text("components/RuleGroupRow.js"))
+                .contains("class=\"cond-more\"");
+        assertThat(text("components/StatsPage.js"))
+                .contains("class=\"log-responsive-duration tabular-nums\"")
+                .contains("class=\"col-actions col-actions-1\"")
+                .contains("<span class=\"rule-protocol\">{{item.log.protocol}}</span>")
+                .contains("class=\"badge badge-method\"")
+                .contains("t('stats.createRuleFromLog')");
+        assertThat(text("components/ResponsesPage.js"))
+                .contains("class=\"response-action-spacer\"")
+                .contains("class=\"response-reference-control\"");
+        assertThat(text("components/RulesPage.js"))
+                .contains("<i v-if=\"r.updatedBy\" class=\"bi bi-person\"");
+        assertThat(text("style.css"))
+                .contains("Unified high-density list language")
+                .contains(".rule-row-action-column { width: 176px }")
+                .contains(".response-usage-column { width: 156px }")
+                .contains("grid-template-columns: repeat(3, 32px)")
+                .contains(".logs-table .log-duration-column { text-align: end }")
+                .contains(".logs-table .col-actions-1 { text-align: end }");
     }
 
     @Test
@@ -397,7 +478,11 @@ class ListRefinementResourceTest {
         assertThat(text("components/AuditPage.js"))
                 .contains(":aria-expanded=\"selectedAudit===log.id\"")
                 .contains(":id=\"'audit-detail-'+log.id\"")
-                .contains("colspan=\"5\"");
+                .contains("auditViewportWidth: window.innerWidth")
+                .contains(":colspan=\"auditDetailColspan\"");
+        assertThat(text("components/IssuesPage.js"))
+                .contains("issueViewportWidth: window.innerWidth")
+                .contains(":colspan=\"issueDetailColspan\"");
         assertThat(text("components/RuleListParts.js"))
                 .contains(":aria-expanded=\"expanded\"")
                 .contains("@keydown.esc.stop.prevent")
@@ -472,7 +557,7 @@ class ListRefinementResourceTest {
     void unconditionalRulesArePresentedAsIntentionalDefaultMatches() throws IOException {
         assertThat(text("i18n/zh-TW.json")).contains("\"noCondition\": \"預設匹配\"");
         assertThat(text("i18n/en.json")).contains("\"noCondition\": \"Default match\"");
-        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20260909.7");
+        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20260912.1");
     }
 
     @Test

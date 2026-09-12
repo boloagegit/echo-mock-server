@@ -68,7 +68,7 @@ const SidebarNav = {
           <i class="bi bi-gear"></i><span class="nav-text">{{t('sidebar.settings')}}</span>
         </button>
 
-        <div class="nav-divider" style="margin-top:auto"></div>
+        <div class="nav-divider nav-divider--push"></div>
         <div class="nav-section">{{t('sidebar.preferences')}}</div>
 
         <button type="button" class="nav-item" @click="helpSeen ? $emit('show-help') : $emit('start-tour')" :title="t('sidebar.help')">

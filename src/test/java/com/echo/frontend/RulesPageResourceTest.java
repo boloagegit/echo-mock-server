@@ -54,7 +54,8 @@ class RulesPageResourceTest {
                 .contains("class=\"rule-row-more\"")
                 .contains("t('rules.moreActions')")
                 .contains("class=\"rule-row-more-popover\"")
-                .contains("invoke('toggle-rule-preview',$event)")
+                .contains("class=\"btn btn-sm btn-icon btn-secondary rule-row-disclosure\"")
+                .contains("@click=\"$emit('toggle-rule-preview',rule)\"")
                 .contains("invoke('show-rule-history',$event)")
                 .contains("invoke('copy-rule',$event)")
                 .doesNotContain("class=\"dblclick-hint\"");
