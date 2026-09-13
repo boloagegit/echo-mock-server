@@ -167,7 +167,7 @@ const RuleApplyModal = {
             <div v-else-if="operation" id="ruleApplyFeedback" class="rule-apply-feedback is-success" role="status">
               <i class="bi bi-check-circle" aria-hidden="true"></i><span>{{operation==='CREATED' ? t('rules.applyCreatedCanonical') : t('rules.applyUpdatedCanonical')}}</span>
             </div>
-            <div v-else-if="schema" id="ruleApplyFeedback" class="rule-apply-feedback is-valid" role="status">
+            <div v-else-if="schema && spec.matchKey" id="ruleApplyFeedback" class="rule-apply-feedback is-valid" role="status">
               <i class="bi bi-check2" aria-hidden="true"></i><span>{{t('rules.applyValidationPassed')}}</span>
             </div>
           </div>

@@ -161,7 +161,7 @@ const ResponsesPage = {
             <span class="sk-actions"><span class="sk sk-btn"></span><span class="sk sk-btn"></span></span>
           </div>
         </div>
-        <table v-if="pagedResponseSummary.length" class="table-fixed workspace-table response-list-table">
+        <table v-if="pagedResponseSummary.length" class="table-fixed workspace-table workspace-primary-aligned-table response-list-table">
           <thead><tr>
             <th v-if="batchSelectResponseMode" class="table-select-column"><input type="checkbox" @change="$emit('toggle-select-all-responses', $event)" :checked="selectedResponses.length===pagedResponseSummary.length && pagedResponseSummary.length>0" :aria-label="t('responses.selectAll')"></th>
             <th class="list-identity-heading" :aria-sort="responseSort.field==='id'?(responseSort.asc?'ascending':'descending'):'none'"><span>{{t('responses.thDescription')}}</span><ui-table-sort-header :label="t('responses.thId')" :active="responseSort.field==='id'" :ascending="responseSort.asc" @toggle="$emit('toggle-response-sort', 'id')"></ui-table-sort-header></th>
@@ -175,33 +175,42 @@ const ResponsesPage = {
           <tbody>
             <template v-for="r in pagedResponseSummary" :key="r.id">
               <tr :class="{'selected-row':batchSelectResponseMode && selectedResponses.includes(r.id), 'unused-row':!r.usageCount, 'row-clickable':!batchSelectResponseMode}" @click="!batchSelectResponseMode && r.usageCount && $emit('toggle-response-rules', r)" @dblclick="!batchSelectResponseMode && isLoggedIn && $emit('open-response-modal', r)" :title="!batchSelectResponseMode ? (r.usageCount ? t('responses.clickExpandDblEdit') : t('responses.dblClickEdit')) : ''">
-                <td v-if="batchSelectResponseMode"><input type="checkbox" :value="r.id" :checked="selectedResponses.includes(r.id)" @change="toggleSelection(r.id, $event.target.checked)" :aria-label="t('responses.selectResponse', {id:shortId(r.id)})"></td>
+                <td v-if="batchSelectResponseMode"><div class="workspace-row-primary"><input type="checkbox" :value="r.id" :checked="selectedResponses.includes(r.id)" @change="toggleSelection(r.id, $event.target.checked)" :aria-label="t('responses.selectResponse', {id:shortId(r.id)})"></div></td>
                 <td class="list-identity-cell">
-                  <div class="list-record-name">{{r.description||t('responses.noDescription')}}</div>
+                  <div class="list-record-name workspace-row-primary">{{r.description||t('responses.noDescription')}}</div>
                   <div class="list-identity-secondary response-identity-meta">
                     <button type="button" class="list-id-copy" @click.stop="$emit('clip-copy',String(r.id))" @dblclick.stop :aria-label="t('rules.copyId')+' '+r.id" :title="String(r.id)">#{{r.id}}<i class="bi bi-copy" aria-hidden="true"></i></button>
                     <span class="response-compact-details">· {{r.contentType==='SSE'?'SSE':t('responses.typeGeneral')}} · {{fmtSize(r.bodySize)}}</span>
-                    <span class="response-mobile-state">· {{r.usageCount?t('responses.usageCount',{count:r.usageCount}):t('responses.notUsed')}}</span>
+                    <button v-if="r.usageCount" type="button" class="response-mobile-state response-mobile-reference-control"
+                      @click.stop="$emit('toggle-response-rules', r)" @dblclick.stop
+                      :title="t('responses.viewLinkedRules', {count:r.usageCount})"
+                      :aria-label="t('responses.viewLinkedRules', {count:r.usageCount})"
+                      :aria-expanded="!!r.expanded" :aria-controls="r.expanded?'response-rules-'+r.id:undefined">
+                      <span aria-hidden="true">·</span><span>{{t('responses.referenceRules')}}</span><strong class="tabular-nums">{{r.usageCount}}</strong>
+                      <i class="bi" :class="r.expanded?'bi-chevron-up':'bi-chevron-down'" aria-hidden="true"></i>
+                    </button>
+                    <span v-else class="response-mobile-state">· {{t('responses.notUsed')}}</span>
                     <span class="response-mobile-updated">· {{fmtTime(r.updatedAt)}}</span>
                   </div>
                 </td>
-                <td class="col-hide-md">
+                <td class="col-hide-md"><div class="workspace-row-primary">
                   <ui-badge v-if="r.contentType==='SSE'" class="badge badge-sse">SSE</ui-badge>
                   <span v-else class="response-type-text">{{t('responses.typeGeneral')}}</span>
+                </div>
                 </td>
-                <td class="col-hide-md"><span class="sub-info">{{fmtSize(r.bodySize)}}</span></td>
+                <td class="col-hide-md"><span class="sub-info workspace-row-primary">{{fmtSize(r.bodySize)}}</span></td>
                 <td class="response-usage-column col-hide-sm">
                   <button v-if="r.usageCount" type="button" class="response-reference-control" @click.stop="$emit('toggle-response-rules', r)" @dblclick.stop
                     :title="t('responses.viewLinkedRules', {count:r.usageCount})" :aria-label="t('responses.viewLinkedRules', {count:r.usageCount})"
                     :aria-expanded="!!r.expanded" :aria-controls="r.expanded?'response-rules-'+r.id:undefined">
                     <span>{{t('responses.referenceRules')}}</span><strong class="tabular-nums">{{r.usageCount}}</strong><i class="bi" :class="r.expanded?'bi-chevron-up':'bi-chevron-down'" aria-hidden="true"></i>
                   </button>
-                  <span v-else class="response-usage-state is-unused">{{t('responses.notUsed')}}<small v-if="daysLeft(r.updatedAt, r.extendedAt, status?.responseRetentionDays) != null">{{t('responses.orphanDaysLeft', {days: daysLeft(r.updatedAt, r.extendedAt, status?.responseRetentionDays)})}}</small></span>
+                  <span v-else class="response-usage-state is-unused"><span class="workspace-row-primary">{{t('responses.notUsed')}}</span><small v-if="daysLeft(r.updatedAt, r.extendedAt, status?.responseRetentionDays) != null">{{t('responses.orphanDaysLeft', {days: daysLeft(r.updatedAt, r.extendedAt, status?.responseRetentionDays)})}}</small></span>
                 </td>
-                <td class="col-datetime col-hide-md"><span class="sub-info" :title="fmtTime(r.createdAt,false)">{{fmtTime(r.createdAt)}}</span></td>
-                <td class="col-datetime col-hide-md"><span class="sub-info" :title="fmtTime(r.updatedAt,false)">{{fmtTime(r.updatedAt)}}</span></td>
+                <td class="col-datetime col-hide-md"><span class="sub-info workspace-row-primary" :title="fmtTime(r.createdAt,false)">{{fmtTime(r.createdAt)}}</span></td>
+                <td class="col-datetime col-hide-md"><span class="sub-info workspace-row-primary" :title="fmtTime(r.updatedAt,false)">{{fmtTime(r.updatedAt)}}</span></td>
                 <td class="col-actions col-actions-3">
-                  <div class="table-row-actions">
+                  <div class="table-row-actions workspace-row-primary workspace-row-primary-end">
                     <ui-button class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('open-response-modal', r)" :title="t('responses.edit')" :aria-label="t('responses.edit')" :disabled="!isLoggedIn"><i class="bi bi-pencil"></i></ui-button>
                     <ui-button v-if="!r.usageCount && daysLeft(r.updatedAt, r.extendedAt, status?.responseRetentionDays) != null" class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('extend-response', r.id)" :title="t('responses.clickExtend')" :aria-label="t('responses.clickExtend')" :disabled="!isLoggedIn"><i class="bi bi-clock-history"></i></ui-button>
                     <span v-else class="response-action-spacer" aria-hidden="true"></span>

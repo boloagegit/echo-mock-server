@@ -56,6 +56,13 @@ const AuditPage = {
   },
   methods: {
     shortId, fmtTime,
+    auditActionLabel(action) {
+      return ({
+        CREATE: this.t('audit.actionCreate'),
+        UPDATE: this.t('audit.actionUpdate'),
+        DELETE: this.t('audit.actionDelete'),
+      })[action] || action;
+    },
     syncAuditViewportWidth() {
       this.auditViewportWidth = window.innerWidth;
     },
@@ -116,7 +123,7 @@ const AuditPage = {
             <span class="sk sk-btn"></span>
           </div>
         </div>
-        <table v-if="pagedAudit.length" class="table-fixed workspace-table audit-list-table">
+        <table v-if="pagedAudit.length" class="table-fixed workspace-table workspace-primary-aligned-table audit-list-table">
           <thead><tr>
             <th class="col-datetime audit-time-column" :aria-sort="auditSort.field==='timestamp'?(auditSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('audit.thTime')" :active="auditSort.field==='timestamp'" :ascending="auditSort.asc" @toggle="$emit('toggle-audit-sort','timestamp')"></ui-table-sort-header></th>
             <th class="table-audit-action-column audit-action-column" :aria-sort="auditSort.field==='action'?(auditSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('audit.thAction')" :active="auditSort.field==='action'" :ascending="auditSort.asc" @toggle="$emit('toggle-audit-sort','action')"></ui-table-sort-header></th>
@@ -127,10 +134,10 @@ const AuditPage = {
           <tbody>
             <template v-for="log in pagedAudit" :key="log.id">
               <tr @click="$emit('toggle-audit-detail', log)" class="row-clickable" :class="{active:selectedAudit===log.id}">
-                <td class="col-datetime audit-time-column"><span class="sub-info" :title="fmtTime(log.timestamp,false)">{{fmtTime(log.timestamp)}}</span></td>
-                <td class="audit-action-column"><ui-badge class="badge" :class="'badge-'+log.action?.toLowerCase()">{{log.action}}</ui-badge><span v-if="getAuditChangeCount(log)" class="sub-info audit-change-count">{{getAuditChangeCount(log)}}</span></td>
+                <td class="col-datetime audit-time-column"><span class="sub-info workspace-row-primary" :title="fmtTime(log.timestamp,false)">{{fmtTime(log.timestamp)}}</span></td>
+                <td class="audit-action-column"><div class="workspace-row-primary"><ui-badge class="badge" :class="'badge-'+log.action?.toLowerCase()">{{auditActionLabel(log.action)}}</ui-badge></div><span v-if="getAuditChangeCount(log)" class="sub-info audit-change-count">{{getAuditChangeCount(log)}}</span></td>
                 <td class="list-identity-cell audit-target-column">
-                  <div class="list-record-name" :title="(log.beforeJson||log.afterJson)?getAuditTarget(log):log.ruleId">{{(log.beforeJson||log.afterJson)?getAuditTarget(log):(log.ruleId?.startsWith('response-')?t('audit.typeResponse'):t('audit.typeRule'))}}</div>
+                  <div class="list-record-name workspace-row-primary" :title="(log.beforeJson||log.afterJson)?getAuditTarget(log):log.ruleId">{{(log.beforeJson||log.afterJson)?getAuditTarget(log):(log.ruleId?.startsWith('response-')?t('audit.typeResponse'):t('audit.typeRule'))}}</div>
                   <div class="list-identity-secondary">
                     <span v-if="log.beforeJson||log.afterJson">{{log.ruleId?.startsWith('response-')?t('audit.typeResponse'):t('audit.typeRule')}}</span>
                     <a v-if="log.action!=='DELETE'" href="#" class="list-inline-id" :title="log.ruleId" @click.stop.prevent="log.ruleId?.startsWith('response-')?$emit('go-to-response',log.ruleId):$emit('go-to-rule',log.ruleId)">{{log.ruleId?.startsWith('response-')?log.ruleId.replace('response-',''):shortId(log.ruleId)}}</a>
@@ -139,8 +146,8 @@ const AuditPage = {
                     <span v-if="!log.beforeJson && !log.afterJson">{{t('auditValues.expandForDetail')}}</span>
                   </div>
                 </td>
-                <td class="col-hide-md"><span class="sub-info">{{log.operator}}</span></td>
-                <td class="col-actions col-actions-1 audit-disclosure-column"><ui-button class="btn btn-sm btn-icon btn-secondary" :title="selectedAudit===log.id?t('audit.collapse'):t('audit.expand')" :aria-label="selectedAudit===log.id?t('audit.collapse'):t('audit.expand')" :aria-expanded="selectedAudit===log.id" :aria-controls="selectedAudit===log.id?'audit-detail-'+log.id:undefined"><i class="bi" :class="selectedAudit===log.id?'bi-chevron-up':'bi-chevron-down'"></i></ui-button></td>
+                <td class="col-hide-md"><span class="sub-info workspace-row-primary">{{log.operator}}</span></td>
+                <td class="col-actions col-actions-1 audit-disclosure-column"><div class="workspace-row-primary workspace-row-primary-end"><ui-button class="btn btn-sm btn-icon btn-secondary" :title="selectedAudit===log.id?t('audit.collapse'):t('audit.expand')" :aria-label="selectedAudit===log.id?t('audit.collapse'):t('audit.expand')" :aria-expanded="selectedAudit===log.id" :aria-controls="selectedAudit===log.id?'audit-detail-'+log.id:undefined"><i class="bi" :class="selectedAudit===log.id?'bi-chevron-up':'bi-chevron-down'"></i></ui-button></div></td>
               </tr>
               <Transition name="ui-detail-row-motion">
               <tr v-if="selectedAudit===log.id" :id="'audit-detail-'+log.id" class="rule-preview-row">

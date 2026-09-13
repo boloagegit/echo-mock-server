@@ -203,6 +203,9 @@
     "applyUpdatedCanonical": "更新完成；resourceVersion 已同步為最新值。",
     "applyLoadFailed": "無法載入規則 JSON，請重新整理後再試。",
     "applyInvalidJson": "JSON 格式不正確。請檢查逗號、括號與引號。",
+    "applyReplaceDraftTitle": "以表單內容取代宣告式草稿？",
+    "applyReplaceDraftMessage": "你修改了表單，但先前的宣告式草稿尚未同步。繼續會以目前表單內容取代該草稿。",
+    "applyReplaceDraftConfirm": "取代草稿",
     "applyDocumentRequired": "請輸入規則 JSON。",
     "applyApiVersion": "apiVersion 必須是 {value}。",
     "applyKind": "kind 必須是 {value}。",
@@ -389,6 +392,9 @@
     "forwardFailed": "失敗",
     "unmatched": "未匹配",
     "deleted": "(已刪除)",
+    "deletedRuleDescription": "匹配的規則已刪除",
+    "defaultForwardDescription": "未匹配規則，轉發至預設下游",
+    "unmatchedDescription": "未匹配任何規則",
     "hostLabel": "主機",
     "forwardTargetLabel": "下游",
     "clickExpandTrace": "展開匹配追蹤",
@@ -838,6 +844,7 @@
     "forwardOriginalHost": "X-Original-Host（不指定已儲存連線）",
     "forwardDefaultConnection": "預設 HTTP 連線",
     "forwardDefaultJmsConnection": "預設 JMS 連線",
+    "forwardSpecificConnection": "指定連線 #{id}",
     "forwardDefaultMissing": "尚未設定預設連線",
     "connectionDisabled": "已停用",
     "forwardTarget": "轉發目標",
@@ -1198,16 +1205,16 @@
     "progress": "第 {current} 步，共 {total} 步"
   },
   "reasonText": {
-    "match": "✓ 匹配",
+    "match": "匹配",
     "disabled": "停用",
     "condition_not_match": "條件不符",
     "fallback": "後備規則",
     "skipped": "跳過",
     "nearMiss": "近似匹配",
-    "shadowed": "◌ 被遮蔽",
-    "mismatch": "✗ 不匹配",
+    "shadowed": "被遮蔽",
+    "mismatch": "不匹配",
     "scenarioStateMismatch": "情境狀態不符",
-    "scenario_state_mismatch": "⊘ 狀態不符"
+    "scenario_state_mismatch": "狀態不符"
   },
   "auditFields": {
     "matchKey": "端點路徑",
@@ -1233,7 +1240,12 @@
     "contentType": "內容類型",
     "groupId": "群組",
     "name": "名稱",
-    "sseEvents": "SSE 事件"
+    "sseEvents": "SSE 事件",
+    "action": "規則行為",
+    "faultType": "故障類型",
+    "forwardTargetMode": "轉發目標模式",
+    "httpTargetConnectionId": "HTTP 連線 ID",
+    "jmsTargetConnectionId": "JMS 連線 ID"
   },
   "auditValues": {
     "empty": "(空)",
@@ -1242,7 +1254,16 @@
     "unknown": "(未知)",
     "parseError": "(解析錯誤)",
     "typePrefix": "類型: ",
-    "expandForDetail": "（展開查看變更）"
+    "expandForDetail": "（展開查看變更）",
+    "modeMock": "模擬回應",
+    "modeForward": "轉發下游",
+    "modeFault": "故障注入",
+    "faultNone": "無",
+    "faultConnectionReset": "連線重置",
+    "faultEmptyResponse": "空回應",
+    "targetOriginalHost": "依 X-Original-Host",
+    "targetDefaultConnection": "預設連線",
+    "targetSavedConnection": "指定連線"
   },
   "filterChips": {
     "protocol": "協定: ",
@@ -1287,7 +1308,7 @@
     "queryConditionsLabel": "查詢參數條件",
     "requestHeadersLabel": "請求標頭",
     "headerConditionsLabel": "標頭條件（不分大小寫）",
-    "diagramPriority": "規則排序（數值越大越優先）\n1. priority 欄位值\n2. 精確路徑優先於萬用路徑（*）\n3. 指定 targetHost 優先於未指定\n4. 建立時間較新者優先\n\n匹配流程\n1. 依排序逐一檢查規則\n2. 有條件且命中 → 立即回傳\n3. 無條件 → 記為後備規則\n4. 全部未命中時回傳後備規則",
+    "diagramPriority": "規則排序\n1. 精確路徑優先於萬用路徑（*）\n2. 同一路徑類型中，priority 數值越大越優先\n3. 指定 targetHost 優先於未指定\n4. 建立時間較新者優先\n\n匹配流程\n1. 依排序逐一檢查規則\n2. 有條件且命中 → 立即回傳\n3. 無條件 → 記為後備規則\n4. 全部未命中時回傳後備規則",
     "diagramCache": "實例 A（Caffeine）          實例 B（Caffeine）\n        │ 更新規則\n        ▼\ncache_events：寫入 RULE_CHANGED 事件\n        │ 每 5 秒輪詢\n        ▼\n找到事件 → 清除快取",
     "sseSequenceExample": "事件 1：{\"status\": \"processing\"}（延遲：0ms）\n事件 2：{\"progress\": 50}（延遲：1000ms）\n事件 3：{\"status\": \"done\"}（延遲：2000ms）",
     "title": "快速上手指南",

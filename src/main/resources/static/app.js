@@ -99,11 +99,15 @@ const _app = createApp({
             catch { /* localStorage may be unavailable; the editor remains fully usable. */ }
         };
         const ruleEditorMode = ref('form');
+        // Preserve a declarative draft when the form has not changed between visits.
+        const ruleApplyFormSource = ref('');
+        const ruleApplyDraftBaseline = ref('');
         // 規則管理（useRules composable）
         const rulesCtx = useRules({ showToast, showConfirm, t, requireLogin, login, isLoggedIn, loading, page, httpLabel, jmsLabel, ruleDragSortEnabled, openEdit: r => openEdit(r) });
         const { rules, ruleFilter, ruleSort, rulePage, rulePageSize, ruleTotalElements, filteredRules, pagedRules, ruleTotalPages, toggleRuleSort, ruleSortIcon, selectedRules, batchSelectMode, toggleSelectAll, ruleViewMode, expandedTagGroups, toggleTagGroup, expandedTagSubgroups, toggleTagSubgroup, tagKeys, rulesByTag, rulesByTagGroup, groupCounts, groupLoading, groupVisibleLimit, getGroupLimit, showMoreGroup, showAllGroup, loadRules, deleteRule, extendRule, toggleEnabled, exportRules, batchProtect, deleteSelectedRules, deleteAllRules, showImportModal, importFormat, importFile, importFileName, handleImportFile, doImport, rulePreviewCache, rulePreviewExpanded, rulePreviewLoading, rulePreviewError, toggleRulePreview, handleRuleRowClick, dragState, canDragRules, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd, dragRowClass, ruleFilterChips, removeRuleChip, clearRuleFilters, showPriorityHelp, helpTab, clipCopy, exportRuleJson, goToRule, showDataDropdown, toggleDataDropdown, closeDataDropdown, triggerResponseImport, showOpenApiPreview, openApiPreviewTitle, openApiPreviewVersion, openApiPreviewRules, openApiImporting, confirmOpenApiImport } = rulesCtx;
         const ruleApplyCtx = useRuleApply({ showToast, showConfirm, t, requireLogin, login, loadRules, markRulesDirty: rulesCtx.markDirty, scenariosEnabled });
-        const { ruleApplyText, ruleApplyLoading, ruleApplySaving, ruleApplyError, ruleApplyOperation, ruleApplySchema, ruleApplySchemaError, ruleApplySystemFields, ruleApplyValidationErrors, createDocumentFromForm, createFormDraftFromDocument, setRuleApplyDocument, updateRuleApplyText, readRuleApplyDocument, resetRuleApply, loadRuleApplySchema, replaceRuleApplyTemplate, applyRuleDocument } = ruleApplyCtx;
+        const { ruleApplyText, ruleApplyLoading, ruleApplySaving, ruleApplyError, ruleApplyOperation, ruleApplySchema, ruleApplySchemaError, ruleApplySystemFields, ruleApplyValidationErrors: rawRuleApplyValidationErrors, ruleApplyValidationVisible, createDocumentFromForm, createFormDraftFromDocument, setRuleApplyDocument, updateRuleApplyText, readRuleApplyDocument, resetRuleApply, loadRuleApplySchema, replaceRuleApplyTemplate, applyRuleDocument } = ruleApplyCtx;
+        const ruleApplyValidationErrors = computed(() => ruleApplyValidationVisible.value ? rawRuleApplyValidationErrors.value : []);
         // 回應管理（useResponses composable）
         const responsesCtx = useResponses({ showToast, showConfirm, t, requireLogin, loading, page, onRulesDirty: () => { rulesCtx.markDirty(); loadRules(true); }, onResponseSaved: () => { rulePreviewCache.value = {}; } });
         const { responseSummary, responseOptions, responseFilter, responseSort, responsePage, responsePageSize, responseTotalElements, filteredResponseSummary, pagedResponseSummary, responseTotalPages, toggleResponseSort, responseSortIcon, onResponsePageSizeChange, showResponseModal, editingResponse, responseForm, responseSseEvents, loadResponseSummary, loadResponseOptions, openResponseModal, saveResponse, deleteResponse, selectedResponses, batchSelectResponseMode, toggleSelectAllResponses, exportResponses, importResponses, deleteSelectedResponses, deleteAllResponses, toggleResponseRules, responseUsageFilter: responseUsageFilter, responseContentTypeFilter, responseFilterChips, removeResponseChip, clearResponseFilters, goToResponse, showResponseDataDropdown, toggleResponseDataDropdown, closeResponseDataDropdown, triggerResponseImport2, extendResponse, deleteOrphanResponses } = responsesCtx;
@@ -143,6 +147,8 @@ const _app = createApp({
         };
         const openRuleEditor = async (openForm, preferredMode = readRuleEditorModePreference()) => {
             ruleEditorMode.value = 'form';
+            ruleApplyFormSource.value = '';
+            ruleApplyDraftBaseline.value = '';
             resetRuleApply();
             await openForm();
             if (showModal.value) { await restoreRuleEditorMode(preferredMode); }
@@ -154,6 +160,8 @@ const _app = createApp({
         const createFromLog = rule => openRuleEditor(() => createFromLogForm(rule));
         const closeModal = () => {
             ruleEditorMode.value = 'form';
+            ruleApplyFormSource.value = '';
+            ruleApplyDraftBaseline.value = '';
             resetRuleApply();
             closeRuleFormModal();
         };
@@ -175,45 +183,69 @@ const _app = createApp({
             if (mode === ruleEditorMode.value) { return; }
             if (mode === 'declarative') {
                 if (!await loadRuleApplySchema()) { return; }
-                setRuleApplyDocument(createDocumentFromForm({
+                const source = createDocumentFromForm({
                     form: form.value,
                     conditions: conditions.value,
                     editing: editing.value,
                     responseBody: currentRuleResponseBody()
-                }));
+                });
+                const signature = JSON.stringify(source);
+                if (signature !== ruleApplyFormSource.value || !ruleApplyText.value) {
+                    if (ruleApplyText.value && ruleApplyText.value !== ruleApplyDraftBaseline.value) {
+                        const replaceDraft = await showConfirm({
+                            title: t('rules.applyReplaceDraftTitle'),
+                            message: t('rules.applyReplaceDraftMessage'),
+                            confirmText: t('rules.applyReplaceDraftConfirm')
+                        });
+                        if (!replaceDraft) { return false; }
+                    }
+                    setRuleApplyDocument(source);
+                    ruleApplyFormSource.value = signature;
+                    ruleApplyDraftBaseline.value = ruleApplyText.value;
+                }
                 ruleEditorMode.value = 'declarative';
                 rememberRuleEditorMode('declarative');
                 return true;
             }
 
-            const document = readRuleApplyDocument();
-            if (!document) { return false; }
-            try {
-                const draft = createFormDraftFromDocument(document, {
-                    currentForm: form.value,
-                    existingResponseBody: previewResponseBody.value,
-                    existingResponseLoaded: Boolean(form.value.responseId)
-                        && previewResponseId.value === form.value.responseId
-                        && !previewResponseLoading.value
-                        && !previewResponseLoadFailed.value
-                });
-                form.value = draft.form;
-                conditions.value = draft.conditions;
-                sseEvents.value = draft.sseEvents;
-                editing.value = draft.identity;
-                if (form.value.protocol === 'HTTP') { loadHttpTargetConnections(); }
-                ruleEditorMode.value = 'form';
-                rememberRuleEditorMode('form');
-                Vue.nextTick(() => {
-                    if (form.value.responseMode === 'new' && !form.value.sseEnabled) {
-                        renderEditor('edit', editEditorRef, form.value.responseBody, false, value => { form.value.responseBody = value; });
-                    }
-                });
-                return true;
-            } catch {
-                ruleApplyError.value = t('rules.applyValidationFailed');
-                return false;
+            // Mode switching is not a save: an incomplete or malformed document must not
+            // prevent returning to the original form draft.
+            const document = readRuleApplyDocument({ validate: false });
+            const canSync = document && rawRuleApplyValidationErrors.value.every(error => error.code === 'REQUIRED');
+            if (canSync) {
+                try {
+                    const draft = createFormDraftFromDocument(document, {
+                        currentForm: form.value,
+                        existingResponseBody: previewResponseBody.value,
+                        existingResponseLoaded: Boolean(form.value.responseId)
+                            && previewResponseId.value === form.value.responseId
+                            && !previewResponseLoading.value
+                            && !previewResponseLoadFailed.value
+                    });
+                    form.value = draft.form;
+                    conditions.value = draft.conditions;
+                    sseEvents.value = draft.sseEvents;
+                    editing.value = draft.identity;
+                    if (form.value.protocol === 'HTTP') { loadHttpTargetConnections(); }
+                    ruleApplyFormSource.value = JSON.stringify(createDocumentFromForm({
+                        form: form.value,
+                        conditions: conditions.value,
+                        editing: editing.value,
+                        responseBody: currentRuleResponseBody()
+                    }));
+                    ruleApplyDraftBaseline.value = ruleApplyText.value;
+                    Vue.nextTick(() => {
+                        if (form.value.responseMode === 'new' && !form.value.sseEnabled) {
+                            renderEditor('edit', editEditorRef, form.value.responseBody, false, value => { form.value.responseBody = value; });
+                        }
+                    });
+                } catch {
+                    // Retain the last usable form draft and the declarative text for recovery.
+                }
             }
+            ruleEditorMode.value = 'form';
+            rememberRuleEditorMode('form');
+            return true;
         };
         const applyRuleSettings = async () => {
             const result = await applyRuleDocument();

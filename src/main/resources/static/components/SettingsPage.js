@@ -457,7 +457,7 @@ const SettingsPage = {
                   <ui-badge v-if="target.defaultConnection" tone="accent">{{t('settings.httpTargetDefault')}}</ui-badge>
                   <ui-badge :tone="target.tlsVerificationEnabled?'success':'neutral'">{{target.tlsVerificationEnabled?t('settings.tlsModeStrict'):t('settings.tlsModeCompatibility')}}</ui-badge>
                   <span v-if="target.secretConfigured"><i class="bi bi-key"></i></span>
-                </div><div class="sub-info">{{target.authType}} · {{target.connectTimeoutSeconds}}s / {{target.readTimeoutSeconds}}s</div></div>
+                </div><div class="sub-info">{{target.authType==='NONE'?t('settings.authNone'):target.authType==='BASIC'?t('settings.authBasic'):t('settings.authBearerToken')}} · {{target.connectTimeoutSeconds}}s / {{target.readTimeoutSeconds}}s</div></div>
               <div class="connection-details">
                 <div class="settings-value-sm connection-address">{{target.baseUrl}}</div>
 
@@ -504,7 +504,7 @@ const SettingsPage = {
                   <ui-badge v-else-if="target.defaultConnection" :tone="yamlJmsTargetConfigured?'neutral':'accent'">{{t(yamlJmsTargetConfigured?'settings.jmsTargetFallbackDefault':'settings.jmsTargetDefault')}}</ui-badge>
                   <span v-if="target.passwordConfigured"><i class="bi bi-key"></i></span>
                 </div>
-                <div class="sub-info">{{target.providerType.toUpperCase()}} · {{target.queueName}}</div>
+                <div class="sub-info connection-queue">{{target.providerType.toUpperCase()}} · {{target.queueName}}</div>
               </div>
               <div class="connection-details">
                 <div class="settings-value-sm connection-address">{{target.serverUrl}}</div>
@@ -528,7 +528,7 @@ const SettingsPage = {
               </div>
             </div>
             <div class="connection-guidance">
-              <div v-if="jmsTargets.length"><span class="connection-guidance-label">{{t('settings.connectionSourceLabel')}}</span><span v-if="activeJmsTarget"><strong>{{jmsTargetDisplayName(activeJmsTarget)}}</strong> · {{activeJmsTarget.serverUrl}} · {{activeJmsTarget.queueName}}</span><span v-else>{{t('settings.jmsTargetNoDefault')}}</span></div>
+              <div v-if="jmsTargets.length"><span class="connection-guidance-label">{{t('settings.connectionSourceLabel')}}</span><span v-if="activeJmsTarget" class="connection-source-value"><strong>{{jmsTargetDisplayName(activeJmsTarget)}}</strong> · {{activeJmsTarget.serverUrl}} · {{activeJmsTarget.queueName}}</span><span v-else>{{t('settings.jmsTargetNoDefault')}}</span></div>
               <div><span class="connection-guidance-label">{{t('settings.connectionPriorityLabel')}}</span><span>{{t('settings.jmsTargetPriorityHint')}}</span></div>
               <div><span class="connection-guidance-label">{{t('settings.connectionApplyLabel')}}</span><span>{{t('settings.jmsTargetSwitchHint')}}</span></div>
               <div><span class="connection-guidance-label">{{t('settings.connectionReconnectLabel')}}</span><span>{{t('settings.jmsTargetReconnectHint')}}</span></div>

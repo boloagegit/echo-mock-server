@@ -19,6 +19,16 @@ class ListRefinementResourceTest {
                 .contains("--radius-panel: 8px;")
                 .contains("--control-h: 36px;")
                 .contains("--toolbar-h: 32px;")
+                .contains("--font-xs: 12px;")
+                .contains("--font-sm: 13px;")
+                .contains("--font-base: 14px;")
+                .contains("--font-md: var(--font-base);")
+                .contains("--font-lg: 22px;")
+                .contains("--font-weight-regular: 400;")
+                .contains("--font-weight-medium: 500;")
+                .contains("--font-weight-semibold: 600;")
+                .contains("--font-weight-bold: 700;")
+                .contains(".workspace-row-primary {\n    min-width: 0;\n    min-height: var(--workspace-row-primary-h);\n    display: flex;\n    align-items: center;\n    line-height: 20px;")
                 .contains(".btn-sm { min-height: var(--control-h-sm);")
                 .contains(".btn-xs { min-height: var(--control-h-sm);")
                 .contains(".btn-icon { padding: 0.3rem; width: var(--control-h); height: var(--control-h);")
@@ -42,7 +52,10 @@ class ListRefinementResourceTest {
                 .contains(".connection-form-modal .modal-close:focus-visible { outline: 0;")
                 .contains("th { height: 40px;")
                 .contains("transition-property: background-color, border-color, color, box-shadow, transform;")
-                .contains(".btn:active:not(:disabled) { transform: scale(0.96) }");
+                .contains(".btn:active:not(:disabled) { transform: scale(0.96) }")
+                .contains(".rule-endpoint-main code { min-width: 0; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: var(--font-base); font-weight: var(--font-weight-medium) }")
+                .doesNotContain("font-weight: 550")
+                .doesNotContain("font-weight: 650");
         assertThat(theme)
                 .contains("--primary-strong: #174b87;")
                 .contains("--success-strong: #145f3a;")
@@ -258,6 +271,91 @@ class ListRefinementResourceTest {
     }
 
     @Test
+    void rulePreviewUsesTheSharedDenseInformationLayout() throws IOException {
+        String css = text("style.css");
+        for (String page : new String[]{"RulesPage", "RuleGroupRow"}) {
+            assertThat(text("components/" + page + ".js"))
+                    .as(page + " rule preview hierarchy")
+                    .contains("class=\"pv-header-context\"")
+                    .contains("shortId(rulePreviewCache[")
+                    .contains("class=\"pv-field pv-field-wide\"")
+                    .contains("class=\"pv-main\"")
+                    .contains("class=\"pv-body ui-detail-panel\"");
+        }
+        assertThat(css)
+                .contains(".pv-header-context {")
+                .contains("border-bottom: 1px solid var(--separator);")
+                .contains("grid-template-columns: minmax(280px, 0.9fr) minmax(360px, 1.35fr);")
+                .contains("@container (min-width: 960px)")
+                .contains(".pv-fields > .pv-field-wide,")
+                .contains(".pv-fields,\n    .pv-body { padding: var(--space-sm) }");
+    }
+
+    @Test
+    void independentAcceptanceFindingsRemainFixed() throws IOException {
+        String help = text("components/PriorityHelpModal.js");
+        String settings = text("components/SettingsPage.js");
+        String css = text("style.css");
+        assertThat(help)
+                .contains("<h3>{{t('modal.condFieldQuery')}}</h3>")
+                .doesNotContain("<h3>{{t('help.condQuery')}}</h3>");
+        assertThat(settings)
+                .contains("target.authType==='NONE'?t('settings.authNone')")
+                .contains("target.authType==='BASIC'?t('settings.authBasic')")
+                .contains("t('settings.authBearerToken')")
+                .contains("class=\"sub-info connection-queue\"")
+                .contains("class=\"connection-source-value\"");
+        assertThat(css)
+                .contains(".pv-forward-target {")
+                .contains("overflow-wrap: anywhere;")
+                .contains(".connection-queue,\n.connection-source-value {")
+                .contains(".connection-name { min-width: 0; overflow-wrap: anywhere; white-space: normal;");
+
+        for (String locale : new String[]{"en.json", "zh-TW.json"}) {
+            var messages = new ObjectMapper().readTree(text("i18n/" + locale));
+            assertThat(messages.path("modal").path("forwardSpecificConnection").asText()).isNotBlank();
+            String priority = messages.path("help").path("diagramPriority").asText();
+            assertThat(priority.indexOf("1.")).isLessThan(priority.indexOf("2."));
+            assertThat(priority).contains(locale.startsWith("zh") ? "精確路徑" : "Exact paths");
+        }
+    }
+
+    @Test
+    void ruleRowsShareOneTopAlignmentSlotAcrossColumns() throws IOException {
+        assertThat(text("style.css"))
+                .contains("--rule-row-primary-h: 32px;")
+                .contains("min-height: var(--rule-row-primary-h);")
+                .contains(".rule-list-table td.col-cond > .cond-list,")
+                .contains(".rule-list-table td.col-priority .table-metadata,")
+                .contains(".rule-list-table td.col-datetime .table-date-stack > .sub-info:first-child,")
+                .contains(".rule-list-table td.rule-row-action-column .rule-row-actions {")
+                .contains("justify-content: center;");
+    }
+
+    @Test
+    void multiLineWorkspaceListsShareOnePrimaryAlignmentSlot() throws IOException {
+        String css = text("style.css");
+        assertThat(css)
+                .contains(".workspace-primary-aligned-table {")
+                .contains("--workspace-row-primary-h: 32px;")
+                .contains(".workspace-primary-aligned-table tbody > tr:not(.rule-preview-row):not(.audit-expand):not(.log-detail-row) > td {")
+                .contains("padding-block: var(--space-xs);")
+                .contains("vertical-align: top;")
+                .contains(".workspace-row-primary {")
+                .contains("min-height: var(--workspace-row-primary-h);")
+                .contains(".workspace-row-primary-end { justify-content: flex-end }");
+
+        for (String page : new String[]{"ResponsesPage", "StatsPage", "AuditPage", "IssuesPage", "AccountsPage"}) {
+            assertThat(text("components/" + page + ".js"))
+                    .as(page + " aligned list rows")
+                    .contains("workspace-primary-aligned-table")
+                    .contains("workspace-row-primary");
+        }
+        assertThat(text("components/SettingsPage.js"))
+                .doesNotContain("workspace-primary-aligned-table");
+    }
+
+    @Test
     void detailFinishingUsesSemanticLayoutHooksAndSelectedOnlyIndicators() throws IOException {
         String css = text("style.css");
         String segmentedControl = text("components/UiSegmentedControl.js");
@@ -417,9 +515,10 @@ class ListRefinementResourceTest {
                 .contains("toggle-response-sort', 'id'")
                 .contains("$emit('clip-copy',String(r.id))")
                 .contains("class=\"response-mobile-state\"")
+                .contains("class=\"response-mobile-state response-mobile-reference-control\"")
                 .contains("class=\"response-usage-state is-unused\"")
                 .contains("class=\"response-reference-control\"")
-                .contains("t('responses.usageCount',{count:r.usageCount})")
+                .contains("@click.stop=\"$emit('toggle-response-rules', r)\"")
                 .contains("t('responses.referenceRules')")
                 .contains("t('responses.orphanDaysLeft'")
                 .contains("responseViewportWidth: window.innerWidth")
@@ -440,11 +539,26 @@ class ListRefinementResourceTest {
                 .contains("class=\"rule-row-more-popover\"")
                 .doesNotContain("invoke('toggle-rule-preview',$event)");
         assertThat(text("components/RulesPage.js"))
-                .contains("class=\"cond-more\"");
+                .contains("class=\"cond-more\"")
+                .contains("class=\"cond-pill-val\"");
         assertThat(text("components/RuleGroupRow.js"))
-                .contains("class=\"cond-more\"");
+                .contains("class=\"cond-more\"")
+                .contains("class=\"cond-pill-val\"");
+        assertThat(text("components/RuleListParts.js"))
+                .contains("class=\"rule-method-slot\"")
+                .contains("class=\"rule-endpoint-flags\"")
+                .contains("class=\"rule-endpoint-details\"")
+                .contains("class=\"rule-technical-meta\"")
+                .contains("class=\"list-id-copy rule-responsive-id\"")
+                .contains("class=\"rule-compact-flags\"")
+                .contains("{{fmtTime(rule.updatedAt)}}");
         assertThat(text("components/StatsPage.js"))
+                .contains("class=\"log-request-description\"")
+                .contains("forwardTargetName(item.log.forwardTarget)")
                 .contains("class=\"log-responsive-duration tabular-nums\"")
+                .contains("class=\"log-time-cell\"")
+                .contains("class=\"col-hide-md log-duration-cell\"")
+                .contains("return this.compactLogTable ? 4 : 5;")
                 .contains("class=\"col-actions col-actions-1\"")
                 .contains("<span class=\"rule-protocol\">{{item.log.protocol}}</span>")
                 .contains("class=\"badge badge-method\"")
@@ -457,10 +571,17 @@ class ListRefinementResourceTest {
         assertThat(text("style.css"))
                 .contains("Unified high-density list language")
                 .contains(".rule-row-action-column { width: 176px }")
+                .contains("grid-template-columns: 40px 56px minmax(0, 1fr) max-content")
+                .contains(".rule-list-table .rule-endpoint-main {\n    min-height: var(--rule-row-primary-h);")
                 .contains(".response-usage-column { width: 156px }")
                 .contains("grid-template-columns: repeat(3, 32px)")
-                .contains(".logs-table .log-duration-column { text-align: end }")
-                .contains(".logs-table .col-actions-1 { text-align: end }");
+                .contains(".log-request-primary { display: grid; grid-template-columns: 40px 56px minmax(0, 1fr);")
+                .contains(".logs-table .log-time-column { width: 104px }")
+                .contains(".logs-table .log-duration-column { width: 88px; text-align: end }")
+                .contains(".logs-table .col-actions-1 { text-align: end }")
+                .contains("grid-template-columns: max-content minmax(180px, 260px) minmax(240px, 1fr);")
+                .contains(".logs-table,\n    .logs-table thead,\n    .logs-table tbody {\n        display: block;")
+                .contains(".response-mobile-reference-control {");
     }
 
     @Test
@@ -478,8 +599,15 @@ class ListRefinementResourceTest {
         assertThat(text("components/AuditPage.js"))
                 .contains(":aria-expanded=\"selectedAudit===log.id\"")
                 .contains(":id=\"'audit-detail-'+log.id\"")
+                .contains("{{auditActionLabel(log.action)}}")
                 .contains("auditViewportWidth: window.innerWidth")
                 .contains(":colspan=\"auditDetailColspan\"");
+        assertThat(text("composables/useAudit.js"))
+                .contains("createdBy', 'updatedBy'")
+                .contains("action: t('auditFields.action')")
+                .contains("faultType: t('auditFields.faultType')")
+                .contains("forwardTargetMode: t('auditFields.forwardTargetMode')")
+                .contains("enumLabels[key]?.[s]");
         assertThat(text("components/IssuesPage.js"))
                 .contains("issueViewportWidth: window.innerWidth")
                 .contains(":colspan=\"issueDetailColspan\"");
@@ -505,9 +633,37 @@ class ListRefinementResourceTest {
                 .contains("<h2 id=\"helpModalTitle\"")
                 .doesNotContain("<h4>");
         assertThat(text("components/StatsPage.js"))
-                .contains("<h2 :id=\"'request-body-heading-'")
+                .contains("<h2 class=\"ui-detail-panel-heading\" :id=\"'request-body-heading-'")
                 .contains("getInputField()?.setAttribute(")
                 .contains("role=\"img\" :aria-label=\"t('stats.matchChainStep'");
+    }
+
+    @Test
+    void requestLogInspectorReusesRuleDetailPanelsAndTextOnlyOutcomes() throws IOException {
+        String stats = text("components/StatsPage.js");
+        String css = text("style.css");
+        assertThat(stats)
+                .contains("class=\"log-inspector-pane ui-detail-panel\"")
+                .contains("class=\"log-overview-section ui-detail-panel\"")
+                .contains("class=\"log-inspector-content log-inspector-trace ui-detail-panel\"")
+                .contains("class=\"pv-body-empty\"")
+                .doesNotContain("bi-check2-circle")
+                .doesNotContain("bi-x-circle")
+                .doesNotContain("reasonIcon(c.reason)");
+        assertThat(css)
+                .contains(".ui-detail-panel {")
+                .contains("border: 1px solid var(--separator);")
+                .contains("background: var(--surface-neutral-soft);")
+                .contains(".ui-detail-panel-heading {");
+        for (String language : new String[]{"zh-TW", "en"}) {
+            var labels = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readTree(text("i18n/" + language + ".json")).path("reasonText");
+            for (String reason : new String[]{"match", "nearMiss", "shadowed", "mismatch", "scenario_state_mismatch"}) {
+                assertThat(labels.path(reason).asText())
+                        .as(language + " " + reason + " is text-only")
+                        .doesNotContain("✓", "✗", "⚠", "◌", "⊘");
+            }
+        }
     }
 
     @Test
@@ -551,6 +707,23 @@ class ListRefinementResourceTest {
                 .doesNotContain("t('stats.pagination')");
         assertThat(text("components/AuditPage.js")).contains("t('audit.pagination')")
                 .doesNotContain("t('stats.pagination')");
+    }
+
+    @Test
+    void selectsRetainTheirChevronAndAuditDetailsUseLocalizedLabels() throws IOException {
+        String css = text("style.css");
+        assertThat(css)
+                .contains("select.form-control { cursor: pointer; appearance: none; background-image: url(")
+                .contains(".connection-form-modal .form-control {\n    border-color: var(--separator);\n    background-color: var(--surface-control);")
+                .doesNotContain(".connection-form-modal .form-control {\n    border-color: var(--separator);\n    background: var(--surface-control);");
+
+        for (String locale : new String[]{"en", "zh-TW"}) {
+            var messages = new ObjectMapper().readTree(text("i18n/" + locale + ".json"));
+            assertThat(messages.path("auditFields").path("action").asText()).isNotBlank();
+            assertThat(messages.path("auditFields").path("forwardTargetMode").asText()).isNotBlank();
+            assertThat(messages.path("auditValues").path("modeForward").asText()).isNotBlank();
+            assertThat(messages.path("auditValues").path("targetSavedConnection").asText()).isNotBlank();
+        }
     }
 
     @Test

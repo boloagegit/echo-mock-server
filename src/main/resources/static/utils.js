@@ -29,8 +29,11 @@ const forwardTargetLabel = rule => {
     const id = protocol === 'JMS'
         ? rule?.jmsTargetConnectionId
         : rule?.httpTargetConnectionId;
-    return id == null || id === '' ? '-' : '#' + id;
+    return id == null || id === ''
+        ? '-'
+        : _t('modal.forwardSpecificConnection', { id });
 };
+const forwardTargetEndpoint = rule => rule?._forwardTargetEndpoint || '';
 const debounce = (fn, delay = 300) => {
     let timer = null;
     const debounced = (...args) => { if (timer) { clearTimeout(timer); } timer = setTimeout(() => { fn(...args); timer = null; }, delay); };

@@ -182,18 +182,26 @@ const useAudit = (deps) => {
         tags: t('auditFields.tags'), sseEnabled: t('auditFields.sseEnabled'), sseLoopEnabled: t('auditFields.sseLoopEnabled'),
         responseId: t('auditFields.responseId'), queueName: t('auditFields.queueName'),
         correlationIdPattern: t('auditFields.correlationIdPattern'), body: t('auditFields.body'), contentType: t('auditFields.contentType'),
-        groupId: t('auditFields.groupId'), name: t('auditFields.name'), sseEvents: t('auditFields.sseEvents')
+        groupId: t('auditFields.groupId'), name: t('auditFields.name'), sseEvents: t('auditFields.sseEvents'),
+        action: t('auditFields.action'), faultType: t('auditFields.faultType'), forwardTargetMode: t('auditFields.forwardTargetMode'),
+        httpTargetConnectionId: t('auditFields.httpTargetConnectionId'), jmsTargetConnectionId: t('auditFields.jmsTargetConnectionId')
     });
 
-    const AUDIT_HIDDEN_FIELDS = new Set(['id', 'version', 'createdAt', 'updatedAt', 'extendedAt', 'bodySize', 'protocol', 'condition']);
+    const AUDIT_HIDDEN_FIELDS = new Set(['id', 'version', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'extendedAt', 'bodySize', 'protocol', 'condition']);
 
     const fieldLabel = (key) => AUDIT_FIELD_LABELS()[key] || key;
 
-    const formatFieldValue = (val) => {
+    const formatFieldValue = (key, val) => {
         if (val === null || val === undefined || val === '') { return t('auditValues.empty'); }
         if (typeof val === 'boolean') { return val ? t('auditValues.yes') : t('auditValues.no'); }
         if (typeof val === 'object') { return JSON.stringify(val, null, 2); }
         const s = String(val);
+        const enumLabels = {
+            action: { MOCK: t('auditValues.modeMock'), FORWARD: t('auditValues.modeForward'), FAULT: t('auditValues.modeFault') },
+            faultType: { NONE: t('auditValues.faultNone'), CONNECTION_RESET: t('auditValues.faultConnectionReset'), EMPTY_RESPONSE: t('auditValues.faultEmptyResponse') },
+            forwardTargetMode: { ORIGINAL_HOST: t('auditValues.targetOriginalHost'), DEFAULT: t('auditValues.targetDefaultConnection'), CONNECTION: t('auditValues.targetSavedConnection') }
+        };
+        if (enumLabels[key]?.[s]) { return enumLabels[key][s]; }
         try {
             const parsed = JSON.parse(s);
             if (typeof parsed === 'object' && parsed !== null) { return JSON.stringify(parsed, null, 2); }
@@ -217,7 +225,7 @@ const useAudit = (deps) => {
                     if (AUDIT_HIDDEN_FIELDS.has(key)) { continue; }
                     const bv = before[key], av = after[key];
                     if (JSON.stringify(bv) !== JSON.stringify(av)) {
-                        const b = formatFieldValue(bv), a = formatFieldValue(av);
+                        const b = formatFieldValue(key, bv), a = formatFieldValue(key, av);
                         changes.push({ label: fieldLabel(key), before: b, after: a, long: isLong(b) || isLong(a) });
                     }
                 }
@@ -230,7 +238,7 @@ const useAudit = (deps) => {
                 if (AUDIT_HIDDEN_FIELDS.has(key)) { continue; }
                 const val = obj[key];
                 if (val === null || val === undefined || val === '') { continue; }
-                const v = formatFieldValue(val);
+                const v = formatFieldValue(key, val);
                 fields.push({ label: fieldLabel(key), value: v, long: isLong(v) });
             }
             return { type: log.action === 'CREATE' ? 'create' : 'delete', changes: fields };
@@ -275,7 +283,14 @@ const useAudit = (deps) => {
     // --- Filter chips ---
     const auditFilterChips = computed(() => {
         const chips = [];
-        if (auditFilter.value.action) chips.push({ key: 'action', label: t('filterChips.action') + auditFilter.value.action });
+        if (auditFilter.value.action) {
+            const actionLabel = {
+                CREATE: t('audit.actionCreate'),
+                UPDATE: t('audit.actionUpdate'),
+                DELETE: t('audit.actionDelete')
+            }[auditFilter.value.action] || auditFilter.value.action;
+            chips.push({ key: 'action', label: t('filterChips.action') + actionLabel });
+        }
         if (auditFilter.value.operator) chips.push({ key: 'operator', label: t('filterChips.operator') + auditFilter.value.operator });
         if (auditFilter.value.keyword) chips.push({ key: 'keyword', label: t('filterChips.keyword') + auditFilter.value.keyword });
         return chips;

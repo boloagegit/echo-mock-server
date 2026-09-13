@@ -51,11 +51,15 @@ class SparseStateResourceTest {
 
     @Test
     void emptyLogBodyUsesTopAlignedMessageWithoutFullHeightInsetPanel() throws IOException {
+        assertThat(text("components/StatsPage.js"))
+                .contains("class=\"pv-body-empty\">{{t('stats.emptyRequestBody')}}")
+                .contains("class=\"pv-body-empty\">{{t('stats.emptyResponseBody')}}");
         String css = text("style.css");
-        int start = css.indexOf(".log-body-empty {");
+        int start = css.indexOf(".pv-body-empty {");
         String rule = css.substring(start, css.indexOf('}', start));
-        assertThat(rule).contains("flex: 0 0 auto").contains("justify-content: flex-start")
-                .doesNotContain("background:");
+        assertThat(rule).contains("padding: var(--space-sm) 0")
+                .doesNotContain("background:")
+                .doesNotContain("min-height:");
     }
 
     private static String text(String path) throws IOException {
