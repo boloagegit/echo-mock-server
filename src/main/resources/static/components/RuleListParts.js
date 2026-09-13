@@ -4,7 +4,7 @@ const RuleListIdentity = {
   props: { rule: Object, httpLabel: String, jmsLabel: String, status: Object },
   emits: ['clip-copy'],
   methods: {
-    shortId, parseTags, condTags,
+    shortId, parseTags, condTags, fmtTime,
     tagEntries(rule) {
       return Object.entries(parseTags(rule.tags));
     },
@@ -13,20 +13,26 @@ const RuleListIdentity = {
     <div class="list-identity">
       <div class="rule-endpoint-main">
         <span class="rule-protocol" :title="rule.protocol==='HTTP'?httpLabel:jmsLabel">{{rule.protocol}}</span>
-        <ui-badge v-if="rule.protocol==='HTTP'" class="badge badge-method">{{rule.method}}</ui-badge>
+        <span class="rule-method-slot"><ui-badge v-if="rule.protocol==='HTTP'" class="badge badge-method">{{rule.method}}</ui-badge></span>
         <code :title="rule.matchKey">{{rule.matchKey}}</code>
-        <i v-if="rule.isProtected" class="bi bi-shield-fill-check text-success" :title="t('rules.isProtected')" :aria-label="t('rules.isProtected')"></i>
-        <ui-badge v-if="rule.sseEnabled" class="badge badge-sse">SSE</ui-badge>
-        <ui-badge v-if="rule.action==='FORWARD'" class="badge badge-muted">{{t('rules.forward')}}</ui-badge>
-        <ui-badge v-if="rule.faultType && rule.faultType!=='NONE'" class="badge badge-muted" :title="t('rules.fault_'+rule.faultType)">{{t('rules.faultInjection')}}</ui-badge>
+        <span v-if="rule.isProtected || rule.sseEnabled || rule.action==='FORWARD' || (rule.faultType && rule.faultType!=='NONE')" class="rule-endpoint-flags">
+          <i v-if="rule.isProtected" class="bi bi-shield-fill-check text-success" :title="t('rules.isProtected')" :aria-label="t('rules.isProtected')"></i>
+          <ui-badge v-if="rule.sseEnabled" class="badge badge-sse">SSE</ui-badge>
+          <ui-badge v-if="rule.action==='FORWARD'" class="badge badge-muted">{{t('rules.forward')}}</ui-badge>
+          <ui-badge v-if="rule.faultType && rule.faultType!=='NONE'" class="badge badge-muted" :title="t('rules.fault_'+rule.faultType)">{{t('rules.faultInjection')}}</ui-badge>
+        </span>
       </div>
       <div class="list-identity-secondary">
-        <span v-if="rule.description" class="rule-description" :title="rule.description">{{rule.description}}</span>
-        <button type="button" class="list-id-copy" @click.stop="$emit('clip-copy',rule.id)" @dblclick.stop :title="rule.id" :aria-label="t('rules.copyId')+' '+rule.id">{{shortId(rule.id)}}<i class="bi bi-copy" aria-hidden="true"></i></button>
-        <span v-if="rule.targetHost && rule.targetHost!=='default'" class="rule-source-host" :title="t('rules.targetPrefix')+rule.targetHost"><span>{{t('rules.targetPrefix')}}</span><code>{{rule.targetHost}}</code></span>
-        <span v-if="status?.scenariosEnabled && rule.scenarioName" class="rule-scenario-meta" :title="t('rules.scenarioTooltip',{name:rule.scenarioName,required:rule.requiredScenarioState||'Started',newState:rule.newScenarioState||rule.requiredScenarioState||'Started'})"><i class="bi bi-diagram-3" aria-hidden="true"></i><code>{{rule.scenarioName}}</code></span>
-        <span v-if="tagEntries(rule).length" class="rule-tag-summary" :title="tagEntries(rule).map(([k,v])=>k+'='+v).join(', ')">{{tagEntries(rule)[0][0]}}:{{tagEntries(rule)[0][1]}}<span v-if="tagEntries(rule).length>1"> +{{tagEntries(rule).length-1}}</span></span>
-        <span class="rule-responsive-meta"><span class="rule-compact-condition" :title="condTags(rule).length?condTags(rule).map(c=>c.label+' '+c.v).join('; '):t('rules.noCondition')">{{condTags(rule).length ? condTags(rule)[0].label+' '+condTags(rule)[0].v : t('rules.noCondition')}}<span v-if="condTags(rule).length>1"> +{{condTags(rule).length-1}}</span> · P{{rule.priority ?? 0}}</span><span class="rule-compact-enabled"> · {{rule.enabled!==false?t('rules.filterEnabled'):t('rules.filterDisabled')}}</span></span>
+        <span class="rule-endpoint-details" :class="{'has-description':!!rule.description}">
+          <span v-if="rule.description" class="rule-description" :title="rule.description">{{rule.description}}</span>
+          <span class="rule-technical-meta">
+            <button type="button" class="list-id-copy" @click.stop="$emit('clip-copy',rule.id)" @dblclick.stop :title="rule.id" :aria-label="t('rules.copyId')+' '+rule.id">{{shortId(rule.id)}}<i class="bi bi-copy" aria-hidden="true"></i></button>
+            <span v-if="rule.targetHost && rule.targetHost!=='default'" class="rule-source-host" :title="t('rules.targetPrefix')+rule.targetHost"><span>{{t('rules.targetPrefix')}}</span><code>{{rule.targetHost}}</code></span>
+            <span v-if="status?.scenariosEnabled && rule.scenarioName" class="rule-scenario-meta" :title="t('rules.scenarioTooltip',{name:rule.scenarioName,required:rule.requiredScenarioState||'Started',newState:rule.newScenarioState||rule.requiredScenarioState||'Started'})"><i class="bi bi-diagram-3" aria-hidden="true"></i><code>{{rule.scenarioName}}</code></span>
+            <span v-if="tagEntries(rule).length" class="rule-tag-summary" :title="tagEntries(rule).map(([k,v])=>k+'='+v).join(', ')">{{tagEntries(rule)[0][0]}}:{{tagEntries(rule)[0][1]}}<span v-if="tagEntries(rule).length>1"> +{{tagEntries(rule).length-1}}</span></span>
+          </span>
+        </span>
+        <span class="rule-responsive-meta"><button type="button" class="list-id-copy rule-responsive-id" @click.stop="$emit('clip-copy',rule.id)" @dblclick.stop :title="rule.id" :aria-label="t('rules.copyId')+' '+rule.id">{{shortId(rule.id)}}<i class="bi bi-copy" aria-hidden="true"></i></button><span class="rule-compact-condition" :title="condTags(rule).length?condTags(rule).map(c=>c.label+' '+c.v).join('; '):t('rules.noCondition')">{{condTags(rule).length ? condTags(rule)[0].label+' '+condTags(rule)[0].v : t('rules.noCondition')}}<span v-if="condTags(rule).length>1"> +{{condTags(rule).length-1}}</span> · P{{rule.priority ?? 0}} · {{fmtTime(rule.updatedAt)}}</span><span class="rule-compact-enabled"> · {{rule.enabled!==false?t('rules.filterEnabled'):t('rules.filterDisabled')}}</span><span class="rule-compact-flags"><i v-if="rule.isProtected" class="bi bi-shield-fill-check text-success" :title="t('rules.isProtected')"></i><ui-badge v-if="rule.sseEnabled" class="badge badge-sse">SSE</ui-badge><ui-badge v-if="rule.action==='FORWARD'" class="badge badge-muted">{{t('rules.forward')}}</ui-badge><ui-badge v-if="rule.faultType && rule.faultType!=='NONE'" class="badge badge-muted" :title="t('rules.fault_'+rule.faultType)">{{t('rules.faultInjection')}}</ui-badge></span></span>
       </div>
     </div>`
 };

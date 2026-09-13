@@ -24,10 +24,27 @@ class ForwardingObservabilityResourceTest {
                 .contains("protocol === 'JMS'")
                 .contains("rule?.jmsTargetConnectionId")
                 .contains("rule?.httpTargetConnectionId")
+                .contains("_t('modal.forwardSpecificConnection', { id })")
+                .contains("const forwardTargetEndpoint = rule => rule?._forwardTargetEndpoint || ''")
                 .contains("_t('modal.forwardOriginalHost')")
                 .contains("'modal.forwardDefaultJmsConnection' : 'modal.forwardDefaultConnection'");
-        assertThat(rules).contains("forwardTargetLabel(rulePreviewCache[r.id])");
-        assertThat(groupedRules).contains("forwardTargetLabel(rulePreviewCache[rule.id])");
+        assertThat(rules)
+                .contains("forwardTargetLabel(rulePreviewCache[r.id])")
+                .contains("forwardTargetLabel, forwardTargetEndpoint")
+                .contains("rulePreviewCache[r.id]._forwardTargetName")
+                .contains("forwardTargetEndpoint(rulePreviewCache[r.id])");
+        assertThat(groupedRules)
+                .contains("forwardTargetLabel(rulePreviewCache[rule.id])")
+                .contains("forwardTargetLabel, forwardTargetEndpoint")
+                .contains("rulePreviewCache[rule.id]._forwardTargetName")
+                .contains("forwardTargetEndpoint(rulePreviewCache[rule.id])");
+        String useRules = resourceText("static/composables/useRules.js");
+        assertThat(useRules)
+                .contains("const hydrateForwardTarget = async (data) =>")
+                .contains("/api/admin/http-target-connections")
+                .contains("/api/admin/jms-target-connections")
+                .contains("data._forwardTargetName = target.name || ''")
+                .contains("await hydrateForwardTarget(data)");
     }
 
     @Test

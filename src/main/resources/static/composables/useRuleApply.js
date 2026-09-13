@@ -10,6 +10,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
     const ruleApplySchema = Vue.ref(null);
     const ruleApplySchemaError = Vue.ref('');
     const ruleApplyIdentity = Vue.ref(null);
+    const ruleApplyValidationVisible = Vue.ref(false);
 
     const templates = {
         HTTP_MOCK: {
@@ -618,6 +619,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         ruleApplyText.value = enforceSystemFields(text).text;
         ruleApplyError.value = '';
         ruleApplyOperation.value = '';
+        ruleApplyValidationVisible.value = false;
     };
 
     const updateRuleApplyText = value => {
@@ -625,12 +627,13 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         ruleApplyText.value = enforced.text;
         ruleApplyError.value = enforced.changed ? t('rules.applySystemFieldsRestored') : '';
         ruleApplyOperation.value = '';
+        ruleApplyValidationVisible.value = true;
     };
 
-    const readRuleApplyDocument = () => {
+    const readRuleApplyDocument = ({ validate = true } = {}) => {
         try {
             const parsed = JSON.parse(ruleApplyText.value);
-            const firstError = ruleApplyValidationErrors.value[0];
+            const firstError = validate ? ruleApplyValidationErrors.value[0] : null;
             if (firstError) {
                 ruleApplyError.value = firstError.message;
                 return null;
@@ -693,6 +696,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         ruleApplyError.value = '';
         ruleApplyOperation.value = '';
         ruleApplyIdentity.value = null;
+        ruleApplyValidationVisible.value = false;
     };
 
     const replaceRuleApplyTemplate = async template => {
@@ -710,9 +714,11 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         ruleApplyError.value = '';
         ruleApplyOperation.value = '';
         ruleApplyIdentity.value = null;
+        ruleApplyValidationVisible.value = true;
     };
 
     const applyRuleDocument = async () => {
+        ruleApplyValidationVisible.value = true;
         if (!await requireLogin()) { return; }
         ruleApplyError.value = '';
         ruleApplyOperation.value = '';
@@ -783,6 +789,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         ruleApplySchemaError,
         ruleApplySystemFields,
         ruleApplyValidationErrors,
+        ruleApplyValidationVisible,
         createDocumentFromForm,
         createFormDraftFromDocument,
         setRuleApplyDocument,

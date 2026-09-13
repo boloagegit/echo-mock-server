@@ -203,6 +203,9 @@
     "applyUpdatedCanonical": "Updated. resourceVersion is now current.",
     "applyLoadFailed": "Could not load the rule JSON. Refresh and try again.",
     "applyInvalidJson": "The JSON is invalid. Check the commas, brackets, and quotation marks.",
+    "applyReplaceDraftTitle": "Replace the declarative draft with the form?",
+    "applyReplaceDraftMessage": "You changed the form, but the earlier declarative draft was not synced. Continuing will replace that draft with the current form.",
+    "applyReplaceDraftConfirm": "Replace draft",
     "applyDocumentRequired": "Enter the rule JSON.",
     "applyApiVersion": "apiVersion must be {value}.",
     "applyKind": "kind must be {value}.",
@@ -389,6 +392,9 @@
     "forwardFailed": "Failed",
     "unmatched": "Unmatched",
     "deleted": "(Deleted)",
+    "deletedRuleDescription": "The matched rule was deleted",
+    "defaultForwardDescription": "No rule matched; forwarded to the default downstream",
+    "unmatchedDescription": "No rule matched",
     "hostLabel": "Host",
     "forwardTargetLabel": "Downstream",
     "clickExpandTrace": "Click to expand match trace",
@@ -838,6 +844,7 @@
     "forwardOriginalHost": "X-Original-Host (no saved connection)",
     "forwardDefaultConnection": "Default HTTP Connection",
     "forwardDefaultJmsConnection": "Default JMS Connection",
+    "forwardSpecificConnection": "Saved connection #{id}",
     "forwardDefaultMissing": "No default connection configured",
     "connectionDisabled": "Disabled",
     "forwardTarget": "Forward Target",
@@ -1198,16 +1205,16 @@
     "progress": "Step {current} of {total}"
   },
   "reasonText": {
-    "match": "✓ Matched",
+    "match": "Matched",
     "disabled": "Disabled",
     "condition_not_match": "Condition Not Met",
     "fallback": "Fallback",
     "skipped": "Skipped",
-    "nearMiss": "⚠ Near Miss",
-    "shadowed": "◌ Shadowed",
-    "mismatch": "✗ Mismatch",
+    "nearMiss": "Near Miss",
+    "shadowed": "Shadowed",
+    "mismatch": "Mismatch",
     "scenarioStateMismatch": "Scenario State Mismatch",
-    "scenario_state_mismatch": "⊘ Scenario State Mismatch"
+    "scenario_state_mismatch": "Scenario State Mismatch"
   },
   "auditFields": {
     "matchKey": "Endpoint Path",
@@ -1233,7 +1240,12 @@
     "contentType": "Content Type",
     "groupId": "Group",
     "name": "Name",
-    "sseEvents": "SSE Events"
+    "sseEvents": "SSE Events",
+    "action": "Rule Behavior",
+    "faultType": "Fault Type",
+    "forwardTargetMode": "Forward Target Mode",
+    "httpTargetConnectionId": "HTTP Connection ID",
+    "jmsTargetConnectionId": "JMS Connection ID"
   },
   "auditValues": {
     "empty": "(Empty)",
@@ -1242,7 +1254,16 @@
     "unknown": "(Unknown)",
     "parseError": "(Parse Error)",
     "typePrefix": "Type: ",
-    "expandForDetail": "(Expand to view changes)"
+    "expandForDetail": "(Expand to view changes)",
+    "modeMock": "Mock Response",
+    "modeForward": "Forward Downstream",
+    "modeFault": "Fault Injection",
+    "faultNone": "None",
+    "faultConnectionReset": "Connection Reset",
+    "faultEmptyResponse": "Empty Response",
+    "targetOriginalHost": "Use X-Original-Host",
+    "targetDefaultConnection": "Default Connection",
+    "targetSavedConnection": "Selected Connection"
   },
   "filterChips": {
     "protocol": "Protocol: ",
@@ -1287,7 +1308,7 @@
     "queryConditionsLabel": "Query conditions",
     "requestHeadersLabel": "Request headers",
     "headerConditionsLabel": "Header conditions (case-insensitive)",
-    "diagramPriority": "Rule sorting (higher value = higher priority)\n1. priority field value\n2. Exact path before wildcard (*)\n3. targetHost specified before unspecified\n4. Newer creation time first\n\nMatching flow\n1. Check rules in sorted order\n2. Condition matches → return immediately\n3. No condition → remember as fallback\n4. Return fallback if nothing matches",
+    "diagramPriority": "Rule sorting\n1. Exact paths before wildcard (*)\n2. Within the same path type, higher priority values first\n3. targetHost specified before unspecified\n4. Newer creation time first\n\nMatching flow\n1. Check rules in sorted order\n2. Condition matches → return immediately\n3. No condition → remember as fallback\n4. Return fallback if nothing matches",
     "diagramCache": "Instance A (Caffeine)       Instance B (Caffeine)\n        │ Update rule\n        ▼\ncache_events: insert RULE_CHANGED event\n        │ Poll every 5 seconds\n        ▼\nEvent found → clear cache",
     "sseSequenceExample": "Event 1: {\"status\": \"processing\"} (delay: 0ms)\nEvent 2: {\"progress\": 50} (delay: 1000ms)\nEvent 3: {\"status\": \"done\"} (delay: 2000ms)",
     "title": "Quick Start Guide",

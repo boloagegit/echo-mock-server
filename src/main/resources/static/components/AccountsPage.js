@@ -191,7 +191,7 @@ const AccountsPage = {
               <span class="sk sk-btn"></span>
             </div>
           </div>
-          <table v-if="accounts.filteredAccounts.value.length" class="table-fixed workspace-table">
+          <table v-if="accounts.filteredAccounts.value.length" class="table-fixed workspace-table workspace-primary-aligned-table accounts-list-table">
             <thead><tr>
               <th :aria-sort="accounts.accountSort.value.field==='username'?(accounts.accountSort.value.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('accounts.thUsername')" :active="accounts.accountSort.value.field==='username'" :ascending="accounts.accountSort.value.asc" @toggle="accounts.toggleAccountSort('username')"></ui-table-sort-header></th>
               <th class="table-compact-column" :aria-sort="accounts.accountSort.value.field==='role'?(accounts.accountSort.value.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('accounts.thRole')" :active="accounts.accountSort.value.field==='role'" :ascending="accounts.accountSort.value.asc" @toggle="accounts.toggleAccountSort('role')"></ui-table-sort-header></th>
@@ -203,15 +203,15 @@ const AccountsPage = {
             <tbody>
               <tr v-for="a in accounts.filteredAccounts.value" :key="a.id">
                 <td class="list-identity-cell">
-                  <span class="list-record-name">{{a.username}}</span>
-                  <ui-badge v-if="a.passwordResetRequested" class="badge badge-warning inline-badge"><i class="bi bi-exclamation-triangle-fill"></i> {{t('accounts.forgotPasswordBadge')}}</ui-badge>
+                  <div class="workspace-row-primary workspace-row-primary-wrap"><span class="list-record-name">{{a.username}}</span>
+                  <ui-badge v-if="a.passwordResetRequested" class="badge badge-warning inline-badge"><i class="bi bi-exclamation-triangle-fill"></i> {{t('accounts.forgotPasswordBadge')}}</ui-badge></div>
                 </td>
-                <td><ui-badge class="badge" :class="a.role==='ROLE_ADMIN'?'badge-http':'badge-muted'">{{a.role==='ROLE_ADMIN'?t('accounts.roleAdmin'):t('accounts.roleUser')}}</ui-badge></td>
-                <td class="col-hide-sm"><ui-badge class="badge" :class="a.enabled?'badge-success':'badge-danger'">{{a.enabled?t('accounts.enabled'):t('accounts.disabled')}}</ui-badge></td>
-                <td class="col-datetime col-hide-md"><span class="sub-info" :title="fmtTime(a.createdAt,false)">{{fmtTime(a.createdAt)}}</span></td>
-                <td class="col-datetime col-hide-md"><span class="sub-info" :title="a.lastLoginAt?fmtTime(a.lastLoginAt,false):t('accounts.neverLoggedIn')">{{a.lastLoginAt?fmtTime(a.lastLoginAt):t('accounts.neverLoggedIn')}}</span></td>
+                <td><div class="workspace-row-primary"><ui-badge class="badge" :class="a.role==='ROLE_ADMIN'?'badge-http':'badge-muted'">{{a.role==='ROLE_ADMIN'?t('accounts.roleAdmin'):t('accounts.roleUser')}}</ui-badge></div></td>
+                <td class="col-hide-sm"><div class="workspace-row-primary"><ui-badge class="badge" :class="a.enabled?'badge-success':'badge-danger'">{{a.enabled?t('accounts.enabled'):t('accounts.disabled')}}</ui-badge></div></td>
+                <td class="col-datetime col-hide-md"><span class="sub-info workspace-row-primary" :title="fmtTime(a.createdAt,false)">{{fmtTime(a.createdAt)}}</span></td>
+                <td class="col-datetime col-hide-md"><span class="sub-info workspace-row-primary" :title="a.lastLoginAt?fmtTime(a.lastLoginAt,false):t('accounts.neverLoggedIn')">{{a.lastLoginAt?fmtTime(a.lastLoginAt):t('accounts.neverLoggedIn')}}</span></td>
                 <td class="col-actions col-actions-3">
-                  <div class="table-row-actions">
+                  <div class="table-row-actions workspace-row-primary workspace-row-primary-end">
                     <ui-button v-if="a.enabled" class="btn btn-sm btn-icon btn-secondary" :title="t('accounts.disable')" :aria-label="t('accounts.disable')+' '+a.username" @click="accounts.disableAccount(a)"><i class="bi bi-pause-circle"></i></ui-button>
                     <ui-button v-else class="btn btn-sm btn-icon btn-secondary" :title="t('accounts.enable')" :aria-label="t('accounts.enable')+' '+a.username" @click="accounts.enableAccount(a)"><i class="bi bi-play-circle"></i></ui-button>
                     <ui-button class="btn btn-sm btn-icon btn-secondary" :title="t('accounts.resetPassword')" :aria-label="t('accounts.resetPassword')+' '+a.username" @click="handleResetPassword(a)"><i class="bi bi-key"></i></ui-button>

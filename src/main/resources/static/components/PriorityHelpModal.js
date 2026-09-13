@@ -380,7 +380,7 @@ items[1].name=B             ✓</pre>
 //item/@sku=A001         ✓ {{t('help.exXpathAttr')}}</pre>
             </div>
             <div class="help-section" id="cond-query">
-              <h3>{{t('help.condQuery')}}</h3>
+              <h3>{{t('modal.condFieldQuery')}}</h3>
               <pre class="help-code">// {{t('help.requestLabel')}}: GET /api/users?page=1&size=20&sort=name
 
 // {{t('help.queryConditionsLabel')}}

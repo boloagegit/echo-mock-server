@@ -174,11 +174,16 @@ const StatsPage = {
       if (log.protocol !== 'HTTP') { return null; }
       return log.proxyStatus != null ? log.proxyStatus : log.responseStatus;
     },
-    reasonIcon(reason) {
-      if (reason === 'match') { return 'bi-check2-circle'; }
-      if (reason === 'disabled') { return 'bi-pause-circle'; }
-      if (reason === 'condition_not_match') { return 'bi-slash-circle'; }
-      return 'bi-dash-circle';
+    forwardTargetName(value) {
+      if (!value) { return ''; }
+      const separator = value.indexOf('|');
+      return separator === -1 ? value.trim() : value.slice(0, separator).trim();
+    },
+    requestDescription(item) {
+      if (item.rule?.description) { return item.rule.description; }
+      if (item.log.matched && item.log.ruleId) { return this.t('stats.deletedRuleDescription'); }
+      if (item.log.forwarded) { return this.t('stats.defaultForwardDescription'); }
+      return this.t('stats.unmatchedDescription');
     },
     /** 取得 detail body（從 lazy-loaded _detail） */
     _getBody(item, type) {
@@ -447,7 +452,7 @@ const StatsPage = {
             </div>
           </div>
 
-          <table v-if="pagedLogs.length" class="table-fixed workspace-table logs-table">
+          <table v-if="pagedLogs.length" class="table-fixed workspace-table workspace-primary-aligned-table logs-table">
             <caption class="visually-hidden">{{t('stats.tableCaption')}}</caption>
             <thead>
               <tr>
@@ -473,52 +478,54 @@ const StatsPage = {
                   :class="{'is-expanded': logDetailExpanded[item.log.id]}"
                   @click="$emit('toggle-log-detail', item)" :title="t('stats.clickExpand')">
                   <td class="log-time-cell" :title="fmtTime(item.log.requestTime,false)">
-                    <span class="log-time-date">{{logDate(item.log.requestTime)}}</span>
-                    <span class="log-time-clock">{{logClock(item.log.requestTime)}}</span>
+                    <div class="log-time-primary workspace-row-primary">
+                      <span class="log-time-date">{{logDate(item.log.requestTime)}}</span>
+                    </div>
+                    <div class="log-time-clock">{{logClock(item.log.requestTime)}}</div>
                   </td>
-                  <td>
-                    <div class="log-request-primary">
+                  <td class="log-request-cell">
+                    <div class="log-request-primary workspace-row-primary">
                       <span class="rule-protocol">{{item.log.protocol}}</span>
                       <ui-badge v-if="item.log.protocol==='HTTP' && item.log.method" class="badge badge-method">{{item.log.method}}</ui-badge>
                       <code :title="item.log.endpoint">{{item.log.endpoint}}</code>
                     </div>
-                    <div v-if="item.log.targetHost || item.log.forwardTarget || item.log.responseTimeMs != null" class="log-request-secondary">
-                      <template v-if="item.log.targetHost"><span>{{t('stats.hostLabel')}}</span><code :title="item.log.targetHost">{{item.log.targetHost}}</code></template>
+                    <div class="log-request-description" :title="requestDescription(item)">{{requestDescription(item)}}</div>
+                    <div class="log-request-secondary">
+                      <a v-if="item.log.ruleId" href="#" class="log-rule-link" :title="item.log.ruleId"
+                        @click.prevent.stop="$emit('go-to-rule', item.log.ruleId)">{{shortId(item.log.ruleId)}}</a>
+                      <span v-if="item.log.ruleId && (item.log.targetHost || item.log.forwardTarget)" class="log-meta-separator" aria-hidden="true">·</span>
+                      <span v-if="item.log.targetHost" class="log-meta-pair log-host-meta"><span>{{t('stats.hostLabel')}}</span><code :title="item.log.targetHost">{{item.log.targetHost}}</code></span>
                       <span v-if="item.log.targetHost && item.log.forwardTarget" class="log-meta-separator" aria-hidden="true">·</span>
-                      <template v-if="item.log.forwardTarget"><span>{{t('stats.forwardTargetLabel')}}</span><code :title="item.log.forwardTarget">{{item.log.forwardTarget}}</code></template>
-                      <span class="log-responsive-duration tabular-nums">{{item.log.targetHost || item.log.forwardTarget ? '· ' : ''}}{{item.log.responseTimeMs}} ms</span>
+                      <span v-if="item.log.forwardTarget" class="log-meta-pair log-downstream-meta"><span>{{t('stats.forwardTargetLabel')}}</span><code :title="item.log.forwardTarget">{{forwardTargetName(item.log.forwardTarget)}}</code></span>
+                      <span class="log-responsive-duration tabular-nums">{{item.log.ruleId || item.log.targetHost || item.log.forwardTarget ? '· ' : ''}}{{item.log.responseTimeMs}} ms</span>
+                      <span class="log-responsive-time tabular-nums">· {{logDate(item.log.requestTime)}} {{logClock(item.log.requestTime)}}</span>
                     </div>
                   </td>
-                  <td class="col-hide-md log-duration-cell"><span>{{item.log.responseTimeMs}}</span><small>ms</small></td>
-                  <td>
-                    <div class="log-result">
+                  <td class="col-hide-md log-duration-cell">
+                    <div class="workspace-row-primary workspace-row-primary-end"><span>{{item.log.responseTimeMs}}</span><small>ms</small></div>
+                  </td>
+                  <td class="log-result-cell">
+                    <div class="log-result workspace-row-primary">
                       <template v-if="item.log.forwarded && item.log.proxyError">
-                        <span class="log-outcome log-outcome-danger" :title="item.log.proxyError"><i class="bi bi-x-circle" aria-hidden="true"></i>{{t('stats.forwardFailed')}}</span>
+                        <span class="log-outcome log-outcome-danger" :title="item.log.proxyError">{{t('stats.forwardFailed')}}</span>
                       </template>
                       <template v-else-if="item.log.forwarded">
-                        <span class="log-outcome"><i class="bi bi-arrow-right-circle" aria-hidden="true"></i>{{t('stats.forwarded')}}</span>
+                        <span class="log-outcome">{{t('stats.forwarded')}}</span>
                       </template>
                       <template v-else-if="item.log.matched">
-                        <span class="log-outcome log-outcome-success"><i class="bi bi-check2-circle" aria-hidden="true"></i>{{t('stats.matched')}}</span>
+                        <span class="log-outcome log-outcome-success">{{t('stats.matched')}}</span>
                       </template>
                       <template v-else>
-                        <span class="log-outcome log-outcome-danger"><i class="bi bi-x-circle" aria-hidden="true"></i>{{t('stats.unmatched')}}</span>
+                        <span class="log-outcome log-outcome-danger">{{t('stats.unmatched')}}</span>
                       </template>
                       <span v-if="logStatusCode(item.log) != null" class="log-status-code"
                         :class="logStatusCode(item.log)<400?'is-success':logStatusCode(item.log)<500?'is-warning':'is-danger'">{{logStatusCode(item.log)}}</span>
                     </div>
-                    <div v-if="item.log.matched && item.rule" class="log-result-secondary">
-                      <a href="#" class="log-rule-link" :title="item.rule.id" @click.prevent.stop="$emit('go-to-rule', item.rule.id)">{{shortId(item.rule.id)}}</a>
-                      <span v-if="item.rule.description" :title="item.rule.description">{{item.rule.description}}</span>
-                    </div>
-                    <div v-else-if="item.log.matched && item.log.ruleId" class="log-result-secondary">
-                      <span class="log-rule-link" :title="item.log.ruleId">{{shortId(item.log.ruleId)}}</span>
-                      <span>{{t('stats.deleted')}}</span>
-                    </div>
-                    <div v-else-if="item.log.proxyError" class="log-result-secondary" :title="item.log.proxyError">{{item.log.proxyError}}</div>
+                    <div v-if="item.log.proxyError" class="log-result-secondary log-result-error" :title="item.log.proxyError">{{item.log.proxyError}}</div>
+                    <div v-else-if="item.log.matched && item.log.ruleId && !item.rule" class="log-result-secondary">{{t('stats.deleted')}}</div>
                   </td>
                   <td class="col-actions col-actions-1">
-                    <div class="log-row-actions">
+                    <div class="log-row-actions workspace-row-primary workspace-row-primary-end">
                       <ui-button type="button" class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('toggle-log-detail', item)"
                         :aria-expanded="!!logDetailExpanded[item.log.id]" :aria-controls="'log-detail-'+item.log.id"
                         :title="logDetailExpanded[item.log.id]?t('stats.collapseTrace'):t('stats.expandTrace')"
@@ -605,11 +612,9 @@ const StatsPage = {
 
           <div v-else-if="inspectorTab==='body'" class="log-inspector-content log-inspector-body-grid"
             role="tabpanel" :id="'log-inspector-body-'+selectedLogItem.log.id" :aria-labelledby="'log-tab-body-'+selectedLogItem.log.id">
-            <section class="log-inspector-pane" :aria-labelledby="'request-body-heading-'+selectedLogItem.log.id">
+            <section class="log-inspector-pane ui-detail-panel" :aria-labelledby="'request-body-heading-'+selectedLogItem.log.id">
               <div class="log-inspector-pane-header">
-                <h2 :id="'request-body-heading-'+selectedLogItem.log.id">
-                  <i class="bi bi-arrow-up-circle" aria-hidden="true"></i>{{t('stats.detailRequestBody')}}
-                </h2>
+                <h2 class="ui-detail-panel-heading" :id="'request-body-heading-'+selectedLogItem.log.id">{{t('stats.detailRequestBody')}}</h2>
                 <span class="log-body-size tabular-nums">{{fmtSize(selectedLogItem._detail?.requestBody?.length || 0)}}</span>
                 <div v-if="selectedLogItem._detail?.requestBody" class="log-body-tools">
                   <div class="pv-search-bar">
@@ -637,14 +642,12 @@ const StatsPage = {
               <div v-if="selectedLogItem._detail?.requestBody && bodyFormatted['reqBody-'+selectedLogItem.log.id]"
                 :ref="'reqBody-'+selectedLogItem.log.id" class="pv-cm-container"></div>
               <pre v-else-if="selectedLogItem._detail?.requestBody" :ref="'reqBody-'+selectedLogItem.log.id" class="pv-pre"><template v-if="bodySearch['reqBody-'+selectedLogItem.log.id]"><template v-for="(seg,si) in bodyHighlight('reqBody-'+selectedLogItem.log.id, selectedLogItem._detail.requestBody)" :key="si"><span v-if="seg.hl" class="pv-highlight" :class="{'pv-highlight-current': bodyHlIsCurrent('reqBody-'+selectedLogItem.log.id, selectedLogItem._detail.requestBody, si)}">{{seg.text}}</span><template v-else>{{seg.text}}</template></template></template><template v-else>{{selectedLogItem._detail.requestBody}}</template></pre>
-              <div v-else class="log-body-empty"><i class="bi bi-file-earmark" aria-hidden="true"></i>{{t('stats.emptyRequestBody')}}</div>
+              <div v-else class="pv-body-empty">{{t('stats.emptyRequestBody')}}</div>
             </section>
 
-            <section class="log-inspector-pane" :aria-labelledby="'response-body-heading-'+selectedLogItem.log.id">
+            <section class="log-inspector-pane ui-detail-panel" :aria-labelledby="'response-body-heading-'+selectedLogItem.log.id">
               <div class="log-inspector-pane-header">
-                <h2 :id="'response-body-heading-'+selectedLogItem.log.id">
-                  <i class="bi bi-arrow-down-circle" aria-hidden="true"></i>{{t('stats.detailResponseBody')}}
-                </h2>
+                <h2 class="ui-detail-panel-heading" :id="'response-body-heading-'+selectedLogItem.log.id">{{t('stats.detailResponseBody')}}</h2>
                 <span class="log-body-size tabular-nums">{{fmtSize(selectedLogItem._detail?.responseBody?.length || 0)}}</span>
                 <div v-if="selectedLogItem._detail?.responseBody" class="log-body-tools">
                   <div class="pv-search-bar">
@@ -672,13 +675,13 @@ const StatsPage = {
               <div v-if="selectedLogItem._detail?.responseBody && bodyFormatted['resBody-'+selectedLogItem.log.id]"
                 :ref="'resBody-'+selectedLogItem.log.id" class="pv-cm-container"></div>
               <pre v-else-if="selectedLogItem._detail?.responseBody" :ref="'resBody-'+selectedLogItem.log.id" class="pv-pre"><template v-if="bodySearch['resBody-'+selectedLogItem.log.id]"><template v-for="(seg,si) in bodyHighlight('resBody-'+selectedLogItem.log.id, selectedLogItem._detail.responseBody)" :key="si"><span v-if="seg.hl" class="pv-highlight" :class="{'pv-highlight-current': bodyHlIsCurrent('resBody-'+selectedLogItem.log.id, selectedLogItem._detail.responseBody, si)}">{{seg.text}}</span><template v-else>{{seg.text}}</template></template></template><template v-else>{{selectedLogItem._detail.responseBody}}</template></pre>
-              <div v-else class="log-body-empty"><i class="bi bi-file-earmark" aria-hidden="true"></i>{{t('stats.emptyResponseBody')}}</div>
+              <div v-else class="pv-body-empty">{{t('stats.emptyResponseBody')}}</div>
             </section>
           </div>
 
           <div v-else-if="inspectorTab==='overview'" class="log-inspector-content log-overview-surface"
             role="tabpanel" :id="'log-inspector-overview-'+selectedLogItem.log.id" :aria-labelledby="'log-tab-overview-'+selectedLogItem.log.id">
-            <section class="log-overview-section" :aria-labelledby="'request-heading-'+selectedLogItem.log.id">
+            <section class="log-overview-section ui-detail-panel" :aria-labelledby="'request-heading-'+selectedLogItem.log.id">
               <h2 class="log-detail-heading" :id="'request-heading-'+selectedLogItem.log.id">{{t('stats.sectionRequest')}}</h2>
               <dl class="log-detail-fields">
                 <div><dt>{{t('stats.detailTime')}}</dt><dd class="tabular-nums">{{fmtTime(selectedLogItem.log.requestTime, false)}}</dd></div>
@@ -690,14 +693,11 @@ const StatsPage = {
                 <div v-if="selectedLogItem.log.clientIp"><dt>{{t('stats.detailClientIp')}}</dt><dd>{{selectedLogItem.log.clientIp}}</dd></div>
               </dl>
             </section>
-            <section class="log-overview-section" :aria-labelledby="'result-heading-'+selectedLogItem.log.id">
+            <section class="log-overview-section ui-detail-panel" :aria-labelledby="'result-heading-'+selectedLogItem.log.id">
               <h2 class="log-detail-heading" :id="'result-heading-'+selectedLogItem.log.id">{{t('stats.sectionMatch')}}</h2>
               <dl class="log-detail-fields">
                 <div><dt>{{t('stats.detailMatched')}}</dt><dd>
-                  <span class="log-outcome" :class="selectedLogItem.log.matched?'log-outcome-success':'log-outcome-danger'">
-                    <i class="bi" :class="selectedLogItem.log.matched?'bi-check2-circle':'bi-x-circle'" aria-hidden="true"></i>
-                    {{selectedLogItem.log.matched ? t('stats.matched') : t('stats.unmatched')}}
-                  </span>
+                  <span class="log-outcome" :class="selectedLogItem.log.matched?'log-outcome-success':'log-outcome-danger'">{{selectedLogItem.log.matched ? t('stats.matched') : t('stats.unmatched')}}</span>
                 </dd></div>
                 <div v-if="selectedLogItem.log.ruleId"><dt>{{t('stats.detailRuleId')}}</dt><dd><a href="#" class="log-rule-link" @click.prevent.stop="$emit('go-to-rule', selectedLogItem.log.ruleId)">{{selectedLogItem.log.ruleId}}</a></dd></div>
                 <div v-if="selectedLogItem.rule?.description"><dt>{{t('stats.detailRuleDesc')}}</dt><dd>{{selectedLogItem.rule.description}}</dd></div>
@@ -715,7 +715,7 @@ const StatsPage = {
             </section>
           </div>
 
-          <div v-else class="log-inspector-content log-inspector-trace" role="tabpanel"
+          <div v-else class="log-inspector-content log-inspector-trace ui-detail-panel" role="tabpanel"
             :id="'log-inspector-trace-'+selectedLogItem.log.id" :aria-labelledby="'log-tab-trace-'+selectedLogItem.log.id">
             <ol class="match-chain-list">
               <li v-for="(c,i) in selectedLogItem.matchChainData" :key="c.ruleId" class="match-chain-item" :class="{'match-chain-match':c.reason==='match'}">
@@ -729,7 +729,7 @@ const StatsPage = {
                   <span v-if="c.description" class="match-chain-desc">{{c.description}}</span>
                 </div>
                 <div class="match-chain-evaluation">
-                  <span class="match-chain-reason" :class="'reason-'+c.reason"><i class="bi" :class="reasonIcon(c.reason)" aria-hidden="true"></i>{{reasonText(c.reason)}}</span>
+                  <span class="match-chain-reason" :class="'reason-'+c.reason">{{reasonText(c.reason)}}</span>
                   <code v-if="c.condition" class="match-chain-cond">{{c.condition}}</code>
                   <div v-if="c.mismatch" class="match-chain-mismatch"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span>{{c.mismatch}}</span></div>
                 </div>

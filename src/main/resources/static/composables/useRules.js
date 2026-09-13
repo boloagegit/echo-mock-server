@@ -419,6 +419,23 @@ const useRules = (deps) => {
     const rulePreviewExpanded = ref({});
     const rulePreviewLoading = ref({});
     const rulePreviewError = ref({});
+    const hydrateForwardTarget = async (data) => {
+        if (data?.action !== 'FORWARD' || data?.forwardTargetMode === 'ORIGINAL_HOST') return;
+        const protocol = String(data.protocol || '').toUpperCase();
+        const isJms = protocol === 'JMS';
+        const endpoint = isJms ? '/api/admin/jms-target-connections' : '/api/admin/http-target-connections';
+        const response = await apiCall(endpoint, {}, { silent: true });
+        if (!response || !response.ok) return;
+        const targets = await response.json().catch(() => []);
+        if (!Array.isArray(targets)) return;
+        const connectionId = isJms ? data.jmsTargetConnectionId : data.httpTargetConnectionId;
+        const target = data.forwardTargetMode === 'CONNECTION'
+            ? targets.find(item => String(item.id) === String(connectionId))
+            : targets.find(item => item.defaultConnection);
+        if (!target) return;
+        data._forwardTargetName = target.name || '';
+        data._forwardTargetEndpoint = isJms ? (target.serverUrl || '') : (target.baseUrl || '');
+    };
     const toggleRulePreview = async (rule) => {
         const id = rule.id;
         if (rulePreviewExpanded.value[id] && !rulePreviewError.value[id]) {
@@ -435,6 +452,7 @@ const useRules = (deps) => {
         const r = await apiCall(`/api/admin/rules/${id}`, {}, { silent: true });
         if (r && r.ok) {
             const data = await r.json();
+            await hydrateForwardTarget(data);
             const body = data.responseBody || '';
             // SSE 內容：格式化為 SSE 預覽
             if (data.sseEnabled) {
