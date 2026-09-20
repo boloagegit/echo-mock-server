@@ -1,11 +1,12 @@
-# SQLite Database (穩定不怕 crash)
+# SQLite Database (WAL + startup recovery)
 # 啟用方式: --spring.profiles.active=sqlite
 spring:
   datasource:
     url: jdbc:sqlite:./mockdb.sqlite?journal_mode=WAL&busy_timeout=10000&synchronous=NORMAL&foreign_keys=ON
     driver-class-name: org.sqlite.JDBC
     hikari:
-      maximum-pool-size: 3        # SQLite 單寫者，3 連線足夠 (1 writer + 2 reader)
+      # 交易管理器會序列化寫入；連線池保留 WAL 的並行讀取能力。
+      maximum-pool-size: 3
       minimum-idle: 1
       connection-timeout: 15000   # 必須 > busy_timeout，避免 pool 比 SQLite 先放棄
       idle-timeout: 600000        # 10 分鐘（SQLite in-process，不需頻繁回收）

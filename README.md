@@ -125,6 +125,14 @@ SPRING_JPA_HIBERNATE_DDL_AUTO=validate \
 
 The remaining Hikari timeout and lifetime settings use the `ECHO_DB_*` variables in the profile files. Do not put multiple database profiles in `SPRING_PROFILES_ACTIVE`.
 
+The SQLite profile keeps a small connection pool for WAL readers and
+automatically queues JPA write transactions inside Echo, so normal concurrent
+writes do not race for SQLite's single-writer lock. `busy_timeout` remains a
+fallback for locks held by another process. Run only one Echo process against a
+given SQLite file; use a server database when multiple application instances
+must share storage. See [SQLite recovery](docs/sqlite-recovery.md) for recovery,
+writer metrics, and validation boundaries.
+
 #### Backup and request-log spool boundaries
 
 The application backup feature is for local H2/SQLite files. External database profiles disable it; PostgreSQL, MySQL/MariaDB, SQL Server, and Oracle backups, point-in-time recovery, retention, and restore drills are owned by the DBA or platform backup service.
