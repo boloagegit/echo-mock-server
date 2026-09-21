@@ -84,7 +84,8 @@ class AdminAgentApiTest {
     @BeforeEach
     void setUp() {
         AdminController controller = new AdminController(
-                ruleService, ruleQueryService, protocolHandlerRegistry, responseService, requestLogService,
+                ruleService, ruleQueryService, protocolHandlerRegistry, responseService,
+                Optional.empty(), Optional.empty(), requestLogService,
                 Optional.of(ruleAuditService), Optional.empty(), Optional.empty(),
                 excelImportService, openApiImportService, Optional.empty(), responseContentValidatorRegistry,
                 builtinUserRepository, agentRegistry, cacheManager, issueReportService, Optional.empty(), Optional.empty(),

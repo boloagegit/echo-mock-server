@@ -39,6 +39,19 @@ public class ResponseService {
         return responseRepository.count();
     }
 
+    public Map<String, Object> getBodyCacheStats() {
+        Map<String, Object> result = new HashMap<>();
+        result.put("entries", responseBodyCache.estimatedSize());
+        responseBodyCache.policy().eviction().ifPresent(eviction -> {
+            result.put("weightedSize", eviction.weightedSize().orElse(0L));
+            result.put("maximumWeight", eviction.getMaximum());
+        });
+        var stats = responseBodyCache.stats();
+        result.put("requestCount", stats.requestCount());
+        result.put("evictionCount", stats.evictionCount());
+        return result;
+    }
+
     public Optional<Response> findById(Long id) {
         return responseRepository.findById(id);
     }

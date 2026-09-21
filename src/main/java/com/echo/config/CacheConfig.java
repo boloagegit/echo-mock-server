@@ -69,11 +69,22 @@ public class CacheConfig {
     @Bean
     public Cache<Long, String> responseBodyCache() {
         return Caffeine.newBuilder()
-                .maximumWeight((long) bodyCacheMaxSizeMb * 1024 * 1024)
-                .weigher((Long id, String body) -> body != null ? body.length() : 0)
-                .expireAfterAccess(bodyCacheExpireMinutes, TimeUnit.MINUTES)
+                .maximumWeight((long) Math.max(1, bodyCacheMaxSizeMb) * 1024 * 1024)
+                .weigher((Long id, String body) -> estimateBodyWeight(body))
+                .expireAfterAccess(Math.max(1, bodyCacheExpireMinutes), TimeUnit.MINUTES)
                 .recordStats()
                 .build();
+    }
+
+    /**
+     * Caffeine weights are relative capacity estimates, not exact retained-heap measurements.
+     * Count UTF-16 storage plus conservative String/cache-entry overhead so non-ASCII and
+     * large response bodies cannot consume roughly twice the configured byte budget.
+     */
+    static int estimateBodyWeight(String body) {
+        if (body == null) return 1;
+        long estimatedBytes = 96L + (long) body.length() * Character.BYTES;
+        return (int) Math.min(Integer.MAX_VALUE, Math.max(1L, estimatedBytes));
     }
 
     public int getBodyCacheThresholdBytes() {

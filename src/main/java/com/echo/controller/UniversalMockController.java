@@ -36,9 +36,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -88,12 +87,19 @@ public class UniversalMockController {
     private long requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS;
     
     /** 延遲回應排程器 */
-    private final ScheduledExecutorService delayScheduler = 
-        Executors.newScheduledThreadPool(DELAY_THREAD_POOL_SIZE, r -> {
+    private final ScheduledThreadPoolExecutor delayScheduler = createDelayScheduler();
+
+    private static ScheduledThreadPoolExecutor createDelayScheduler() {
+        ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(DELAY_THREAD_POOL_SIZE, r -> {
             Thread t = new Thread(r, "delay-scheduler");
             t.setDaemon(true);
             return t;
         });
+        scheduler.setRemoveOnCancelPolicy(true);
+        scheduler.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+        scheduler.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
+        return scheduler;
+    }
 
     public UniversalMockController(RuleService ruleService,
                                    HttpRuleService httpRuleService,
@@ -110,6 +116,10 @@ public class UniversalMockController {
     @PreDestroy
     public void shutdown() {
         delayScheduler.shutdown();
+    }
+
+    public int getPendingDelayTaskCount() {
+        return delayScheduler.getQueue().size();
     }
 
     /** SSE 逾時時間（毫秒） */
@@ -374,14 +384,16 @@ public class UniversalMockController {
             try {
                 ScheduledFuture<?> task = delayScheduler.schedule(
                         () -> deliver(event), delayMs, TimeUnit.MILLISECONDS);
-                scheduled.set(task);
-                if (stopped.get()) task.cancel(false);
+                ScheduledFuture<?> previous = scheduled.getAndSet(task);
+                if (previous != null && !previous.isDone()) previous.cancel(false);
+                if (stopped.get() && scheduled.compareAndSet(task, null)) task.cancel(false);
             } catch (RuntimeException error) {
                 fail(error, "SSE scheduling failed");
             }
         }
 
         private void deliver(SseEvent event) {
+            scheduled.set(null);
             if (stopped.get()) return;
             try {
                 String data = render(event.data());
@@ -532,24 +544,31 @@ public class UniversalMockController {
             CompletableFuture<PipelineResult> pipelineFuture,
             Runnable connectionReset) {
         DeferredResult<ResponseEntity<String>> deferredResult = new DeferredResult<>(requestTimeoutMs);
+        AtomicBoolean terminal = new AtomicBoolean();
+        AtomicReference<ScheduledFuture<?>> delayedTask = new AtomicReference<>();
         deferredResult.onTimeout(() -> {
-            deferredResult.setErrorResult(
-                    ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT).body("Request timeout"));
-            pipelineFuture.cancel(true);
+            if (terminal.compareAndSet(false, true)) {
+                cancelScheduled(delayedTask);
+                pipelineFuture.cancel(true);
+                deferredResult.setErrorResult(
+                        ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT).body("Request timeout"));
+            }
         });
-        deferredResult.onError(ignored -> pipelineFuture.cancel(true));
+        deferredResult.onError(ignored -> terminateDeferred(terminal, delayedTask, pipelineFuture));
         deferredResult.onCompletion(() -> {
-            if (!pipelineFuture.isDone()) pipelineFuture.cancel(true);
+            terminateDeferred(terminal, delayedTask, pipelineFuture);
         });
         pipelineFuture.whenComplete((result, error) -> {
-            if (deferredResult.isSetOrExpired()) return;
+            if (terminal.get() || deferredResult.isSetOrExpired()) return;
             if (error != null) {
                 log.error("Async HTTP pipeline error: {}", error.getMessage(), error);
-                deferredResult.setErrorResult(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                        .body("Pipeline error"));
+                if (terminal.compareAndSet(false, true)) {
+                    deferredResult.setErrorResult(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                            .body("Pipeline error"));
+                }
                 return;
             }
-            completeResponse(deferredResult, result, connectionReset);
+            completeResponse(deferredResult, result, connectionReset, terminal, delayedTask);
         });
 
         return deferredResult;
@@ -558,11 +577,14 @@ public class UniversalMockController {
     @SuppressWarnings("FutureReturnValueIgnored")
     private void completeResponse(DeferredResult<ResponseEntity<String>> deferredResult,
                                   PipelineResult result,
-                                  Runnable connectionReset) {
-        if (deferredResult.isSetOrExpired()) return;
+                                  Runnable connectionReset,
+                                  AtomicBoolean terminal,
+                                  AtomicReference<ScheduledFuture<?>> delayedTask) {
+        if (terminal.get() || deferredResult.isSetOrExpired()) return;
         MockResponse mockResponse = result.getResponse();
         Runnable completion = () -> {
-            if (!deferredResult.isSetOrExpired()) {
+            delayedTask.set(null);
+            if (!deferredResult.isSetOrExpired() && terminal.compareAndSet(false, true)) {
                 if ("CONNECTION_RESET".equals(result.getFaultType())) {
                     connectionReset.run();
                     deferredResult.setResult(null);
@@ -573,10 +595,33 @@ public class UniversalMockController {
         };
         long delay = result.getDelayMs();
         if (delay > 0) {
-            delayScheduler.schedule(completion, delay, TimeUnit.MILLISECONDS);
+            ScheduledFuture<?> task = delayScheduler.schedule(completion, delay, TimeUnit.MILLISECONDS);
+            if (!delayedTask.compareAndSet(null, task)) {
+                task.cancel(false);
+                return;
+            }
+            // Timeout/completion may win between scheduling and publishing the future.
+            if ((terminal.get() || deferredResult.isSetOrExpired())
+                    && delayedTask.compareAndSet(task, null)) {
+                task.cancel(false);
+            }
         } else {
             completion.run();
         }
+    }
+
+    private void terminateDeferred(
+            AtomicBoolean terminal,
+            AtomicReference<ScheduledFuture<?>> delayedTask,
+            CompletableFuture<?> pipelineFuture) {
+        terminal.set(true);
+        cancelScheduled(delayedTask);
+        if (!pipelineFuture.isDone()) pipelineFuture.cancel(true);
+    }
+
+    private void cancelScheduled(AtomicReference<ScheduledFuture<?>> scheduled) {
+        ScheduledFuture<?> task = scheduled.getAndSet(null);
+        if (task != null) task.cancel(false);
     }
 
     private Runnable captureConnectionReset(HttpServletResponse response) {

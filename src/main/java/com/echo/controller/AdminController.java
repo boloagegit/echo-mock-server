@@ -21,6 +21,7 @@ import com.echo.protocol.ProtocolHandlerRegistry;
 import com.echo.entity.BuiltinUser;
 import com.echo.repository.BuiltinUserRepository;
 import com.echo.service.ResponseService;
+import com.echo.service.ResponseTemplateService;
 import com.echo.service.RuleApplyMapper;
 import com.echo.service.RuleApplyContractService;
 import com.echo.service.RuleApplyPersistenceSynchronizer;
@@ -101,6 +102,8 @@ public class AdminController {
     private final RuleQueryService ruleQueryService;
     private final ProtocolHandlerRegistry protocolHandlerRegistry;
     private final ResponseService responseService;
+    private final Optional<ResponseTemplateService> responseTemplateService;
+    private final Optional<UniversalMockController> universalMockController;
     private final RequestLogService requestLogService;
     private final Optional<RuleAuditService> ruleAuditService;
     private final Optional<com.echo.jms.JmsConnectionManager> jmsConnectionManager;
@@ -262,6 +265,11 @@ public class AdminController {
         status.put("jvmHeapUsed", rt.totalMemory() - rt.freeMemory());
         status.put("jvmHeapMax", rt.maxMemory());
         status.put("ruleCaches", getRuleCacheStats());
+        status.put("responseBodyCache", responseService.getBodyCacheStats());
+        status.put("templateCache", responseTemplateService
+                .map(ResponseTemplateService::getTemplateCacheStats).orElse(Map.of()));
+        status.put("delaySchedulerQueueSize", universalMockController
+                .map(UniversalMockController::getPendingDelayTaskCount).orElse(-1));
 
         // 啟動時間
         status.put("uptime", Duration.between(startupTime, Instant.now()).toSeconds());

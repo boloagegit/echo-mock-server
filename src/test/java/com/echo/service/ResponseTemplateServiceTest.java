@@ -8,6 +8,8 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -210,6 +212,56 @@ class ResponseTemplateServiceTest {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render(null, context);
         assertEquals("", result);
+    }
+
+    @Test
+    @DisplayName("模板快取預設使用 16 MiB 權重預算")
+    void shouldUseDefaultTemplateCacheWeightBudget() {
+        assertEquals(16L * 1024 * 1024, templateService.templateCacheMaxWeightBytes());
+    }
+
+    @Test
+    @DisplayName("超過權重預算的模板仍會渲染但不進入快取")
+    void oversizedTemplateShouldRenderWithoutBeingCached() {
+        ResponseTemplateService smallCacheService = new ResponseTemplateService(1);
+        String oversized = "x".repeat(175_000) + "{{request.method}}";
+
+        String result = smallCacheService.render(
+                oversized, buildContext("/test", "POST", null, null, null));
+
+        assertTrue(result.endsWith("POST"));
+        assertEquals(0, smallCacheService.templateCacheEstimatedSize());
+    }
+
+    @Test
+    @DisplayName("模板權重包含來源字元與編譯結構預留")
+    void templateWeightShouldBeConservative() {
+        assertTrue(ResponseTemplateService.estimateTemplateWeight("x".repeat(1_000)) >= 6_000);
+    }
+
+    @Test
+    @DisplayName("共享編譯模板不得混用並行請求上下文")
+    void cachedTemplateShouldKeepConcurrentRequestContextsIsolated() throws Exception {
+        var executor = Executors.newFixedThreadPool(8);
+        try {
+            java.util.List<Callable<Boolean>> tasks = new java.util.ArrayList<>();
+            for (int i = 0; i < 100; i++) {
+                String requestId = "request-" + i;
+                tasks.add(() -> {
+                    var context = buildContext("/test", "POST", Map.of("id", requestId), null, null);
+                    return requestId.equals(templateService.render("{{request.query.id}}", context));
+                });
+            }
+            assertTrue(executor.invokeAll(tasks).stream().allMatch(future -> {
+                try {
+                    return future.get();
+                } catch (Exception e) {
+                    return false;
+                }
+            }));
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     // === Helper ===

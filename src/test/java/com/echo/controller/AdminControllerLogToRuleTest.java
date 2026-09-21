@@ -71,7 +71,8 @@ class AdminControllerLogToRuleTest {
     void setUp() {
         controller = new AdminController(
                 ruleService, ruleQueryService, protocolHandlerRegistry, responseService,
-                requestLogService, Optional.empty(), Optional.empty(),
+                Optional.empty(), Optional.empty(), requestLogService,
+                Optional.empty(), Optional.empty(),
                 Optional.empty(), excelImportService, openApiImportService, Optional.empty(),
                 responseContentValidatorRegistry, builtinUserRepository,
                 agentRegistry, cacheManager, issueReportService, Optional.empty(), Optional.empty(),

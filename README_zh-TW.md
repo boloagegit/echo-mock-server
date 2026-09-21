@@ -116,6 +116,7 @@ SPRING_JPA_HIBERNATE_DDL_AUTO=validate \
 | `SPRING_JPA_HIBERNATE_DDL_AUTO` | 目前 profile 預設為 `update`；完成受控 schema 遷移後使用 `validate` |
 | `ECHO_REQUEST_LOG_ENABLED` | 設為 `false` 會停止建立請求記錄、Log Agent 與本機 spool；預設為 `true` |
 | `ECHO_REQUEST_LOG_SPOOL_PATH` | 每實例本機 SQLite request-log spool 路徑；預設 `./data/request-log-spool.sqlite` |
+| `ECHO_CACHE_TEMPLATE_MAX_WEIGHT_MB` | 編譯模板快取容量（MiB），預設 `16`；超大模板仍可渲染但不保留於快取 |
 | `ECHO_DB_POOL_MAX_SIZE`／`ECHO_DB_POOL_MIN_IDLE` | 外部 profile 的 Hikari connection pool 大小 |
 
 其餘 Hikari timeout 與 lifetime 設定使用 profile 檔案中的 `ECHO_DB_*` 變數。請勿在 `SPRING_PROFILES_ACTIVE` 放入多個資料庫 profile。
