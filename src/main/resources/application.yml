@@ -79,6 +79,9 @@ echo:
       max-size-mb: 50          # Response body 快取上限 (MB)，512MB heap 下不宜過大
       threshold-kb: 5120      # 超過此大小的 body 不快取 (KB) - 5MB
       expire-minutes: 720     # 快取過期時間 (分鐘) - 12 小時
+    template:
+      # 以來源與編譯結構的保守估算限制模板快取；單筆超過預算仍會渲染但不保留。
+      max-weight-mb: ${ECHO_CACHE_TEMPLATE_MAX_WEIGHT_MB:16}
     sync-interval-ms: 5000    # 多實例 cache 同步間隔 (毫秒)
   jms:
     enabled: false

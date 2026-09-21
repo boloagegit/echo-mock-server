@@ -10,9 +10,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import net.jqwik.api.*;
 import net.jqwik.api.constraints.IntRange;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -20,6 +22,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -40,6 +44,11 @@ class SseSendEventsTest {
     void setUp() {
         controller = new UniversalMockController(
                 ruleService, httpRuleService, requestLogService, templateService, null);
+    }
+
+    @AfterEach
+    void tearDown() {
+        controller.shutdown();
     }
 
     // --- Normal event sequence → all sent then complete() ---
@@ -122,6 +131,24 @@ class SseSendEventsTest {
         verify(emitter, times(1)).send(any(SseEmitter.SseEventBuilder.class));
         verify(emitter).completeWithError(any(RuntimeException.class));
         verify(emitter, never()).complete();
+    }
+
+    @Test
+    void timeoutCancelsAndRemovesPendingSseEvent() throws Exception {
+        List<SseEvent> events = List.of(
+                new SseEvent("msg", "later", "1", 60_000L, null));
+        CompletableFuture<Void> playback = CompletableFuture.runAsync(() ->
+                controller.sendSseEvents(emitter, events, false, null,
+                        new HashMap<>(), "/test", "GET"));
+        ArgumentCaptor<Runnable> timeoutCallback = ArgumentCaptor.forClass(Runnable.class);
+
+        verify(emitter, timeout(1_000)).onTimeout(timeoutCallback.capture());
+        assertThat(controller.getPendingDelayTaskCount()).isEqualTo(1);
+        timeoutCallback.getValue().run();
+
+        playback.get(2, TimeUnit.SECONDS);
+        assertThat(controller.getPendingDelayTaskCount()).isZero();
+        verify(emitter, never()).send(any(SseEmitter.SseEventBuilder.class));
     }
 
     // --- Ordering verification: completeWithError called after sends ---

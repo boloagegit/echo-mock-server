@@ -9,6 +9,8 @@ import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.PathNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.w3c.dom.Document;
 import org.xml.sax.InputSource;
@@ -48,6 +50,8 @@ public class ResponseTemplateService {
     private static final String NUMERIC = "0123456789";
     private static final String ALPHABETIC = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     private static final int MAX_RANDOM_LENGTH = 10_000;
+    private static final int DEFAULT_TEMPLATE_CACHE_MIB = 16;
+    private static final long MEBIBYTE = 1024L * 1024L;
 
     // Faker data arrays
     private static final String[] FIRST_NAMES = {
@@ -104,14 +108,58 @@ public class ResponseTemplateService {
     );
 
     private final Handlebars handlebars;
-    private final Cache<String, Template> templateCache = Caffeine.newBuilder()
-            .maximumSize(1000)
-            .expireAfterAccess(1, TimeUnit.HOURS)
-            .build();
+    private final Cache<String, Template> templateCache;
+    private final long templateCacheMaxWeightBytes;
 
     public ResponseTemplateService() {
+        this(DEFAULT_TEMPLATE_CACHE_MIB);
+    }
+
+    @Autowired
+    public ResponseTemplateService(
+            @Value("${echo.cache.template.max-weight-mb:16}") int templateCacheMaxWeightMb) {
         this.handlebars = new Handlebars();
+        this.templateCacheMaxWeightBytes = saturatingMebibytes(templateCacheMaxWeightMb);
+        this.templateCache = Caffeine.newBuilder()
+                .maximumWeight(templateCacheMaxWeightBytes)
+                .weigher((String source, Template compiled) -> estimateTemplateWeight(source))
+                .expireAfterAccess(1, TimeUnit.HOURS)
+                .recordStats()
+                .build();
         registerHelpers();
+    }
+
+    private static long saturatingMebibytes(int configuredMib) {
+        return Math.max(1L, configuredMib) * MEBIBYTE;
+    }
+
+    /** Source characters plus a conservative allowance for the compiled Handlebars tree. */
+    static int estimateTemplateWeight(String source) {
+        if (source == null) return 1;
+        long estimatedBytes = 1_024L + (long) source.length() * 6L;
+        return (int) Math.min(Integer.MAX_VALUE, Math.max(1L, estimatedBytes));
+    }
+
+    long templateCacheMaxWeightBytes() {
+        return templateCacheMaxWeightBytes;
+    }
+
+    long templateCacheEstimatedSize() {
+        templateCache.cleanUp();
+        return templateCache.estimatedSize();
+    }
+
+    public Map<String, Object> getTemplateCacheStats() {
+        Map<String, Object> result = new HashMap<>();
+        result.put("entries", templateCache.estimatedSize());
+        templateCache.policy().eviction().ifPresent(eviction -> {
+            result.put("weightedSize", eviction.weightedSize().orElse(0L));
+            result.put("maximumWeight", eviction.getMaximum());
+        });
+        var stats = templateCache.stats();
+        result.put("requestCount", stats.requestCount());
+        result.put("evictionCount", stats.evictionCount());
+        return result;
     }
 
     @PreDestroy
