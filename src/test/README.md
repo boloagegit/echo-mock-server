@@ -42,4 +42,4 @@ JMS 的 `LEGACY`、`DEFAULT`、`SELECTED` 三條入口由 `JmsForwardingRoute` �
 ./gradlew t spotbugsMain
 ```
 
-以上不是長時間負載測試。既有外部 JMS／手動端到端測試仍依其原本環境條件執行；內嵌 broker 測試不等同於公司實際 JMS 環境驗收。
+以上不是長時間負載測試。既有外部 JMS／手動端到端測試仍依其原本環境條件執行；內嵌 broker 測試不等同於實際外部 JMS 部署環境驗收。

@@ -76,7 +76,7 @@
 
 快速轉發時，每次請求各產生一行 Mock INFO、一行 forward INFO；queue 滿後又為每次丟棄產生 WARN。單次 15 秒測試形成 642,518 行、約 96 MiB console log，其中包含 207,395 行 queue-full WARN。這個 log storm 本身會消耗 CPU、I/O 並放大故障。
 
-高 RPS 結果不代表請求紀錄具同等持久化能力：目前約 95% 的高速請求紀錄被丟棄。使用者已確認請求紀錄可接受有限資料遺失，因此後續以「Mock／轉發不中斷、佇列有界、丟棄可觀測但不逐筆刷 WARN」為設計原則。
+高 RPS 結果不代表請求紀錄具同等持久化能力：此基準中約 95% 的高速請求紀錄被丟棄。當時的紀錄佇列容量固定，滿載時允許丟棄；後續優化以「Mock／轉發不中斷、佇列有界、丟棄可觀測但不逐筆刷 WARN」為設計原則。
 
 ## JMS 規則匹配基準
 
@@ -91,7 +91,7 @@
 | 10 次 response 平均 | 11.2 ms |
 | 匹配正確率 | 10/10 |
 
-這是 JMS 規則匹配基準，不是外部 TIBCO／IBM MQ 的端到端 RPS。外部 broker 的網路、broker 設定與 client library 不在本機基準範圍內；之後若要優化 JMS transport，需在公司測試環境補同版本 broker 的獨立 E2E 負載測試。
+這是 JMS 規則匹配基準，不是外部 TIBCO／IBM MQ 的端到端 RPS。外部 broker 的網路、broker 設定與 client library 不在本機基準範圍內；之後若要優化 JMS transport，需在獨立測試環境補同版本 broker 的 E2E 負載測試。
 
 ## 優化後比較門檻
 
@@ -160,11 +160,11 @@ python3 scripts/bench-2000-jms.py http://127.0.0.1:18080
 實作原則是只將真正的下游 I/O 移到獨立的背景執行緒；一般 Mock 仍在原請求流程直接完成，不付出額外排程成本。
 
 - HTTP pipeline 支援非同步完成轉發，Undertow worker 不再等待下游 socket。
-- 依使用者要求，`echo.http.forward.max-concurrent` 程式預設為 `0`，代表不設應用層同時轉發上限；動態執行緒閒置 60 秒後回收。
+- `echo.http.forward.max-concurrent` 程式預設為 `0`，代表不設應用層同時轉發上限；動態執行緒閒置 60 秒後回收。
 - 設定正整數可重新啟用應用層上限；該模式容量用盡時以 50 ms 非阻塞 backoff 回應，避免客戶端立即重試形成 502 retry storm。
 - 連線池預設提高為單一下游 route 50 條、每個 HTTP client pool 合計 200 條；等待連線池空位改為獨立的 3,000 ms 上限，避免平均 1 s 的健康下游在短暫尖峰下因原 250 ms 設定過早回應 502。指定連線每組 profile 擁有自己的 pool；`X-Original-Host` 共用一個 pool，才是跨 host 合計 200 條。
 - 指定 HTTP 連線的解析結果進入 Caffeine cache；更新或刪除時同步清除 cache 與舊 Client。
-- `X-Original-Host` 轉發改用相同的隔離執行與逾時策略，仍保留公司內網預設不驗證 HTTPS 憑證，並保留呼叫端 `Authorization` 的原有行為。
+- `X-Original-Host` 轉發改用相同的隔離執行與逾時策略，維持內網相容模式預設不驗證 HTTPS 憑證，並保留呼叫端 `Authorization` 的原有行為。
 
 以 Fat Jar、全新臨時 H2 與相同本機下游重跑：
 
@@ -216,7 +216,7 @@ python3 scripts/bench-2000-jms.py http://127.0.0.1:18080
 黑箱正確性驗證：
 
 - 預設 HTTP profile 轉發與下游 418 status passthrough 正確。
-- 規則指定 `X-Original-Host` 實際連到自簽 HTTPS，仍保留公司內網預設不驗證憑證行為。
+- 規則指定 `X-Original-Host` 實際連到自簽 HTTPS，維持內網相容模式預設不驗證憑證的行為。
 - 1 s read timeout 實際於約 1.01 s 回傳 502，指標正確累計 `readTimeouts=1`。
 - 200 並行壓力的 pool acquire 失敗會被獨立分類為 `poolTimeouts`。
 - 停止請求 35 s 後，pool `available` 實際由 50 降為 0，證明 idle cleanup 有執行。
