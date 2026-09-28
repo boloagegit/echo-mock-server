@@ -103,58 +103,19 @@ public class JmsTargetForwarder {
     private String forwardResolved(String body, Message originalMessage,
                                    JmsTargetConnectionService.ResolvedTarget resolved) {
         JmsProperties.Target target = resolved.target();
-        String targetQueue = target.getQueue();
-        int timeoutMs = target.getTimeoutSeconds() * 1000;
 
         try {
             if (connectionService != null) {
-                try (TargetClientUse client = acquireSelectedClient(resolved)) {
-                    return exchange(body, originalMessage, target, client.connection());
-                }
+                return exchangeSelected(body, originalMessage, resolved);
             }
             ConnectionFactory factory = getOrCreateFactory(resolved);
-            
-            try (Session session = getConnection(factory, resolved.cacheKey())
-                    .createSession(false, Session.AUTO_ACKNOWLEDGE)) {
-                Queue destQueue = session.createQueue(targetQueue);
-                TemporaryQueue replyQueue = session.createTemporaryQueue();
-
-                // 發送訊息
-                MessageProducer producer = session.createProducer(destQueue);
-                TextMessage forwardMsg = session.createTextMessage(body);
-                forwardMsg.setJMSReplyTo(replyQueue);
-                
-                try {
-                    if (originalMessage == null) {
-                        throw new IllegalStateException("Original JMS message unavailable");
-                    }
-                    forwardMsg.setJMSCorrelationID(originalMessage.getJMSMessageID());
-                } catch (Exception e) {
-                    log.debug("Failed to set JMSCorrelationID: {}", e.getMessage());
-                }
-                
-                producer.send(forwardMsg);
-                log.debug("Forwarded message to target queue: {}", targetQueue);
-
-                // 等待回應
-                MessageConsumer consumer = session.createConsumer(replyQueue);
-                Message response = consumer.receive(timeoutMs);
-
-                if (response instanceof TextMessage textMessage) {
-                    String responseBody = textMessage.getText();
-                    log.debug("Received response from target JMS");
-                    return responseBody;
-                } else {
-                    log.warn("Target JMS response timeout or invalid type");
-                    return "<error>JMS response timeout</error>";
-                }
-            }
+            return exchange(body, originalMessage, target,
+                    getConnection(factory, resolved.cacheKey()),
+                    () -> resetConnection(resolved.cacheKey()));
 
         } catch (JMSException e) {
             if (connectionService == null) {
                 resetConnection(resolved.cacheKey());
-            } else {
-                resetSelectedClientByCacheKey(resolved.cacheKey(), e);
             }
             log.error("Failed to forward to target JMS (connection reset): {}", e.getMessage());
             return "<error>JMS forward error: " + e.getMessage() + "</error>";
@@ -188,13 +149,9 @@ public class JmsTargetForwarder {
         JmsTargetConnectionService.ResolvedTarget resolved = null;
         try {
             resolved = connectionService.resolveEnabled(connectionId);
-            try (TargetClientUse client = acquireSelectedClient(resolved)) {
-                return new ForwardResult(
-                        exchange(body, originalMessage, resolved.target(), client.connection()),
-                        describeTarget(resolved));
-            }
+            return new ForwardResult(exchangeSelected(body, originalMessage, resolved),
+                    describeTarget(resolved));
         } catch (JMSException e) {
-            resetSelectedClientByCacheKey(resolved.cacheKey(), e);
             log.error("Failed to forward to selected JMS target (connection reset): {}",
                     e.getMessage());
             return new ForwardResult(
@@ -312,33 +269,69 @@ public class JmsTargetForwarder {
     }
 
     private String exchange(String body, Message originalMessage, JmsProperties.Target target,
-                            Connection connection) throws JMSException {
+                            Connection connection, Runnable retireConnection) throws JMSException {
         String targetQueue = target.getQueue();
         int timeoutMs = target.getTimeoutSeconds() * 1000;
         try (Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)) {
             Queue destQueue = session.createQueue(targetQueue);
             TemporaryQueue replyQueue = session.createTemporaryQueue();
-            MessageProducer producer = session.createProducer(destQueue);
-            TextMessage forwardMsg = session.createTextMessage(body);
-            forwardMsg.setJMSReplyTo(replyQueue);
-            try {
-                if (originalMessage == null) {
-                    throw new IllegalStateException("Original JMS message unavailable");
+            try (MessageProducer producer = session.createProducer(destQueue)) {
+                TextMessage forwardMsg = session.createTextMessage(body);
+                forwardMsg.setJMSReplyTo(replyQueue);
+                try {
+                    if (originalMessage == null) {
+                        throw new IllegalStateException("Original JMS message unavailable");
+                    }
+                    forwardMsg.setJMSCorrelationID(originalMessage.getJMSMessageID());
+                } catch (Exception e) {
+                    log.debug("Failed to set JMSCorrelationID: {}", e.getMessage());
                 }
-                forwardMsg.setJMSCorrelationID(originalMessage.getJMSMessageID());
-            } catch (Exception e) {
-                log.debug("Failed to set JMSCorrelationID: {}", e.getMessage());
+                producer.send(forwardMsg);
+                log.debug("Forwarded message to target queue: {}", targetQueue);
+                try (MessageConsumer consumer = session.createConsumer(replyQueue)) {
+                    Message response = consumer.receive(timeoutMs);
+                    if (response instanceof TextMessage textMessage) {
+                        log.debug("Received response from target JMS");
+                        return textMessage.getText();
+                    }
+                    log.warn("Target JMS response timeout or invalid type");
+                    return "<error>JMS response timeout</error>";
+                }
+            } finally {
+                // Temporary destinations live until the Connection closes, not the Session.
+                // Close consumers first, then delete while the creating Session is still open.
+                try {
+                    replyQueue.delete();
+                } catch (JMSException | RuntimeException e) {
+                    // Preserve the downstream result/original error. Retiring the connection
+                    // releases orphan destinations; selected clients wait for other active uses.
+                    log.warn("Failed to delete temporary JMS reply queue; retiring connection: {}",
+                            e.getMessage());
+                    retireConnection.run();
+                }
             }
-            producer.send(forwardMsg);
-            log.debug("Forwarded message to target queue: {}", targetQueue);
-            MessageConsumer consumer = session.createConsumer(replyQueue);
-            Message response = consumer.receive(timeoutMs);
-            if (response instanceof TextMessage textMessage) {
-                log.debug("Received response from target JMS");
-                return textMessage.getText();
+        }
+    }
+
+    private void retireSelectedClient(String cacheKey, TargetClientUse client) {
+        synchronized (selectedTargetClients) {
+            // A late cleanup failure must not retire a replacement for the same profile.
+            selectedTargetClients.remove(cacheKey, client.owner);
+            client.owner.retire();
+        }
+    }
+
+    private String exchangeSelected(String body, Message originalMessage,
+                                    JmsTargetConnectionService.ResolvedTarget resolved) throws Exception {
+        try (TargetClientUse client = acquireSelectedClient(resolved)) {
+            try {
+                return exchange(body, originalMessage, resolved.target(), client.connection(),
+                        () -> retireSelectedClient(resolved.cacheKey(), client));
+            } catch (JMSException e) {
+                // Reset the actual failed client, not a newer replacement with the same cache key.
+                retireSelectedClient(resolved.cacheKey(), client);
+                throw e;
             }
-            log.warn("Target JMS response timeout or invalid type");
-            return "<error>JMS response timeout</error>";
         }
     }
 
@@ -371,15 +364,6 @@ public class JmsTargetForwarder {
             if (superseded) entry.getValue().retire();
             return superseded;
         });
-    }
-
-    private void resetSelectedClientByCacheKey(String cacheKey, Exception error) {
-        if (cacheKey == null) return;
-        synchronized (selectedTargetClients) {
-            TargetClient client = selectedTargetClients.remove(cacheKey);
-            if (client != null) client.retire();
-        }
-        log.info("Selected JMS connection reset after failure: {}", error.getMessage());
     }
 
     /** Stops new work on a changed/deleted profile and closes it after active forwards finish. */

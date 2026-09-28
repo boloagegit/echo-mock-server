@@ -342,6 +342,10 @@ public final class HttpOutboundForwarder {
                     .pendingAcquireTimeout(Duration.ofMillis(poolAcquireTimeoutMs))
                     .maxIdleTime(Duration.ofSeconds(idleConnectionTimeoutSeconds))
                     .evictInBackground(Duration.ofSeconds(idleConnectionTimeoutSeconds))
+                    // Connection eviction alone leaves per-host pools and their metrics behind.
+                    // Dispose only empty, inactive pools; active/pending requests remain intact.
+                    .disposeInactivePoolsInBackground(Duration.ofSeconds(idleConnectionTimeoutSeconds),
+                            Duration.ofSeconds(idleConnectionTimeoutSeconds))
                     .metrics(true, () -> metricsCollector)
                     .build();
             HttpClient httpClient = HttpClient.create(connectionProvider)
