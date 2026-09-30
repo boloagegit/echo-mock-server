@@ -302,7 +302,7 @@ public final class JmsTargetForwarder {
     private String exchange(String body, Message originalMessage, JmsProperties.Target target,
                             Connection connection, Runnable retireConnection) throws JMSException {
         String targetQueue = target.getQueue();
-        int timeoutMs = target.getTimeoutSeconds() * 1000;
+        long timeoutMs = target.getTimeoutSeconds() * 1000L;
         try (Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)) {
             Queue destQueue = session.createQueue(targetQueue);
             TemporaryQueue replyQueue = session.createTemporaryQueue();

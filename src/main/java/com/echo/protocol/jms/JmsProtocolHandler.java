@@ -13,11 +13,13 @@ import com.echo.protocol.AbstractProtocolHandler;
 import com.echo.repository.JmsRuleRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.jms.core.JmsTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -255,7 +257,9 @@ public class JmsProtocolHandler extends AbstractProtocolHandler {
             int timeout = ((Number) request.getOrDefault("timeout", 30)).intValue();
             
             var jms = jmsConnectionManager.get();
-            var jmsTemplate = jms.getJmsTemplate();
+            // Per-request settings must not mutate the template shared by concurrent callers.
+            var jmsTemplate = new JmsTemplate(Objects.requireNonNull(
+                    jms.getJmsTemplate().getConnectionFactory(), "JMS ConnectionFactory not available"));
             jmsTemplate.setReceiveTimeout(timeout * 1000L);
             
             String queueName = jmsRule.getQueueName().equals("*") ? "ECHO.REQUEST" : jmsRule.getQueueName();
