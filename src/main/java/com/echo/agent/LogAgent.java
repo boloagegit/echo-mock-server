@@ -174,6 +174,16 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
         return AGENT_NAME;
     }
 
+    public boolean isDurableConsumerRunning() { return durableConsumerRunning.get(); }
+
+    public boolean isDurableMode() {
+        return durableSpool != null && !configService.isRequestLogMemoryMode();
+    }
+
+    public boolean isStorageUnavailable() {
+        return durableSpool != null && durableSpool.isStorageUnavailable();
+    }
+
     @Override
     public AgentStats getStats() {
         AgentStats base = super.getStats();

@@ -594,6 +594,46 @@ public final class HttpOutboundForwarder {
                 Map.copyOf(targets));
     }
 
+    /** Bounded aggregate for resource diagnostics; never enumerates target identities. */
+    public Map<String, Object> resourceMetricsSnapshot() {
+        final int limit = 64;
+        Set<ClientHolder> seen = new HashSet<>();
+        seen.add(originalHostClient);
+        boolean complete = true;
+        for (ClientHolder holder : clients.values()) {
+            if (seen.size() >= limit) { complete = false; break; }
+            seen.add(holder);
+        }
+        for (ClientHolder holder : retiredClients) {
+            if (seen.size() >= limit) { complete = false; break; }
+            seen.add(holder);
+        }
+        long leased = 0, pending = connectionLimiter.pendingCount(), idle = 0, capacity = 0;
+        for (ClientHolder holder : seen) {
+            int count = 0;
+            for (ConnectionPoolMetrics pool : holder.metricsCollector().pools.values()) {
+                if (count++ >= limit) { complete = false; break; }
+                leased += pool.acquiredSize();
+                pending += pool.pendingAcquireSize();
+                idle += pool.idleSize();
+                capacity += pool.maxAllocatedSize();
+            }
+        }
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("activeForwards", activeForwards.get());
+        values.put("completedForwards", completedForwards.sum());
+        values.put("cancelledForwards", cancelledForwards.sum());
+        values.put("rejectedForwards", rejectedForwards.sum());
+        values.put("poolLeased", leased);
+        values.put("poolPending", pending);
+        values.put("poolIdle", idle);
+        values.put("poolCapacity", capacity);
+        values.put("bufferedBytes", responseBufferBudget.reservedBytes());
+        values.put("bufferLimitBytes", responseBufferBudget.maximumBytes());
+        values.put("coverageComplete", complete);
+        return Map.copyOf(values);
+    }
+
     private TargetMetrics metricsFor(String key, String name) {
         TargetMetrics metrics = targetMetrics.get(key);
         if (metrics == null) {

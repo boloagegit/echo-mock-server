@@ -15,6 +15,8 @@ import org.springframework.stereotype.Component;
 public class JmsProperties {
 
     private boolean enabled = false;
+    /** Startup policy description only; does not suppress Artemis warnings or change routing. */
+    private boolean policySummaryEnabled = true;
     private String alias = "JMS";
     private int port = 61616;
     private String username = "admin";

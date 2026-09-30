@@ -60,6 +60,18 @@ spring:
 
 # Echo 自訂配置
 echo:
+  # Resource snapshots are ADMIN-only and collected only on manual refresh.
+  monitoring:
+    enabled: true
+    jvm-enabled: true
+    caches-enabled: true
+    scheduler-enabled: true
+    jms-enabled: true
+    http-enabled: true
+    database-enabled: true
+    request-log-enabled: true
+    application-log-enabled: true
+    storage-enabled: true
   env-label:                    # 環境別名（如 DEV、SIT、UAT），可用環境變數 ECHO_ENV_LABEL 覆蓋
   features:
     bulk-import-export-enabled: ${ECHO_BULK_IMPORT_EXPORT_ENABLED:false}  # 批次匯入／匯出，預設關閉
@@ -85,6 +97,7 @@ echo:
     sync-interval-ms: 5000    # 多實例 cache 同步間隔 (毫秒)
   jms:
     enabled: false
+    policy-summary-enabled: true # Describes policy; does not suppress Artemis warnings.
     alias:                     # JMS 協定顯示別名，可用環境變數 ECHO_JMS_ALIAS 覆蓋
     port: 61616              # Artemis 監聽埠 (外部服務連線 tcp://localhost:61616)
     username: admin          # Artemis 帳密，可用環境變數 ECHO_JMS_USERNAME / ECHO_JMS_PASSWORD 覆蓋

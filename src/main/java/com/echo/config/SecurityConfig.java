@@ -64,6 +64,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/admin/builtin-users/forgot-password", "/api/admin/builtin-users/register").permitAll()
                 // 內建帳號管理 — 僅 ADMIN
                 .requestMatchers("/api/admin/builtin-users/**").hasRole("ADMIN")
+                .requestMatchers("/api/admin/resources", "/api/admin/resources/**").hasRole("ADMIN")
                 // 已登入使用者可選擇安全的唯讀連線 DTO；管理與測試仍僅限 ADMIN
                 .requestMatchers(HttpMethod.GET,
                         "/api/admin/jms-target-connections",

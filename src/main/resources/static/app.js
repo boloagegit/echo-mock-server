@@ -21,7 +21,7 @@ const _app = createApp({
         const { toasts, showToast, dismissToast, confirmState, showConfirm } = useToast(t);
         _showToast = showToast;
         // 認證與權限管理（useAuth composable）
-        const { isAdmin, isLoggedIn, login, logout, requireLogin } = useAuth(showConfirm, t);
+        const { isAdmin, isLoggedIn, login, logout, requireLogin, verifyAdminResourceAccess } = useAuth(showConfirm, t);
 
         // === 獨立工具 composables ===
         const themeCtx = useTheme(t);
@@ -409,8 +409,14 @@ const _app = createApp({
             themeCtx.applyTheme();
             applyDensity(); 
             await loadLocale(locale.value);
-            await loadStatus();
-            checkForceChangePassword();
+            if (window.location.hash.split('?')[0] === '#/settings') {
+                await verifyAdminResourceAccess();
+                // The existing DB-backed status must not gate the independent diagnostic panel.
+                void loadStatus().then(checkForceChangePassword);
+            } else {
+                await loadStatus();
+                checkForceChangePassword();
+            }
             applyUrlParams(); 
             if (!sessionStorage.getItem('echo_dblclick_hint_shown') && isLoggedIn.value) { showDblClickHint.value = true; }
             window.addEventListener('hashchange', applyUrlParams); 
@@ -495,6 +501,7 @@ _app.component('change-password-modal', ChangePasswordModal);
 _app.component('responses-page', ResponsesPage);
 _app.component('accounts-page', AccountsPage);
 _app.component('settings-page', SettingsPage);
+_app.component('resource-monitoring-panel', ResourceMonitoringPanel);
 _app.component('priority-help-modal', PriorityHelpModal);
 _app.component('rules-page', RulesPage);
 _app.component('rule-edit-modal', RuleEditModal);

@@ -15,7 +15,12 @@ enum JmsForwardingRoute {
     LEGACY, DEFAULT, SELECTED;
 
     JmsTargetForwarder createForwarder(JmsProperties properties, List<JmsTargetFactoryProvider> providers) {
-        if (this == LEGACY) return new JmsTargetForwarder(properties, providers);
+        return createForwarder(properties, providers, null);
+    }
+
+    JmsTargetForwarder createForwarder(JmsProperties properties, List<JmsTargetFactoryProvider> providers,
+                                      JmsRuntimeMetrics metrics) {
+        if (this == LEGACY) return new JmsTargetForwarder(properties, providers, metrics);
 
         JmsTargetConnectionService service = mock(JmsTargetConnectionService.class);
         var resolved = new JmsTargetConnectionService.ResolvedTarget("db:7:1", "Test", properties.getTarget(), false);
@@ -24,7 +29,7 @@ enum JmsForwardingRoute {
         } else {
             when(service.resolveEnabled("7")).thenReturn(resolved);
         }
-        return new JmsTargetForwarder(service, providers);
+        return new JmsTargetForwarder(service, providers, metrics);
     }
 
     String forward(JmsTargetForwarder forwarder, String body) {

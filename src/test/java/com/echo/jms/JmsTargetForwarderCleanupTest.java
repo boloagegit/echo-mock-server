@@ -215,6 +215,9 @@ class JmsTargetForwarderCleanupTest {
                 verify(replacement, never()).close();
                 assertThat(fixture.forward()).isEqualTo("reply");
                 verify(fixture.factory, times(2)).createConnection();
+                assertThat(fixture.metrics.snapshot()).containsEntry("forwardExits", 4L)
+                        .containsEntry("forwardActive", 0).containsEntry("forwardFailures", 1L)
+                        .containsEntry("cleanupFailures", 2L);
             }
         }
     }
@@ -282,6 +285,7 @@ class JmsTargetForwarderCleanupTest {
         final Connection connection = mock(Connection.class);
         final Exchange exchange = new Exchange();
         final JmsTargetForwarder forwarder;
+        final JmsRuntimeMetrics metrics = new JmsRuntimeMetrics(new com.echo.config.MonitoringProperties());
 
         Fixture(JmsForwardingRoute route) throws Exception {
             this.route = route;
@@ -297,7 +301,7 @@ class JmsTargetForwarderCleanupTest {
             when(provider.create(any())).thenReturn(factory);
             when(factory.createConnection()).thenReturn(connection);
             when(connection.createSession(false, Session.AUTO_ACKNOWLEDGE)).thenReturn(exchange.session);
-            forwarder = route.createForwarder(props, List.of(provider));
+            forwarder = route.createForwarder(props, List.of(provider), metrics);
         }
 
         String forward() {

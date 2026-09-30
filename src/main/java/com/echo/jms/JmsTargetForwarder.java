@@ -31,11 +31,12 @@ import java.util.function.Supplier;
 @Component
 @ConditionalOnProperty(name = "echo.jms.enabled", havingValue = "true")
 @Slf4j
-public class JmsTargetForwarder {
+public final class JmsTargetForwarder {
 
     private final Supplier<Optional<JmsTargetConnectionService.ResolvedTarget>> targetResolver;
     private final JmsTargetConnectionService connectionService;
     private final List<JmsTargetFactoryProvider> factoryProviders;
+    private final JmsRuntimeMetrics metrics;
     private final Map<String, TargetClient> selectedTargetClients = new ConcurrentHashMap<>();
     private volatile ConnectionFactory targetFactory;
     private volatile Connection targetConnection;
@@ -43,23 +44,34 @@ public class JmsTargetForwarder {
 
     @Autowired
     public JmsTargetForwarder(JmsTargetConnectionService connectionService,
+                              List<JmsTargetFactoryProvider> factoryProviders, JmsRuntimeMetrics metrics) {
+        this(connectionService::resolveActive, connectionService, factoryProviders, metrics);
+    }
+
+    public JmsTargetForwarder(JmsTargetConnectionService connectionService,
                               List<JmsTargetFactoryProvider> factoryProviders) {
-        this(connectionService::resolveActive, connectionService, factoryProviders);
+        this(connectionService, factoryProviders, null);
     }
 
     /** Backward-compatible constructor used by existing standalone tests and integrations. */
     public JmsTargetForwarder(JmsProperties jmsProperties,
                               List<JmsTargetFactoryProvider> factoryProviders) {
-        this(() -> legacyTarget(jmsProperties), null, factoryProviders);
+        this(jmsProperties, factoryProviders, null);
+    }
+
+    public JmsTargetForwarder(JmsProperties jmsProperties,
+                              List<JmsTargetFactoryProvider> factoryProviders, JmsRuntimeMetrics metrics) {
+        this(() -> legacyTarget(jmsProperties), null, factoryProviders, metrics);
     }
 
     private JmsTargetForwarder(
             Supplier<Optional<JmsTargetConnectionService.ResolvedTarget>> targetResolver,
             JmsTargetConnectionService connectionService,
-            List<JmsTargetFactoryProvider> factoryProviders) {
+            List<JmsTargetFactoryProvider> factoryProviders, JmsRuntimeMetrics metrics) {
         this.targetResolver = targetResolver;
         this.connectionService = connectionService;
         this.factoryProviders = factoryProviders;
+        this.metrics = metrics;
     }
 
     @jakarta.annotation.PreDestroy
@@ -90,6 +102,18 @@ public class JmsTargetForwarder {
 
     /** 轉發並回傳不含認證資訊的實際目標，供 Request Log 使用。 */
     public ForwardResult forwardWithMetadata(String body, Message originalMessage) {
+        if (metrics != null) metrics.forwardStarted();
+        try {
+            return forwardDefaultWithMetadata(body, originalMessage);
+        } catch (RuntimeException e) {
+            if (metrics != null) metrics.forwardFailed();
+            throw e;
+        } finally {
+            if (metrics != null) metrics.forwardExited();
+        }
+    }
+
+    private ForwardResult forwardDefaultWithMetadata(String body, Message originalMessage) {
         Optional<JmsTargetConnectionService.ResolvedTarget> selected = targetResolver.get();
         if (selected.isEmpty()) {
             return new ForwardResult(
@@ -114,12 +138,14 @@ public class JmsTargetForwarder {
                     () -> resetConnection(resolved.cacheKey()));
 
         } catch (JMSException e) {
+            if (metrics != null) metrics.forwardFailed();
             if (connectionService == null) {
                 resetConnection(resolved.cacheKey());
             }
             log.error("Failed to forward to target JMS (connection reset): {}", e.getMessage());
             return "<error>JMS forward error: " + e.getMessage() + "</error>";
         } catch (Exception e) {
+            if (metrics != null) metrics.forwardFailed();
             log.error("Failed to forward to target JMS: {}", e.getMessage());
             return "<error>JMS forward error: " + e.getMessage() + "</error>";
         }
@@ -147,21 +173,26 @@ public class JmsTargetForwarder {
                     "<error>Named JMS target connections are unavailable</error>", null);
         }
         JmsTargetConnectionService.ResolvedTarget resolved = null;
+        if (metrics != null) metrics.forwardStarted();
         try {
             resolved = connectionService.resolveEnabled(connectionId);
             return new ForwardResult(exchangeSelected(body, originalMessage, resolved),
                     describeTarget(resolved));
         } catch (JMSException e) {
+            if (metrics != null) metrics.forwardFailed();
             log.error("Failed to forward to selected JMS target (connection reset): {}",
                     e.getMessage());
             return new ForwardResult(
                     "<error>JMS forward error: " + e.getMessage() + "</error>",
                     describeTarget(resolved));
         } catch (Exception e) {
+            if (metrics != null) metrics.forwardFailed();
             log.error("Failed to forward to selected JMS target: {}", e.getMessage());
             return new ForwardResult(
                     "<error>JMS forward error: " + e.getMessage() + "</error>",
                     resolved == null ? null : describeTarget(resolved));
+        } finally {
+            if (metrics != null) metrics.forwardExited();
         }
     }
 
@@ -294,6 +325,10 @@ public class JmsTargetForwarder {
                         log.debug("Received response from target JMS");
                         return textMessage.getText();
                     }
+                    if (metrics != null) {
+                        if (response == null) metrics.receiveTimedOut();
+                        else metrics.invalidReply();
+                    }
                     log.warn("Target JMS response timeout or invalid type");
                     return "<error>JMS response timeout</error>";
                 }
@@ -303,6 +338,7 @@ public class JmsTargetForwarder {
                 try {
                     replyQueue.delete();
                 } catch (JMSException | RuntimeException e) {
+                    if (metrics != null) metrics.cleanupFailed();
                     // Preserve the downstream result/original error. Retiring the connection
                     // releases orphan destinations; selected clients wait for other active uses.
                     log.warn("Failed to delete temporary JMS reply queue; retiring connection: {}",

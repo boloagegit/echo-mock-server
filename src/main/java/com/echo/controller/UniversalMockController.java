@@ -122,6 +122,10 @@ public class UniversalMockController {
         return delayScheduler.getQueue().size();
     }
 
+    public int getActiveDelayWorkerCount() { return delayScheduler.getActiveCount(); }
+
+    public int getDelayWorkerCapacity() { return delayScheduler.getCorePoolSize(); }
+
     /** SSE 逾時時間（毫秒） */
     private static final long SSE_TIMEOUT_MS = 30_000L;
     /** SSE 循環模式逾時時間（24 小時） */
