@@ -26,21 +26,32 @@ public class MockJmsListener {
     private final JmsMockPipeline jmsMockPipeline;
     private final JmsEndpointExtractor endpointExtractor;
     private final JmsMessageMemoryBudget memoryBudget;
+    private final JmsRuntimeMetrics metrics;
 
     public MockJmsListener(JmsConnectionManager connectionManager,
                            JmsProperties jmsProperties,
                            JmsMockPipeline jmsMockPipeline,
                            JmsEndpointExtractor endpointExtractor,
                            JmsMessageMemoryBudget memoryBudget) {
+        this(connectionManager, jmsProperties, jmsMockPipeline, endpointExtractor, memoryBudget, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MockJmsListener(JmsConnectionManager connectionManager,
+                           JmsProperties jmsProperties, JmsMockPipeline jmsMockPipeline,
+                           JmsEndpointExtractor endpointExtractor, JmsMessageMemoryBudget memoryBudget,
+                           JmsRuntimeMetrics metrics) {
         this.connectionManager = connectionManager;
         this.jmsProperties = jmsProperties;
         this.jmsMockPipeline = jmsMockPipeline;
         this.endpointExtractor = endpointExtractor;
         this.memoryBudget = memoryBudget;
+        this.metrics = metrics;
     }
 
     @JmsListener(destination = "${echo.jms.queue:ECHO.REQUEST}")
     public void onMessage(Message message) {
+        if (metrics != null) metrics.listenerStarted();
         try (ReservedPipelineResult processing = processMessage(message)) {
             PipelineResult result = processing.result();
 
@@ -99,6 +110,8 @@ public class MockJmsListener {
         } catch (Exception e) {
             log.error("JMS processing error", e);
             sendErrorReply(message, e.getMessage());
+        } finally {
+            if (metrics != null) metrics.listenerExited();
         }
     }
 
@@ -191,7 +204,9 @@ public class MockJmsListener {
                 reply.setJMSCorrelationID(request.getJMSMessageID());
                 return reply;
             });
+            if (metrics != null) metrics.replySent();
         } catch (Exception e) {
+            if (metrics != null) metrics.replyFailed();
             log.error("Failed to send reply: {}", e.getMessage());
         }
     }

@@ -98,11 +98,11 @@ public class SqliteSerializingJpaTransactionManager extends JpaTransactionManage
         }
     }
 
-    int getQueuedWriterCount() {
+    public int getQueuedWriterCount() {
         return queuedWriters.get();
     }
 
-    int getActiveWriterCount() {
+    public int getActiveWriterCount() {
         return activeWriters.get();
     }
 

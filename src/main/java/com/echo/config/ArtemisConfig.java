@@ -80,6 +80,22 @@ public class ArtemisConfig {
             configureRedelivery(addressSettings, jmsProperties);
             configuration.addAddressSetting("#", addressSettings);
 
+            if (jmsProperties.isPolicySummaryEnabled()) {
+                log.info("Echo JMS wildcard policy: maxDeliveryAttempts={}, deadLetterConfigured={}, "
+                                + "expiryConfigured={}, fullPolicy=PAGE, pagingThresholdBytes={}, "
+                                + "minDiskFreeBytes={}. AMQ222165/AMQ222166 describe address settings, "
+                                + "not resource cleanup; expired messages are not retained without an expiry address.",
+                        addressSettings.getMaxDeliveryAttempts(),
+                        addressSettings.getDeadLetterAddress() != null,
+                        addressSettings.getExpiryAddress() != null,
+                        boundedBrokerMaxBytes, configuration.getMinDiskFree());
+            }
+            if (addressSettings.getMaxDeliveryAttempts() > 0
+                    && addressSettings.getDeadLetterAddress() == null) {
+                log.warn("Echo JMS wildcard policy has finite delivery attempts and no dead-letter address: "
+                        + "messages are removed when attempts are exhausted. Artemis warnings remain enabled.");
+            }
+
             log.info("Artemis TCP acceptor configured on port {}, paging after {} MB",
                     port, boundedBrokerMaxBytes / (1024 * 1024));
         };

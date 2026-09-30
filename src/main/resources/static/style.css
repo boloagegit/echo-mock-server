@@ -3330,6 +3330,49 @@ input[type="checkbox"] {
 .settings-card-header .btn i { color: inherit }
 .settings-card-body { padding: var(--space-md) var(--space-lg) var(--space-lg) }
 .settings-card-wide { grid-column: 1 / -1 }
+.resource-monitoring { margin-bottom: var(--space-lg) }
+.resource-monitoring-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap }
+.resource-monitoring-title { margin: 0; font-size: var(--font-base); font-weight: var(--font-weight-semibold); line-height: 1.5 }
+.resource-monitoring-group-title { margin: 0; font-size: var(--font-base); font-weight: var(--font-weight-medium) }
+.resource-monitoring-meta { display: flex; align-items: center; gap: var(--space-md); flex-wrap: wrap; min-height: 32px; font-size: var(--font-sm); color: var(--muted) }
+.resource-monitoring-error { color: var(--danger) }
+.resource-monitoring-overview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-md); margin: var(--space-sm) 0 var(--space-md) }
+.resource-monitoring-summary { min-width: 0; padding: var(--space-md); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-panel) }
+.resource-monitoring-summary-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-sm); margin-bottom: var(--space-sm) }
+.resource-monitoring-metrics { margin: 0; display: grid; gap: var(--space-xs) }
+.resource-monitoring-metric { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); align-items: baseline; gap: var(--space-sm); min-height: 24px; font-size: var(--font-sm); line-height: 1.5 }
+.resource-monitoring-metric dt { min-width: 0; margin: 0; font-weight: var(--font-weight-regular); color: var(--muted); overflow-wrap: anywhere }
+.resource-monitoring-metric dd { min-width: 0; margin: 0; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); overflow-wrap: anywhere }
+.resource-monitoring-details { border: 1px solid var(--border); border-radius: var(--radius-panel); overflow: clip; background: var(--card) }
+.resource-monitoring-details > details + details { border-top: 1px solid var(--border) }
+.resource-monitoring-details summary { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); min-height: 48px; padding: var(--space-sm) var(--space-md); cursor: pointer; list-style: none }
+.resource-monitoring-details summary::-webkit-details-marker { display: none }
+.resource-monitoring-details summary:hover { background: var(--surface-neutral-soft) }
+.resource-monitoring-details summary:focus-visible { outline: 0; box-shadow: inset 0 0 0 2px var(--primary); border-radius: var(--radius-control) }
+.resource-monitoring-disclosure-copy { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-sm) var(--space-md); min-width: 0; font-size: var(--font-base); font-weight: var(--font-weight-medium) }
+.resource-monitoring-disclosure-copy small { font-size: var(--font-sm); color: var(--muted); font-weight: var(--font-weight-regular); overflow-wrap: anywhere }
+.resource-monitoring-chevron { flex: 0 0 auto; color: var(--muted); transition: transform var(--motion-fast) var(--ease-standard) }
+.resource-monitoring-disclosure-state { margin-inline-start: auto; flex: 0 0 auto }
+.resource-monitoring-details details[open] > summary .resource-monitoring-chevron { transform: rotate(180deg) }
+.resource-monitoring-detail-content { padding: 0 var(--space-md) var(--space-md) }
+.resource-monitoring-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-lg) var(--space-xl); align-items: start }
+.resource-monitoring-detail-section { min-width: 0 }
+.resource-monitoring-cumulative { margin: 0 0 var(--space-md) }
+.resource-monitoring-note { margin: var(--space-sm) 0 0 }
+.resource-monitoring-config { margin-bottom: 0 }
+@media (max-width: 1100px) {
+    .resource-monitoring-overview { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+}
+@media (max-width: 700px) {
+    .resource-monitoring-overview, .resource-monitoring-detail-grid { grid-template-columns: minmax(0, 1fr) }
+    .resource-monitoring-disclosure-copy { flex-direction: column; gap: var(--space-xs) }
+    .resource-monitoring-details summary { flex-wrap: wrap }
+    .resource-monitoring-disclosure-copy { flex: 1 1 200px }
+    .resource-monitoring-disclosure-state { margin-inline-start: 0 }
+}
+@media (prefers-reduced-motion: reduce) {
+    .resource-monitoring-chevron { transition: none }
+}
 .settings-card-header-actions { justify-content: space-between }
 .scenario-settings-body { padding-top: var(--space-sm) }
 .settings-state-row {

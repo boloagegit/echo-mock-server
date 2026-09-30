@@ -22,6 +22,8 @@ const SettingsPage = {
     return {
       agents: [],
       agentsLoading: false,
+      resourceRefreshToken: 0,
+      resourceLoading: false,
       jmsTargets: [],
       jmsTargetsLoading: false,
       jmsTargetSaving: false,
@@ -96,6 +98,10 @@ const SettingsPage = {
     },
   },
   methods: {
+    refreshStatus() {
+      this.resourceRefreshToken++;
+      this.$emit('refresh-status');
+    },
     notify(message, type = 'success') {
       if (typeof _showToast === 'function') { _showToast(message, type); }
     },
@@ -412,9 +418,10 @@ const SettingsPage = {
           <h1 class="page-title">{{t('settings.title')}}</h1>
           <span class="settings-page-meta" v-if="status">v{{status.version}} · {{t('settings.configHint')}}</span>
         </div>
-        <ui-button class="btn btn-secondary" @click="$emit('refresh-status')" :disabled="loading.status"><i class="bi bi-arrow-clockwise" :class="{'spin':loading.status}"></i> {{t('settings.refresh')}}</ui-button>
+        <ui-button class="btn btn-secondary" @click="refreshStatus" :disabled="isAdmin ? resourceLoading : loading.status"><i class="bi bi-arrow-clockwise" :class="{'spin':isAdmin ? resourceLoading : loading.status}"></i> {{t('settings.refresh')}}</ui-button>
       </div>
       <div class="page-scroll">
+      <resource-monitoring-panel v-if="isAdmin" :refresh-token="resourceRefreshToken" @loading="resourceLoading=$event"></resource-monitoring-panel>
       <!-- Skeleton -->
       <div v-if="!status" class="settings-grid">
         <div class="settings-card" v-for="i in 6" :key="'sk-'+i">

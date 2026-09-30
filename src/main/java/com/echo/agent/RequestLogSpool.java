@@ -625,6 +625,8 @@ public class RequestLogSpool {
                 state.pendingItems());
     }
 
+    public boolean isStorageUnavailable() { return storageUnavailable.get(); }
+
     public record StatusSnapshot(
             long pendingBytes,
             long pendingByteLimit,

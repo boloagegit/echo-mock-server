@@ -14,6 +14,20 @@ const useAuth = (showConfirm, t) => {
     const isAdmin = ref(false);
     const isLoggedIn = ref(false);
 
+    /** ADMIN-only, DB-independent diagnostic entry. Never trusts locally stored roles. */
+    const verifyAdminResourceAccess = async () => {
+        const controller = new AbortController();
+        const deadline = setTimeout(() => controller.abort(), 8000);
+        try {
+            const response = await fetch('/api/admin/resources/access', { cache: 'no-store', signal: controller.signal });
+            isAdmin.value = response.ok;
+            if (response.ok) isLoggedIn.value = true;
+            else if (response.status === 401) isLoggedIn.value = false;
+        } catch {
+            isAdmin.value = false;
+        } finally { clearTimeout(deadline); }
+    };
+
     /** 跳轉至登入頁面 */
     const login = () => { window.location.href = '/login.html'; };
 
@@ -33,5 +47,5 @@ const useAuth = (showConfirm, t) => {
         return true;
     };
 
-    return { isAdmin, isLoggedIn, login, logout, requireLogin };
+    return { isAdmin, isLoggedIn, login, logout, requireLogin, verifyAdminResourceAccess };
 };
