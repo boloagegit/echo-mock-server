@@ -431,7 +431,7 @@ echo:
       enabled: false            # 舊版單一連線相容設定；未建立資料庫連線時使用
       type: tibco               # artemis 或 tibco
       server-url: tcp://esb-server:7222
-      timeout-seconds: 30
+      timeout-seconds: 30        # 允許 1～300 秒；無效值會在設定綁定時拒絕啟動
       queue: TARGET.REQUEST     # 目標 Queue
   http:
     alias: HTTP                 # HTTP 協定顯示名稱

@@ -454,7 +454,7 @@ echo:
       enabled: false            # Legacy fallback used until a database profile exists
       type: tibco               # artemis or tibco
       server-url: tcp://esb-server:7222
-      timeout-seconds: 30
+      timeout-seconds: 30        # Valid range: 1–300 seconds; invalid values fail configuration binding
       queue: TARGET.REQUEST     # Target queue
   http:
     alias: HTTP                 # HTTP protocol display name

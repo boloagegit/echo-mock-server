@@ -76,6 +76,15 @@ public class JmsProperties {
         private String password;
         private int timeoutSeconds = 30;
 
+        /** Keep legacy YAML targets within the same finite range as database targets. */
+        public void setTimeoutSeconds(int timeoutSeconds) {
+            if (timeoutSeconds < 1 || timeoutSeconds > 300) {
+                throw new IllegalArgumentException(
+                        "echo.jms.target.timeout-seconds must be between 1 and 300");
+            }
+            this.timeoutSeconds = timeoutSeconds;
+        }
+
         /** 目標 JMS Server 上要轉發到的 Queue */
         private String queue = "TARGET.REQUEST";
     }
