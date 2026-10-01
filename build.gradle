@@ -68,7 +68,7 @@ dependencies {
     runtimeOnly 'com.mysql:mysql-connector-j'
     runtimeOnly 'org.mariadb.jdbc:mariadb-java-client'
     runtimeOnly 'com.microsoft.sqlserver:mssql-jdbc'
-    runtimeOnly 'com.oracle.database.jdbc:ojdbc17:23.26.1.0.0'
+    runtimeOnly 'com.oracle.database.jdbc:ojdbc17:23.26.3.0.0'
 
     // Monitoring & Actuator
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
