@@ -167,7 +167,7 @@ body {
 .sidebar.collapsed .sidebar-brand,
 .sidebar.collapsed .env-label,
 .sidebar.collapsed .nav-section { display: none }
-.sidebar.collapsed .nav-item { justify-content: center; padding: var(--sidebar-item-py) }
+.sidebar.collapsed .nav-item { justify-content: center; padding: calc(var(--sidebar-item-py) - 1px) }
 .sidebar.collapsed .sidebar-header { justify-content: center }
 .sidebar-header {
     display: flex; align-items: center; justify-content: space-between;
@@ -224,12 +224,12 @@ body {
     align-items: center;
     gap: var(--space-sm);
     min-height: 36px;
-    padding: var(--sidebar-item-py) 0.625rem;
+    padding: calc(var(--sidebar-item-py) - 1px) calc(0.625rem - 1px);
     border-radius: var(--radius-control);
     color: var(--muted);
     cursor: pointer;
     width: 100%;
-    border: 0;
+    border: 1px solid transparent;
     background: transparent;
     font-family: inherit;
     text-align: start;
@@ -552,9 +552,9 @@ body {
 .btn-secondary:hover:not(:disabled) { border-color: var(--muted); color: var(--text); background: var(--hover) }
 .btn-secondary:disabled, .btn-secondary.disabled { background: var(--card); color: var(--text); border-color: var(--border) }
 .btn-secondary.active { background: rgba(var(--primary-rgb), 0.12); color: var(--primary); border-color: rgba(var(--primary-rgb), 0.3) }
-.btn-danger { background: transparent; color: var(--danger); border: 1px solid rgba(var(--danger-rgb), 0.4) }
+.btn-danger { background: transparent; color: var(--danger-text); border: 1px solid rgba(var(--danger-rgb), 0.4) }
 .btn-danger:hover:not(:disabled) { background: rgba(var(--danger-rgb), 0.1) }
-.btn-danger:disabled, .btn-danger.disabled { background: transparent; color: var(--danger); border-color: rgba(var(--danger-rgb), 0.4) }
+.btn-danger:disabled, .btn-danger.disabled { background: transparent; color: var(--danger-text); border-color: rgba(var(--danger-rgb), 0.4) }
 .btn-warning { background: var(--warning); color: #1c2128; border-color: var(--warning) }
 .btn-warning:hover:not(:disabled) { filter: brightness(1.1) }
 .btn-warning:disabled, .btn-warning.disabled { background: var(--warning); color: #1c2128; border-color: var(--warning) }
@@ -2573,7 +2573,7 @@ tr.active { background: var(--hover) }
     font-weight: var(--font-weight-semibold);
     font-variant-numeric: tabular-nums;
 }
-.log-status-code.is-success { background: var(--surface-success-soft); color: var(--success) }
+.log-status-code.is-success { background: var(--surface-success-soft); color: var(--success-strong) }
 .log-status-code.is-warning { background: rgba(var(--warning-rgb), 0.1); color: var(--warning) }
 .log-status-code.is-danger { background: rgba(var(--danger-rgb), 0.1); color: var(--danger) }
 .log-rule-link { color: var(--primary); font-family: var(--font-mono); font-size: var(--font-xs); font-weight: 600; text-decoration: none }
@@ -3597,7 +3597,7 @@ input[type="checkbox"] {
 .settings-label-strong { color: var(--text); font-weight: 600 }
 .settings-value-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-sm) }
 .settings-danger-zone { background: rgba(var(--danger-rgb), 0.035) }
-.settings-danger-zone-header { color: var(--danger) }
+.settings-danger-zone-header { color: var(--danger-text) }
 .settings-danger-warning {
     display: flex;
     align-items: flex-start;
@@ -4223,7 +4223,7 @@ select.is-invalid {
 .rule-row-more > summary { display: inline-flex; border-color: transparent !important; border-radius: 5px; background: transparent; color: var(--primary) }
 .rule-row-more > summary:hover,
 .rule-row-more > summary:focus-visible { border-color: transparent; background: var(--surface-primary-soft); color: var(--primary) }
-.rule-row-more-popover { position: absolute; z-index: 35; inset-block-start: 50%; inset-inline-end: calc(100% + var(--space-xs)); width: 168px; display: flex; flex-direction: column; gap: 2px; padding: var(--space-xs); border: 1px solid var(--separator); border-radius: var(--radius-control); background: var(--card); box-shadow: var(--shadow-subtle); transform: translateY(-50%) }
+.rule-row-more-popover { position: absolute; z-index: 35; width: 168px; display: flex; flex-direction: column; gap: 2px; padding: var(--space-xs); border: 1px solid var(--separator); border-radius: var(--radius-control); background: var(--card); box-shadow: var(--shadow-subtle) }
 .rule-row-more[open] .rule-row-more-popover { animation: rowPopoverIn var(--motion-fast) var(--ease-standard) }
 .rule-row-more-popover > button { width: 100%; min-height: 32px; display: flex; align-items: center; gap: var(--space-sm); padding: 0 var(--space-sm); border: 0; border-radius: 4px; background: transparent; color: var(--text); font: inherit; font-size: var(--font-sm); text-align: start; cursor: pointer }
 .rule-row-more-popover > button:hover,
@@ -4234,8 +4234,8 @@ select.is-invalid {
     to { opacity: 1; transform: translateY(0) }
 }
 @keyframes rowPopoverIn {
-    from { opacity: 0; transform: translate(-4px, -50%) }
-    to { opacity: 1; transform: translate(0, -50%) }
+    from { opacity: 0; transform: translateX(-4px) }
+    to { opacity: 1; transform: translateX(0) }
 }
 
 /* Tour overlay + tooltip */
@@ -4722,7 +4722,7 @@ body { background: var(--bg); letter-spacing: 0.002em }
 .nav-item:hover { background: var(--hover); color: var(--text) }
 .nav-item.active {
     background: var(--surface-primary-soft);
-    border: 1px solid var(--separator);
+    border-color: var(--separator);
     color: var(--text);
     font-weight: var(--font-weight-semibold);
 }
@@ -5063,8 +5063,8 @@ a:focus-visible,
 .ui-button--secondary:hover:not(:disabled) { border-color: var(--muted); background: var(--hover); color: var(--text) }
 .ui-button--quiet { border-color: transparent; background: transparent; color: var(--primary) }
 .ui-button--quiet:hover:not(:disabled) { border-color: transparent; background: var(--surface-primary-soft); color: var(--primary) }
-.ui-button--danger { border-color: rgba(var(--danger-rgb), 0.5); background: transparent; color: var(--danger) }
-.ui-button--danger:hover:not(:disabled) { border-color: rgba(var(--danger-rgb), 0.5); background: rgba(var(--danger-rgb), 0.08); color: var(--danger) }
+.ui-button--danger { border-color: rgba(var(--danger-rgb), 0.5); background: transparent; color: var(--danger-text) }
+.ui-button--danger:hover:not(:disabled) { border-color: rgba(var(--danger-rgb), 0.5); background: rgba(var(--danger-rgb), 0.08); color: var(--danger-text) }
 .ui-button:active:not(:disabled) { transform: scale(0.96) }
 .ui-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; box-shadow: none }
 .ui-button:disabled, .ui-button.disabled { opacity: 0.55; cursor: not-allowed; pointer-events: none }
@@ -5642,6 +5642,9 @@ select.form-select-sm { height: 32px; min-height: 32px; border-radius: 5px; padd
 .preview-save-action { margin-inline-start: auto }
 .response-content-size { margin-inline-start: auto }
 .modal-footer-status { margin-inline-end: auto }
+@media (max-width: 576px) {
+    .rule-modal-fullscreen > .modal-footer .modal-footer-status { flex-basis: 100% }
+}
 .settings-warning-value { color: var(--warning-text) }
 .settings-card-divider { margin: var(--space-sm) 0; border-top: 1px solid var(--separator) }
 .settings-agent-name { font-weight: var(--font-weight-semibold) }
@@ -6100,7 +6103,7 @@ select.form-select-sm { height: 32px; min-height: 32px; border-radius: 5px; padd
 .response-list-table .table-row-actions .ui-button--danger:focus-visible {
     border-color: transparent;
     background: rgba(var(--danger-rgb), 0.08);
-    color: var(--danger);
+    color: var(--danger-text);
 }
 .response-linked-rules-header {
     min-height: 32px;

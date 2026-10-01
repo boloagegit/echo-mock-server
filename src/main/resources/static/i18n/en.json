@@ -1009,6 +1009,11 @@
     "condPlaceholderHeader": "Header",
     "condPlaceholderField": "Field",
     "condPlaceholderValue": "Value",
+    "conditionTypeLabel": "Condition {index} type",
+    "conditionFieldLabel": "Condition {index} field",
+    "conditionOperatorLabel": "Condition {index} operator",
+    "conditionValueLabel": "Condition {index} value",
+    "removeConditionLabel": "Remove condition {index}",
     "addCondition": "Add Condition",
     "responseSettings": "Response Settings",
     "advancedSettings": "Advanced Settings",
@@ -1150,6 +1155,10 @@
     "scenarioStatePlaceholder": "e.g., Started"
   },
   "confirm": {
+    "discardRuleTitle": "Discard rule changes?",
+    "discardRuleMessage": "This rule has unsaved changes. Discarding cannot be undone; the saved rule will not be deleted.",
+    "discardChanges": "Discard changes",
+    "continueEditing": "Continue editing",
     "ok": "OK",
     "cancel": "Cancel",
     "enterToConfirm": "Enter “{value}” to confirm",

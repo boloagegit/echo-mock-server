@@ -29,6 +29,7 @@ async function enterSettings(statusCode) {
     checkForceChangePassword() { throw new Error('status should still be pending'); },
     showDblClickHint: { value: false },
     closeResponseDropdown() {}, closeDataDropdown() {}, closeResponseDataDropdown() {}, handleKeydown() {},
+    handleBeforeUnload() {},
   };
   vm.createContext(context);
   vm.runInContext(fs.readFileSync(path.join(staticRoot, 'composables/useAuth.js'), 'utf8') +

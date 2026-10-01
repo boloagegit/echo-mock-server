@@ -227,7 +227,8 @@ class RuleEditModalResourceTest {
                 .contains("class=\"response-picker-state response-picker-empty-state\"")
                 .contains("class=\"response-picker-empty-actions\"")
                 .contains("form.responseMode='new';closeResponsePicker();$emit('on-response-mode-change')")
-                .contains("closeResponsePicker();$emit('close');$emit('go-to-responses','')")
+                .contains("closeResponsePicker();$emit('go-to-responses','')")
+                .doesNotContain("$emit('close');$emit('go-to-responses'")
                 .contains("t('modal.createNewResponse')")
                 .contains("t('modal.goToResponseManagement')");
     }

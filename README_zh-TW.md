@@ -197,8 +197,13 @@ JVM 參數在 Dockerfile 中設定（預設 `-Xms256m -Xmx512m`，OOM 時保留 
 | 環境變數 | 預設值 | 說明 |
 |----------|--------|------|
 | `ECHO_BULK_IMPORT_EXPORT_ENABLED` | `false` | 顯示並啟用批次匯入／匯出操作 |
+| `ECHO_ISSUE_REPORTING_ENABLED` | `false` | 顯示問題回報頁面並啟用其 API；既有回報資料保留 |
 | `ECHO_SCENARIOS_ENABLED` | `false` | 啟用 Scenario 狀態機規則與管理功能 |
 | `ECHO_RULE_DRAG_SORT_ENABLED` | `false` | 啟用規則列表的拖曳優先度排序 |
+
+也可在部署設定檔設定 `echo.features.issue-reporting-enabled: true` 啟用問題回報，
+修改後須重新啟動 Echo。關閉時隱藏導覽入口，直接進入 `#/issues` 會返回規則列表，
+已登入使用者呼叫問題回報 API 會得到 404；不刪除既有資料，開啟後沿用原本權限。
 
 ### 存取服務
 

@@ -13,6 +13,7 @@
  * @param {Ref} deps.logFilter - 記錄篩選條件（來自 useStats）
  * @param {Ref} deps.auditFilter - 修訂篩選條件（來自 useAudit）
  * @param {Ref} deps.isAdmin - 是否為管理員（來自 useAuth）
+ * @param {Ref} deps.issueReportingEnabled - 後端是否啟用問題回報
  * @param {Function} deps.loadRules - 載入規則函式（來自 useRules）
  * @param {Function} deps.loadLogs - 載入記錄函式（來自 useStats）
  * @param {Function} deps.loadAudit - 載入修訂函式（來自 useAudit）
@@ -28,6 +29,7 @@ const useRouter = (deps) => {
 
     // --- 狀態 ---
     const validPages = ['rules', 'responses', 'stats', 'audit', 'issues', 'accounts', 'settings'];
+    const isIssuesEnabled = () => deps.issueReportingEnabled?.value === true && typeof loadIssues === 'function';
 
     /**
      * 解析目前的 hash，回傳頁面名稱與查詢參數
@@ -81,7 +83,7 @@ const useRouter = (deps) => {
             page.value = 'rules';
         } else if (targetPage === 'accounts' && !isAdmin.value) {
             page.value = 'rules';
-        } else if (targetPage === 'issues' && !deps.loadIssues) {
+        } else if (targetPage === 'issues' && !isIssuesEnabled()) {
             page.value = 'rules';
         } else {
             page.value = targetPage;
@@ -119,14 +121,29 @@ const useRouter = (deps) => {
      */
     const setupRouterWatchers = () => {
         // 頁面切換 → 更新 URL
-        watch(page, (newPage, oldPage) => { if (newPage !== oldPage) updateUrl(); });
+        watch(page, (newPage, oldPage) => {
+            if (newPage === 'issues' && !isIssuesEnabled()) {
+                page.value = 'rules';
+                updateUrl(true);
+                return;
+            }
+            if (newPage !== oldPage) updateUrl();
+        });
+        if (deps.issueReportingEnabled) {
+            watch(deps.issueReportingEnabled, enabled => {
+                if (!enabled && page.value === 'issues') {
+                    page.value = 'rules';
+                    updateUrl(true);
+                }
+            });
+        }
         // 篩選條件 → 同步 URL
         watch(ruleFilter, () => { if (page.value === 'rules') updateUrl(); }, { deep: true });
         watch(responseFilter, () => { if (page.value === 'responses') updateUrl(); });
         watch(logFilter, () => { if (page.value === 'stats') updateUrl(); }, { deep: true });
         watch(auditFilter, () => { if (page.value === 'audit') updateUrl(); }, { deep: true });
         // 頁面切換 → 載入對應資料
-        watch(page, p => { if (p === 'rules') loadRules(); if (p === 'stats') loadLogs(); if (p === 'audit') loadAudit(); if (p === 'responses') loadResponseSummary(); if (p === 'accounts') loadAccounts(); if (p === 'issues') loadIssues(); if (p === 'settings') { loadStatus(); loadBackupStatus(); } });
+        watch(page, p => { if (p === 'rules') loadRules(); if (p === 'stats') loadLogs(); if (p === 'audit') loadAudit(); if (p === 'responses') loadResponseSummary(); if (p === 'accounts') loadAccounts(); if (p === 'issues' && isIssuesEnabled()) loadIssues(); if (p === 'settings') { loadStatus(); loadBackupStatus(); } });
     };
 
     return {

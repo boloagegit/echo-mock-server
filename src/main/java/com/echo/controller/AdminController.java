@@ -189,6 +189,9 @@ public class AdminController {
     @Value("${echo.features.rule-drag-sort-enabled:false}")
     private boolean ruleDragSortEnabled;
 
+    @Value("${echo.features.issue-reporting-enabled:false}")
+    private boolean issueReportingEnabled;
+
     private final Instant startupTime = Instant.now();
 
     // ========== 系統狀態 ==========
@@ -207,6 +210,7 @@ public class AdminController {
         status.put("bulkImportExportEnabled", bulkImportExportEnabled);
         status.put("scenariosEnabled", scenariosEnabled);
         status.put("ruleDragSortEnabled", ruleDragSortEnabled);
+        status.put("issueReportingEnabled", issueReportingEnabled);
         status.put("ldapUrl", ldapUrl);
         status.put("httpAlias", httpAlias);
         status.put("jmsAlias", jmsAlias);

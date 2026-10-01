@@ -539,16 +539,16 @@ const RuleEditModal = {
                         <span class="modal-heading-icon"><i class="bi" :class="editing?'bi-pencil-square':'bi-plus-circle'"></i></span>
                         <h2 id="ruleEditorTitle">{{editing ? t('modal.editRule') : t('modal.addRule')}}</h2>
                     </div>
-                    <ui-tabs class="rule-editor-mode-switch" variant="compact" :model-value="editorMode"
+                    <ui-tabs class="rule-editor-mode-switch" :inert="saving" variant="compact" :model-value="editorMode"
                         :items="editorModeTabs" :aria-label="t('modal.settingMode')"
                         @update:model-value="$emit('change-editor-mode',$event)"></ui-tabs>
                 </div>
                 <div class="rule-modal-actions">
                     <ui-button class="close-btn" @click="$emit('update:maximized',!maximized)" :title="maximized ? t('modal.restoreWindow') : t('modal.fullscreen')" :aria-label="maximized ? t('modal.restoreWindow') : t('modal.fullscreen')"><i class="bi" :class="maximized?'bi-fullscreen-exit':'bi-arrows-fullscreen'"></i></ui-button>
-                    <ui-button class="close-btn" @click="$emit('close')" :aria-label="t('modal.cancel')"><i class="bi bi-x-lg"></i></ui-button>
+                    <ui-button class="close-btn" :disabled="saving" @click="$emit('close')" :aria-label="t('modal.cancel')"><i class="bi bi-x-lg"></i></ui-button>
                 </div>
             </div>
-            <div v-if="editorMode==='form'" class="modal-body rule-editor">
+            <div v-if="editorMode==='form'" class="modal-body rule-editor" :inert="saving" :aria-busy="saving">
                 <!-- 左側：匹配條件 + 測試 -->
                 <div class="rule-left">
                     <div class="rule-pane-heading">
@@ -627,20 +627,20 @@ const RuleEditModal = {
                         </div>
                         <div class="cond-builder">
                             <div v-for="(c,i) in conditions" :key="i" class="cond-row">
-                                <select v-if="form.protocol==='HTTP'" class="form-control cond-type" v-model="c.type">
+                                <select v-if="form.protocol==='HTTP'" class="form-control cond-type" v-model="c.type" :aria-label="t('modal.conditionTypeLabel',{index:i+1})">
                                     <option value="body">{{t('modal.condFieldBody')}}</option>
                                     <option value="query">{{t('modal.condFieldQuery')}}</option>
                                     <option value="header">{{t('modal.condFieldHeader')}}</option>
                                 </select>
-                                <input class="form-control" v-model="c.field" :placeholder="c.type==='query' ? t('modal.condPlaceholderParam') : c.type==='header' ? t('modal.condPlaceholderHeader') : t('modal.condPlaceholderField')">
-                                <select class="form-control cond-op" v-model="c.operator">
+                                <input class="form-control" v-model="c.field" :aria-label="t('modal.conditionFieldLabel',{index:i+1})" :placeholder="c.type==='query' ? t('modal.condPlaceholderParam') : c.type==='header' ? t('modal.condPlaceholderHeader') : t('modal.condPlaceholderField')">
+                                <select class="form-control cond-op" v-model="c.operator" :aria-label="t('modal.conditionOperatorLabel',{index:i+1})">
                                     <option value="=">=</option>
                                     <option value="!=">!=</option>
                                     <option value="*=">*=</option>
                                     <option value="~=">~=</option>
                                 </select>
-                                <input class="form-control" v-model="c.value" :placeholder="t('modal.condPlaceholderValue')">
-                                <button type="button" class="cond-remove" @click="$emit('remove-condition',i)"><i class="bi bi-x"></i></button>
+                                <input class="form-control" v-model="c.value" :aria-label="t('modal.conditionValueLabel',{index:i+1})" :placeholder="t('modal.condPlaceholderValue')">
+                                <button type="button" class="cond-remove" @click="$emit('remove-condition',i)" :aria-label="t('modal.removeConditionLabel',{index:i+1})" :title="t('modal.removeConditionLabel',{index:i+1})"><i class="bi bi-x" aria-hidden="true"></i></button>
                             </div>
                             <div class="cond-builder-actions" :class="{'is-empty':!conditions.length}">
                                 <span v-if="!conditions.length" class="sub-info">{{t('rules.noCondition')}}</span>
@@ -1223,7 +1223,7 @@ const RuleEditModal = {
                                 <span>{{t('modal.noMatchingResponse')}}</span>
                                 <div class="response-picker-empty-actions">
                                     <ui-button type="button" class="btn btn-sm btn-primary" @click="form.responseMode='new';closeResponsePicker();$emit('on-response-mode-change')"><i class="bi bi-file-earmark-plus" aria-hidden="true"></i>{{t('modal.createNewResponse')}}</ui-button>
-                                    <ui-button type="button" class="btn btn-sm btn-secondary" @click="closeResponsePicker();$emit('close');$emit('go-to-responses','')"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>{{t('modal.goToResponseManagement')}}</ui-button>
+                                    <ui-button type="button" class="btn btn-sm btn-secondary" @click="closeResponsePicker();$emit('go-to-responses','')"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>{{t('modal.goToResponseManagement')}}</ui-button>
                                 </div>
                             </div>
                         </div>
@@ -1248,7 +1248,7 @@ const RuleEditModal = {
             </div>
             <div v-if="editorMode==='form'" class="modal-footer" data-tour="save">
                 <span v-if="!canSave" class="sub-info modal-footer-status"><i class="bi bi-info-circle"></i> {{t('modal.requiredFieldsHint')}}</span>
-                <ui-button variant="quiet" @click="$emit('close')">{{t('modal.cancel')}}</ui-button>
+                <ui-button variant="quiet" :disabled="saving" @click="$emit('close')">{{t('modal.cancel')}}</ui-button>
                 <ui-button class="btn btn-secondary" @click="$emit('save',false)" :disabled="!canSave||saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-floppy'" :spin="saving"></ui-motion-icon> {{t('modal.save')}}</ui-button>
                 <ui-button class="btn btn-primary" @click="$emit('save',true)" :disabled="!canSave||saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-check2-circle'" :spin="saving"></ui-motion-icon> {{t('modal.saveAndClose')}}</ui-button>
             </div>

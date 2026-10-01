@@ -1009,6 +1009,11 @@
     "condPlaceholderHeader": "標頭名稱",
     "condPlaceholderField": "欄位",
     "condPlaceholderValue": "值",
+    "conditionTypeLabel": "條件 {index} 類型",
+    "conditionFieldLabel": "條件 {index} 欄位",
+    "conditionOperatorLabel": "條件 {index} 運算子",
+    "conditionValueLabel": "條件 {index} 值",
+    "removeConditionLabel": "刪除條件 {index}",
     "addCondition": "新增條件",
     "responseSettings": "回應設定",
     "advancedSettings": "進階設定",
@@ -1150,6 +1155,10 @@
     "scenarioStatePlaceholder": "例如 Started"
   },
   "confirm": {
+    "discardRuleTitle": "放棄規則修改？",
+    "discardRuleMessage": "這個規則有尚未儲存的修改。放棄後將無法復原；已儲存的規則不會被刪除。",
+    "discardChanges": "放棄修改",
+    "continueEditing": "繼續編輯",
     "ok": "確定",
     "cancel": "取消",
     "enterToConfirm": "輸入「{value}」後確認",

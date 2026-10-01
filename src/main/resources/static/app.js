@@ -2,6 +2,7 @@ const _app = createApp({
     setup() {
         const jmsEnabled = ref(false), sidebarCollapsed = ref(false), mobileMenu = ref(false);
         const status = ref(null);
+        const issueReportingEnabled = computed(() => status.value?.issueReportingEnabled === true);
         const scenariosEnabled = computed(() => status.value?.scenariosEnabled === true);
         const ruleDragSortEnabled = computed(() => status.value?.ruleDragSortEnabled === true);
         const httpAlias = ref('HTTP');
@@ -42,11 +43,25 @@ const _app = createApp({
         });
 
         // Tour (interactive onboarding)
-        const tourCtx = useTour({ t });
+        let tourReturnContext = null;
+        const finishTourContext = async () => {
+            const context = tourReturnContext;
+            tourReturnContext = null;
+            if (!context) return;
+            // A tour owns its demo editor, not an existing user draft.
+            if (!await closeModal()) return;
+            showPriorityHelp.value = context.help;
+            await Vue.nextTick();
+            if (context.focus?.isConnected && !context.focus.closest('[inert]')) context.focus.focus();
+        };
+        const tourCtx = useTour({ t, onFinish: finishTourContext });
         const { tourActive, tourStep, helpSeen, startTour: _startTour, nextStep: _nextStep, prevStep: _prevStep, skipTour, tourSteps } = tourCtx;
         const startTour = async () => {
-            await openCreateForTour();
-            if (showModal.value) { _startTour(); }
+            const context = { help: showPriorityHelp.value, focus: document.activeElement };
+            if (!await openCreateForTour()) return;
+            showPriorityHelp.value = false;
+            tourReturnContext = context;
+            _startTour();
         };
         const tourHighlightStyle = ref({ display: 'none' });
         const tourTooltipStyle = ref({ display: 'none' });
@@ -113,7 +128,69 @@ const _app = createApp({
         const { responseSummary, responseOptions, responseFilter, responseSort, responsePage, responsePageSize, responseTotalElements, filteredResponseSummary, pagedResponseSummary, responseTotalPages, toggleResponseSort, responseSortIcon, onResponsePageSizeChange, showResponseModal, editingResponse, responseForm, responseSseEvents, loadResponseSummary, loadResponseOptions, openResponseModal, saveResponse, deleteResponse, selectedResponses, batchSelectResponseMode, toggleSelectAllResponses, exportResponses, importResponses, deleteSelectedResponses, deleteAllResponses, toggleResponseRules, responseUsageFilter: responseUsageFilter, responseContentTypeFilter, responseFilterChips, removeResponseChip, clearResponseFilters, goToResponse, showResponseDataDropdown, toggleResponseDataDropdown, closeResponseDataDropdown, triggerResponseImport2, extendResponse, deleteOrphanResponses } = responsesCtx;
         // 規則表單（useRuleForm composable）
         const ruleFormCtx = useRuleForm({ showToast, showConfirm, t, requireLogin, login, loadRules, rulePreviewCache, rulePreviewExpanded, rulesMarkDirty: rulesCtx.markDirty, responsesMarkDirty: responsesCtx.markDirty, responseSseEvents, renderEditor, editEditorRef, editFormatted, previewEditorRef, previewFormatted, responseFormEditorRef, responseFormFormatted, detectMode, editors, jmsEnabled });
-        const { showModal, editing, form, conditions, conditionsExpanded, formErrors, saving, canSave, validateForm, showCatchAllWarning, catchAllConfirmed, showBodyConditionWarning, sseEvents, addSseEvent, removeSseEvent, ssePreview, setProtocol, openCreate: openCreateForm, copyRule: copyRuleForm, createFromLog: createFromLogForm, openEdit: openEditForm, closeModal: closeRuleFormModal, saveRule, onResponseModeChange, testExpanded, testParams, testResult, testLoading, testSseEvents, testSseMode, runTest, stopSseTest, generateTestData, previewResponseId, previewResponseBody, previewResponseLoading, previewResponseLoadFailed, previewEditing, previewEditBody, previewResponseUsageCount, previewSaving, togglePreviewEditing, savePreviewResponse, responsePickerSearch, responseDropdownOpen, filteredResponsePicker, responsePickerSseOnly, responsePickerSummary, responsePickerPage, responsePickerTotalElements, responsePickerTotalPages, responsePickerLoading, responsePickerError, openResponsePickerDrawer, submitResponsePickerSearch, setResponsePickerSseOnly, changeResponsePickerPage, selectResponseOption, clearResponseSelection, newTag, addTag, removeTag, newHeader, addHeader, removeHeader, responseSsePreview, ruleModalMaximized, responseModalMaximized, togglePreviewFormat, toggleEditFormat, setupFormWatchers, closeResponseDropdown, httpTargetConnections, loadHttpTargetConnections, jmsTargetConnections, loadJmsTargetConnections } = ruleFormCtx;
+        const { showModal, editing, form, conditions, conditionsExpanded, formErrors, saving, canSave, validateForm, showCatchAllWarning, catchAllConfirmed, showBodyConditionWarning, sseEvents, addSseEvent, removeSseEvent, ssePreview, setProtocol, openCreate: openCreateForm, copyRule: copyRuleForm, createFromLog: createFromLogForm, openEdit: openEditForm, closeModal: closeRuleFormModal, saveRule: saveRuleForm, onResponseModeChange, testExpanded, testParams, testResult, testLoading, testSseEvents, testSseMode, runTest, stopSseTest, generateTestData, previewResponseId, previewResponseBody, previewResponseLoading, previewResponseLoadFailed, previewEditing, previewEditBody, previewResponseUsageCount, previewSaving, togglePreviewEditing, savePreviewResponse, responsePickerSearch, responseDropdownOpen, filteredResponsePicker, responsePickerSseOnly, responsePickerSummary, responsePickerPage, responsePickerTotalElements, responsePickerTotalPages, responsePickerLoading, responsePickerError, openResponsePickerDrawer, submitResponsePickerSearch, setResponsePickerSseOnly, changeResponsePickerPage, selectResponseOption, clearResponseSelection, newTag, addTag, removeTag, newHeader, addHeader, removeHeader, responseSsePreview, ruleModalMaximized, responseModalMaximized, togglePreviewFormat, toggleEditFormat, setupFormWatchers, closeResponseDropdown, httpTargetConnections, loadHttpTargetConnections, jmsTargetConnections, loadJmsTargetConnections } = ruleFormCtx;
+
+        const normalizeDraftText = text => {
+            try { return JSON.parse(text); } catch { return text; }
+        };
+        const ruleSaveInFlight = ref(false);
+        let ruleEditorSession = 0;
+        const readRuleDraft = () => ({
+            spec: createDocumentFromForm({
+                form: form.value, conditions: conditions.value, editing: editing.value,
+                responseBody: form.value.responseMode === 'existing' ? null
+                    : form.value.sseEnabled ? serializeSseEvents(sseEvents.value) : form.value.responseBody
+            }).spec,
+            conditions: conditions.value,
+            responseMode: form.value.responseMode,
+            replyQueue: form.value.replyQueue || null,
+            sseDraft: form.value.sseEnabled && (form.value.responseMode !== 'existing'
+                || draftFingerprint(sseEvents.value) !== draftFingerprint(deserializeSseEvents(previewResponseBody.value)))
+                ? sseEvents.value : null,
+            pendingTag: newTag.value,
+            pendingHeader: newHeader.value,
+            previewBody: previewEditing.value && previewEditBody.value !== previewResponseBody.value
+                ? previewEditBody.value : null,
+            declarative: draftFingerprint(normalizeDraftText(ruleApplyText.value))
+                !== draftFingerprint(normalizeDraftText(ruleApplyDraftBaseline.value))
+                ? { text: normalizeDraftText(ruleApplyText.value) } : null
+        });
+        const discardRuleDraft = () => {
+            ruleEditorSession++;
+            ruleEditorMode.value = 'form';
+            ruleApplyFormSource.value = '';
+            ruleApplyDraftBaseline.value = '';
+            resetRuleApply();
+            closeRuleFormModal();
+        };
+        const ruleDraftGuard = useDiscardGuard({
+            readDraft: readRuleDraft, isOpen: () => showModal.value,
+            isBusy: () => ruleSaveInFlight.value || saving.value || ruleApplySaving.value || previewSaving.value,
+            discard: discardRuleDraft, showConfirm, t
+        });
+        const closeModal = () => ruleDraftGuard.requestClose();
+        const leaveRuleForResponses = async responseId => {
+            if (!await closeModal()) return;
+            goToResponse(String(responseId ?? ''));
+        };
+        const markRuleDraftSaved = () => ruleDraftGuard.begin({
+            ...readRuleDraft(), declarative: null,
+            pendingTag: { key: '', value: '' }, pendingHeader: { key: '', value: '' }
+        });
+        const saveRule = async andClose => {
+            if (ruleSaveInFlight.value) return;
+            ruleSaveInFlight.value = true;
+            try {
+                if (!await saveRuleForm(andClose)) return;
+                if (showModal.value) {
+                    await Vue.nextTick();
+                    markRuleDraftSaved();
+                } else {
+                    ruleDraftGuard.reset();
+                    resetRuleApply();
+                }
+            } finally { ruleSaveInFlight.value = false; }
+        };
 
         const waitForExistingResponsePreview = async () => {
             const responseId = form.value.responseMode === 'existing' ? form.value.responseId : null;
@@ -146,25 +223,23 @@ const _app = createApp({
             await changeRuleEditorMode('declarative');
         };
         const openRuleEditor = async (openForm, preferredMode = readRuleEditorModePreference()) => {
+            if (showModal.value && !await closeModal()) return false;
+            const session = ++ruleEditorSession;
             ruleEditorMode.value = 'form';
             ruleApplyFormSource.value = '';
             ruleApplyDraftBaseline.value = '';
             resetRuleApply();
             await openForm();
-            if (showModal.value) { await restoreRuleEditorMode(preferredMode); }
+            if (session !== ruleEditorSession || !showModal.value) return false;
+            ruleDraftGuard.begin();
+            await restoreRuleEditorMode(preferredMode);
+            return showModal.value;
         };
         const openCreate = () => openRuleEditor(openCreateForm);
         const openCreateForTour = () => openRuleEditor(openCreateForm, 'form');
         const openEdit = rule => openRuleEditor(() => openEditForm(rule));
         const copyRule = rule => openRuleEditor(() => copyRuleForm(rule));
         const createFromLog = rule => openRuleEditor(() => createFromLogForm(rule));
-        const closeModal = () => {
-            ruleEditorMode.value = 'form';
-            ruleApplyFormSource.value = '';
-            ruleApplyDraftBaseline.value = '';
-            resetRuleApply();
-            closeRuleFormModal();
-        };
         const currentRuleResponseBody = () => {
             if (form.value.protocol === 'HTTP' && form.value.action === 'FORWARD') { return null; }
             if (form.value.sseEnabled) { return serializeSseEvents(sseEvents.value); }
@@ -180,9 +255,15 @@ const _app = createApp({
             return form.value.responseBody;
         };
         const changeRuleEditorMode = async mode => {
+            if (ruleSaveInFlight.value || saving.value || ruleApplySaving.value || previewSaving.value) return false;
             if (mode === ruleEditorMode.value) { return; }
+            const session = ruleEditorSession;
+            let wasDirty = ruleDraftGuard.isDirty();
             if (mode === 'declarative') {
                 if (!await loadRuleApplySchema()) { return; }
+                if (session !== ruleEditorSession || !showModal.value || ruleSaveInFlight.value || saving.value || ruleApplySaving.value || previewSaving.value) return false;
+                // A schema request must not mark text typed while it was pending as saved.
+                wasDirty = wasDirty || ruleDraftGuard.isDirty();
                 const source = createDocumentFromForm({
                     form: form.value,
                     conditions: conditions.value,
@@ -205,6 +286,7 @@ const _app = createApp({
                 }
                 ruleEditorMode.value = 'declarative';
                 rememberRuleEditorMode('declarative');
+                if (!wasDirty) markRuleDraftSaved();
                 return true;
             }
 
@@ -245,20 +327,27 @@ const _app = createApp({
             }
             ruleEditorMode.value = 'form';
             rememberRuleEditorMode('form');
+            if (!wasDirty) markRuleDraftSaved();
             return true;
         };
         const applyRuleSettings = async () => {
-            const result = await applyRuleDocument();
-            if (!result?.resource?.metadata?.id) { return; }
-            const resource = result.resource;
-            editing.value = {
-                ...(editing.value || {}),
-                id: resource.metadata.id,
-                version: resource.metadata.resourceVersion,
-                protocol: resource.spec?.protocol
-            };
-            form.value.id = resource.metadata.id;
-            form.value.version = resource.metadata.resourceVersion;
+            if (ruleSaveInFlight.value || saving.value || ruleApplySaving.value || previewSaving.value) return;
+            ruleSaveInFlight.value = true;
+            try {
+                const result = await applyRuleDocument();
+                if (!result?.resource?.metadata?.id) { return; }
+                const resource = result.resource;
+                editing.value = {
+                    ...(editing.value || {}),
+                    id: resource.metadata.id,
+                    version: resource.metadata.resourceVersion,
+                    protocol: resource.spec?.protocol
+                };
+                form.value.id = resource.metadata.id;
+                form.value.version = resource.metadata.resourceVersion;
+                ruleApplyDraftBaseline.value = ruleApplyText.value;
+                markRuleDraftSaved();
+            } finally { ruleSaveInFlight.value = false; }
         };
 
         // === 帳號管理 composable ===
@@ -266,7 +355,7 @@ const _app = createApp({
         const { accounts, searchKeyword: accountSearchKeyword, filteredAccounts, loadAccounts, createAccount, deleteAccount, enableAccount, disableAccount, resetPassword } = accountsCtx;
 
         // === Issue Report composable ===
-        const issuesCtx = useIssues({ showToast, showConfirm, t, requireLogin, loading, isAdmin });
+        const issuesCtx = useIssues({ showToast, showConfirm, t, requireLogin, loading, isAdmin, issueReportingEnabled });
         const { issues, issueFilter, issueSort, issuePage, issuePageSize, issueTotalElements, filteredIssues, pagedIssues, issueTotalPages, openCount: openIssueCount, toggleIssueSort, issueSortIcon, loadIssues, createIssue, replyIssue, resolveIssue, reopenIssue, deleteIssue } = issuesCtx;
 
         // === 路由（依賴 filters） ===
@@ -336,7 +425,7 @@ const _app = createApp({
         };
 
         // === 路由（依賴 loadStatus, loadBackupStatus, filters） ===
-        const routerCtx = useRouter({ page, ruleFilter, responseFilter, logFilter, auditFilter, isAdmin, loadRules: () => loadRules(), loadLogs, loadAudit, loadResponseSummary: () => loadResponseSummary(), loadBackupStatus, loadStatus, loadAccounts, loadIssues });
+        const routerCtx = useRouter({ page, ruleFilter, responseFilter, logFilter, auditFilter, isAdmin, issueReportingEnabled, loadRules: () => loadRules(), loadLogs, loadAudit, loadResponseSummary: () => loadResponseSummary(), loadBackupStatus, loadStatus, loadAccounts, loadIssues });
         const { applyUrlParams } = routerCtx;
         const triggerBackup = async () => {
             if (!await showConfirm({ title: t('confirm.triggerBackup'), message: t('confirm.triggerBackupMsg') })) return;
@@ -373,9 +462,11 @@ const _app = createApp({
         });
         const toggleResponseFormFormat = () => { responseFormFormatted.value = !responseFormFormatted.value; renderEditor('responseForm', responseFormEditorRef, responseForm.value.body, false, v => { responseForm.value.body = v; }); };
         const handleKeydown = e => {
+            if (e.defaultPrevented) return;
             const anyModal = showModal.value || showPriorityHelp.value || showResponseModal.value || showImportModal.value || confirmState.value.show || showForceChangePassword.value;
             if (e.key === 'Escape') {
                 if (confirmState.value.show) { confirmState.value.onCancel?.(); }
+                else if (tourActive.value) { skipTour(); }
                 else if (showModal.value) { closeModal(); }
                 else if (showResponseModal.value) { showResponseModal.value = false; }
                 else if (showImportModal.value) { showImportModal.value = false; }
@@ -404,6 +495,11 @@ const _app = createApp({
                 sidebarCollapsed.value = !sidebarCollapsed.value;
             }
         };
+        const handleBeforeUnload = event => {
+            if (!ruleDraftGuard.isDirty()) return;
+            event.preventDefault();
+            event.returnValue = '';
+        };
 
         onMounted(async () => { 
             themeCtx.applyTheme();
@@ -424,6 +520,7 @@ const _app = createApp({
             window.addEventListener('click', closeDataDropdown);
             window.addEventListener('click', closeResponseDataDropdown);
             window.addEventListener('keydown', handleKeydown);
+            window.addEventListener('beforeunload', handleBeforeUnload);
         });
         onUnmounted(() => { 
             cleanupStats();
@@ -433,6 +530,7 @@ const _app = createApp({
             window.removeEventListener('click', closeDataDropdown);
             window.removeEventListener('click', closeResponseDataDropdown);
             window.removeEventListener('keydown', handleKeydown); 
+            window.removeEventListener('beforeunload', handleBeforeUnload);
             cleanupEditors();
         });
         // 雙擊編輯提示
@@ -469,7 +567,7 @@ const _app = createApp({
             const r = await apiCall('/api/admin/logs/all', { method: 'DELETE' }, { errorMsg: t('toast.deleteAllLogsFailed') });
             if (r && r.ok) { const d = await r.json(); showToast(t('toast.deleteAllLogsSuccess', {count: d.deleted}), 'success'); loadLogs(true); }
         };
-        return { locale, messages, t, switchLocale, loadLocale, page, rules, jmsEnabled, scenariosEnabled, showModal, editing, ruleEditorMode, changeRuleEditorMode, form, conditions, conditionsExpanded, toasts, dismissToast, sidebarCollapsed, mobileMenu, autoResize, canSave, saving, formErrors, validateForm, showCatchAllWarning, catchAllConfirmed, showBodyConditionWarning, setProtocol, openCreate, copyRule, createFromLog, openEdit, closeModal, saveRule, deleteRule, extendRule, toggleEnabled, loadRules, loadStatus, loadLogs, logs, logSummary, logFilter, logSort, logPage, logPageSize, pagedLogs, totalPages, toggleSort, sortIcon, onPageSizeChange, auditLogs, loadAudit, selectedAudit, auditFilter, auditSort, auditPage, auditPageSize, auditTotalElements, pagedAudit, auditTotalPages, toggleAuditSort, auditSortIcon, onAuditPageSizeChange, toggleAuditDetail, formatAuditJson, getAuditChanges, getAuditTarget, getAuditDescription, getAuditProtocol, getAuditChangeCount, status, isAdmin, isLoggedIn, login, logout, httpAlias, jmsAlias, httpLabel, jmsLabel, envLabel, selectedRules, batchSelectMode, ruleFilter, ruleSort, rulePage, rulePageSize, ruleTotalElements, filteredRules, pagedRules, ruleTotalPages, toggleRuleSort, ruleSortIcon, toggleSelectAll, exportRules, showImportModal, importFormat, importFile, importFileName, handleImportFile, doImport, batchProtect, deleteSelectedRules, deleteAllRules, deleteAllResponses, deleteAllAuditLogs, deleteAllLogs, showPriorityHelp, helpTab, onResponseModeChange, responseSummary, responseOptions, httpTargetConnections, jmsTargetConnections, responseFilter, responseSort, responsePage, responsePageSize, responseTotalElements, filteredResponseSummary, pagedResponseSummary, responseTotalPages, toggleResponseSort, responseSortIcon, onResponsePageSizeChange, showResponseModal, editingResponse, responseForm, loadResponseSummary, openResponseModal, saveResponse, deleteResponse, responsePickerSearch, responseDropdownOpen, filteredResponsePicker, responsePickerSseOnly, responsePickerSummary, responsePickerPage, responsePickerTotalElements, responsePickerTotalPages, responsePickerLoading, responsePickerError, openResponsePickerDrawer, submitResponsePickerSearch, setResponsePickerSseOnly, changeResponsePickerPage, selectResponseOption, clearResponseSelection, loading, newTag, parseTags, addTag, removeTag, newHeader, parseHeaders, addHeader, removeHeader, fmtTime, shortId, daysLeft, fmtSize, toggleResponseRules, selectedResponses, batchSelectResponseMode, toggleSelectAllResponses, exportResponses, importResponses, deleteSelectedResponses, ruleViewMode, expandedTagGroups, toggleTagGroup, expandedTagSubgroups, toggleTagSubgroup, tagKeys, rulesByTag, rulesByTagGroup, groupCounts, groupLoading, getGroupLimit, showMoreGroup, showAllGroup, toggleMatchChain, logDetailExpanded, toggleLogDetail, goToRule, goToResponse, testExpanded, testParams, testResult, testLoading, testSseEvents, testSseMode, runTest, stopSseTest, generateTestData, previewResponseId, previewResponseBody, previewResponseLoading, previewResponseLoadFailed, previewEditorRef, editEditorRef, responseFormEditorRef, previewFormatted, editFormatted, responseFormFormatted, togglePreviewFormat, toggleEditFormat, toggleResponseFormFormat, detectMode, previewEditing, previewEditBody, previewResponseUsageCount, previewSaving, togglePreviewEditing, savePreviewResponse, backupStatus, triggerBackup, theme, toggleTheme, themeIcon, themeLabel, density, toggleDensity, densityIcon, densityLabel, confirmState, showConfirm, auditTruncated, ruleFilterChips, removeRuleChip, clearRuleFilters, logFilterChips, removeLogChip, clearLogFilters, auditFilterChips, removeAuditChip, clearAuditFilters, responseFilterChips, removeResponseChip, clearResponseFilters, rulePreviewCache, rulePreviewExpanded, rulePreviewLoading, rulePreviewError, toggleRulePreview, handleRuleRowClick, clipCopy, exportRuleJson, condCount, condTooltip, condTags, fmtCond, showDblClickHint, dismissDblClickHint, responseUnusedOnly: responseUsageFilter, responseContentTypeFilter, dragState, canDragRules, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd, dragRowClass, showDataDropdown, toggleDataDropdown, triggerResponseImport, showResponseDataDropdown, toggleResponseDataDropdown, triggerResponseImport2, ruleModalMaximized, responseModalMaximized, sseEnabled: computed(() => form.value.sseEnabled), sseEvents, addSseEvent, removeSseEvent, ssePreview, responseSsePreview, responseSseEvents, extendResponse, deleteOrphanResponses, accountsCtx, loadAccounts, showForceChangePassword, forceChangePwdForm, forceChangePwdError, forceChangePwdSubmitting, submitForceChangePassword, createRuleFromLog, applyTemplate, tourActive, tourStep, helpSeen, startTour, nextStep, prevStep, skipTour, tourSteps, tourHighlightStyle, tourTooltipStyle, ruleApplyText, ruleApplyLoading, ruleApplySaving, ruleApplyError, ruleApplyOperation, ruleApplySchema, ruleApplySchemaError, ruleApplySystemFields, ruleApplyValidationErrors, updateRuleApplyText, replaceRuleApplyTemplate, applyRuleSettings, issues, issueFilter, issueSort, issuePage, issuePageSize, issueTotalElements, filteredIssues, pagedIssues, issueTotalPages, openIssueCount, toggleIssueSort, issueSortIcon, loadIssues, createIssue, replyIssue, resolveIssue, reopenIssue, deleteIssue, showOpenApiPreview, openApiPreviewTitle, openApiPreviewVersion, openApiPreviewRules, openApiImporting, confirmOpenApiImport };
+        return { locale, messages, t, switchLocale, loadLocale, page, rules, jmsEnabled, scenariosEnabled, showModal, editing, ruleEditorMode, changeRuleEditorMode, form, conditions, conditionsExpanded, toasts, dismissToast, sidebarCollapsed, mobileMenu, autoResize, canSave, saving, ruleSaveInFlight, formErrors, validateForm, showCatchAllWarning, catchAllConfirmed, showBodyConditionWarning, setProtocol, openCreate, copyRule, createFromLog, openEdit, closeModal, leaveRuleForResponses, saveRule, deleteRule, extendRule, toggleEnabled, loadRules, loadStatus, loadLogs, logs, logSummary, logFilter, logSort, logPage, logPageSize, pagedLogs, totalPages, toggleSort, sortIcon, onPageSizeChange, auditLogs, loadAudit, selectedAudit, auditFilter, auditSort, auditPage, auditPageSize, auditTotalElements, pagedAudit, auditTotalPages, toggleAuditSort, auditSortIcon, onAuditPageSizeChange, toggleAuditDetail, formatAuditJson, getAuditChanges, getAuditTarget, getAuditDescription, getAuditProtocol, getAuditChangeCount, status, isAdmin, isLoggedIn, login, logout, httpAlias, jmsAlias, httpLabel, jmsLabel, envLabel, selectedRules, batchSelectMode, ruleFilter, ruleSort, rulePage, rulePageSize, ruleTotalElements, filteredRules, pagedRules, ruleTotalPages, toggleRuleSort, ruleSortIcon, toggleSelectAll, exportRules, showImportModal, importFormat, importFile, importFileName, handleImportFile, doImport, batchProtect, deleteSelectedRules, deleteAllRules, deleteAllResponses, deleteAllAuditLogs, deleteAllLogs, showPriorityHelp, helpTab, onResponseModeChange, responseSummary, responseOptions, httpTargetConnections, jmsTargetConnections, responseFilter, responseSort, responsePage, responsePageSize, responseTotalElements, filteredResponseSummary, pagedResponseSummary, responseTotalPages, toggleResponseSort, responseSortIcon, onResponsePageSizeChange, showResponseModal, editingResponse, responseForm, loadResponseSummary, openResponseModal, saveResponse, deleteResponse, responsePickerSearch, responseDropdownOpen, filteredResponsePicker, responsePickerSseOnly, responsePickerSummary, responsePickerPage, responsePickerTotalElements, responsePickerTotalPages, responsePickerLoading, responsePickerError, openResponsePickerDrawer, submitResponsePickerSearch, setResponsePickerSseOnly, changeResponsePickerPage, selectResponseOption, clearResponseSelection, loading, newTag, parseTags, addTag, removeTag, newHeader, parseHeaders, addHeader, removeHeader, fmtTime, shortId, daysLeft, fmtSize, toggleResponseRules, selectedResponses, batchSelectResponseMode, toggleSelectAllResponses, exportResponses, importResponses, deleteSelectedResponses, ruleViewMode, expandedTagGroups, toggleTagGroup, expandedTagSubgroups, toggleTagSubgroup, tagKeys, rulesByTag, rulesByTagGroup, groupCounts, groupLoading, getGroupLimit, showMoreGroup, showAllGroup, toggleMatchChain, logDetailExpanded, toggleLogDetail, goToRule, goToResponse, testExpanded, testParams, testResult, testLoading, testSseEvents, testSseMode, runTest, stopSseTest, generateTestData, previewResponseId, previewResponseBody, previewResponseLoading, previewResponseLoadFailed, previewEditorRef, editEditorRef, responseFormEditorRef, previewFormatted, editFormatted, responseFormFormatted, togglePreviewFormat, toggleEditFormat, toggleResponseFormFormat, detectMode, previewEditing, previewEditBody, previewResponseUsageCount, previewSaving, togglePreviewEditing, savePreviewResponse, backupStatus, triggerBackup, theme, toggleTheme, themeIcon, themeLabel, density, toggleDensity, densityIcon, densityLabel, confirmState, showConfirm, auditTruncated, ruleFilterChips, removeRuleChip, clearRuleFilters, logFilterChips, removeLogChip, clearLogFilters, auditFilterChips, removeAuditChip, clearAuditFilters, responseFilterChips, removeResponseChip, clearResponseFilters, rulePreviewCache, rulePreviewExpanded, rulePreviewLoading, rulePreviewError, toggleRulePreview, handleRuleRowClick, clipCopy, exportRuleJson, condCount, condTooltip, condTags, fmtCond, showDblClickHint, dismissDblClickHint, responseUnusedOnly: responseUsageFilter, responseContentTypeFilter, dragState, canDragRules, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd, dragRowClass, showDataDropdown, toggleDataDropdown, triggerResponseImport, showResponseDataDropdown, toggleResponseDataDropdown, triggerResponseImport2, ruleModalMaximized, responseModalMaximized, sseEnabled: computed(() => form.value.sseEnabled), sseEvents, addSseEvent, removeSseEvent, ssePreview, responseSsePreview, responseSseEvents, extendResponse, deleteOrphanResponses, accountsCtx, loadAccounts, showForceChangePassword, forceChangePwdForm, forceChangePwdError, forceChangePwdSubmitting, submitForceChangePassword, createRuleFromLog, applyTemplate, tourActive, tourStep, helpSeen, startTour, nextStep, prevStep, skipTour, tourSteps, tourHighlightStyle, tourTooltipStyle, ruleApplyText, ruleApplyLoading, ruleApplySaving, ruleApplyError, ruleApplyOperation, ruleApplySchema, ruleApplySchemaError, ruleApplySystemFields, ruleApplyValidationErrors, updateRuleApplyText, replaceRuleApplyTemplate, applyRuleSettings, issues, issueFilter, issueSort, issuePage, issuePageSize, issueTotalElements, filteredIssues, pagedIssues, issueTotalPages, openIssueCount, toggleIssueSort, issueSortIcon, loadIssues, createIssue, replyIssue, resolveIssue, reopenIssue, deleteIssue, showOpenApiPreview, openApiPreviewTitle, openApiPreviewVersion, openApiPreviewRules, openApiImporting, confirmOpenApiImport };
         }
 });
 _app.component('ui-button', UiButton);

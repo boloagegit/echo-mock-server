@@ -104,12 +104,12 @@ class ListRefinementResourceTest {
                 .contains(".ui-button--compact { height: 32px; min-height: 32px;")
                 .contains("border-radius: 5px")
                 .contains(".ui-button--quiet { border-color: transparent; background: transparent; color: var(--primary) }")
-                .contains(".ui-button--danger { border-color: rgba(var(--danger-rgb), 0.5); background: transparent; color: var(--danger) }")
+                .contains(".ui-button--danger { border-color: rgba(var(--danger-rgb), 0.5); background: transparent; color: var(--danger-text) }")
                 .contains(".ui-button:disabled, .ui-button.disabled { opacity: 0.55;")
                 .contains(".card-table .col-actions .ui-button--secondary,");
 
         assertThat(text("components/RuleEditModal.js"))
-                .contains("<ui-button variant=\"quiet\" @click=\"$emit('close')\">{{t('modal.cancel')}}</ui-button>")
+                .contains("<ui-button variant=\"quiet\" :disabled=\"saving\" @click=\"$emit('close')\">{{t('modal.cancel')}}</ui-button>")
                 .contains("<ui-button class=\"btn btn-secondary\" @click=\"$emit('save',false)\"");
 
         Pattern directLegacyButton = Pattern.compile("<button\\b[^>]*class=\\\"(?:btn(?:\\s|\\\")|[^\\\"]+\\sbtn(?:\\s|\\\"))");
@@ -730,7 +730,7 @@ class ListRefinementResourceTest {
     void unconditionalRulesArePresentedAsIntentionalDefaultMatches() throws IOException {
         assertThat(text("i18n/zh-TW.json")).contains("\"noCondition\": \"預設匹配\"");
         assertThat(text("i18n/en.json")).contains("\"noCondition\": \"Default match\"");
-        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20260912.1");
+        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261001.2");
     }
 
     @Test
