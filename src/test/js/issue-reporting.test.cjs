@@ -166,7 +166,7 @@ test('navigation, page mount, app wiring, default config and cached asset versio
   assert.ok(app.includes('isAdmin, issueReportingEnabled, loadRules:'));
   assert.ok(app.includes('loading, isAdmin, issueReportingEnabled }'));
   for (const asset of ['composables/useRouter.js', 'composables/useIssues.js', 'components/SidebarNav.js', 'app.js']) {
-    const version = ['components/SidebarNav.js', 'app.js'].includes(asset) ? '20261001.2' : '20261001.1';
+    const version = asset === 'app.js' ? '20261001.3' : asset === 'components/SidebarNav.js' ? '20261001.2' : '20261001.1';
     assert.ok(source('index.html').includes(asset + '?v=' + version));
   }
   const config = fs.readFileSync(path.join(staticRoot, '../application.yml'), 'utf8');

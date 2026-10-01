@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - One-click maintainer release workflow with validated CalVer tags, release artifacts, checksums, generated notes, and GHCR images
 
 ### Changed
+- System Settings now separates overview, resource details, forwarding targets, data/backups, and service configuration; shared target tables and six metric disclosures retain manual-refresh behavior
 - Priority field semantics reversed to higher-number-higher-priority
 - Split HTTP/JMS rule caches for better isolation
 - Extract Template Method pipeline for HTTP/JMS mock processing
@@ -35,6 +36,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Spring Boot updated to 3.5.16 and the build aligned with the supported Gradle 8.14.5 line
 
 ### Fixed
+- Forwarding target dialogs now place and contain keyboard focus, support Escape, and restore the launch control; Settings action menus remain within the viewport
+- JMS forwarding documentation now reflects configuration-first default selection and distinguishes it from automatic failover
 - SpotBugs mutable array warnings
 - Remember Me validity now uses dedicated `echo.remember-me.validity` setting
 - Rule matching performance — removed MatchChain/Detail construction in hot loop

@@ -23,7 +23,10 @@ class ResourceMonitoringResourceTest {
                 .contains("clearTimeout(deadline)")
                 .doesNotContain("setInterval", "loadStatus", "/api/admin/status", "status()", "localStorage");
         assertThat(settings).contains("this.resourceRefreshToken++", "@click=\"refreshStatus\"")
-                .contains("v-if=\"isAdmin\" :refresh-token=\"resourceRefreshToken\"");
+                .contains("v-if=\"isAdmin\" v-show=\"activeTab === 'overview' || activeTab === 'monitoring'\"")
+                .contains(":refresh-token=\"resourceRefreshToken\"")
+                .contains("<ui-tabs")
+                .contains("<template v-if=\"status\">");
         assertThat(index.indexOf("ResourceMonitoringPanel.js")).isLessThan(index.indexOf("/app.js"));
         assertThat(text("static/app.js")).contains("_app.component('resource-monitoring-panel', ResourceMonitoringPanel)");
     }
@@ -43,9 +46,9 @@ class ResourceMonitoringResourceTest {
                 assertThat(i18n.path("states").path(state).asText()).isNotBlank();
             for (String group : List.of("jvm", "jms", "http", "database", "requestLog", "storage"))
                 assertThat(i18n.path("summary").path(group).asText()).isNotBlank();
-            for (String group : List.of("memory", "processing", "persistence")) {
+            for (String group : List.of("memory", "cache", "jms", "http", "database", "scheduler")) {
                 assertThat(i18n.path("details").path(group).asText()).isNotBlank();
-                assertThat(i18n.path("details").path(group + "Hint").asText()).isNotBlank();
+                assertThat(i18n.path("detailNotes").path(group).asText()).isNotBlank();
             }
             assertThat(i18n.path("cumulativeHint").asText()).isNotBlank();
             assertThat(i18n.path("incompleteGroups").asText()).isNotBlank();
