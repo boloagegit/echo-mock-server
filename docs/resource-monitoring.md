@@ -87,12 +87,31 @@ connection as before.
 
 ## Reading the Settings panel
 
-The default view shows six compact summaries (heap, JMS, HTTP, database waits,
-request-log persistence, and free storage). Three keyboard-operable disclosures
-contain all 74 display fields across the original nine collector groups.
-Opening a disclosure does not collect another snapshot; it only renders the
-already collected values. Collapsing details reduces visual/DOM complexity,
-not backend collection cost. Counter details show the process start time.
+Settings has five tabs: Overview, Resource Monitoring, Forward Connections,
+Data & Backups, and Service Configuration. Overview shows six compact summaries
+(heap, JMS, HTTP, database waits, request-log persistence, and free storage).
+Resource Monitoring has six keyboard-operable disclosures: Memory & GC, Caches,
+JMS, HTTP, Database & Persistence, and Delay Scheduler. Together they retain all
+74 display fields across the original nine collector groups, grouped into
+current usage, lifetime counters, and limits/configuration/timestamps.
+
+The same monitoring component remains mounted when switching Settings tabs.
+Opening a disclosure or following an overview detail link does not collect
+another snapshot. Collapsing details reduces visual/DOM complexity, not backend
+collection cost. Counter details show the process start time. Cache hit rates
+come from the separate legacy status response, not the resource snapshot.
+Collection state describes availability, not a health verdict. Zero temporary
+queue cleanup failures does not establish that no queues remain: downstream
+broker connection/temporary-queue inventory is not collected. Persistent pooled
+connections alone are not leak evidence. Scheduled backups do not establish
+that restore has been verified.
+
+Forward Connections uses one shared HTTP/JMS table with source, destination,
+default role, last test, and actions. Tests are explicit; the displayed result
+belongs to this page session. Configuration-backed JMS entries remain read-only.
+Data & Backups keeps retention, file inventory, manual backup, and collapsed
+destructive operations separate from service configuration. These presentation
+changes do not change endpoints, permissions, routing, or monitoring switches.
 
 ## Verification
 

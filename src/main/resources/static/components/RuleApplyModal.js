@@ -124,7 +124,7 @@ const RuleApplyModal = {
   },
   template: /* html */`
     <div class="rule-apply-inline">
-        <div class="modal-body rule-apply-body">
+        <div class="modal-body rule-apply-body" :inert="saving" :aria-busy="saving">
           <div class="rule-apply-editor-pane">
             <div class="rule-apply-toolbar">
               <div class="rule-apply-template-controls" role="group" :aria-label="t('rules.applyTemplates')">

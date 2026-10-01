@@ -104,12 +104,12 @@ class ListRefinementResourceTest {
                 .contains(".ui-button--compact { height: 32px; min-height: 32px;")
                 .contains("border-radius: 5px")
                 .contains(".ui-button--quiet { border-color: transparent; background: transparent; color: var(--primary) }")
-                .contains(".ui-button--danger { border-color: rgba(var(--danger-rgb), 0.5); background: transparent; color: var(--danger) }")
+                .contains(".ui-button--danger { border-color: rgba(var(--danger-rgb), 0.5); background: transparent; color: var(--danger-text) }")
                 .contains(".ui-button:disabled, .ui-button.disabled { opacity: 0.55;")
                 .contains(".card-table .col-actions .ui-button--secondary,");
 
         assertThat(text("components/RuleEditModal.js"))
-                .contains("<ui-button variant=\"quiet\" @click=\"$emit('close')\">{{t('modal.cancel')}}</ui-button>")
+                .contains("<ui-button variant=\"quiet\" :disabled=\"saving\" @click=\"$emit('close')\">{{t('modal.cancel')}}</ui-button>")
                 .contains("<ui-button class=\"btn btn-secondary\" @click=\"$emit('save',false)\"");
 
         Pattern directLegacyButton = Pattern.compile("<button\\b[^>]*class=\\\"(?:btn(?:\\s|\\\")|[^\\\"]+\\sbtn(?:\\s|\\\"))");
@@ -208,8 +208,13 @@ class ListRefinementResourceTest {
         }
         assertThat(text("components/SettingsPage.js"))
                 .contains("<ui-status")
-                .contains("connection-action-group connection-action-operational")
-                .contains("connection-action-group connection-action-management")
+                .contains("<connection-targets-table")
+                .doesNotContain("status-on")
+                .doesNotContain("status-off");
+        assertThat(text("components/ConnectionTargetsTable.js"))
+                .contains("<ui-dropdown-menu")
+                .contains("@click=\"$emit('test', target)\"")
+                .contains("@click=\"$emit('edit', target)\"")
                 .contains("variant=\"secondary\" size=\"compact\" class=\"connection-action-test\"")
                 .doesNotContain("status-on")
                 .doesNotContain("status-off");
@@ -294,15 +299,15 @@ class ListRefinementResourceTest {
     @Test
     void independentAcceptanceFindingsRemainFixed() throws IOException {
         String help = text("components/PriorityHelpModal.js");
-        String settings = text("components/SettingsPage.js");
+        String settings = text("components/SettingsPage.js") + text("components/ConnectionTargetsTable.js");
         String css = text("style.css");
         assertThat(help)
                 .contains("<h3>{{t('modal.condFieldQuery')}}</h3>")
                 .doesNotContain("<h3>{{t('help.condQuery')}}</h3>");
         assertThat(settings)
-                .contains("target.authType==='NONE'?t('settings.authNone')")
-                .contains("target.authType==='BASIC'?t('settings.authBasic')")
-                .contains("t('settings.authBearerToken')")
+                .contains("target.authType==='NONE'?this.t('settings.authNone')")
+                .contains("target.authType==='BASIC'?this.t('settings.authBasic')")
+                .contains("this.t('settings.authBearerToken')")
                 .contains("class=\"sub-info connection-queue\"")
                 .contains("class=\"connection-source-value\"");
         assertThat(css)
@@ -417,7 +422,7 @@ class ListRefinementResourceTest {
     void listHeadersMenusAndLoadStatesUseSharedAccessiblePrimitives() throws IOException {
         assertThat(text("index.html"))
                 .contains("/components/UiTableSortHeader.js?v=20260909.1")
-                .contains("/components/UiDropdownMenu.js?v=20260909.2")
+                .contains("/components/UiDropdownMenu.js?v=20261001.1")
                 .contains("/components/UiLoadState.js?v=20260909.1");
         assertThat(text("app.js"))
                 .contains("_app.component('ui-table-sort-header', UiTableSortHeader);")
@@ -730,7 +735,7 @@ class ListRefinementResourceTest {
     void unconditionalRulesArePresentedAsIntentionalDefaultMatches() throws IOException {
         assertThat(text("i18n/zh-TW.json")).contains("\"noCondition\": \"預設匹配\"");
         assertThat(text("i18n/en.json")).contains("\"noCondition\": \"Default match\"");
-        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20260912.1");
+        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261001.3");
     }
 
     @Test

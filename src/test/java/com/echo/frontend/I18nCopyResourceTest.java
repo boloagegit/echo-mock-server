@@ -62,7 +62,8 @@ class I18nCopyResourceTest {
     void routesSharedNavigationAndControlCopyThroughI18n() throws IOException {
         String sidebar = resourceText("static/components/SidebarNav.js");
         String audit = resourceText("static/components/AuditPage.js");
-        String settings = resourceText("static/components/SettingsPage.js");
+        String settings = resourceText("static/components/SettingsPage.js")
+                + resourceText("static/components/ConnectionTargetsTable.js");
         String ruleEditor = resourceText("static/components/RuleEditModal.js");
 
         assertThat(sidebar)

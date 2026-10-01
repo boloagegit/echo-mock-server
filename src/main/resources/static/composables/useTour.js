@@ -2,12 +2,12 @@
  * useTour - 互動式導覽 Composable
  *
  * 管理新手引導 tour 的狀態與步驟邏輯。
- * 點擊 sidebar 說明（首次）→ 開啟新增規則 Modal → 逐步高亮 Modal 內元素。
+ * 從說明文件選擇開始導覽 → 開啟示範規則 → 結束後回到進入前情境。
  *
- * @param {Object} deps - { t, openCreate }
+ * @param {Object} deps - { t, onFinish }
  * @returns {{ tourActive, tourStep, helpSeen, startTour, nextStep, prevStep, skipTour, tourSteps }}
  */
-const useTour = ({ t }) => {
+const useTour = ({ t, onFinish = () => {} }) => {
     const { ref, computed } = Vue;
 
     const helpSeen = ref(localStorage.getItem('echo_help_seen') === '1');
@@ -64,10 +64,12 @@ const useTour = ({ t }) => {
     };
 
     const finishTour = () => {
+        if (!tourActive.value) return;
         tourActive.value = false;
         tourStep.value = 0;
         helpSeen.value = true;
         localStorage.setItem('echo_help_seen', '1');
+        onFinish();
     };
 
     return { tourActive, tourStep, helpSeen, startTour, nextStep, prevStep, skipTour, tourSteps };

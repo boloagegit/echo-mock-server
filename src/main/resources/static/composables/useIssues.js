@@ -10,10 +10,12 @@
  * @param {Function} deps.requireLogin - 登入檢查函式
  * @param {Ref} deps.loading - 全域 loading 狀態
  * @param {Ref} deps.isAdmin - 是否為管理員
+ * @param {Ref} deps.issueReportingEnabled - 後端是否啟用問題回報
  */
 const useIssues = (deps) => {
     const { ref, computed, watch } = Vue;
     const { showToast, showConfirm, t, requireLogin, loading, isAdmin } = deps;
+    const issueReportingEnabled = deps.issueReportingEnabled || ref(false);
 
     // --- 資料快取 ---
     const dataLastLoaded = { issues: 0 };
@@ -62,6 +64,7 @@ const useIssues = (deps) => {
 
     // --- 載入 ---
     const loadIssues = async (force) => {
+        if (!issueReportingEnabled.value) { return false; }
         if (!force && !shouldLoad()) { return; }
         const requestId = ++listRequestSequence;
         if (listAbortController) { listAbortController.abort(); }
@@ -104,9 +107,22 @@ const useIssues = (deps) => {
     watch(issueSort, reloadIssuesFromFirstPage, { deep: true });
     watch(issuePage, () => loadIssues(true));
     watch(issuePageSize, reloadIssuesFromFirstPage);
+    watch(issueReportingEnabled, enabled => {
+        if (enabled) { return; }
+        listRequestSequence++;
+        if (listAbortController) { listAbortController.abort(); listAbortController = null; }
+        issues.value = [];
+        openCount.value = 0;
+        issueTotalElements.value = 0;
+        issueServerTotalPages.value = 0;
+        dataLastLoaded.issues = 0;
+        loading.value.issues = false;
+        loading.value.issuesError = '';
+    });
 
     // --- 建立 ---
     const createIssue = async (title, description) => {
+        if (!issueReportingEnabled.value) { return false; }
         if (!await requireLogin()) { return false; }
         const r = await apiCall('/api/admin/issues', {
             method: 'POST',
@@ -126,6 +142,7 @@ const useIssues = (deps) => {
 
     // --- Admin 操作 ---
     const replyIssue = async (id, reply) => {
+        if (!issueReportingEnabled.value) { return false; }
         if (!await requireLogin()) { return false; }
         const r = await apiCall(`/api/admin/issues/${id}/reply`, {
             method: 'PUT',
@@ -141,6 +158,7 @@ const useIssues = (deps) => {
     };
 
     const resolveIssue = async (id) => {
+        if (!issueReportingEnabled.value) { return false; }
         if (!await requireLogin()) { return false; }
         if (!await showConfirm({ title: t('issues.confirmResolve'), message: t('issues.confirmResolveMsg') })) { return false; }
         const r = await apiCall(`/api/admin/issues/${id}/resolve`, { method: 'PUT' }, { silent: true });
@@ -154,6 +172,7 @@ const useIssues = (deps) => {
     };
 
     const reopenIssue = async (id) => {
+        if (!issueReportingEnabled.value) { return false; }
         if (!await requireLogin()) { return false; }
         const r = await apiCall(`/api/admin/issues/${id}/reopen`, { method: 'PUT' }, { silent: true });
         if (r && r.ok) {
@@ -166,6 +185,7 @@ const useIssues = (deps) => {
     };
 
     const deleteIssue = async (id) => {
+        if (!issueReportingEnabled.value) { return false; }
         if (!await requireLogin()) { return false; }
         if (!await showConfirm({ title: t('issues.confirmDelete'), message: t('issues.confirmDeleteMsg'), confirmText: t('issues.delete'), danger: true })) { return false; }
         const r = await apiCall(`/api/admin/issues/${id}`, { method: 'DELETE' }, { silent: true });

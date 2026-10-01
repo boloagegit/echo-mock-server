@@ -197,8 +197,13 @@ JVM 參數在 Dockerfile 中設定（預設 `-Xms256m -Xmx512m`，OOM 時保留 
 | 環境變數 | 預設值 | 說明 |
 |----------|--------|------|
 | `ECHO_BULK_IMPORT_EXPORT_ENABLED` | `false` | 顯示並啟用批次匯入／匯出操作 |
+| `ECHO_ISSUE_REPORTING_ENABLED` | `false` | 顯示問題回報頁面並啟用其 API；既有回報資料保留 |
 | `ECHO_SCENARIOS_ENABLED` | `false` | 啟用 Scenario 狀態機規則與管理功能 |
 | `ECHO_RULE_DRAG_SORT_ENABLED` | `false` | 啟用規則列表的拖曳優先度排序 |
+
+也可在部署設定檔設定 `echo.features.issue-reporting-enabled: true` 啟用問題回報，
+修改後須重新啟動 Echo。關閉時隱藏導覽入口，直接進入 `#/issues` 會返回規則列表，
+已登入使用者呼叫問題回報 API 會得到 404；不刪除既有資料，開啟後沿用原本權限。
 
 ### 存取服務
 
@@ -290,7 +295,9 @@ Echo 可作為 JMS Proxy，在開發環境攔截 JMS 訊息：
                  無匹配規則 → 轉發到 Target ESB
 ```
 
-管理員可在「系統設定 → JMS 轉發連線」建立多組 Artemis/TIBCO 連線、測試連線並指定一組預設值。只有無規則匹配時才會使用預設的**轉發端**連線；Echo 自己接收訊息的 Embedded Artemis 不受影響。第一次建立資料庫連線設定後，系統會改用資料庫設定，原本 `application.yml` 的 `target` 僅作為尚未建立任何設定時的相容備援。密碼以 AES-GCM 加密保存且不會由 API 回傳；正式環境請固定設定 `ECHO_JMS_CREDENTIAL_KEY`，更換此金鑰前必須先重新輸入所有已儲存密碼。
+管理員可在「系統設定 → 轉發連線 → JMS」建立多組 Artemis/TIBCO 連線、測試連線並指定一組資料庫預設值。有效且啟用的 `application.yml` 轉發設定優先；未設定時才使用資料庫預設連線。這是設定優先順序，不是連線失敗後自動切換的後備機制。未匹配規則的訊息，以及選擇「預設 JMS 連線」的規則，會使用此**轉發端**預設；指定特定連線的規則則使用該連線。Echo 自己接收訊息的 Embedded Artemis 不受影響。密碼以 AES-GCM 加密保存且不會由 API 回傳；正式環境請固定設定 `ECHO_JMS_CREDENTIAL_KEY`，更換此金鑰前必須先重新輸入所有已儲存密碼。
+
+系統設定分為「總覽、資源監控、轉發連線、資料與備份、服務設定」。僅進入頁面與手動重新整理／重試時更新，不定時輪詢。監控明細區分目前使用量、啟動後累計與設定上限；判讀健康度或資源未釋放前，請先參閱[資源快照的意義與限制](docs/resource-monitoring.md)。
 
 使用 Artemis Core client 傳送 XML 時，建議在發送端連線 URL 設定 `tcp://echo-host:61616?minLargeMessageSize=524288`。這會讓約 256KB 以內的文字訊息走一般訊息路徑，避免中型 XML 每筆建立 large-message 檔案；更大的訊息仍會落盤保護 heap。此參數必須設在**發送端**，不是 Echo 的 `application.yml`。
 

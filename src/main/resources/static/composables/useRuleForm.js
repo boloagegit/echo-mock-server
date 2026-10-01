@@ -723,6 +723,8 @@ const useRuleForm = (deps) => {
         conditions.value = [];
         sseEvents.value = [];
         formErrors.value = {};
+        newTag.value = { key: '', value: '' };
+        newHeader.value = { key: '', value: '' };
         catchAllConfirmed.value = false;
         showCatchAllWarning.value = false;
         testExpanded.value = false;
@@ -801,11 +803,13 @@ const useRuleForm = (deps) => {
         } else if (payload.responseMode === 'existing') { payload.responseBody = null; }
         else { payload.responseId = null; }
         delete payload.responseMode;
+        let savedSuccessfully = false;
         try {
             const url = editing.value ? `/api/admin/rules/${editing.value.id}` : '/api/admin/rules';
             const r = await apiCall(url, { method: editing.value ? 'PUT' : 'POST', body: JSON.stringify(payload) }, { errorMsg: t('toast.ruleSaveFailed') });
             if (r && r.ok) {
                 const saved = await r.json();
+                savedSuccessfully = true;
                 showToast(editing.value ? t('toast.ruleSaveSuccess') : t('toast.ruleCreateSuccess'), 'success');
                 rulesMarkDirty();
                 delete rulePreviewCache.value[saved.id];
@@ -824,6 +828,7 @@ const useRuleForm = (deps) => {
             else if (r && (r.status === 401 || r.status === 403)) { login(); }
         } catch (e) { showToast(t('toast.ruleSaveFailed'), 'error'); }
         saving.value = false;
+        return savedSuccessfully;
     };
 
     // --- 回應預覽編輯 ---

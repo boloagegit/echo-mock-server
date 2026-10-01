@@ -37,11 +37,66 @@ const RuleListIdentity = {
     </div>`
 };
 
+const ruleMenuPosition = (trigger, bounds, width, height, gap = 4) => ({
+  left: Math.max(bounds.left + gap, Math.min(trigger.left - width - gap, bounds.right - width - gap)),
+  top: Math.max(bounds.top + gap, Math.min(trigger.top + trigger.height / 2 - height / 2, bounds.bottom - height - gap))
+});
+
 const RuleRowActions = {
   inject: ['t'],
   props: { rule: Object, isLoggedIn: Boolean, expanded: Boolean, previewId: String },
   emits: ['open-edit', 'toggle-rule-preview', 'show-rule-history', 'copy-rule'],
+  data() { return { popoverStyle: { visibility: 'hidden' } }; },
+  beforeUnmount() { this.removeMenuListeners(); },
   methods: {
+    removeMenuListeners() {
+      window.removeEventListener('resize', this._positionMenu);
+      document.removeEventListener('scroll', this._positionMenu, true);
+      document.removeEventListener('pointerdown', this._outsideMenu);
+      if (this._menuFrame) cancelAnimationFrame(this._menuFrame);
+      this._menuFrame = null;
+    },
+    onMenuToggle() {
+      this.removeMenuListeners();
+      this.popoverStyle = { visibility: 'hidden' };
+      if (!this.$refs.moreMenu?.open) return;
+      this._positionMenu = () => {
+        if (this._menuFrame) return;
+        this._menuFrame = requestAnimationFrame(() => {
+          this._menuFrame = null;
+          this.positionMenu();
+        });
+      };
+      this._outsideMenu = event => {
+        if (!this.$refs.moreMenu?.contains(event.target)) this.$refs.moreMenu.open = false;
+      };
+      window.addEventListener('resize', this._positionMenu);
+      document.addEventListener('scroll', this._positionMenu, { capture: true, passive: true });
+      document.addEventListener('pointerdown', this._outsideMenu);
+      this.$nextTick(() => this.positionMenu());
+    },
+    positionMenu() {
+      const menu = this.$refs.moreMenu;
+      const panel = this.$refs.morePanel;
+      if (!menu?.open || !panel) return;
+      const bounds = { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+      for (let node = menu.parentElement; node; node = node.parentElement) {
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        if (/(auto|scroll|hidden|clip)/.test(style.overflowX)) {
+          bounds.left = Math.max(bounds.left, rect.left + node.clientLeft);
+          bounds.right = Math.min(bounds.right, rect.left + node.clientLeft + node.clientWidth);
+        }
+        if (/(auto|scroll|hidden|clip)/.test(style.overflowY)) {
+          bounds.top = Math.max(bounds.top, rect.top + node.clientTop);
+          bounds.bottom = Math.min(bounds.bottom, rect.top + node.clientTop + node.clientHeight);
+        }
+      }
+      const anchor = menu.getBoundingClientRect();
+      const trigger = menu.querySelector('summary').getBoundingClientRect();
+      const position = ruleMenuPosition(trigger, bounds, panel.offsetWidth, panel.offsetHeight);
+      this.popoverStyle = { left: (position.left - anchor.left) + 'px', top: (position.top - anchor.top) + 'px' };
+    },
     invoke(action, event) {
       const menu = event.currentTarget.closest('details');
       if (menu) { menu.open = false; menu.querySelector('summary')?.focus(); }
@@ -52,9 +107,9 @@ const RuleRowActions = {
     <div class="rule-row-actions" @click.stop @dblclick.stop>
       <ui-button type="button" class="btn btn-sm btn-secondary rule-row-edit" @click="$emit('open-edit',rule)" :title="!isLoggedIn?t('rules.loginRequired'):t('rules.edit')" :disabled="!isLoggedIn"><i class="bi bi-pencil" aria-hidden="true"></i><span>{{t('rules.edit')}}</span></ui-button>
       <ui-button type="button" class="btn btn-sm btn-icon btn-secondary rule-row-disclosure" @click="$emit('toggle-rule-preview',rule)" :aria-expanded="expanded" :aria-controls="expanded?previewId:undefined" :title="expanded?t('rules.collapsePreview'):t('rules.expandPreview')" :aria-label="expanded?t('rules.collapsePreview'):t('rules.expandPreview')"><i class="bi" :class="expanded?'bi-chevron-up':'bi-chevron-down'" aria-hidden="true"></i></ui-button>
-      <details class="rule-row-more" @keydown.esc.stop.prevent="$event.currentTarget.open=false;$event.currentTarget.querySelector('summary').focus()">
+      <details ref="moreMenu" class="rule-row-more" @toggle="onMenuToggle" @keydown.esc.stop.prevent="$event.currentTarget.open=false;$event.currentTarget.querySelector('summary').focus()">
         <summary class="btn btn-sm btn-icon btn-secondary" :aria-label="t('rules.moreActions')+' '+rule.id" :title="t('rules.moreActions')"><i class="bi bi-three-dots-vertical" aria-hidden="true"></i></summary>
-        <div class="rule-row-more-popover">
+        <div ref="morePanel" class="rule-row-more-popover" :style="popoverStyle">
           <button type="button" @click="invoke('show-rule-history',$event)"><i class="bi bi-clock-history" aria-hidden="true"></i><span>{{t('rules.history')}}</span></button>
           <button type="button" @click="invoke('copy-rule',$event)" :disabled="!isLoggedIn"><i class="bi bi-copy" aria-hidden="true"></i><span>{{t('rules.quickCopy')}}</span></button>
         </div>

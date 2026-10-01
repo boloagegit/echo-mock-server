@@ -110,11 +110,14 @@ test('request deadline aborts once without creating a polling loop', async () =>
 test('compact overview has six groups; details retain all nine sections and every metric', () => {
   const { instance } = fixture(async () => { throw new Error('not requested'); });
   assert.equal(instance.summaries.length, 6);
-  assert.equal(instance.detailGroups.length, 3);
+  assert.equal(instance.detailGroups.length, 6);
   const sections = instance.detailGroups.flatMap(group => group.sections);
   assert.equal(sections.length, 9);
   assert.equal(new Set(sections.map(group => group.key)).size, 9);
   assert.equal(sections.reduce((count, group) => count + group.metrics.length, 0), 74);
+  const displayed = instance.detailGroups.flatMap(group => group.columns.flatMap(column => column.sections.flatMap(section => section.metrics.map(metric => section.key + ':' + metric))));
+  assert.equal(displayed.length, 74);
+  assert.equal(new Set(displayed).size, 74);
   for (const summary of instance.summaries) {
     const detail = sections.find(group => group.key === summary.key);
     assert.equal(summary.metrics.every(key => detail.metrics.includes(key)), true);
@@ -143,7 +146,39 @@ test('collapsed details expose incomplete hidden groups without health claims', 
   const { instance } = fixture(async () => {});
   instance.snapshot = { sections: { jvm: { state: 'AVAILABLE' }, caches: { state: 'FAILED' } } };
   const memory = instance.detailGroups.find(group => group.key === 'memory');
-  assert.equal(memory.incomplete, 1);
-  assert.equal(memory.tone, 'danger');
-  assert.equal(instance.detailGroups[1].sections[0].key, 'jms');
+  assert.equal(memory.incomplete, 0);
+  const caches = instance.detailGroups.find(group => group.key === 'cache');
+  assert.equal(caches.incomplete, 1);
+  assert.equal(caches.tone, 'danger');
+  assert.equal(instance.detailGroups.find(group => group.key === 'jms').sections[0].key, 'jms');
+});
+
+test('current, cumulative and configuration metrics retain distinct meanings', () => {
+  const { instance } = fixture(async () => {});
+  const jms = instance.detailGroups.find(group => group.key === 'jms');
+  assert.ok(jms.columns.find(c => c.key === 'current').sections[0].metrics.includes('forwardActive'));
+  assert.ok(jms.columns.find(c => c.key === 'cumulative').sections[0].metrics.includes('cleanupFailures'));
+  assert.ok(jms.columns.find(c => c.key === 'limits').sections[0].metrics.includes('maxDeliveryAttempts'));
+});
+
+test('heap percentage excludes invalid, missing and disabled observations', () => {
+  const { instance } = fixture(async () => {});
+  for (const state of ['DISABLED', 'FAILED']) {
+    instance.snapshot = { sections: { jvm: { state, values: { heapUsedBytes: 400, heapMaxBytes: 500 } } } };
+    assert.equal(instance.heapPercent, null);
+  }
+  instance.snapshot = { sections: { jvm: { state: 'AVAILABLE', values: { heapUsedBytes: 400, heapMaxBytes: 500 } } } };
+  assert.equal(instance.heapPercent, 80);
+  instance.snapshot.sections.jvm.values.heapMaxBytes = 0;
+  assert.equal(instance.heapPercent, null);
+});
+
+test('summary navigation does not fetch and maps request-log details to database', () => {
+  let calls = 0;
+  const { instance, events } = fixture(async () => { calls++; });
+  instance.navigateToDetail('requestLog');
+  assert.deepEqual(events[0], ['navigate', 'monitoring', 'database']);
+  instance.navigateToDetail('storage');
+  assert.deepEqual(events[1], ['navigate', 'data', 'storage']);
+  assert.equal(calls, 0);
 });

@@ -125,6 +125,14 @@ class AdminControllerTest {
         assertThat(response.getBody().get("bulkImportExportEnabled")).isEqualTo(true);
         assertThat(response.getBody().get("scenariosEnabled")).isEqualTo(true);
         assertThat(response.getBody().get("ruleDragSortEnabled")).isEqualTo(true);
+        assertThat(response.getBody().get("issueReportingEnabled")).isEqualTo(false);
+    }
+
+    @Test
+    void getStatus_shouldExposeEnabledIssueReportingFeature() {
+        ReflectionTestUtils.setField(controller, "issueReportingEnabled", true);
+
+        assertThat(controller.getStatus(null).getBody().get("issueReportingEnabled")).isEqualTo(true);
     }
 
     @Test

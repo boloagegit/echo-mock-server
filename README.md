@@ -216,9 +216,16 @@ The following user-facing features are intentionally disabled by default and can
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `ECHO_ISSUE_REPORTING_ENABLED` | `false` | Shows the issue-reporting page and enables its APIs; existing reports are retained |
 | `ECHO_BULK_IMPORT_EXPORT_ENABLED` | `false` | Shows and enables bulk import/export operations |
 | `ECHO_SCENARIOS_ENABLED` | `false` | Enables stateful Scenario rules and Scenario administration |
 | `ECHO_RULE_DRAG_SORT_ENABLED` | `false` | Enables drag-and-drop priority ordering in the rule list |
+
+Issue reporting can also be enabled with `echo.features.issue-reporting-enabled: true`
+in the deployment configuration. Restart Echo to apply the setting. When disabled,
+the navigation entry is hidden, direct `#/issues` links return to the rule list,
+and authenticated issue API requests return 404. Existing data and enabled-mode
+permissions are unchanged.
 
 ### Access the Service
 
@@ -310,7 +317,9 @@ Application ──JMS──▶ Echo (Artemis)  ──JMS──▶ ESB (TIBCO/Art
                      No match    → Forward to Target ESB
 ```
 
-Administrators can create multiple Artemis/TIBCO profiles under **System Settings → JMS Forward Connections**, test them, and select one default. Only unmatched messages use this outbound default; Echo's inbound Embedded Artemis connection is unchanged. Once the first database profile is created, database profiles take precedence and the legacy `application.yml` target is used only while no database profile exists. Passwords are stored with AES-GCM encryption and are never returned by the API. Set a stable `ECHO_JMS_CREDENTIAL_KEY` in production; changing it requires re-entering every stored password.
+Administrators can create multiple Artemis/TIBCO profiles under **System Settings → Forward Connections → JMS**, test them, and select one database default. A valid, enabled `application.yml` target takes precedence; the database default is used only when that configuration is absent. This is configuration precedence, not automatic failover. Unmatched messages and rules selecting the default JMS connection use this outbound default; rules selecting a specific profile use that profile. Echo's inbound Embedded Artemis connection is unchanged. Passwords are stored with AES-GCM encryption and are never returned by the API. Set a stable `ECHO_JMS_CREDENTIAL_KEY` in production; changing it requires re-entering every stored password.
+
+System Settings separates **Overview**, **Resource Monitoring**, **Forward Connections**, **Data & Backups**, and **Service Configuration**. Settings collects data on entry and explicit refresh/retry only, without polling. Resource details distinguish current usage, lifetime counters, and configured limits; see [resource snapshot semantics](docs/resource-monitoring.md) before interpreting them as health or leak evidence.
 
 For Artemis Core clients that send XML, configure the sender URL as `tcp://echo-host:61616?minLargeMessageSize=524288`. Text payloads up to roughly 256 KB then use the regular-message path instead of creating one large-message file per request, while larger messages still spill to disk to protect the heap. This is a **sender-side** connection setting, not an Echo `application.yml` property.
 
