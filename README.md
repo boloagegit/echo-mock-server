@@ -321,6 +321,9 @@ Administrators can create multiple Artemis/TIBCO profiles under **System Setting
 
 System Settings separates **Overview**, **Resource Monitoring**, **Forward Connections**, **Data & Backups**, and **Service Configuration**. Settings collects data on entry and explicit refresh/retry only, without polling. Resource details distinguish current usage, lifetime counters, and configured limits; see [resource snapshot semantics](docs/resource-monitoring.md) before interpreting them as health or leak evidence.
 
+[Transaction diagnostics](docs/transaction-diagnostics.md) adds bounded anomaly-only file summaries
+and Request Log correlation IDs. See the linked guide for configuration, quotas and evidence limits.
+
 For Artemis Core clients that send XML, configure the sender URL as `tcp://echo-host:61616?minLargeMessageSize=524288`. Text payloads up to roughly 256 KB then use the regular-message path instead of creating one large-message file per request, while larger messages still spill to disk to protect the heap. This is a **sender-side** connection setting, not an Echo `application.yml` property.
 
 ## Condition Matching Syntax

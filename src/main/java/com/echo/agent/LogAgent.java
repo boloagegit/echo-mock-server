@@ -566,6 +566,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     private RequestLog toEntity(LogTask task, boolean detailedAnalysis) {
         String matchChain = analyzeMatchChain(task, detailedAnalysis);
         return RequestLog.builder()
+                .diagnosticId(task.getDiagnosticId())
                 .ruleId(task.getRuleId())
                 .protocol(task.getProtocol())
                 .method(task.getMethod())
@@ -580,7 +581,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 .forwarded(task.isForwarded())
                 .forwardTarget(task.getForwardTarget())
                 .proxyStatus(task.getProxyStatus())
-                .proxyError(task.getProxyError())
+                .proxyError(RequestLog.limitProxyError(task.getProxyError()))
                 .responseStatus(task.getResponseStatus())
                 .requestBody(task.getRequestBody())
                 .responseBody(task.getResponseBody())
@@ -596,6 +597,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
      */
     private RequestLogService.LogEntry toLogEntry(LogTask task, String matchChain) {
         return RequestLogService.LogEntry.builder()
+                .diagnosticId(task.getDiagnosticId())
                 .id(RequestLogService.nextMemoryId())
                 .ruleId(task.getRuleId())
                 .protocol(task.getProtocol())
@@ -611,7 +613,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 .forwarded(task.isForwarded())
                 .forwardTarget(task.getForwardTarget())
                 .proxyStatus(task.getProxyStatus())
-                .proxyError(task.getProxyError())
+                .proxyError(RequestLog.limitProxyError(task.getProxyError()))
                 .responseStatus(task.getResponseStatus())
                 .requestBody(task.getRequestBody())
                 .responseBody(task.getResponseBody())

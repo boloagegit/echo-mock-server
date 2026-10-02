@@ -60,6 +60,19 @@ spring:
 
 # Echo 自訂配置
 echo:
+  # Healthy requests write no diagnostic file lines. Anomalies have bounded metadata only.
+  diagnostics:
+    enabled: ${ECHO_DIAGNOSTICS_ENABLED:true}
+    jms-enabled: true
+    http-enabled: true
+    sse-enabled: true
+    queue-capacity: 1024 # bounded to 32..4096, one daemon writer, no body/header logging
+    detailed-enabled: false # temporary troubleshooting only; auto-expires after startup
+    detailed-seconds: 300 # maximum 600; all detail still shares the byte/rate limits
+    daily-bytes: 10485760 # 10 MiB, UTF-8 bytes including newlines, retained across restarts
+    retained-bytes: 52428800 # 50 MiB across owned diagnostic day files
+    retention-days: 7 # maximum seven days including today, capacity may shorten history
+    records-per-second: 20 # aggregate anomaly/detail output limit, omitted records counted
   # Resource snapshots are ADMIN-only and collected only on manual refresh.
   monitoring:
     enabled: true

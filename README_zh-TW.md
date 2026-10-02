@@ -299,6 +299,9 @@ Echo 可作為 JMS Proxy，在開發環境攔截 JMS 訊息：
 
 系統設定分為「總覽、資源監控、轉發連線、資料與備份、服務設定」。僅進入頁面與手動重新整理／重試時更新，不定時輪詢。監控明細區分目前使用量、啟動後累計與設定上限；判讀健康度或資源未釋放前，請先參閱[資源快照的意義與限制](docs/resource-monitoring.md)。
 
+[交易診斷](docs/transaction-diagnostics.md)提供有容量限制的異常摘要與請求紀錄關聯 ID。
+設定方式、留存限制與證據判讀集中於該文件，正常請求不新增診斷檔案日誌。
+
 使用 Artemis Core client 傳送 XML 時，建議在發送端連線 URL 設定 `tcp://echo-host:61616?minLargeMessageSize=524288`。這會讓約 256KB 以內的文字訊息走一般訊息路徑，避免中型 XML 每筆建立 large-message 檔案；更大的訊息仍會落盤保護 heap。此參數必須設在**發送端**，不是 Echo 的 `application.yml`。
 
 ## 條件匹配語法

@@ -59,12 +59,17 @@ class RequestLogSummaryQuerySqliteIntegrationTest {
                 .containsExactly("/orders/3", "/orders/1");
         assertThat(result.rows().get(0).faultType()).isEqualTo("EMPTY_RESPONSE");
         assertThat(result.rows().get(0).scenarioName()).isEqualTo("order-flow");
+        assertThat(result.rows().get(0).diagnosticId()).isEqualTo("process-orders-3");
+        var byTrace = query.query(new RequestLogSummaryQuery.Filter(null, null, null,
+                "process-orders-3", null), 0, 10, "requestTime", false);
+        assertThat(byTrace.rows()).singleElement().satisfies(row -> assertThat(row.endpoint()).isEqualTo("/orders/3"));
     }
 
     private RequestLog log(Protocol protocol, boolean matched,
                            String endpoint, LocalDateTime time) {
         boolean statefulFault = "/orders/3".equals(endpoint);
         return RequestLog.builder().protocol(protocol).endpoint(endpoint)
+                .diagnosticId(statefulFault ? "process-orders-3" : null)
                 .matched(matched).responseTimeMs(1).requestTime(time)
                 .faultType(statefulFault ? "EMPTY_RESPONSE" : null)
                 .scenarioName(statefulFault ? "order-flow" : null)

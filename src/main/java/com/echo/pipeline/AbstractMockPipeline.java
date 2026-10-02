@@ -107,6 +107,13 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
 
             if (matchResult.isMatched()) {
                 T rule = matchResult.getMatchedRule();
+                boolean forwardMatched = (rule.getFaultType() == null || rule.getFaultType() == FaultType.NONE)
+                        && shouldForwardMatchedRule(rule, request);
+                request.getTrace().event("ROUTE", "ruleId", rule.getId(), "ruleVersion", rule.getVersion(),
+                        "responseId", rule.getResponseId(), "mode", rule.getFaultType() != null
+                                && rule.getFaultType() != FaultType.NONE ? "FAULT"
+                                : forwardMatched ? "FORWARD" : "MOCK",
+                        "endpoint", request.getEndpointValue() != null ? request.getEndpointValue() : request.getPath());
                 ruleId = rule.getId();
                 delayMs = calculateDelay(
                     rule.getDelayMs() != null ? rule.getDelayMs() : 0,
@@ -134,7 +141,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                             .forwarded(false)
                             .build();
                     }
-                } else if (shouldForwardMatchedRule(rule, request)) {
+                } else if (forwardMatched) {
                     responseStage = forwardMatchedRuleAsync(rule, request);
                 } else {
                     // 4b. 解析回應內容
@@ -147,7 +154,10 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                 ruleId = null;
                 delayMs = 0;
                 // 5. 無匹配：判斷是否轉發
-                if (shouldForward(request)) {
+                boolean forward = shouldForward(request);
+                request.getTrace().event("ROUTE", "ruleId", null, "mode", forward ? "FORWARD" : "UNMATCHED",
+                        "endpoint", request.getEndpointValue() != null ? request.getEndpointValue() : request.getPath());
+                if (forward) {
                     responseStage = forwardAsync(request);
                 } else {
                     immediateResponse = handleNoMatch(request);
@@ -217,7 +227,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                 proxyStatus, response.getProxyError(), loggedResponseStatus,
                 matchTimeMs, request.getBody(), response.getBody(), candidates, preparedBody,
                 request.getQueryString(), request.getHeaders(), faultType,
-                scenarioName, scenarioFromState, scenarioToState);
+                scenarioName, scenarioFromState, scenarioToState, request.getTrace().id());
 
         return PipelineResult.builder()
                 .response(response)
@@ -234,7 +244,8 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     }
 
     private PipelineResult pipelineError(MockRequest request, long startTime, Throwable error) {
-        log.error("Pipeline execution error: {}", error.getMessage(), error);
+        request.getTrace().failure("PIPELINE_FAILED", error);
+        if (!request.getTrace().enabled()) log.error("Pipeline execution error: {}", error.getMessage(), error);
         int responseTimeMs = (int) (System.currentTimeMillis() - startTime);
         boolean logUnavailable = error instanceof RequestLogUnavailableException;
         if (logUnavailable && request.getProtocol() == Protocol.JMS) {
@@ -467,6 +478,38 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                 requestBody, responseBody,
                 candidates, preparedBody, queryString, headers, faultType,
                 scenarioName, scenarioFromState, scenarioToState);
+    }
+
+    /** 記錄包含明確轉發狀態與安全目標資訊的請求日誌。 */
+    protected void recordLog(String ruleId, Protocol protocol, String method,
+                             String endpoint, boolean matched, int responseTimeMs,
+                             String clientIp, String matchChainJson, String targetHost,
+                             boolean forwarded, String forwardTarget,
+                             Integer proxyStatus, String proxyError,
+                             Integer responseStatus, Integer matchTimeMs,
+                             String requestBody, String responseBody,
+                             List<T> candidates,
+                             ConditionMatcher.PreparedBody preparedBody,
+                             String queryString,
+                             Map<String, String> headers,
+                             String faultType,
+                             String scenarioName,
+                             String scenarioFromState,
+                             String scenarioToState, String diagnosticId) {
+        if (diagnosticId == null) {
+            recordLog(ruleId, protocol, method, endpoint, matched, responseTimeMs, clientIp,
+                    matchChainJson, targetHost, forwarded, forwardTarget, proxyStatus, proxyError,
+                    responseStatus, matchTimeMs, requestBody, responseBody, candidates, preparedBody,
+                    queryString, headers, faultType, scenarioName, scenarioFromState, scenarioToState);
+            return;
+        }
+        requestLogService.record(ruleId, protocol, method, endpoint,
+                matched, responseTimeMs, clientIp, matchChainJson, targetHost,
+                forwarded, forwardTarget,
+                proxyStatus, proxyError, responseStatus, matchTimeMs,
+                requestBody, responseBody,
+                candidates, preparedBody, queryString, headers, faultType,
+                scenarioName, scenarioFromState, scenarioToState, diagnosticId);
     }
 
     // ==================== 抽象方法：由子類別實作 ====================

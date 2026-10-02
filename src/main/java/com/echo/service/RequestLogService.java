@@ -241,6 +241,29 @@ public class RequestLogService {
                        String scenarioName,
                        String scenarioFromState,
                        String scenarioToState) {
+        record(ruleId, protocol, method, endpoint, matched, responseTimeMs, clientIp,
+                matchChain, targetHost, forwarded, forwardTarget, proxyStatus, proxyError,
+                responseStatus, matchTimeMs, requestBody, responseBody, candidates, preparedBody,
+                queryString, headers, faultType, scenarioName, scenarioFromState, scenarioToState, null);
+    }
+
+    /** 記錄請求，並保留轉發、故障注入與 Scenario 狀態轉移資訊。 */
+    @SuppressWarnings("java:S107")
+    public <T extends BaseRule> void record(String ruleId, Protocol protocol, String method, String endpoint,
+                       boolean matched, int responseTimeMs, String clientIp,
+                       String matchChain, String targetHost,
+                       boolean forwarded, String forwardTarget,
+                       Integer proxyStatus, String proxyError,
+                       Integer responseStatus, Integer matchTimeMs,
+                       String requestBody, String responseBody,
+                       List<T> candidates,
+                       ConditionMatcher.PreparedBody preparedBody,
+                       String queryString,
+                       Map<String, String> headers,
+                       String faultType,
+                       String scenarioName,
+                       String scenarioFromState,
+                       String scenarioToState, String diagnosticId) {
         if (configService.isRequestLogDisabled()) {
             return;
         }
@@ -257,7 +280,7 @@ public class RequestLogService {
                 matchChain, targetHost, forwarded, forwardTarget,
                 proxyStatus, proxyError, responseStatus, matchTimeMs,
                 requestBody, responseBody, candidates, preparedBody, queryString, headers,
-                faultType, scenarioName, scenarioFromState, scenarioToState));
+                faultType, scenarioName, scenarioFromState, scenarioToState, diagnosticId));
     }
 
     private <T extends BaseRule> LogTask buildLogTask(
@@ -269,7 +292,7 @@ public class RequestLogService {
             List<T> candidates, ConditionMatcher.PreparedBody preparedBody,
             String queryString, Map<String, String> headers,
             String faultType, String scenarioName,
-            String scenarioFromState, String scenarioToState) {
+            String scenarioFromState, String scenarioToState, String diagnosticId) {
         List<CandidateSnapshot> candidateSnapshots = CandidateSnapshot.toCandidateSnapshots(candidates);
         String reqBody = null;
         String resBody = null;
@@ -284,6 +307,7 @@ public class RequestLogService {
         String analysisBody = rawAnalysisBody != null && rawAnalysisBody.length() <= maxSize
                 ? rawAnalysisBody : null;
         return LogTask.builder()
+                .diagnosticId(diagnosticId)
                 .ruleId(ruleId)
                 .protocol(protocol)
                 .method(method)
@@ -298,7 +322,8 @@ public class RequestLogService {
                 .forwarded(forwarded)
                 .forwardTarget(RequestLog.limitForwardTarget(forwardTarget))
                 .proxyStatus(proxyStatus)
-                .proxyError(proxyError)
+                // Match the existing DB column, without changing the actual response body.
+                .proxyError(RequestLog.limitProxyError(proxyError))
                 .responseStatus(responseStatus)
                 .requestBody(reqBody)
                 .responseBody(resBody)
@@ -344,6 +369,7 @@ public class RequestLogService {
             stream = stream.filter(e -> containsIgnoreCase(e.getEndpoint(), keyword)
                     || containsIgnoreCase(e.getTargetHost(), keyword)
                     || containsIgnoreCase(e.getForwardTarget(), keyword)
+                    || containsIgnoreCase(e.getDiagnosticId(), keyword)
                     || containsIgnoreCase(e.getRuleId(), keyword));
         }
 
@@ -454,6 +480,7 @@ public class RequestLogService {
             stream = stream.filter(e -> containsIgnoreCase(e.getEndpoint(), normalized)
                     || containsIgnoreCase(e.getTargetHost(), normalized)
                     || containsIgnoreCase(e.getForwardTarget(), normalized)
+                    || containsIgnoreCase(e.getDiagnosticId(), normalized)
                     || containsIgnoreCase(e.getRuleId(), normalized));
         }
         if (filter.getAfterId() != null) {
@@ -542,6 +569,7 @@ public class RequestLogService {
 
     private LogEntry toEntry(RequestLog log) {
         return LogEntry.builder()
+                .diagnosticId(log.getDiagnosticId())
                 .id(log.getId())
                 .ruleId(log.getRuleId())
                 .protocol(log.getProtocol())
@@ -570,6 +598,7 @@ public class RequestLogService {
 
     private LogSummaryEntry toSummaryFromEntry(LogEntry e) {
         return LogSummaryEntry.builder()
+                .diagnosticId(e.getDiagnosticId())
                 .id(e.getId())
                 .ruleId(e.getRuleId())
                 .protocol(e.getProtocol())
@@ -598,6 +627,7 @@ public class RequestLogService {
 
     private LogSummaryEntry toSummaryFromProjection(Object[] row) {
         return LogSummaryEntry.builder()
+                .diagnosticId(row.length > 23 ? (String) row[23] : null)
                 .id((Long) row[0])
                 .ruleId((String) row[1])
                 .protocol((Protocol) row[2])
@@ -626,6 +656,7 @@ public class RequestLogService {
 
     private LogSummaryEntry toSummaryFromRow(RequestLogSummaryQuery.SummaryRow row) {
         return LogSummaryEntry.builder()
+                .diagnosticId(row.diagnosticId())
                 .id(row.id())
                 .ruleId(row.ruleId())
                 .protocol(row.protocol())
@@ -657,6 +688,7 @@ public class RequestLogService {
     @Getter @Builder
     public static class LogEntry {
         private Long id;
+        private String diagnosticId;
         private String ruleId;
         private Protocol protocol;
         private String method;
@@ -688,6 +720,7 @@ public class RequestLogService {
     @Getter @Builder
     public static class LogSummaryEntry {
         private Long id;
+        private String diagnosticId;
         private String ruleId;
         private Protocol protocol;
         private String method;

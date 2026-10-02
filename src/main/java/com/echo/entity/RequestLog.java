@@ -34,6 +34,10 @@ public class RequestLog {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** Short local diagnostic correlation only; nullable for historical rows. */
+    @Column(length = 36)
+    private String diagnosticId;
+
     /** 關聯規則 ID (404 時為 null) */
     @Column(length = 36)
     private String ruleId;
@@ -138,5 +142,10 @@ public class RequestLog {
             return value;
         }
         return value.substring(0, MAX_FORWARD_TARGET_LENGTH);
+    }
+
+    /** Existing proxy_error column, including replay of older durable spool records. */
+    public static String limitProxyError(String value) {
+        return value == null || value.length() <= 255 ? value : value.substring(0, 255);
     }
 }

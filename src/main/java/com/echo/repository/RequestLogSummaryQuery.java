@@ -41,7 +41,7 @@ public class RequestLogSummaryQuery {
                 log.get("scenarioFromState"), log.get("scenarioToState"),
                 builder.isNotNull(log.get("requestBody")),
                 builder.isNotNull(log.get("responseBody")),
-                builder.isNotNull(log.get("matchChain")));
+                builder.isNotNull(log.get("matchChain")), log.get("diagnosticId"));
         contentQuery.where(predicates(builder, log, filter));
         contentQuery.orderBy(order(builder, log, sortField, ascending));
 
@@ -80,6 +80,7 @@ public class RequestLogSummaryQuery {
                     builder.like(builder.lower(log.get("endpoint")), pattern),
                     builder.like(builder.lower(log.get("targetHost")), pattern),
                     builder.like(builder.lower(log.get("forwardTarget")), pattern),
+                    builder.like(builder.lower(log.get("diagnosticId")), pattern),
                     builder.like(builder.lower(log.get("ruleId")), pattern)));
         }
         if (filter.afterId() != null) {
@@ -104,7 +105,7 @@ public class RequestLogSummaryQuery {
                 row.get(11, Boolean.class), row.get(12, String.class), row.get(13, Number.class),
                 row.get(14, String.class), row.get(15, Number.class), row.get(16, String.class),
                 row.get(17, String.class), row.get(18, String.class), row.get(19, String.class),
-                row.get(20, Boolean.class), row.get(21, Boolean.class), row.get(22, Boolean.class));
+                row.get(20, Boolean.class), row.get(21, Boolean.class), row.get(22, Boolean.class), row.get(23, String.class));
     }
 
     public record Filter(String ruleId, Protocol protocol, Boolean matched,
@@ -118,7 +119,7 @@ public class RequestLogSummaryQuery {
             String forwardTarget, Number proxyStatus, String proxyError,
             Number responseStatus, String faultType, String scenarioName,
             String scenarioFromState, String scenarioToState, Boolean hasRequestBody,
-            Boolean hasResponseBody, Boolean hasMatchChain) {
+            Boolean hasResponseBody, Boolean hasMatchChain, String diagnosticId) {
     }
 
     public record Result(List<SummaryRow> rows, long totalElements, int totalPages) {

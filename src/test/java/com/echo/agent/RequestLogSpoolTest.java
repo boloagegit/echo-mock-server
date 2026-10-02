@@ -97,6 +97,20 @@ class RequestLogSpoolTest {
     }
 
     @Test
+    void diagnosticIdSurvivesSpoolRestart() {
+        Path path = tempDir.resolve("diagnostic-id.sqlite");
+        spool = createSpool(path, 16 * 1024 * 1024);
+        spool.start();
+        spool.append(LogTask.builder().protocol(Protocol.JMS).endpoint("DEMO.REQUEST")
+                .diagnosticId("process-123").requestTime(LocalDateTime.now()).build());
+        spool.stop();
+        spool = createSpool(path, 16 * 1024 * 1024);
+        spool.start();
+        assertThat(spool.readAfter(0, 10)).singleElement().satisfies(entry ->
+                assertThat(entry.task().getDiagnosticId()).isEqualTo("process-123"));
+    }
+
+    @Test
     void concurrentAppendsAreAllDurableAndOrdered() throws Exception {
         spool = createSpool(tempDir.resolve("concurrent.sqlite"), 64 * 1024 * 1024);
         spool.start();
@@ -212,6 +226,7 @@ class RequestLogSpoolTest {
         List<RequestLogSpool.SpoolEntry> entries = spool.readAfter(0, 10);
         assertThat(entries).singleElement().satisfies(entry -> {
             assertThat(entry.task().getRuleId()).isEqualTo("legacy-rule");
+            assertThat(entry.task().getDiagnosticId()).isNull();
             assertThat(entry.task().isForwarded()).isFalse();
             assertThat(entry.task().getForwardTarget()).isNull();
             assertThat(entry.task().getAnalysisBody()).isEqualTo("{\"id\":1}");

@@ -25,6 +25,34 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /** Real broker regression: closing a Session alone must not leave reply destinations behind. */
 class JmsTargetForwarderCleanupIntegrationTest {
+    @ParameterizedTest
+    @EnumSource(JmsForwardingRoute.class)
+    void diagnosticTraceDistinguishesSuccessTimeoutThenRecoveryOnRealBroker(JmsForwardingRoute route) throws Exception {
+        var lines = new java.util.concurrent.CopyOnWriteArrayList<String>();
+        try (var diagnostics = new com.echo.diagnostics.TransactionDiagnostics(
+                new com.echo.config.DiagnosticProperties(), lines::add)) {
+            diagnostics.start();
+            var properties = new JmsProperties();
+            properties.getTarget().setEnabled(true);
+            properties.getTarget().setType("artemis");
+            properties.getTarget().setServerUrl(BROKER_URL);
+            properties.getTarget().setQueue(REQUEST_QUEUE);
+            properties.getTarget().setTimeoutSeconds(1);
+            forwarder = route.createForwarder(properties, List.of(new ArtemisFactoryProvider()));
+            for (String body : List.of("request", "timeout", "request")) {
+                var trace = diagnostics.begin("JMS");
+                assertThat(route.forward(forwarder, body, trace)).isEqualTo(body.equals("timeout")
+                        ? "<error>JMS response timeout</error>" : "reply");
+                trace.end("PROCESSING_ENDED");
+                assertThat(broker.getActiveMQServerControl().getQueueNames()).containsExactly(REQUEST_QUEUE);
+            }
+            org.awaitility.Awaitility.await().atMost(2, java.util.concurrent.TimeUnit.SECONDS)
+                    .until(() -> lines.size() == 1);
+            assertThat(lines.get(0)).contains("waitResult=NO_REPLY", "sendReturned=true", "outId=ID:", "outReplyTo=");
+            assertThat(diagnostics.snapshot()).containsEntry("diagnosticAccepted", 1L);
+            assertThat(diagnostics.snapshot()).containsEntry("diagnosticDropped", 0L);
+        }
+    }
     private static final String BROKER_URL = "vm://9462";
     private static final String REQUEST_QUEUE = "CLEANUP.REQUEST";
 

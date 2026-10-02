@@ -240,7 +240,7 @@ const useStats = (deps) => {
             chips.push({ key: 'matched', label: t('filterChips.status') + (logFilter.value.matched === 'true' ? t('stats.filterMatched') : t('stats.filterUnmatched')) });
         }
         if (logFilter.value.endpoint) {
-            chips.push({ key: 'endpoint', label: t('filterChips.endpoint') + logFilter.value.endpoint });
+            chips.push({ key: 'endpoint', label: t('filterChips.keyword') + logFilter.value.endpoint });
         }
         return chips;
     });

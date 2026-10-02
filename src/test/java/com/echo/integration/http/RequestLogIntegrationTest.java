@@ -60,6 +60,7 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
         Map<String, Object> log = getLogEntry(logs.get(0));
         assertThat(log.get("matched")).isEqualTo(true);
         assertThat(log.get("protocol")).isEqualTo("HTTP");
+        assertThat((String) log.get("diagnosticId")).matches("[a-f0-9]{8}-[a-z0-9]+");
     }
 
     @Test

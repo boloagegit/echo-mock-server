@@ -684,6 +684,12 @@ const StatsPage = {
             <section class="log-overview-section ui-detail-panel" :aria-labelledby="'request-heading-'+selectedLogItem.log.id">
               <h2 class="log-detail-heading" :id="'request-heading-'+selectedLogItem.log.id">{{t('stats.sectionRequest')}}</h2>
               <dl class="log-detail-fields">
+                <div v-if="selectedLogItem.log.diagnosticId"><dt>{{t('stats.diagnosticId')}}</dt><dd class="d-flex align-items-center gap-2">
+                  <code>{{selectedLogItem.log.diagnosticId}}</code>
+                  <ui-button type="button" class="btn btn-sm btn-icon btn-secondary"
+                    @click.stop="copyBody(selectedLogItem.log.diagnosticId)"
+                    :title="t('stats.copyDiagnosticId')" :aria-label="t('stats.copyDiagnosticId')"><i class="bi bi-clipboard" aria-hidden="true"></i></ui-button>
+                </dd></div>
                 <div><dt>{{t('stats.detailTime')}}</dt><dd class="tabular-nums">{{fmtTime(selectedLogItem.log.requestTime, false)}}</dd></div>
                 <div><dt>{{t('stats.detailProtocol')}}</dt><dd><ui-badge class="badge" :class="'badge-'+selectedLogItem.log.protocol?.toLowerCase()">{{selectedLogItem.log.protocol}}</ui-badge></dd></div>
                 <div v-if="selectedLogItem.log.method"><dt>{{t('stats.detailMethod')}}</dt><dd><span class="log-method">{{selectedLogItem.log.method}}</span></dd></div>

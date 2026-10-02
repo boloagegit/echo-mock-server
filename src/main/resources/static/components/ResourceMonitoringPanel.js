@@ -25,7 +25,10 @@ const ResourceMonitoringPanel = {
         http: ['activeForwards', 'completedForwards', 'cancelledForwards', 'rejectedForwards', 'poolLeased', 'poolPending', 'poolIdle', 'poolCapacity', 'bufferedBytes', 'bufferLimitBytes'],
         database: ['poolActive', 'poolIdle', 'poolTotal', 'poolWaiting', 'writerWaiting', 'writerActive'],
         requestLog: ['queueItems', 'processed', 'dropped', 'queueBytes', 'capacityBytes', 'inFlightBytes', 'byteLimit', 'waitingProducers', 'backpressureActive', 'storageUnavailable', 'consumerRunning'],
-        applicationLog: ['queueUsed', 'queueCapacity', 'started'],
+        applicationLog: ['queueUsed', 'queueCapacity', 'started', 'diagnosticEnabled', 'diagnosticRunning',
+          'diagnosticDetailed', 'diagnosticFileWriteAttempted', 'diagnosticFileAvailable', 'diagnosticQueueUsed', 'diagnosticQueueCapacity',
+          'diagnosticDropped', 'diagnosticSinkFailures', 'diagnosticRateLimited', 'diagnosticBudgetDropped',
+          'diagnosticTodayBytes', 'diagnosticDailyLimitBytes', 'diagnosticRetainedBytes', 'diagnosticRetainedLimitBytes'],
         storage: ['dataFreeBytes', 'backupFreeBytes'],
       };
       return Object.entries(fields).map(([key, metrics]) => ({ key, metrics, section: this.snapshot?.sections?.[key] }));
@@ -48,6 +51,7 @@ const ResourceMonitoringPanel = {
         jms: ['listenerExits', 'replySent', 'replyFailures', 'forwardExits', 'forwardFailures', 'receiveTimeouts', 'invalidReplies', 'cleanupFailures'],
         http: ['completedForwards', 'cancelledForwards', 'rejectedForwards'],
         requestLog: ['processed', 'dropped'],
+        applicationLog: ['diagnosticDropped', 'diagnosticSinkFailures', 'diagnosticRateLimited', 'diagnosticBudgetDropped'],
       };
       const limits = {
         jvm: ['heapMaxBytes', 'nonHeapCommittedBytes'],
@@ -56,7 +60,7 @@ const ResourceMonitoringPanel = {
         jms: ['maximumBytes', 'maxDeliveryAttempts', 'lastListenerExit', 'lastForwardExit'],
         http: ['poolCapacity', 'bufferLimitBytes'],
         requestLog: ['capacityBytes', 'byteLimit'],
-        applicationLog: ['queueCapacity'],
+        applicationLog: ['queueCapacity', 'diagnosticQueueCapacity', 'diagnosticDailyLimitBytes', 'diagnosticRetainedLimitBytes'],
       };
       return [
         { key: 'memory', keys: ['jvm'] },

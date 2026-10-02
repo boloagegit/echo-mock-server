@@ -339,6 +339,7 @@ public class RequestLogSpool {
     private long estimateSerializationBytes(LogTask task) {
         long characters = 512;
         characters = addStringLength(characters, task.getRuleId());
+        characters = addStringLength(characters, task.getDiagnosticId());
         characters = addStringLength(characters, task.getMethod());
         characters = addStringLength(characters, task.getEndpoint());
         characters = addStringLength(characters, task.getClientIp());
@@ -1351,7 +1352,7 @@ public class RequestLogSpool {
             String faultType, String scenarioName, String scenarioFromState, String scenarioToState,
             List<CandidateRecord> candidates, String analysisBody, String queryString,
             Map<String, String> headers, Map<String, Boolean> matchOutcomes,
-            boolean analysisUsesRequestBody) {
+            boolean analysisUsesRequestBody, String diagnosticId) {
 
         static SpoolTask from(LogTask task) {
             boolean analysisUsesRequestBody = task.getRequestBody() != null
@@ -1364,13 +1365,14 @@ public class RequestLogSpool {
                     task.getFaultType(), task.getScenarioName(), task.getScenarioFromState(), task.getScenarioToState(),
                     null, analysisUsesRequestBody ? null : task.getAnalysisBody(),
                     task.getQueryString(), task.getHeaders(), task.getMatchOutcomes(),
-                    analysisUsesRequestBody);
+                    analysisUsesRequestBody, task.getDiagnosticId());
         }
 
         LogTask toLogTask(List<CandidateRecord> externalCandidates) {
             List<CandidateRecord> restoredCandidates = externalCandidates != null
                     ? externalCandidates : candidates;
             return LogTask.builder()
+                    .diagnosticId(diagnosticId)
                     .ruleId(ruleId).protocol(protocol).method(method).endpoint(endpoint).matched(matched)
                     .responseTimeMs(responseTimeMs).matchTimeMs(matchTimeMs).clientIp(clientIp)
                     .requestTime(requestTime).matchChain(matchChain).targetHost(targetHost)

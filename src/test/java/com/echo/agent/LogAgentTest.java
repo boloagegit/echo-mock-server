@@ -86,6 +86,22 @@ class LogAgentTest {
     // ==================== Database Mode Tests (Req 5.2, 5.4) ====================
 
     @Test
+    void olderSpoolProxyErrorsAreBoundedAtPersistenceWithoutChangingResponseBody() {
+        when(configService.isRequestLogMemoryMode()).thenReturn(false);
+        when(configService.getRequestLogMaxRecords()).thenReturn(100);
+        LogTask task = LogTask.builder().protocol(Protocol.HTTP).endpoint("/error")
+                .requestTime(LocalDateTime.now()).proxyError("e".repeat(300)).responseBody("r".repeat(300)).build();
+        createAgent(false).processBatch(List.of(task));
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<RequestLog>> captured = ArgumentCaptor.forClass(List.class);
+        verify(requestLogRepository).saveAll(captured.capture());
+        assertThat(captured.getValue().get(0).getProxyError()).hasSize(255);
+        assertThat(captured.getValue().get(0).getResponseBody()).hasSize(300);
+        assertThat(RequestLog.limitProxyError(null)).isNull();
+        assertThat(RequestLog.limitProxyError("e".repeat(255))).hasSize(255);
+    }
+
+    @Test
     void processBatch_databaseMode_shouldSaveAllEntities() {
         // Arrange
         when(configService.isRequestLogMemoryMode()).thenReturn(false);

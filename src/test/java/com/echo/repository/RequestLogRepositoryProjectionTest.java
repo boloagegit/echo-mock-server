@@ -39,7 +39,7 @@ class RequestLogRepositoryProjectionTest {
 
         assertThat(rows).hasSize(3);
         assertThat(rows).allSatisfy(row -> {
-            assertThat(row).hasSize(23);
+            assertThat(row).hasSize(24);
             assertThat(Arrays.asList(row)).doesNotContain(largeBody);
         });
         assertThat(byEndpoint.get("/large")[16]).isEqualTo("EMPTY_RESPONSE");

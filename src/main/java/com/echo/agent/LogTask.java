@@ -56,6 +56,7 @@ public class LogTask {
     private final String queryString;
     private final Map<String, String> headers;
     private final Map<String, Boolean> matchOutcomes;
+    private final String diagnosticId;
 
     private LogTask(
             String ruleId,
@@ -84,7 +85,9 @@ public class LogTask {
             String analysisBody,
             String queryString,
             Map<String, String> headers,
-            Map<String, Boolean> matchOutcomes) {
+            Map<String, Boolean> matchOutcomes,
+            String diagnosticId) {
+        this.diagnosticId = diagnosticId;
         this.ruleId = ruleId;
         this.protocol = protocol;
         this.method = method;
