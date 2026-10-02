@@ -134,6 +134,37 @@ tasks.named('test') {
     finalizedBy jacocoTestReport
 }
 
+// Opt-in, short real-JMS/file-output A/B measurement; never part of unit-test gates.
+tasks.register('diagnosticCost', JavaExec) {
+    dependsOn testClasses
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.echo.diagnostics.DiagnosticCostProbe'
+    args providers.gradleProperty('diagnosticOutput').getOrElse('artifacts/diagnostics-cost'),
+            providers.gradleProperty('diagnosticRequests').getOrElse('1500')
+    jvmArgs '-Xmx512m'
+}
+
+// Opt-in short real AP / HTTP / SQLite / durable-spool comparison, isolated temp data.
+tasks.register('diagnosticApplicationCost', JavaExec) {
+    dependsOn testClasses
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.echo.diagnostics.ApplicationDiagnosticCostProbe'
+    args providers.gradleProperty('diagnosticOutput').getOrElse('artifacts/diagnostics-cost'),
+            providers.gradleProperty('diagnosticRequests').getOrElse('1000')
+    jvmArgs '-Xmx512m'
+}
+
+// Opt-in Docker fixture only: never included in the application or normal test gates.
+tasks.register('dockerDiagnosticFixtureJar', Jar) {
+    dependsOn testClasses
+    archiveFileName = 'echo-diagnostic-fixture.jar'
+    from(sourceSets.test.output) {
+        include 'com/echo/diagnostics/ContainerDiagnosticFixture*.class'
+    }
+}
+
 jacocoTestReport {
     dependsOn test
     reports {

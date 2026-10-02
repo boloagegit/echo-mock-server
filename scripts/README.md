@@ -29,6 +29,8 @@ export ECHO_TEST_PASSWORD='your-local-password'
 | `test-sqlite-recovery-resilience.py` | Disposable SQLite lock, bounded JVM OOM, corruption fail-fast, verified-backup restore, and post-recovery writes |
 | `test-rdbms-matrix.py` | Disposable Docker Compose matrix for H2, SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle; runs E2E/persistence checks, restart verification, and evidence collection |
 | `test-container-resilience.py` | Disposable Compose JMS XML pressure, fixed-heap, SIGKILL/restart, ID accounting, Artemis paging, and bounded tmpfs high-water/full/recovery validation |
+| `test-container-diagnostics.py` | Short real Echo + SQLite + JMS forwarding matrix under CPU/memory caps; 30s no-reply, non-text reply, correlation, bounded anomaly output and cleanup/recovery checks |
+| `test-container-resource-soak.py` | Finite 10-minute fixed-rate HTTP/JMS forwarding resource probe, with two idle minutes, GC floors, RSS/cgroup/FD/connection/queue measurements and real caller reply verification |
 | `perf-test-downstream.py` | Local downstream HTTP server for forwarding latency and body-limit tests |
 | `tests/test_windows_script_compatibility.py` | Windows path, command, and process compatibility checks for Python scripts |
 
@@ -91,6 +93,76 @@ python3 scripts/test-sqlite-recovery-resilience.py
 ```
 
 Use disposable databases and ports for benchmarks. Do not point destructive or crash-resilience scripts at a production database.
+
+For a short real-JMS anomaly-only diagnostics on/off comparison (no existing Echo service or
+database required), run `./gradlew diagnosticCost -PdiagnosticRequests=3000`.
+Results and broker files stay under ignored `artifacts/diagnostics-cost`.
+For the actual HTTP application plus disposable SQLite/durable spool comparison,
+run `./gradlew diagnosticApplicationCost -PdiagnosticRequests=1000`.
+Both probes are short local measurements, not production capacity guarantees.
+See [transaction diagnostic measurement limits](../docs/transaction-diagnostics.md).
+
+For short default-enabled diagnostics checks under Docker resource limits:
+
+```bash
+docker pull eclipse-temurin:17-jdk
+python3 scripts/test-container-diagnostics.py --dry-run
+python3 scripts/test-container-diagnostics.py
+python3 -m unittest discover -s scripts/tests -p test_container_diagnostics.py
+```
+
+This builds an opt-in test-only fixture jar with `./gradlew`, freezes the local
+Java image identity, and runs two disposable Echo instances sequentially:
+1 CPU / 1 GiB container / 512 MiB heap, and 0.5 CPU / 768 MiB container / 256 MiB
+heap. Each performs 472 small synthetic JMS calls, including a full 30-second
+no-reply wait with concurrent healthy traffic and a BytesMessage reply. HTTP
+inspection stays inside an internal Docker network; no host ports or existing
+database directories are exposed. Diagnostic defaults, listener concurrency,
+durable request logging, and broker persistence are retained; scheduled backups
+and cleanup are disabled only in the disposable instances. The harness collects
+cgroup v2 memory/CPU/OOM evidence, actual caller responses, downstream identities,
+Request Logs, monitoring snapshots and diagnostic files under ignored
+`artifacts/transaction-diagnostics-docker/<run>/`. It removes only exact resources
+with its unique ownership label. It never performs global Docker cleanup. This
+is a bounded functional/resource-pressure check, not long-run or TIBCO/SIT
+capacity certification. Cgroup v2 and curl inside the selected JDK image are
+required. `--image` and `--output` are available; `--skip-build` requires the
+application jar built with `-PreleaseVersion=container-diagnostics` and its
+matching fixture jar. Overall container memory is **not** Java's heap limit.
+An optional stricter `--tiers half-cpu-512m` investigation uses 512 MiB for the
+whole container and 256 MiB heap; it is not an assumed supported capacity and
+must report an OOM/exit as a failure. To distinguish startup capacity from
+diagnostic output, use that tier with `--startup-only --diagnostics-off`; this
+control does not run or certify business scenarios.
+
+For a finite resource-retention investigation (not a maximum-throughput test):
+
+```bash
+python3 scripts/test-container-resource-soak.py --dry-run
+python3 scripts/test-container-resource-soak.py
+python3 -m unittest discover -s scripts/tests -p test_container_resource_soak.py
+```
+
+The default window is **600 measured seconds** at 5 JMS plus 5 HTTP forwards/sec,
+with synthetic 8 KiB requests, four disposable HTTPS origins rotated every 30
+seconds, a 1 CPU / 1 GiB Echo container, and 512 MiB Java heap. Request logs
+retain at most 2,000 rows so insertion/retention cleanup is exercised. Diagnostics
+remain default-enabled/anomaly-only. A separate fixture verifies response bodies
+and JMS correlation; it retains only fixed-size timing histograms. The harness
+captures monitoring snapshots, process RSS/threads/file descriptors, cgroup CPU,
+memory/anon/file-cache/OOM events and downstream broker queues/connections at
+approximately 15-second intervals. A ten-second warmup and two idle minutes are
+**outside** the measured window. Explicit `jcmd GC.run` is run once after warmup
+and once after natural idle; these interventions are labelled and are never used
+during measured traffic. Natural GC logs retain the heap floor between those
+interventions. It checks idle HTTP pool reclamation, temporary JMS queue deletion,
+drained write queues, configured DB connection bounds and request-log retention.
+Only the uniquely labelled containers/network are removed, including the tested
+Echo service. Evidence stays under ignored `artifacts/resource-soak/<run>/`.
+Scheduled backups and cleanup are disabled only in this disposable instance.
+No production endpoints, local database files or company incident details are
+used. A plateau in this bounded synthetic workload cannot establish permanent
+leak freedom, SQLite/host memory safety, or real TIBCO/SIT workload capacity.
 
 The container resilience harness generates an owned Compose project name and
 random host ports, stores primary data in a project-scoped named volume and
