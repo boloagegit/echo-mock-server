@@ -154,7 +154,7 @@ public class UniversalMockController {
      * <p>
      * 若匹配到 sseEnabled=true 的規則，回傳 SseEmitter；
      * 若匹配到非 SSE 規則，建構一般 ResponseEntity 回傳；
-     * 若無匹配規則，回傳 404。
+     * 若無匹配規則，委派一般 HTTP pipeline 判斷轉發或回傳 404。
      */
     public Object handleSseRequest(HttpServletRequest request, HttpServletResponse response) {
         return handleSseRequest(request, response, null);
@@ -202,6 +202,9 @@ public class UniversalMockController {
         String matchChainJson = MatchDescriptionBuilder.toMatchChainJson(matchResult.getMatchChain(), matchResult.isMatched());
 
         if (!matchResult.isMatched()) {
+            if (httpMockPipeline != null) {
+                return handleRequest(request, response, body);
+            }
             long responseTime = System.currentTimeMillis() - startTime;
             requestLogService.record(null, Protocol.HTTP, method, path, false,
                     (int) responseTime, clientIp, matchChainJson, null, null, null, 404, (int) matchTime,

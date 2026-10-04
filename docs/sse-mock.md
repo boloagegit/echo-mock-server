@@ -7,6 +7,10 @@ method keeps the existing match-any-method behavior; HEAD and OPTIONS requests
 matching an SSE rule return 405. Explicit HEAD, OPTIONS, TRACE, `*` or blank
 methods cannot be saved as SSE rules. Ordinary HTTP rules retain their pipeline
 behavior, including conditions, templates, response status, headers and delay.
+Unmatched requests, including those with explicit SSE Accept and request bodies,
+use the ordinary HTTP pipeline: the default connection takes precedence over
+`X-Original-Host`, and no forwarding target returns 404. Forwarded responses keep
+the existing buffered HTTP behavior.
 
 Example request against a synthetic POST rule:
 
