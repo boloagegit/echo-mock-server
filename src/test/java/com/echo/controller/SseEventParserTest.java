@@ -120,7 +120,7 @@ class SseEventParserTest {
     // --- Mixed valid/invalid events ---
 
     @Test
-    void mixedValidAndInvalidEvents() {
+    void mixedValidAndInvalidEvents_rejectsWholeSequence() {
         String json = """
                 [
                   {"data":"ok"},
@@ -129,9 +129,7 @@ class SseEventParserTest {
                   {"data":""}
                 ]""";
         List<SseEvent> events = controller.parseSseEvents(json);
-        assertThat(events).hasSize(2);
-        assertThat(events.get(0).data()).isEqualTo("ok");
-        assertThat(events.get(1).data()).isEqualTo("good");
+        assertThat(events).isEmpty();
     }
 
     // --- Non-JSON format and JSON object (not array) ---
@@ -205,12 +203,11 @@ class SseEventParserTest {
     }
 
     @Test
-    void parseEventWithInvalidType_stillParses() {
+    void parseEventWithInvalidType_rejectsSequence() {
         String json = """
                 [{"data":"x","type":"unknown"}]""";
         List<SseEvent> events = controller.parseSseEvents(json);
-        assertThat(events).hasSize(1);
-        assertThat(events.get(0).type()).isEqualTo("unknown");
+        assertThat(events).isEmpty();
     }
 
     // --- Template syntax preserved as-is ---
@@ -318,9 +315,9 @@ class SseEventParserTest {
     @Provide
     Arbitrary<List<SseEvent>> validSseEventLists() {
         Arbitrary<SseEvent> validEvent = Combinators.combine(
-                Arbitraries.strings().ofMinLength(0).ofMaxLength(20).injectNull(0.3),
+                Arbitraries.strings().ofMinLength(0).ofMaxLength(20).filter(s -> !s.contains("\r") && !s.contains("\n")).injectNull(0.3),
                 Arbitraries.strings().ofMinLength(1).ofMaxLength(50),
-                Arbitraries.strings().ofMinLength(0).ofMaxLength(10).injectNull(0.3),
+                Arbitraries.strings().ofMinLength(0).ofMaxLength(10).filter(s -> !s.contains("\r") && !s.contains("\n") && !s.contains("\0")).injectNull(0.3),
                 Arbitraries.longs().between(-500, 60000).injectNull(0.2),
                 Arbitraries.of("normal", "error", "abort").injectNull(0.3)
         ).as(SseEvent::new);

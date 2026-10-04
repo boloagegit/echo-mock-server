@@ -9,7 +9,7 @@
 - **條件匹配** - 根據 Body (JSON/XML)、Query、Header 條件回傳不同回應
 - **標籤分類** - 以 JSON 標籤分類規則（`key:value`），可依標籤批次啟用/停用
 - **回應管理** - 獨立管理回應內容，多規則可共用同一回應，支援匯出/匯入
-- **SSE 串流** - 支援 Server-Sent Events，可編輯事件序列、循環模式、即時預覽
+- **SSE 串流** - 支援 Server-Sent Events，可編輯事件序列、循環模式、即時預覽（[契約與播放行為](docs/sse-mock.md)）
 - **動態模板** - WireMock 風格 Handlebars 模板引擎，支援條件、迴圈、JSONPath/XPath
 - **Proxy 轉發** - 無匹配規則時自動轉發到原始主機
 - **視覺化管理** - Dark/Light Theme Web UI，支援 RWD 響應式設計

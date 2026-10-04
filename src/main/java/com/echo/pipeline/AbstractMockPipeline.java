@@ -273,7 +273,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
      * 計算實際延遲時間。
      * 若 maxDelayMs 有設定且大於 delayMs，則在 [delayMs, maxDelayMs] 範圍內隨機取值。
      */
-    static long calculateDelay(long delayMs, Long maxDelayMs) {
+    public static long calculateDelay(long delayMs, Long maxDelayMs) {
         if (maxDelayMs != null && maxDelayMs > delayMs) {
             return ThreadLocalRandom.current().nextLong(delayMs, maxDelayMs + 1);
         }
@@ -389,6 +389,11 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     /**
      * 協定可覆寫 body 準備策略；HTTP 維持既有完整解析，JMS 可依候選條件走串流路徑。
      */
+    public ConditionMatcher.PreparedBody prepareBodyForMatching(MockRequest request, List<T> candidates) {
+        return requiresBodyParsing(candidates) ? prepareBody(request, candidates)
+                : ConditionMatcher.PreparedBody.rawOnly(request.getBody());
+    }
+
     protected ConditionMatcher.PreparedBody prepareBody(MockRequest request, List<T> candidates) {
         return conditionMatcher.prepareBody(request.getBody());
     }

@@ -15,6 +15,8 @@ import com.echo.service.MatchResult;
 import com.echo.service.RuleService;
 import com.echo.service.RequestLogService;
 import com.echo.service.ResponseTemplateService;
+import com.echo.service.SseEventSequence;
+import com.echo.service.SseRuleSettings;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.undertow.server.ServerConnection;
@@ -25,18 +27,21 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.async.DeferredResult;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
-import java.util.ArrayList;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -87,11 +92,14 @@ public class UniversalMockController {
     private long requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS;
     
     /** 延遲回應排程器 */
-    private final ScheduledThreadPoolExecutor delayScheduler = createDelayScheduler();
+    private final ScheduledThreadPoolExecutor delayScheduler = createDelayScheduler("delay-scheduler");
+    // Blocking servlet writes must not consume the general HTTP delay workers.
+    private final ScheduledExecutorService sseScheduler;
+    private final Set<SsePlayback> ssePlaybacks = ConcurrentHashMap.newKeySet();
 
-    private static ScheduledThreadPoolExecutor createDelayScheduler() {
+    private static ScheduledThreadPoolExecutor createDelayScheduler(String threadName) {
         ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(DELAY_THREAD_POOL_SIZE, r -> {
-            Thread t = new Thread(r, "delay-scheduler");
+            Thread t = new Thread(r, threadName);
             t.setDaemon(true);
             return t;
         });
@@ -101,11 +109,20 @@ public class UniversalMockController {
         return scheduler;
     }
 
+    @Autowired
     public UniversalMockController(RuleService ruleService,
                                    HttpRuleService httpRuleService,
                                    RequestLogService requestLogService,
                                    ResponseTemplateService templateService,
                                    HttpMockPipeline httpMockPipeline) {
+        this(ruleService, httpRuleService, requestLogService, templateService, httpMockPipeline,
+                createDelayScheduler("sse-scheduler"));
+    }
+
+    UniversalMockController(RuleService ruleService, HttpRuleService httpRuleService,
+                            RequestLogService requestLogService, ResponseTemplateService templateService,
+                            HttpMockPipeline httpMockPipeline, ScheduledExecutorService sseScheduler) {
+        this.sseScheduler = sseScheduler != null ? sseScheduler : createDelayScheduler("sse-scheduler");
         this.ruleService = ruleService;
         this.httpRuleService = httpRuleService;
         this.requestLogService = requestLogService;
@@ -115,6 +132,8 @@ public class UniversalMockController {
     
     @PreDestroy
     public void shutdown() {
+        ssePlaybacks.forEach(SsePlayback::stop);
+        sseScheduler.shutdownNow();
         delayScheduler.shutdown();
     }
 
@@ -126,21 +145,28 @@ public class UniversalMockController {
 
     public int getDelayWorkerCapacity() { return delayScheduler.getCorePoolSize(); }
 
-    /** SSE 逾時時間（毫秒） */
-    private static final long SSE_TIMEOUT_MS = 30_000L;
-    /** SSE 循環模式逾時時間（24 小時） */
-    private static final long SSE_LOOP_TIMEOUT_MS = 86_400_000L;
+    public int getPendingSseTaskCount() {
+        return sseScheduler instanceof ScheduledThreadPoolExecutor executor ? executor.getQueue().size() : 0;
+    }
 
     /**
      * 處理 SSE 請求（Accept: text/event-stream）。
      * <p>
      * 若匹配到 sseEnabled=true 的規則，回傳 SseEmitter；
      * 若匹配到非 SSE 規則，建構一般 ResponseEntity 回傳；
-     * 若無匹配規則，回傳 404。
+     * 若無匹配規則，GET/HEAD 保留 404；其他方法委派一般 HTTP pipeline。
      */
-    @GetMapping(value = "/**", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Object handleSseRequest(HttpServletRequest request,
-                                   HttpServletResponse response) {
+    public Object handleSseRequest(HttpServletRequest request, HttpServletResponse response) {
+        return handleSseRequest(request, response, null);
+    }
+
+    @RequestMapping(value = "/**", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Object handleSseRequest(HttpServletRequest request, HttpServletResponse response,
+                                   @RequestBody(required = false) String body) {
+        // Produces conditions also match */*. Keep ordinary requests on their original pipeline.
+        if (httpMockPipeline != null && !explicitlyAcceptsSse(request)) {
+            return handleRequest(request, response, body);
+        }
         long startTime = System.currentTimeMillis();
 
         String originalHost = getOriginalHost(request);
@@ -164,25 +190,41 @@ public class UniversalMockController {
         if (httpMockPipeline != null) {
             List<HttpRule> candidates = httpRuleService.findPreparedHttpRules(originalHost, path, method);
             matchResult = httpMockPipeline.matchRule(candidates,
-                    ConditionMatcher.PreparedBody.rawOnly(null), queryString, requestHeaders);
+                    body == null ? ConditionMatcher.PreparedBody.rawOnly(null)
+                            : httpMockPipeline.prepareBodyForMatching(MockRequest.builder().body(body).build(), candidates),
+                    queryString, requestHeaders);
         } else {
             // 保留給舊有單元測試與嵌入式呼叫端的相容路徑。
             matchResult = httpRuleService.findMatchingHttpRuleWithCandidates(
-                    originalHost, path, method, null, queryString, requestHeaders);
+                    originalHost, path, method, body, queryString, requestHeaders);
         }
         long matchTime = System.currentTimeMillis() - startTime;
         String matchChainJson = MatchDescriptionBuilder.toMatchChainJson(matchResult.getMatchChain(), matchResult.isMatched());
 
         if (!matchResult.isMatched()) {
+            if (httpMockPipeline != null && !"GET".equals(method) && !"HEAD".equals(method)) {
+                return handleRequest(request, response, body);
+            }
             long responseTime = System.currentTimeMillis() - startTime;
             requestLogService.record(null, Protocol.HTTP, method, path, false,
                     (int) responseTime, clientIp, matchChainJson, null, null, null, 404, (int) matchTime,
                     null, null);
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .contentType(MediaType.TEXT_PLAIN)
                     .body("No mock rule found for SSE request.");
         }
 
         HttpRule rule = matchResult.getMatchedRule();
+        int configuredStatus = rule.getHttpStatus() == null ? 200 : rule.getHttpStatus();
+        if (Boolean.TRUE.equals(rule.getSseEnabled())
+                && ("HEAD".equals(method) || "OPTIONS".equals(method))) {
+            return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                    .header(HttpHeaders.ALLOW, "GET, POST, PUT, PATCH, DELETE")
+                    .contentType(MediaType.TEXT_PLAIN).body("HTTP method does not support SSE playback");
+        }
+        if (httpMockPipeline != null && (!Boolean.TRUE.equals(rule.getSseEnabled()) || configuredStatus != 200)) {
+            return handleRequest(request, response, body);
+        }
         AbstractMockPipeline.ScenarioTransition scenarioTransition = httpMockPipeline != null
                 ? httpMockPipeline.advanceScenarioState(rule)
                 : null;
@@ -193,7 +235,7 @@ public class UniversalMockController {
             long responseTime = System.currentTimeMillis() - startTime;
             recordSseRule(rule, method, path, (int) responseTime, clientIp,
                     matchChainJson, originalHost, null, (int) matchTime, null,
-                    queryString, requestHeaders, faultType, scenarioTransition);
+                    queryString, requestHeaders, faultType, scenarioTransition, body);
             captureConnectionReset(response).run();
             return ResponseEntity.ok().build();
         }
@@ -202,7 +244,7 @@ public class UniversalMockController {
             long responseTime = System.currentTimeMillis() - startTime;
             recordSseRule(rule, method, path, (int) responseTime, clientIp,
                     matchChainJson, originalHost, faultStatus, (int) matchTime, "",
-                    queryString, requestHeaders, faultType, scenarioTransition);
+                    queryString, requestHeaders, faultType, scenarioTransition, body);
             response.setStatus(faultStatus);
             try {
                 response.getOutputStream().flush();
@@ -221,7 +263,7 @@ public class UniversalMockController {
             if (templateService.hasTemplate(responseBody)) {
                 Map<String, String> queryParams = parseQueryString(queryString);
                 var templateContext = new ResponseTemplateService.TemplateContext(
-                        path, method, queryParams, requestHeaders, null);
+                        path, method, queryParams, requestHeaders, body);
                 responseBody = templateService.render(responseBody, templateContext);
             }
 
@@ -229,7 +271,7 @@ public class UniversalMockController {
             long responseTime = System.currentTimeMillis() - startTime;
             recordSseRule(rule, method, path, (int) responseTime, clientIp,
                     matchChainJson, originalHost, status, (int) matchTime, responseBody,
-                    queryString, requestHeaders, faultType, scenarioTransition);
+                    queryString, requestHeaders, faultType, scenarioTransition, body);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(detectContentType(responseBody));
@@ -252,8 +294,9 @@ public class UniversalMockController {
             long responseTime = System.currentTimeMillis() - startTime;
             recordSseRule(rule, method, path, (int) responseTime, clientIp,
                     matchChainJson, originalHost, 500, (int) matchTime, null,
-                    queryString, requestHeaders, faultType, scenarioTransition);
+                    queryString, requestHeaders, faultType, scenarioTransition, body);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .contentType(MediaType.TEXT_PLAIN)
                     .body("SSE rule has no response body configured (responseId is null).");
         }
 
@@ -265,26 +308,51 @@ public class UniversalMockController {
             long responseTime = System.currentTimeMillis() - startTime;
             recordSseRule(rule, method, path, (int) responseTime, clientIp,
                     matchChainJson, originalHost, 500, (int) matchTime, null,
-                    queryString, requestHeaders, faultType, scenarioTransition);
+                    queryString, requestHeaders, faultType, scenarioTransition, body);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .contentType(MediaType.TEXT_PLAIN)
                     .body("SSE rule has no valid events.");
         }
 
-        // 記錄請求日誌
-        long responseTime = System.currentTimeMillis() - startTime;
-        recordSseRule(rule, method, path, (int) responseTime, clientIp,
-                matchChainJson, originalHost, 200, (int) matchTime, responseBody,
-                queryString, requestHeaders, faultType, scenarioTransition);
-
         boolean loopEnabled = Boolean.TRUE.equals(rule.getSseLoopEnabled());
-        long timeout = loopEnabled ? SSE_LOOP_TIMEOUT_MS : SSE_TIMEOUT_MS;
+        long initialDelay;
+        HttpHeaders headers;
+        long timeout;
+        try {
+            initialDelay = AbstractMockPipeline.calculateDelay(rule.getDelayMs() == null ? 0 : rule.getDelayMs(), rule.getMaxDelayMs());
+            headers = SseRuleSettings.headers(rule.getHttpHeaders(), configuredStatus);
+            timeout = SseRuleSettings.timeout(SseEventSequence.parse(responseBody), initialDelay, loopEnabled);
+        } catch (IllegalArgumentException error) {
+            recordSseRule(rule, method, path, (int) (System.currentTimeMillis() - startTime), clientIp,
+                    matchChainJson, originalHost, 500, (int) matchTime, null,
+                    queryString, requestHeaders, faultType, scenarioTransition, body);
+            return ResponseEntity.internalServerError().contentType(MediaType.TEXT_PLAIN).body(error.getMessage());
+        }
+        recordSseRule(rule, method, path, (int) (System.currentTimeMillis() - startTime), clientIp,
+                matchChainJson, originalHost, configuredStatus, (int) matchTime, responseBody,
+                queryString, requestHeaders, faultType, scenarioTransition, body);
+        if (configuredStatus != 200) {
+            return ResponseEntity.status(configuredStatus).headers(headers).body(responseBody);
+        }
+        if (response != null) headers.forEach((name, values) -> values.forEach(value -> response.addHeader(name, value)));
         SseEmitter emitter = new SseEmitter(timeout);
 
         // 每個事件只在實際發送時短暫使用 scheduler；等待期間不占用執行緒。
-        startSsePlayback(emitter, events, loopEnabled,
-                queryString, requestHeaders, path, method);
+        createSsePlayback(emitter, events, loopEnabled,
+                queryString, requestHeaders, path, method, body, initialDelay).start();
 
         return emitter;
+    }
+
+    private static boolean explicitlyAcceptsSse(HttpServletRequest request) {
+        Enumeration<String> values = request.getHeaders(HttpHeaders.ACCEPT);
+        while (values.hasMoreElements()) {
+            for (MediaType type : MediaType.parseMediaTypes(values.nextElement())) {
+                if ("text".equalsIgnoreCase(type.getType()) && "event-stream".equalsIgnoreCase(type.getSubtype())
+                        && type.getQualityValue() > 0) return true;
+            }
+        }
+        return false;
     }
 
     private void recordSseRule(
@@ -292,17 +360,17 @@ public class UniversalMockController {
             String clientIp, String matchChainJson, String originalHost,
             Integer responseStatus, int matchTimeMs, String responseBody,
             String queryString, Map<String, String> requestHeaders,
-            FaultType faultType, AbstractMockPipeline.ScenarioTransition scenarioTransition) {
+            FaultType faultType, AbstractMockPipeline.ScenarioTransition scenarioTransition, String body) {
         if (faultType == FaultType.NONE && scenarioTransition == null) {
             requestLogService.record(rule.getId(), Protocol.HTTP, method, path, true,
                     responseTimeMs, clientIp, matchChainJson, originalHost,
-                    null, null, responseStatus, matchTimeMs, null, responseBody);
+                    null, null, responseStatus, matchTimeMs, body, responseBody);
             return;
         }
         requestLogService.record(rule.getId(), Protocol.HTTP, method, path, true,
                 responseTimeMs, clientIp, matchChainJson, originalHost,
-                null, null, responseStatus, matchTimeMs, null, responseBody,
-                List.of(rule), ConditionMatcher.PreparedBody.rawOnly(null),
+                null, null, responseStatus, matchTimeMs, body, responseBody,
+                List.of(rule), ConditionMatcher.PreparedBody.rawOnly(body),
                 queryString, requestHeaders,
                 faultType != FaultType.NONE ? faultType.name() : null,
                 scenarioTransition != null ? scenarioTransition.name() : null,
@@ -321,27 +389,31 @@ public class UniversalMockController {
     void sendSseEvents(SseEmitter emitter, List<SseEvent> events, boolean loopEnabled,
                        String queryString, Map<String, String> requestHeaders,
                        String path, String method) {
-        // 保留同步測試 seam；正式請求直接使用 startSsePlayback，不占用等待執行緒。
-        SsePlayback playback = createSsePlayback(emitter, events, loopEnabled,
-                queryString, requestHeaders, path, method);
-        playback.start();
-        playback.completion().join();
+        startSsePlayback(emitter, events, loopEnabled, queryString, requestHeaders, path, method).join();
     }
 
-    private void startSsePlayback(
+    CompletableFuture<Void> startSsePlayback(
             SseEmitter emitter, List<SseEvent> events, boolean loopEnabled,
             String queryString, Map<String, String> requestHeaders,
             String path, String method) {
-        createSsePlayback(emitter, events, loopEnabled,
-                queryString, requestHeaders, path, method).start();
+        SsePlayback playback = createSsePlayback(emitter, events, loopEnabled,
+                queryString, requestHeaders, path, method);
+        playback.start();
+        return playback.completion();
     }
 
     private SsePlayback createSsePlayback(
             SseEmitter emitter, List<SseEvent> events, boolean loopEnabled,
             String queryString, Map<String, String> requestHeaders,
             String path, String method) {
+        return createSsePlayback(emitter, events, loopEnabled, queryString, requestHeaders, path, method, null, 0);
+    }
+
+    private SsePlayback createSsePlayback(SseEmitter emitter, List<SseEvent> events, boolean loopEnabled,
+            String queryString, Map<String, String> requestHeaders, String path, String method,
+            String body, long initialDelay) {
         return new SsePlayback(emitter, events, loopEnabled,
-                parseQueryString(queryString), requestHeaders, path, method);
+                parseQueryString(queryString), requestHeaders, path, method, body, initialDelay);
     }
 
     /** Non-blocking event state machine: delays are scheduler timestamps, not Thread.sleep. */
@@ -354,13 +426,17 @@ public class UniversalMockController {
         private final String path;
         private final String method;
         private final AtomicBoolean stopped = new AtomicBoolean();
-        private final AtomicReference<ScheduledFuture<?>> scheduled = new AtomicReference<>();
+        private final AtomicReference<PendingSseTask> scheduled = new AtomicReference<>();
+        private final String body;
+        private long initialDelay;
         private final CompletableFuture<Void> completion = new CompletableFuture<>();
         private int index;
 
         private SsePlayback(SseEmitter emitter, List<SseEvent> events, boolean loopEnabled,
                             Map<String, String> queryParams, Map<String, String> requestHeaders,
-                            String path, String method) {
+                            String path, String method, String body, long initialDelay) {
+            this.body = body;
+            this.initialDelay = initialDelay;
             this.emitter = emitter;
             this.events = events;
             this.loopEnabled = loopEnabled;
@@ -371,6 +447,7 @@ public class UniversalMockController {
         }
 
         private void start() {
+            ssePlaybacks.add(this);
             emitter.onCompletion(this::stop);
             emitter.onTimeout(this::stop);
             emitter.onError(ignored -> stop());
@@ -384,20 +461,25 @@ public class UniversalMockController {
         private void scheduleNext() {
             if (stopped.get()) return;
             SseEvent event = events.get(index);
-            long delayMs = event.delayMs() == null ? 0 : Math.max(0, event.delayMs());
+            long delayMs = (event.delayMs() == null ? 0 : Math.max(0, event.delayMs())) + initialDelay;
+            initialDelay = 0;
+            PendingSseTask pending = new PendingSseTask();
+            // Publish ownership before schedule(): a zero-delay task can run before it returns.
+            if (!scheduled.compareAndSet(null, pending)) return;
+            if (stopped.get()) {
+                cancelPending();
+                return;
+            }
             try {
-                ScheduledFuture<?> task = delayScheduler.schedule(
-                        () -> deliver(event), delayMs, TimeUnit.MILLISECONDS);
-                ScheduledFuture<?> previous = scheduled.getAndSet(task);
-                if (previous != null && !previous.isDone()) previous.cancel(false);
-                if (stopped.get() && scheduled.compareAndSet(task, null)) task.cancel(false);
+                pending.attach(sseScheduler.schedule(() -> {
+                    if (scheduled.compareAndSet(pending, null)) deliver(event);
+                }, delayMs, TimeUnit.MILLISECONDS));
             } catch (RuntimeException error) {
                 fail(error, "SSE scheduling failed");
             }
         }
 
         private void deliver(SseEvent event) {
-            scheduled.set(null);
             if (stopped.get()) return;
             try {
                 String data = render(event.data());
@@ -405,14 +487,14 @@ public class UniversalMockController {
                 switch (effectiveType) {
                     case "error" -> {
                         SseEmitter.SseEventBuilder builder = SseEmitter.event()
-                                .name("error").data(data);
+                                .name("error").data(wireData(data), new MediaType("text", "plain", java.nio.charset.StandardCharsets.UTF_8));
                         if (event.id() != null) builder.id(event.id());
                         emitter.send(builder);
                         fail(new RuntimeException("SSE error event"), null);
                     }
                     case "abort" -> fail(new RuntimeException("SSE abort"), null);
                     default -> {
-                        SseEmitter.SseEventBuilder builder = SseEmitter.event().data(data);
+                        SseEmitter.SseEventBuilder builder = SseEmitter.event().data(wireData(data), new MediaType("text", "plain", java.nio.charset.StandardCharsets.UTF_8));
                         if (event.event() != null) builder.name(event.event());
                         if (event.id() != null) builder.id(event.id());
                         emitter.send(builder);
@@ -430,7 +512,7 @@ public class UniversalMockController {
         private String render(String data) {
             if (!templateService.hasTemplate(data)) return data;
             var context = new ResponseTemplateService.TemplateContext(
-                    path, method, queryParams, requestHeaders, null);
+                    path, method, queryParams, requestHeaders, body);
             try {
                 return templateService.render(data, context);
             } catch (Exception error) {
@@ -453,12 +535,16 @@ public class UniversalMockController {
 
         private void complete() {
             if (!stopped.compareAndSet(false, true)) return;
+            cancelPending();
+            ssePlaybacks.remove(this);
             emitter.complete();
             completion.complete(null);
         }
 
         private void fail(Exception error, String message) {
             if (!stopped.compareAndSet(false, true)) return;
+            cancelPending();
+            ssePlaybacks.remove(this);
             if (message != null) log.error("{}: {}", message, error.getMessage());
             emitter.completeWithError(error);
             completion.complete(null);
@@ -466,9 +552,33 @@ public class UniversalMockController {
 
         private void stop() {
             if (!stopped.compareAndSet(false, true)) return;
-            ScheduledFuture<?> task = scheduled.getAndSet(null);
-            if (task != null) task.cancel(false);
+            cancelPending();
+            ssePlaybacks.remove(this);
             completion.complete(null);
+        }
+
+        private void cancelPending() {
+            PendingSseTask task = scheduled.getAndSet(null);
+            if (task != null) task.cancel();
+        }
+    }
+
+    private static String wireData(String data) {
+        return data.replace("\r\n", "\n").replace('\r', '\n');
+    }
+
+    private static final class PendingSseTask {
+        private ScheduledFuture<?> future;
+        private boolean cancelled;
+
+        synchronized void attach(ScheduledFuture<?> task) {
+            future = task;
+            if (cancelled) task.cancel(false);
+        }
+
+        synchronized void cancel() {
+            cancelled = true;
+            if (future != null) future.cancel(false);
         }
     }
 
@@ -703,53 +813,18 @@ public class UniversalMockController {
         return params;
     }
 
-    private static final long MAX_DELAY_MS = 30_000L;
-    private static final ObjectMapper SSE_OBJECT_MAPPER = new ObjectMapper();
-
-    /** SSE 事件邏輯模型 */
+    /** SSE event model retained for embedded callers and test seams. */
     record SseEvent(String event, String data, String id, Long delayMs, String type) {}
 
-    /**
-     * 解析 Response.body 中的 SSE 事件 JSON 陣列。
-     * <p>
-     * null/空白/非 JSON 輸入回傳空列表（不拋例外）。
-     * 跳過 data 為 null 或空字串的事件。
-     * delayMs 為負數視為 0，超過 30000 截斷至 30000。
-     */
+    /** Invalid persisted sequences fail as a whole using the same contract as rule saves. */
     List<SseEvent> parseSseEvents(String jsonStr) {
-        if (jsonStr == null || jsonStr.isBlank()) {
-            return List.of();
-        }
-
-        String trimmed = jsonStr.trim();
-        if (!trimmed.startsWith("[")) {
-            return List.of();
-        }
-
-        List<SseEvent> raw;
         try {
-            raw = SSE_OBJECT_MAPPER.readValue(trimmed, new TypeReference<List<SseEvent>>() {});
-        } catch (Exception e) {
-            log.warn("Failed to parse SSE events JSON: {}", e.getMessage());
+            return SseEventSequence.parse(jsonStr).stream()
+                    .map(event -> new SseEvent(event.event(), event.data(), event.id(), event.delayMs(), event.type()))
+                    .toList();
+        } catch (IllegalArgumentException error) {
+            log.warn("Failed to parse SSE events JSON: {}", error.getMessage());
             return List.of();
         }
-
-        List<SseEvent> result = new ArrayList<>();
-        for (SseEvent evt : raw) {
-            if (evt.data() == null || evt.data().isEmpty()) {
-                continue;
-            }
-            Long delay = evt.delayMs();
-            if (delay != null) {
-                if (delay < 0) {
-                    delay = 0L;
-                } else if (delay > MAX_DELAY_MS) {
-                    delay = MAX_DELAY_MS;
-                }
-            }
-            result.add(new SseEvent(evt.event(), evt.data(), evt.id(), delay, evt.type()));
-        }
-        return result;
     }
-
 }

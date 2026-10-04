@@ -143,11 +143,12 @@ class SseSendEventsTest {
         ArgumentCaptor<Runnable> timeoutCallback = ArgumentCaptor.forClass(Runnable.class);
 
         verify(emitter, timeout(1_000)).onTimeout(timeoutCallback.capture());
-        assertThat(controller.getPendingDelayTaskCount()).isEqualTo(1);
+        org.awaitility.Awaitility.await().atMost(java.time.Duration.ofSeconds(1))
+                .untilAsserted(() -> assertThat(controller.getPendingSseTaskCount()).isEqualTo(1));
         timeoutCallback.getValue().run();
 
         playback.get(2, TimeUnit.SECONDS);
-        assertThat(controller.getPendingDelayTaskCount()).isZero();
+        assertThat(controller.getPendingSseTaskCount()).isZero();
         verify(emitter, never()).send(any(SseEmitter.SseEventBuilder.class));
     }
 

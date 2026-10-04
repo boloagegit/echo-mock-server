@@ -13,7 +13,7 @@ An enterprise-grade dual-protocol mock server supporting HTTP and JMS, designed 
 - **Condition Matching** – Returns different responses based on Body (JSON/XML), Query, and Header conditions
 - **Tag-Based Organization** – Classify rules with JSON tags (`key:value`), batch enable/disable by tag
 - **Response Management** – Manage response content independently; multiple rules can share a single response, with export/import support
-- **SSE Streaming** – Server-Sent Events support with editable event sequences, loop modes, and live preview
+- **SSE Streaming** – Server-Sent Events support with editable event sequences, loop modes, and live preview ([contract and playback](docs/sse-mock.md))
 - **Dynamic Templates** – WireMock-style Handlebars template engine with conditionals, loops, JSONPath/XPath
 - **Proxy Forwarding** – Automatically forwards to the original host when no matching rule is found
 - **Visual Management** – Dark/Light theme Web UI with responsive design (RWD)

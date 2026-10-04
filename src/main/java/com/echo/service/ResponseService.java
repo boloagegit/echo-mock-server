@@ -136,12 +136,26 @@ public class ResponseService {
 
     @Transactional
     public Response save(Response response) {
+        validateSseContent(response);
         log.info("Saving response: {}", response.getDescription());
         Response saved = responseRepository.save(response);
         if (saved.getId() != null) {
             responseBodyCache.invalidate(saved.getId());
         }
         return saved;
+    }
+
+    private void validateSseContent(Response response) {
+        if ("SSE_EVENTS".equals(response.getContentType())) SseEventSequence.parse(response.getBody());
+        if (response.getId() == null) return;
+        for (var rule : protocolHandlerRegistry.findByResponseId(response.getId())) {
+            if (rule instanceof com.echo.entity.HttpRule httpRule && Boolean.TRUE.equals(httpRule.getSseEnabled())) {
+                long minimum = rule.getDelayMs() == null ? 0 : rule.getDelayMs();
+                long maximum = rule.getMaxDelayMs() == null ? minimum : Math.max(minimum, rule.getMaxDelayMs());
+                SseRuleSettings.timeout(SseEventSequence.parse(response.getBody()), maximum,
+                        Boolean.TRUE.equals(httpRule.getSseLoopEnabled()));
+            }
+        }
     }
 
     @Transactional
