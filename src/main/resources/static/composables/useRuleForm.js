@@ -481,59 +481,53 @@ const useRuleForm = (deps) => {
             const hdrs = { 'Accept': 'text/event-stream', 'X-Original-Host': form.value.targetHost || '' };
             if (testParams.value.headersStr) {
                 testParams.value.headersStr.split(',').forEach(h => {
-                    const [k, v] = h.split(':').map(s => s.trim());
+                    const colon = h.indexOf(':');
+                    const k = h.slice(0, colon).trim(), v = h.slice(colon + 1).trim();
                     if (k && v) { hdrs[k] = v; }
                 });
             }
             const ac = new AbortController();
             testSseAbort.value = ac;
             const startTime = Date.now();
+            let reader;
             try {
-                const r = await fetch(url, { method: 'GET', headers: hdrs, signal: ac.signal });
-                if (!r.ok || !r.body) {
+                const method = form.value.method ? form.value.method.toUpperCase() : 'GET';
+                const options = { method, headers: hdrs, signal: ac.signal };
+                if (method !== 'GET' && method !== 'HEAD') {
+                    options.body = testParams.value.body;
+                    if (!Object.keys(hdrs).some(k => k.toLowerCase() === 'content-type')) hdrs['Content-Type'] = 'application/json';
+                }
+                const r = await fetch(url, options);
+                if (r.status !== 200 || !r.body || !/^text\/event-stream(?:\s*;|$)/i.test(r.headers.get('Content-Type') || '')) {
                     const body = await r.text();
-                    testResult.value = { status: r.status, body: body || 'Request failed', elapsed: Date.now() - startTime };
-                    testLoading.value = false;
+                    if (testSseAbort.value === ac) testResult.value = { status: r.status, body: body || 'Request failed', elapsed: Date.now() - startTime };
                     return;
                 }
-                const reader = r.body.getReader();
+                reader = r.body.getReader();
                 const decoder = new TextDecoder();
-                let buf = '';
-                let curEvent = { event: '', data: '', id: '' };
-                const pushEvent = () => {
-                    if (curEvent.data || curEvent.event || curEvent.id) {
-                        testSseEvents.value.push({ ...curEvent, time: Date.now() - startTime });
+                const parser = createSseParser(event => {
+                    if (testSseAbort.value === ac) testSseEvents.value.push({ ...event, time: Date.now() - startTime });
+                });
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) {
+                        parser.push(decoder.decode());
+                        parser.finish();
+                        break;
                     }
-                    curEvent = { event: '', data: '', id: '' };
-                };
-                const readLoop = async () => {
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) { pushEvent(); break; }
-                        buf += decoder.decode(value, { stream: true });
-                        const lines = buf.split('\n');
-                        buf = lines.pop();
-                        for (const line of lines) {
-                            if (line === '') { pushEvent(); continue; }
-                            if (line.startsWith(':')) { continue; }
-                            const idx = line.indexOf(':');
-                            let field, val;
-                            if (idx === -1) { field = line; val = ''; }
-                            else { field = line.substring(0, idx); val = line.substring(idx + 1).replace(/^ /, ''); }
-                            if (field === 'data') { curEvent.data = curEvent.data ? curEvent.data + '\n' + val : val; }
-                            else if (field === 'event') { curEvent.event = val; }
-                            else if (field === 'id') { curEvent.id = val; }
-                        }
-                    }
-                };
-                await readLoop();
+                    parser.push(decoder.decode(value, { stream: true }));
+                }
             } catch (e) {
-                if (e.name !== 'AbortError') {
+                if (e.name !== 'AbortError' && testSseAbort.value === ac) {
                     testResult.value = { status: 0, body: e.message, elapsed: Date.now() - startTime };
                 }
+            } finally {
+                if (reader) reader.releaseLock();
+                if (testSseAbort.value === ac) {
+                    testSseAbort.value = null;
+                    testLoading.value = false;
+                }
             }
-            testSseAbort.value = null;
-            testLoading.value = false;
         } else {
             try {
                 const payload = { body: testParams.value.body };

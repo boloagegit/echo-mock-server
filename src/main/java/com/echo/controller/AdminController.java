@@ -779,6 +779,7 @@ public class AdminController {
                     Response before = Response.builder().id(existing.getId()).description(existing.getDescription()).body(existing.getBody()).build();
                     response.setId(id);
                     response.setVersion(existing.getVersion());
+                    if (response.getContentType() == null) response.setContentType(existing.getContentType());
                     Response saved = responseService.save(response);
                     ruleAuditService.ifPresent(s -> s.logResponseUpdate(before, saved));
                     return ResponseEntity.ok(saved);
@@ -1348,8 +1349,10 @@ public class AdminController {
         } else if (dto.getResponseId() != null && (dto.getResponseBody() == null || dto.getResponseBody().isBlank())) {
             response = responseService.findById(dto.getResponseId())
                     .orElseThrow(() -> new IllegalArgumentException("Response not found: " + dto.getResponseId()));
+            validateSseRule(dto, response.getBody());
         } else {
             // 驗證回應內容格式
+            validateSseRule(dto, dto.getResponseBody());
             if (dto.getResponseBody() != null && !dto.getResponseBody().isBlank()) {
                 ResponseContentType contentType = ContentTypeConstraints.infer(dto.getProtocol(), dto.getSseEnabled());
                 responseContentValidatorRegistry.getValidator(contentType).validate(dto.getResponseBody());
@@ -1375,6 +1378,17 @@ public class AdminController {
         evictCacheByProtocol(dto.getProtocol());
         cacheInvalidationService.ifPresent(s -> s.publishInvalidation(dto.getProtocol()));
         return new SaveResult(saved, handler.toDto(saved, response, false));
+    }
+
+    private void validateSseRule(RuleDto dto, String body) {
+        if (dto.getProtocol() != Protocol.HTTP || !Boolean.TRUE.equals(dto.getSseEnabled())) return;
+        com.echo.service.SseRuleSettings.validateMethod(dto.getMethod());
+        com.echo.service.SseRuleSettings.headers(dto.getResponseHeaders(), dto.getStatus() == null ? 200 : dto.getStatus());
+        long minimum = dto.getDelayMs() == null ? 0 : dto.getDelayMs();
+        long maximum = dto.getMaxDelayMs() == null ? minimum : dto.getMaxDelayMs();
+        if (minimum < 0 || maximum < minimum) throw new IllegalArgumentException("SSE delay range 無效");
+        com.echo.service.SseRuleSettings.timeout(com.echo.service.SseEventSequence.parse(body),
+                maximum, Boolean.TRUE.equals(dto.getSseLoopEnabled()));
     }
 
     private void stampRuleForSave(BaseRule candidate) {

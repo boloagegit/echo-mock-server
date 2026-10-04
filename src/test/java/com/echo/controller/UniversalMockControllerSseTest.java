@@ -13,6 +13,7 @@ import com.echo.service.ResponseTemplateService;
 import com.echo.service.RuleService;
 import net.jqwik.api.*;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -70,7 +71,7 @@ class UniversalMockControllerSseTest {
                 .id("scenario-sse")
                 .matchKey("/scenario")
                 .method("GET")
-                .sseEnabled(false)
+                .sseEnabled(true)
                 .responseId(42L)
                 .httpStatus(200)
                 .scenarioName("checkout")
@@ -83,20 +84,83 @@ class UniversalMockControllerSseTest {
                 isNull(), anyMap())).thenReturn(matched(rule));
         when(pipeline.advanceScenarioState(rule)).thenReturn(
                 new AbstractMockPipeline.ScenarioTransition("checkout", "Started", "Paid", true));
-        when(ruleService.findResponseBodyById(42L)).thenReturn(Optional.of("{\"ok\":true}"));
-        when(templateService.hasTemplate(anyString())).thenReturn(false);
+        when(ruleService.findResponseBodyById(42L)).thenReturn(Optional.of("[{\"data\":\"ok\"}]"));
 
         Object result = scenarioController.handleSseRequest(
                 sseGetRequest("/scenario"), httpServletResponse);
 
-        assertThat(result).isInstanceOf(ResponseEntity.class);
+        assertThat(result).isInstanceOf(SseEmitter.class);
         verify(pipeline).advanceScenarioState(rule);
         verify(requestLogService).record(
                 eq("scenario-sse"), eq(Protocol.HTTP), eq("GET"), eq("/scenario"), eq(true),
                 anyInt(), eq("127.0.0.1"), anyString(), eq("default"),
-                isNull(), isNull(), eq(200), anyInt(), isNull(), eq("{\"ok\":true}"),
+                isNull(), isNull(), eq(200), anyInt(), isNull(), eq("[{\"data\":\"ok\"}]"),
                 ArgumentMatchers.<HttpRule>anyList(), any(ConditionMatcher.PreparedBody.class),
                 isNull(), anyMap(), isNull(), eq("checkout"), eq("Started"), eq("Paid"));
+        scenarioController.shutdown();
+    }
+
+    @AfterEach
+    void tearDown() { controller.shutdown(); }
+
+    @Test
+    void ordinaryAndWildcardAcceptRequestsRetainOriginalPipelineFallback() {
+        HttpMockPipeline pipeline = mock(HttpMockPipeline.class);
+        UniversalMockController fallbackController = new UniversalMockController(
+                ruleService, httpRuleService, requestLogService, templateService, pipeline);
+        when(pipeline.executeAsync(any())).thenReturn(java.util.concurrent.CompletableFuture.completedFuture(
+                com.echo.pipeline.PipelineResult.builder().response(com.echo.pipeline.MockResponse.builder()
+                        .status(202).body("ordinary pipeline").build()).build()));
+        try {
+            for (String accept : java.util.Arrays.asList(null, "*/*", "text/*", "text/event-stream;q=0")) {
+                MockHttpServletRequest request = sseGetRequest("/ordinary");
+                request.setMethod("POST"); request.removeHeader("Accept");
+                if (accept != null) request.addHeader("Accept", accept);
+                Object result = fallbackController.handleSseRequest(request, httpServletResponse, "synthetic body");
+                assertThat(result).isInstanceOf(ResponseEntity.class);
+                assertThat(((ResponseEntity<?>) result).getBody()).isEqualTo("ordinary pipeline");
+            }
+            verify(pipeline, times(4)).executeAsync(any());
+            verify(httpRuleService, never()).findPreparedHttpRules(any(), any(), any());
+        } finally {
+            fallbackController.shutdown();
+        }
+    }
+
+    @Test
+    void normalScenarioRuleWithSseAcceptUsesOrdinaryPipelineOnce() {
+        HttpMockPipeline pipeline = mock(HttpMockPipeline.class);
+        UniversalMockController fallbackController = new UniversalMockController(
+                ruleService, httpRuleService, requestLogService, templateService, pipeline);
+        HttpRule rule = HttpRule.builder().id("scenario-http").matchKey("/scenario")
+                .method("POST").sseEnabled(false).scenarioName("checkout")
+                .requiredScenarioState("Started").newScenarioState("Paid").build();
+        String body = "{\"prompt\":\"synthetic\"}";
+        when(httpRuleService.findPreparedHttpRules("default", "/scenario", "POST")).thenReturn(List.of(rule));
+        when(pipeline.prepareBodyForMatching(any(), anyList())).thenReturn(ConditionMatcher.PreparedBody.rawOnly(body));
+        when(pipeline.matchRule(anyList(), any(ConditionMatcher.PreparedBody.class), isNull(), anyMap()))
+                .thenReturn(matched(rule));
+        when(pipeline.executeAsync(any())).thenReturn(java.util.concurrent.CompletableFuture.completedFuture(
+                com.echo.pipeline.PipelineResult.builder().response(com.echo.pipeline.MockResponse.builder()
+                        .status(202).body("{\"ok\":true}").headers(java.util.Map.of("X-Synthetic", "yes"))
+                        .build()).build()));
+        MockHttpServletRequest request = sseGetRequest("/scenario");
+        request.setMethod("POST");
+        try {
+            Object result = fallbackController.handleSseRequest(request, httpServletResponse, body);
+            assertThat(result).isInstanceOf(ResponseEntity.class);
+            ResponseEntity<?> response = (ResponseEntity<?>) result;
+            assertThat(response.getStatusCode().value()).isEqualTo(202);
+            assertThat(response.getBody()).isEqualTo("{\"ok\":true}");
+            assertThat(response.getHeaders().getFirst("X-Synthetic")).isEqualTo("yes");
+            var captured = org.mockito.ArgumentCaptor.forClass(com.echo.pipeline.MockRequest.class);
+            verify(pipeline, times(1)).executeAsync(captured.capture());
+            assertThat(captured.getValue().getBody()).isEqualTo(body);
+            // The ordinary pipeline owns its transition; the SSE controller cannot advance it twice.
+            verify(pipeline, never()).advanceScenarioState(any());
+        } finally {
+            fallbackController.shutdown();
+        }
     }
 
     private MatchResult<HttpRule> noMatch() {
@@ -313,6 +377,7 @@ class UniversalMockControllerSseTest {
         } else {
             assertThat(result).isInstanceOf(ResponseEntity.class);
         }
+        ctrl.shutdown();
     }
 
     record SseRoutingInput(boolean sseEnabled, int ruleIndex) {}
@@ -370,6 +435,7 @@ class UniversalMockControllerSseTest {
         verify(mockLogSvc).record(eq("prop-order"), eq(Protocol.HTTP), any(), any(),
                 eq(true), anyInt(), any(), any(), any(), isNull(), isNull(), eq(200), anyInt(),
                 isNull(), any());
+        ctrl.shutdown();
     }
 
     @Provide
@@ -420,6 +486,7 @@ class UniversalMockControllerSseTest {
         } else {
             verify(mockTmplSvc, never()).render(any(), any());
         }
+        ctrl.shutdown();
     }
 
     record TemplateDecisionInput(String data) {}

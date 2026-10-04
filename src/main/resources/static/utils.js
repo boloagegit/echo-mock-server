@@ -111,6 +111,43 @@ const serializeSseEvents = (events) => {
     });
     return JSON.stringify(arr, null, 2);
 };
+
+// Incremental SSE framing. UTF-8 decoding belongs to the streaming TextDecoder.
+const createSseParser = onEvent => {
+    let line = '', skipLf = false, data = [], event = '', lastId = '';
+    const consumeLine = () => {
+        if (line === '') {
+            if (data.length) onEvent({ event, data: data.join('\n'), id: lastId });
+            data = [];
+            event = '';
+        } else if (!line.startsWith(':')) {
+            const colon = line.indexOf(':');
+            const field = colon < 0 ? line : line.slice(0, colon);
+            let value = colon < 0 ? '' : line.slice(colon + 1);
+            if (value.startsWith(' ')) value = value.slice(1);
+            if (field === 'data') data.push(value);
+            else if (field === 'event') event = value;
+            else if (field === 'id' && !value.includes('\0')) lastId = value;
+        }
+        line = '';
+    };
+    return {
+        push(text) {
+            for (const char of text) {
+                if (skipLf) {
+                    skipLf = false;
+                    if (char === '\n') continue;
+                }
+                if (char === '\r' || char === '\n') {
+                    consumeLine();
+                    skipLf = char === '\r';
+                } else line += char;
+            }
+        },
+        // EOF does not dispatch an event without its terminating blank line.
+        finish() { line = ''; data = []; event = ''; }
+    };
+};
 let _showToast = null;
 let _t = null;
 const apiCall = async (url, opt = {}, config = {}) => {

@@ -728,11 +728,6 @@ class AdminControllerTest {
                 .responseBody(invalidSseBody)
                 .build();
 
-        ResponseContentValidator mockValidator = mock(ResponseContentValidator.class);
-        doThrow(new IllegalArgumentException("SSE 回應內容必須為 JSON 陣列格式"))
-                .when(mockValidator).validate(invalidSseBody);
-        when(responseContentValidatorRegistry.getValidator(ResponseContentType.SSE_EVENTS)).thenReturn(mockValidator);
-
         var errorResponse = controller.handleIllegalArgument(
                 new IllegalArgumentException("SSE 回應內容必須為 JSON 陣列格式"));
         assertThat(errorResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
