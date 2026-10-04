@@ -91,8 +91,12 @@ class SseForwardingRegressionIntegrationTest extends BaseIntegrationTest {
                 downstreamRequests.incrementAndGet();
                 byte[] reply = ("synthetic downstream: " + body).getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "text/plain;charset=UTF-8");
-                exchange.sendResponseHeaders(202, reply.length);
-                exchange.getResponseBody().write(reply);
+                if ("HEAD".equals(exchange.getRequestMethod())) {
+                    exchange.sendResponseHeaders(202, -1);
+                } else {
+                    exchange.sendResponseHeaders(202, reply.length);
+                    exchange.getResponseBody().write(reply);
+                }
             }
         });
     }
@@ -138,6 +142,51 @@ class SseForwardingRegressionIntegrationTest extends BaseIntegrationTest {
             assertThat(response.body()).contains("No mock rule found");
         }
         assertThat(downstreamRequests.get()).isZero();
+    }
+
+    @Test
+    void unmatchedSseGetAndHeadKeep404DespiteDefaultConnection() throws Exception {
+        configureDefaultConnection();
+        for (String method : List.of("GET", "HEAD")) {
+            for (String host : List.of("", "127.0.0.1:" + downstream.getAddress().getPort())) {
+                var request = request("/unmatched", method).method(method, HttpRequest.BodyPublishers.noBody());
+                if (!host.isEmpty()) request.header("X-Original-Host", host);
+                var response = client.send(request.build(), HttpResponse.BodyHandlers.ofString());
+                assertThat(response.statusCode()).isEqualTo(404);
+                assertThat(response.body()).isEqualTo(method.equals("HEAD") ? "" : "No mock rule found for SSE request.");
+            }
+        }
+        assertThat(downstreamRequests.get()).isZero();
+    }
+
+    @Test
+    void unmatchedSseGetAndHeadKeep404DespiteOriginalHost() throws Exception {
+        for (String method : List.of("GET", "HEAD")) {
+            for (String host : List.of("", "127.0.0.1:1")) {
+                var request = request("/unmatched", method).method(method, HttpRequest.BodyPublishers.noBody());
+                if (!host.isEmpty()) request.header("X-Original-Host", host);
+                var response = client.send(request.build(), HttpResponse.BodyHandlers.ofString());
+                assertThat(response.statusCode()).isEqualTo(404);
+                assertThat(response.body()).isEqualTo(method.equals("HEAD") ? "" : "No mock rule found for SSE request.");
+            }
+        }
+        assertThat(downstreamRequests.get()).isZero();
+    }
+
+    @Test
+    void ordinaryGetAndHeadWithoutSseAcceptStillUseDefaultConnection() throws Exception {
+        configureDefaultConnection();
+        int count = 0;
+        for (String method : List.of("GET", "HEAD")) {
+            var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/mock/unmatched"))
+                    .timeout(Duration.ofSeconds(10)).method(method, HttpRequest.BodyPublishers.noBody()).build();
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            assertThat(response.statusCode()).isEqualTo(202);
+            assertThat(response.body()).isEqualTo(method.equals("HEAD") ? "" : "synthetic downstream: ");
+            assertThat(received.get().method()).isEqualTo(method);
+            assertThat(received.get().path()).isEqualTo("/base/unmatched");
+            assertThat(downstreamRequests.get()).isEqualTo(++count);
+        }
     }
 
     @Test
