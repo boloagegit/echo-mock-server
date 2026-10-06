@@ -502,3 +502,6 @@
 .log-detail-drawer .log-inspector-body-grid { grid-template-columns: minmax(0, 1fr) }
 .log-detail-drawer .log-overview-surface { grid-template-columns: minmax(0, 1fr) }
 .log-detail-drawer .ui-detail-drawer__title { font-family: var(--font-mono); font-size: 14px }
+
+/* Collapsed sidebar keeps the app mark visible above the expand toggle. */
+.sidebar.collapsed .sidebar-header { flex-direction: column; gap: var(--space-sm); padding: 12px 0 8px }

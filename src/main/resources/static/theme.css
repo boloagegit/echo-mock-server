@@ -52,6 +52,9 @@
     --method-patch: #c9aeff;
     --method-delete: #ff8a80;
     --protocol-jms: #c9aeff;
+    /* Neutral app mark, inverted per theme so it reads as an app icon on both. */
+    --brand-tile: #eceef1;
+    --brand-ink: #14171b;
 }
 
 /* 深色主題 ＋ 藍色主色 */
@@ -106,6 +109,8 @@
     --method-patch: #6a46b5;
     --method-delete: #b3242d;
     --protocol-jms: #6a46b5;
+    --brand-tile: #16191d;
+    --brand-ink: #eceef1;
 }
 
 /* 淺色主題 ＋ 藍色主色 */

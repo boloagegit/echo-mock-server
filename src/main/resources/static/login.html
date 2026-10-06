@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Echo－登入</title>
-    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=20260906.2">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20261007.1">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=20261007.1" sizes="any">
     <link rel="stylesheet" href="/theme.css?v=20261006.1">
     <script src="/ui-accent.js?v=20261006.1"></script>
     <link rel="stylesheet" href="/webjars/bootstrap-icons/font/bootstrap-icons.min.css">
@@ -29,10 +30,10 @@
         .login-titles{min-width:0}
         .login-subtitle{margin-top:2px;color:var(--muted);font-size:13px}
 
-        .login-logo{width:40px;height:40px;flex:0 0 40px;display:flex;align-items:center;justify-content:center;position:relative}
-        .login-logo::after{content:"";position:absolute;inset:-6px;border:1px solid rgba(var(--primary-rgb),0.5);border-radius:50%;opacity:0;pointer-events:none}
-        .login-logo img{position:relative;z-index:1;width:40px;height:40px;display:block;object-fit:contain;transition:transform var(--motion-fast) var(--ease-standard)}
-        .login-logo:hover img{transform:scale(1.05) rotate(-3deg)}
+        .login-logo{width:40px;height:40px;flex:0 0 40px;display:flex;align-items:center;justify-content:center;position:relative;border-radius:11px;background:var(--brand-tile);color:var(--brand-ink);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.08),0 1px 2px rgba(0,0,0,0.24)}
+        .login-logo::after{content:"";position:absolute;inset:-4px;border:1px solid rgba(var(--muted-rgb),0.5);border-radius:14px;opacity:0;pointer-events:none}
+        .login-logo .login-mark{position:relative;z-index:1;width:24px;height:24px;display:block;transition:transform var(--motion-fast) var(--ease-standard)}
+        .login-logo:hover .login-mark{transform:scale(1.05) rotate(-3deg)}
         .login-logo:hover::after{animation:loginLogoEcho var(--motion-slow) var(--ease-standard)}
         @keyframes loginLogoEcho{from{opacity:.52;transform:scale(.76)}to{opacity:0;transform:scale(1.22)}}
         
@@ -92,7 +93,7 @@
 
         /* 響應式 */
         @media(max-width:480px){.login-card{border-radius:10px;margin:0 0.25rem}.login-env,.login-footer{padding-inline:1.25rem}.login-header{padding:1.5rem 1.25rem 0}.login-body{padding:1.25rem 1.25rem 1.5rem}}
-        @media(prefers-reduced-motion:reduce){.login-logo img{transition-duration:.01ms}.login-logo:hover::after{animation:none}}
+        @media(prefers-reduced-motion:reduce){.login-logo .login-mark{transition-duration:.01ms}.login-logo:hover::after{animation:none}}
     </style>
 </head>
 <body>
@@ -101,7 +102,7 @@
             <i class="bi bi-hdd-network" aria-hidden="true"></i><span id="login-env-text"></span>
         </div>
         <div class="login-header">
-            <div class="login-logo"><img src="/favicon.ico?v=20260906.2" alt=""></div>
+            <div class="login-logo"><svg class="login-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.4" aria-hidden="true"><path d="M6.5 4.5V19.5"/><path d="M6.5 4.5H18"/><path d="M6.5 12H15.5" stroke-opacity="0.78"/><path d="M6.5 19.5H14.5" stroke-opacity="0.55"/></svg></div>
             <div class="login-titles">
                 <h1>Echo Mock Server</h1>
                 <p class="login-subtitle" data-i18n="login.subtitle">請登入以管理模擬規則</p>

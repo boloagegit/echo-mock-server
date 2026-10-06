@@ -30,19 +30,38 @@ class LoginAccessibilityResourceTest {
                 .contains("document.documentElement.lang = locale === 'zh-TW' ? 'zh-TW' : 'en';");
     }
 
+    /** One neutral "fading E" mark: the same strokes in the favicon, the sidebar and the login card. */
+    private static final String[] MARK_STROKES = {
+            "<path d=\"M6.5 4.5V19.5\"/>",
+            "<path d=\"M6.5 4.5H18\"/>",
+            "<path d=\"M6.5 12H15.5\" stroke-opacity=\"0.78\"/>",
+            "<path d=\"M6.5 19.5H14.5\" stroke-opacity=\"0.55\"/>"
+    };
+
     @Test
     void appLogoIsSharedByFaviconSidebarAndLogin() throws IOException {
         String index = resourceText("static/index.html");
         String login = resourceText("static/login.html");
         String sidebar = resourceText("static/components/SidebarNav.js");
+        String favicon = resourceText("static/favicon.svg");
 
-        assertThat(index).contains("type=\"image/x-icon\" href=\"/favicon.ico?v=20260906.2\"");
-        assertThat(login)
-                .contains("type=\"image/x-icon\" href=\"/favicon.ico?v=20260906.2\"")
-                .contains("<div class=\"login-logo\"><img src=\"/favicon.ico?v=20260906.2\" alt=\"\"></div>");
+        for (String page : new String[]{index, login}) {
+            assertThat(page)
+                    .contains("<link rel=\"icon\" type=\"image/svg+xml\" href=\"/favicon.svg?v=20261007.1\">")
+                    .contains("<link rel=\"icon\" type=\"image/x-icon\" href=\"/favicon.ico?v=20261007.1\" sizes=\"any\">");
+        }
+        for (String stroke : MARK_STROKES) {
+            assertThat(favicon).contains(stroke);
+            assertThat(sidebar).contains(stroke);
+            assertThat(login).contains(stroke);
+        }
         assertThat(sidebar)
                 .contains("class=\"brand-mark\" aria-hidden=\"true\"")
-                .contains("<img class=\"brand-icon\" src=\"/favicon.ico?v=20260906.2\" alt=\"\" width=\"22\" height=\"22\">");
+                .contains("<span class=\"brand-sub\">Mock Server</span>");
+        assertThat(login).contains("<div class=\"login-logo\"><svg class=\"login-mark\"");
+        // The mark stays neutral; deployment accents belong to the environment label only.
+        assertThat(resourceText("static/theme.css")).contains("--brand-tile: #eceef1;").contains("--brand-tile: #16191d;");
+        assertThat(favicon).doesNotContainIgnoringCase("#82a8f7").doesNotContainIgnoringCase("#46d3be");
         assertThat(new ClassPathResource("static/favicon.ico").exists()).isTrue();
     }
 
@@ -55,7 +74,7 @@ class LoginAccessibilityResourceTest {
 
         assertThat(index)
                 .contains("/style.css?v=20261007.1")
-                .contains("/components/SidebarNav.js?v=20261006.1");
+                .contains("/components/SidebarNav.js?v=20261007.1");
         assertThat(sidebar).contains("class=\"brand-mark\" aria-hidden=\"true\"");
         assertThat(css)
                 .contains(".sidebar-brand:hover .brand-icon { transform: scale(1.06) rotate(-3deg) }")
@@ -63,7 +82,7 @@ class LoginAccessibilityResourceTest {
                 .contains("@keyframes brandEcho")
                 .doesNotContain("animation: brandEcho infinite");
         assertThat(login)
-                .contains(".login-logo:hover img{transform:scale(1.05) rotate(-3deg)}")
+                .contains(".login-logo:hover .login-mark{transform:scale(1.05) rotate(-3deg)}")
                 .contains("@media(prefers-reduced-motion:reduce)")
                 .contains(".login-logo:hover::after{animation:none}");
     }
