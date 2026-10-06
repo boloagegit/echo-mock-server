@@ -9,10 +9,10 @@ const staticRoot = path.resolve(__dirname, '../../main/resources/static');
 // Execute the real auth helper and real app mount callback together. The old
 // DB-backed status request never resolves; diagnostics must still mount once.
 async function enterSettings(statusCode) {
-  let accessReads = 0, resourceReads = 0, statusReads = 0;
+  let accessReads = 0, resourceReads = 0, statusReads = 0, reveals = 0;
   const timers = new Set();
   const context = {
-    Vue: { ref: value => ({ value }) },
+    Vue: { ref: value => ({ value }), nextTick: async () => {} },
     AbortController,
     fetch: async url => {
       assert.equal(url, '/api/admin/resources/access');
@@ -27,7 +27,8 @@ async function enterSettings(statusCode) {
     locale: { value: 'zh-TW' }, loadLocale: async () => {},
     loadStatus: () => { statusReads++; return new Promise(() => {}); },
     checkForceChangePassword() { throw new Error('status should still be pending'); },
-    showDblClickHint: { value: false },
+    readCachedStatus: () => null, applyStatus() {},
+    revealApp: () => { reveals++; },
     closeResponseDropdown() {}, closeDataDropdown() {}, closeResponseDataDropdown() {}, handleKeydown() {},
     handleBeforeUnload() {},
   };
@@ -42,7 +43,7 @@ async function enterSettings(statusCode) {
   const callback = app.split('onMounted(async () => {')[1].split('onUnmounted(() => {')[0];
   assert.ok(callback, 'real mount callback must be present');
   await vm.runInContext('(async () => {' + callback.replace(/\}\);\s*$/, '') + '})()', context);
-  return { accessReads, resourceReads, statusReads, timers, admin: context.isAdmin.value };
+  return { accessReads, resourceReads, statusReads, reveals, timers, admin: context.isAdmin.value };
 }
 
 test('cold admin Settings entry is not gated by a never-ending status query', async () => {
@@ -52,6 +53,8 @@ test('cold admin Settings entry is not gated by a never-ending status query', as
   assert.equal(result.statusReads, 1);
   assert.equal(result.admin, true);
   assert.equal(result.timers.size, 0);
+  // The boot shell must not wait for the pending status query either.
+  assert.ok(result.reveals >= 1);
 });
 
 test('cold Settings entry cannot bypass ADMIN authorization', async () => {

@@ -12,9 +12,15 @@
     <link rel="stylesheet" href="/theme.css?v=20261006.1">
     <link rel="stylesheet" href="/style.css?v=20261007.1">
     <link rel="stylesheet" href="/console.css?v=20261007.1">
+    <script src="/ui-boot.js?v=20261007.1"></script>
     <script src="/ui-accent.js?v=20261006.1"></script>
 </head>
 <body>
+<!-- Static shell with the real layout geometry: covers startup until translations and identity are ready. -->
+<div id="boot-shell" class="boot-shell" aria-hidden="true">
+    <div class="boot-shell__sidebar"><span class="boot-shell__mark"></span><span class="boot-shell__line is-name"></span></div>
+    <div class="boot-shell__main"><span class="boot-shell__line is-title"></span><span class="boot-shell__line is-toolbar"></span><span class="boot-shell__card"></span></div>
+</div>
 <div id="app" v-cloak>
     <div class="top-loader" v-if="loading.rules||loading.logs||loading.audit||loading.responses||loading.accounts||loading.issues"></div>
     <div class="layout">
@@ -408,6 +414,6 @@
 <script src="/components/RuleEditModal.js?v=20261006.1"></script>
 <script src="/components/RuleApplyModal.js?v=20261001.2"></script>
 <script src="/components/OpenApiPreviewModal.js?v=20260909.5"></script>
-<script src="/app.js?v=20261006.2"></script>
+<script src="/app.js?v=20261007.1"></script>
 </body>
 </html>

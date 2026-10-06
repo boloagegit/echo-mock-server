@@ -528,3 +528,20 @@
 .audit-detail-drawer .ac-list { display: flex; flex-direction: column; gap: 8px }
 .audit-detail-drawer .ac-block-diff { grid-template-columns: minmax(0, 1fr) }
 .help-tooltip.is-warning { color: var(--warning-text) }
+
+/* ===== Boot shell =====
+ * Painted with the first frame (theme already applied by ui-boot.js) in the same
+ * geometry as the app, so a reload shows a steady frame instead of a blank page
+ * followed by untranslated text. Removed once translations and identity are ready. */
+.boot-shell { position: fixed; inset: 0; z-index: 1000; display: flex; background: var(--bg); transition: opacity 160ms var(--ease-standard) }
+.boot-shell.is-leaving { opacity: 0; pointer-events: none }
+.boot-shell__sidebar { flex: 0 0 var(--sidebar-width); display: flex; align-items: flex-start; gap: 10px; padding: 14px 12px 0 18px; border-inline-end: 1px solid var(--border); background: var(--sidebar-bg) }
+.boot-shell__mark { width: 32px; height: 32px; border-radius: 9px; background: var(--brand-tile) }
+.boot-shell__main { flex: 1; display: flex; flex-direction: column; gap: 14px; padding: var(--space-lg) var(--space-xl) }
+.boot-shell__line { display: block; height: 10px; border-radius: 5px; background: var(--surface-raised) }
+.boot-shell__line.is-name { width: 72px; margin-top: 11px }
+.boot-shell__line.is-title { width: 140px; height: 18px; margin-top: 12px }
+.boot-shell__line.is-toolbar { width: min(560px, 60%); height: var(--control-h-sm); margin-top: 22px; border-radius: var(--radius-control) }
+.boot-shell__card { flex: 1; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--card) }
+@media (max-width: 768px) { .boot-shell__sidebar { display: none } }
+@media (prefers-reduced-motion: reduce) { .boot-shell { transition: none } }

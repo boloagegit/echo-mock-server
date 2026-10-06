@@ -32,7 +32,11 @@ const useAuth = (showConfirm, t) => {
     const login = () => { window.location.href = '/login.html'; };
 
     /** 登出並跳轉 */
-    const logout = () => { window.location.href = '/api/auth/logout'; };
+    const logout = () => {
+        // Drop the cached identity so the next page load cannot briefly show the signed-in sidebar.
+        try { sessionStorage.removeItem('echo.statusCache'); } catch { /* storage unavailable */ }
+        window.location.href = '/api/auth/logout';
+    };
 
     /**
      * 檢查是否已登入，未登入時彈出確認對話框

@@ -363,24 +363,46 @@ const _app = createApp({
         // === app.js 專屬邏輯 ===
         const autoResize = e => { const el = e.target; el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 300) + 'px' };
         let statusLastLoaded = 0;
+        // The last status is cached per tab so a reload can draw the signed-in sidebar
+        // (identity, admin sections, environment) immediately; the live response then replaces it.
+        const STATUS_CACHE_KEY = 'echo.statusCache';
+        const STATUS_CACHE_FIELDS = ['isLoggedIn', 'isAdmin', 'username', 'isBuiltinUser', 'envLabel', 'uiAccent', 'jmsEnabled',
+            'httpAlias', 'jmsAlias', 'serverPort', 'artemisBrokerUrl', 'bulkImportExportEnabled', 'scenariosEnabled',
+            'ruleDragSortEnabled', 'issueReportingEnabled', 'cleanupRetentionDays', 'responseRetentionDays'];
+        const readCachedStatus = () => {
+            try { return JSON.parse(sessionStorage.getItem(STATUS_CACHE_KEY) || 'null'); } catch { return null; }
+        };
+        const applyStatus = data => {
+            status.value = data;
+            jmsEnabled.value = data.jmsEnabled;
+            isAdmin.value = data.isAdmin === true;
+            isLoggedIn.value = data.isLoggedIn === true;
+            httpAlias.value = data.httpAlias || 'HTTP';
+            jmsAlias.value = data.jmsAlias || 'JMS';
+            envLabel.value = data.envLabel || '';
+            window.EchoAccent?.apply(data.uiAccent);
+            document.title = envLabel.value ? `Echo - ${envLabel.value}` : 'Echo Mock Server';
+        };
         const loadStatus = async () => {
             if (loading.value.status) { return; }
             loading.value.status = true;
             const r = await apiCall('/api/admin/status', {}, { silent: true });
             if (r && r.ok) {
                 const data = await r.json();
-                status.value = data;
-                jmsEnabled.value = data.jmsEnabled;
-                isAdmin.value = data.isAdmin === true;
-                isLoggedIn.value = data.isLoggedIn === true;
-                httpAlias.value = data.httpAlias || 'HTTP';
-                jmsAlias.value = data.jmsAlias || 'JMS';
-                envLabel.value = data.envLabel || '';
-                window.EchoAccent?.apply(data.uiAccent);
-                document.title = envLabel.value ? `Echo - ${envLabel.value}` : 'Echo Mock Server';
+                applyStatus(data);
+                try {
+                    sessionStorage.setItem(STATUS_CACHE_KEY, JSON.stringify(Object.fromEntries(STATUS_CACHE_FIELDS.map(key => [key, data[key]]))));
+                } catch { /* storage unavailable */ }
                 if (data.orphanRules > 0) { showToast(t('toast.orphanRulesWarning', {count: data.orphanRules}), 'error'); }
             }
             setTimeout(() => { loading.value.status = false; }, 2000);
+        };
+        /** Fade out the static boot shell once the first real frame is ready (idempotent). */
+        const revealApp = () => {
+            const shell = document.getElementById('boot-shell');
+            if (!shell || shell.classList.contains('is-leaving')) { return; }
+            shell.classList.add('is-leaving');
+            setTimeout(() => shell.remove(), 180);
         };
 
         // === 強制改密碼 Modal ===
@@ -502,7 +524,11 @@ const _app = createApp({
         onMounted(async () => { 
             themeCtx.applyTheme();
             applyDensity(); 
+            const revealFallback = setTimeout(revealApp, 2500);
+            const cachedStatus = readCachedStatus();
+            if (cachedStatus) { applyStatus(cachedStatus); }
             await loadLocale(locale.value);
+            if (cachedStatus) { revealApp(); }
             if (window.location.hash.split('?')[0] === '#/settings') {
                 await verifyAdminResourceAccess();
                 // The existing DB-backed status must not gate the independent diagnostic panel.
@@ -512,6 +538,9 @@ const _app = createApp({
                 checkForceChangePassword();
             }
             applyUrlParams(); 
+            await Vue.nextTick();
+            clearTimeout(revealFallback);
+            revealApp();
             window.addEventListener('hashchange', applyUrlParams); 
             window.addEventListener('click', closeResponseDropdown); 
             window.addEventListener('click', closeDataDropdown);
