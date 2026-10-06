@@ -481,7 +481,9 @@
     "nextPage": "下一頁",
     "lastPage": "最後一頁",
     "pageSize": "每頁顯示筆數",
-    "pageStatus": "第 {page} 頁，共 {total} 頁"
+    "pageStatus": "第 {page} 頁，共 {total} 頁",
+    "openMatchedRule": "開啟命中的規則",
+    "copyEndpoint": "複製端點"
   },
   "audit": {
     "pagination": "修訂記錄分頁",

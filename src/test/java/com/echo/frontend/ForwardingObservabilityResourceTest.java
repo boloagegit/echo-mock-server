@@ -47,11 +47,13 @@ class ForwardingObservabilityResourceTest {
         String stats = resourceText("static/components/StatsPage.js");
 
         assertThat(stats)
-                .contains("item.log.forwarded && item.log.proxyError")
+                .contains("if (log.forwarded && log.proxyError) return this.t('stats.forwardFailed');")
                 .contains("item.log.forwardTarget")
                 .contains("if (log.protocol !== 'HTTP') { return null; }")
-                .contains(":colspan=\"logDetailColspan\"")
-                .contains("window.matchMedia('(max-width: 1024px)')");
+                .contains("<ui-detail-drawer class=\"log-detail-drawer\"");
+        // Columns now collapse by available width (container queries) instead of a JS media query + colspan.
+        assertThat(resourceText("static/console.css"))
+                .contains("@container (max-width: 900px) { .log-table .col-duration { display: none } }");
     }
 
     @Test

@@ -484,3 +484,21 @@
 .detail-link__desc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted) }
 .detail-link__go { margin-inline-start: auto; color: var(--text-subtle) }
 .detail-link:hover .detail-link__go { color: var(--primary) }
+
+/* ===== Request log list and inspector drawer ===== */
+.log-table .col-time { width: 132px }
+.log-table .col-method { width: 72px }
+.log-table .col-duration { width: 92px }
+.log-table .col-result { width: 150px }
+.log-table .col-actions { width: 56px }
+.log-forward { flex: none; display: inline-flex; align-items: center; gap: 4px; color: var(--text-subtle); font-family: var(--font-mono); font-size: var(--font-xs) }
+.log-result-line { display: inline-flex; align-items: center; gap: var(--space-sm) }
+@container (max-width: 900px) { .log-table .col-duration { display: none } }
+@container (max-width: 720px) { .log-table .col-time { display: none } .log-table .rule-desc { display: none } }
+
+/* The inspector needs room for request/response bodies, so this drawer is wider and stacks its panes. */
+.ui-detail-drawer.log-detail-drawer { --drawer-w: 760px }
+.log-detail-drawer .log-inspector { display: flex; flex-direction: column; gap: var(--space-md); padding-top: var(--space-md); border: 0; background: transparent }
+.log-detail-drawer .log-inspector-body-grid { grid-template-columns: minmax(0, 1fr) }
+.log-detail-drawer .log-overview-surface { grid-template-columns: minmax(0, 1fr) }
+.log-detail-drawer .ui-detail-drawer__title { font-family: var(--font-mono); font-size: 14px }

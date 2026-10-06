@@ -481,7 +481,9 @@
     "nextPage": "Next page",
     "lastPage": "Last page",
     "pageSize": "Rows per page",
-    "pageStatus": "Page {page} of {total}"
+    "pageStatus": "Page {page} of {total}",
+    "openMatchedRule": "Open matched rule",
+    "copyEndpoint": "Copy endpoint"
   },
   "audit": {
     "pagination": "Audit log pagination",

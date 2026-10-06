@@ -11,10 +11,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 讓點選、鍵盤與操作位置在每一頁都一致。遷移一頁就把它加進 MIGRATED_LISTS。
  */
 class ListSystemResourceTest {
-    /** page component -> its row/table component (same file when the page renders rows itself). */
+    /** page component, its row/table component (same file when the page renders rows itself), has batch selection. */
     private static final String[][] MIGRATED_LISTS = {
-            {"RulesPage", "RuleTable"},
-            {"ResponsesPage", "ResponsesPage"},
+            {"RulesPage", "RuleTable", "batch"},
+            {"ResponsesPage", "ResponsesPage", "batch"},
+            {"StatsPage", "StatsPage", ""},
     };
 
     @Test
@@ -45,6 +46,7 @@ class ListSystemResourceTest {
     @Test
     void batchActionsLiveInABarInsteadOfShiftingTheHeader() throws IOException {
         for (String[] list : MIGRATED_LISTS) {
+            if (!"batch".equals(list[2])) { continue; }
             String page = text("components/" + list[0] + ".js");
             int header = page.indexOf("<div class=\"page-actions\">");
             String headerActions = page.substring(header, page.indexOf("</div>", header));

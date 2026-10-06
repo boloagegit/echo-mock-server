@@ -40,9 +40,6 @@ const StatsPage = {
       bodySearchIdx: {},
       bodyFormatted: {},
       inspectorTab: 'body',
-      compactLogTable: false,
-      logTableMediaQuery: null,
-      logTableMediaListener: null,
     };
   },
   computed: {
@@ -52,8 +49,8 @@ const StatsPage = {
     selectedLogItem() {
       return this.pagedLogs.find(item => !!this.logDetailExpanded[item.log.id]) || null;
     },
-    logDetailColspan() {
-      return this.compactLogTable ? 4 : 5;
+    selectedIndex() {
+      return this.selectedLogItem ? this.pagedLogs.indexOf(this.selectedLogItem) : -1;
     },
     inspectorTabs() {
       const id = this.selectedLogItem?.log?.id || 'none';
@@ -123,25 +120,7 @@ const StatsPage = {
       }
     });
   },
-  mounted() {
-    if (typeof window.matchMedia !== 'function') { return; }
-    this.logTableMediaQuery = window.matchMedia('(max-width: 1024px)');
-    this.logTableMediaListener = event => { this.compactLogTable = event.matches; };
-    this.compactLogTable = this.logTableMediaQuery.matches;
-    if (this.logTableMediaQuery.addEventListener) {
-      this.logTableMediaQuery.addEventListener('change', this.logTableMediaListener);
-    } else {
-      this.logTableMediaQuery.addListener(this.logTableMediaListener);
-    }
-  },
   beforeUnmount() {
-    if (this.logTableMediaQuery && this.logTableMediaListener) {
-      if (this.logTableMediaQuery.removeEventListener) {
-        this.logTableMediaQuery.removeEventListener('change', this.logTableMediaListener);
-      } else {
-        this.logTableMediaQuery.removeListener(this.logTableMediaListener);
-      }
-    }
     // 清理所有 CodeMirror instances 和 marks
     if (this.cmInstances) {
       for (const key of Object.keys(this.cmInstances)) {
@@ -386,6 +365,51 @@ const StatsPage = {
     copyBody(text) {
       this.$emit('clip-copy', text);
     },
+    logOutcome(log) {
+      if (log.forwarded && log.proxyError) return this.t('stats.forwardFailed');
+      if (log.forwarded) return this.t('stats.forwarded');
+      return log.matched ? this.t('stats.matched') : this.t('stats.unmatched');
+    },
+    logTone(log) {
+      if (log.forwarded && log.proxyError) return 'danger';
+      if (log.forwarded) return 'neutral';
+      return log.matched ? 'success' : 'danger';
+    },
+    logMenuItems(item, inDrawer = false) {
+      const t = this.t;
+      const items = [];
+      if (!inDrawer && (item.log.hasResponseBody || item._detail?.responseBody)) {
+        items.push({ key: 'create-rule', label: t('stats.createRuleFromLog'), icon: 'bi-plus-circle' });
+      }
+      if (!inDrawer && item.log.ruleId) {
+        items.push({ key: 'open-rule', label: t('stats.openMatchedRule'), icon: 'bi-box-arrow-up-right' });
+      }
+      items.push({ key: 'copy-endpoint', label: t('stats.copyEndpoint'), icon: 'bi-copy' });
+      if (item.log.diagnosticId) {
+        items.push({ key: 'copy-diagnostic', label: t('stats.copyDiagnosticId'), icon: 'bi-fingerprint' });
+      }
+      return items;
+    },
+    handleLogMenu(action, item) {
+      if (action === 'create-rule') this.$emit('create-rule-from-log', item._detail || item.log);
+      else if (action === 'open-rule') this.$emit('go-to-rule', item.log.ruleId);
+      else if (action === 'copy-endpoint') this.$emit('clip-copy', item.log.endpoint);
+      else if (action === 'copy-diagnostic') this.$emit('clip-copy', item.log.diagnosticId);
+    },
+    selectLog(item) {
+      this.$emit('toggle-log-detail', item);
+    },
+    onRowKeydown(event, item) {
+      if (event.target !== event.currentTarget) return;
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.selectLog(item); }
+    },
+    stepDetail(direction) {
+      const next = this.pagedLogs[this.selectedIndex + direction];
+      if (next) {
+        this.$emit('toggle-log-detail', next);
+        this.$nextTick(() => document.querySelector('.logs-workspace [data-detail-row].is-selected')?.scrollIntoView({ block: 'nearest' }));
+      }
+    },
   },
   template: /* html */`
     <div class="page workspace-page logs-workspace" :class="{active:true}">
@@ -400,33 +424,26 @@ const StatsPage = {
           </button>
         </div>
         <div class="page-actions">
-          <ui-button type="button" class="btn btn-secondary" @click="$emit('load-logs', true)" :disabled="loading.logs">
-            <i class="bi bi-arrow-clockwise" :class="{'spin':loading.logs}" aria-hidden="true"></i>
-            {{t('stats.refresh')}}
+          <ui-button type="button" variant="secondary" @click="$emit('load-logs', true)" :disabled="loading.logs">
+            <i class="bi bi-arrow-clockwise" :class="{'spin':loading.logs}" aria-hidden="true"></i>{{t('stats.refresh')}}
           </ui-button>
         </div>
       </div>
 
-      <div class="card workspace-filter-card">
-        <div class="card-body filter-row workspace-filter-bar">
-          <div class="workspace-filter-controls">
-            <ui-toggle-group :model-value="logFilter.protocol" :options="protocolFilterOptions"
-              :aria-label="t('stats.protocolFilter')"
-              @update:model-value="$emit('update:logFilter', {...logFilter, protocol:$event})"></ui-toggle-group>
-            <ui-toggle-group :model-value="logFilter.matched" :options="resultFilterOptions"
-              :aria-label="t('stats.resultFilter')"
-              @update:model-value="$emit('update:logFilter', {...logFilter, matched:$event})"></ui-toggle-group>
-            <workspace-search-field
-              input-id="logSearch"
-              :model-value="logFilter.endpoint"
-              :placeholder="t('stats.searchPlaceholder')"
-              :aria-label="t('stats.searchLabel')"
-              :clear-label="t('stats.clearSearch')"
-              :submit-mode="true"
-              @search="$emit('update:logFilter', {...logFilter, endpoint:$event})"
-            ></workspace-search-field>
-          </div>
-        </div>
+      <div class="list-toolbar">
+        <workspace-search-field
+          input-id="logSearch"
+          :model-value="logFilter.endpoint"
+          :placeholder="t('stats.searchPlaceholder')"
+          :aria-label="t('stats.searchLabel')"
+          :clear-label="t('stats.clearSearch')"
+          :submit-mode="true"
+          @search="$emit('update:logFilter', {...logFilter, endpoint:$event})"
+        ></workspace-search-field>
+        <ui-toggle-group :model-value="logFilter.protocol" :options="protocolFilterOptions" :aria-label="t('stats.protocolFilter')"
+          @update:model-value="$emit('update:logFilter', {...logFilter, protocol:$event})"></ui-toggle-group>
+        <ui-toggle-group :model-value="logFilter.matched" :options="resultFilterOptions" :aria-label="t('stats.resultFilter')"
+          @update:model-value="$emit('update:logFilter', {...logFilter, matched:$event})"></ui-toggle-group>
       </div>
 
       <ui-filter-chip-list :items="logFilterChips" :aria-label="t('common.activeFilters')"
@@ -434,124 +451,69 @@ const StatsPage = {
         @remove="$emit('remove-log-chip', $event)"
         @clear="$emit('clear-log-filters')"></ui-filter-chip-list>
 
-      <div class="card card-table workspace-table-card">
+      <div class="card card-table list-card">
         <ui-load-state v-if="loading.logsError && !loading.logs" kind="error" icon="bi-cloud-slash" :title="t('stats.loadFailed')" has-action>
-          <template #action><ui-button type="button" class="btn btn-sm btn-secondary" @click="$emit('load-logs', true)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</ui-button></template>
+          <template #action><ui-button type="button" variant="secondary" size="compact" @click="$emit('load-logs', true)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</ui-button></template>
         </ui-load-state>
         <div v-else class="card-table-body">
-          <div v-if="loading.logs && !logs.length" role="status" :aria-label="t('stats.loadingLogs')">
-            <div v-for="i in 6" :key="'sk-log-'+i" class="sk-row">
-              <span class="sk sk-text-sm log-skeleton-time"></span>
-              <span class="sk sk-badge log-skeleton-protocol"></span>
-              <span class="sk sk-badge log-skeleton-method"></span>
-              <span class="sk sk-text log-skeleton-endpoint"></span>
-              <span class="sk sk-text-sm log-skeleton-duration"></span>
-              <span class="sk sk-badge log-skeleton-result"></span>
-              <span class="sk sk-text log-skeleton-detail"></span>
-            </div>
+          <div v-if="loading.logs && !logs.length" class="list-skeleton" role="status" :aria-label="t('stats.loadingLogs')">
+            <div v-for="i in 8" :key="'sk-log-'+i" class="list-skeleton__row"><span class="sk sk-w-15p"></span><span class="sk sk-w-40p"></span><span class="sk sk-w-15p"></span></div>
           </div>
-
-          <table v-if="pagedLogs.length" class="table-fixed workspace-table workspace-primary-aligned-table logs-table">
+          <table v-else-if="pagedLogs.length" class="data-table log-table">
             <caption class="visually-hidden">{{t('stats.tableCaption')}}</caption>
-            <thead>
-              <tr>
-                <th class="log-time-column" :aria-sort="sortAria('requestTime')">
-                  <ui-table-sort-header :label="t('stats.thTime')" :active="logSort.field==='requestTime'" :ascending="logSort.asc"
-                    :aria-label="t('stats.sortBy', {field:t('stats.thTime')})" @toggle="$emit('toggle-sort','requestTime')"></ui-table-sort-header>
-                </th>
-                <th :aria-sort="sortAria('endpoint')">
-                  <ui-table-sort-header :label="t('stats.thRequest')" :active="logSort.field==='endpoint'" :ascending="logSort.asc"
-                    :aria-label="t('stats.sortBy', {field:t('stats.thRequest')})" @toggle="$emit('toggle-sort','endpoint')"></ui-table-sort-header>
-                </th>
-                <th class="col-hide-md log-duration-column" :aria-sort="sortAria('responseTimeMs')">
-                  <ui-table-sort-header :label="t('stats.thDuration')" :active="logSort.field==='responseTimeMs'" :ascending="logSort.asc"
-                    :aria-label="t('stats.sortBy', {field:t('stats.thDuration')})" @toggle="$emit('toggle-sort','responseTimeMs')"></ui-table-sort-header>
-                </th>
-                <th>{{t('stats.thResult')}}</th>
-                <th class="col-actions col-actions-1">{{t('stats.thActions')}}</th>
-              </tr>
-            </thead>
+            <thead><tr>
+              <th class="col-time" :aria-sort="sortAria('requestTime')">
+                <ui-table-sort-header :label="t('stats.thTime')" :active="logSort.field==='requestTime'" :ascending="logSort.asc"
+                  :aria-label="t('stats.sortBy', {field:t('stats.thTime')})" @toggle="$emit('toggle-sort','requestTime')"></ui-table-sort-header>
+              </th>
+              <th class="col-method">{{t('rules.thMethod')}}</th>
+              <th class="col-request" :aria-sort="sortAria('endpoint')">
+                <ui-table-sort-header :label="t('stats.thRequest')" :active="logSort.field==='endpoint'" :ascending="logSort.asc"
+                  :aria-label="t('stats.sortBy', {field:t('stats.thRequest')})" @toggle="$emit('toggle-sort','endpoint')"></ui-table-sort-header>
+              </th>
+              <th class="col-duration cell-end" :aria-sort="sortAria('responseTimeMs')">
+                <ui-table-sort-header :label="t('stats.thDuration')" :active="logSort.field==='responseTimeMs'" :ascending="logSort.asc"
+                  :aria-label="t('stats.sortBy', {field:t('stats.thDuration')})" @toggle="$emit('toggle-sort','responseTimeMs')"></ui-table-sort-header>
+              </th>
+              <th class="col-result">{{t('stats.thResult')}}</th>
+              <th class="col-actions"><span class="visually-hidden">{{t('stats.thActions')}}</span></th>
+            </tr></thead>
             <tbody>
-              <template v-for="item in pagedLogs" :key="item.log.id">
-                <tr class="row-clickable log-summary-row" :id="'log-summary-'+item.log.id"
-                  :class="{'is-expanded': logDetailExpanded[item.log.id]}"
-                  @click="$emit('toggle-log-detail', item)" :title="t('stats.clickExpand')">
-                  <td class="log-time-cell" :title="fmtTime(item.log.requestTime,false)">
-                    <div class="log-time-primary workspace-row-primary">
-                      <span class="log-time-date">{{logDate(item.log.requestTime)}}</span>
-                    </div>
-                    <div class="log-time-clock">{{logClock(item.log.requestTime)}}</div>
-                  </td>
-                  <td class="log-request-cell">
-                    <div class="log-request-primary workspace-row-primary">
-                      <span class="rule-protocol">{{item.log.protocol}}</span>
-                      <ui-badge v-if="item.log.protocol==='HTTP' && item.log.method" class="badge badge-method" :data-method="item.log.method">{{item.log.method}}</ui-badge>
-                      <code :title="item.log.endpoint">{{item.log.endpoint}}</code>
-                    </div>
-                    <div class="log-request-description" :title="requestDescription(item)">{{requestDescription(item)}}</div>
-                    <div class="log-request-secondary">
-                      <a v-if="item.log.ruleId" href="#" class="log-rule-link" :title="item.log.ruleId"
-                        @click.prevent.stop="$emit('go-to-rule', item.log.ruleId)">{{shortId(item.log.ruleId)}}</a>
-                      <span v-if="item.log.ruleId && (item.log.targetHost || item.log.forwardTarget)" class="log-meta-separator" aria-hidden="true">·</span>
-                      <span v-if="item.log.targetHost" class="log-meta-pair log-host-meta"><span>{{t('stats.hostLabel')}}</span><code :title="item.log.targetHost">{{item.log.targetHost}}</code></span>
-                      <span v-if="item.log.targetHost && item.log.forwardTarget" class="log-meta-separator" aria-hidden="true">·</span>
-                      <span v-if="item.log.forwardTarget" class="log-meta-pair log-downstream-meta"><span>{{t('stats.forwardTargetLabel')}}</span><code :title="item.log.forwardTarget">{{forwardTargetName(item.log.forwardTarget)}}</code></span>
-                      <span class="log-responsive-duration tabular-nums">{{item.log.ruleId || item.log.targetHost || item.log.forwardTarget ? '· ' : ''}}{{item.log.responseTimeMs}} ms</span>
-                      <span class="log-responsive-time tabular-nums">· {{logDate(item.log.requestTime)}} {{logClock(item.log.requestTime)}}</span>
-                    </div>
-                  </td>
-                  <td class="col-hide-md log-duration-cell">
-                    <div class="workspace-row-primary workspace-row-primary-end"><span>{{item.log.responseTimeMs}}</span><small>ms</small></div>
-                  </td>
-                  <td class="log-result-cell">
-                    <div class="log-result workspace-row-primary">
-                      <template v-if="item.log.forwarded && item.log.proxyError">
-                        <span class="log-outcome log-outcome-danger" :title="item.log.proxyError">{{t('stats.forwardFailed')}}</span>
-                      </template>
-                      <template v-else-if="item.log.forwarded">
-                        <span class="log-outcome">{{t('stats.forwarded')}}</span>
-                      </template>
-                      <template v-else-if="item.log.matched">
-                        <span class="log-outcome log-outcome-success">{{t('stats.matched')}}</span>
-                      </template>
-                      <template v-else>
-                        <span class="log-outcome log-outcome-danger">{{t('stats.unmatched')}}</span>
-                      </template>
-                      <span v-if="logStatusCode(item.log) != null" class="log-status-code"
-                        :class="logStatusCode(item.log)<400?'is-success':logStatusCode(item.log)<500?'is-warning':'is-danger'">{{logStatusCode(item.log)}}</span>
-                    </div>
-                    <div v-if="item.log.proxyError" class="log-result-secondary log-result-error" :title="item.log.proxyError">{{item.log.proxyError}}</div>
-                    <div v-else-if="item.log.matched && item.log.ruleId && !item.rule" class="log-result-secondary">{{t('stats.deleted')}}</div>
-                  </td>
-                  <td class="col-actions col-actions-1">
-                    <div class="log-row-actions workspace-row-primary workspace-row-primary-end">
-                      <ui-button type="button" class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('toggle-log-detail', item)"
-                        :aria-expanded="!!logDetailExpanded[item.log.id]" :aria-controls="'log-detail-'+item.log.id"
-                        :title="logDetailExpanded[item.log.id]?t('stats.collapseTrace'):t('stats.expandTrace')"
-                        :aria-label="logDetailExpanded[item.log.id]?t('stats.collapseTrace'):t('stats.expandTrace')">
-                        <i class="bi" :class="logDetailExpanded[item.log.id]?'bi-chevron-up':'bi-chevron-down'" aria-hidden="true"></i>
-                      </ui-button>
-                    </div>
-                  </td>
-                </tr>
-
-                <Transition name="ui-detail-row-motion">
-                <tr v-if="logDetailExpanded[item.log.id]" class="log-detail-row">
-                  <td :colspan="logDetailColspan" class="log-detail-cell" @click.stop>
-                    <div class="log-detail-slot" :id="'log-detail-slot-'+item.log.id"></div>
-                  </td>
-                </tr>
-                </Transition>
-
-              </template>
+              <tr v-for="item in pagedLogs" :key="item.log.id" :id="'log-summary-'+item.log.id" data-detail-row tabindex="0"
+                :class="{'is-selected': !!logDetailExpanded[item.log.id]}" :aria-selected="logDetailExpanded[item.log.id] ? 'true' : 'false'"
+                @click="selectLog(item)" @keydown="onRowKeydown($event, item)">
+                <td class="col-time cell-mono cell-subtle" :title="fmtTime(item.log.requestTime,false)">{{logDate(item.log.requestTime)}} {{logClock(item.log.requestTime)}}</td>
+                <td class="col-method">
+                  <span class="rule-method" :data-method="item.log.protocol==='HTTP' ? item.log.method : null" :data-protocol="item.log.protocol">{{item.log.protocol==='HTTP' ? (item.log.method || 'HTTP') : 'JMS'}}</span>
+                </td>
+                <td class="col-request">
+                  <span class="rule-identity">
+                    <code class="rule-path" :title="item.log.endpoint">{{item.log.endpoint}}</code>
+                    <span class="rule-desc" :title="requestDescription(item)">{{requestDescription(item)}}</span>
+                    <span v-if="item.log.forwardTarget" class="log-forward" :title="item.log.forwardTarget"><i class="bi bi-arrow-right" aria-hidden="true"></i>{{forwardTargetName(item.log.forwardTarget)}}</span>
+                  </span>
+                </td>
+                <td class="col-duration cell-end cell-mono cell-subtle">{{item.log.responseTimeMs}} ms</td>
+                <td class="col-result">
+                  <span class="log-result-line">
+                    <ui-status :tone="logTone(item.log)" :title="item.log.proxyError || null">{{logOutcome(item.log)}}</ui-status>
+                    <span v-if="logStatusCode(item.log) != null" class="log-status-code"
+                      :class="logStatusCode(item.log)<400?'is-success':logStatusCode(item.log)<500?'is-warning':'is-danger'">{{logStatusCode(item.log)}}</span>
+                  </span>
+                </td>
+                <td class="col-actions" @click.stop @dblclick.stop>
+                  <span class="row-actions">
+                    <ui-row-menu :items="logMenuItems(item)" :label="t('common.moreActions') + ' ' + item.log.endpoint" @select="handleLogMenu($event, item)"></ui-row-menu>
+                  </span>
+                </td>
+              </tr>
             </tbody>
           </table>
-
-          <ui-load-state v-if="!pagedLogs.length && !loading.logs" kind="empty" :has-action="hasLogFilters"
+          <ui-load-state v-else kind="empty" has-action
             :icon="hasLogFilters?'bi-search':'bi-inbox'"
             :title="hasLogFilters?t('stats.emptyNoMatch'):t('stats.emptyNoLogs')"
             :hint="hasLogFilters?t('stats.emptyNoMatchHint'):t('stats.emptyHint')">
-            <template #action><ui-button type="button" class="btn btn-secondary" @click="$emit('clear-log-filters')">{{t('stats.clearAll')}}</ui-button></template>
+            <template #action><ui-button v-if="hasLogFilters" type="button" variant="secondary" size="compact" @click="$emit('clear-log-filters')">{{t('stats.clearAll')}}</ui-button></template>
           </ui-load-state>
         </div>
 
@@ -562,41 +524,35 @@ const StatsPage = {
           :page-size-label="t('stats.pageSize')"
           :first-page-label="t('stats.firstPage')" :previous-page-label="t('stats.previousPage')"
           :next-page-label="t('stats.nextPage')" :last-page-label="t('stats.lastPage')"
+          :scroll-hint-label="t('common.scrollForMore')"
+          :scroll-region-label="t('stats.tableCaption')"
           @update:page="$emit('update:logPage', $event)"
           @update:page-size="$emit('update:logPageSize', $event)"
         >
           <template #summary>
             <span class="sub-info">{{t('stats.totalCount', {count: logSummary.filteredRequests ?? logs.length})}}</span>
-            <ui-button v-if="logFilter.protocol||logFilter.matched||logFilter.endpoint" type="button" variant="quiet" size="compact" class="workspace-filter-reset"
-              :title="t('stats.clickClearFilter')" @click="$emit('clear-log-filters')"><i class="bi bi-funnel-fill" aria-hidden="true"></i> {{t('stats.filtering')}}</ui-button>
           </template>
         </workspace-pagination>
+      </div>
 
-        <Teleport v-if="selectedLogItem && !loading.logsError" defer :to="'#log-detail-slot-'+selectedLogItem.log.id">
-        <section class="log-inspector" :id="'log-detail-'+selectedLogItem.log.id"
-          :aria-labelledby="'log-summary-'+selectedLogItem.log.id">
-          <header class="log-inspector-header">
-            <div class="log-inspector-identity">
-              <ui-badge class="badge" :class="'badge-'+selectedLogItem.log.protocol?.toLowerCase()">{{selectedLogItem.log.protocol}}</ui-badge>
-              <span v-if="selectedLogItem.log.protocol==='HTTP' && selectedLogItem.log.method" class="log-method">{{selectedLogItem.log.method}}</span>
-              <code :title="selectedLogItem.log.endpoint">{{selectedLogItem.log.endpoint}}</code>
-              <span v-if="logStatusCode(selectedLogItem.log) != null" class="log-status-code"
-                :class="logStatusCode(selectedLogItem.log)<400?'is-success':logStatusCode(selectedLogItem.log)<500?'is-warning':'is-danger'">{{logStatusCode(selectedLogItem.log)}}</span>
-              <span class="log-inspector-duration tabular-nums">{{selectedLogItem.log.responseTimeMs}} ms</span>
-            </div>
-            <div class="log-inspector-actions">
-              <ui-button v-if="selectedLogItem.log.hasResponseBody || selectedLogItem._detail?.responseBody" type="button"
-                class="btn btn-sm btn-secondary" @click.stop="$emit('create-rule-from-log', selectedLogItem._detail || selectedLogItem.log)">
-                <i class="bi bi-plus-circle" aria-hidden="true"></i>{{t('stats.createRuleFromLog')}}
-              </ui-button>
-              <ui-button type="button" class="btn btn-sm btn-icon btn-secondary"
-                @click.stop="$emit('toggle-log-detail', selectedLogItem)"
-                :title="t('stats.closeInspector')" :aria-label="t('stats.closeInspector')">
-                <i class="bi bi-x-lg" aria-hidden="true"></i>
-              </ui-button>
-            </div>
-          </header>
-
+      <ui-detail-drawer class="log-detail-drawer" :open="!!selectedLogItem && !loading.logsError"
+        :title="selectedLogItem?.log.endpoint || ''" :subtitle="selectedLogItem ? requestDescription(selectedLogItem) : ''"
+        :has-prev="selectedIndex > 0" :has-next="selectedIndex >= 0 && selectedIndex < pagedLogs.length - 1"
+        @close="selectedLogItem && $emit('toggle-log-detail', selectedLogItem)" @prev="stepDetail(-1)" @next="stepDetail(1)">
+        <template v-if="selectedLogItem" #meta>
+          <span class="rule-method" :data-method="selectedLogItem.log.protocol==='HTTP' ? selectedLogItem.log.method : null" :data-protocol="selectedLogItem.log.protocol">{{selectedLogItem.log.protocol==='HTTP' ? (selectedLogItem.log.method || 'HTTP') : 'JMS'}}</span>
+          <ui-status :tone="logTone(selectedLogItem.log)">{{logOutcome(selectedLogItem.log)}}</ui-status>
+          <span v-if="logStatusCode(selectedLogItem.log) != null" class="log-status-code"
+            :class="logStatusCode(selectedLogItem.log)<400?'is-success':logStatusCode(selectedLogItem.log)<500?'is-warning':'is-danger'">{{logStatusCode(selectedLogItem.log)}}</span>
+          <span class="detail-mono">{{selectedLogItem.log.responseTimeMs}} ms · {{fmtTime(selectedLogItem.log.requestTime, false)}}</span>
+        </template>
+        <template v-if="selectedLogItem" #actions>
+          <ui-button v-if="selectedLogItem.log.hasResponseBody || selectedLogItem._detail?.responseBody" type="button" variant="primary" size="compact"
+            @click="$emit('create-rule-from-log', selectedLogItem._detail || selectedLogItem.log)"><i class="bi bi-plus-circle" aria-hidden="true"></i>{{t('stats.createRuleFromLog')}}</ui-button>
+          <ui-button v-if="selectedLogItem.log.ruleId" type="button" variant="secondary" size="compact" @click="$emit('go-to-rule', selectedLogItem.log.ruleId)"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>{{t('stats.openMatchedRule')}}</ui-button>
+          <ui-row-menu :items="logMenuItems(selectedLogItem, true)" :label="t('common.moreActions')" @select="handleLogMenu($event, selectedLogItem)"></ui-row-menu>
+        </template>
+        <section v-if="selectedLogItem" class="log-inspector" :id="'log-detail-'+selectedLogItem.log.id">
           <ui-tabs class="log-inspector-tabs" variant="compact" v-model="inspectorTab"
             :items="inspectorTabs" :aria-label="t('stats.inspectorViews')"></ui-tabs>
 
@@ -742,8 +698,7 @@ const StatsPage = {
             </ol>
           </div>
         </section>
-        </Teleport>
-      </div>
+      </ui-detail-drawer>
     </div>
   `
 };

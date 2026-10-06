@@ -359,7 +359,7 @@ class ListRefinementResourceTest {
                 .contains("min-height: var(--workspace-row-primary-h);")
                 .contains(".workspace-row-primary-end { justify-content: flex-end }");
 
-        for (String page : new String[]{"StatsPage", "AuditPage", "IssuesPage", "AccountsPage"}) {
+        for (String page : new String[]{"AuditPage", "IssuesPage", "AccountsPage"}) {
             assertThat(text("components/" + page + ".js"))
                     .as(page + " aligned list rows")
                     .contains("workspace-primary-aligned-table")
@@ -553,16 +553,14 @@ class ListRefinementResourceTest {
                 .contains("{{fmtTime(r.updatedAt)}}")
                 .contains("<ui-row-menu");
         assertThat(text("components/RulesPage.js")).contains("<rule-table").doesNotContain("<rule-group-row");
+        // Request logs use the shared single-line row: time, method, endpoint + description, duration, result, ⋯ menu.
         assertThat(text("components/StatsPage.js"))
-                .contains("class=\"log-request-description\"")
+                .contains("<span class=\"rule-desc\" :title=\"requestDescription(item)\">{{requestDescription(item)}}</span>")
                 .contains("forwardTargetName(item.log.forwardTarget)")
-                .contains("class=\"log-responsive-duration tabular-nums\"")
-                .contains("class=\"log-time-cell\"")
-                .contains("class=\"col-hide-md log-duration-cell\"")
-                .contains("return this.compactLogTable ? 4 : 5;")
-                .contains("class=\"col-actions col-actions-1\"")
-                .contains("<span class=\"rule-protocol\">{{item.log.protocol}}</span>")
-                .contains("class=\"badge badge-method\"")
+                .contains("class=\"col-duration cell-end cell-mono cell-subtle\">{{item.log.responseTimeMs}} ms</td>")
+                .contains("class=\"col-time cell-mono cell-subtle\"")
+                .contains("class=\"rule-method\" :data-method=\"item.log.protocol==='HTTP' ? item.log.method : null\"")
+                .contains("<ui-row-menu :items=\"logMenuItems(item)\"")
                 .contains("t('stats.createRuleFromLog')");
         assertThat(text("components/ResponsesPage.js"))
                 .contains("<ui-row-menu :items=\"menuItems(r)\"")
