@@ -520,7 +520,12 @@
     "emptyHint": "Changes appear here after rules or responses are created, edited, or deleted.",
     "totalCount": "{count} total",
     "filtering": "Filtering",
-    "clickClearFilter": "Click to Clear Filter"
+    "clickClearFilter": "Click to Clear Filter",
+    "loadFailed": "Could not load audit logs. Please try again.",
+    "emptyFilterResult": "No audit logs match these filters",
+    "openRule": "Open rule",
+    "openResponse": "Open response",
+    "changesTitle": "Changes"
   },
   "monitoring": {
     "title": "Resource monitoring",

@@ -52,7 +52,7 @@ class WorkspaceTableResourceTest {
         assertThat(rules).contains("class=\"col-updated cell-mono cell-subtle\" :title=\"fmtTime(r.updatedAt,false)")
                 .contains("{{fmtTime(r.updatedAt)}}");
         assertThat(responses).contains("class=\"col-updated cell-mono cell-subtle\" :title=\"fmtTime(r.updatedAt,false)\"");
-        assertThat(audit).contains("class=\"col-datetime audit-time-column\"");
+        assertThat(audit).contains("class=\"col-time cell-mono cell-subtle\" :title=\"fmtTime(log.timestamp,false)\">{{fmtTime(log.timestamp)}}</td>");
     }
 
     @Test

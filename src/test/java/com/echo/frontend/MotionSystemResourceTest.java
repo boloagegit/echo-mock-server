@@ -37,7 +37,7 @@ class MotionSystemResourceTest {
         }
         assertThat(resourceText("static/components/RuleEditModal.js"))
                 .contains("<Transition name=\"ui-mode-panel-motion\" mode=\"out-in\">");
-        for (String list : new String[]{"AuditPage", "IssuesPage"}) {
+        for (String list : new String[]{"IssuesPage"}) {
             assertThat(resourceText("static/components/" + list + ".js"))
                     .contains("<Transition name=\"ui-detail-row-motion\">");
         }
@@ -45,6 +45,7 @@ class MotionSystemResourceTest {
         assertThat(resourceText("static/components/UiDetailDrawer.js")).contains("<Transition name=\"ui-drawer-motion\">");
         assertThat(resourceText("static/components/ResponsesPage.js")).contains("<response-detail");
         assertThat(resourceText("static/components/StatsPage.js")).contains("<ui-detail-drawer class=\"log-detail-drawer\"");
+        assertThat(resourceText("static/components/AuditPage.js")).contains("<ui-detail-drawer class=\"audit-detail-drawer\"");
         assertThat(resourceText("static/console.css"))
                 .contains(".ui-drawer-motion-enter-active,")
                 .contains("@media (prefers-reduced-motion: reduce) {\n    .ui-drawer-motion-enter-active,");

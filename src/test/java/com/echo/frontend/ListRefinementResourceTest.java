@@ -359,7 +359,7 @@ class ListRefinementResourceTest {
                 .contains("min-height: var(--workspace-row-primary-h);")
                 .contains(".workspace-row-primary-end { justify-content: flex-end }");
 
-        for (String page : new String[]{"AuditPage", "IssuesPage", "AccountsPage"}) {
+        for (String page : new String[]{"IssuesPage", "AccountsPage"}) {
             assertThat(text("components/" + page + ".js"))
                     .as(page + " aligned list rows")
                     .contains("workspace-primary-aligned-table")
@@ -593,12 +593,13 @@ class ListRefinementResourceTest {
                 .contains("<button type=\"button\" class=\"detail-link\" @click=\"$emit('go-to-rule', rule.id)\">")
                 .contains("t('responses.linkedRulesTitle')")
                 .contains("t('responses.noVisibleLinkedRules')");
+        // Audit rows expose selection; the change diff opens in the shared drawer with its own heading.
         assertThat(text("components/AuditPage.js"))
-                .contains(":aria-expanded=\"selectedAudit===log.id\"")
-                .contains(":id=\"'audit-detail-'+log.id\"")
+                .contains(":aria-selected=\"selectedAudit===log.id ? 'true' : 'false'\"")
+                .contains("<ui-detail-drawer class=\"audit-detail-drawer\"")
                 .contains("{{auditActionLabel(log.action)}}")
-                .contains("auditViewportWidth: window.innerWidth")
-                .contains(":colspan=\"auditDetailColspan\"");
+                .contains("t('audit.changesTitle')")
+                .doesNotContain("colspan");
         assertThat(text("composables/useAudit.js"))
                 .contains("createdBy', 'updatedBy'")
                 .contains("action: t('auditFields.action')")

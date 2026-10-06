@@ -627,7 +627,7 @@ const useRules = (deps) => {
         if (r && r.ok) { const data = await r.json(); const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `rule-${id.substring(0, 8)}.json`; a.click(); showToast(t('toast.ruleJsonExported'), 'success'); }
     };
 
-    const goToRule = id => { deps.page.value = 'rules'; ruleFilter.value.keyword = id; };
+    const goToRule = id => { deps.page.value = 'rules'; ruleFilter.value.keyword = id; openRuleDetail({ id }); };
 
     // --- 匯出匯入整合 dropdown ---
     const showDataDropdown = ref(false);

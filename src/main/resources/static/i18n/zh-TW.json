@@ -520,7 +520,12 @@
     "emptyHint": "建立、修改或刪除規則與回應後，變更內容會顯示在這裡。",
     "totalCount": "共 {count} 筆",
     "filtering": "篩選中",
-    "clickClearFilter": "清除篩選"
+    "clickClearFilter": "清除篩選",
+    "loadFailed": "無法載入修訂記錄，請稍後再試。",
+    "emptyFilterResult": "找不到符合條件的修訂記錄",
+    "openRule": "開啟規則",
+    "openResponse": "開啟回應",
+    "changesTitle": "變更內容"
   },
   "monitoring": {
     "title": "資源監控",

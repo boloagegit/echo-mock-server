@@ -517,3 +517,14 @@
     .page.active > .ui-filter-chip-list,
     .page.active > .batch-bar { animation: none }
 }
+
+/* ===== Audit list and change drawer ===== */
+.audit-table .col-time { width: 124px }
+.audit-table .col-action { width: 132px }
+.audit-table .col-operator { width: 140px }
+.audit-table .col-actions { width: 56px }
+.audit-action { display: inline-flex; align-items: center; gap: var(--space-sm) }
+@container (max-width: 760px) { .audit-table .col-operator { display: none } .audit-table .rule-desc { display: none } }
+.audit-detail-drawer .ac-list { display: flex; flex-direction: column; gap: 8px }
+.audit-detail-drawer .ac-block-diff { grid-template-columns: minmax(0, 1fr) }
+.help-tooltip.is-warning { color: var(--warning-text) }

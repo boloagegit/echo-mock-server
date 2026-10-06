@@ -16,6 +16,7 @@ class ListSystemResourceTest {
             {"RulesPage", "RuleTable", "batch"},
             {"ResponsesPage", "ResponsesPage", "batch"},
             {"StatsPage", "StatsPage", ""},
+            {"AuditPage", "AuditPage", ""},
     };
 
     @Test
@@ -69,6 +70,14 @@ class ListSystemResourceTest {
         assertThat(text("components/ResponsesPage.js"))
                 .contains(":data-tooltip=\"t('responses.sharedInfo')\"")
                 .doesNotContain("page-subtitle");
+    }
+
+    @Test
+    void auditLoadFailuresAreNotShownAsAnEmptyHistory() throws IOException {
+        assertThat(text("composables/useAudit.js")).contains("deps.loading.value.auditError = !(r && r.ok);");
+        assertThat(text("components/AuditPage.js"))
+                .contains("<ui-load-state v-if=\"loading.auditError && !loading.audit\" kind=\"error\"")
+                .contains("t('audit.emptyFilterResult')");
     }
 
     private static String text(String path) throws IOException {
