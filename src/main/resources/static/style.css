@@ -6601,3 +6601,13 @@ select.form-select-sm { height: 32px; min-height: 32px; border-radius: 5px; padd
 
 /* Bootstrap links follow the deployment accent instead of Bootstrap blue. */
 :root { --bs-link-color: var(--primary); --bs-link-color-rgb: var(--primary-rgb); --bs-link-hover-color: var(--primary-strong); --bs-link-hover-color-rgb: var(--primary-rgb) }
+
+/* Rule editor: the selected method carries its own colour; paths read as code. */
+.method-group .ui-choice-group__option.method-btn.active { border-color: currentColor; background: color-mix(in srgb, currentColor 12%, transparent); font-family: var(--font-mono) }
+.method-group .ui-choice-group__option.method-btn.active.GET { color: var(--method-get) }
+.method-group .ui-choice-group__option.method-btn.active.POST { color: var(--method-post) }
+.method-group .ui-choice-group__option.method-btn.active.PUT { color: var(--method-put) }
+.method-group .ui-choice-group__option.method-btn.active.PATCH { color: var(--method-patch) }
+.method-group .ui-choice-group__option.method-btn.active.DELETE { color: var(--method-delete) }
+.method-group .ui-choice-group__option.method-btn { font-family: var(--font-mono) }
+#rule-http-path { font-family: var(--font-mono) }
