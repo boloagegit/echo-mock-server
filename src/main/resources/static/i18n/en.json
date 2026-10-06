@@ -1687,13 +1687,8 @@
     "registerSubmit": "Create Account",
     "registerSuccess": "Account created! You can now log in.",
     "registerBack": "Back to Login",
-    "heading": "Sign in",
-    "brandTagline": "Every request gets the echo you expect.",
-    "brandDescription": "A dual-protocol HTTP and JMS mock server. Match requests with rules, then return mock responses, forward downstream or inject faults.",
-    "demoLabel": "How rules match",
-    "demoMock": "→ Mock response",
-    "demoReply": "→ JMS reply",
-    "demoForward": "→ Forward downstream"
+    "environment": "{env} environment",
+    "version": "Version"
   },
   "issues": {
     "title": "Issues",

@@ -1687,13 +1687,8 @@
     "registerSubmit": "建立帳號",
     "registerSuccess": "帳號已建立，現在可以登入。",
     "registerBack": "返回登入",
-    "heading": "登入",
-    "brandTagline": "每個請求，都有預期的回聲。",
-    "brandDescription": "HTTP 與 JMS 雙協定模擬伺服器。以規則匹配請求，回傳模擬內容、轉發下游，或注入故障。",
-    "demoLabel": "規則匹配示意",
-    "demoMock": "→ 回傳模擬回應",
-    "demoReply": "→ 回覆 JMS 訊息",
-    "demoForward": "→ 轉發下游"
+    "environment": "{env} 環境",
+    "version": "版本"
   },
   "issues": {
     "title": "問題回報",
