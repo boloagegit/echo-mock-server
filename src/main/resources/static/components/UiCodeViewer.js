@@ -1,11 +1,25 @@
 /**
  * UiCodeViewer - 抽屜裡的長內容檢視器（唯讀）
  *
- * 行號、換行切換、格式化（JSON）、複製與全文搜尋（Enter／Shift+Enter 跳下一筆／上一筆）。
+ * 行號、換行切換、格式化（JSON／XML）、複製與全文搜尋（Enter／Shift+Enter 跳下一筆／上一筆）。
  * 高度依內容，最多 maxHeight（抽屜加寬時更高），超過就在檢視器內捲動；CodeMirror 只繪製
  * 看得到的行，幾百 KB 的內容也不必截斷。
  */
 const CODE_VIEWER_MARK_LIMIT = 2000;
+const CODE_VIEWER_FORMAT_LIMIT = 2000000;
+/** Indents XML one element per line (enough for reading SOAP / JMS payloads). */
+const formatXmlForReading = xml => {
+  let formatted = '';
+  let indent = 0;
+  for (const part of xml.replace(/(>)\s*(<)/g, '$1\n$2').split('\n')) {
+    const line = part.trim();
+    if (!line) continue;
+    if (line.startsWith('</')) indent = Math.max(indent - 1, 0);
+    formatted += '  '.repeat(indent) + line + '\n';
+    if (line.startsWith('<') && !line.startsWith('</') && !line.startsWith('<?') && !line.startsWith('<!') && !line.endsWith('/>') && !line.includes('</')) indent++;
+  }
+  return formatted.trim();
+};
 const UiCodeViewer = {
   inject: ['t'],
   props: {
@@ -25,10 +39,11 @@ const UiCodeViewer = {
       return 'text/plain';
     },
     canFormat() {
-      return this.mode === 'application/json' && this.value.length <= 2000000;
+      return this.mode !== 'text/plain' && this.value.length <= CODE_VIEWER_FORMAT_LIMIT;
     },
     text() {
       if (!this.formatted || !this.canFormat) return this.value;
+      if (this.mode === 'xml') return formatXmlForReading(this.value);
       try { return JSON.stringify(JSON.parse(this.value), null, 2); } catch { return this.value; }
     },
   },

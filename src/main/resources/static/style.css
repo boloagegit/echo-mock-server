@@ -1938,12 +1938,7 @@ textarea.form-control { min-height: 80px; font-family: var(--font-mono); font-si
 .ac-block-panel { flex: 1; min-width: 0 }
 .ac-block-panel + .ac-block-panel { border-left: 1px solid var(--border) }
 .ac-block-title { padding: 0.25rem 0.6rem; font-size: var(--font-xs); color: var(--muted); font-weight: 500 }
-.ac-block-panel pre { margin: 0; padding: 0.4rem 0.6rem; font-size: var(--font-sm); white-space: pre-wrap; word-break: break-word; line-height: 1.5; background: none }
-.ac-block-before pre { color: var(--danger) }
-.ac-block-after pre { color: var(--success) }
-.ac-block-pre { margin: 0; padding: 0.4rem 0.6rem; font-size: var(--font-sm); white-space: pre-wrap; word-break: break-word; line-height: 1.5; color: var(--text) }
 .audit-no-change { padding: 0.75rem 1rem; color: var(--muted); font-size: var(--font-sm) }
-.audit-raw { margin: 0; padding: 0.5rem 0.75rem; font-size: var(--font-sm); white-space: pre-wrap; word-break: break-word; color: var(--text); background: var(--code-bg); border: 1px solid var(--border); border-radius: 4px }
 tr.active { background: var(--hover) }
 
 /* Expanded audit diff */
@@ -1951,7 +1946,6 @@ tr.active { background: var(--hover) }
 .audit-workspace .ac-block-label { border-bottom: 0; background: var(--surface-control) }
 .audit-workspace .ac-block-panel + .ac-block-panel { border-left: 0 }
 .audit-workspace .ac-block-after { background: var(--surface-success-soft) }
-.audit-workspace .audit-raw { border: 0; border-radius: var(--radius-panel) }
 .audit-workspace .workspace-search-compact { width: 100%; min-width: 0; max-width: none }
 .audit-workspace .workspace-search-field:not(.workspace-search-compact) { min-width: 0 }
 .logs-workspace .page-heading .help-tooltip { margin-inline-start: calc(var(--space-xs) * -1) }
@@ -2115,63 +2109,6 @@ tr.active { background: var(--hover) }
     white-space: nowrap;
 }
 .log-body-size { color: var(--muted); font-size: var(--font-xs); white-space: nowrap }
-.log-inspector-pane .log-body-tools { justify-self: end; min-width: 0 }
-.log-inspector-pane .log-body-tools > .btn-icon {
-    width: 32px;
-    height: 32px;
-    flex: 0 0 32px;
-    border: 0;
-    background: var(--surface-control);
-}
-.log-inspector-pane .log-body-tools > .btn-icon:hover { background: rgba(var(--muted-rgb), 0.12) }
-.log-inspector-pane .log-body-tools > .btn-icon.active { background: var(--surface-primary-strong); color: var(--primary) }
-.log-inspector-pane .pv-search-bar { min-width: 0; min-height: 32px; padding: 2px; border-radius: var(--radius-control); background: var(--surface-control) }
-.log-inspector-pane .pv-search-bar input {
-    width: 144px;
-    min-width: 80px;
-    min-height: 28px;
-    padding: 0 var(--space-sm);
-    border: 0;
-    border-radius: calc(var(--radius-control) - 2px);
-    background: transparent;
-}
-.log-inspector-pane .pv-search-bar input:focus-visible { outline: 0; background: var(--card); box-shadow: var(--focus-ring) }
-.log-inspector-pane .pv-search-bar button {
-    display: inline-grid;
-    place-items: center;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border-radius: calc(var(--radius-control) - 2px);
-}
-.log-inspector-pane .pv-search-bar button:hover { background: rgba(var(--muted-rgb), 0.12); color: var(--text) }
-.log-inspector-pane .pv-search-bar button:focus-visible { outline: 0; color: var(--text); box-shadow: var(--focus-ring) }
-.log-inspector-pane > .pv-pre {
-    flex: 1 1 auto;
-    min-height: 0;
-    max-height: none;
-    border-color: var(--separator);
-    border-radius: var(--radius-panel);
-    white-space: pre;
-    word-break: normal;
-}
-.log-inspector-pane > .pv-cm-container {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: hidden;
-    border: 1px solid var(--separator);
-    border-radius: var(--radius-panel);
-}
-.log-inspector-pane > .pv-cm-container .CodeMirror { width: 100%; height: 100% !important; font-size: var(--font-sm) }
-.log-inspector-pane > .pv-cm-container .CodeMirror,
-.log-inspector-pane > .pv-cm-container .CodeMirror-gutters { color: var(--text); background: var(--code-bg) }
-.log-inspector-pane > .pv-cm-container .CodeMirror-gutters { border-color: var(--separator) }
-.log-inspector-pane > .pv-cm-container .CodeMirror-linenumber { color: var(--muted) }
-.log-inspector-pane > .pv-cm-container .cm-string { color: var(--warning) }
-.log-inspector-pane > .pv-cm-container .cm-property,
-.log-inspector-pane > .pv-cm-container .cm-attribute { color: var(--primary) }
-.log-inspector-pane > .pv-cm-container .cm-number,
-.log-inspector-pane > .pv-cm-container .cm-atom { color: var(--purple) }
 .log-overview-surface {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2260,31 +2197,6 @@ tr.active { background: var(--hover) }
     overflow: auto;
 }
 .log-inspector-trace .match-chain-list { overflow: visible; padding: 0; background: transparent }
-
-.log-body-tools { display: flex; align-items: center; gap: var(--space-xs) }
-.logs-workspace .log-body-tools > .btn-icon { width: 32px; height: 32px; flex: 0 0 32px; border: 0; background: var(--surface-control) }
-.logs-workspace .log-body-tools > .btn-icon:hover { background: rgba(var(--muted-rgb), 0.12) }
-.logs-workspace .log-body-tools > .btn-icon.active { background: var(--surface-primary-strong); color: var(--primary) }
-.logs-workspace .pv-search-bar { min-height: 32px; padding: 2px; border-radius: var(--radius-control); background: var(--surface-control) }
-.logs-workspace .pv-search-bar input {
-    width: 156px;
-    min-height: 28px;
-    padding: 0 var(--space-sm);
-    border: 0;
-    border-radius: calc(var(--radius-control) - 2px);
-    background: transparent;
-}
-.logs-workspace .pv-search-bar input:focus-visible { outline: 0; background: var(--card); box-shadow: var(--focus-ring) }
-.logs-workspace .pv-search-bar button {
-    display: inline-grid;
-    place-items: center;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border-radius: calc(var(--radius-control) - 2px);
-}
-.logs-workspace .pv-search-bar button:hover { background: rgba(var(--muted-rgb), 0.12); color: var(--text) }
-.logs-workspace .pv-search-bar button:focus-visible { outline: 0; color: var(--text); box-shadow: var(--focus-ring) }
 
 .workspace-pagination.card-table-footer {
     display: grid;
@@ -3064,90 +2976,6 @@ select.is-invalid {
     font-weight: var(--font-weight-semibold);
     line-height: 1.4;
 }
-.pv-pre {
-    margin: 0;
-    padding: 0.5rem 0.75rem;
-    font-size: var(--font-sm);
-    font-family: var(--font-mono);
-    background: var(--code-bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-panel);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    max-height: 180px;
-    overflow: auto;
-    color: var(--text);
-    line-height: 1.5;
-    position: relative;
-}
-.pv-pre.expanded {
-    max-height: none;
-}
-/* 搜尋高亮 */
-.pv-pre .pv-highlight {
-    background: rgba(240, 180, 41, 0.35);
-    color: var(--text);
-    border-radius: 2px;
-    padding: 0 1px;
-}
-.pv-pre .pv-highlight-current {
-    background: rgba(240, 180, 41, 0.7);
-    outline: 1px solid var(--warning);
-}
-/* 展開/收合按鈕 */
-/* 搜尋列 */
-.pv-search-bar {
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
-    min-height: 32px;
-    padding: 2px;
-    border-radius: var(--radius-control);
-    background: var(--surface-control);
-}
-.pv-search-bar input {
-    font-size: var(--font-sm);
-    min-height: 28px;
-    padding: 0 var(--space-sm);
-    background: transparent;
-    border: 0;
-    border-radius: calc(var(--radius-control) - 2px);
-    color: var(--text);
-    width: 140px;
-    outline: none;
-    transition: border-color var(--motion-fast) var(--ease-standard);
-}
-.pv-search-bar input:focus {
-    background: var(--card);
-    box-shadow: var(--focus-ring);
-}
-.pv-search-bar .pv-search-count {
-    font-size: var(--font-xs);
-    color: var(--muted);
-    white-space: nowrap;
-}
-.pv-search-bar button {
-    display: inline-grid;
-    place-items: center;
-    width: 28px;
-    height: 28px;
-    background: none;
-    border: none;
-    color: var(--muted);
-    cursor: pointer;
-    padding: 0;
-    border-radius: calc(var(--radius-control) - 2px);
-    font-size: var(--font-sm);
-    line-height: 1;
-    transition: color var(--motion-fast) var(--ease-standard);
-}
-.pv-search-bar button:hover {
-    color: var(--text);
-    background: rgba(var(--muted-rgb), 0.12);
-}
-.pv-search-bar button:focus-visible { outline: 0; box-shadow: var(--focus-ring) }
-/* Use the available table width, not the browser width, to avoid tall preview rows. */
-
 /* Rule table guidance and progressive row actions */
 @keyframes hintFadeIn {
     from { opacity: 0; transform: translateY(-4px) }
@@ -4356,13 +4184,13 @@ a:focus-visible,
     }
 }
 
-.ui-toggle { position: relative; width: 32px; height: 32px; display: inline-flex; align-items: center; cursor: pointer }
-.ui-toggle input { position: absolute; width: 1px; height: 1px; opacity: 0 }
+.ui-toggle { position: relative; width: 32px; height: 32px; display: inline-flex; align-items: center; flex: none; padding: 0; border: 0; background: none; color: inherit; cursor: pointer }
 .ui-toggle__track { width: 32px; height: 18px; padding: 2px; display: block; border: 1px solid var(--border2); border-radius: 10px; background: var(--surface-control); transition: background-color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard) }
 .ui-toggle__track::after { content: ""; width: 12px; height: 12px; display: block; border-radius: 50%; background: var(--muted); transition: transform var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard) }
-.ui-toggle input:checked + .ui-toggle__track { border-color: var(--btn-primary); background: var(--btn-primary) }
-.ui-toggle input:checked + .ui-toggle__track::after { transform: translateX(14px); background: var(--on-primary) }
-.ui-toggle input:focus-visible + .ui-toggle__track { outline: 2px solid var(--primary); outline-offset: 2px }
+.ui-toggle[aria-checked="true"] .ui-toggle__track { border-color: var(--btn-primary); background: var(--btn-primary) }
+.ui-toggle[aria-checked="true"] .ui-toggle__track::after { transform: translateX(14px); background: var(--on-primary) }
+.ui-toggle:focus-visible { outline: 0 }
+.ui-toggle:focus-visible .ui-toggle__track { outline: 2px solid var(--primary); outline-offset: 2px }
 .ui-toggle.is-disabled { opacity: 0.55; cursor: not-allowed }
 
 /* Native form controls retain their semantics; these shared rules are their primitive contract. */

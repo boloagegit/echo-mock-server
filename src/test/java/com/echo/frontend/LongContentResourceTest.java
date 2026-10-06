@@ -44,13 +44,32 @@ class LongContentResourceTest {
         assertThat(text("console.css"))
                 .contains(".ui-code-viewer { border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--code-bg); overflow: clip }")
                 .contains(".ui-code-viewer__toolbar { position: sticky;")
-                .contains(".audit-detail-drawer .audit-raw { max-height: 320px; overflow: auto }")
                 .contains(".audit-detail-drawer .ac-block-diff { flex-direction: column }")
-                .contains(".log-detail-drawer .log-inspector-pane > .pv-pre { max-height: 420px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere }");
-        assertThat(text("components/StatsPage.js"))
-                .contains("const height = Math.min(420, Math.ceil(cm.defaultTextHeight() * cm.lineCount()) + 12);");
+                .contains(".audit-detail-drawer .ac-block .ui-code-viewer { border: 0; border-radius: 0 }");
         assertThat(text("index.html").indexOf("/components/UiCodeViewer.js?v="))
                 .isPositive().isLessThan(text("index.html").indexOf("/app.js?v="));
+    }
+
+    @Test
+    void requestLogAndAuditDrawersShareTheSameViewer() throws IOException {
+        // Request and response bodies: one viewer each, no page-specific CodeMirror, search or format code.
+        assertThat(text("components/StatsPage.js"))
+                .contains("<ui-code-viewer v-if=\"shownLogItem._detail?.requestBody\" :key=\"'reqBody-'+shownLogItem.log.id\"")
+                .contains("<ui-code-viewer v-if=\"shownLogItem._detail?.responseBody\" :key=\"'resBody-'+shownLogItem.log.id\"")
+                .doesNotContain("CodeMirror(")
+                .doesNotContain("fitCodeMirror")
+                .doesNotContain("bodySearch");
+        // Long audit values (before / after, single values, unreadable raw data) use it too.
+        assertThat(text("components/AuditPage.js"))
+                .contains("<ui-code-viewer :value=\"String(c.before ?? '')\"")
+                .contains("<ui-code-viewer :value=\"String(c.after ?? '')\"")
+                .contains("<ui-code-viewer :value=\"String(c.value ?? '')\"")
+                .contains("<ui-code-viewer :value=\"String(detail.raw ?? '')\"")
+                .doesNotContain("<pre");
+        assertThat(text("style.css"))
+                .doesNotContain(".pv-search-bar")
+                .doesNotContain(".pv-cm-container")
+                .doesNotContain(".audit-raw");
     }
 
     @Test

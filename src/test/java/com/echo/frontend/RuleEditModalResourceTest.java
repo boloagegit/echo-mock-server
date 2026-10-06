@@ -161,7 +161,7 @@ class RuleEditModalResourceTest {
 
         // The header names the rule being edited, with the same method colour as the list.
         assertThat(component)
-                .contains("<p v-if=\"form.matchKey\" class=\"rule-modal-context\">")
+                .contains("<p class=\"rule-modal-context\">")
                 .contains("<span class=\"rule-method\" :data-method=\"form.protocol==='HTTP' ? (form.method || 'GET') : null\"")
                 .doesNotContain("modal-heading-icon")
                 .doesNotContain("rule-pane-heading-icon");
@@ -230,6 +230,40 @@ class RuleEditModalResourceTest {
         assertThat(resourceText("static/console.css"))
                 .contains(".rule-test-bar .rule-test-panel > .rule-test-output { grid-column: 2; grid-row: 1 / span 4; margin: 0 }")
                 .contains(".rule-pane-heading .ui-segmented-control__description { display: none }");
+    }
+
+    @Test
+    void switchingProtocolSwapsFieldsInPlaceWithoutMovingTheRestOfTheEditor() throws IOException {
+        String component = resourceText("static/components/RuleEditModal.js");
+        String console = resourceText("static/console.css");
+
+        // The header summary is always there (a placeholder until the path / queue is set), so its height never changes.
+        assertThat(component)
+                .contains("<p class=\"rule-modal-context\">")
+                .contains("<span v-else class=\"rule-modal-context__pending\">{{form.protocol==='HTTP' ? t('modal.pathPending') : t('modal.queuePending')}}</span>");
+        // Request: HTTP and JMS fill one slot with the same rhythm (destination, then a field with one hint).
+        assertThat(component)
+                .contains("<div class=\"form-block rule-protocol-slot\" data-tour=\"match\">")
+                .contains("<div v-if=\"form.protocol==='HTTP'\" key=\"http\" class=\"rule-protocol-fields\">")
+                .contains("<div v-else key=\"jms\" class=\"rule-protocol-fields\">")
+                .contains("<input id=\"rule-jms-queue\" class=\"form-control rule-path-input\"")
+                .contains("{{t('modal.queueMatchHint')}}");
+        // Response: JMS keeps the shape row and says what the reply is instead of dropping it.
+        assertThat(component)
+                .contains("<div v-else key=\"jms\" class=\"response-status-row response-status-row--jms\">")
+                .contains("<code class=\"response-reply-type\">TextMessage</code>");
+        assertThat(component.split("<Transition name=\"rule-protocol-swap\">", -1)).hasSize(3);
+        // Only the incoming fields fade; the outgoing ones leave at once so the two sets never stack.
+        assertThat(console)
+                .contains(".response-status-row { min-height: calc(var(--control-h-sm) + 2 * var(--editor-shell-padding) + 2px) }")
+                .contains(".rule-protocol-swap-enter-from { opacity: 0 }")
+                .contains(".rule-protocol-swap-leave-active { display: none }")
+                .contains("@media (prefers-reduced-motion: reduce) { .rule-protocol-swap-enter-active { transition: none } }");
+        for (String lang : new String[]{"zh-TW", "en"}) {
+            assertThat(resourceText("static/i18n/" + lang + ".json")).as(lang)
+                    .contains("\"pathPending\"").contains("\"queuePending\"").contains("\"queueMatchHint\"")
+                    .contains("\"jmsReplyLabel\"").contains("\"jmsReplyHint\"");
+        }
     }
 
     @Test

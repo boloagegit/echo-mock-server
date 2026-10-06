@@ -40,9 +40,6 @@ const StatsPage = {
   })],
   data() {
     return {
-      bodySearch: {},
-      bodySearchIdx: {},
-      bodyFormatted: {},
       inspectorTab: 'body',
     };
   },
@@ -87,60 +84,6 @@ const StatsPage = {
         this.inspectorTab = 'body';
       }
     },
-    logDetailExpanded: {
-      deep: true,
-      handler(newVal) {
-        this.$nextTick(() => {
-          for (const item of this.pagedLogs) {
-            const id = item.log.id;
-            if (!id || !newVal[id]) { continue; }
-            // 新選取的紀錄 — 自動啟用 CodeMirror 格式化
-            const detail = item._detail;
-            if (!detail) { continue; }
-            if (detail.requestBody) {
-              const rk = 'reqBody-' + id;
-              if (!this.bodyFormatted[rk]) { this.toggleBodyFormat(rk, detail.requestBody); }
-            }
-            if (detail.responseBody) {
-              const rk = 'resBody-' + id;
-              if (!this.bodyFormatted[rk]) { this.toggleBodyFormat(rk, detail.responseBody); }
-            }
-          }
-        });
-      }
-    }
-  },
-  updated() {
-    this.$nextTick(() => {
-      for (const item of this.pagedLogs) {
-        const id = item.log.id;
-        if (!id || !this.logDetailExpanded[id]) { continue; }
-        const detail = item._detail;
-        if (!detail) { continue; }
-        for (const [prefix, body] of [['reqBody-', detail.requestBody], ['resBody-', detail.responseBody]]) {
-          if (!body) { continue; }
-          const refKey = prefix + id;
-          if (this.bodyFormatted[refKey]) {
-            this._reinitCmIfNeeded(refKey, body);
-          }
-        }
-      }
-    });
-  },
-  beforeUnmount() {
-    // 清理所有 CodeMirror instances 和 marks
-    if (this.cmInstances) {
-      for (const key of Object.keys(this.cmInstances)) {
-        try { this.cmInstances[key].toTextArea(); } catch { /* ignore */ }
-      }
-      this.cmInstances = {};
-    }
-    if (this.cmMarks) {
-      for (const key of Object.keys(this.cmMarks)) {
-        if (this.cmMarks[key]) { this.cmMarks[key].forEach(m => { try { m.clear(); } catch { /* ignore */ } }); }
-      }
-      this.cmMarks = {};
-    }
   },
   methods: {
     shortId, fmtTime, fmtSize, reasonText,
@@ -170,216 +113,6 @@ const StatsPage = {
       if (item.log.matched && item.log.ruleId) { return this.t('stats.deletedRuleDescription'); }
       if (item.log.forwarded) { return this.t('stats.defaultForwardDescription'); }
       return this.t('stats.unmatchedDescription');
-    },
-    /** 取得 detail body（從 lazy-loaded _detail） */
-    _getBody(item, type) {
-      const detail = item._detail;
-      if (!detail) { return null; }
-      return type === 'req' ? detail.requestBody : detail.responseBody;
-    },
-    /** 收合再展開後 DOM 被重建，CodeMirror 需要重新掛載 */
-    _reinitCmIfNeeded(refKey, text) {
-      this.cmInstances = this.cmInstances || {};
-      const cm = this.cmInstances[refKey];
-      const refs = this.$refs[refKey];
-      const el = Array.isArray(refs) ? refs[0] : refs;
-      if (!el) { return; }
-      // 如果 el 是空的（DOM 重建後），重新初始化
-      if (cm) {
-        // 檢查 cm 的 wrapper 是否還在 DOM 中
-        try {
-          if (el.contains(cm.getWrapperElement())) { return; } // 仍在 DOM，不需重建
-        } catch { /* ignore */ }
-        // wrapper 不在 DOM → 清理舊 instance
-        try { cm.toTextArea(); } catch { /* ignore */ }
-        delete this.cmInstances[refKey];
-      }
-      // 重新建立
-      const _detectMode = this.detectMode || ((t) => { const s = (t || '').trim(); if (s.startsWith('{') || s.startsWith('[')) { return 'application/json'; } if (s.startsWith('<')) { return 'xml'; } return 'text/plain'; });
-      const mode = _detectMode(text);
-      let formatted = text;
-      if (mode === 'application/json') {
-        try { formatted = JSON.stringify(JSON.parse(text), null, 2); } catch { /* keep original */ }
-      } else if (mode === 'xml') {
-        formatted = this.formatXml(text);
-      }
-      el.textContent = '';
-      this.cmInstances[refKey] = CodeMirror(el, {
-        value: formatted,
-        mode: mode,
-        readOnly: true,
-        lineNumbers: true,
-        lineWrapping: false,
-        theme: 'default'
-      });
-      this.cmInstances[refKey].getInputField()?.setAttribute(
-        'aria-label',
-        refKey.startsWith('reqBody-') ? this.t('stats.detailRequestBody') : this.t('stats.detailResponseBody')
-      );
-      this.fitCodeMirror(this.cmInstances[refKey], el);
-    },
-    /**
-     * A formatted body gets a definite height: as tall as its lines, at most 420px. Long bodies
-     * then scroll inside the editor, which only renders the lines in view.
-     */
-    fitCodeMirror(cm, container) {
-      if (!cm || !container) { return; }
-      const height = Math.min(420, Math.ceil(cm.defaultTextHeight() * cm.lineCount()) + 12);
-      container.style.height = height + 'px';
-      cm.refresh();
-    },
-    setBodySearch(refKey, val) {
-      this.bodySearch = { ...this.bodySearch, [refKey]: val };
-      this.bodySearchIdx = { ...this.bodySearchIdx, [refKey]: 0 };
-      this.cmHighlight(refKey);
-    },
-    bodyHighlight(refKey, text) {
-      const kw = (this.bodySearch[refKey] || '').trim();
-      if (!kw || !text) { return [{ text, hl: false }]; }
-      const parts = [];
-      const lower = text.toLowerCase();
-      const kwLower = kw.toLowerCase();
-      let pos = 0;
-      let idx = lower.indexOf(kwLower, pos);
-      while (idx !== -1) {
-        if (idx > pos) { parts.push({ text: text.slice(pos, idx), hl: false }); }
-        parts.push({ text: text.slice(idx, idx + kw.length), hl: true });
-        pos = idx + kw.length;
-        idx = lower.indexOf(kwLower, pos);
-      }
-      if (pos < text.length) { parts.push({ text: text.slice(pos), hl: false }); }
-      return parts;
-    },
-    bodyMatchCount(refKey, text) {
-      const kw = (this.bodySearch[refKey] || '').trim();
-      if (!kw || !text) { return 0; }
-      const lower = text.toLowerCase();
-      const kwLower = kw.toLowerCase();
-      let count = 0;
-      let pos = 0;
-      while ((pos = lower.indexOf(kwLower, pos)) !== -1) { count++; pos += kwLower.length; }
-      return count;
-    },
-    bodyMatchLabel(refKey, text) {
-      const total = this.bodyMatchCount(refKey, text);
-      if (total === 0) { return this.t('stats.bodySearchNoMatches'); }
-      return this.t('stats.bodySearchMatches', {current: (this.bodySearchIdx[refKey] || 0) + 1, total});
-    },
-    bodyNavSearch(refKey, text, dir) {
-      const total = this.bodyMatchCount(refKey, text);
-      if (total === 0) { return; }
-      let cur = (this.bodySearchIdx[refKey] || 0) + dir;
-      if (cur >= total) { cur = 0; }
-      if (cur < 0) { cur = total - 1; }
-      this.bodySearchIdx = { ...this.bodySearchIdx, [refKey]: cur };
-      const cm = this.cmInstances && this.cmInstances[refKey];
-      if (cm) {
-        this.cmHighlight(refKey);
-        return;
-      }
-      this.$nextTick(() => {
-        const refs = this.$refs[refKey];
-        const el = Array.isArray(refs) ? refs[0] : refs;
-        if (!el) { return; }
-        const active = el.querySelector('.pv-highlight-current');
-        if (active) { active.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
-      });
-    },
-    bodyHlIsCurrent(refKey, text, segIdx) {
-      const parts = this.bodyHighlight(refKey, text);
-      let matchIdx = 0;
-      for (let i = 0; i < parts.length; i++) {
-        if (parts[i].hl) {
-          if (i === segIdx) { return matchIdx === (this.bodySearchIdx[refKey] || 0); }
-          matchIdx++;
-        }
-      }
-      return false;
-    },
-    cmHighlight(refKey) {
-      const cm = this.cmInstances && this.cmInstances[refKey];
-      if (!cm) { return; }
-      this.cmMarks = this.cmMarks || {};
-      if (this.cmMarks[refKey]) { this.cmMarks[refKey].forEach(m => m.clear()); }
-      this.cmMarks[refKey] = [];
-      const kw = (this.bodySearch[refKey] || '').trim();
-      if (!kw) { return; }
-      const text = cm.getValue();
-      const kwLower = kw.toLowerCase();
-      const lower = text.toLowerCase();
-      let pos = 0;
-      let matchIdx = 0;
-      const curIdx = this.bodySearchIdx[refKey] || 0;
-      while ((pos = lower.indexOf(kwLower, pos)) !== -1) {
-        const from = cm.posFromIndex(pos);
-        const to = cm.posFromIndex(pos + kw.length);
-        const css = matchIdx === curIdx ? 'background: var(--warning, #ffc107); color: #000; border-radius: 2px;' : 'background: rgba(var(--warning-rgb, 255,193,7), 0.35); border-radius: 2px;';
-        this.cmMarks[refKey].push(cm.markText(from, to, { css }));
-        if (matchIdx === curIdx) { cm.scrollIntoView(from, 60); }
-        matchIdx++;
-        pos += kw.length;
-      }
-    },
-    toggleBodyFormat(refKey, text) {
-      this.bodyFormatted = { ...this.bodyFormatted, [refKey]: !this.bodyFormatted[refKey] };
-      if (this.bodyFormatted[refKey]) {
-        this.$nextTick(() => {
-          const refs = this.$refs[refKey];
-          const el = Array.isArray(refs) ? refs[0] : refs;
-          if (!el) { return; }
-          const _detectMode = this.detectMode || ((t) => { const s = (t || '').trim(); if (s.startsWith('{') || s.startsWith('[')) { return 'application/json'; } if (s.startsWith('<')) { return 'xml'; } return 'text/plain'; });
-          const mode = _detectMode(text);
-          let formatted = text;
-          if (mode === 'application/json') {
-            try { formatted = JSON.stringify(JSON.parse(text), null, 2); } catch { /* keep original */ }
-          } else if (mode === 'xml') {
-            formatted = this.formatXml(text);
-          }
-          el.textContent = '';
-          this.cmInstances = this.cmInstances || {};
-          if (this.cmInstances[refKey]) { try { this.cmInstances[refKey].toTextArea(); } catch { /* ignore */ } }
-          this.cmInstances[refKey] = CodeMirror(el, {
-            value: formatted,
-            mode: mode,
-            readOnly: true,
-            lineNumbers: true,
-            lineWrapping: false,
-            theme: 'default'
-          });
-          this.cmInstances[refKey].getInputField()?.setAttribute(
-            'aria-label',
-            refKey.startsWith('reqBody-') ? this.t('stats.detailRequestBody') : this.t('stats.detailResponseBody')
-          );
-          this.fitCodeMirror(this.cmInstances[refKey], el);
-        });
-      } else {
-        if (this.cmInstances && this.cmInstances[refKey]) {
-          const refs = this.$refs[refKey];
-          const el = Array.isArray(refs) ? refs[0] : refs;
-          try { this.cmInstances[refKey].toTextArea(); } catch { /* ignore */ }
-          delete this.cmInstances[refKey];
-          if (el) { el.textContent = text || ''; }
-        }
-      }
-    },
-    formatXml(xml) {
-      let formatted = '';
-      let indent = 0;
-      const parts = (xml || '').replace(/(>)\s*(<)/g, '$1\n$2').split('\n');
-      for (const part of parts) {
-        const trimmed = part.trim();
-        if (!trimmed) { continue; }
-        if (trimmed.startsWith('</')) { indent = Math.max(indent - 1, 0); }
-        formatted += '  '.repeat(indent) + trimmed + '\n';
-        if (trimmed.startsWith('<') && !trimmed.startsWith('</') && !trimmed.startsWith('<?') && !trimmed.endsWith('/>') && !trimmed.includes('</')) { indent++; }
-      }
-      return formatted.trim();
-    },
-    getFormattedText(refKey, text) {
-      if (this.cmInstances && this.cmInstances[refKey]) {
-        return this.cmInstances[refKey].getValue();
-      }
-      return text;
     },
     copyBody(text) {
       this.$emit('clip-copy', text);
@@ -589,66 +322,18 @@ const StatsPage = {
             <section class="log-inspector-pane ui-detail-panel" :aria-labelledby="'request-body-heading-'+shownLogItem.log.id">
               <div class="log-inspector-pane-header">
                 <h2 class="ui-detail-panel-heading" :id="'request-body-heading-'+shownLogItem.log.id">{{t('stats.detailRequestBody')}}</h2>
-                <span class="log-body-size tabular-nums">{{fmtSize(shownLogItem._detail?.requestBody?.length || 0)}}</span>
-                <div v-if="shownLogItem._detail?.requestBody" class="log-body-tools">
-                  <div class="pv-search-bar">
-                    <input :value="bodySearch['reqBody-'+shownLogItem.log.id]||''"
-                      @input="setBodySearch('reqBody-'+shownLogItem.log.id, $event.target.value)"
-                      :placeholder="t('rules.pvSearchBody')" :aria-label="t('stats.searchRequestBody')"
-                      @keydown.enter.prevent="bodyNavSearch('reqBody-'+shownLogItem.log.id, bodyFormatted['reqBody-'+shownLogItem.log.id] ? getFormattedText('reqBody-'+shownLogItem.log.id, shownLogItem._detail.requestBody) : shownLogItem._detail.requestBody, $event.shiftKey ? -1 : 1)">
-                    <span v-if="bodySearch['reqBody-'+shownLogItem.log.id]" class="pv-search-count">{{bodyMatchLabel('reqBody-'+shownLogItem.log.id, bodyFormatted['reqBody-'+shownLogItem.log.id] ? getFormattedText('reqBody-'+shownLogItem.log.id, shownLogItem._detail.requestBody) : shownLogItem._detail.requestBody)}}</span>
-                    <button v-if="bodySearch['reqBody-'+shownLogItem.log.id]" type="button"
-                      @click="bodyNavSearch('reqBody-'+shownLogItem.log.id, bodyFormatted['reqBody-'+shownLogItem.log.id] ? getFormattedText('reqBody-'+shownLogItem.log.id, shownLogItem._detail.requestBody) : shownLogItem._detail.requestBody, -1)"
-                      :title="t('rules.pvSearchPrev')" :aria-label="t('rules.pvSearchPrev')"><i class="bi bi-chevron-up" aria-hidden="true"></i></button>
-                    <button v-if="bodySearch['reqBody-'+shownLogItem.log.id]" type="button"
-                      @click="bodyNavSearch('reqBody-'+shownLogItem.log.id, bodyFormatted['reqBody-'+shownLogItem.log.id] ? getFormattedText('reqBody-'+shownLogItem.log.id, shownLogItem._detail.requestBody) : shownLogItem._detail.requestBody, 1)"
-                      :title="t('rules.pvSearchNext')" :aria-label="t('rules.pvSearchNext')"><i class="bi bi-chevron-down" aria-hidden="true"></i></button>
-                  </div>
-                  <ui-button type="button" class="btn btn-sm btn-icon btn-secondary"
-                    :class="{'active': bodyFormatted['reqBody-'+shownLogItem.log.id]}"
-                    :aria-pressed="!!bodyFormatted['reqBody-'+shownLogItem.log.id]"
-                    @click.stop="toggleBodyFormat('reqBody-'+shownLogItem.log.id, shownLogItem._detail.requestBody)"
-                    :title="t('rules.pvFormat')" :aria-label="t('rules.pvFormat')"><i class="bi bi-braces" aria-hidden="true"></i></ui-button>
-                  <ui-button type="button" class="btn btn-sm btn-icon btn-secondary" @click.stop="copyBody(shownLogItem._detail.requestBody)"
-                    :title="t('rules.copyFullContent')" :aria-label="t('rules.copyFullContent')"><i class="bi bi-clipboard" aria-hidden="true"></i></ui-button>
-                </div>
               </div>
-              <div v-if="shownLogItem._detail?.requestBody && bodyFormatted['reqBody-'+shownLogItem.log.id]"
-                :ref="'reqBody-'+shownLogItem.log.id" class="pv-cm-container"></div>
-              <pre v-else-if="shownLogItem._detail?.requestBody" :ref="'reqBody-'+shownLogItem.log.id" class="pv-pre"><template v-if="bodySearch['reqBody-'+shownLogItem.log.id]"><template v-for="(seg,si) in bodyHighlight('reqBody-'+shownLogItem.log.id, shownLogItem._detail.requestBody)" :key="si"><span v-if="seg.hl" class="pv-highlight" :class="{'pv-highlight-current': bodyHlIsCurrent('reqBody-'+shownLogItem.log.id, shownLogItem._detail.requestBody, si)}">{{seg.text}}</span><template v-else>{{seg.text}}</template></template></template><template v-else>{{shownLogItem._detail.requestBody}}</template></pre>
+              <ui-code-viewer v-if="shownLogItem._detail?.requestBody" :key="'reqBody-'+shownLogItem.log.id" :value="shownLogItem._detail.requestBody"
+                :label="t('stats.detailRequestBody')" @copy="copyBody($event)"></ui-code-viewer>
               <div v-else class="pv-body-empty">{{t('stats.emptyRequestBody')}}</div>
             </section>
 
             <section class="log-inspector-pane ui-detail-panel" :aria-labelledby="'response-body-heading-'+shownLogItem.log.id">
               <div class="log-inspector-pane-header">
                 <h2 class="ui-detail-panel-heading" :id="'response-body-heading-'+shownLogItem.log.id">{{t('stats.detailResponseBody')}}</h2>
-                <span class="log-body-size tabular-nums">{{fmtSize(shownLogItem._detail?.responseBody?.length || 0)}}</span>
-                <div v-if="shownLogItem._detail?.responseBody" class="log-body-tools">
-                  <div class="pv-search-bar">
-                    <input :value="bodySearch['resBody-'+shownLogItem.log.id]||''"
-                      @input="setBodySearch('resBody-'+shownLogItem.log.id, $event.target.value)"
-                      :placeholder="t('rules.pvSearchBody')" :aria-label="t('stats.searchResponseBody')"
-                      @keydown.enter.prevent="bodyNavSearch('resBody-'+shownLogItem.log.id, bodyFormatted['resBody-'+shownLogItem.log.id] ? getFormattedText('resBody-'+shownLogItem.log.id, shownLogItem._detail.responseBody) : shownLogItem._detail.responseBody, $event.shiftKey ? -1 : 1)">
-                    <span v-if="bodySearch['resBody-'+shownLogItem.log.id]" class="pv-search-count">{{bodyMatchLabel('resBody-'+shownLogItem.log.id, bodyFormatted['resBody-'+shownLogItem.log.id] ? getFormattedText('resBody-'+shownLogItem.log.id, shownLogItem._detail.responseBody) : shownLogItem._detail.responseBody)}}</span>
-                    <button v-if="bodySearch['resBody-'+shownLogItem.log.id]" type="button"
-                      @click="bodyNavSearch('resBody-'+shownLogItem.log.id, bodyFormatted['resBody-'+shownLogItem.log.id] ? getFormattedText('resBody-'+shownLogItem.log.id, shownLogItem._detail.responseBody) : shownLogItem._detail.responseBody, -1)"
-                      :title="t('rules.pvSearchPrev')" :aria-label="t('rules.pvSearchPrev')"><i class="bi bi-chevron-up" aria-hidden="true"></i></button>
-                    <button v-if="bodySearch['resBody-'+shownLogItem.log.id]" type="button"
-                      @click="bodyNavSearch('resBody-'+shownLogItem.log.id, bodyFormatted['resBody-'+shownLogItem.log.id] ? getFormattedText('resBody-'+shownLogItem.log.id, shownLogItem._detail.responseBody) : shownLogItem._detail.responseBody, 1)"
-                      :title="t('rules.pvSearchNext')" :aria-label="t('rules.pvSearchNext')"><i class="bi bi-chevron-down" aria-hidden="true"></i></button>
-                  </div>
-                  <ui-button type="button" class="btn btn-sm btn-icon btn-secondary"
-                    :class="{'active': bodyFormatted['resBody-'+shownLogItem.log.id]}"
-                    :aria-pressed="!!bodyFormatted['resBody-'+shownLogItem.log.id]"
-                    @click.stop="toggleBodyFormat('resBody-'+shownLogItem.log.id, shownLogItem._detail.responseBody)"
-                    :title="t('rules.pvFormat')" :aria-label="t('rules.pvFormat')"><i class="bi bi-braces" aria-hidden="true"></i></ui-button>
-                  <ui-button type="button" class="btn btn-sm btn-icon btn-secondary" @click.stop="copyBody(shownLogItem._detail.responseBody)"
-                    :title="t('rules.copyFullContent')" :aria-label="t('rules.copyFullContent')"><i class="bi bi-clipboard" aria-hidden="true"></i></ui-button>
-                </div>
               </div>
-              <div v-if="shownLogItem._detail?.responseBody && bodyFormatted['resBody-'+shownLogItem.log.id]"
-                :ref="'resBody-'+shownLogItem.log.id" class="pv-cm-container"></div>
-              <pre v-else-if="shownLogItem._detail?.responseBody" :ref="'resBody-'+shownLogItem.log.id" class="pv-pre"><template v-if="bodySearch['resBody-'+shownLogItem.log.id]"><template v-for="(seg,si) in bodyHighlight('resBody-'+shownLogItem.log.id, shownLogItem._detail.responseBody)" :key="si"><span v-if="seg.hl" class="pv-highlight" :class="{'pv-highlight-current': bodyHlIsCurrent('resBody-'+shownLogItem.log.id, shownLogItem._detail.responseBody, si)}">{{seg.text}}</span><template v-else>{{seg.text}}</template></template></template><template v-else>{{shownLogItem._detail.responseBody}}</template></pre>
+              <ui-code-viewer v-if="shownLogItem._detail?.responseBody" :key="'resBody-'+shownLogItem.log.id" :value="shownLogItem._detail.responseBody"
+                :label="t('stats.detailResponseBody')" @copy="copyBody($event)"></ui-code-viewer>
               <div v-else class="pv-body-empty">{{t('stats.emptyResponseBody')}}</div>
             </section>
           </div>

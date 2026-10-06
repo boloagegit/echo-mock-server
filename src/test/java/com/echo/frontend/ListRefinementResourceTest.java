@@ -126,7 +126,7 @@ class ListRefinementResourceTest {
         assertThat(text("index.html"))
                 .contains("/components/UiBadge.js?v=20260909.2")
                 .contains("/components/UiStatus.js?v=20260909.1")
-                .contains("/components/UiToggle.js?v=20260909.1")
+                .contains("/components/UiToggle.js?v=20261007.15")
                 .contains("/components/UiSegmentedControl.js?v=20260912.1")
                 .contains("/components/UiToggleGroup.js?v=20260912.1")
                 .contains("/components/UiFilterChipList.js?v=20260909.3");
@@ -145,10 +145,17 @@ class ListRefinementResourceTest {
         assertThat(text("components/UiStatus.js"))
                 .contains("`ui-status--${props.tone}`")
                 .contains("ui-status__dot");
+        // The switch is drawn from its value, so a change made during the click always shows
+        // (a cancelled native checkbox restored its old look and hid the editor's enabled / protected changes).
         assertThat(text("components/UiToggle.js"))
-                .contains("class=\"ui-toggle\"")
+                .contains("<button type=\"button\" role=\"switch\" class=\"ui-toggle\"")
+                .contains(":aria-checked=\"checked ? 'true' : 'false'\"")
                 .contains(":aria-label=\"ariaLabel\"")
-                .contains("@click.prevent.stop=\"$emit('toggle')\"");
+                .contains("@click.stop=\"$emit('toggle')\"")
+                .doesNotContain("type=\"checkbox\"");
+        assertThat(text("style.css"))
+                .contains(".ui-toggle[aria-checked=\"true\"] .ui-toggle__track { border-color: var(--btn-primary); background: var(--btn-primary) }")
+                .doesNotContain(".ui-toggle input:checked");
         assertThat(text("components/UiSegmentedControl.js"))
                 .contains("class=\"ui-segmented-control\"")
                 .contains("role=\"radiogroup\"")
@@ -622,8 +629,11 @@ class ListRefinementResourceTest {
                 .doesNotContain("<h4>");
         assertThat(text("components/StatsPage.js"))
                 .contains("<h2 class=\"ui-detail-panel-heading\" :id=\"'request-body-heading-'")
-                .contains("getInputField()?.setAttribute(")
+                .contains(":label=\"t('stats.detailRequestBody')\"")
                 .contains("role=\"img\" :aria-label=\"t('stats.matchChainStep'");
+        // The shared body viewer names its CodeMirror input after the panel it sits in.
+        assertThat(text("components/UiCodeViewer.js"))
+                .contains("this.cm.getInputField()?.setAttribute('aria-label', this.label);");
     }
 
     @Test
@@ -717,7 +727,7 @@ class ListRefinementResourceTest {
     void unconditionalRulesArePresentedAsIntentionalDefaultMatches() throws IOException {
         assertThat(text("i18n/zh-TW.json")).contains("\"noCondition\": \"預設匹配\"");
         assertThat(text("i18n/en.json")).contains("\"noCondition\": \"Default match\"");
-        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261007.14");
+        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261007.15");
     }
 
     @Test

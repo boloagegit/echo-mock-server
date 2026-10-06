@@ -469,10 +469,6 @@
 .detail-subtitle { margin: 6px 0 0; color: var(--muted); font-size: var(--font-sm); font-weight: var(--font-weight-medium) }
 .detail-section > .detail-inline-action { margin-top: 2px }
 .detail-chips .ui-badge { max-width: 100%; white-space: normal; overflow-wrap: anywhere; justify-content: flex-start; text-align: start }
-.audit-detail-drawer .ac-block-panel pre,
-.audit-detail-drawer .ac-block-pre,
-.audit-detail-drawer .audit-raw { max-height: 320px; overflow: auto }
-.log-detail-drawer .log-inspector-pane > .pv-pre { max-height: 420px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere }
 .detail-copy { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 0; border: 0; background: transparent; color: var(--text); font: inherit; text-align: start; cursor: copy }
 .detail-copy code { overflow-wrap: anywhere }
 .detail-copy i { color: var(--text-subtle); font-size: 12px }
@@ -659,6 +655,7 @@
 .rule-modal-context > .bi { color: var(--text-subtle); font-size: 12px }
 .rule-modal-context__chip { padding: 0 6px; border-radius: 4px; background: var(--surface-neutral-soft); color: var(--muted) }
 .rule-modal-context__result { min-width: 0; overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap }
+.rule-modal-context__pending { color: var(--text-subtle) }
 .rule-modal-actions .rule-state-controls { flex-wrap: nowrap; gap: 14px }
 .rule-editor .rule-pane-heading { align-items: center; justify-content: space-between; gap: var(--space-md); min-height: 40px; margin-bottom: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--separator) }
 .rule-editor .rule-pane-title-row { align-items: baseline; gap: 8px }
@@ -697,7 +694,7 @@
 .rule-request-line > .form-group { min-width: 0; margin-bottom: 0 }
 .rule-request-line .method-group { display: grid; grid-template-columns: repeat(5, max-content); height: var(--control-h); padding: 2px }
 .rule-request-line .method-group .method-btn { min-height: calc(var(--control-h) - 4px); padding-inline: 9px }
-.rule-request-line .rule-path-input { font-family: var(--font-mono); font-size: 13px }
+.rule-protocol-fields .rule-path-input { font-family: var(--font-mono); font-size: 13px }
 @container rule-left (max-width: 500px) {
     .rule-request-line { grid-template-columns: minmax(0, 1fr) }
     .rule-request-line .method-group { grid-template-columns: repeat(5, minmax(0, 1fr)) }
@@ -749,6 +746,14 @@
 /* In the narrow drawer, before and after stack so long values keep the full width. */
 .audit-detail-drawer .ac-block-diff { flex-direction: column }
 .audit-detail-drawer .ac-block-panel + .ac-block-panel { border-left: 0; border-top: 1px solid var(--border) }
+/* Long values open in the shared viewer; inside a change block it drops its own frame. */
+.audit-detail-drawer .ac-block { overflow: clip }
+.audit-detail-drawer .ac-block .ui-code-viewer { border: 0; border-radius: 0 }
+.audit-detail-drawer .ac-block-before .ac-block-title { color: var(--danger) }
+.audit-detail-drawer .ac-block-after .ac-block-title { color: var(--success) }
+/* The wide drawer has room to compare before and after side by side. */
+.audit-detail-drawer.is-wide .ac-block-diff { flex-direction: row }
+.audit-detail-drawer.is-wide .ac-block-panel + .ac-block-panel { border-top: 0; border-left: 1px solid var(--border) }
 .help-tooltip.is-warning { color: var(--warning-text) }
 
 /* Nothing contentful paints before the app is ready, so a reload swaps old page → finished page. */
@@ -775,3 +780,19 @@
 .boot-shell__card { flex: 1; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--card) }
 @media (max-width: 768px) { .boot-shell__sidebar { display: none } }
 @media (prefers-reduced-motion: reduce) { .boot-shell { transition: none } }
+
+/* ===== Protocol switch =====
+ * HTTP and JMS fill the same slots with rows of the same height (request: destination row,
+ * then a field with one hint; response: one shape row), so switching swaps fields in place
+ * instead of moving the rest of the editor. Only the swapped fields fade in. */
+.rule-queue-field { margin-bottom: var(--editor-field-gap) }
+/* As tall as the HTTP type switch (option + shell padding + border) in every density. */
+.response-status-row { min-height: calc(var(--control-h-sm) + 2 * var(--editor-shell-padding) + 2px) }
+.response-reply-label { color: var(--muted); font-size: var(--font-sm); font-weight: var(--font-weight-medium); white-space: nowrap }
+.response-reply-type { padding: 2px 8px; border-radius: 4px; background: var(--surface-neutral-soft); color: var(--text); font-family: var(--font-mono); font-size: 12px }
+.response-status-row--jms .sub-info { min-width: 0; color: var(--text-subtle); font-size: var(--font-xs) }
+.rule-protocol-swap-enter-active { transition: opacity var(--motion-fast) var(--ease-standard) }
+.rule-protocol-swap-enter-from { opacity: 0 }
+/* The outgoing fields leave at once, so the two sets never stack for a frame. */
+.rule-protocol-swap-leave-active { display: none }
+@media (prefers-reduced-motion: reduce) { .rule-protocol-swap-enter-active { transition: none } }

@@ -246,11 +246,11 @@ const AuditPage = {
                           <div class="ac-block-diff">
                             <div class="ac-block-panel ac-block-before">
                               <div class="ac-block-title">{{t('audit.beforeChange')}}</div>
-                              <pre>{{c.before}}</pre>
+                              <ui-code-viewer :value="String(c.before ?? '')" :label="c.label + ' · ' + t('audit.beforeChange')" :max-height="260" @copy="$emit('clip-copy', $event)"></ui-code-viewer>
                             </div>
                             <div class="ac-block-panel ac-block-after">
                               <div class="ac-block-title">{{t('audit.afterChange')}}</div>
-                              <pre>{{c.after}}</pre>
+                              <ui-code-viewer :value="String(c.after ?? '')" :label="c.label + ' · ' + t('audit.afterChange')" :max-height="260" @copy="$emit('clip-copy', $event)"></ui-code-viewer>
                             </div>
                           </div>
                         </div>
@@ -259,7 +259,7 @@ const AuditPage = {
                     <div v-else class="audit-no-change">{{t('audit.noSubstantialChange')}}</div>
                   </template>
                   <template v-else-if="detail.type==='error'">
-                    <pre class="audit-raw">{{detail.raw}}</pre>
+                    <ui-code-viewer :value="String(detail.raw ?? '')" :label="t('audit.changesTitle')" @copy="$emit('clip-copy', $event)"></ui-code-viewer>
                   </template>
                   <template v-else-if="detail.changes?.length">
                     <div class="ac-list">
@@ -270,7 +270,7 @@ const AuditPage = {
                         </div>
                         <div v-else class="ac-block">
                           <div class="ac-block-label">{{c.label}}</div>
-                          <pre class="ac-block-pre">{{c.value}}</pre>
+                          <ui-code-viewer :value="String(c.value ?? '')" :label="c.label" :max-height="260" @copy="$emit('clip-copy', $event)"></ui-code-viewer>
                         </div>
                       </template>
                     </div>

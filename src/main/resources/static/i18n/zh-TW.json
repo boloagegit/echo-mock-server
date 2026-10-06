@@ -1265,7 +1265,12 @@
     "responsePaneHint": "命中後的處理",
     "conditionAllMatch": "全部符合才命中",
     "ruleSettings": "規則設定",
-    "responseTypeSseStream": "SSE 串流"
+    "responseTypeSseStream": "SSE 串流",
+    "pathPending": "尚未設定路徑",
+    "queuePending": "尚未設定佇列",
+    "queueMatchHint": "填 * 代表所有佇列；指定佇列名稱的規則會先比對。",
+    "jmsReplyLabel": "回覆訊息",
+    "jmsReplyHint": "CorrelationID 帶入請求的 MessageID"
   },
   "confirm": {
     "discardRuleTitle": "放棄規則修改？",

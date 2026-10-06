@@ -19,7 +19,7 @@ function load(files, extra = {}) {
   return { ...context.exports, storage };
 }
 
-test('the code viewer formats JSON up to 2 MB and shows anything else as it is', () => {
+test('the code viewer formats JSON and XML up to 2 MB and shows plain text as it is', () => {
   const { UiCodeViewer } = load(['utils.js', 'components/UiCodeViewer.js']);
   const view = value => {
     const state = { value, formatted: true };
@@ -28,7 +28,11 @@ test('the code viewer formats JSON up to 2 MB and shows anything else as it is',
     return UiCodeViewer.computed.text.call(state);
   };
   assert.equal(view('{"a":1}'), '{\n  "a": 1\n}');
-  assert.equal(view('<a><b/></a>'), '<a><b/></a>');
+  assert.equal(view('<a><b/></a>'), '<a>\n  <b/>\n</a>');
+  assert.equal(
+    view('<?xml version="1.0"?><env:Envelope><env:Body><order id="1"><item>A</item><empty/></order></env:Body></env:Envelope>'),
+    '<?xml version="1.0"?>\n<env:Envelope>\n  <env:Body>\n    <order id="1">\n      <item>A</item>\n      <empty/>\n    </order>\n  </env:Body>\n</env:Envelope>',
+    'one element per line; a leaf with text stays on its line');
   assert.equal(view('plain text'), 'plain text');
   const huge = '{"a":"' + 'x'.repeat(2000001) + '"}';
   assert.equal(view(huge), huge, 'formatting is skipped above 2 MB');

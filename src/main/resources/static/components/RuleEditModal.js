@@ -572,9 +572,10 @@ const RuleEditModal = {
                             <span class="visually-hidden">{{t('modal.ruleDescription')}}</span>
                             <input id="ruleDescription" v-model="form.description" :placeholder="t('modal.ruleNamePlaceholder')" maxlength="255" autocomplete="off">
                         </label>
-                        <p v-if="form.matchKey" class="rule-modal-context">
+                        <p class="rule-modal-context">
                             <span class="rule-method" :data-method="form.protocol==='HTTP' ? (form.method || 'GET') : null" :data-protocol="form.protocol">{{form.protocol==='HTTP' ? (form.method || 'GET') : 'JMS'}}</span>
-                            <code>{{form.matchKey}}</code>
+                            <code v-if="form.matchKey">{{form.matchKey}}</code>
+                            <span v-else class="rule-modal-context__pending">{{form.protocol==='HTTP' ? t('modal.pathPending') : t('modal.queuePending')}}</span>
                             <span v-if="conditions.length" class="rule-modal-context__chip">{{t('modal.conditionSummary', {count: conditions.length})}}</span>
                             <i class="bi bi-arrow-right" aria-hidden="true"></i>
                             <span class="rule-modal-context__result">{{ruleModeSummary}}</span>
@@ -614,8 +615,9 @@ const RuleEditModal = {
                             @update:model-value="$emit('set-protocol',$event)"></ui-choice-group>
                     </div>
                     <!-- 匹配路徑 -->
-                    <div class="form-block" data-tour="match">
-                        <template v-if="form.protocol==='HTTP'">
+                    <div class="form-block rule-protocol-slot" data-tour="match">
+                        <Transition name="rule-protocol-swap">
+                        <div v-if="form.protocol==='HTTP'" key="http" class="rule-protocol-fields">
                             <!-- Method and path read as one request line, like the header ("GET /api/orders"). -->
                             <div class="rule-request-line">
                                 <div class="form-group form-group--tight">
@@ -635,18 +637,21 @@ const RuleEditModal = {
                                 <input id="rule-source-host" class="form-control" v-model="form.targetHost" placeholder="api.example.com">
                                 <div class="sub-info source-host-hint">{{t('modal.sourceHostMatchHint')}}</div>
                             </div>
-                        </template>
-                        <template v-else>
-                            <div class="form-group form-group--tight">
+                        </div>
+                        <div v-else key="jms" class="rule-protocol-fields">
+                            <!-- Same rhythm as HTTP: the destination first (monospace like the path), then the secondary field. -->
+                            <div class="form-group rule-queue-field">
                                 <label class="form-label" for="rule-jms-queue">{{t('modal.queue')}} <span class="required">*</span></label>
-                                <input id="rule-jms-queue" class="form-control" v-model="form.matchKey" :class="{'is-invalid':formErrors.matchKey}" placeholder="QUEUE.NAME">
+                                <input id="rule-jms-queue" class="form-control rule-path-input" v-model="form.matchKey" :class="{'is-invalid':formErrors.matchKey}" placeholder="QUEUE.NAME">
                                 <div v-if="formErrors.matchKey" class="invalid-feedback validation-message--visible">{{formErrors.matchKey}}</div>
+                                <div class="sub-info source-host-hint">{{t('modal.queueMatchHint')}}</div>
                             </div>
                             <div class="form-group form-group--flush">
                                 <label class="form-label" for="rule-jms-reply">{{t('modal.replyQueue')}}</label>
-                                <input id="rule-jms-reply" class="form-control" v-model="form.replyQueue" placeholder="REPLY.QUEUE">
+                                <input id="rule-jms-reply" class="form-control rule-path-input" v-model="form.replyQueue" placeholder="REPLY.QUEUE">
                             </div>
-                        </template>
+                        </div>
+                        </Transition>
                     </div>
                     <!-- 條件匹配 -->
                     <div class="form-block" data-tour="conditions">
@@ -885,7 +890,8 @@ const RuleEditModal = {
                     <!-- 回應模式 + 統一選擇器 -->
                     <div v-else key="mock" class="form-block mock-result-settings" data-tour="response">
                         <!-- 回應的形狀：狀態碼與一般／SSE 串流（SSE 描述的是回應，所以放在這裡） -->
-                        <div v-if="form.protocol==='HTTP'" class="response-status-row">
+                        <Transition name="rule-protocol-swap">
+                        <div v-if="form.protocol==='HTTP'" key="http" class="response-status-row">
                             <div class="response-status-field">
                                 <label for="ruleStatus">{{t('modal.statusCode')}}</label>
                                 <input id="ruleStatus" type="number" class="form-control" v-model.number="form.status" min="100" max="599" :class="{'is-invalid':formErrors.status}">
@@ -895,6 +901,12 @@ const RuleEditModal = {
                                 :model-value="!!form.sseEnabled" :options="responseTypeOptions" :aria-label="t('modal.responseType')"
                                 @update:model-value="form.sseEnabled=$event"></ui-choice-group>
                         </div>
+                        <div v-else key="jms" class="response-status-row response-status-row--jms">
+                            <span class="response-reply-label">{{t('modal.jmsReplyLabel')}}</span>
+                            <code class="response-reply-type">TextMessage</code>
+                            <span class="sub-info">{{t('modal.jmsReplyHint')}}</span>
+                        </div>
+                        </Transition>
                         <!-- 回應內容的來源：使用現有回應或建立新的 -->
                         <div class="response-mode-toolbar">
                             <span class="response-mode-label">{{t('modal.responseMode')}}</span>
