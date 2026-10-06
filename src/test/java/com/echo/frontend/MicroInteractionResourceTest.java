@@ -47,6 +47,14 @@ class MicroInteractionResourceTest {
         }
     }
 
+    @Test
+    void phonesKeepThePageTitleOnOneLineAndHideKeyboardHints() throws IOException {
+        assertThat(text("console.css"))
+                .contains(".page-title { white-space: nowrap }")
+                .contains(".page-header > .page-actions { flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-start }")
+                .contains("    .workspace-search-kbd { display: none }");
+    }
+
     private static String text(String path) throws IOException {
         try (var stream = new ClassPathResource("static/" + path).getInputStream()) {
             return new String(stream.readAllBytes(), StandardCharsets.UTF_8);

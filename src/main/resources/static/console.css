@@ -635,6 +635,16 @@
 .ui-icon { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round }
 .user-menu__item .ui-icon { width: 16px; height: 16px; color: var(--muted) }
 
+/* ===== Narrow screens =====
+ * The page title never breaks per character; header actions wrap below it instead.
+ * The "/" key hint is for keyboards, so phones do not show it. */
+.page-title { white-space: nowrap }
+@media (max-width: 640px) {
+    .page-header { flex-wrap: wrap; row-gap: var(--space-sm) }
+    .page-header > .page-actions { flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-start }
+    .workspace-search-kbd { display: none }
+}
+
 /* ===== Loading reveal =====
  * Most requests finish quickly. A placeholder that appears for a few frames and is
  * then swapped out reads as a flash, so loading placeholders stay invisible for a
