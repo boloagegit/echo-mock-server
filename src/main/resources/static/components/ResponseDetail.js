@@ -21,7 +21,19 @@ const ResponseDetail = {
     hasNext: Boolean,
   },
   emits: ['close', 'prev', 'next', 'retry', 'edit', 'menu', 'go-to-rule', 'clip-copy'],
+  data() {
+    return { showFullBody: false, bodyExpanded: false, showAllRules: false };
+  },
+  watch: {
+    'view.id'() {
+      this.showFullBody = false;
+      this.bodyExpanded = false;
+      this.showAllRules = false;
+    },
+  },
   computed: {
+    DETAIL_LIST_PREVIEW: () => DETAIL_LIST_PREVIEW,
+    BODY_PREVIEW_CHARS: () => BODY_PREVIEW_CHARS,
     shownDetail() {
       return this.held.value.detail;
     },
@@ -35,10 +47,20 @@ const ResponseDetail = {
       if (this.view.usageCount) return null;
       return daysLeft(this.view.updatedAt, this.view.extendedAt, this.status?.responseRetentionDays);
     },
+    bodyFull() {
+      return formatBodyForReading(this.shownDetail?.body || '');
+    },
+    bodyTruncated() {
+      return !this.showFullBody && this.bodyFull.length > BODY_PREVIEW_CHARS;
+    },
     formattedBody() {
-      const body = this.shownDetail?.body || '';
-      if (!body) return '';
-      try { return JSON.stringify(JSON.parse(body), null, 2); } catch { return body; }
+      return this.bodyTruncated ? this.bodyFull.slice(0, BODY_PREVIEW_CHARS) : this.bodyFull;
+    },
+    linkedRules() {
+      return this.shownDetail?.rules || [];
+    },
+    visibleLinkedRules() {
+      return this.showAllRules ? this.linkedRules : this.linkedRules.slice(0, DETAIL_LIST_PREVIEW.links);
     },
     menuItems() {
       const t = this.t;
@@ -75,7 +97,7 @@ const ResponseDetail = {
         </div>
         <p v-if="shownDetail && !shownDetail.rules.length" class="detail-empty">{{view.usageCount ? t('responses.noVisibleLinkedRules') : t('responses.notUsed')}}</p>
         <ul v-else-if="shownDetail" class="detail-links">
-          <li v-for="rule in shownDetail.rules" :key="rule.id">
+          <li v-for="rule in visibleLinkedRules" :key="rule.id">
             <button type="button" class="detail-link" @click="$emit('go-to-rule', rule.id)">
               <span class="rule-method" :data-method="rule.protocol==='HTTP' ? (rule.method || 'GET') : null" :data-protocol="rule.protocol">{{rule.protocol==='HTTP' ? (rule.method || 'GET') : 'JMS'}}</span>
               <code class="detail-link__path">{{rule.matchKey}}</code>
@@ -84,18 +106,28 @@ const ResponseDetail = {
             </button>
           </li>
         </ul>
+        <button v-if="linkedRules.length > DETAIL_LIST_PREVIEW.links" type="button" class="detail-inline-action"
+          :aria-expanded="showAllRules ? 'true' : 'false'" @click="showAllRules = !showAllRules">
+          {{showAllRules ? t('common.showLess') : t('common.showAllCount', {count: linkedRules.length})}}</button>
       </section>
 
       <section class="detail-section">
         <div class="detail-section__head">
           <h3 class="detail-section__title">{{t('rules.pvResponseContent')}}</h3>
           <div v-if="formattedBody" class="detail-section__tools">
+            <ui-button type="button" variant="quiet" size="compact" icon-only :title="bodyExpanded ? t('common.collapseBlock') : t('common.expandBlock')"
+              :aria-label="bodyExpanded ? t('common.collapseBlock') : t('common.expandBlock')" :aria-pressed="bodyExpanded ? 'true' : 'false'"
+              @click="bodyExpanded = !bodyExpanded"><i class="bi" :class="bodyExpanded ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand'" aria-hidden="true"></i></ui-button>
             <ui-button type="button" variant="quiet" size="compact" icon-only :title="t('rules.copyFullContent')" :aria-label="t('rules.copyFullContent')"
               @click="$emit('clip-copy', shownDetail.body)"><i class="bi bi-clipboard" aria-hidden="true"></i></ui-button>
           </div>
         </div>
         <p v-if="shownDetail && !formattedBody" class="detail-empty">{{t('rules.empty')}}</p>
-        <pre v-else-if="formattedBody" class="detail-code">{{formattedBody}}</pre>
+        <pre v-else-if="formattedBody" class="detail-code" :class="{'is-expanded': bodyExpanded}">{{formattedBody}}</pre>
+        <p v-if="bodyTruncated" class="detail-truncated">
+          <span>{{t('common.previewTruncated', {shown: fmtSize(BODY_PREVIEW_CHARS), total: fmtSize(bodyFull.length)})}}</span>
+          <button type="button" class="detail-inline-action" @click="showFullBody = true">{{t('common.showFullContent')}}</button>
+        </p>
       </section>
 
       <section class="detail-section">

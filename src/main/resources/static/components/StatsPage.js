@@ -216,6 +216,17 @@ const StatsPage = {
         'aria-label',
         refKey.startsWith('reqBody-') ? this.t('stats.detailRequestBody') : this.t('stats.detailResponseBody')
       );
+      this.fitCodeMirror(this.cmInstances[refKey], el);
+    },
+    /**
+     * A formatted body gets a definite height: as tall as its lines, at most 420px. Long bodies
+     * then scroll inside the editor, which only renders the lines in view.
+     */
+    fitCodeMirror(cm, container) {
+      if (!cm || !container) { return; }
+      const height = Math.min(420, Math.ceil(cm.defaultTextHeight() * cm.lineCount()) + 12);
+      container.style.height = height + 'px';
+      cm.refresh();
     },
     setBodySearch(refKey, val) {
       this.bodySearch = { ...this.bodySearch, [refKey]: val };
@@ -339,6 +350,7 @@ const StatsPage = {
             'aria-label',
             refKey.startsWith('reqBody-') ? this.t('stats.detailRequestBody') : this.t('stats.detailResponseBody')
           );
+          this.fitCodeMirror(this.cmInstances[refKey], el);
         });
       } else {
         if (this.cmInstances && this.cmInstances[refKey]) {

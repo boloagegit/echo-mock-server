@@ -239,7 +239,17 @@
 .ui-detail-drawer__header { display: flex; align-items: flex-start; gap: var(--space-md); padding: 16px 12px 14px 20px; border-bottom: 1px solid var(--border) }
 .ui-detail-drawer__titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px }
 .ui-detail-drawer__title { margin: 0; color: var(--text); font-size: 15px; font-weight: var(--font-weight-semibold); line-height: 1.4; overflow-wrap: anywhere }
-.ui-detail-drawer__subtitle { margin: 0; color: var(--muted); font-size: var(--font-sm) }
+.ui-detail-drawer__subtitle { margin: 0; color: var(--muted); font-size: var(--font-sm); overflow-wrap: anywhere }
+/* Long titles and descriptions keep the header compact: two lines each, then "show full text". */
+.ui-detail-drawer__title.is-clamped,
+.ui-detail-drawer__subtitle.is-clamped { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden }
+.ui-detail-drawer__titles:has(.ui-detail-drawer__more[aria-expanded="true"]) { max-height: 40vh; overflow-y: auto }
+.ui-detail-drawer__more,
+.detail-inline-action { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--primary); font: inherit; font-size: var(--font-xs); cursor: pointer }
+.ui-detail-drawer__more:hover,
+.detail-inline-action:hover { text-decoration: underline; text-underline-offset: 2px }
+.ui-detail-drawer__more:focus-visible,
+.detail-inline-action:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px }
 .ui-detail-drawer__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px }
 .ui-detail-drawer__nav { flex: none; display: flex; gap: 2px }
 .ui-detail-drawer__nav .ui-button { color: var(--muted) }
@@ -437,6 +447,15 @@
 }
 .detail-search input:focus { outline: 0; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.25) }
 .detail-search__count { position: absolute; right: 8px; color: var(--text-subtle); font-family: var(--font-mono); font-size: 11px }
+/* Long content stays inside its own box; "expand" lets it run the full height of the drawer. */
+.detail-code.is-expanded { max-height: none }
+.detail-truncated { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 8px 0 0; color: var(--text-subtle); font-size: var(--font-xs) }
+.detail-section > .detail-inline-action { margin-top: 2px }
+.detail-chips .ui-badge { max-width: 100%; white-space: normal; overflow-wrap: anywhere; justify-content: flex-start; text-align: start }
+.audit-detail-drawer .ac-block-panel pre,
+.audit-detail-drawer .ac-block-pre,
+.audit-detail-drawer .audit-raw { max-height: 320px; overflow: auto }
+.log-detail-drawer .log-inspector-pane > .pv-pre { max-height: 420px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere }
 .detail-code mark { padding: 0; border-radius: 2px; background: rgba(var(--warning-rgb), 0.3); color: inherit }
 .detail-code mark.is-current { background: rgba(var(--warning-rgb), 0.65); box-shadow: 0 0 0 1px var(--warning) }
 .detail-copy { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 0; border: 0; background: transparent; color: var(--text); font: inherit; text-align: start; cursor: copy }
@@ -489,6 +508,7 @@
 }
 .detail-link:hover { background: var(--hover) }
 .detail-link:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px }
+.detail-link > .rule-method { flex: none; width: 52px }
 .detail-link__path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 12.5px }
 .detail-link__desc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted) }
 .detail-link__go { margin-inline-start: auto; color: var(--text-subtle) }
@@ -667,7 +687,9 @@
 .audit-action { display: inline-flex; align-items: center; gap: var(--space-sm) }
 @container (max-width: 760px) { .audit-table .col-operator { display: none } .audit-table .rule-desc { display: none } }
 .audit-detail-drawer .ac-list { display: flex; flex-direction: column; gap: 8px }
-.audit-detail-drawer .ac-block-diff { grid-template-columns: minmax(0, 1fr) }
+/* In the narrow drawer, before and after stack so long values keep the full width. */
+.audit-detail-drawer .ac-block-diff { flex-direction: column }
+.audit-detail-drawer .ac-block-panel + .ac-block-panel { border-left: 0; border-top: 1px solid var(--border) }
 .help-tooltip.is-warning { color: var(--warning-text) }
 
 /* Nothing contentful paints before the app is ready, so a reload swaps old page → finished page. */

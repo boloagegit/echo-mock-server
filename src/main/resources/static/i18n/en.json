@@ -1797,6 +1797,13 @@
     "loadFailed": "Failed to load",
     "undo": "Undo",
     "moreActions": "More actions",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "showAll": "Show full text",
+    "showLess": "Show less",
+    "showAllCount": "Show all ({count})",
+    "expandBlock": "Expand",
+    "collapseBlock": "Collapse",
+    "previewTruncated": "Large content: showing the first {shown} of {total}",
+    "showFullContent": "Show full content"
   }
 }

@@ -24,9 +24,11 @@ const RuleDetail = {
   },
   emits: ['close', 'prev', 'next', 'retry', 'edit', 'menu', 'clip-copy'],
   data() {
-    return { bodySearch: '', bodyMatchIndex: 0 };
+    return { bodySearch: '', bodyMatchIndex: 0, showFullBody: false, bodyExpanded: false, showAllConditions: false, showAllTags: false };
   },
   computed: {
+    DETAIL_LIST_PREVIEW: () => DETAIL_LIST_PREVIEW,
+    BODY_PREVIEW_CHARS: () => BODY_PREVIEW_CHARS,
     shownDetail() {
       return this.held.value.detail;
     },
@@ -49,15 +51,37 @@ const RuleDetail = {
     conditionGroups() {
       return condTagsGrouped(this.view);
     },
+    conditionCount() {
+      return this.conditionGroups.reduce((sum, group) => sum + group.items.length, 0);
+    },
+    /** Many conditions show the first few; the rest are one click away. */
+    visibleConditionGroups() {
+      if (this.showAllConditions || this.conditionCount <= DETAIL_LIST_PREVIEW.conditions) return this.conditionGroups;
+      let room = DETAIL_LIST_PREVIEW.conditions;
+      return this.conditionGroups.map(group => {
+        const items = group.items.slice(0, room);
+        room -= items.length;
+        return { ...group, items };
+      }).filter(group => group.items.length);
+    },
     tagEntries() {
       return Object.entries(parseTags(this.view.tags));
+    },
+    visibleTagEntries() {
+      return this.showAllTags ? this.tagEntries : this.tagEntries.slice(0, DETAIL_LIST_PREVIEW.tags);
     },
     retention() {
       if (this.view.isProtected) return null;
       return daysLeft(this.view.createdAt, this.view.extendedAt, this.status?.cleanupRetentionDays);
     },
+    bodyFull() {
+      return formatBodyForReading(this.shownDetail?._previewBody || '');
+    },
+    bodyTruncated() {
+      return !this.showFullBody && this.bodyFull.length > BODY_PREVIEW_CHARS;
+    },
     body() {
-      return this.shownDetail?._previewBody || '';
+      return this.bodyTruncated ? this.bodyFull.slice(0, BODY_PREVIEW_CHARS) : this.bodyFull;
     },
     bodySegments() {
       const keyword = this.bodySearch.trim();
@@ -98,13 +122,17 @@ const RuleDetail = {
     'view.id'() {
       this.bodySearch = '';
       this.bodyMatchIndex = 0;
+      this.showFullBody = false;
+      this.bodyExpanded = false;
+      this.showAllConditions = false;
+      this.showAllTags = false;
     },
     bodySearch() {
       this.bodyMatchIndex = 0;
     },
   },
   methods: {
-    shortId, fmtTime, forwardTargetLabel, forwardTargetEndpoint,
+    shortId, fmtTime, fmtSize, forwardTargetLabel, forwardTargetEndpoint,
     stepMatch(direction) {
       if (!this.bodyMatchCount) return;
       this.bodyMatchIndex = (this.bodyMatchIndex + direction + this.bodyMatchCount) % this.bodyMatchCount;
@@ -139,7 +167,7 @@ const RuleDetail = {
         <div class="detail-section__head"><h3 class="detail-section__title">{{t('rules.pvSectionConditions')}}</h3></div>
         <p v-if="!conditionGroups.length" class="detail-empty">{{t('rules.noCondition')}}</p>
         <dl v-else class="detail-grid">
-          <template v-for="group in conditionGroups" :key="group.type">
+          <template v-for="group in visibleConditionGroups" :key="group.type">
             <dt>{{conditionTitle(group.type)}}</dt>
             <dd class="detail-chips">
               <button v-for="(item, i) in group.items" :key="group.type+i" type="button" class="cond-chip is-copyable" :data-kind="group.type"
@@ -147,6 +175,9 @@ const RuleDetail = {
             </dd>
           </template>
         </dl>
+        <button v-if="conditionCount > DETAIL_LIST_PREVIEW.conditions" type="button" class="detail-inline-action"
+          :aria-expanded="showAllConditions ? 'true' : 'false'" @click="showAllConditions = !showAllConditions">
+          {{showAllConditions ? t('common.showLess') : t('common.showAllCount', {count: conditionCount})}}</button>
       </section>
 
       <section class="detail-section">
@@ -176,12 +207,19 @@ const RuleDetail = {
                   @keydown.enter.prevent="stepMatch($event.shiftKey ? -1 : 1)">
                 <span v-if="bodySearch" class="detail-search__count">{{bodyMatchCount ? bodyMatchIndex + 1 : 0}}/{{bodyMatchCount}}</span>
               </label>
+              <ui-button type="button" variant="quiet" size="compact" icon-only :title="bodyExpanded ? t('common.collapseBlock') : t('common.expandBlock')"
+                :aria-label="bodyExpanded ? t('common.collapseBlock') : t('common.expandBlock')" :aria-pressed="bodyExpanded ? 'true' : 'false'"
+                @click="bodyExpanded = !bodyExpanded"><i class="bi" :class="bodyExpanded ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand'" aria-hidden="true"></i></ui-button>
               <ui-button type="button" variant="quiet" size="compact" icon-only :title="t('rules.copyFullContent')" :aria-label="t('rules.copyFullContent')"
-                @click="$emit('clip-copy', view.responseBody || body)"><i class="bi bi-clipboard" aria-hidden="true"></i></ui-button>
+                @click="$emit('clip-copy', view.responseBody || shownDetail?._previewBody || body)"><i class="bi bi-clipboard" aria-hidden="true"></i></ui-button>
             </div>
           </div>
           <p v-if="!body && shownDetail" class="detail-empty">{{t('rules.empty')}}</p>
-          <pre v-else-if="body" ref="bodyPre" class="detail-code"><template v-for="(part, i) in bodySegments" :key="i"><mark v-if="part.hit" :class="{'is-current': part.current}">{{part.text}}</mark><template v-else>{{part.text}}</template></template></pre>
+          <pre v-else-if="body" ref="bodyPre" class="detail-code" :class="{'is-expanded': bodyExpanded}"><template v-for="(part, i) in bodySegments" :key="i"><mark v-if="part.hit" :class="{'is-current': part.current}">{{part.text}}</mark><template v-else>{{part.text}}</template></template></pre>
+          <p v-if="bodyTruncated" class="detail-truncated">
+            <span>{{t('common.previewTruncated', {shown: fmtSize(BODY_PREVIEW_CHARS), total: fmtSize(bodyFull.length)})}}</span>
+            <button type="button" class="detail-inline-action" @click="showFullBody = true">{{t('common.showFullContent')}}</button>
+          </p>
         </template>
       </section>
 
@@ -199,7 +237,9 @@ const RuleDetail = {
           </template>
           <template v-if="tagEntries.length">
             <dt>{{t('rules.pvTags')}}</dt>
-            <dd class="detail-chips"><ui-badge v-for="([k, v]) in tagEntries" :key="k" tone="neutral">{{k}}={{v}}</ui-badge></dd>
+            <dd class="detail-chips"><ui-badge v-for="([k, v]) in visibleTagEntries" :key="k" tone="neutral">{{k}}={{v}}</ui-badge>
+              <button v-if="tagEntries.length > DETAIL_LIST_PREVIEW.tags" type="button" class="detail-inline-action" :aria-expanded="showAllTags ? 'true' : 'false'"
+                @click="showAllTags = !showAllTags">{{showAllTags ? t('common.showLess') : t('common.showAllCount', {count: tagEntries.length})}}</button></dd>
           </template>
           <template v-if="view.createdAt"><dt>{{t('rules.pvCreated')}}</dt><dd class="detail-mono">{{fmtTime(view.createdAt, false)}}</dd></template>
           <template v-if="view.updatedAt"><dt>{{t('rules.pvUpdated')}}</dt><dd><span class="detail-mono">{{fmtTime(view.updatedAt, false)}}</span> · {{view.updatedBy || t('rules.unknownOperator')}}</dd></template>

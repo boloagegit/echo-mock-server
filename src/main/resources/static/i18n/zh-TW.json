@@ -1797,6 +1797,13 @@
     "loadFailed": "載入失敗",
     "undo": "復原",
     "moreActions": "更多操作",
-    "notifications": "通知"
+    "notifications": "通知",
+    "showAll": "顯示全文",
+    "showLess": "收合",
+    "showAllCount": "顯示全部（{count}）",
+    "expandBlock": "展開",
+    "collapseBlock": "收合",
+    "previewTruncated": "內容較大，僅顯示前 {shown}（共 {total}）",
+    "showFullContent": "顯示完整內容"
   }
 }

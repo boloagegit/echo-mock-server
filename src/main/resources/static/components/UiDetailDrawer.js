@@ -65,15 +65,29 @@ const UiDetailDrawer = {
     Vue.onMounted(() => document.addEventListener('keydown', onKeydown, true));
     Vue.onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
 
-    return { panelRef, headingId, close };
+    // Long titles and descriptions show two lines each; "show all" reveals the rest.
+    const titleRef = Vue.ref(null);
+    const subtitleRef = Vue.ref(null);
+    const headerExpanded = Vue.ref(false);
+    const headerClamped = Vue.ref(false);
+    const overflows = el => !!el && el.scrollHeight > el.clientHeight + 1;
+    const measureHeader = async () => {
+      await Vue.nextTick();
+      if (!headerExpanded.value) { headerClamped.value = overflows(titleRef.value) || overflows(subtitleRef.value); }
+    };
+    Vue.watch(() => [props.open, props.title, props.subtitle], () => { headerExpanded.value = false; measureHeader(); }, { immediate: true });
+
+    return { panelRef, headingId, close, titleRef, subtitleRef, headerExpanded, headerClamped };
   },
   template: /* html */`
     <Transition name="ui-drawer-motion">
       <aside v-if="open" ref="panelRef" class="ui-detail-drawer" :class="{'is-stale': stale}" role="complementary" :aria-labelledby="headingId" tabindex="-1">
         <header class="ui-detail-drawer__header">
           <div class="ui-detail-drawer__titles">
-            <h2 :id="headingId" class="ui-detail-drawer__title">{{title}}</h2>
-            <p v-if="subtitle" class="ui-detail-drawer__subtitle">{{subtitle}}</p>
+            <h2 ref="titleRef" :id="headingId" class="ui-detail-drawer__title" :class="{'is-clamped': !headerExpanded}" :title="headerClamped ? title : null">{{title}}</h2>
+            <p v-if="subtitle" ref="subtitleRef" class="ui-detail-drawer__subtitle" :class="{'is-clamped': !headerExpanded}" :title="headerClamped ? subtitle : null">{{subtitle}}</p>
+            <button v-if="headerClamped" type="button" class="ui-detail-drawer__more" :aria-expanded="headerExpanded ? 'true' : 'false'"
+              @click="headerExpanded = !headerExpanded">{{headerExpanded ? t('common.showLess') : t('common.showAll')}}</button>
             <div v-if="$slots.meta" class="ui-detail-drawer__meta"><slot name="meta"></slot></div>
           </div>
           <div class="ui-detail-drawer__nav">

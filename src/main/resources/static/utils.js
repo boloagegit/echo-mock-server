@@ -95,6 +95,19 @@ const trapDialogFocus = (event, dialog) => {
  * true once the current record can be shown (loaded, failed, or nothing to load).
  * Templates read `held.value`, `held.open`, `held.waiting` and `held.stale`.
  */
+/**
+ * Long content in drawers: JSON is pretty-printed when it is small enough to format quickly,
+ * and very large bodies render only their beginning until the reader asks for the rest.
+ */
+const BODY_PREVIEW_CHARS = 64 * 1024;
+const DETAIL_LIST_PREVIEW = { conditions: 6, links: 8, tags: 8 };
+const formatBodyForReading = raw => {
+    if (!raw) { return ''; }
+    if (raw.length <= 512000) {
+        try { return JSON.stringify(JSON.parse(raw), null, 2); } catch { /* not JSON: show as is */ }
+    }
+    return raw;
+};
 /** Modifier shown in save-shortcut hints (Ctrl+Enter or ⌘+Enter save every form dialog). */
 const SAVE_SHORTCUT_KEY = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘' : 'Ctrl';
 const DETAIL_HOLD_MS = 300;
