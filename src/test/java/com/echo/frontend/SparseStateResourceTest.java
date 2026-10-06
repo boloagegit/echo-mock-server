@@ -12,7 +12,7 @@ class SparseStateResourceTest {
         // One drawer serves both views: no conditions and empty bodies get a short inline note, tags only render when present.
         String source = text("components/RuleDetail.js");
         assertThat(source).contains("<p v-if=\"!conditionGroups.length\" class=\"detail-empty\">{{t('rules.noCondition')}}</p>")
-                .contains("<p v-if=\"!body && detail\" class=\"detail-empty\">{{t('rules.empty')}}</p>")
+                .contains("<p v-if=\"!body && shownDetail\" class=\"detail-empty\">{{t('rules.empty')}}</p>")
                 .contains("<template v-if=\"tagEntries.length\">")
                 .doesNotContain("<span class=\"pv-label\"></span>");
     }

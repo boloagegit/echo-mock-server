@@ -26,10 +26,47 @@
 const useRouter = (deps) => {
     const { watch } = Vue;
     const { page, ruleFilter, responseFilter, logFilter, auditFilter, isAdmin, loadRules, loadLogs, loadAudit, loadResponseSummary, loadBackupStatus, loadStatus, loadAccounts, loadIssues } = deps;
+    // The page actually on screen. `page` is the target and drives the sidebar right away.
+    const shownPage = deps.shownPage || Vue.ref(page.value);
 
     // --- 狀態 ---
     const validPages = ['rules', 'responses', 'stats', 'audit', 'issues', 'accounts', 'settings'];
     const isIssuesEnabled = () => deps.issueReportingEnabled?.value === true && typeof loadIssues === 'function';
+
+    /** Starts the data load for a page and returns its promise (or null when there is nothing to wait for). */
+    const loadPage = p => {
+        if (p === 'rules') return loadRules();
+        if (p === 'responses') return loadResponseSummary();
+        if (p === 'stats') return loadLogs();
+        if (p === 'audit') return loadAudit();
+        if (p === 'accounts') return loadAccounts();
+        if (p === 'issues' && isIssuesEnabled()) return loadIssues();
+        if (p === 'settings') return Promise.all([loadStatus(), loadBackupStatus()]);
+        return null;
+    };
+
+    /**
+     * Page switches work like the detail drawers: the current page stays on screen until
+     * the next page's data has arrived (or PAGE_HOLD_MS passes), then the two swap in one
+     * frame instead of showing an empty list first. Pages visited before keep their rows,
+     * so they swap at once and refresh in place.
+     */
+    const PAGE_HOLD_MS = 300;
+    const visitedPages = new Set();
+    let holdToken = 0;
+    const showPageWhenReady = (target, pending) => {
+        const token = ++holdToken;
+        const swap = () => {
+            if (token !== holdToken || page.value !== target) { return; }
+            shownPage.value = target;
+            visitedPages.add(target);
+        };
+        if (!pending || visitedPages.has(target)) { swap(); return; }
+        setTimeout(swap, PAGE_HOLD_MS);
+        Promise.resolve(pending).catch(() => {}).finally(swap);
+    };
+    // A load started by applyUrlParams, reused by the page watcher in the same tick.
+    let urlLoad = null;
 
     /**
      * 解析目前的 hash，回傳頁面名稱與查詢參數
@@ -75,6 +112,7 @@ const useRouter = (deps) => {
 
     /**
      * 從 URL hash 解析參數並套用至頁面與篩選條件
+     * @returns {Promise|null} 目前頁面資料載入完成的 Promise
      */
     const applyUrlParams = () => {
         const { pageName, params } = parseHash();
@@ -92,26 +130,25 @@ const useRouter = (deps) => {
             ruleFilter.value.protocol = params.get('protocol') || '';
             ruleFilter.value.enabled = params.get('enabled') || '';
             ruleFilter.value.keyword = params.get('keyword') || '';
-            loadRules();
         } else if (page.value === 'responses') {
             responseFilter.value = params.get('keyword') || '';
-            loadResponseSummary();
         } else if (page.value === 'stats') {
             logFilter.value.protocol = params.get('protocol') || '';
             logFilter.value.matched = params.get('matched') || '';
             logFilter.value.endpoint = params.get('endpoint') || '';
-            loadLogs();
         } else if (page.value === 'audit') {
             auditFilter.value.action = params.get('action') || '';
             auditFilter.value.operator = params.get('operator') || '';
             auditFilter.value.keyword = params.get('keyword') || '';
-            loadAudit();
-        } else if (page.value === 'accounts') {
-            loadAccounts();
-        } else if (page.value === 'issues') {
-            loadIssues();
         }
+        // Settings loads its own status; every other page loads here, once.
+        const target = page.value;
+        const pending = target === 'settings' ? null : loadPage(target);
+        Promise.resolve(pending).catch(() => {}).finally(() => visitedPages.add(target));
+        urlLoad = { page: target, pending };
+        setTimeout(() => { urlLoad = null; });
         updateUrl(true);
+        return pending;
     };
 
     /**
@@ -142,12 +179,17 @@ const useRouter = (deps) => {
         watch(responseFilter, () => { if (page.value === 'responses') updateUrl(); });
         watch(logFilter, () => { if (page.value === 'stats') updateUrl(); }, { deep: true });
         watch(auditFilter, () => { if (page.value === 'audit') updateUrl(); }, { deep: true });
-        // 頁面切換 → 載入對應資料
-        watch(page, p => { if (p === 'rules') loadRules(); if (p === 'stats') loadLogs(); if (p === 'audit') loadAudit(); if (p === 'responses') loadResponseSummary(); if (p === 'accounts') loadAccounts(); if (p === 'issues' && isIssuesEnabled()) loadIssues(); if (p === 'settings') { loadStatus(); loadBackupStatus(); } });
+        // 頁面切換 → 載入對應資料，資料到齊（或短暫等待後）才換上新頁面
+        watch(page, p => {
+            const pending = urlLoad && urlLoad.page === p && p !== 'settings' ? urlLoad.pending : loadPage(p);
+            urlLoad = null;
+            showPageWhenReady(p, pending);
+        });
     };
 
     return {
         page,
+        shownPage,
         validPages,
         parseHash,
         updateUrl,

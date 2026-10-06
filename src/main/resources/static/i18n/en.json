@@ -966,7 +966,12 @@
       "newPasswordPlaceholder": "At least 6 characters",
       "newPasswordInvalid": "Choose a new password with at least 6 characters.",
       "submit": "Change Password"
-    }
+    },
+    "detailInfo": "Account details",
+    "thUpdatedAt": "Updated",
+    "mustChangePassword": "Must change at next sign-in",
+    "resetRequested": "This user asked for a password reset. Resetting creates a temporary password to hand over.",
+    "resetRequestedAt": "This user asked for a password reset at {time}. Resetting creates a temporary password to hand over."
   },
   "modal": {
     "editResponse": "Edit Response",
@@ -1516,7 +1521,8 @@
     "action": "Action: ",
     "operator": "Operator: ",
     "search": "Search: ",
-    "type": "Type: "
+    "type": "Type: ",
+    "role": "Role: "
   },
   "ssePreview": {
     "delay": "--- Delay {ms}ms ---",

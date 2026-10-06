@@ -40,7 +40,7 @@ function routerHarness(enabled, hash = '#/issues') {
     replaceState: (_state, _title, next) => { window.location.hash = next; },
     pushState: (_state, _title, next) => { window.location.hash = next; },
   } };
-  const context = vm.createContext({ Vue: h.Vue, deps, window, URLSearchParams });
+  const context = vm.createContext({ Vue: h.Vue, deps, window, URLSearchParams, setTimeout, clearTimeout });
   vm.runInContext(source('composables/useRouter.js') + '\nthis.router = useRouter(deps);', context);
   context.router.setupRouterWatchers();
   return { ...h, deps, window, calls, router: context.router };
@@ -160,14 +160,18 @@ test('disabling clears only browser cache and aborts late results; re-enabling l
 test('navigation, page mount, app wiring, default config and cached asset versions agree', () => {
   const guard = "status?.issueReportingEnabled === true";
   assert.ok(source('components/SidebarNav.js').includes('v-if="isLoggedIn && ' + guard + '"'));
-  assert.ok(source('index.html').includes("v-if=\"page==='issues' && " + guard + '"'));
+  // Pages render from shownPage, which follows page once the next page's data is ready.
+  assert.ok(source('index.html').includes("v-if=\"shownPage==='issues' && " + guard + '"'));
   const app = source('app.js');
   assert.ok(app.includes('const issueReportingEnabled = computed(() => status.value?.issueReportingEnabled === true)'));
   assert.ok(app.includes('isAdmin, issueReportingEnabled, loadRules:'));
   assert.ok(app.includes('loading, isAdmin, issueReportingEnabled }'));
-  for (const asset of ['composables/useRouter.js', 'composables/useIssues.js', 'components/SidebarNav.js', 'app.js']) {
-    const version = asset === 'app.js' ? '20261007.1' : asset === 'components/SidebarNav.js' ? '20261007.1' : '20261001.1';
-    assert.ok(source('index.html').includes(asset + '?v=' + version));
+  const versions = {
+    'composables/useRouter.js': '20261007.2', 'composables/useIssues.js': '20261001.1',
+    'components/SidebarNav.js': '20261007.1', 'app.js': '20261007.2',
+  };
+  for (const [asset, version] of Object.entries(versions)) {
+    assert.ok(source('index.html').includes(asset + '?v=' + version), asset);
   }
   const config = fs.readFileSync(path.join(staticRoot, '../application.yml'), 'utf8');
   assert.ok(config.includes('issue-reporting-enabled: ${ECHO_ISSUE_REPORTING_ENABLED:false}'));

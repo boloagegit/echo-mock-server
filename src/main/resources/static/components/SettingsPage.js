@@ -499,7 +499,7 @@ const SettingsPage = {
       <resource-monitoring-panel ref="resources" v-if="isAdmin" v-show="activeTab === 'overview' || activeTab === 'monitoring'" :view="activeTab" :backup-enabled="backupStatus?.enabled ?? null" :rule-caches="status?.ruleCaches" :refresh-token="resourceRefreshToken" @loading="resourceLoading=$event" @snapshot="updateResourceSnapshot" @navigate="navigateTab"></resource-monitoring-panel>
       <p v-if="activeTab !== 'overview' && activeTab !== 'monitoring'" class="settings-inline-note settings-manual-note">{{t('settings.manualRefreshHint')}}</p>
       <!-- Skeleton -->
-      <div v-if="!status && activeTab !== 'monitoring' && (activeTab !== 'overview' || !isAdmin)" class="settings-grid">
+      <div v-if="!status && activeTab !== 'monitoring' && (activeTab !== 'overview' || !isAdmin)" class="settings-grid loading-reveal">
         <div class="settings-card" v-for="i in 6" :key="'sk-'+i">
           <div class="settings-card-header"><span class="sk sk-text sk-w-120"></span></div>
           <div class="settings-card-body">

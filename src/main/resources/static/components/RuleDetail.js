@@ -6,6 +6,9 @@
  */
 const RuleDetail = {
   inject: ['t'],
+  mixins: [heldDetailMixin(function () {
+    return { open: this.open, key: this.rule?.id, ready: !!this.detail || this.error, value: { rule: this.rule, detail: this.detail } };
+  })],
   props: {
     open: Boolean,
     rule: { type: Object, default: null },
@@ -24,8 +27,11 @@ const RuleDetail = {
     return { bodySearch: '', bodyMatchIndex: 0 };
   },
   computed: {
+    shownDetail() {
+      return this.held.value.detail;
+    },
     view() {
-      return this.detail || this.rule || {};
+      return this.held.value.detail || this.held.value.rule || {};
     },
     isHttp() {
       return this.view.protocol !== 'JMS';
@@ -51,7 +57,7 @@ const RuleDetail = {
       return daysLeft(this.view.createdAt, this.view.extendedAt, this.status?.cleanupRetentionDays);
     },
     body() {
-      return this.detail?._previewBody || '';
+      return this.shownDetail?._previewBody || '';
     },
     bodySegments() {
       const keyword = this.bodySearch.trim();
@@ -89,7 +95,7 @@ const RuleDetail = {
     },
   },
   watch: {
-    'rule.id'() {
+    'view.id'() {
       this.bodySearch = '';
       this.bodyMatchIndex = 0;
     },
@@ -112,8 +118,8 @@ const RuleDetail = {
     },
   },
   template: /* html */`
-    <ui-detail-drawer :open="open" :title="view.matchKey || ''" :subtitle="view.description || ''"
-      :loading="loading && !detail" :error="error && !detail" :has-prev="hasPrev" :has-next="hasNext"
+    <ui-detail-drawer :open="held.open" :title="view.matchKey || ''" :subtitle="view.description || ''"
+      :loading="held.waiting" :error="error && !shownDetail" :stale="held.stale" :has-prev="hasPrev" :has-next="hasNext"
       class="rule-detail" @close="$emit('close')" @prev="$emit('prev')" @next="$emit('next')" @retry="$emit('retry')">
       <template #meta>
         <span class="rule-method" :data-method="isHttp ? (view.method || 'GET') : null" :data-protocol="view.protocol">{{isHttp ? (view.method || 'GET') : 'JMS'}}</span>
@@ -174,7 +180,7 @@ const RuleDetail = {
                 @click="$emit('clip-copy', view.responseBody || body)"><i class="bi bi-clipboard" aria-hidden="true"></i></ui-button>
             </div>
           </div>
-          <p v-if="!body && detail" class="detail-empty">{{t('rules.empty')}}</p>
+          <p v-if="!body && shownDetail" class="detail-empty">{{t('rules.empty')}}</p>
           <pre v-else-if="body" ref="bodyPre" class="detail-code"><template v-for="(part, i) in bodySegments" :key="i"><mark v-if="part.hit" :class="{'is-current': part.current}">{{part.text}}</mark><template v-else>{{part.text}}</template></template></pre>
         </template>
       </section>

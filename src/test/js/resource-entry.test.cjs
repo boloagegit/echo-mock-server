@@ -29,6 +29,7 @@ async function enterSettings(statusCode) {
     checkForceChangePassword() { throw new Error('status should still be pending'); },
     readCachedStatus: () => null, applyStatus() {},
     revealApp: () => { reveals++; },
+    page: { value: 'settings' }, shownPage: { value: 'rules' }, BOOT_DATA_WAIT_MS: 600,
     closeResponseDropdown() {}, closeDataDropdown() {}, closeResponseDataDropdown() {}, handleKeydown() {},
     handleBeforeUnload() {},
   };

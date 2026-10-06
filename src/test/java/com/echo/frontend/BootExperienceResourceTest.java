@@ -37,12 +37,17 @@ class BootExperienceResourceTest {
     }
 
     @Test
-    void shellLeavesOnlyWhenTranslationsAndIdentityAreReady() throws IOException {
+    void shellLeavesOnlyWhenTranslationsIdentityAndFirstRowsAreReady() throws IOException {
         String app = text("app.js");
 
         assertThat(app)
                 .contains("const revealFallback = setTimeout(revealApp, 2500);")
-                .contains("if (cachedStatus) { applyStatus(cachedStatus); }\n            await loadLocale(locale.value);\n            if (cachedStatus) { revealApp(); }")
+                .contains("const BOOT_DATA_WAIT_MS = 600;")
+                // A cached identity only shortens the wait; it no longer reveals an empty list.
+                .contains("if (cachedStatus) { setTimeout(revealApp, BOOT_DATA_WAIT_MS); }")
+                .doesNotContain("if (cachedStatus) { revealApp(); }")
+                .contains("const firstPage = applyUrlParams();")
+                .contains("await Promise.race([firstPage, new Promise(resolve => { dataWait = setTimeout(resolve, BOOT_DATA_WAIT_MS); })]);")
                 .contains("sessionStorage.setItem(STATUS_CACHE_KEY")
                 .doesNotContain("'datasourceUrl', ")
                 .doesNotContain("'ldapUrl'");

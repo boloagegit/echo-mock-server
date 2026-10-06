@@ -33,7 +33,14 @@ const AuditPage = {
     'go-to-rule', 'go-to-response', 'toggle-audit-detail', 'clip-copy'
   ],
   inject: ['t'],
+  mixins: [heldDetailMixin(function () {
+    const log = this.selectedLog;
+    return { open: !!log, key: log?.id, ready: !log?._detailLoading, value: log };
+  })],
   computed: {
+    shownLog() {
+      return this.held.value;
+    },
     hasAuditFilters() {
       return Boolean(this.auditFilter.action || this.auditFilter.operator || this.auditFilter.keyword);
     },
@@ -211,21 +218,21 @@ const AuditPage = {
         </workspace-pagination>
       </div>
 
-      <ui-detail-drawer class="audit-detail-drawer" :open="!!selectedLog" :title="selectedLog ? targetName(selectedLog) : ''"
-        :subtitle="selectedLog ? targetType(selectedLog) + ' · ' + targetId(selectedLog) : ''"
-        :loading="!!selectedLog?._detailLoading" :has-prev="selectedIndex > 0" :has-next="selectedIndex >= 0 && selectedIndex < pagedAudit.length - 1"
+      <ui-detail-drawer class="audit-detail-drawer" :open="held.open" :title="shownLog ? targetName(shownLog) : ''"
+        :subtitle="shownLog ? targetType(shownLog) + ' · ' + targetId(shownLog) : ''"
+        :loading="held.waiting" :stale="held.stale" :has-prev="selectedIndex > 0" :has-next="selectedIndex >= 0 && selectedIndex < pagedAudit.length - 1"
         @close="selectedLog && $emit('toggle-audit-detail', selectedLog)" @prev="stepDetail(-1)" @next="stepDetail(1)">
-        <template v-if="selectedLog" #meta>
-          <ui-badge class="badge" :class="'badge-'+selectedLog.action?.toLowerCase()">{{auditActionLabel(selectedLog.action)}}</ui-badge>
-          <span class="detail-mono">{{fmtTime(selectedLog.timestamp, false)}}</span>
-          <span class="cell-subtle">{{selectedLog.operator}}</span>
+        <template v-if="shownLog" #meta>
+          <ui-badge class="badge" :class="'badge-'+shownLog.action?.toLowerCase()">{{auditActionLabel(shownLog.action)}}</ui-badge>
+          <span class="detail-mono">{{fmtTime(shownLog.timestamp, false)}}</span>
+          <span class="cell-subtle">{{shownLog.operator}}</span>
         </template>
-        <template v-if="selectedLog && selectedLog.action!=='DELETE'" #actions>
-          <ui-button variant="secondary" size="compact" @click="openTarget(selectedLog)"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>{{isResponse(selectedLog) ? t('audit.openResponse') : t('audit.openRule')}}</ui-button>
+        <template v-if="shownLog && shownLog.action!=='DELETE'" #actions>
+          <ui-button variant="secondary" size="compact" @click="openTarget(shownLog)"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>{{isResponse(shownLog) ? t('audit.openResponse') : t('audit.openRule')}}</ui-button>
         </template>
-        <section v-if="selectedLog" class="detail-section audit-changes">
+        <section v-if="shownLog" class="detail-section audit-changes">
           <div class="detail-section__head"><h3 class="detail-section__title">{{t('audit.changesTitle')}}</h3></div>
-                  <template v-for="detail in [getAuditChanges(selectedLog)]" :key="selectedLog.id">
+                  <template v-for="detail in [getAuditChanges(shownLog)]" :key="shownLog.id">
                   <template v-if="detail.type==='update'">
                     <div v-if="detail.changes.length" class="ac-list">
                       <template v-for="c in detail.changes" :key="c.label">

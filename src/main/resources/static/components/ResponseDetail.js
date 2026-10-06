@@ -6,6 +6,9 @@
  */
 const ResponseDetail = {
   inject: ['t'],
+  mixins: [heldDetailMixin(function () {
+    return { open: this.open, key: this.response?.id, ready: !!this.detail || this.error, value: { response: this.response, detail: this.detail } };
+  })],
   props: {
     open: Boolean,
     response: { type: Object, default: null },
@@ -19,8 +22,11 @@ const ResponseDetail = {
   },
   emits: ['close', 'prev', 'next', 'retry', 'edit', 'menu', 'go-to-rule', 'clip-copy'],
   computed: {
+    shownDetail() {
+      return this.held.value.detail;
+    },
     view() {
-      return { ...(this.response || {}), ...(this.detail || {}) };
+      return { ...(this.held.value.response || {}), ...(this.shownDetail || {}) };
     },
     isSse() {
       return this.view.contentType === 'SSE';
@@ -30,7 +36,7 @@ const ResponseDetail = {
       return daysLeft(this.view.updatedAt, this.view.extendedAt, this.status?.responseRetentionDays);
     },
     formattedBody() {
-      const body = this.detail?.body || '';
+      const body = this.shownDetail?.body || '';
       if (!body) return '';
       try { return JSON.stringify(JSON.parse(body), null, 2); } catch { return body; }
     },
@@ -48,8 +54,8 @@ const ResponseDetail = {
     fmtTime, fmtSize, shortId,
   },
   template: /* html */`
-    <ui-detail-drawer :open="open" :title="view.description || t('responses.noDescription')" :subtitle="view.id != null ? '#' + view.id : ''"
-      :loading="loading && !detail" :error="error && !detail" :has-prev="hasPrev" :has-next="hasNext"
+    <ui-detail-drawer :open="held.open" :title="view.description || t('responses.noDescription')" :subtitle="view.id != null ? '#' + view.id : ''"
+      :loading="held.waiting" :error="error && !shownDetail" :stale="held.stale" :has-prev="hasPrev" :has-next="hasNext"
       class="response-detail" @close="$emit('close')" @prev="$emit('prev')" @next="$emit('next')" @retry="$emit('retry')">
       <template #meta>
         <ui-badge tone="neutral">{{isSse ? 'SSE' : t('responses.typeGeneral')}}</ui-badge>
@@ -65,11 +71,11 @@ const ResponseDetail = {
       <section class="detail-section">
         <div class="detail-section__head">
           <h3 class="detail-section__title">{{t('responses.linkedRulesTitle')}}</h3>
-          <span class="detail-section__tools detail-mono">{{(detail?.rules || []).length}}</span>
+          <span class="detail-section__tools detail-mono">{{(shownDetail?.rules || []).length}}</span>
         </div>
-        <p v-if="detail && !detail.rules.length" class="detail-empty">{{view.usageCount ? t('responses.noVisibleLinkedRules') : t('responses.notUsed')}}</p>
-        <ul v-else-if="detail" class="detail-links">
-          <li v-for="rule in detail.rules" :key="rule.id">
+        <p v-if="shownDetail && !shownDetail.rules.length" class="detail-empty">{{view.usageCount ? t('responses.noVisibleLinkedRules') : t('responses.notUsed')}}</p>
+        <ul v-else-if="shownDetail" class="detail-links">
+          <li v-for="rule in shownDetail.rules" :key="rule.id">
             <button type="button" class="detail-link" @click="$emit('go-to-rule', rule.id)">
               <span class="rule-method" :data-method="rule.protocol==='HTTP' ? (rule.method || 'GET') : null" :data-protocol="rule.protocol">{{rule.protocol==='HTTP' ? (rule.method || 'GET') : 'JMS'}}</span>
               <code class="detail-link__path">{{rule.matchKey}}</code>
@@ -85,10 +91,10 @@ const ResponseDetail = {
           <h3 class="detail-section__title">{{t('rules.pvResponseContent')}}</h3>
           <div v-if="formattedBody" class="detail-section__tools">
             <ui-button type="button" variant="quiet" size="compact" icon-only :title="t('rules.copyFullContent')" :aria-label="t('rules.copyFullContent')"
-              @click="$emit('clip-copy', detail.body)"><i class="bi bi-clipboard" aria-hidden="true"></i></ui-button>
+              @click="$emit('clip-copy', shownDetail.body)"><i class="bi bi-clipboard" aria-hidden="true"></i></ui-button>
           </div>
         </div>
-        <p v-if="detail && !formattedBody" class="detail-empty">{{t('rules.empty')}}</p>
+        <p v-if="shownDetail && !formattedBody" class="detail-empty">{{t('rules.empty')}}</p>
         <pre v-else-if="formattedBody" class="detail-code">{{formattedBody}}</pre>
       </section>
 

@@ -226,7 +226,7 @@ class ListRefinementResourceTest {
 
     @Test
     void listFiltersUseSharedControlsWithCorrectSelectionSemantics() throws IOException {
-        for (String page : new String[]{"RulesPage", "ResponsesPage", "AuditPage", "StatsPage"}) {
+        for (String page : new String[]{"RulesPage", "ResponsesPage", "AuditPage", "StatsPage", "AccountsPage"}) {
             String source = text("components/" + page + ".js");
             assertThat(source).as(page + " toggle groups")
                     .contains("<ui-toggle-group")
@@ -236,7 +236,8 @@ class ListRefinementResourceTest {
                     .doesNotContain("class=\"filter-chips\"")
                     .doesNotContain("class=\"filter-chip\"");
         }
-        for (String page : new String[]{"AccountsPage", "IssuesPage"}) {
+        // Issues still uses a required segmented status filter until it moves to the shared list.
+        for (String page : new String[]{"IssuesPage"}) {
             assertThat(text("components/" + page + ".js"))
                     .as(page + " required filters")
                     .contains("<ui-segmented-control")
@@ -359,7 +360,8 @@ class ListRefinementResourceTest {
                 .contains("min-height: var(--workspace-row-primary-h);")
                 .contains(".workspace-row-primary-end { justify-content: flex-end }");
 
-        for (String page : new String[]{"IssuesPage", "AccountsPage"}) {
+        // Accounts moved to the shared data-table; Issues keeps the aligned slot until it does too.
+        for (String page : new String[]{"IssuesPage"}) {
             assertThat(text("components/" + page + ".js"))
                     .as(page + " aligned list rows")
                     .contains("workspace-primary-aligned-table")
@@ -728,7 +730,7 @@ class ListRefinementResourceTest {
     void unconditionalRulesArePresentedAsIntentionalDefaultMatches() throws IOException {
         assertThat(text("i18n/zh-TW.json")).contains("\"noCondition\": \"預設匹配\"");
         assertThat(text("i18n/en.json")).contains("\"noCondition\": \"Default match\"");
-        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261006.3");
+        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261007.2");
     }
 
     @Test

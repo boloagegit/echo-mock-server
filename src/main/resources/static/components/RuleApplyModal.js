@@ -158,7 +158,7 @@ const RuleApplyModal = {
             </p>
 
             <div class="rule-apply-editor-shell" :class="{'is-loading':loading, 'has-error':visibleError}">
-              <div v-if="loading" class="rule-apply-loading"><i class="bi bi-arrow-clockwise spin" aria-hidden="true"></i> {{t('rules.loading')}}</div>
+              <div v-if="loading" class="rule-apply-loading loading-reveal"><i class="bi bi-arrow-clockwise spin" aria-hidden="true"></i> {{t('rules.loading')}}</div>
               <textarea ref="editorInput" class="rule-apply-textarea" :value="documentText" @input="updateDocument" @keydown.ctrl.enter.prevent="$emit('apply')" @keydown.meta.enter.prevent="$emit('apply')" :aria-label="t('rules.applyEditorLabel')" :aria-invalid="!!visibleError" aria-describedby="ruleApplyReplaceNotice ruleApplyFeedback" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
             </div>
             <div v-if="visibleError" id="ruleApplyFeedback" class="rule-apply-feedback is-error" role="alert">

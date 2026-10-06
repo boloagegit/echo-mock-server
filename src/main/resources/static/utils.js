@@ -84,6 +84,52 @@ const trapDialogFocus = (event, dialog) => {
         first.focus();
     }
 };
+/**
+ * Detail drawers keep showing the record already on screen until the next record's
+ * data is ready, then swap in a single frame. Without this, stepping through a list
+ * blanks the drawer for a frame (content → empty → content), which reads as a flash.
+ * Opening from closed waits the same way (up to DETAIL_HOLD_MS), so the drawer slides
+ * in already filled instead of filling in mid-slide.
+ *
+ * `source` runs on the component and returns { open, key, ready, value }; `ready` is
+ * true once the current record can be shown (loaded, failed, or nothing to load).
+ * Templates read `held.value`, `held.open`, `held.waiting` and `held.stale`.
+ */
+const DETAIL_HOLD_MS = 300;
+const heldDetailMixin = source => ({
+    data() { return { heldSnapshot: null, holdExpired: false }; },
+    computed: {
+        heldSource() { return source.call(this); },
+        held() {
+            const current = this.heldSource;
+            const stale = current.open && !current.ready && !!this.heldSnapshot;
+            return {
+                value: stale ? this.heldSnapshot : current.value,
+                stale,
+                waiting: !current.ready && !stale,
+                open: current.open && (current.ready || stale || this.holdExpired),
+            };
+        },
+    },
+    watch: {
+        heldSource: {
+            immediate: true,
+            handler(current, previous) {
+                if (!current.open || current.ready) {
+                    clearTimeout(this.holdTimer);
+                    this.heldSnapshot = current.open ? current.value : null;
+                    this.holdExpired = false;
+                } else if (!previous || !previous.open || previous.key !== current.key) {
+                    clearTimeout(this.holdTimer);
+                    this.holdExpired = false;
+                    this.holdTimer = setTimeout(() => { this.holdExpired = true; }, DETAIL_HOLD_MS);
+                }
+            },
+        },
+    },
+    beforeUnmount() { clearTimeout(this.holdTimer); },
+});
+
 const deserializeSseEvents = (jsonStr) => {
     const defaultEvent = () => ({ event: '', data: '', id: '', delayMs: 0, type: 'normal' });
     if (jsonStr == null || typeof jsonStr !== 'string' || !jsonStr.trim()) { return [defaultEvent()]; }

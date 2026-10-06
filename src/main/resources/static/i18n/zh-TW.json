@@ -966,7 +966,12 @@
       "newPasswordPlaceholder": "至少 6 字元",
       "newPasswordInvalid": "請設定至少 6 個字元的新密碼。",
       "submit": "修改密碼"
-    }
+    },
+    "detailInfo": "帳號資訊",
+    "thUpdatedAt": "更新時間",
+    "mustChangePassword": "下次登入須修改密碼",
+    "resetRequested": "使用者已申請重設密碼。重設後會產生一組臨時密碼，請交給使用者。",
+    "resetRequestedAt": "使用者於 {time} 申請重設密碼。重設後會產生一組臨時密碼，請交給使用者。"
   },
   "modal": {
     "editResponse": "編輯回應內容",
@@ -1516,7 +1521,8 @@
     "action": "操作：",
     "operator": "操作者：",
     "search": "搜尋：",
-    "type": "類型："
+    "type": "類型：",
+    "role": "角色："
   },
   "ssePreview": {
     "delay": "—— 延遲 {ms} ms ——",

@@ -294,7 +294,7 @@ const RulesPage = {
                 </button>
                 <template v-if="expandedTagGroups.includes(section.key)">
                     <template v-if="!section.isTag">
-                        <div v-if="groupLoading['_untagged']" class="rule-group__state" role="status"><i class="bi bi-arrow-clockwise spin" aria-hidden="true"></i>{{t('rules.loading')}}</div>
+                        <div v-if="groupLoading['_untagged']" class="rule-group__state loading-reveal" role="status"><i class="bi bi-arrow-clockwise spin" aria-hidden="true"></i>{{t('rules.loading')}}</div>
                         <rule-table v-if="groupRules('_untagged').length" :rules="groupRules('_untagged')" :selected-id="ruleDetailId"
                             :is-logged-in="isLoggedIn" :status="status" :http-label="httpLabel" :jms-label="jmsLabel"
                             @select="selectRule" @edit="$emit('open-edit', $event)" @toggle-enabled="$emit('toggle-enabled', $event)" @menu="handleRowMenu"></rule-table>
@@ -312,7 +312,7 @@ const RulesPage = {
                                 <span class="rule-group__count">{{sub.count}}</span>
                             </button>
                             <template v-if="expandedTagSubgroups.includes(sub.id)">
-                                <div v-if="groupLoading[sub.id]" class="rule-group__state" role="status"><i class="bi bi-arrow-clockwise spin" aria-hidden="true"></i>{{t('rules.loading')}}</div>
+                                <div v-if="groupLoading[sub.id]" class="rule-group__state loading-reveal" role="status"><i class="bi bi-arrow-clockwise spin" aria-hidden="true"></i>{{t('rules.loading')}}</div>
                                 <rule-table v-if="subgroupRules(sub.id).length" :rules="subgroupRules(sub.id)" :selected-id="ruleDetailId"
                                     :is-logged-in="isLoggedIn" :status="status" :http-label="httpLabel" :jms-label="jmsLabel"
                                     @select="selectRule" @edit="$emit('open-edit', $event)" @toggle-enabled="$emit('toggle-enabled', $event)" @menu="handleRowMenu"></rule-table>

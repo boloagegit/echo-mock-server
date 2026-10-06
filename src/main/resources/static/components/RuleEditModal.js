@@ -1147,7 +1147,7 @@ const RuleEditModal = {
                                     </ui-button>
                                 </template>
                             </div>
-                            <div v-if="form.responseId && previewResponseLoading" class="response-preview-loading"><i class="bi bi-hourglass-split spin"></i> {{t('modal.loadingResponse')}}</div>
+                            <div v-if="form.responseId && previewResponseLoading" class="response-preview-loading loading-reveal"><i class="bi bi-hourglass-split spin"></i> {{t('modal.loadingResponse')}}</div>
                             <div v-else-if="form.responseId && previewResponseLoadFailed" class="response-preview-empty response-preview-error"><i class="bi bi-exclamation-circle" aria-hidden="true"></i><span>{{t('modal.responseLoadFailed')}}</span></div>
                             <div v-else-if="form.responseId" v-show="previewResponseBody.length || previewEditing" class="response-preview-wrap">
                                 <div id="rulePreviewEditor" class="preview-editor" :class="{editing:previewEditing}"></div>
@@ -1206,7 +1206,7 @@ const RuleEditModal = {
                                 @update:model-value="$emit('update:response-picker-sse-only',$event)"></ui-choice-group>
                         </div>
                         <div id="ruleResponsePickerList" class="response-picker-drawer-results" role="listbox" :aria-label="t('modal.responsePickerResults')" :aria-busy="responsePickerLoading">
-                            <div v-if="responsePickerLoading" class="response-picker-state"><span class="spinner-sm" aria-hidden="true"></span>{{t('modal.loadingResponses')}}</div>
+                            <div v-if="responsePickerLoading" class="response-picker-state loading-reveal"><span class="spinner-sm" aria-hidden="true"></span>{{t('modal.loadingResponses')}}</div>
                             <div v-else-if="responsePickerError" class="response-picker-state is-error">
                                 <span>{{t('modal.responsePickerLoadFailed')}}</span>
                                 <ui-button type="button" class="btn btn-sm btn-secondary" @click="$emit('search-response-picker')">{{t('common.retry')}}</ui-button>

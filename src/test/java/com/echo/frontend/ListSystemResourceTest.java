@@ -17,6 +17,7 @@ class ListSystemResourceTest {
             {"ResponsesPage", "ResponsesPage", "batch"},
             {"StatsPage", "StatsPage", ""},
             {"AuditPage", "AuditPage", ""},
+            {"AccountsPage", "AccountsPage", ""},
     };
 
     @Test
@@ -57,15 +58,25 @@ class ListSystemResourceTest {
     }
 
     @Test
-    void pageSwitchKeepsTheHeaderStillAndOnlyEasesContentIn() throws IOException {
+    void pageSwitchSwapsFilledPagesInOneFrameWithoutFading() throws IOException {
         String style = text("style.css");
         String console = text("console.css");
+        String router = text("composables/useRouter.js");
 
         assertThat(style).contains(".page.active { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden }");
+        // Nothing on the page fades in on a switch: a dim-then-brighten card reads as a flash.
         assertThat(console)
-                .contains(".page.active > .list-card,")
-                .contains("@keyframes pageContentIn { from { opacity: 0.4; transform: translateY(3px) }")
+                .doesNotContain("pageContentIn")
                 .doesNotContain(".page.active > .page-header {");
+        // Pages render from shownPage; the sidebar follows page (the target) immediately.
+        assertThat(text("index.html"))
+                .contains("<rules-page v-if=\"shownPage==='rules'\"")
+                .contains("<accounts-page v-if=\"shownPage==='accounts'\"")
+                .doesNotContain("-page v-if=\"page===");
+        assertThat(router)
+                .contains("const PAGE_HOLD_MS = 300;")
+                .contains("if (!pending || visitedPages.has(target)) { swap(); return; }")
+                .contains("showPageWhenReady(p, pending);");
         // Notes that used to push the toolbar down now live in a header tooltip.
         assertThat(text("components/ResponsesPage.js"))
                 .contains(":data-tooltip=\"t('responses.sharedInfo')\"")

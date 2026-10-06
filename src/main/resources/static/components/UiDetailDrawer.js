@@ -14,6 +14,8 @@ const UiDetailDrawer = {
     subtitle: { type: String, default: '' },
     loading: { type: Boolean, default: false },
     error: { type: Boolean, default: false },
+    /** The body still shows the previous record while the next one loads (see heldDetailMixin). */
+    stale: { type: Boolean, default: false },
     hasPrev: { type: Boolean, default: false },
     hasNext: { type: Boolean, default: false },
   },
@@ -67,7 +69,7 @@ const UiDetailDrawer = {
   },
   template: /* html */`
     <Transition name="ui-drawer-motion">
-      <aside v-if="open" ref="panelRef" class="ui-detail-drawer" role="complementary" :aria-labelledby="headingId" tabindex="-1">
+      <aside v-if="open" ref="panelRef" class="ui-detail-drawer" :class="{'is-stale': stale}" role="complementary" :aria-labelledby="headingId" tabindex="-1">
         <header class="ui-detail-drawer__header">
           <div class="ui-detail-drawer__titles">
             <h2 :id="headingId" class="ui-detail-drawer__title">{{title}}</h2>
@@ -84,8 +86,8 @@ const UiDetailDrawer = {
           </div>
         </header>
         <div v-if="$slots.actions" class="ui-detail-drawer__actions"><slot name="actions"></slot></div>
-        <div class="ui-detail-drawer__body">
-          <div v-if="loading" class="ui-detail-drawer__state" role="status">
+        <div class="ui-detail-drawer__body" :aria-busy="stale ? 'true' : null">
+          <div v-if="loading" class="ui-detail-drawer__state loading-reveal" role="status">
             <i class="bi bi-arrow-clockwise spin" aria-hidden="true"></i><span>{{t('common.loading')}}</span>
           </div>
           <div v-else-if="error" class="ui-detail-drawer__state is-error" role="alert">

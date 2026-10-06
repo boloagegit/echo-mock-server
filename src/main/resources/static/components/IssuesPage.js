@@ -181,7 +181,7 @@ const IssuesPage = {
           <template #action><ui-button type="button" class="btn btn-sm btn-secondary" @click="$emit('load-issues', true)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</ui-button></template>
         </ui-load-state>
         <div v-else class="card-table-body">
-          <div v-if="loading.issues && !issues.length" role="status" :aria-label="t('common.loading')">
+          <div v-if="loading.issues && !issues.length" class="loading-reveal" role="status" :aria-label="t('common.loading')">
             <div v-for="i in 5" :key="'sk-issue-'+i" class="sk-row">
               <span class="sk sk-badge sk-w-70"></span>
               <span class="sk sk-text sk-w-40p"></span>

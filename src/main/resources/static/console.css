@@ -236,7 +236,9 @@
 .ui-detail-drawer__nav .ui-button { color: var(--muted) }
 .ui-detail-drawer__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); padding: 12px 20px; border-bottom: 1px solid var(--border) }
 .ui-detail-drawer__actions .ui-row-menu { margin-inline-start: auto }
-.ui-detail-drawer__body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 20px 24px; overscroll-behavior: contain }
+.ui-detail-drawer__body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 20px 24px; overscroll-behavior: contain; transition: opacity var(--motion-fast) var(--ease-standard) }
+/* While the next record loads the current one stays put; only a wait long enough to notice dims it. */
+.ui-detail-drawer.is-stale .ui-detail-drawer__body { opacity: 0.55; transition-delay: 300ms }
 .ui-detail-drawer__footer { display: flex; justify-content: flex-end; gap: var(--space-sm); padding: 12px 20px; border-top: 1px solid var(--border) }
 .ui-detail-drawer__state { display: flex; align-items: center; gap: var(--space-sm); padding: 24px 0; color: var(--muted) }
 .ui-detail-drawer__state.is-error { color: var(--danger-text) }
@@ -506,17 +508,68 @@
 .sidebar.collapsed .sidebar-header { flex-direction: column; gap: var(--space-sm); padding: 12px 0 8px }
 
 /* ===== Page switching =====
- * The header and toolbar sit at the same position on every page and never
- * animate; only the content below eases in, so switching pages feels steady. */
-.page.active > .list-card,
-.page.active > .ui-filter-chip-list,
-.page.active > .batch-bar { animation: pageContentIn var(--motion-base) var(--ease-standard) both }
-@keyframes pageContentIn { from { opacity: 0.4; transform: translateY(3px) } to { opacity: 1; transform: none } }
-@media (prefers-reduced-motion: reduce) {
-    .page.active > .list-card,
-    .page.active > .ui-filter-chip-list,
-    .page.active > .batch-bar { animation: none }
+ * The header, toolbar and list card sit at the same position on every page and never
+ * animate. The router holds the current page until the next one has its rows, so a
+ * switch swaps content in a single frame; fading the card in would only read as a flash. */
+
+/* ===== Account list and drawer ===== */
+.accounts-table .col-role { width: 112px }
+.accounts-table .col-status { width: 104px }
+.accounts-table .col-created,
+.accounts-table .col-login { width: 132px }
+.accounts-table .col-actions { width: 56px }
+.account-name { display: flex; align-items: center; gap: var(--space-sm); min-width: 0 }
+.account-avatar {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--surface-neutral-soft);
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: var(--font-weight-semibold);
 }
+.account-name .record-name__title { white-space: nowrap }
+.account-flag { flex: none; gap: 4px }
+.is-disabled .account-avatar { opacity: 0.6 }
+@container (max-width: 820px) { .accounts-table .col-created { display: none } }
+@container (max-width: 640px) { .accounts-table .col-login, .accounts-table .col-status { display: none } }
+
+/* A short notice at the top of a drawer, for something the reader should act on. */
+.detail-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    margin: var(--space-md) 0 0;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-neutral-soft);
+    color: var(--text);
+    font-size: var(--font-sm);
+    line-height: 1.5;
+}
+.detail-notice > i { flex: none; margin-top: 2px }
+.detail-notice.is-warning { border-color: rgba(var(--warning-rgb), 0.4); background: rgba(var(--warning-rgb), 0.08) }
+.detail-notice.is-warning > i { color: var(--warning-text) }
+
+/* ===== Loading reveal =====
+ * Most requests finish quickly. A placeholder that appears for a few frames and is
+ * then swapped out reads as a flash, so loading placeholders stay invisible for a
+ * short grace period and fade in only when the wait is long enough to notice.
+ * Only opacity animates; the grace period still applies with reduced motion. */
+.top-loader,
+.list-skeleton,
+.loading-reveal { animation: loadingReveal 160ms var(--ease-standard) 300ms both }
+@keyframes loadingReveal { from { opacity: 0 } to { opacity: 1 } }
+/* A busy button keeps full strength and only starts turning its icon once the wait
+ * is noticeable, so a quick refresh does not blink the button. */
+.ui-button:disabled:has(.spin) { opacity: 1 }
+.ui-button .spin { animation-delay: 150ms }
 
 /* ===== Audit list and change drawer ===== */
 .audit-table .col-time { width: 124px }

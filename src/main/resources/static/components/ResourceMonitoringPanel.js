@@ -190,7 +190,7 @@ const ResourceMonitoringPanel = {
   template: /* html */`
     <section class="resource-monitoring" :aria-busy="busy">
       <div class="resource-monitoring-meta" aria-live="polite">
-        <span v-if="busy">{{t('monitoring.loading')}}</span>
+        <span v-if="busy" class="loading-reveal">{{t('monitoring.loading')}}</span>
         <span v-if="snapshot">{{t('monitoring.collectedAt')}} {{collectedTime(snapshot.collectedAt)}}</span>
         <span v-if="failed" class="resource-monitoring-error">{{t(snapshot ? 'monitoring.stale' : 'monitoring.failed')}}</span>
         <ui-button v-if="failed" variant="secondary" size="compact" @click="loadSnapshot" :disabled="busy">{{t('common.retry')}}</ui-button>
