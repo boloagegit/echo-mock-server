@@ -28,7 +28,6 @@ class ListRefinementResourceTest {
                 .contains("--font-weight-medium: 500;")
                 .contains("--font-weight-semibold: 600;")
                 .contains("--font-weight-bold: 700;")
-                .contains(".workspace-row-primary {\n    min-width: 0;\n    min-height: var(--workspace-row-primary-h);\n    display: flex;\n    align-items: center;\n    line-height: 20px;")
                 .contains(".btn-sm { min-height: var(--control-h-sm);")
                 .contains(".btn-xs { min-height: var(--control-h-sm);")
                 .contains(".btn-icon { padding: 0.3rem; width: var(--control-h); height: var(--control-h);")
@@ -36,24 +35,21 @@ class ListRefinementResourceTest {
                 .contains(".btn-xs.btn-icon { width: max(32px, var(--control-h-sm)); height: max(32px, var(--control-h-sm));")
                 .contains(".workspace-pagination .pagination-controls .btn { width: max(32px, var(--control-h-sm)); height: max(32px, var(--control-h-sm)); min-height: max(32px, var(--control-h-sm));")
                 .contains(".workspace-page-size .form-control {\n    width: 76px;\n    min-height: var(--control-h-sm);")
-                .contains(".connection-actions {\n    display: flex;")
-                .contains(".connection-action-group { display: flex;")
-                .contains(".connection-action-management {\n    padding-inline-start: var(--space-md);")
                 .contains("min-height: var(--control-h-sm);")
                 .contains(".btn:disabled, .btn.disabled { opacity: 0.55;")
                 .contains(".tag-add-inline input {\n    width: 65px;\n    min-height: var(--control-h-sm);")
                 .contains(".tag-add-inline button {\n    width: max(32px, var(--control-h-sm));")
                 .contains(".tag-add-inline button:focus-visible { outline: 2px solid var(--primary);")
                 .contains(".help-tooltip {\n    position: relative;\n    width: 32px;\n    height: 32px;\n    flex: 0 0 32px;")
-                .contains(".rule-table-hint > summary { width: 32px; height: 32px;")
-                .contains(".rule-table-hint-popover > button { width: 32px; height: 32px; flex: 0 0 32px;")
-                .contains(".rule-filter-bar .btn-group .btn { height: var(--toolbar-h); min-height: var(--toolbar-h);")
                 .contains(".connection-form-modal .modal-close {\n    width: 32px;\n    height: 32px;")
                 .contains(".connection-form-modal .modal-close:focus-visible { outline: 0;")
                 .contains("th { height: 40px;")
                 .contains("transition-property: background-color, border-color, color, box-shadow, transform;")
                 .contains(".btn:active:not(:disabled) { transform: scale(0.96) }")
-                .contains(".rule-endpoint-main code { min-width: 0; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: var(--font-base); font-weight: var(--font-weight-medium) }")
+                // Legacy row, toolbar and connection-action layouts were replaced by the shared list system.
+                .doesNotContain(".workspace-row-primary {")
+                .doesNotContain(".rule-filter-bar .btn-group .btn {")
+                .doesNotContain(".connection-action-group {")
                 .doesNotContain("font-weight: 550")
                 .doesNotContain("font-weight: 650");
         assertThat(theme)
@@ -62,16 +58,15 @@ class ListRefinementResourceTest {
                 .contains("--success-strong: #145f3a;")
                 .contains("--warning-strong: #684709;");
         assertThat(css)
-                .contains(".cond-tag .cond-label { background: rgba(var(--warning-rgb), 0.2); color: var(--warning-strong) }")
-                .contains(".cond-tag.query .cond-label { background: rgba(var(--primary-rgb), 0.2); color: var(--primary-strong) }")
-                .contains(".cond-tag.header .cond-label { background: rgba(var(--success-rgb), 0.2); color: var(--success-strong) }");
+                // Condition kinds are told apart by the shared cond-chip colours (see SignalConsoleListResourceTest).
+                .doesNotContain(".cond-tag .cond-label {");
 
-        int protocolStart = css.lastIndexOf(".badge-http {");
-        String protocolRule = css.substring(protocolStart, css.indexOf('}', protocolStart));
-        assertThat(protocolRule)
-                .contains("background: var(--surface-control)")
-                .contains("color: var(--text)")
-                .doesNotContain("color: var(--primary)");
+        // Protocol is shown by the method column's own colours, never the deployment accent;
+        // the old protocol badge is gone.
+        assertThat(css).doesNotContain(".badge-http {");
+        assertThat(text("console.css"))
+                .contains(".rule-method[data-protocol=\"JMS\"] { color: var(--protocol-jms) }")
+                .doesNotContain(".rule-method[data-protocol=\"JMS\"] { color: var(--primary) }");
     }
 
     @Test
@@ -107,7 +102,7 @@ class ListRefinementResourceTest {
                 .contains(".ui-button--quiet { border-color: transparent; background: transparent; color: var(--primary) }")
                 .contains(".ui-button--danger { border-color: rgba(var(--danger-rgb), 0.5); background: transparent; color: var(--danger-text) }")
                 .contains(".ui-button:disabled, .ui-button.disabled { opacity: 0.55;")
-                .contains(".card-table .col-actions .ui-button--secondary,");
+                .contains(".card-table .col-actions .ui-button--secondary {");
 
         assertThat(text("components/RuleEditModal.js"))
                 .contains("<ui-button variant=\"quiet\" :disabled=\"saving\" @click=\"$emit('close')\">{{t('modal.cancel')}}</ui-button>")
@@ -323,8 +318,12 @@ class ListRefinementResourceTest {
                 .contains("this.t('settings.authBearerToken')")
                 .contains("class=\"sub-info connection-queue\"")
                 .contains("class=\"connection-source-value\"");
+        // The rule drawer wraps long forward targets instead of overflowing.
+        assertThat(text("console.css"))
+                .contains(".rule-detail-forward { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px }")
+                .contains(".detail-grid dd { min-width: 0; margin: 0; color: var(--text); overflow-wrap: anywhere }");
         assertThat(css)
-                .contains(".pv-forward-target {")
+                .doesNotContain(".pv-forward-target {")
                 .contains("overflow-wrap: anywhere;")
                 .contains(".connection-queue,\n.connection-source-value {")
                 .contains(".connection-name { min-width: 0; overflow-wrap: anywhere; white-space: normal;");
@@ -340,14 +339,13 @@ class ListRefinementResourceTest {
 
     @Test
     void ruleRowsShareOneTopAlignmentSlotAcrossColumns() throws IOException {
+        // Rule rows are single-line data-table rows, so every column shares one baseline;
+        // the multi-line alignment slot of the old rule table is gone.
+        assertThat(text("components/RuleTable.js")).contains("class=\"data-table rule-table");
+        assertThat(text("console.css")).contains(".data-table td {");
         assertThat(text("style.css"))
-                .contains("--rule-row-primary-h: 32px;")
-                .contains("min-height: var(--rule-row-primary-h);")
-                .contains(".rule-list-table td.col-cond > .cond-list,")
-                .contains(".rule-list-table td.col-priority .table-metadata,")
-                .contains(".rule-list-table td.col-datetime .table-date-stack > .sub-info:first-child,")
-                .contains(".rule-list-table td.rule-row-action-column .rule-row-actions {")
-                .contains("justify-content: center;");
+                .doesNotContain("--rule-row-primary-h: 32px;")
+                .doesNotContain(".rule-list-table td.rule-row-action-column .rule-row-actions {");
     }
 
     @Test
@@ -375,15 +373,13 @@ class ListRefinementResourceTest {
                 .contains(".ui-segmented-control__check {\n    position: absolute;")
                 .contains(".ui-segmented-control--compact .ui-segmented-control__check { display: none }")
                 .contains(".ui-segmented-control--compact .ui-segmented-control__option.is-selected {")
-                .contains(".pv-header {\n        display: grid;")
-                .contains(".pv-header-actions {\n        grid-column: 1 / -1;")
+                // The old inline preview header (pv-*) became the shared detail drawer header.
+                .doesNotContain(".pv-header {")
                 .doesNotContain(".issues-list-table .issue-disclosure-column")
                 .contains("select.form-select-sm { height: var(--control-h-sm);")
                 .contains(".response-editor-modal .response-sse-table .form-control-sm {\n    min-height: 32px;")
                 .contains(".response-editor-modal .response-sse-table tbody tr {")
                 .contains("grid-template-areas:")
-                .contains(".detail-row-cell { padding: 0 !important }")
-                .contains(".table-row-actions {")
                 .contains(".workspace-modal[tabindex=\"-1\"]:focus-visible { outline: 0 }")
                 .contains(".rule-apply-inline > .rule-apply-body {")
                 .contains("grid-template-columns: repeat(2, minmax(0, 1fr))")
@@ -558,17 +554,15 @@ class ListRefinementResourceTest {
         assertThat(text("components/ResponsesPage.js"))
                 .contains("<ui-row-menu :items=\"menuItems(r)\"")
                 .contains("class=\"usage-count\"");
+        // Column widths and responsive collapse live with the shared tables in console.css.
+        assertThat(text("console.css"))
+                .contains(".response-table .col-usage { width: 168px }")
+                .contains(".log-table .col-time { width: 132px }")
+                .contains(".log-table .col-duration { width: 92px }")
+                .contains("@container (max-width: 760px) { .response-table .col-type, .response-table .col-updated { display: none } }");
         assertThat(text("style.css"))
-                .contains("Unified high-density list language")
-                .contains(".response-usage-column { width: 156px }")
-                .contains("grid-template-columns: repeat(3, 32px)")
-                .contains(".log-request-primary { display: grid; grid-template-columns: 40px 56px minmax(0, 1fr);")
-                .contains(".logs-table .log-time-column { width: 104px }")
-                .contains(".logs-table .log-duration-column { width: 88px; text-align: end }")
-                .contains(".logs-table .col-actions-1 { text-align: end }")
-                .contains("grid-template-columns: max-content minmax(180px, 260px) minmax(240px, 1fr);")
-                .contains(".logs-table,\n    .logs-table thead,\n    .logs-table tbody {\n        display: block;")
-                .contains(".response-mobile-reference-control {");
+                .doesNotContain(".logs-table")
+                .doesNotContain(".response-mobile-reference-control {");
     }
 
     @Test

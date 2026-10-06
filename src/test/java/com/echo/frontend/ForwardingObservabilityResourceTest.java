@@ -66,11 +66,13 @@ class ForwardingObservabilityResourceTest {
         assertThat(zh.path("detailForwardTarget").asText()).isNotBlank();
         assertThat(en.path("detailForwarded").asText()).isNotBlank();
         assertThat(zh.path("detailForwarded").asText()).isNotBlank();
+        // Lists drop secondary columns by their own width (container queries), not viewport breakpoints.
+        assertThat(resourceText("static/console.css"))
+                .contains("@container (max-width: 900px) { .log-table .col-duration { display: none } }")
+                .contains("@container (max-width: 720px) { .log-table .col-time { display: none }");
         assertThat(stylesheet)
-                .contains("@media (max-width: 1280px)")
-                .contains(".rule-list-table .col-hide-md")
-                .contains("@media (max-width: 1200px)")
-                .contains(".connection-test-result { margin-top: var(--space-xs); overflow-wrap: anywhere }");
+                .doesNotContain(".rule-list-table .col-hide-md")
+                .contains(".connection-test-outcome { display: block; font-size: var(--font-xs); font-variant-numeric: tabular-nums }");
     }
 
     private static String resourceText(String path) throws IOException {

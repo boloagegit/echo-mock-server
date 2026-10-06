@@ -121,29 +121,21 @@
  * Flat toolbars, quieter table chrome, colour-coded HTTP methods and, on wide
  * screens, single-line rule rows whose actions appear on hover or focus.
  */
-.card.workspace-filter-card { margin-bottom: var(--space-sm); border: 0; background: transparent; box-shadow: none }
-.workspace-filter-bar { padding: 0; background: transparent }
-.workspace-filter-controls > .workspace-search-field { order: -1; flex: 1 1 320px; max-width: 520px }
 
 .card-table { border-color: var(--border); background: var(--card) }
 .card-table th { background: var(--table-head); color: var(--text-subtle); font-weight: var(--font-weight-medium); letter-spacing: 0 }
 .card-table thead { box-shadow: 0 1px 0 var(--border) }
 .card-table th,
 .card-table td { border-bottom-color: color-mix(in srgb, var(--border) 72%, transparent) }
-.card-table tbody > tr.row-clickable:hover { background: var(--hover) }
 
 .ui-badge.badge-method { min-height: 20px; padding: 0; border: 0; background: transparent; color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.02em }
-.rule-method-slot .ui-badge.badge-method { justify-content: flex-start }
 .ui-badge.badge-method[data-method="GET"] { color: var(--method-get) }
 .ui-badge.badge-method[data-method="POST"] { color: var(--method-post) }
 .ui-badge.badge-method[data-method="PUT"] { color: var(--method-put) }
 .ui-badge.badge-method[data-method="PATCH"] { color: var(--method-patch) }
 .ui-badge.badge-method[data-method="DELETE"] { color: var(--method-delete) }
-.rule-protocol { color: var(--text-subtle); font-family: var(--font-mono); font-size: 11px; font-weight: var(--font-weight-medium) }
-.rule-protocol[data-protocol="JMS"] { color: var(--protocol-jms); font-weight: var(--font-weight-semibold) }
 
 /* Query conditions use the request-blue so they never read as the deployment accent. */
-.cond-tag.query .cond-label { background: color-mix(in srgb, var(--method-post) 18%, transparent); color: var(--method-post) }
 .cond-tag.query { background: color-mix(in srgb, var(--method-post) 6%, transparent) }
 
 /* Audit actions keep their semantic colours inside the shared badge component. */
@@ -297,7 +289,6 @@
     word-break: break-word;
 }
 .detail-empty { color: var(--muted); font-size: var(--font-sm) }
-.detail-note { display: flex; gap: var(--space-sm); padding: 10px 12px; border-radius: var(--radius-panel); background: var(--surface-neutral-soft); color: var(--muted); font-size: var(--font-sm) }
 
 /* Toasts: errors stay longer, actionable toasts (undo) show their action. */
 .toast.error .toast-progress { animation-duration: 7s }

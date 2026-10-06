@@ -26,13 +26,13 @@ class WorkspaceTableResourceTest {
     void actionColumnsReserveButtonsGapsAndDensityAwarePadding() throws IOException {
         String stylesheet = resourceText("static/style.css");
 
-        assertThat(stylesheet)
-                .contains(".table-fixed td.col-actions { overflow: visible; text-overflow: clip }")
-                .contains(".col-actions-1 { width: max(72px, calc(32px + var(--cell-px) + var(--cell-px))) }")
-                .contains(".col-actions-2 { width: calc(64px + var(--space-xs) + var(--cell-px) + var(--cell-px)) }")
-                .contains(".col-actions-3 { width: calc(96px + var(--space-xs) + var(--space-xs) + var(--cell-px) + var(--cell-px)) }")
-                .doesNotContain(".logs-table .col-actions-2 {")
-                .contains(".logs-table .col-actions-1 { text-align: end }");
+        // Every list's action column holds quiet buttons and the row menu without clipping them.
+        assertThat(resourceText("static/console.css"))
+                .contains(".data-table td.col-actions { width: 104px; overflow: visible; text-align: end }")
+                .contains(".row-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 2px }")
+                .contains(".audit-table .col-actions { width: 56px }")
+                .contains(".log-table .col-actions { width: 56px }");
+        assertThat(stylesheet).doesNotContain(".col-actions-1 {").doesNotContain(".logs-table");
     }
 
     @Test
@@ -42,12 +42,12 @@ class WorkspaceTableResourceTest {
         String responses = resourceText("static/components/ResponsesPage.js");
         String audit = resourceText("static/components/AuditPage.js");
 
-        assertThat(stylesheet)
-                .contains(".col-datetime { width: 132px; font-variant-numeric: tabular-nums }")
-                .contains(".col-priority { width: 64px; text-align: center; white-space: nowrap }")
-                .contains("td.col-datetime .sub-info")
-                .contains("text-overflow: clip")
-                .contains(".table-date-stack");
+        // Timestamps are short mono cells; the full time is on hover.
+        assertThat(resourceText("static/console.css"))
+                .contains(".data-table .cell-mono { font-family: var(--font-mono); font-size: var(--font-xs) }")
+                .contains(".log-table .col-time { width: 132px }")
+                .contains(".audit-table .col-time { width: 124px }");
+        assertThat(stylesheet).doesNotContain(".table-date-stack");
         // Rule rows keep the short timestamp visible and expose the full time and operator on hover.
         assertThat(rules).contains("class=\"col-updated cell-mono cell-subtle\" :title=\"fmtTime(r.updatedAt,false)")
                 .contains("{{fmtTime(r.updatedAt)}}");
