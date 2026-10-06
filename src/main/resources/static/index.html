@@ -81,7 +81,7 @@
                 @open-rule-detail="openRuleDetail($event)"
                 @close-rule-detail="closeRuleDetail"
                 @load-rule-detail="loadRuleDetail($event, { force: true })"
-                @go-to-responses="page='responses';responseFilter=String($event)"
+                @go-to-responses="goToResponse(String($event))"
                 @clip-copy="clipCopy($event)" @extend-rule="extendRule($event)"
                 @drag-start="(e, r) => onDragStart(e, r)"
                 @drag-over="(e, r) => onDragOver(e, r)"
@@ -178,6 +178,10 @@
                 :response-page-size="responsePageSize"
                 :response-total-elements="responseTotalElements"
                 :response-total-pages="responseTotalPages"
+                :response-detail-id="responseDetailId" :response-detail-cache="responseDetailCache"
+                :response-detail-loading="responseDetailLoading" :response-detail-error="responseDetailError"
+                @open-response-detail="openResponseDetail($event)" @close-response-detail="closeResponseDetail"
+                @load-response-detail="loadResponseDetail($event, { force: true })"
                 @load-responses="loadResponseSummary($event)"
                 @open-response-modal="openResponseModal($event)"
                 @delete-response="(id, usage) => deleteResponse(id, usage)"
@@ -193,12 +197,11 @@
                 @export-responses="exportResponses();showResponseDataDropdown=false"
                 @import-responses="importResponses($event)"
                 @delete-selected-responses="deleteSelectedResponses"
-                @toggle-response-rules="toggleResponseRules($event)"
                 @toggle-response-data-dropdown="toggleResponseDataDropdown"
                 @trigger-response-import="triggerResponseImport2()"
                 @remove-response-chip="removeResponseChip($event)"
                 @clear-response-filters="clearResponseFilters"
-                @go-to-rule="page='rules';ruleFilter.keyword=$event"
+                @go-to-rule="page='rules';ruleFilter.keyword=$event;openRuleDetail({ id: $event })"
                 @clip-copy="clipCopy($event)"
                 @extend-response="extendResponse($event)"
             ></responses-page>
@@ -390,7 +393,8 @@
 <script src="/components/StatsPage.js?v=20261006.1"></script>
 <script src="/components/ResponseEditModal.js?v=20260912.2"></script>
 <script src="/components/ChangePasswordModal.js?v=20260909.5"></script>
-    <script src="/components/ResponsesPage.js?v=20261006.1"></script>
+    <script src="/components/ResponsesPage.js?v=20261007.1"></script>
+    <script src="/components/ResponseDetail.js?v=20261007.1"></script>
 <script src="/components/ResourceMonitoringPanel.js?v=20261001.1"></script>
 <script src="/components/ConnectionTargetsTable.js?v=20261001.1"></script>
 <script src="/components/SettingsPage.js?v=20261001.1"></script>

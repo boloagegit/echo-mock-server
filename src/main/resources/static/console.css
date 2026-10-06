@@ -439,3 +439,48 @@
 
 .ui-detail-drawer code,
 .data-table code { color: inherit }
+
+/* ===== Shared record cells (responses, accounts, issues) ===== */
+.page-subtitle { display: flex; align-items: center; gap: var(--space-sm); margin: calc(var(--space-sm) * -1) 0 var(--space-md); color: var(--text-subtle); font-size: var(--font-sm) }
+.record-name { display: flex; align-items: baseline; gap: var(--space-sm); min-width: 0 }
+.record-name__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text); font-weight: var(--font-weight-medium) }
+.record-name__title.is-empty { color: var(--text-subtle); font-weight: var(--font-weight-regular) }
+.record-name__id { flex: none; color: var(--text-subtle); font-family: var(--font-mono); font-size: var(--font-xs) }
+.usage-count { color: var(--text) }
+.usage-count strong { font-family: var(--font-mono); font-weight: var(--font-weight-semibold) }
+.usage-expiry { margin-inline-start: var(--space-sm) }
+
+.response-table .col-select { width: 40px }
+.response-table .col-type { width: 88px }
+.response-table .col-size { width: 88px }
+.response-table .col-usage { width: 168px }
+.response-table .col-created,
+.response-table .col-updated { width: 116px }
+@container (max-width: 1040px) { .response-table .col-created { display: none } }
+@container (max-width: 900px) { .response-table .col-size { display: none } }
+@container (max-width: 760px) { .response-table .col-type, .response-table .col-updated { display: none } }
+
+/* Linked records inside a drawer (e.g. rules that use a response). */
+.detail-links { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none }
+.detail-link {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-height: 36px;
+    padding: 0 var(--space-sm);
+    border: 0;
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: var(--font-sm);
+    text-align: start;
+    cursor: pointer;
+}
+.detail-link:hover { background: var(--hover) }
+.detail-link:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px }
+.detail-link__path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 12.5px }
+.detail-link__desc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted) }
+.detail-link__go { margin-inline-start: auto; color: var(--text-subtle) }
+.detail-link:hover .detail-link__go { color: var(--primary) }

@@ -374,7 +374,11 @@
     "createFirstResponse": "新增第一個回應",
     "totalCount": "共 {count} 筆",
     "filtering": "篩選中",
-    "clickClearFilter": "清除篩選"
+    "clickClearFilter": "清除篩選",
+    "selectedCount": "已選取 {count} 個回應",
+    "ruleUnit": "條規則",
+    "detailInfo": "回應資訊",
+    "loadFailed": "無法載入回應，請稍後再試。"
   },
   "stats": {
     "title": "請求記錄",

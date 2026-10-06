@@ -374,7 +374,11 @@
     "createFirstResponse": "Create Your First Response",
     "totalCount": "{count} total",
     "filtering": "Filtering",
-    "clickClearFilter": "Click to Clear Filter"
+    "clickClearFilter": "Click to Clear Filter",
+    "selectedCount": "{count} responses selected",
+    "ruleUnit": "rules",
+    "detailInfo": "Details",
+    "loadFailed": "Could not load responses. Please try again."
   },
   "stats": {
     "title": "Request Logs",

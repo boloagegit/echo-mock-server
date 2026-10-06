@@ -1,0 +1,109 @@
+/**
+ * ResponseDetail - 回應詳情抽屜
+ *
+ * 顯示引用此回應的規則（可直接跳到規則）、回應內容與保留資訊。
+ * 版面與 RuleDetail 相同：上方常用動作，其餘收在「⋯」。
+ */
+const ResponseDetail = {
+  inject: ['t'],
+  props: {
+    open: Boolean,
+    response: { type: Object, default: null },
+    detail: { type: Object, default: null },
+    loading: Boolean,
+    error: Boolean,
+    isLoggedIn: Boolean,
+    status: Object,
+    hasPrev: Boolean,
+    hasNext: Boolean,
+  },
+  emits: ['close', 'prev', 'next', 'retry', 'edit', 'menu', 'go-to-rule', 'clip-copy'],
+  computed: {
+    view() {
+      return { ...(this.response || {}), ...(this.detail || {}) };
+    },
+    isSse() {
+      return this.view.contentType === 'SSE';
+    },
+    retention() {
+      if (this.view.usageCount) return null;
+      return daysLeft(this.view.updatedAt, this.view.extendedAt, this.status?.responseRetentionDays);
+    },
+    formattedBody() {
+      const body = this.detail?.body || '';
+      if (!body) return '';
+      try { return JSON.stringify(JSON.parse(body), null, 2); } catch { return body; }
+    },
+    menuItems() {
+      const t = this.t;
+      const items = [];
+      if (this.retention != null && this.isLoggedIn) {
+        items.push({ key: 'extend', label: t('responses.clickExtend'), icon: 'bi-calendar-plus' });
+      }
+      items.push({ key: 'delete', label: t('responses.delete'), icon: 'bi-trash', danger: true, dividerBefore: items.length > 0, disabled: !this.isLoggedIn });
+      return items;
+    },
+  },
+  methods: {
+    fmtTime, fmtSize, shortId,
+  },
+  template: /* html */`
+    <ui-detail-drawer :open="open" :title="view.description || t('responses.noDescription')" :subtitle="view.id != null ? '#' + view.id : ''"
+      :loading="loading && !detail" :error="error && !detail" :has-prev="hasPrev" :has-next="hasNext"
+      class="response-detail" @close="$emit('close')" @prev="$emit('prev')" @next="$emit('next')" @retry="$emit('retry')">
+      <template #meta>
+        <ui-badge tone="neutral">{{isSse ? 'SSE' : t('responses.typeGeneral')}}</ui-badge>
+        <span class="detail-mono">{{fmtSize(view.bodySize)}}</span>
+        <ui-status :tone="view.usageCount ? 'success' : 'neutral'">{{view.usageCount ? t('responses.usageCount', {count: view.usageCount}) : t('responses.notUsed')}}</ui-status>
+      </template>
+      <template #actions>
+        <ui-button type="button" variant="primary" size="compact" :disabled="!isLoggedIn" @click="$emit('edit', view)"><i class="bi bi-pencil" aria-hidden="true"></i>{{t('responses.edit')}}</ui-button>
+        <ui-button type="button" variant="secondary" size="compact" @click="$emit('clip-copy', String(view.id))"><i class="bi bi-copy" aria-hidden="true"></i>{{t('rules.copyId')}}</ui-button>
+        <ui-row-menu :items="menuItems" :label="t('common.moreActions')" @select="$emit('menu', $event, view)"></ui-row-menu>
+      </template>
+
+      <section class="detail-section">
+        <div class="detail-section__head">
+          <h3 class="detail-section__title">{{t('responses.linkedRulesTitle')}}</h3>
+          <span class="detail-section__tools detail-mono">{{(detail?.rules || []).length}}</span>
+        </div>
+        <p v-if="detail && !detail.rules.length" class="detail-empty">{{view.usageCount ? t('responses.noVisibleLinkedRules') : t('responses.notUsed')}}</p>
+        <ul v-else-if="detail" class="detail-links">
+          <li v-for="rule in detail.rules" :key="rule.id">
+            <button type="button" class="detail-link" @click="$emit('go-to-rule', rule.id)">
+              <span class="rule-method" :data-method="rule.protocol==='HTTP' ? (rule.method || 'GET') : null" :data-protocol="rule.protocol">{{rule.protocol==='HTTP' ? (rule.method || 'GET') : 'JMS'}}</span>
+              <code class="detail-link__path">{{rule.matchKey}}</code>
+              <span v-if="rule.description" class="detail-link__desc">{{rule.description}}</span>
+              <i class="bi bi-arrow-right detail-link__go" aria-hidden="true"></i>
+            </button>
+          </li>
+        </ul>
+      </section>
+
+      <section class="detail-section">
+        <div class="detail-section__head">
+          <h3 class="detail-section__title">{{t('rules.pvResponseContent')}}</h3>
+          <div v-if="formattedBody" class="detail-section__tools">
+            <ui-button type="button" variant="quiet" size="compact" icon-only :title="t('rules.copyFullContent')" :aria-label="t('rules.copyFullContent')"
+              @click="$emit('clip-copy', detail.body)"><i class="bi bi-clipboard" aria-hidden="true"></i></ui-button>
+          </div>
+        </div>
+        <p v-if="detail && !formattedBody" class="detail-empty">{{t('rules.empty')}}</p>
+        <pre v-else-if="formattedBody" class="detail-code">{{formattedBody}}</pre>
+      </section>
+
+      <section class="detail-section">
+        <div class="detail-section__head"><h3 class="detail-section__title">{{t('responses.detailInfo')}}</h3></div>
+        <dl class="detail-grid">
+          <dt>ID</dt><dd class="detail-mono">#{{view.id}}</dd>
+          <template v-if="view.createdAt"><dt>{{t('responses.thCreatedAt')}}</dt><dd class="detail-mono">{{fmtTime(view.createdAt, false)}}</dd></template>
+          <template v-if="view.updatedAt"><dt>{{t('responses.thUpdatedAt')}}</dt><dd class="detail-mono">{{fmtTime(view.updatedAt, false)}}</dd></template>
+          <template v-if="retention != null">
+            <dt>{{t('rules.pvDaysLeft')}}</dt>
+            <dd><ui-badge :tone="retention <= 7 ? 'warning' : 'neutral'">{{t('responses.orphanDaysLeft', {days: retention})}}</ui-badge></dd>
+          </template>
+        </dl>
+      </section>
+    </ui-detail-drawer>
+  `,
+};

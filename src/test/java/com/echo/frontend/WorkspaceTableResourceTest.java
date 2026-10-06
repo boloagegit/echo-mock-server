@@ -18,10 +18,8 @@ class WorkspaceTableResourceTest {
         assertThat(resourceText("static/components/RuleDetail.js"))
                 .contains("t('rules.pvDaysLeft')")
                 .contains(":tone=\"retention <= 7 ? 'warning' : 'neutral'\"");
-        assertThat(resourceText("static/components/ResponsesPage.js"))
-                .contains("class=\"response-reference-control\"")
-                .contains("t('responses.referenceRules')")
-                .contains(":aria-expanded=\"!!r.expanded\"");
+        assertThat(resourceText("static/components/ResponsesPage.js")).contains("class=\"usage-count\"");
+        assertThat(resourceText("static/components/ResponseDetail.js")).contains("t('responses.linkedRulesTitle')");
     }
 
     @Test
@@ -53,7 +51,7 @@ class WorkspaceTableResourceTest {
         // Rule rows keep the short timestamp visible and expose the full time and operator on hover.
         assertThat(rules).contains("class=\"col-updated cell-mono cell-subtle\" :title=\"fmtTime(r.updatedAt,false)")
                 .contains("{{fmtTime(r.updatedAt)}}");
-        assertThat(responses).contains("class=\"col-datetime col-hide-md\"");
+        assertThat(responses).contains("class=\"col-updated cell-mono cell-subtle\" :title=\"fmtTime(r.updatedAt,false)\"");
         assertThat(audit).contains("class=\"col-datetime audit-time-column\"");
     }
 

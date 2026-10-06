@@ -359,7 +359,7 @@ class ListRefinementResourceTest {
                 .contains("min-height: var(--workspace-row-primary-h);")
                 .contains(".workspace-row-primary-end { justify-content: flex-end }");
 
-        for (String page : new String[]{"ResponsesPage", "StatsPage", "AuditPage", "IssuesPage", "AccountsPage"}) {
+        for (String page : new String[]{"StatsPage", "AuditPage", "IssuesPage", "AccountsPage"}) {
             assertThat(text("components/" + page + ".js"))
                     .as(page + " aligned list rows")
                     .contains("workspace-primary-aligned-table")
@@ -399,15 +399,14 @@ class ListRefinementResourceTest {
         for (String page : new String[]{
                 "AccountsPage", "AuditPage", "IssuesPage", "ResponsesPage", "RuleEditModal",
                 "RuleTable", "RuleDetail", "RulesPage", "SettingsPage", "SidebarNav", "StatsPage", "ToastContainer",
-                "UiDetailDrawer", "UiRowMenu"
+                "UiDetailDrawer", "UiRowMenu", "ResponseDetail"
         }) {
             assertThat(text("components/" + page + ".js"))
                     .as(page + " static inline styles")
                     .doesNotContain(" style=\"");
         }
         assertThat(text("components/ResponsesPage.js"))
-                .contains("variant=\"danger\" size=\"compact\" icon-only")
-                .contains("class=\"detail-row-cell\"");
+                .contains("{ key: 'delete', label: t('responses.delete'), icon: 'bi-trash', danger: true");
     }
 
     @Test
@@ -526,24 +525,21 @@ class ListRefinementResourceTest {
     @Test
     void responseIdentityRetainsSortingAndExposesUsageAcrossBreakpoints() throws IOException {
         String source = text("components/ResponsesPage.js");
-        assertThat(source).contains("list-identity-heading")
-                .contains("toggle-response-sort', 'id'")
-                .contains("$emit('clip-copy',String(r.id))")
-                .contains("class=\"response-mobile-state\"")
-                .contains("class=\"response-mobile-state response-mobile-reference-control\"")
-                .contains("class=\"response-usage-state is-unused\"")
-                .contains("class=\"response-reference-control\"")
-                .contains("@click.stop=\"$emit('toggle-response-rules', r)\"")
-                .contains("t('responses.referenceRules')")
-                .contains("t('responses.orphanDaysLeft'")
-                .contains("responseViewportWidth: window.innerWidth")
-                .contains("this.responseViewportWidth <= 768 ? 2 : this.responseViewportWidth <= 1024 ? 3 : 7")
-                .contains(":colspan=\"responseDetailColspan\"")
-                .contains("class=\"linked-rule-primary\"")
-                .contains("class=\"linked-rule-secondary\"")
-                .contains("class=\"response-linked-rules-header\"")
-                .contains("class=\"bi bi-arrow-right linked-rule-open-icon\"")
-                .contains(":aria-label=\"[rule.protocol, rule.method, rule.matchKey, rule.description].filter(Boolean).join(' ')\"");
+        String detail = text("components/ResponseDetail.js");
+
+        assertThat(source)
+                .contains("$emit('toggle-response-sort', 'id')")
+                .contains("class=\"record-name__id\">#{{r.id}}</span>")
+                .contains("if (action === 'copy-id') this.$emit('clip-copy', String(r.id));")
+                .contains("<span v-if=\"r.usageCount\" class=\"usage-count\"><strong>{{r.usageCount}}</strong>")
+                .contains("{{t('responses.notUsed')}}");
+        assertThat(detail)
+                .contains("t('responses.orphanDaysLeft', {days: retention})")
+                .contains("class=\"rule-method\" :data-method=")
+                .contains("class=\"detail-link__path\">{{rule.matchKey}}</code>");
+        assertThat(text("console.css"))
+                .contains("@container (max-width: 1040px) { .response-table .col-created { display: none } }")
+                .contains("@container (max-width: 760px) { .response-table .col-type, .response-table .col-updated { display: none } }");
     }
 
     @Test
@@ -569,8 +565,8 @@ class ListRefinementResourceTest {
                 .contains("class=\"badge badge-method\"")
                 .contains("t('stats.createRuleFromLog')");
         assertThat(text("components/ResponsesPage.js"))
-                .contains("class=\"response-action-spacer\"")
-                .contains("class=\"response-reference-control\"");
+                .contains("<ui-row-menu :items=\"menuItems(r)\"")
+                .contains("class=\"usage-count\"");
         assertThat(text("style.css"))
                 .contains("Unified high-density list language")
                 .contains(".response-usage-column { width: 156px }")
@@ -594,10 +590,10 @@ class ListRefinementResourceTest {
         assertThat(text("components/UiDetailDrawer.js"))
                 .contains(":aria-labelledby=\"headingId\"")
                 .contains("event.key === 'Escape'");
-        assertThat(text("components/ResponsesPage.js"))
-                .contains("<a v-for=\"rule in r.rules\"")
-                .contains(":aria-expanded=\"!!r.expanded\"")
-                .contains(":id=\"'response-rules-'+r.id\"")
+        // Linked rules are real buttons inside the response drawer and jump straight to the rule.
+        assertThat(text("components/ResponseDetail.js"))
+                .contains("<button type=\"button\" class=\"detail-link\" @click=\"$emit('go-to-rule', rule.id)\">")
+                .contains("t('responses.linkedRulesTitle')")
                 .contains("t('responses.noVisibleLinkedRules')");
         assertThat(text("components/AuditPage.js"))
                 .contains(":aria-expanded=\"selectedAudit===log.id\"")

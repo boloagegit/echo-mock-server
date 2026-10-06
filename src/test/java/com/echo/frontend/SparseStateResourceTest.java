@@ -42,9 +42,11 @@ class SparseStateResourceTest {
     void unusedResponsesKeepNeutralMetadataAndExplicitExpiryWarning() throws IOException {
         assertThat(text("style.css")).doesNotContain("tr.unused-row .sub-info { color: var(--danger)")
                 .doesNotContain("tr.unused-row td { background: rgba(var(--danger-rgb)");
+        // Unused responses stay neutral in the list; only a near expiry (≤7 days) gets a warning badge.
         assertThat(text("components/ResponsesPage.js"))
-                .contains("class=\"response-usage-state is-unused\"")
-                .contains("t('responses.orphanDaysLeft'");
+                .contains("<span v-else class=\"cell-subtle\">{{t('responses.notUsed')}}")
+                .contains("retention(r) != null && retention(r) <= 7\" tone=\"warning\"");
+        assertThat(text("components/ResponseDetail.js")).contains("t('responses.orphanDaysLeft'");
     }
 
     @Test
