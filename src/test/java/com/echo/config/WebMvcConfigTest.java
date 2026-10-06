@@ -2,6 +2,7 @@ package com.echo.config;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.core.Ordered;
+import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.web.servlet.config.annotation.*;
 
@@ -34,12 +35,15 @@ class WebMvcConfigTest {
         when(registry.addResourceHandler("/webjars/**")).thenReturn(webjarsRegistration);
         when(registration.addResourceLocations(anyString())).thenReturn(registration);
         when(webjarsRegistration.addResourceLocations(anyString())).thenReturn(webjarsRegistration);
+        when(webjarsRegistration.setCacheControl(any(CacheControl.class))).thenReturn(webjarsRegistration);
 
         config.addResourceHandlers(registry);
 
         verify(registry).addResourceHandler("/index.html");
         verify(registration).addResourceLocations("classpath:/static/");
         verify(registration).setCachePeriod(0);
+        // WebJars are cached by the browser but always revalidated.
+        verify(webjarsRegistration).setCacheControl(argThat(cache -> "no-cache".equals(cache.getHeaderValue())));
     }
 
     @Test

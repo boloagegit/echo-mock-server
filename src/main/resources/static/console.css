@@ -560,8 +560,8 @@
 /* ===== Dialogs and the rule editor =====
  * Dialog headers name what is being edited; footers keep Cancel neutral (accent is
  * for the primary action) and show the save shortcut when saving is possible. */
-.workspace-modal .modal-footer > .ui-button--quiet { color: var(--muted) }
-.workspace-modal .modal-footer > .ui-button--quiet:hover:not(:disabled) { background: var(--hover); color: var(--text) }
+.modal-footer > .ui-button--quiet { color: var(--muted) }
+.modal-footer > .ui-button--quiet:hover:not(:disabled) { background: var(--hover); color: var(--text) }
 .modal-footer-hint { display: inline-flex; align-items: center; gap: 4px; margin-inline-end: auto; color: var(--text-subtle); font-size: var(--font-xs) }
 .modal-footer-hint kbd {
     min-width: 20px;
@@ -622,6 +622,9 @@
 .boot-shell.is-leaving { opacity: 0; pointer-events: none }
 /* Like other loading placeholders, the shell only appears when startup is slow enough to notice. */
 .boot-shell > * { animation: loadingReveal 160ms var(--ease-standard) 300ms both }
+/* A snapshot of the page being reloaded is the first paint, exactly as it was left. */
+.boot-shell--snapshot { display: block; pointer-events: none }
+.boot-shell--snapshot > * { animation: none }
 .boot-shell__sidebar { flex: 0 0 var(--sidebar-width); display: flex; align-items: flex-start; gap: 10px; padding: 14px 12px 0 18px; border-inline-end: 1px solid var(--border); background: var(--sidebar-bg) }
 .boot-shell__mark { width: 32px; height: 32px; border-radius: 9px; background: var(--brand-tile) }
 .boot-shell__main { flex: 1; display: flex; flex-direction: column; gap: 14px; padding: var(--space-lg) var(--space-xl) }

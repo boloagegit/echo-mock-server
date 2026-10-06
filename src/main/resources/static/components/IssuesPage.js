@@ -293,7 +293,7 @@ const IssuesPage = {
       <div ref="issueCreateOverlay" v-if="showCreateModal" class="modal-overlay" @click.self="closeCreate" @keydown="handleCreateKeydown">
         <div ref="issueCreateDialog" class="modal-box workspace-modal issue-create-modal" role="dialog" aria-modal="true" aria-labelledby="issueCreateTitle" tabindex="-1">
           <div class="modal-header">
-            <div class="modal-heading"><span class="modal-heading-icon"><i class="bi bi-flag" aria-hidden="true"></i></span><h2 id="issueCreateTitle">{{t('issues.createTitle')}}</h2></div>
+            <div class="modal-heading"><h2 id="issueCreateTitle">{{t('issues.createTitle')}}</h2></div>
             <ui-button type="button" class="close-btn" @click="closeCreate" :disabled="creating" :aria-label="t('issues.cancel')"><i class="bi bi-x-lg" aria-hidden="true"></i></ui-button>
           </div>
           <div class="modal-body issue-create-body">

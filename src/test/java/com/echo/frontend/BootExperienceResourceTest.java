@@ -46,7 +46,28 @@ class BootExperienceResourceTest {
                 .contains(".boot-shell > * { animation: loadingReveal 160ms var(--ease-standard) 300ms both }");
         assertThat(text("app.js"))
                 .contains("root.classList.remove('is-booting');")
-                .contains("if (performance.now() < BOOT_SHELL_VISIBLE_AFTER_MS) { shell.remove(); return; }");
+                .contains("performance.now() < BOOT_SHELL_VISIBLE_AFTER_MS) { shell.remove(); return; }");
+    }
+
+    @Test
+    void reloadPaintsASnapshotOfThePageBeingLeftWithoutTransientOrSensitiveParts() throws IOException {
+        String index = text("index.html");
+        String app = text("app.js");
+
+        // Restored synchronously right after the shell, before the first paint.
+        assertThat(index.indexOf("<script src=\"/ui-snapshot.js?v="))
+                .isGreaterThan(index.indexOf("<div id=\"boot-shell\""))
+                .isLessThan(index.indexOf("<div id=\"app\" v-cloak>"));
+        assertThat(app)
+                .contains("window.addEventListener('pagehide', savePageSnapshot);")
+                .contains("shownPage.value === 'settings'")
+                .contains(".modal-overlay, [aria-modal=\"true\"], .ui-detail-drawer, .toast-wrap, .ui-dropdown-menu__panel, .user-menu, .tour-overlay, .top-loader, input[type=\"password\"]")
+                .contains("if (shell.classList.contains('boot-shell--snapshot') || performance.now() < BOOT_SHELL_VISIBLE_AFTER_MS) { shell.remove(); return; }");
+        assertThat(text("composables/useAuth.js")).contains("sessionStorage.removeItem('echo.pageSnapshot');");
+        // Icons and code text are ready on the first paint.
+        assertThat(index)
+                .contains("<link rel=\"preload\" href=\"/webjars/bootstrap-icons/font/fonts/bootstrap-icons.woff2?")
+                .contains("jetbrains-mono-latin-400-normal.woff2\" as=\"font\" type=\"font/woff2\" crossorigin>");
     }
 
     @Test

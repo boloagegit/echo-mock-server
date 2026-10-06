@@ -33,8 +33,11 @@ const useAuth = (showConfirm, t) => {
 
     /** 登出並跳轉 */
     const logout = () => {
-        // Drop the cached identity so the next page load cannot briefly show the signed-in sidebar.
-        try { sessionStorage.removeItem('echo.statusCache'); } catch { /* storage unavailable */ }
+        // Drop the cached identity and page snapshot so the next load cannot briefly show signed-in content.
+        try {
+            sessionStorage.removeItem('echo.statusCache');
+            sessionStorage.removeItem('echo.pageSnapshot');
+        } catch { /* storage unavailable */ }
         window.location.href = '/api/auth/logout';
     };
 

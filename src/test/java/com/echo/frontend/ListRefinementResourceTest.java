@@ -201,14 +201,17 @@ class ListRefinementResourceTest {
                 .contains(".invalid-feedback { font-size: 11px;");
 
         for (String page : new String[]{"AccountsPage", "AuditPage", "IssuesPage", "ResponsesPage",
-                "RuleEditModal", "RuleTable", "RuleDetail", "RulesPage", "SettingsPage", "StatsPage"}) {
+                "RuleEditModal", "RuleTable", "RuleDetail", "RulesPage", "StatsPage"}) {
             assertThat(text("components/" + page + ".js"))
                     .as(page + " semantic badges")
                     .doesNotContain("<span class=\"badge")
                     .contains("<ui-badge");
         }
+        // Settings shows states (agents, JMS, LDAP) as dot statuses and needs no badges.
         assertThat(text("components/SettingsPage.js"))
                 .contains("<ui-status")
+                .doesNotContain("<span class=\"badge")
+                .doesNotContain("badge bg-")
                 .contains("<connection-targets-table")
                 .doesNotContain("status-on")
                 .doesNotContain("status-off");

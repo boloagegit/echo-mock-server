@@ -14,7 +14,11 @@ spring:
   web:
     resources:
       cache:
-        period: 0  # 開發環境不快取靜態資源
+        # 瀏覽器可快取靜態資源，但每次以 Last-Modified 驗證（未變更回 304），改版後一定拿到新檔。
+        # index.html 另由 WebMvcConfig 設為不快取。
+        cachecontrol:
+          no-cache: true
+        use-last-modified: true
   application:
     name: echo
 

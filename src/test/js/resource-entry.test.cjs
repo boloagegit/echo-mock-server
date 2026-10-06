@@ -31,7 +31,7 @@ async function enterSettings(statusCode) {
     revealApp: () => { reveals++; },
     page: { value: 'settings' }, shownPage: { value: 'rules' }, BOOT_DATA_WAIT_MS: 600,
     closeResponseDropdown() {}, closeDataDropdown() {}, closeResponseDataDropdown() {}, handleKeydown() {},
-    handleBeforeUnload() {},
+    handleBeforeUnload() {}, savePageSnapshot() {},
   };
   vm.createContext(context);
   vm.runInContext(fs.readFileSync(path.join(staticRoot, 'composables/useAuth.js'), 'utf8') +

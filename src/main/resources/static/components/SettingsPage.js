@@ -151,6 +151,13 @@ const SettingsPage = {
         event.stopPropagation();
         if (protocol === 'http') this.showHttpTargetForm = false;
         else this.showJmsTargetForm = false;
+        return;
+      }
+      // Ctrl/Cmd+Enter saves, as in every other form dialog.
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        if (protocol === 'http' && this.canSaveHttpTarget && !this.httpTargetSaving) this.saveHttpTarget();
+        else if (protocol === 'jms' && this.canSaveJmsTarget && !this.jmsTargetSaving) this.saveJmsTarget();
       }
     },
     navigateTab(tab, section) {
@@ -434,9 +441,6 @@ const SettingsPage = {
         this.agentsLoading = false;
       }
     },
-    agentStatusBadgeClass(status) {
-      return status === 'RUNNING' ? 'badge bg-success' : 'badge bg-warning text-dark';
-    },
     agentStatusText(status) {
       const map = { RUNNING: 'agentStatusRunning', STOPPED: 'agentStatusStopped', STARTING: 'agentStatusStarting', STOPPING: 'agentStatusStopping' };
       return this.t('settings.' + (map[status] || 'agentStatusStopped'));
@@ -489,15 +493,16 @@ const SettingsPage = {
       <div class="page-header">
         <div class="page-heading">
           <h1 class="page-title">{{t('settings.title')}}</h1>
+          <span v-if="status" class="page-meta settings-context"><span>{{t('settings.version')}} {{status.version}}</span><span>{{t('settings.uptime')}} {{formatUptime(status.uptime)}}</span><span>HTTP {{status.serverPort}}</span></span>
         </div>
-        <ui-button variant="secondary" size="compact" @click="refreshStatus" :disabled="isAdmin ? resourceLoading : loading.status"><i class="bi bi-arrow-clockwise" :class="{'spin':isAdmin ? resourceLoading : loading.status}"></i> {{t('settings.refresh')}}</ui-button>
+        <div class="page-actions">
+          <ui-button variant="secondary" @click="refreshStatus" :disabled="isAdmin ? resourceLoading : loading.status" :title="t('settings.manualRefreshHint')"><i class="bi bi-arrow-clockwise" :class="{'spin':isAdmin ? resourceLoading : loading.status}" aria-hidden="true"></i>{{t('settings.refresh')}}</ui-button>
+        </div>
       </div>
       <div class="page-scroll">
-      <div v-if="status" class="settings-context"><ui-badge v-if="status.envLabel" tone="neutral">{{status.envLabel}}</ui-badge><span>{{t('settings.version')}} {{status.version}}</span><span>{{t('settings.uptime')}} {{formatUptime(status.uptime)}}</span><span>HTTP {{status.serverPort}}</span></div>
       <ui-tabs class="settings-tabs" v-model="activeTab" :items="tabs" :aria-label="t('settings.title')"></ui-tabs>
       <section id="settings-content" class="settings-tab-panel" role="tabpanel" :aria-labelledby="'settings-tab-' + activeTab" tabindex="0">
       <resource-monitoring-panel ref="resources" v-if="isAdmin" v-show="activeTab === 'overview' || activeTab === 'monitoring'" :view="activeTab" :backup-enabled="backupStatus?.enabled ?? null" :rule-caches="status?.ruleCaches" :refresh-token="resourceRefreshToken" @loading="resourceLoading=$event" @snapshot="updateResourceSnapshot" @navigate="navigateTab"></resource-monitoring-panel>
-      <p v-if="activeTab !== 'overview' && activeTab !== 'monitoring'" class="settings-inline-note settings-manual-note">{{t('settings.manualRefreshHint')}}</p>
       <!-- Skeleton -->
       <div v-if="!status && activeTab !== 'monitoring' && (activeTab !== 'overview' || !isAdmin)" class="settings-grid loading-reveal">
         <div class="settings-card" v-for="i in 6" :key="'sk-'+i">
@@ -515,7 +520,7 @@ const SettingsPage = {
       <template v-if="status">
       <div class="settings-grid">
         <div v-show="activeTab === 'service'" class="settings-card">
-          <div class="settings-card-header"><i class="bi bi-info-circle"></i> {{t('settings.serviceInfo')}}</div>
+          <div class="settings-card-header">{{t('settings.serviceInfo')}}</div>
           <div class="settings-card-body">
             <div class="settings-item"><span class="settings-label">{{t('settings.version')}}</span><span class="settings-value">{{ status.version }}</span></div>
             <div class="settings-item"><span class="settings-label">{{t('settings.httpPort')}}</span><span class="settings-value">{{ status.serverPort }}</span></div>
@@ -526,8 +531,8 @@ const SettingsPage = {
         </div>
         <div class="settings-card settings-card-wide connection-settings-section connection-http-section" v-if="isAdmin" v-show="activeTab === 'connections'">
           <div class="settings-card-header settings-card-header-actions">
-            <span><i class="bi bi-globe2"></i> {{t('settings.httpTargets')}}</span>
-            <ui-button variant="primary" size="compact" @click="openCreateHttpTarget"><i class="bi bi-plus-lg"></i> {{t('settings.httpTargetAdd')}}</ui-button>
+            <span>{{t('settings.httpTargets')}}</span>
+            <ui-button variant="secondary" size="compact" @click="openCreateHttpTarget"><i class="bi bi-plus-lg" aria-hidden="true"></i>{{t('settings.httpTargetAdd')}}</ui-button>
           </div>
           <div class="settings-card-body">
             <div v-if="httpTargetsLoading" class="sub-info">{{t('settings.httpTargetLoading')}}</div>
@@ -544,8 +549,8 @@ const SettingsPage = {
         </div>
         <div class="settings-card settings-card-wide connection-settings-section connection-jms-section" v-if="isAdmin" v-show="activeTab === 'connections'">
           <div class="settings-card-header settings-card-header-actions">
-            <span><i class="bi bi-diagram-2"></i> {{t('settings.jmsTargets')}}</span>
-            <ui-button variant="primary" size="compact" @click="openCreateJmsTarget"><i class="bi bi-plus-lg"></i> {{t('settings.jmsTargetAdd')}}</ui-button>
+            <span>{{t('settings.jmsTargets')}}</span>
+            <ui-button variant="secondary" size="compact" @click="openCreateJmsTarget"><i class="bi bi-plus-lg" aria-hidden="true"></i>{{t('settings.jmsTargetAdd')}}</ui-button>
           </div>
           <div class="settings-card-body">
             <div v-if="jmsTargetsLoading" class="sub-info">{{t('settings.jmsTargetLoading')}}</div>
@@ -563,7 +568,7 @@ const SettingsPage = {
           </div>
         </div>
         <div v-show="activeTab === 'service'" class="settings-card">
-          <div class="settings-card-header"><i class="bi bi-diagram-3"></i> {{t('settings.protocolSettings')}}</div>
+          <div class="settings-card-header">{{t('settings.protocolSettings')}}</div>
           <div class="settings-card-body">
             <div class="settings-item"><span class="settings-label">{{t('settings.httpAlias')}}</span><span class="settings-value">{{ status.httpAlias || t('settings.notSet') }}</span></div>
             <div class="settings-item"><span class="settings-label">{{t('settings.jmsAlias')}}</span><span class="settings-value">{{ status.jmsAlias || t('settings.notSet') }}</span></div>
@@ -572,7 +577,7 @@ const SettingsPage = {
           </div>
         </div>
         <div v-show="activeTab === 'data'" class="settings-card">
-          <div class="settings-card-header"><i class="bi bi-database"></i> {{t('settings.dataStorage')}}</div>
+          <div class="settings-card-header">{{t('settings.dataStorage')}}</div>
           <div class="settings-card-body">
             <div class="settings-item"><span class="settings-label">{{t('settings.database')}}</span><span class="settings-value">{{databaseKind}}</span></div>
             <div class="settings-item"><span class="settings-label">{{t('settings.ruleRetention')}}</span><span class="settings-value">{{ status.cleanupRetentionDays ?? 180 }} {{t('settings.days')}}</span></div>
@@ -583,7 +588,7 @@ const SettingsPage = {
           </div>
         </div>
         <div v-show="activeTab === 'service'" class="settings-card">
-          <div class="settings-card-header"><i class="bi bi-shield-lock"></i> {{t('settings.authSettings')}}</div>
+          <div class="settings-card-header">{{t('settings.authSettings')}}</div>
           <div class="settings-card-body">
             <div class="settings-item"><span class="settings-label">{{t('settings.ldapStatus')}}</span><span class="settings-value"><ui-status :tone="status.ldapEnabled?'success':'neutral'">{{ status.ldapEnabled ? t('settings.enabled') : t('settings.disabled') }}</ui-status></span></div>
             <div class="settings-item" v-if="status.ldapEnabled"><span class="settings-label">{{t('settings.ldapUrl')}}</span><span class="settings-value settings-value-sm">{{ status.ldapUrl }}</span></div>
@@ -591,7 +596,7 @@ const SettingsPage = {
           </div>
         </div>
         <div v-show="activeTab === 'data'" class="settings-card">
-          <div class="settings-card-header"><i class="bi bi-bar-chart"></i> {{t('settings.dataStats')}}</div>
+          <div class="settings-card-header">{{t('settings.dataStats')}}</div>
           <div class="settings-card-body">
             <div class="settings-item"><span class="settings-label">{{t('settings.ruleCount')}}</span><span class="settings-value">{{ formatNum(status.ruleCount) }}</span></div>
             <div class="settings-item"><span class="settings-label">{{t('settings.responseCount')}}</span><span class="settings-value">{{ formatNum(status.responseCount) }}</span></div>
@@ -602,7 +607,7 @@ const SettingsPage = {
           </div>
         </div>
         <div v-if="!isAdmin" v-show="activeTab === 'overview'" class="settings-card">
-          <div class="settings-card-header"><i class="bi bi-cpu"></i> {{t('settings.systemInfo')}}</div>
+          <div class="settings-card-header">{{t('settings.systemInfo')}}</div>
           <div class="settings-card-body">
             <div class="settings-item"><span class="settings-label">{{t('settings.jvmHeap')}}</span><span class="settings-value">{{ formatHeap() }}</span></div>
             <div class="settings-item"><span class="settings-label">{{t('settings.httpRuleCache')}}</span><span class="settings-value settings-value-sm">{{ formatCache('httpRules') }}</span></div>
@@ -612,11 +617,11 @@ const SettingsPage = {
           </div>
         </div>
         <div v-show="activeTab === 'service'" class="settings-card">
-          <div class="settings-card-header"><i class="bi bi-robot"></i> {{t('settings.agentStatus')}}</div>
+          <div class="settings-card-header">{{t('settings.agentStatus')}}</div>
           <div class="settings-card-body" v-if="agents.length">
             <template v-for="(a, idx) in agents" :key="a.name">
               <div v-if="idx > 0" class="settings-card-divider"></div>
-              <div class="settings-item"><span class="settings-label">{{t('settings.agentName')}}</span><span class="settings-value settings-agent-name">{{ a.name }} <span :class="agentStatusBadgeClass(a.status)" class="inline-badge"><i v-if="a.status !== 'RUNNING'" class="bi bi-exclamation-triangle me-1"></i>{{ agentStatusText(a.status) }}</span></span></div>
+              <div class="settings-item"><span class="settings-label">{{t('settings.agentName')}}</span><span class="settings-value settings-agent-name">{{ a.name }} <ui-status :tone="a.status === 'RUNNING' ? 'success' : 'warning'">{{ agentStatusText(a.status) }}</ui-status></span></div>
               <p class="settings-inline-note" v-if="a.description">{{ a.name==='log-agent' ? t('settings.agentLogDescription') : a.description }}</p>
               <div class="settings-item"><span class="settings-label">{{t('settings.agentQueueSize')}}</span><span class="settings-value">{{ formatNum(a.queueSize) }}</span></div>
               <div class="settings-item"><span class="settings-label">{{t('settings.agentProcessed')}}</span><span class="settings-value">{{ formatNum(a.processedCount) }}</span></div>
@@ -628,7 +633,7 @@ const SettingsPage = {
           </div>
         </div>
         <div v-show="activeTab === 'data'" class="settings-card settings-card-wide settings-backup-card">
-          <div class="settings-card-header settings-card-header-actions"><span>{{t('settings.dbBackup')}}</span><ui-button v-if="backupStatus?.enabled" variant="primary" size="compact" @click="$emit('trigger-backup')" :disabled="loading.backup"><i v-if="loading.backup" class="bi bi-arrow-clockwise spin" aria-hidden="true"></i>{{t('settings.backupNow')}}</ui-button></div>
+          <div class="settings-card-header settings-card-header-actions"><span>{{t('settings.dbBackup')}}</span><ui-button v-if="backupStatus?.enabled" variant="secondary" size="compact" @click="$emit('trigger-backup')" :disabled="loading.backup"><i v-if="loading.backup" class="bi bi-arrow-clockwise spin" aria-hidden="true"></i>{{t('settings.backupNow')}}</ui-button></div>
           <div class="settings-card-body" v-if="backupStatus?.enabled">
             <div class="settings-backup-meta"><span>{{t('settings.backupEnabled')}}</span><span>{{t('settings.schedule')}} <code>{{backupStatus.cron}}</code></span><span>{{t('settings.retentionDays')}} {{backupStatus.retentionDays}} {{t('settings.days')}}</span><span>{{t('settings.path')}} <code>{{backupStatus.path}}</code></span></div>
             <table v-if="backupStatus.files?.length" class="settings-table settings-backup-table"><thead><tr><th scope="col">{{t('settings.backupList')}}</th><th scope="col" class="settings-number">{{t('settings.fileSize')}}</th></tr></thead><tbody><tr v-for="f in backupStatus.files" :key="f.name"><td><code>{{f.name}}</code></td><td class="settings-number">{{fmtSize(f.size)}}</td></tr></tbody></table>
@@ -652,7 +657,7 @@ const SettingsPage = {
         </div>
         <div v-if="scenarioEnabled" v-show="activeTab === 'service'" class="settings-card settings-scenario-card">
           <div class="settings-card-header settings-card-header-actions">
-            <span><i class="bi bi-diagram-3" aria-hidden="true"></i> {{t('settings.scenarios')}}</span>
+            <span>{{t('settings.scenarios')}}</span>
             <ui-button v-if="scenarios.length && !scenariosError" type="button" class="btn btn-xs btn-secondary" @click="resetAllScenarios" :disabled="scenarioResetting!==null">
               <i class="bi" :class="scenarioResetting==='*'?'bi-arrow-clockwise spin':'bi-arrow-counterclockwise'" aria-hidden="true"></i>{{t('settings.resetAllScenarios')}}
             </ui-button>
@@ -692,9 +697,9 @@ const SettingsPage = {
       </template>
       </section>
       <ui-modal-transition>
-      <div v-if="showHttpTargetForm" class="modal-overlay" @click.self="showHttpTargetForm=false" @keydown="onConnectionDialogKeydown($event, 'http')">
+      <div v-if="showHttpTargetForm" class="modal-overlay" @keydown="onConnectionDialogKeydown($event, 'http')">
         <div class="modal-box workspace-modal connection-form-modal connection-http-form-modal" role="dialog" aria-modal="true" aria-labelledby="httpTargetFormTitle" tabindex="-1">
-          <div class="modal-header"><h2 id="httpTargetFormTitle"><i class="bi bi-globe2"></i> {{editingHttpTarget?t('settings.httpTargetEdit'):t('settings.httpTargetAdd')}}</h2><ui-button type="button" variant="quiet" size="compact" icon-only class="modal-close" @click="showHttpTargetForm=false" :aria-label="t('rules.close')" :title="t('rules.close')"><i class="bi bi-x-lg"></i></ui-button></div>
+          <div class="modal-header"><h2 id="httpTargetFormTitle">{{editingHttpTarget?t('settings.httpTargetEdit'):t('settings.httpTargetAdd')}}</h2><ui-button type="button" variant="quiet" size="compact" icon-only class="modal-close" @click="showHttpTargetForm=false" :aria-label="t('rules.close')" :title="t('rules.close')"><i class="bi bi-x-lg"></i></ui-button></div>
           <div class="modal-body">
             <div class="form-row"><div class="form-group"><label class="form-label" for="httpTargetName">{{t('settings.httpTargetName')}} <span class="required">*</span></label><input id="httpTargetName" class="form-control" v-model="httpTargetForm.name" maxlength="100" required></div><div class="form-group"><label class="form-label" for="httpAuthType">{{t('settings.httpAuthType')}}</label><select id="httpAuthType" class="form-control" v-model="httpTargetForm.authType"><option value="NONE">{{t('settings.authNone')}}</option><option value="BASIC">{{t('settings.authBasic')}}</option><option value="BEARER">{{t('settings.authBearerToken')}}</option></select></div></div>
             <div class="form-group"><label class="form-label" for="httpTargetBaseUrl">{{t('settings.httpTargetBaseUrl')}} <span class="required">*</span></label><input id="httpTargetBaseUrl" class="form-control" v-model="httpTargetForm.baseUrl" placeholder="https://internal-api.example.com" autocomplete="url" spellcheck="false" required></div>
@@ -710,14 +715,14 @@ const SettingsPage = {
               <div class="sub-info connection-form-hint"><i class="bi bi-info-circle"></i> {{httpTargetForm.tlsVerificationEnabled?t('settings.tlsVerificationStrictHint'):t('settings.tlsVerificationCompatibilityHint')}}</div>
             </div>
           </div>
-          <div class="modal-footer"><ui-button variant="quiet" @click="showHttpTargetForm=false">{{t('rules.close')}}</ui-button><ui-button class="btn btn-primary" @click="saveHttpTarget" :disabled="httpTargetSaving||!canSaveHttpTarget"><i class="bi bi-check-lg"></i> {{t('modal.save')}}</ui-button></div>
+          <div class="modal-footer"><ui-button variant="quiet" @click="showHttpTargetForm=false">{{t('modal.cancel')}}</ui-button><ui-button variant="primary" @click="saveHttpTarget" :disabled="httpTargetSaving||!canSaveHttpTarget"><i class="bi bi-check-lg" aria-hidden="true"></i>{{t('modal.save')}}</ui-button></div>
         </div>
       </div>
       </ui-modal-transition>
       <ui-modal-transition>
-      <div v-if="showJmsTargetForm" class="modal-overlay" @click.self="showJmsTargetForm=false" @keydown="onConnectionDialogKeydown($event, 'jms')">
+      <div v-if="showJmsTargetForm" class="modal-overlay" @keydown="onConnectionDialogKeydown($event, 'jms')">
         <div class="modal-box workspace-modal connection-form-modal connection-jms-form-modal" role="dialog" aria-modal="true" aria-labelledby="jmsTargetFormTitle" tabindex="-1">
-          <div class="modal-header"><h2 id="jmsTargetFormTitle"><i class="bi bi-diagram-2"></i> {{editingJmsTarget?t('settings.jmsTargetEdit'):t('settings.jmsTargetAdd')}}</h2><ui-button type="button" variant="quiet" size="compact" icon-only class="modal-close" @click="showJmsTargetForm=false" :aria-label="t('rules.close')" :title="t('rules.close')"><i class="bi bi-x-lg"></i></ui-button></div>
+          <div class="modal-header"><h2 id="jmsTargetFormTitle">{{editingJmsTarget?t('settings.jmsTargetEdit'):t('settings.jmsTargetAdd')}}</h2><ui-button type="button" variant="quiet" size="compact" icon-only class="modal-close" @click="showJmsTargetForm=false" :aria-label="t('rules.close')" :title="t('rules.close')"><i class="bi bi-x-lg"></i></ui-button></div>
           <div class="modal-body">
             <div class="form-row"><div class="form-group"><label class="form-label" for="jmsTargetName">{{t('settings.jmsTargetName')}} <span class="required">*</span></label><input id="jmsTargetName" class="form-control" v-model="jmsTargetForm.name" maxlength="100" required></div><div class="form-group"><label class="form-label" for="jmsTargetProvider">{{t('settings.jmsTargetProvider')}}</label><select id="jmsTargetProvider" class="form-control" v-model="jmsTargetForm.providerType"><option value="artemis">Artemis</option><option value="tibco">TIBCO EMS</option></select></div></div>
             <div class="form-group"><label class="form-label" for="jmsTargetServerUrl">{{t('settings.jmsTargetServerUrl')}} <span class="required">*</span></label><input id="jmsTargetServerUrl" class="form-control" v-model="jmsTargetForm.serverUrl" placeholder="tcp://host:61616" autocomplete="url" spellcheck="false" required></div>
@@ -726,7 +731,7 @@ const SettingsPage = {
             <div class="form-row"><div class="form-group"><label class="form-label" for="jmsTargetQueue">{{t('settings.jmsTargetQueue')}} <span class="required">*</span></label><input id="jmsTargetQueue" class="form-control" v-model="jmsTargetForm.queueName" spellcheck="false" required></div><div class="form-group"><label class="form-label" for="jmsTargetTimeout">{{t('settings.jmsTargetTimeout')}}</label><input id="jmsTargetTimeout" type="number" min="1" max="300" class="form-control" v-model.number="jmsTargetForm.timeoutSeconds"></div></div>
             <div class="connection-form-options"><label class="form-check"><input type="checkbox" v-model="jmsTargetForm.enabled" :disabled="editingJmsTarget?.defaultConnection" @change="onJmsTargetEnabledChange"> {{t('settings.enabled')}}</label><label class="form-check"><input type="checkbox" v-model="jmsTargetForm.defaultConnection" :disabled="!jmsTargetForm.enabled||editingJmsTarget?.defaultConnection"> {{t(yamlJmsTargetConfigured?'settings.jmsTargetFallbackDefault':'settings.jmsTargetDefault')}}</label></div>
           </div>
-          <div class="modal-footer"><ui-button variant="quiet" @click="showJmsTargetForm=false">{{t('rules.close')}}</ui-button><ui-button class="btn btn-primary" @click="saveJmsTarget" :disabled="jmsTargetSaving||!canSaveJmsTarget"><i class="bi bi-check-lg"></i> {{t('modal.save')}}</ui-button></div>
+          <div class="modal-footer"><ui-button variant="quiet" @click="showJmsTargetForm=false">{{t('modal.cancel')}}</ui-button><ui-button variant="primary" @click="saveJmsTarget" :disabled="jmsTargetSaving||!canSaveJmsTarget"><i class="bi bi-check-lg" aria-hidden="true"></i>{{t('modal.save')}}</ui-button></div>
         </div>
       </div>
       </ui-modal-transition>

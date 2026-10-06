@@ -400,6 +400,36 @@ const _app = createApp({
             setTimeout(() => { loading.value.status = false; }, 2000);
         };
         const BOOT_DATA_WAIT_MS = 600;
+        /**
+         * Keep a copy of the current screen for the next reload (see ui-snapshot.js), so its
+         * first paint is the page the user just left. Dialogs, drawers, menus and toasts are
+         * left out (a reload closes them), and Settings is never stored because it shows
+         * connection details that stay out of browser storage.
+         */
+        const PAGE_SNAPSHOT_KEY = 'echo.pageSnapshot';
+        const savePageSnapshot = () => {
+            try {
+                const app = document.getElementById('app');
+                if (!app || document.documentElement.classList.contains('is-booting') || shownPage.value === 'settings') { return; }
+                const clone = app.cloneNode(true);
+                // Field state lives in properties, not attributes; copy it so the snapshot matches.
+                const liveFields = app.querySelectorAll('input, select');
+                clone.querySelectorAll('input, select').forEach((field, i) => {
+                    const live = liveFields[i];
+                    if (!live) { return; }
+                    if (field.tagName === 'SELECT') { field.options[live.selectedIndex]?.setAttribute('selected', ''); return; }
+                    const type = field.getAttribute('type') || 'text';
+                    if (type === 'checkbox' || type === 'radio') { field.toggleAttribute('checked', live.checked); }
+                    else if ((type === 'text' || type === 'search') && live.value) { field.setAttribute('value', live.value); }
+                });
+                clone.querySelectorAll('.modal-overlay, [aria-modal="true"], .ui-detail-drawer, .toast-wrap, .ui-dropdown-menu__panel, .user-menu, .tour-overlay, .top-loader, input[type="password"]')
+                    .forEach(node => node.remove());
+                clone.querySelectorAll('[data-detail-row].is-selected').forEach(row => row.classList.remove('is-selected'));
+                const html = clone.innerHTML;
+                if (html.length > 1500000) { return; }
+                sessionStorage.setItem(PAGE_SNAPSHOT_KEY, JSON.stringify({ href: location.href, savedAt: Date.now(), html }));
+            } catch { /* storage full or unavailable: the next reload uses the plain shell */ }
+        };
         // The boot shell fades in after 300 ms (console.css); before that there is nothing to fade out.
         const BOOT_SHELL_VISIBLE_AFTER_MS = 300;
         /**
@@ -413,7 +443,8 @@ const _app = createApp({
             root.classList.remove('is-booting');
             const shell = document.getElementById('boot-shell');
             if (!shell) { return; }
-            if (performance.now() < BOOT_SHELL_VISIBLE_AFTER_MS) { shell.remove(); return; }
+            // A snapshot of the same page is swapped out in the same frame: nothing visibly changes.
+            if (shell.classList.contains('boot-shell--snapshot') || performance.now() < BOOT_SHELL_VISIBLE_AFTER_MS) { shell.remove(); return; }
             shell.classList.add('is-leaving');
             setTimeout(() => shell.remove(), 180);
         };
@@ -566,6 +597,7 @@ const _app = createApp({
             window.addEventListener('click', closeResponseDataDropdown);
             window.addEventListener('keydown', handleKeydown);
             window.addEventListener('beforeunload', handleBeforeUnload);
+            window.addEventListener('pagehide', savePageSnapshot);
         });
         onUnmounted(() => { 
             cleanupStats();
@@ -576,6 +608,7 @@ const _app = createApp({
             window.removeEventListener('click', closeResponseDataDropdown);
             window.removeEventListener('keydown', handleKeydown); 
             window.removeEventListener('beforeunload', handleBeforeUnload);
+            window.removeEventListener('pagehide', savePageSnapshot);
             cleanupEditors();
         });
 

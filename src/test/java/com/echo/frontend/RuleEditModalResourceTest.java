@@ -176,7 +176,7 @@ class RuleEditModalResourceTest {
                 .doesNotContain(".protocol-btn.active { background: var(--btn-primary)")
                 .doesNotContain(".rule-editor-mode-switch button.active { background: var(--btn-primary)")
                 .contains(".rule-editor .form-block-header { color: var(--text-subtle); font-size: 11px; letter-spacing: 0.08em }");
-        assertThat(console).contains(".workspace-modal .modal-footer > .ui-button--quiet { color: var(--muted) }");
+        assertThat(console).contains(".modal-footer > .ui-button--quiet { color: var(--muted) }");
     }
 
     @Test

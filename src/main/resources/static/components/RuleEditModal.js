@@ -169,7 +169,7 @@ const RuleEditModal = {
                 emit('search-response-picker');
             });
         };
-        const saveShortcutKey = /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘' : 'Ctrl';
+        const saveShortcutKey = SAVE_SHORTCUT_KEY;
         const onDialogKeydown = event => {
             if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && props.editorMode === 'form') {
                 event.preventDefault();

@@ -191,7 +191,7 @@ const PriorityHelpModal = {
   <div ref="helpOverlayRef" class="modal-overlay" v-if="show" @click.self="$emit('close')">
     <div ref="helpDialogRef" class="modal-box help-modal help-fullscreen workspace-modal" role="dialog" aria-modal="true" aria-labelledby="helpModalTitle">
       <div class="modal-header">
-        <div class="modal-heading"><span class="modal-heading-icon"><i class="bi bi-book" aria-hidden="true"></i></span><h2 id="helpModalTitle">{{t('help.title')}}</h2></div>
+        <div class="modal-heading"><h2 id="helpModalTitle">{{t('help.title')}}</h2></div>
         <div class="modal-header-actions">
           <ui-button type="button" class="btn btn-sm btn-secondary" @click="$emit('start-tour')"><i class="bi bi-signpost-split" aria-hidden="true"></i>{{t('help.startTour')}}</ui-button>
           <ui-button ref="closeButtonRef" type="button" class="close-btn" @click="$emit('close')" :aria-label="t('modal.cancel')"><i class="bi bi-x-lg" aria-hidden="true"></i></ui-button>

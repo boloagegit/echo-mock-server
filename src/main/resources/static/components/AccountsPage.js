@@ -350,7 +350,7 @@ const AccountsPage = {
       <div ref="createAccountOverlay" v-if="showCreateModal" class="modal-overlay" @keydown="handleDialogKeydown($event, () => $refs.createAccountDialog, closeCreateModal)">
         <div ref="createAccountDialog" class="modal-box workspace-modal account-modal" role="dialog" aria-modal="true" aria-labelledby="createAccountTitle" tabindex="-1">
           <div class="modal-header">
-            <div class="modal-heading"><span class="modal-heading-icon"><i class="bi bi-person-plus" aria-hidden="true"></i></span><h2 id="createAccountTitle">{{t('accounts.createTitle')}}</h2></div>
+            <div class="modal-heading"><h2 id="createAccountTitle">{{t('accounts.createTitle')}}</h2></div>
             <ui-button type="button" class="close-btn" @click="closeCreateModal()" :aria-label="t('modal.cancel')"><i class="bi bi-x-lg" aria-hidden="true"></i></ui-button>
           </div>
           <div class="modal-body account-modal-body">
@@ -378,7 +378,7 @@ const AccountsPage = {
       <div ref="tempPasswordOverlay" v-if="showTempPasswordModal" class="modal-overlay" @keydown="handleDialogKeydown($event, () => $refs.tempPasswordDialog, closeTempPasswordModal)">
         <div ref="tempPasswordDialog" class="modal-box workspace-modal account-modal" role="dialog" aria-modal="true" aria-labelledby="tempPasswordTitle" tabindex="-1">
           <div class="modal-header">
-            <div class="modal-heading"><span class="modal-heading-icon"><i class="bi bi-key" aria-hidden="true"></i></span><h2 id="tempPasswordTitle">{{t('accounts.tempPasswordTitle')}}</h2></div>
+            <div class="modal-heading"><h2 id="tempPasswordTitle">{{t('accounts.tempPasswordTitle')}}</h2></div>
             <ui-button type="button" class="close-btn" @click="closeTempPasswordModal()" :aria-label="t('modal.cancel')"><i class="bi bi-x-lg" aria-hidden="true"></i></ui-button>
           </div>
           <div class="modal-body temp-password-body">

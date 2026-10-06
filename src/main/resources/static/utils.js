@@ -95,6 +95,8 @@ const trapDialogFocus = (event, dialog) => {
  * true once the current record can be shown (loaded, failed, or nothing to load).
  * Templates read `held.value`, `held.open`, `held.waiting` and `held.stale`.
  */
+/** Modifier shown in save-shortcut hints (Ctrl+Enter or ⌘+Enter save every form dialog). */
+const SAVE_SHORTCUT_KEY = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘' : 'Ctrl';
 const DETAIL_HOLD_MS = 300;
 const heldDetailMixin = source => ({
     data() { return { heldSnapshot: null, holdExpired: false }; },

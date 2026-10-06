@@ -1117,11 +1117,6 @@ td .sub-info { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
     line-height: 1.5;
 }
 .response-sse-preview-skipped { margin-top: var(--space-lg) }
-.response-save-shortcut {
-    margin-inline-end: auto;
-    color: var(--muted);
-    font-size: var(--font-xs);
-}
 .response-sse-preview-empty {
     display: flex;
     flex: 1;
@@ -3301,11 +3296,14 @@ input[type="checkbox"] {
 .settings-workspace .settings-card-body { padding: var(--space-md) }
 .settings-workspace .settings-item { align-items: flex-start; gap: var(--space-md); padding-inline: 0; min-height: 32px }
 .settings-workspace .settings-value { font-weight: var(--font-weight-regular); font-variant-numeric: tabular-nums }
-.settings-context { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs) var(--space-lg); margin-bottom: var(--space-md); font-size: var(--font-xs); color: var(--muted) }
-.settings-tabs { overflow-x: auto; flex-wrap: nowrap; gap: var(--space-xs); padding: var(--space-xs); border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-neutral-soft); margin-bottom: var(--space-md) }
-.settings-tabs .ui-tabs__tab { white-space: nowrap; flex: 0 0 auto }
+.settings-context { display: inline-flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs) var(--space-md); margin-inline-start: var(--space-sm); font-size: var(--font-xs); color: var(--text-subtle) }
+.settings-context > span + span::before { content: "·"; margin-inline-end: var(--space-md); color: var(--border2) }
+.ui-tabs.settings-tabs { overflow-x: auto; flex-wrap: nowrap; gap: var(--space-lg); margin-bottom: var(--space-md); border-bottom: 1px solid var(--border) }
+.settings-tabs .ui-tabs__tab { position: relative; min-height: var(--control-h); padding: 0 2px; border: 0; border-radius: 0; background: transparent; white-space: nowrap; flex: 0 0 auto }
+.settings-tabs .ui-tabs__tab:hover:not(:disabled) { background: transparent; color: var(--text) }
 .settings-tabs .ui-tabs__tab.active,
-.settings-tabs .ui-tabs__tab.active:hover:not(:disabled) { color: var(--primary); border-color: var(--border2); background: var(--card) }
+.settings-tabs .ui-tabs__tab.active:hover:not(:disabled) { color: var(--text); background: transparent }
+.settings-tabs .ui-tabs__tab.active::after { content: ''; position: absolute; inset: auto 0 -1px; height: 2px; border-radius: 2px 2px 0 0; background: var(--primary) }
 .settings-tab-panel:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: var(--radius-control) }
 .settings-manual-note { margin: 0 0 var(--space-md) }
 .settings-workspace .settings-table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: collapse; font-size: var(--font-sm) }
@@ -3337,6 +3335,8 @@ input[type="checkbox"] {
 .connection-target-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-xs); flex-wrap: wrap }
 .connection-target-actions .ui-button { white-space: nowrap }
 .connection-target-actions .ui-button--quiet { padding-inline: var(--space-sm) }
+.connection-target-actions .connection-action-edit { color: var(--muted) }
+.connection-target-actions .connection-action-edit:hover:not(:disabled) { background: var(--hover); color: var(--text) }
 .connection-target-actions .ui-dropdown-menu > .ui-button { width: 32px; height: 32px; min-height: 32px }
 .connection-target-actions .connection-readonly { margin: 0 }
 .connection-target-menu .ui-dropdown-menu__item.ui-button:last-child:not(:disabled),
