@@ -227,7 +227,7 @@ class RuleEditModalResourceTest {
         String component = resourceText("static/components/RuleEditModal.js");
         int existingPanel = component.indexOf("class=\"response-existing-panel\"");
         int selectedSummary = component.indexOf("class=\"response-selected-card\"", existingPanel);
-        int drawerLaunch = component.indexOf("class=\"btn btn-sm btn-secondary response-picker-change\"", existingPanel);
+        int drawerLaunch = component.indexOf("class=\"response-picker-change\"", existingPanel);
         int drawer = component.indexOf("id=\"ruleResponsePickerDrawer\"", drawerLaunch);
 
         assertThat(existingPanel).isGreaterThanOrEqualTo(0);

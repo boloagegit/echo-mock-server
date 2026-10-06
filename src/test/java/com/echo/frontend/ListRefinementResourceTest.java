@@ -111,7 +111,7 @@ class ListRefinementResourceTest {
 
         assertThat(text("components/RuleEditModal.js"))
                 .contains("<ui-button variant=\"quiet\" :disabled=\"saving\" @click=\"$emit('close')\">{{t('modal.cancel')}}</ui-button>")
-                .contains("<ui-button class=\"btn btn-secondary\" @click=\"$emit('save',false)\"");
+                .contains("<ui-button variant=\"secondary\" @click=\"$emit('save',false)\"");
 
         Pattern directLegacyButton = Pattern.compile("<button\\b[^>]*class=\\\"(?:btn(?:\\s|\\\")|[^\\\"]+\\sbtn(?:\\s|\\\"))");
         for (String page : new String[]{

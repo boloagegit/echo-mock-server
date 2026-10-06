@@ -758,13 +758,13 @@ const RuleEditModal = {
                                 </template>
                             </div>
                             <div class="rule-test-actions">
-                                <ui-button type="button" class="btn btn-primary btn-sm" @click="$emit('run-test')" :disabled="testLoading">
+                                <ui-button type="button" variant="primary" size="compact" @click="$emit('run-test')" :disabled="testLoading">
                                     <i class="bi" :class="testLoading?'bi-arrow-clockwise spin':'bi-send'" aria-hidden="true"></i>{{t('modal.sendTest')}}
                                 </ui-button>
-                                <ui-button type="button" class="btn btn-secondary btn-sm" @click="$emit('generate-test-data')" :disabled="!conditions.length" :title="t('modal.generateTestData')">
+                                <ui-button type="button" variant="secondary" size="compact" @click="$emit('generate-test-data')" :disabled="!conditions.length" :title="t('modal.generateTestData')">
                                     <i class="bi bi-magic" aria-hidden="true"></i>{{t('modal.generateTestData')}}
                                 </ui-button>
-                                <ui-button v-if="testLoading && testSseMode" type="button" class="btn btn-danger btn-sm" @click="$emit('stop-sse-test')">
+                                <ui-button v-if="testLoading && testSseMode" type="button" variant="danger" size="compact" @click="$emit('stop-sse-test')">
                                     <i class="bi bi-stop-circle" aria-hidden="true"></i>{{t('modal.stop')}}
                                 </ui-button>
                             </div>
@@ -996,14 +996,14 @@ const RuleEditModal = {
                                     </div>
                                 </div>
                                 <div class="response-selected-actions">
-                                    <ui-button ref="responsePickerLaunch" type="button" class="btn btn-sm btn-secondary response-picker-change" @click="toggleResponsePicker" aria-controls="ruleResponsePickerDrawer" :aria-expanded="responseDropdownOpen">
+                                    <ui-button ref="responsePickerLaunch" type="button" variant="secondary" size="compact" class="response-picker-change" @click="toggleResponsePicker" aria-controls="ruleResponsePickerDrawer" :aria-expanded="responseDropdownOpen">
                                         <i class="bi bi-search" aria-hidden="true"></i>{{t('modal.searchDifferentResponseLabel')}}
                                     </ui-button>
-                                    <ui-button type="button" class="btn btn-sm btn-icon btn-secondary" @click="$emit('go-to-responses',form.responseId)" :title="t('modal.goToResponseManagement')" :aria-label="t('modal.goToResponseManagement')"><i class="bi bi-box-arrow-up-right"></i></ui-button>
-                                    <ui-button type="button" class="btn btn-sm btn-icon btn-secondary" @click="$emit('clear-response-selection')" :title="t('modal.clearSelection')" :aria-label="t('modal.clearSelection')"><i class="bi bi-x-lg"></i></ui-button>
+                                    <ui-button type="button" variant="secondary" size="compact" icon-only @click="$emit('go-to-responses',form.responseId)" :title="t('modal.goToResponseManagement')" :aria-label="t('modal.goToResponseManagement')"><i class="bi bi-box-arrow-up-right"></i></ui-button>
+                                    <ui-button type="button" variant="secondary" size="compact" icon-only @click="$emit('clear-response-selection')" :title="t('modal.clearSelection')" :aria-label="t('modal.clearSelection')"><i class="bi bi-x-lg"></i></ui-button>
                                 </div>
                             </div>
-                            <ui-button v-else ref="responsePickerLaunch" type="button" class="btn btn-secondary response-picker-empty-launch" @click="toggleResponsePicker" aria-controls="ruleResponsePickerDrawer" :aria-expanded="responseDropdownOpen">
+                            <ui-button v-else ref="responsePickerLaunch" type="button" variant="secondary" class="response-picker-empty-launch" @click="toggleResponsePicker" aria-controls="ruleResponsePickerDrawer" :aria-expanded="responseDropdownOpen">
                                 <i class="bi bi-search" aria-hidden="true"></i>{{t('modal.responsePickerDrawerTitle')}}
                             </ui-button>
                         </div>
@@ -1123,7 +1123,7 @@ const RuleEditModal = {
                                 </table>
                             </div>
                             <div class="rule-sse-actions">
-                                <ui-button type="button" class="btn btn-sm btn-secondary" @click="$emit('add-sse-event')">
+                                <ui-button type="button" variant="secondary" size="compact" @click="$emit('add-sse-event')">
                                     <i class="bi bi-plus-lg" aria-hidden="true"></i>{{t('modal.addSseEvent')}}
                                 </ui-button>
                                 <span class="sub-info">{{t('modal.sseEventCount', {count: sseEvents.length})}}</span>
@@ -1139,21 +1139,21 @@ const RuleEditModal = {
                             <div class="preview-toolbar">
                                 <span class="response-content-label">{{t('modal.responseContent')}}</span>
                                 <template v-if="form.responseId && !previewResponseLoading && !previewResponseLoadFailed">
-                                    <ui-button type="button" class="btn btn-xs" :class="previewEditing?'btn-warning':'btn-secondary'" @click="$emit('toggle-preview-editing')" :title="previewEditing ? t('modal.cancelEdit') : t('modal.editResponse2')">
+                                    <ui-button type="button" variant="quiet" size="compact" :class="previewEditing?'btn-warning':'btn-secondary'" @click="$emit('toggle-preview-editing')" :title="previewEditing ? t('modal.cancelEdit') : t('modal.editResponse2')">
                                         <i class="bi" :class="previewEditing?'bi-x-lg':'bi-pencil'"></i>
                                         {{previewEditing ? t('modal.cancelEdit') : ((selectedResponse?.usageCount||previewResponseUsageCount) > 1 ? t('modal.editSharedResponse') : t('modal.editResponse2'))}}
                                     </ui-button>
                                     <span v-if="previewEditing && previewResponseUsageCount > 1" class="badge badge-warning response-shared-warning" :title="t('modal.modifyAffectsAll')">
                                         <i class="bi bi-exclamation-triangle"></i> {{t('modal.sharedWarning', {count: previewResponseUsageCount})}}
                                     </span>
-                                    <ui-button type="button" class="btn btn-xs btn-secondary" @click="$emit('toggle-preview-format')">
+                                    <ui-button type="button" variant="secondary" size="compact" @click="$emit('toggle-preview-format')">
                                         <i class="bi" :class="previewFormatted?'bi-code':'bi-braces'"></i>
                                         {{previewFormatted ? t('modal.plainText') : t('modal.format')}}
                                         <span v-if="previewResponseBody.length>512000" class="text-warning">{{t('modal.largeFile')}}</span>
                                     </ui-button>
                                     <span v-if="!previewResponseBody.length" class="response-body-state"><i class="bi bi-file-earmark" aria-hidden="true"></i>{{t('modal.emptyResponseBody')}}</span>
                                     <span class="response-body-size">{{fmtSize(previewResponseBody.length)}}</span>
-                                    <ui-button v-if="previewEditing" type="button" class="btn btn-xs btn-primary preview-save-action" @click="$emit('save-preview-response')" :disabled="previewSaving">
+                                    <ui-button v-if="previewEditing" type="button" variant="primary" size="compact" class="preview-save-action" @click="$emit('save-preview-response')" :disabled="previewSaving">
                                         <i class="bi" :class="previewSaving?'bi-hourglass-split':'bi-check-lg'"></i> {{t('modal.saveResponse')}}
                                     </ui-button>
                                 </template>
@@ -1169,7 +1169,7 @@ const RuleEditModal = {
                         <div v-else class="response-content-mode">
                             <div class="edit-toolbar">
                                 <span class="response-content-label">{{t('modal.responseContent')}}</span>
-                                <ui-button type="button" class="btn btn-xs btn-secondary" @click="$emit('toggle-edit-format')">
+                                <ui-button type="button" variant="secondary" size="compact" @click="$emit('toggle-edit-format')">
                                     <i class="bi" :class="editFormatted?'bi-code':'bi-braces'"></i>
                                     {{editFormatted ? t('modal.plainText') : t('modal.format')}}
                                 </ui-button>
@@ -1201,7 +1201,7 @@ const RuleEditModal = {
                                 <h4>{{t('modal.responsePickerDrawerTitle')}}</h4>
                                 <p>{{t('modal.responsePickerDrawerHint')}}</p>
                             </div>
-                            <ui-button type="button" class="btn btn-sm btn-icon btn-secondary" @click="closeResponsePicker" :aria-label="t('modal.closeResponsePicker')" :title="t('modal.closeResponsePicker')"><i class="bi bi-x-lg" aria-hidden="true"></i></ui-button>
+                            <ui-button type="button" variant="secondary" size="compact" icon-only @click="closeResponsePicker" :aria-label="t('modal.closeResponsePicker')" :title="t('modal.closeResponsePicker')"><i class="bi bi-x-lg" aria-hidden="true"></i></ui-button>
                         </header>
                         <form class="response-picker-drawer-search" @submit.prevent="$emit('search-response-picker')">
                             <div class="response-picker-control is-open">
@@ -1209,7 +1209,7 @@ const RuleEditModal = {
                                 <input id="ruleResponsePickerInput" ref="responsePickerInput" class="response-picker-input" role="combobox" aria-autocomplete="list" aria-controls="ruleResponsePickerList" aria-expanded="true" :aria-activedescendant="responsePickerActiveIndex >= 0 ? responseOptionId(filteredResponsePicker[responsePickerActiveIndex]) : undefined" :value="responsePickerSearch" @input="onResponseSearchInput" @keydown="onResponsePickerKeydown" :placeholder="t('modal.searchResponseByNameOrId')">
                                 <button v-if="responsePickerSearch" type="button" class="response-picker-clear" @click="clearResponseSearch" :aria-label="t('modal.clearSearch')" :title="t('modal.clearSearch')"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
                             </div>
-                            <ui-button type="submit" class="btn btn-primary response-picker-search-submit"><i class="bi bi-search" aria-hidden="true"></i>{{t('common.searchAction')}}</ui-button>
+                            <ui-button type="submit" variant="primary" class="response-picker-search-submit"><i class="bi bi-search" aria-hidden="true"></i>{{t('common.searchAction')}}</ui-button>
                         </form>
                         <div class="response-picker-drawer-toolbar">
                             <ui-choice-group class="response-picker-filters" option-class="response-picker-filter" variant="compact"
@@ -1220,7 +1220,7 @@ const RuleEditModal = {
                             <div v-if="responsePickerLoading" class="response-picker-state loading-reveal"><span class="spinner-sm" aria-hidden="true"></span>{{t('modal.loadingResponses')}}</div>
                             <div v-else-if="responsePickerError" class="response-picker-state is-error">
                                 <span>{{t('modal.responsePickerLoadFailed')}}</span>
-                                <ui-button type="button" class="btn btn-sm btn-secondary" @click="$emit('search-response-picker')">{{t('common.retry')}}</ui-button>
+                                <ui-button type="button" variant="secondary" size="compact" @click="$emit('search-response-picker')">{{t('common.retry')}}</ui-button>
                             </div>
                             <button v-else v-for="(r,index) in filteredResponsePicker" :id="responseOptionId(r)" :key="r.id" type="button" role="option" :aria-selected="form.responseId===r.id" @mouseenter="responsePickerActiveIndex=index" @focus="responsePickerActiveIndex=index" @click="selectResponse(r)" class="response-picker-drawer-item" :class="{selected:form.responseId===r.id,active:responsePickerActiveIndex===index}">
                                 <span class="response-dropdown-check" aria-hidden="true"><i class="bi" :class="form.responseId===r.id?'bi-check-circle-fill':'bi-circle'"></i></span>
@@ -1233,16 +1233,16 @@ const RuleEditModal = {
                             <div v-if="!responsePickerLoading && !responsePickerError && !filteredResponsePicker.length" class="response-picker-state response-picker-empty-state">
                                 <span>{{t('modal.noMatchingResponse')}}</span>
                                 <div class="response-picker-empty-actions">
-                                    <ui-button type="button" class="btn btn-sm btn-primary" @click="form.responseMode='new';closeResponsePicker();$emit('on-response-mode-change')"><i class="bi bi-file-earmark-plus" aria-hidden="true"></i>{{t('modal.createNewResponse')}}</ui-button>
-                                    <ui-button type="button" class="btn btn-sm btn-secondary" @click="closeResponsePicker();$emit('go-to-responses','')"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>{{t('modal.goToResponseManagement')}}</ui-button>
+                                    <ui-button type="button" variant="primary" size="compact" @click="form.responseMode='new';closeResponsePicker();$emit('on-response-mode-change')"><i class="bi bi-file-earmark-plus" aria-hidden="true"></i>{{t('modal.createNewResponse')}}</ui-button>
+                                    <ui-button type="button" variant="secondary" size="compact" @click="closeResponsePicker();$emit('go-to-responses','')"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>{{t('modal.goToResponseManagement')}}</ui-button>
                                 </div>
                             </div>
                         </div>
                         <footer class="response-picker-drawer-footer">
                             <span>{{t('modal.responsePickerPageStatus', {page:responsePickerPage + 1, total:responsePickerTotalPages || 1})}}</span>
                             <div>
-                                <ui-button type="button" class="btn btn-sm btn-icon btn-secondary" :disabled="responsePickerPage <= 0 || responsePickerLoading" @click="$emit('change-response-picker-page',responsePickerPage - 1)" :aria-label="t('modal.previousPage')" :title="t('modal.previousPage')"><i class="bi bi-chevron-left" aria-hidden="true"></i></ui-button>
-                                <ui-button type="button" class="btn btn-sm btn-icon btn-secondary" :disabled="responsePickerPage + 1 >= responsePickerTotalPages || responsePickerLoading" @click="$emit('change-response-picker-page',responsePickerPage + 1)" :aria-label="t('modal.nextPage')" :title="t('modal.nextPage')"><i class="bi bi-chevron-right" aria-hidden="true"></i></ui-button>
+                                <ui-button type="button" variant="secondary" size="compact" icon-only :disabled="responsePickerPage <= 0 || responsePickerLoading" @click="$emit('change-response-picker-page',responsePickerPage - 1)" :aria-label="t('modal.previousPage')" :title="t('modal.previousPage')"><i class="bi bi-chevron-left" aria-hidden="true"></i></ui-button>
+                                <ui-button type="button" variant="secondary" size="compact" icon-only :disabled="responsePickerPage + 1 >= responsePickerTotalPages || responsePickerLoading" @click="$emit('change-response-picker-page',responsePickerPage + 1)" :aria-label="t('modal.nextPage')" :title="t('modal.nextPage')"><i class="bi bi-chevron-right" aria-hidden="true"></i></ui-button>
                             </div>
                         </footer>
                     </section>
@@ -1261,8 +1261,8 @@ const RuleEditModal = {
                 <span v-if="!canSave" class="sub-info modal-footer-status"><i class="bi bi-info-circle"></i> {{t('modal.requiredFieldsHint')}}</span>
                 <span v-else class="modal-footer-hint"><kbd>{{saveShortcutKey}}</kbd><kbd>Enter</kbd>{{t('modal.saveAndCloseShortcut')}}</span>
                 <ui-button variant="quiet" :disabled="saving" @click="$emit('close')">{{t('modal.cancel')}}</ui-button>
-                <ui-button class="btn btn-secondary" @click="$emit('save',false)" :disabled="!canSave||saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-floppy'" :spin="saving"></ui-motion-icon> {{t('modal.save')}}</ui-button>
-                <ui-button class="btn btn-primary" @click="$emit('save',true)" :disabled="!canSave||saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-check2-circle'" :spin="saving"></ui-motion-icon> {{t('modal.saveAndClose')}}</ui-button>
+                <ui-button variant="secondary" @click="$emit('save',false)" :disabled="!canSave||saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-floppy'" :spin="saving"></ui-motion-icon> {{t('modal.save')}}</ui-button>
+                <ui-button variant="primary" @click="$emit('save',true)" :disabled="!canSave||saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-check2-circle'" :spin="saving"></ui-motion-icon> {{t('modal.saveAndClose')}}</ui-button>
             </div>
         </div>
     </div>
