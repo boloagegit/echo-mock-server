@@ -168,7 +168,6 @@ const AccountsPage = {
             :aria-label="t('accounts.searchPlaceholder')"
             :clear-label="t('accounts.searchPlaceholder')"
             :submit-mode="true"
-            :submit-label="t('common.searchAction')"
             @search="accounts.searchKeyword.value=$event"
           ></workspace-search-field>
           </div>

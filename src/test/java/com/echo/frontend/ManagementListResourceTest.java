@@ -62,8 +62,10 @@ class ManagementListResourceTest {
         assertThat(component)
                 .contains("ruleFilter.mode")
                 .contains("ruleFilter.expiring")
-                .contains("r.updatedBy||t('rules.unknownOperator')")
-                .contains("$emit('toggle-rule-sort', 'updatedAt')");
+                .contains("@sort=\"$emit('toggle-rule-sort', $event)\"");
+        assertThat(resourceText("static/components/RuleTable.js"))
+                .contains("r.updatedBy || t('rules.unknownOperator')")
+                .contains("$emit('sort', 'updatedAt')");
     }
 
     private static String resourceText(String path) throws IOException {

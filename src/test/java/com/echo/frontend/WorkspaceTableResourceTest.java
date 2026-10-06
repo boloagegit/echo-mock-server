@@ -12,11 +12,12 @@ class WorkspaceTableResourceTest {
 
     @Test
     void distinguishesRoutineMetadataFromRetentionWarningsInBothRuleViews() throws IOException {
-        for (String path : new String[]{"static/components/RulesPage.js", "static/components/RuleGroupRow.js"}) {
-            assertThat(resourceText(path)).contains("<= 7\" class=\"badge badge-warning\"")
-                    .contains("t('rules.pvDaysLeft')")
-                    .contains("class=\"table-metadata\"");
-        }
+        // Rows flag only rules that expire within a week; the drawer always shows the remaining days.
+        assertThat(resourceText("static/components/RuleTable.js"))
+                .contains("retentionDays(r) != null && retentionDays(r) <= 7\" tone=\"warning\"");
+        assertThat(resourceText("static/components/RuleDetail.js"))
+                .contains("t('rules.pvDaysLeft')")
+                .contains(":tone=\"retention <= 7 ? 'warning' : 'neutral'\"");
         assertThat(resourceText("static/components/ResponsesPage.js"))
                 .contains("class=\"response-reference-control\"")
                 .contains("t('responses.referenceRules')")
@@ -39,8 +40,7 @@ class WorkspaceTableResourceTest {
     @Test
     void dateColumnsKeepShortTimestampsAndRetentionLabelsVisible() throws IOException {
         String stylesheet = resourceText("static/style.css");
-        String rules = resourceText("static/components/RulesPage.js");
-        String groupedRules = resourceText("static/components/RuleGroupRow.js");
+        String rules = resourceText("static/components/RuleTable.js");
         String responses = resourceText("static/components/ResponsesPage.js");
         String audit = resourceText("static/components/AuditPage.js");
 
@@ -50,8 +50,9 @@ class WorkspaceTableResourceTest {
                 .contains("td.col-datetime .sub-info")
                 .contains("text-overflow: clip")
                 .contains(".table-date-stack");
-        assertThat(rules).contains("class=\"col-datetime col-hide-md\"").contains("class=\"table-date-stack\"");
-        assertThat(groupedRules).contains("class=\"col-datetime col-hide-md\"").contains("class=\"table-date-stack\"");
+        // Rule rows keep the short timestamp visible and expose the full time and operator on hover.
+        assertThat(rules).contains("class=\"col-updated cell-mono cell-subtle\" :title=\"fmtTime(r.updatedAt,false)")
+                .contains("{{fmtTime(r.updatedAt)}}");
         assertThat(responses).contains("class=\"col-datetime col-hide-md\"");
         assertThat(audit).contains("class=\"col-datetime audit-time-column\"");
     }
@@ -83,22 +84,20 @@ class WorkspaceTableResourceTest {
     }
 
     @Test
-    void expandedRuleRowsSpanOnlyColumnsThatRemainVisibleAtEachBreakpoint() throws IOException {
+    void ruleColumnsCollapseByAvailableWidthInsteadOfSpanningPreviewRows() throws IOException {
         String rules = resourceText("static/components/RulesPage.js");
-        String groupedRules = resourceText("static/components/RuleGroupRow.js");
+        String table = resourceText("static/components/RuleTable.js");
         String stylesheet = resourceText("static/style.css");
+        String console = resourceText("static/console.css");
 
-        assertThat(rules)
-                .contains("ruleViewportWidth <= 768 ? 2 : this.ruleViewportWidth <= 1280 ? 3 : 6")
-                .contains("ruleViewportWidth <= 768 ? 2 : this.ruleViewportWidth <= 1280 ? 3 : 6")
-                .contains(":colspan=\"rulePreviewColspan\"")
-                .contains(":preview-colspan=\"groupRulePreviewColspan\"")
-                .contains("window.addEventListener('resize', this.syncRuleViewportWidth")
-                .contains("window.removeEventListener('resize', this.syncRuleViewportWidth)");
-        assertThat(groupedRules).contains(":colspan=\"previewColspan\"");
-        assertThat(stylesheet)
-                .contains("container-type: inline-size")
-                .contains("@container (min-width: 600px)");
+        // Details live in the drawer, so there are no preview rows whose colspan must track visible columns.
+        assertThat(rules).doesNotContain("colspan").doesNotContain("syncRuleViewportWidth");
+        assertThat(table).doesNotContain("colspan");
+        assertThat(stylesheet).contains("container-type: inline-size");
+        assertThat(console)
+                .contains("@container (max-width: 980px) {\n    .rule-table .col-updated { display: none }")
+                .contains("@container (max-width: 860px) {\n    .rule-table .col-cond { display: none }")
+                .contains("@container (max-width: 680px) {\n    .rule-table .col-priority { display: none }");
     }
 
     private static String resourceText(String path) throws IOException {

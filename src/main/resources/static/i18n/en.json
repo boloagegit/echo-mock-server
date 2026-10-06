@@ -314,7 +314,13 @@
     "fault_CONNECTION_RESET": "Connection Reset",
     "fault_EMPTY_RESPONSE": "Empty Response",
     "pvScenario": "Scenario",
-    "scenarioTooltip": "Scenario: {name} (Required: {required} → New: {newState})"
+    "scenarioTooltip": "Scenario: {name} (Required: {required} → New: {newState})",
+    "thMethod": "Method",
+    "dragColumn": "Drag to reorder",
+    "selectedCount": "{count} rules selected",
+    "batchDone": "Done",
+    "pvSectionResponse": "Response",
+    "pvTargetHost": "Source host"
   },
   "responses": {
     "pagination": "Response pagination",
@@ -1374,7 +1380,9 @@
     "openApiParseFailed": "Failed to parse OpenAPI spec",
     "scenarioResetSuccess": "Scenario reset to Started",
     "scenarioResetAllSuccess": "All scenarios reset to Started",
-    "scenarioResetFailed": "Failed to reset scenario"
+    "scenarioResetFailed": "Failed to reset scenario",
+    "ruleEnabledNamed": "Enabled “{name}”",
+    "ruleDisabledNamed": "Disabled “{name}”"
   },
   "validation": {
     "matchKeyRequired": "Please enter a Match Key",
@@ -1761,6 +1769,12 @@
     "removeFilter": "Remove filter: {filter}",
     "sortBy": "Sort by {field}",
     "retry": "Retry",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "previousItem": "Previous item",
+    "nextItem": "Next item",
+    "loadFailed": "Failed to load",
+    "undo": "Undo",
+    "moreActions": "More actions",
+    "notifications": "Notifications"
   }
 }

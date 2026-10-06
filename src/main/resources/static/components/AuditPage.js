@@ -90,7 +90,6 @@ const AuditPage = {
               :clear-label="t('audit.clearAll')"
               icon="bi-person" compact
               :submit-mode="true"
-              :submit-label="t('common.searchAction')"
               @search="$emit('update:auditFilter', {...auditFilter, operator:$event})"
             ></workspace-search-field>
             <workspace-search-field
@@ -100,7 +99,6 @@ const AuditPage = {
               :aria-label="t('audit.searchContent')"
               :clear-label="t('audit.clearAll')"
               :submit-mode="true"
-              :submit-label="t('common.searchAction')"
               @search="$emit('update:auditFilter', {...auditFilter, keyword:$event})"
             ></workspace-search-field>
           </div>

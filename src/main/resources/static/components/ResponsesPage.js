@@ -137,7 +137,6 @@ const ResponsesPage = {
               :aria-label="t('responses.searchPlaceholder')"
               :clear-label="t('responses.clearSearch')"
               :submit-mode="true"
-              :submit-label="t('common.searchAction')"
               @search="$emit('update:responseFilter', $event)"
             ></workspace-search-field>
           </div>

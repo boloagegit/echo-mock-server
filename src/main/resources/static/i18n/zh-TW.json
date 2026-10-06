@@ -314,7 +314,13 @@
     "fault_CONNECTION_RESET": "連線重置",
     "fault_EMPTY_RESPONSE": "空回應",
     "pvScenario": "情境",
-    "scenarioTooltip": "情境：{name}（前置狀態：{required} → 新狀態：{newState}）"
+    "scenarioTooltip": "情境：{name}（前置狀態：{required} → 新狀態：{newState}）",
+    "thMethod": "方法",
+    "dragColumn": "拖曳排序",
+    "selectedCount": "已選取 {count} 條規則",
+    "batchDone": "完成",
+    "pvSectionResponse": "回應",
+    "pvTargetHost": "來源主機"
   },
   "responses": {
     "pagination": "回應分頁",
@@ -1374,7 +1380,9 @@
     "openApiParseFailed": "OpenAPI 規格解析失敗",
     "scenarioResetSuccess": "情境已重置為 Started（初始）",
     "scenarioResetAllSuccess": "全部情境已重置為 Started（初始）",
-    "scenarioResetFailed": "情境重置失敗"
+    "scenarioResetFailed": "情境重置失敗",
+    "ruleEnabledNamed": "已啟用「{name}」",
+    "ruleDisabledNamed": "已停用「{name}」"
   },
   "validation": {
     "matchKeyRequired": "請輸入匹配鍵",
@@ -1761,6 +1769,12 @@
     "removeFilter": "移除篩選：{filter}",
     "sortBy": "依{field}排序",
     "retry": "重試",
-    "loading": "載入中…"
+    "loading": "載入中…",
+    "previousItem": "上一筆",
+    "nextItem": "下一筆",
+    "loadFailed": "載入失敗",
+    "undo": "復原",
+    "moreActions": "更多操作",
+    "notifications": "通知"
   }
 }

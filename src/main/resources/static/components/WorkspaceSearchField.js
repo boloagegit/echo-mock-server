@@ -1,5 +1,9 @@
 /**
  * WorkspaceSearchField - shared search control for dense workspace toolbars.
+ *
+ * In submit mode the applied keyword is emitted through `search` after the
+ * user pauses typing (debounced) or presses Enter, so lists filter as you type
+ * without sending a request per keystroke. Unchanged values are never re-sent.
  */
 const WorkspaceSearchField = {
   props: {
@@ -12,7 +16,7 @@ const WorkspaceSearchField = {
     compact: { type: Boolean, default: false },
     showClear: { type: Boolean, default: true },
     submitMode: { type: Boolean, default: false },
-    submitLabel: { type: String, default: '' },
+    debounceMs: { type: Number, default: 350 },
   },
   emits: ['update:modelValue', 'search'],
   data() {
@@ -28,21 +32,29 @@ const WorkspaceSearchField = {
   },
   watch: {
     modelValue(value) {
-      this.draftValue = value;
+      if (value.trim() !== this.normalizedDraft) { this.draftValue = value; }
     },
+  },
+  beforeUnmount() {
+    clearTimeout(this.searchTimer);
   },
   methods: {
     onInput(event) {
       this.draftValue = event.target.value;
       if (!this.submitMode) {
         this.$emit('update:modelValue', this.draftValue);
+        return;
       }
+      clearTimeout(this.searchTimer);
+      this.searchTimer = setTimeout(() => this.submitSearch(), this.debounceMs);
     },
     submitSearch() {
+      clearTimeout(this.searchTimer);
       if (!this.submitMode || this.searchUnchanged) { return; }
       this.$emit('search', this.normalizedDraft);
     },
     clearSearch() {
+      clearTimeout(this.searchTimer);
       const hadAppliedSearch = !!this.modelValue;
       this.draftValue = '';
       if (this.submitMode) {
@@ -53,7 +65,7 @@ const WorkspaceSearchField = {
     },
   },
   template: /* html */`
-    <form class="workspace-search-field" :class="{'workspace-search-compact':compact, 'workspace-search-submit-mode':submitMode}" role="search" @submit.prevent="submitSearch">
+    <form class="workspace-search-field" :class="{'workspace-search-compact':compact}" role="search" @submit.prevent="submitSearch">
       <div class="workspace-search-input">
         <label v-if="inputId && ariaLabel" class="visually-hidden" :for="inputId">{{ariaLabel}}</label>
         <i class="bi" :class="icon" aria-hidden="true"></i>
@@ -67,6 +79,7 @@ const WorkspaceSearchField = {
           spellcheck="false"
           @input="onInput"
           @keydown.enter.prevent="submitSearch"
+          @keydown.esc="draftValue ? ($event.stopPropagation(), clearSearch()) : $event.target.blur()"
         >
         <ui-button
           v-if="showClear && draftValue"
@@ -80,14 +93,6 @@ const WorkspaceSearchField = {
           @click="clearSearch"
         ><i class="bi bi-x" aria-hidden="true"></i></ui-button>
       </div>
-      <ui-button
-        v-if="submitMode"
-        type="submit"
-        variant="secondary"
-        size="compact"
-        class="workspace-search-submit"
-        :disabled="searchUnchanged"
-      ><i class="bi bi-search" aria-hidden="true"></i><span>{{submitLabel}}</span></ui-button>
     </form>
   `,
 };

@@ -37,11 +37,15 @@ class MotionSystemResourceTest {
         }
         assertThat(resourceText("static/components/RuleEditModal.js"))
                 .contains("<Transition name=\"ui-mode-panel-motion\" mode=\"out-in\">");
-        for (String list : new String[]{
-                "RulesPage", "RuleGroupRow", "ResponsesPage", "AuditPage", "IssuesPage", "StatsPage"}) {
+        for (String list : new String[]{"ResponsesPage", "AuditPage", "IssuesPage", "StatsPage"}) {
             assertThat(resourceText("static/components/" + list + ".js"))
                     .contains("<Transition name=\"ui-detail-row-motion\">");
         }
+        // Rule details moved from an expanded row to the shared drawer, which animates and honours reduced motion.
+        assertThat(resourceText("static/components/UiDetailDrawer.js")).contains("<Transition name=\"ui-drawer-motion\">");
+        assertThat(resourceText("static/console.css"))
+                .contains(".ui-drawer-motion-enter-active,")
+                .contains("@media (prefers-reduced-motion: reduce) {\n    .ui-drawer-motion-enter-active,");
     }
 
     @Test

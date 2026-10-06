@@ -16,8 +16,8 @@ class ForwardingObservabilityResourceTest {
     @Test
     void rulePreviewUsesTheConnectionIdForItsProtocol() throws IOException {
         String utils = resourceText("static/utils.js");
-        String rules = resourceText("static/components/RulesPage.js");
-        String groupedRules = resourceText("static/components/RuleGroupRow.js");
+        // List and group views share one drawer, so the forward target is rendered in RuleDetail only.
+        String ruleDetail = resourceText("static/components/RuleDetail.js");
 
         assertThat(utils)
                 .contains("const protocol = String(rule?.protocol || '').toUpperCase()")
@@ -28,16 +28,11 @@ class ForwardingObservabilityResourceTest {
                 .contains("const forwardTargetEndpoint = rule => rule?._forwardTargetEndpoint || ''")
                 .contains("_t('modal.forwardOriginalHost')")
                 .contains("'modal.forwardDefaultJmsConnection' : 'modal.forwardDefaultConnection'");
-        assertThat(rules)
-                .contains("forwardTargetLabel(rulePreviewCache[r.id])")
+        assertThat(ruleDetail)
+                .contains("forwardTargetLabel(view)")
                 .contains("forwardTargetLabel, forwardTargetEndpoint")
-                .contains("rulePreviewCache[r.id]._forwardTargetName")
-                .contains("forwardTargetEndpoint(rulePreviewCache[r.id])");
-        assertThat(groupedRules)
-                .contains("forwardTargetLabel(rulePreviewCache[rule.id])")
-                .contains("forwardTargetLabel, forwardTargetEndpoint")
-                .contains("rulePreviewCache[rule.id]._forwardTargetName")
-                .contains("forwardTargetEndpoint(rulePreviewCache[rule.id])");
+                .contains("view._forwardTargetName")
+                .contains("forwardTargetEndpoint(view)");
         String useRules = resourceText("static/composables/useRules.js");
         assertThat(useRules)
                 .contains("const hydrateForwardTarget = async (data) =>")

@@ -239,8 +239,8 @@ class RuleEditModalResourceTest {
 
         assertThat(stylesheet)
                 .contains("--control-h: 36px;")
-                .contains("--control-h: 34px; --control-h-sm: 30px;")
-                .contains("--control-h: 42px; --control-h-sm: 36px;")
+                .contains("--control-h: 32px; --control-h-sm: 28px;")
+                .contains("--control-h: 40px; --control-h-sm: 36px;")
                 .contains("--editor-section-py: 6px; --editor-field-gap: 6px;")
                 .contains("--editor-section-py: 14px; --editor-field-gap: 12px;")
                 .contains("--editor-content-min-h: 380px;")

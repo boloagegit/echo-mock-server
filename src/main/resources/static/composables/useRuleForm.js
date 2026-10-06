@@ -21,7 +21,8 @@
  * @param {Function} deps.loadRules - 載入規則函式（來自 useRules）
  * @param {import('vue').Ref} deps.rules - 規則列表（來自 useRules）
  * @param {import('vue').Ref} deps.rulePreviewCache - 規則預覽快取（來自 useRules）
- * @param {import('vue').Ref} deps.rulePreviewExpanded - 規則預覽展開狀態（來自 useRules）
+ * @param {import('vue').Ref} deps.ruleDetailId - 詳情抽屜目前顯示的規則 ID（來自 useRules）
+ * @param {Function} deps.loadRuleDetail - 重新載入規則詳情（來自 useRules）
  * @param {Function} deps.rulesMarkDirty - 標記規則資料需重新載入（來自 useRules）
  * @param {Function} deps.responsesMarkDirty - 標記回應資料需重新載入（來自 useResponses）
  * @param {import('vue').Ref} deps.responseSseEvents - 回應 SSE 事件（來自 useResponses）
@@ -40,7 +41,7 @@
 const useRuleForm = (deps) => {
     const { ref, computed, watch } = Vue;
     const { showToast, showConfirm, t, requireLogin, login,
-            loadRules, rulePreviewCache, rulePreviewExpanded, rulesMarkDirty,
+            loadRules, rulePreviewCache, ruleDetailId, loadRuleDetail, rulesMarkDirty,
             responsesMarkDirty, responseSseEvents,
             renderEditor, editEditorRef, editFormatted, previewEditorRef, previewFormatted,
             responseFormEditorRef, responseFormFormatted } = deps;
@@ -813,7 +814,7 @@ const useRuleForm = (deps) => {
                 showToast(editing.value ? t('toast.ruleSaveSuccess') : t('toast.ruleCreateSuccess'), 'success');
                 rulesMarkDirty();
                 delete rulePreviewCache.value[saved.id];
-                rulePreviewExpanded.value[saved.id] = false;
+                if (ruleDetailId?.value === saved.id) { loadRuleDetail(saved.id, { force: true }); }
                 if (andClose) { closeModal(); loadRules(true); }
                 else {
                     editing.value = saved;

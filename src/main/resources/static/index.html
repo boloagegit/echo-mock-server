@@ -9,7 +9,8 @@
     <link rel="stylesheet" href="/webjars/bootstrap-icons/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="/webjars/codemirror/lib/codemirror.css">
     <link rel="stylesheet" href="/theme.css?v=20261006.1">
-    <link rel="stylesheet" href="/style.css?v=20261006.5">
+    <link rel="stylesheet" href="/style.css?v=20261007.1">
+    <link rel="stylesheet" href="/console.css?v=20261007.1">
     <script src="/ui-accent.js?v=20261006.1"></script>
 </head>
 <body>
@@ -43,8 +44,7 @@
                 :rule-page="rulePage" :rule-page-size="rulePageSize"
                 :batch-select-mode="batchSelectMode" :selected-rules="selectedRules"
                 :rule-filter-chips="ruleFilterChips"
-                :show-dbl-click-hint="showDblClickHint"
-                :rule-preview-expanded="rulePreviewExpanded"
+                :rule-detail-id="ruleDetailId"
                 :rule-preview-loading="rulePreviewLoading"
                 :rule-preview-error="rulePreviewError"
                 :rule-preview-cache="rulePreviewCache"
@@ -78,9 +78,9 @@
                 @export-rule-json="exportRuleJson($event)"
                 @remove-rule-chip="removeRuleChip($event)"
                 @clear-rule-filters="clearRuleFilters"
-                @toggle-rule-preview="toggleRulePreview($event)"
-                @handle-rule-row-click="handleRuleRowClick($event)"
-                @dismiss-dblclick-hint="dismissDblClickHint"
+                @open-rule-detail="openRuleDetail($event)"
+                @close-rule-detail="closeRuleDetail"
+                @load-rule-detail="loadRuleDetail($event, { force: true })"
                 @go-to-responses="page='responses';responseFilter=String($event)"
                 @clip-copy="clipCopy($event)" @extend-rule="extendRule($event)"
                 @drag-start="(e, r) => onDragStart(e, r)"
@@ -338,7 +338,7 @@
 
     <confirm-modal :confirm-state="confirmState"></confirm-modal>
 
-    <toast-container :toasts="toasts" @dismiss="dismissToast"></toast-container>
+    <toast-container :toasts="toasts" @dismiss="dismissToast" @action="runToastAction"></toast-container>
 </div>
 <script src="/webjars/vue/dist/vue.global.prod.js"></script>
 <script src="/webjars/codemirror/lib/codemirror.js"></script>
@@ -370,7 +370,9 @@
 <script src="/components/UiToggleGroup.js?v=20260912.1"></script>
 <script src="/components/UiFilterChipList.js?v=20260909.3"></script>
 <script src="/components/UiTableSortHeader.js?v=20260909.1"></script>
-<script src="/components/UiDropdownMenu.js?v=20261001.1"></script>
+<script src="/components/UiDropdownMenu.js?v=20261007.1"></script>
+<script src="/components/UiRowMenu.js?v=20261007.1"></script>
+<script src="/components/UiDetailDrawer.js?v=20261007.1"></script>
 <script src="/components/UiLoadState.js?v=20260909.1"></script>
 <script src="/components/UiTabs.js?v=20260909.1"></script>
 <script src="/components/UiChoiceGroup.js?v=20260909.1"></script>
@@ -393,9 +395,9 @@
 <script src="/components/ConnectionTargetsTable.js?v=20261001.1"></script>
 <script src="/components/SettingsPage.js?v=20261001.1"></script>
 <script src="/components/PriorityHelpModal.js?v=20260909.7"></script>
-<script src="/components/RuleListParts.js?v=20261006.1"></script>
-<script src="/components/RulesPage.js?v=20260912.3"></script>
-<script src="/components/RuleGroupRow.js?v=20260912.3"></script>
+<script src="/components/RuleTable.js?v=20261007.1"></script>
+<script src="/components/RuleDetail.js?v=20261007.1"></script>
+<script src="/components/RulesPage.js?v=20261007.1"></script>
 <script src="/components/AccountsPage.js?v=20260912.1"></script>
 <script src="/components/RuleEditModal.js?v=20261006.1"></script>
 <script src="/components/RuleApplyModal.js?v=20261001.2"></script>

@@ -15,42 +15,40 @@ class WorkspaceSearchResourceTest {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Test
-    void submitModeKeepsDraftSeparateUntilEnterOrSearchButton() throws IOException {
+    void searchAppliesAfterAPauseOrOnEnterWithoutResendingTheSameKeyword() throws IOException {
         String component = resourceText("static/components/WorkspaceSearchField.js");
 
+        // Lists filter as you type, but each keystroke does not hit the server.
         assertThat(component)
-                .contains("@submit.prevent=\"submitSearch\"")
+                .contains("debounceMs: { type: Number, default: 350 }")
+                .contains("this.searchTimer = setTimeout(() => this.submitSearch(), this.debounceMs);")
                 .contains("@keydown.enter.prevent=\"submitSearch\"")
-                .contains("this.draftValue = event.target.value")
-                .contains("if (!this.submitMode)")
+                .contains("if (!this.submitMode || this.searchUnchanged) { return; }")
                 .contains("this.$emit('search', this.normalizedDraft)")
-                .contains("type=\"submit\"")
-                .contains(":disabled=\"searchUnchanged\"");
+                .contains("beforeUnmount() {\n    clearTimeout(this.searchTimer);")
+                .doesNotContain("type=\"submit\"")
+                .doesNotContain("workspace-search-submit");
     }
 
     @Test
-    void submitButtonIsASeparateControlWithStableSpacing() throws IOException {
+    void searchFieldUsesTheSharedControlHeight() throws IOException {
         String component = resourceText("static/components/WorkspaceSearchField.js");
         String styles = resourceText("static/style.css");
 
         assertThat(component)
                 .contains("<div class=\"workspace-search-input\">")
                 .contains("class=\"form-control form-control-sm\"")
-                .contains("class=\"workspace-search-submit\"")
-                .contains("size=\"compact\"");
+                .contains("@keydown.esc=");
         assertThat(styles)
-                .contains(".workspace-search-submit-mode {")
-                .contains("gap: var(--space-sm);")
                 .contains(".workspace-search-input { position: relative; flex: 1; min-width: 0 }")
-                .contains(".workspace-search-field .form-control { height: 32px; min-height: 32px }")
-                .contains(".rule-filter-select .form-control { width: auto; min-width: 104px; height: 32px; min-height: 32px }")
+                .contains(".workspace-search-field .form-control { height: var(--control-h-sm); min-height: var(--control-h-sm) }")
                 .doesNotContain(".workspace-search-submit-mode .workspace-search-clear")
                 .doesNotContain(".workspace-filter-bar .workspace-search-submit,")
                 .doesNotContain(".workspace-filter-controls > .btn { height: var(--toolbar-h)");
     }
 
     @Test
-    void primaryWorkspaceListsUseExplicitSearchSubmission() throws IOException {
+    void primaryWorkspaceListsApplyTheirKeywordThroughTheSharedSearchEvent() throws IOException {
         assertExplicitSearch("static/components/RulesPage.js");
         assertExplicitSearch("static/components/ResponsesPage.js");
         assertExplicitSearch("static/components/StatsPage.js");
@@ -89,7 +87,7 @@ class WorkspaceSearchResourceTest {
     private static void assertExplicitSearch(String path) throws IOException {
         assertThat(resourceText(path))
                 .contains(":submit-mode=\"true\"")
-                .contains(":submit-label=\"t('common.searchAction')\"")
+                .doesNotContain(":submit-label=")
                 .contains("@search=");
     }
 

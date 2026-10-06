@@ -259,32 +259,33 @@ test('finishing every tour step also restores its entry context', () => {
   assert.equal(h.tour.tourStep.value, 0);
 });
 
-function menuPosition(trigger, bounds, width = 168, height = 76) {
-  const context = vm.createContext({ trigger, bounds, width, height,
-    shortId() {}, parseTags() {}, condTags() {}, fmtTime() {} });
-  vm.runInContext(source('components/RuleListParts.js') + '\nthis.position = ruleMenuPosition(trigger, bounds, width, height);', context);
-  return context.position;
+// Rule rows use the shared UiRowMenu, which positions through UiDropdownMenu's viewport-safe helper.
+function rowMenuPosition(trigger, viewport, menu = { width: 184, height: 150 }) {
+  const context = vm.createContext({ trigger, menu, viewport, Vue: {} });
+  vm.runInContext(source('components/UiDropdownMenu.js') + '\nthis.position = dropdownViewportPosition(trigger, menu, viewport);', context);
+  return Object.fromEntries(Object.entries(context.position).map(([k, v]) => [k, typeof v === 'string' && v.endsWith('px') ? parseFloat(v) : v]));
 }
 
-test('lower-edge menu is clamped above the table footer, including its last action', () => {
-  const bounds = { left: 233, right: 1415, top: 139, bottom: 830 };
-  const p = menuPosition({ left: 1371, top: 812, height: 32 }, bounds);
-  assert.equal(p.top, 750);
-  assert.ok(p.top + 76 <= bounds.bottom - 4);
+test('lower-edge row menu opens above its trigger, including its last action', () => {
+  const viewport = { width: 1440, height: 900 };
+  const p = rowMenuPosition({ right: 1403, top: 812, bottom: 844 }, viewport);
+  assert.equal(p.top, 658);
+  assert.ok(p.top + 150 <= viewport.height - 8);
 });
 
-test('first-row menu retains its nearby placement', () => {
-  const p = menuPosition({ left: 1371, top: 199, height: 32 }, { left: 233, right: 1415, top: 139, bottom: 830 });
-  assert.equal(p.top, 177);
-  assert.equal(p.left, 1199);
+test('first-row menu opens directly below its trigger', () => {
+  const p = rowMenuPosition({ right: 1403, top: 199, bottom: 231 }, { width: 1440, height: 900 });
+  assert.equal(p.top, 235);
+  assert.equal(p.left, 1219);
 });
 
-test('narrow and top-edge menus stay inside the available viewport', () => {
-  const bounds = { left: 24, right: 366, top: 139, bottom: 760 };
-  const p = menuPosition({ left: 112, top: 143, height: 32 }, bounds);
-  assert.ok(p.left >= bounds.left + 4);
-  assert.ok(p.left + 168 <= bounds.right - 4);
-  assert.ok(p.top >= bounds.top + 4);
+test('narrow and top-edge row menus stay inside the available viewport', () => {
+  const viewport = { width: 390, height: 844 };
+  const p = rowMenuPosition({ right: 120, top: 143, bottom: 175 }, viewport);
+  assert.ok(p.left >= 8);
+  assert.ok(p.left + 184 <= viewport.width - 8);
+  assert.ok(p.top >= 8);
+  assert.equal(source('components/UiRowMenu.js').includes('viewport-safe'), true);
 });
 
 test('narrow rule editor footer keeps its validation hint separate from actions', () => {

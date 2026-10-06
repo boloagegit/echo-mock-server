@@ -168,7 +168,7 @@ const IssuesPage = {
               :placeholder="t('issues.searchPlaceholder')"
               :aria-label="t('issues.searchPlaceholder')"
               :clear-label="t('issues.clearSearch')"
-              :submit-mode="true" :submit-label="t('common.searchAction')"
+              :submit-mode="true"
               @search="$emit('update:issueFilter', {...issueFilter,keyword:$event})"
             ></workspace-search-field>
           </div>

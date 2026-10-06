@@ -213,7 +213,9 @@ const useRules = (deps) => {
                     serverRuleTotalPages.value = 0;
                 }
                 markLoaded();
-                rulePreviewExpanded.value = {};
+                // Details may have changed on the server; refetch the open drawer instead of showing stale data.
+                rulePreviewCache.value = {};
+                if (ruleDetailId.value) { loadRuleDetail(ruleDetailId.value); }
             } else {
                 loading.value.rulesError = t('rules.loadFailed');
             }
@@ -257,6 +259,7 @@ const useRules = (deps) => {
         rules.value = rules.value.filter(r => r.id !== id);
         const r = await apiCall(`/api/admin/rules/${id}`, { method: 'DELETE' }, { errorMsg: t('toast.ruleDeleteFailed') });
         if (r && r.ok) {
+            if (ruleDetailId.value === id) { closeRuleDetail(); }
             showToast(t('toast.ruleDeleteSuccess'), 'success');
             markDirty();
             await loadRules(true);
@@ -273,18 +276,23 @@ const useRules = (deps) => {
         if (r && r.ok) { showToast(t('toast.ruleExtendSuccess'), 'success'); markDirty(); loadRules(true); }
     };
 
-    const toggleEnabled = async rule => {
+    /**
+     * 切換啟用狀態：立即生效，並在通知中提供「復原」。
+     * 這是可逆操作，所以不再逐次確認；刪除等不可逆操作仍會確認。
+     */
+    const toggleEnabled = async (rule, { offerUndo = true } = {}) => {
         if (!await requireLogin()) return;
         const newEnabled = rule.enabled === false;
         const action = newEnabled ? 'enable' : 'disable';
-        const msg = newEnabled ? t('confirm.enableRuleMsg') : t('confirm.disableRuleMsg');
-        if (!await showConfirm({ title: newEnabled ? t('confirm.enableRule') : t('confirm.disableRule'), message: msg })) return;
         const r = await apiCall(`/api/admin/rules/${rule.id}/${action}`, { method: 'PUT' }, { errorMsg: t('toast.ruleStatusFailed') });
         if (r && r.ok) {
             rule.enabled = newEnabled;
-            showToast(newEnabled ? t('toast.ruleEnabled') : t('toast.ruleDisabled'), 'success');
+            const name = rule.description || rule.matchKey || shortId(rule.id);
+            const undo = offerUndo ? { label: t('common.undo'), handler: () => toggleEnabled(rule, { offerUndo: false }) } : null;
+            showToast(t(newEnabled ? 'toast.ruleEnabledNamed' : 'toast.ruleDisabledNamed', { name }), 'success', undo);
+            // Update in place: reloading would re-sort by update time and make the row jump away.
             markDirty();
-            await loadRules(true);
+            if (ruleDetailId.value === rule.id && rulePreviewCache.value[rule.id]) { rulePreviewCache.value[rule.id].enabled = newEnabled; }
         }
     };
 
@@ -414,9 +422,9 @@ const useRules = (deps) => {
         if (r && r.ok) { const d = await r.json(); showToast(t('toast.deleteAllRulesSuccess', {count: d.deleted}), 'success'); markDirty(); loadRules(true); }
     };
 
-    // --- 行內預覽 ---
+    // --- 詳情抽屜 ---
+    const ruleDetailId = ref(null);
     const rulePreviewCache = ref({});
-    const rulePreviewExpanded = ref({});
     const rulePreviewLoading = ref({});
     const rulePreviewError = ref({});
     const hydrateForwardTarget = async (data) => {
@@ -436,19 +444,10 @@ const useRules = (deps) => {
         data._forwardTargetName = target.name || '';
         data._forwardTargetEndpoint = isJms ? (target.serverUrl || '') : (target.baseUrl || '');
     };
-    const toggleRulePreview = async (rule) => {
-        const id = rule.id;
-        if (rulePreviewExpanded.value[id] && !rulePreviewError.value[id]) {
-            rulePreviewExpanded.value[id] = false;
-            return;
-        }
-        if (rulePreviewCache.value[id]) {
-            rulePreviewExpanded.value[id] = true;
-            return;
-        }
+    const loadRuleDetail = async (id, { force = false } = {}) => {
+        if (!id || rulePreviewLoading.value[id] || (!force && rulePreviewCache.value[id])) { return; }
         rulePreviewLoading.value[id] = true;
         rulePreviewError.value[id] = false;
-        rulePreviewExpanded.value[id] = true;
         const r = await apiCall(`/api/admin/rules/${id}`, {}, { silent: true });
         if (r && r.ok) {
             const data = await r.json();
@@ -485,20 +484,13 @@ const useRules = (deps) => {
         }
         rulePreviewLoading.value[id] = false;
     };
-
-    let ruleClickTimer = null;
-    const handleRuleRowClick = (r) => {
-        if (ruleClickTimer) {
-            clearTimeout(ruleClickTimer);
-            ruleClickTimer = null;
-            if (isLoggedIn.value) { if (deps.openEdit) deps.openEdit(r); }
-        } else {
-            ruleClickTimer = setTimeout(() => {
-                ruleClickTimer = null;
-                toggleRulePreview(r);
-            }, 250);
-        }
+    const openRuleDetail = rule => {
+        if (!rule?.id) { return; }
+        ruleDetailId.value = rule.id;
+        loadRuleDetail(rule.id);
     };
+    const closeRuleDetail = () => { ruleDetailId.value = null; };
+
 
     // --- 拖曳排序 ---
     const dragState = ref({ dragging: false, dragId: null, overId: null, overPos: null });
@@ -709,13 +701,14 @@ const useRules = (deps) => {
         importFileName,
         handleImportFile,
         doImport,
-        // 行內預覽
+        // 詳情抽屜
+        ruleDetailId,
         rulePreviewCache,
-        rulePreviewExpanded,
         rulePreviewLoading,
         rulePreviewError,
-        toggleRulePreview,
-        handleRuleRowClick,
+        loadRuleDetail,
+        openRuleDetail,
+        closeRuleDetail,
         // 拖曳排序
         dragState,
         canDragRules,
