@@ -6593,3 +6593,11 @@ select.form-select-sm { height: 32px; min-height: 32px; border-radius: 5px; padd
     .rule-list-table .rule-endpoint-details:not(.has-description) + .rule-responsive-meta { grid-column: 3 / -1 }
     .rule-list-table .rule-endpoint-details.has-description + .rule-responsive-meta { grid-column: 4 }
 }
+
+/* Audit actions keep their semantic colours inside the shared badge component. */
+.ui-badge.badge-create { border-color: rgba(var(--success-rgb), 0.36); background: rgba(var(--success-rgb), 0.1); color: var(--success) }
+.ui-badge.badge-update { border-color: color-mix(in srgb, var(--method-post) 36%, transparent); background: color-mix(in srgb, var(--method-post) 10%, transparent); color: var(--method-post) }
+.ui-badge.badge-delete { border-color: rgba(var(--danger-rgb), 0.36); background: rgba(var(--danger-rgb), 0.1); color: var(--danger-text) }
+
+/* Bootstrap links follow the deployment accent instead of Bootstrap blue. */
+:root { --bs-link-color: var(--primary); --bs-link-color-rgb: var(--primary-rgb); --bs-link-hover-color: var(--primary-strong); --bs-link-hover-color-rgb: var(--primary-rgb) }

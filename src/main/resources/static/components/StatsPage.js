@@ -486,7 +486,7 @@ const StatsPage = {
                   <td class="log-request-cell">
                     <div class="log-request-primary workspace-row-primary">
                       <span class="rule-protocol">{{item.log.protocol}}</span>
-                      <ui-badge v-if="item.log.protocol==='HTTP' && item.log.method" class="badge badge-method">{{item.log.method}}</ui-badge>
+                      <ui-badge v-if="item.log.protocol==='HTTP' && item.log.method" class="badge badge-method" :data-method="item.log.method">{{item.log.method}}</ui-badge>
                       <code :title="item.log.endpoint">{{item.log.endpoint}}</code>
                     </div>
                     <div class="log-request-description" :title="requestDescription(item)">{{requestDescription(item)}}</div>

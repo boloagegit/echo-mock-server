@@ -708,7 +708,7 @@ const RuleEditModal = {
                             <div class="rule-test-target">
                                 <div class="rule-test-target-primary">
                                     <template v-if="form.protocol==='HTTP'">
-                                        <ui-badge class="badge badge-method">{{form.method||'GET'}}</ui-badge>
+                                        <ui-badge class="badge badge-method" :data-method="form.method||'GET'">{{form.method||'GET'}}</ui-badge>
                                         <code>/mock{{form.matchKey==='*'?'/test':form.matchKey}}</code>
                                     </template>
                                     <template v-else>

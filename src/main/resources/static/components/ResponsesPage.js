@@ -230,7 +230,7 @@ const ResponsesPage = {
                     </div>
                     <div v-else class="response-linked-rules-list">
                       <a v-for="rule in r.rules" :key="rule.id" href="#rules" class="linked-rule list-linked-record" :aria-label="[rule.protocol, rule.method, rule.matchKey, rule.description].filter(Boolean).join(' ')" @click.stop.prevent="$emit('go-to-rule', rule.id)">
-                        <span class="linked-rule-primary"><span class="rule-protocol">{{rule.protocol}}</span><ui-badge v-if="rule.method" class="badge badge-method">{{rule.method}}</ui-badge><code :title="rule.matchKey">{{rule.matchKey}}</code><ui-badge v-if="rule.sseEnabled" class="badge badge-sse">SSE</ui-badge></span>
+                        <span class="linked-rule-primary"><span class="rule-protocol" :data-protocol="rule.protocol">{{rule.protocol}}</span><ui-badge v-if="rule.method" class="badge badge-method" :data-method="rule.method">{{rule.method}}</ui-badge><code :title="rule.matchKey">{{rule.matchKey}}</code><ui-badge v-if="rule.sseEnabled" class="badge badge-sse">SSE</ui-badge></span>
                         <span class="linked-rule-secondary"><span v-if="rule.description" class="sub-info" :title="rule.description">{{rule.description}}</span><span class="list-inline-id" :title="rule.id">{{shortId(rule.id)}}</span></span>
                         <i class="bi bi-arrow-right linked-rule-open-icon" aria-hidden="true"></i>
                       </a>
