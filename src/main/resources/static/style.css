@@ -6535,3 +6535,61 @@ select.form-select-sm { height: 32px; min-height: 32px; border-radius: 5px; padd
 .page-title { font-weight: var(--font-weight-semibold); letter-spacing: -0.01em }
 .page-count { border-color: var(--border); background: transparent; color: var(--muted); font-family: var(--font-mono); font-size: var(--font-xs); font-weight: var(--font-weight-medium) }
 .main { background: var(--bg) }
+
+/* ===== Signal Console lists (2026-10) =====
+ * Flat toolbars, quieter table chrome, colour-coded HTTP methods and, on wide
+ * screens, single-line rule rows whose actions appear on hover or focus.
+ */
+.card.workspace-filter-card { margin-bottom: var(--space-sm); border: 0; background: transparent; box-shadow: none }
+.workspace-filter-bar { padding: 0; background: transparent }
+.workspace-filter-controls > .workspace-search-field { order: -1; flex: 1 1 320px; max-width: 520px }
+.workspace-filter-bar .workspace-search-field .form-control { background: var(--card) }
+
+.card-table { border-color: var(--border); background: var(--card) }
+.card-table th { background: var(--table-head); color: var(--text-subtle); font-weight: var(--font-weight-medium); letter-spacing: 0 }
+.card-table thead { box-shadow: 0 1px 0 var(--border) }
+.card-table th,
+.card-table td { border-bottom-color: color-mix(in srgb, var(--border) 72%, transparent) }
+.card-table tbody > tr.row-clickable:hover { background: var(--hover) }
+
+.ui-badge.badge-method { min-height: 20px; padding: 0; border: 0; background: transparent; color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.02em }
+.rule-method-slot .ui-badge.badge-method { justify-content: flex-start }
+.ui-badge.badge-method[data-method="GET"] { color: var(--method-get) }
+.ui-badge.badge-method[data-method="POST"] { color: var(--method-post) }
+.ui-badge.badge-method[data-method="PUT"] { color: var(--method-put) }
+.ui-badge.badge-method[data-method="PATCH"] { color: var(--method-patch) }
+.ui-badge.badge-method[data-method="DELETE"] { color: var(--method-delete) }
+.rule-protocol { color: var(--text-subtle); font-family: var(--font-mono); font-size: 11px; font-weight: var(--font-weight-medium) }
+.rule-protocol[data-protocol="JMS"] { color: var(--protocol-jms); font-weight: var(--font-weight-semibold) }
+.rule-list-table .rule-endpoint-main code { font-family: var(--font-mono) }
+
+/* Query conditions use the request-blue so they never read as the deployment accent. */
+.cond-tag.query .cond-label { background: color-mix(in srgb, var(--method-post) 18%, transparent); color: var(--method-post) }
+.cond-tag.query { background: color-mix(in srgb, var(--method-post) 6%, transparent) }
+
+@media (min-width: 1281px) {
+    .rule-list-table tbody > tr:not(.rule-preview-row) > td { vertical-align: middle }
+    .rule-list-table .list-identity { display: flex; align-items: center; gap: var(--space-md); min-width: 0 }
+    .rule-list-table .rule-endpoint-main { flex: 0 1 auto; min-width: 0; grid-template-columns: 40px 56px minmax(0, max-content) max-content }
+    .rule-list-table .list-identity-secondary { display: flex; flex: 1 1 0; min-width: 0; overflow: hidden }
+    .rule-list-table .rule-endpoint-details { flex: 1 1 auto }
+    .rule-list-table .rule-technical-meta { color: var(--text-subtle) }
+    .rule-list-table .table-date-stack { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0 var(--space-sm) }
+    .rule-list-table .rule-updated-by { max-width: 100%; overflow: hidden; text-overflow: ellipsis; color: var(--text-subtle) }
+}
+@media (hover: hover) and (min-width: 1281px) {
+    .rule-list-table tbody > tr:not(.rule-preview-row) .rule-row-actions > * { opacity: 0; transition: opacity var(--motion-fast) var(--ease-standard) }
+    .rule-list-table tbody > tr:not(.rule-preview-row):hover .rule-row-actions > *,
+    .rule-list-table tbody > tr:not(.rule-preview-row):focus-within .rule-row-actions > *,
+    .rule-list-table .rule-row-actions > .rule-row-more[open],
+    .rule-list-table .rule-row-actions > .rule-row-disclosure[aria-expanded="true"] { opacity: 1 }
+}
+/* Medium widths (typical Windows laptops at 125% scaling): two lines per rule,
+ * endpoint first, then description beside the compact condition/priority meta. */
+@media (min-width: 769px) and (max-width: 1280px) {
+    .rule-list-table .list-identity-secondary { grid-template-columns: 40px 56px minmax(0, max-content) minmax(0, 1fr) }
+    .rule-list-table .rule-endpoint-details { grid-column: 3; max-width: 260px }
+    .rule-list-table .rule-endpoint-details:not(.has-description) { display: none }
+    .rule-list-table .rule-endpoint-details:not(.has-description) + .rule-responsive-meta { grid-column: 3 / -1 }
+    .rule-list-table .rule-endpoint-details.has-description + .rule-responsive-meta { grid-column: 4 }
+}

@@ -12,8 +12,8 @@ const RuleListIdentity = {
   template: /* html */`
     <div class="list-identity">
       <div class="rule-endpoint-main">
-        <span class="rule-protocol" :title="rule.protocol==='HTTP'?httpLabel:jmsLabel">{{rule.protocol}}</span>
-        <span class="rule-method-slot"><ui-badge v-if="rule.protocol==='HTTP'" class="badge badge-method">{{rule.method}}</ui-badge></span>
+        <span class="rule-protocol" :data-protocol="rule.protocol" :title="rule.protocol==='HTTP'?httpLabel:jmsLabel">{{rule.protocol}}</span>
+        <span class="rule-method-slot"><ui-badge v-if="rule.protocol==='HTTP'" class="badge badge-method" :data-method="rule.method">{{rule.method}}</ui-badge></span>
         <code :title="rule.matchKey">{{rule.matchKey}}</code>
         <span v-if="rule.isProtected || rule.sseEnabled || rule.action==='FORWARD' || (rule.faultType && rule.faultType!=='NONE')" class="rule-endpoint-flags">
           <i v-if="rule.isProtected" class="bi bi-shield-fill-check text-success" :title="t('rules.isProtected')" :aria-label="t('rules.isProtected')"></i>
