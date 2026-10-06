@@ -29,7 +29,7 @@ const SidebarNav = {
   ],
   inject: ['t'],
   data() {
-    return { userMenuOpen: false };
+    return { userMenuOpen: false, indicator: null, indicatorReady: false };
   },
   computed: {
     userName() {
@@ -59,13 +59,30 @@ const SidebarNav = {
       return [{ value: 'zh-TW', label: this.t('sidebar.languageZh') }, { value: 'en', label: this.t('sidebar.languageEn') }];
     }
   },
+  watch: {
+    page() { this.$nextTick(this.placeIndicator); },
+    isAdmin() { this.$nextTick(this.placeIndicator); },
+  },
   mounted() {
     document.addEventListener('pointerdown', this.onDocumentPointerDown);
+    // The active highlight slides between items; it follows size changes such as collapsing the sidebar.
+    this.navObserver = new ResizeObserver(() => this.placeIndicator());
+    this.navObserver.observe(this.$refs.nav);
+    this.placeIndicator();
+    // Enable the slide only after the first placement has rendered, so it never animates in from the corner.
+    this.$nextTick(() => setTimeout(() => { this.indicatorReady = true; }, 0));
   },
   unmounted() {
+    this.navObserver?.disconnect();
     document.removeEventListener('pointerdown', this.onDocumentPointerDown);
   },
   methods: {
+    placeIndicator() {
+      const item = this.$refs.nav?.querySelector('.nav-item.active');
+      this.indicator = item
+        ? { '--nav-indicator-x': item.offsetLeft + 'px', '--nav-indicator-y': item.offsetTop + 'px', '--nav-indicator-w': item.offsetWidth + 'px', '--nav-indicator-h': item.offsetHeight + 'px' }
+        : null;
+    },
     go(target) {
       this.$emit('update:page', target);
       this.$emit('update:mobileMenu', false);
@@ -114,7 +131,8 @@ const SidebarNav = {
           <ui-motion-icon :icon="mobileMenu ? 'bi-x-lg' : (sidebarCollapsed ? 'bi-chevron-right' : 'bi-chevron-left')"></ui-motion-icon>
         </button>
       </div>
-      <nav class="sidebar-nav" :aria-label="t('sidebar.workspace')">
+      <nav ref="nav" class="sidebar-nav" :aria-label="t('sidebar.workspace')">
+        <span v-if="indicator" class="nav-indicator" :class="{'is-ready': indicatorReady}" :style="indicator" aria-hidden="true"></span>
         <div class="nav-section">{{t('sidebar.workspace')}}</div>
         <button type="button" class="nav-item" :class="{active: page==='rules'}" :aria-label="t('sidebar.rules')" :title="sidebarCollapsed?t('sidebar.rules'):undefined" :aria-current="page==='rules'?'page':undefined" @click="go('rules')">
           <ui-icon name="rules"></ui-icon><span class="nav-text">{{t('sidebar.rules')}}</span>

@@ -490,6 +490,17 @@ const _app = createApp({
         // === 路由（依賴 loadStatus, loadBackupStatus, filters） ===
         const routerCtx = useRouter({ page, shownPage, ruleFilter, responseFilter, logFilter, auditFilter, isAdmin, issueReportingEnabled, loadRules: () => loadRules(), loadLogs, loadAudit, loadResponseSummary: () => loadResponseSummary(), loadBackupStatus, loadStatus, loadAccounts, loadIssues });
         const { applyUrlParams } = routerCtx;
+        // Each page keeps its list scroll position, so coming back lands where you left off.
+        const pageScroll = {};
+        const pageScroller = () => document.querySelector('.page.active .card-table-body, .page.active .page-scroll');
+        watch(shownPage, (to, from) => {
+            const scroller = pageScroller();
+            if (scroller && from) { pageScroll[from] = scroller.scrollTop; }
+        }, { flush: 'pre' });
+        watch(shownPage, to => {
+            const scroller = pageScroller();
+            if (scroller && pageScroll[to]) { scroller.scrollTop = pageScroll[to]; }
+        }, { flush: 'post' });
         const triggerBackup = async () => {
             if (!await showConfirm({ title: t('confirm.triggerBackup'), message: t('confirm.triggerBackupMsg') })) return;
             loading.value.backup = true;

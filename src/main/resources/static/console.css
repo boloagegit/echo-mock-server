@@ -21,6 +21,23 @@
 .sidebar-nav > .nav-section:first-child { padding-top: 0.5rem }
 .nav-item { min-height: 36px; border-radius: 7px; border-color: transparent; color: var(--muted) }
 .nav-item.active { background: rgba(var(--primary-rgb), 0.12); border-color: transparent; color: var(--text) }
+/* The active highlight is one element that slides to the selected item (transform only). */
+.sidebar-nav { position: relative }
+.sidebar-nav > .nav-item { position: relative; z-index: 1 }
+.sidebar-nav:has(> .nav-indicator) > .nav-item.active { background: transparent }
+.nav-indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: var(--nav-indicator-w);
+    height: var(--nav-indicator-h);
+    border-radius: 7px;
+    background: rgba(var(--primary-rgb), 0.12);
+    transform: translate(var(--nav-indicator-x), var(--nav-indicator-y));
+    pointer-events: none;
+}
+.nav-indicator.is-ready { transition: transform var(--motion-base) var(--ease-standard), height var(--motion-base) var(--ease-standard) }
+@media (prefers-reduced-motion: reduce) { .nav-indicator.is-ready { transition: none } }
 .nav-item.active .ui-icon { color: var(--primary) }
 
 .sidebar-footer { flex-shrink: 0; display: flex; flex-direction: column; gap: var(--space-sm); padding: var(--space-sm) 0.75rem 0.75rem }

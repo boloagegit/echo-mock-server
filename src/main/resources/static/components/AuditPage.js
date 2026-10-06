@@ -127,7 +127,7 @@ const AuditPage = {
       </div>
 
       <div class="list-toolbar">
-        <workspace-search-field
+        <workspace-search-field shortcut="/"
           input-id="auditSearch"
           :model-value="auditFilter.keyword"
           :placeholder="t('audit.searchContent')"

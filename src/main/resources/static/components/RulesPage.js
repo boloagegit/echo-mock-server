@@ -206,7 +206,7 @@ const RulesPage = {
     <div v-if="!jmsEnabled" class="warning-banner"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> {{t('rules.jmsNotEnabled', {jmsLabel: jmsLabel})}}</div>
 
     <div class="list-toolbar">
-        <workspace-search-field
+        <workspace-search-field shortcut="/"
             input-id="ruleSearch"
             :model-value="ruleFilter.keyword"
             :placeholder="t('rules.searchPlaceholder')"

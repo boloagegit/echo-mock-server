@@ -75,8 +75,8 @@ class LoginAccessibilityResourceTest {
         String css = resourceText("static/style.css");
 
         assertThat(index)
-                .contains("/style.css?v=20261007.8")
-                .contains("/components/SidebarNav.js?v=20261007.8");
+                .contains("/style.css?v=20261007.9")
+                .contains("/components/SidebarNav.js?v=20261007.9");
         assertThat(sidebar).contains("class=\"brand-mark\" aria-hidden=\"true\"");
         assertThat(css)
                 .contains(".sidebar-brand:hover .brand-icon { transform: scale(1.06) rotate(-3deg) }")

@@ -212,7 +212,7 @@ const IssuesPage = {
       </div>
 
       <div class="list-toolbar">
-        <workspace-search-field
+        <workspace-search-field shortcut="/"
           input-id="issueSearch"
           :model-value="issueFilter.keyword"
           :placeholder="t('issues.searchPlaceholder')"

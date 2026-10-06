@@ -17,6 +17,8 @@ const WorkspaceSearchField = {
     showClear: { type: Boolean, default: true },
     submitMode: { type: Boolean, default: false },
     debounceMs: { type: Number, default: 350 },
+    /** Key that focuses this field from anywhere on the page, shown as a hint while it is empty. */
+    shortcut: { type: String, default: '' },
   },
   emits: ['update:modelValue', 'search'],
   data() {
@@ -81,6 +83,7 @@ const WorkspaceSearchField = {
           @keydown.enter.prevent="submitSearch"
           @keydown.esc="draftValue ? ($event.stopPropagation(), clearSearch()) : $event.target.blur()"
         >
+        <kbd v-if="shortcut && !draftValue" class="workspace-search-kbd" aria-hidden="true">{{shortcut}}</kbd>
         <ui-button
           v-if="showClear && draftValue"
           type="button"

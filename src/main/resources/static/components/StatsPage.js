@@ -438,7 +438,7 @@ const StatsPage = {
       </div>
 
       <div class="list-toolbar">
-        <workspace-search-field
+        <workspace-search-field shortcut="/"
           input-id="logSearch"
           :model-value="logFilter.endpoint"
           :placeholder="t('stats.searchPlaceholder')"
