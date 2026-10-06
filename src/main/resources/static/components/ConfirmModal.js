@@ -129,7 +129,7 @@ const ConfirmModal = {
         </div>
         <div class="modal-footer">
           <ui-button ref="cancelButton" type="button" variant="quiet" class="confirm-cancel" @click="confirmState.onCancel">{{confirmState.cancelText}}</ui-button>
-          <ui-button type="button" class="btn" :class="confirmState.danger?'btn-danger':'btn-primary'" @click="submitConfirm"><i v-if="confirmState.danger" class="bi bi-trash" aria-hidden="true"></i>{{confirmState.confirmText}}</ui-button>
+          <ui-button type="button" :variant="confirmState.danger ? 'danger' : 'primary'" @click="submitConfirm"><i v-if="confirmState.danger" class="bi bi-trash" aria-hidden="true"></i>{{confirmState.confirmText}}</ui-button>
         </div>
       </div>
     </div>

@@ -353,7 +353,8 @@ test('all sidebar buttons have permanent names and current-page semantics', () =
   for (const attribute of [':aria-label=', ':aria-expanded=', 'aria-controls="sidebar-user-menu"', 'aria-haspopup="dialog"']) {
     assert.ok(trigger.includes(attribute), attribute);
   }
-  const menuItems = sidebar.match(/<button[^>]*class="user-menu__item[^"]*"[^>]*>\s*<i[^>]*><\/i><span>\{\{t\('sidebar\.\w+'\)\}\}<\/span>/g);
+  // Each item pairs a decorative Echo icon with its visible, localized name.
+  const menuItems = sidebar.match(/<button[^>]*class="user-menu__item[^"]*"[^>]*>\s*<ui-icon name="\w+"><\/ui-icon><span>\{\{t\('sidebar\.\w+'\)\}\}<\/span>/g);
   assert.equal(menuItems.length, 4);
   for (const action of ['show-help', 'change-password', 'logout', 'login']) {
     assert.ok(sidebar.includes("runMenuAction('" + action + "')"), action);

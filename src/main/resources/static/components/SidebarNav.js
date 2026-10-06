@@ -117,29 +117,29 @@ const SidebarNav = {
       <nav class="sidebar-nav" :aria-label="t('sidebar.workspace')">
         <div class="nav-section">{{t('sidebar.workspace')}}</div>
         <button type="button" class="nav-item" :class="{active: page==='rules'}" :aria-label="t('sidebar.rules')" :title="sidebarCollapsed?t('sidebar.rules'):undefined" :aria-current="page==='rules'?'page':undefined" @click="go('rules')">
-          <i class="bi bi-list-ul" aria-hidden="true"></i><span class="nav-text">{{t('sidebar.rules')}}</span>
+          <ui-icon name="rules"></ui-icon><span class="nav-text">{{t('sidebar.rules')}}</span>
         </button>
         <button type="button" class="nav-item" :class="{active: page==='responses'}" :aria-label="t('sidebar.responses')" :title="sidebarCollapsed?t('sidebar.responses'):undefined" :aria-current="page==='responses'?'page':undefined" @click="go('responses')">
-          <i class="bi bi-chat-square-text" aria-hidden="true"></i><span class="nav-text">{{t('sidebar.responses')}}</span>
+          <ui-icon name="responses"></ui-icon><span class="nav-text">{{t('sidebar.responses')}}</span>
         </button>
         <button type="button" class="nav-item" :class="{active: page==='stats'}" :aria-label="t('sidebar.stats')" :title="sidebarCollapsed?t('sidebar.stats'):undefined" :aria-current="page==='stats'?'page':undefined" @click="go('stats')">
-          <i class="bi bi-activity" aria-hidden="true"></i><span class="nav-text">{{t('sidebar.stats')}}</span>
+          <ui-icon name="logs"></ui-icon><span class="nav-text">{{t('sidebar.stats')}}</span>
         </button>
         <button type="button" class="nav-item" :class="{active: page==='audit'}" :aria-label="t('sidebar.audit')" :title="sidebarCollapsed?t('sidebar.audit'):undefined" :aria-current="page==='audit'?'page':undefined" @click="go('audit')">
-          <i class="bi bi-clock-history" aria-hidden="true"></i><span class="nav-text">{{t('sidebar.audit')}}</span>
+          <ui-icon name="audit"></ui-icon><span class="nav-text">{{t('sidebar.audit')}}</span>
         </button>
         <button type="button" v-if="isLoggedIn && status?.issueReportingEnabled === true" class="nav-item" :class="{active: page==='issues'}" :aria-label="t('sidebar.issues')" :title="sidebarCollapsed?t('sidebar.issues'):undefined" :aria-current="page==='issues'?'page':undefined" @click="go('issues')">
-          <i class="bi bi-flag" aria-hidden="true"></i><span class="nav-text">{{t('sidebar.issues')}}</span>
+          <ui-icon name="issues"></ui-icon><span class="nav-text">{{t('sidebar.issues')}}</span>
           <span v-if="openIssueCount>0" class="nav-badge">{{openIssueCount}}</span>
         </button>
 
         <template v-if="isAdmin">
           <div class="nav-section">{{t('sidebar.manage')}}</div>
           <button type="button" class="nav-item" :class="{active: page==='accounts'}" :aria-label="t('sidebar.accounts')" :title="sidebarCollapsed?t('sidebar.accounts'):undefined" :aria-current="page==='accounts'?'page':undefined" @click="go('accounts')">
-            <i class="bi bi-people" aria-hidden="true"></i><span class="nav-text">{{t('sidebar.accounts')}}</span>
+            <ui-icon name="accounts"></ui-icon><span class="nav-text">{{t('sidebar.accounts')}}</span>
           </button>
           <button type="button" class="nav-item" :class="{active: page==='settings'}" :aria-label="t('sidebar.settings')" :title="sidebarCollapsed?t('sidebar.settings'):undefined" :aria-current="page==='settings'?'page':undefined" @click="go('settings')">
-            <i class="bi bi-sliders" aria-hidden="true"></i><span class="nav-text">{{t('sidebar.settings')}}</span>
+            <ui-icon name="settings"></ui-icon><span class="nav-text">{{t('sidebar.settings')}}</span>
           </button>
         </template>
       </nav>
@@ -184,16 +184,16 @@ const SidebarNav = {
               </div>
               <div class="user-menu__divider" role="separator"></div>
               <button type="button" class="user-menu__item" @click="runMenuAction('show-help')">
-                <i class="bi bi-question-circle" aria-hidden="true"></i><span>{{t('sidebar.help')}}</span>
+                <ui-icon name="help"></ui-icon><span>{{t('sidebar.help')}}</span>
               </button>
               <button type="button" v-if="isLoggedIn && status?.isBuiltinUser" class="user-menu__item" @click="runMenuAction('change-password')">
-                <i class="bi bi-key" aria-hidden="true"></i><span>{{t('sidebar.changePassword')}}</span>
+                <ui-icon name="key"></ui-icon><span>{{t('sidebar.changePassword')}}</span>
               </button>
               <button type="button" v-if="isLoggedIn" class="user-menu__item user-menu__item--danger" @click="runMenuAction('logout')">
-                <i class="bi bi-box-arrow-left" aria-hidden="true"></i><span>{{t('sidebar.logout')}}</span>
+                <ui-icon name="logout"></ui-icon><span>{{t('sidebar.logout')}}</span>
               </button>
               <button type="button" v-else class="user-menu__item" @click="runMenuAction('login')">
-                <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i><span>{{t('sidebar.login')}}</span>
+                <ui-icon name="login"></ui-icon><span>{{t('sidebar.login')}}</span>
               </button>
             </div>
           </Transition>

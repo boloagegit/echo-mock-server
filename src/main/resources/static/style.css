@@ -1308,19 +1308,20 @@ kbd {
 .priority-list .badge.low { background: var(--muted) }
 
 /* Help Tabs */
-.help-tabs {
+/* Section tabs are underline tabs, like Settings. */
+.ui-tabs.help-tabs {
     display: flex;
-    gap: var(--space-xs);
-    padding: var(--space-xs) var(--space-sm);
-    border-bottom: 0;
-    background: var(--surface-neutral-soft);
+    gap: var(--space-lg);
+    padding: 0 var(--space-md);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
 }
 .help-tabs button {
-    flex: 1;
-    min-height: 38px;
-    padding: 0 var(--space-md);
+    position: relative;
+    min-height: var(--control-h);
+    padding: 0 2px;
     border: none;
+    border-radius: 0;
     background: none;
     color: var(--muted);
     font-size: var(--font-base);
@@ -1330,16 +1331,12 @@ kbd {
     align-items: center;
     justify-content: center;
     gap: 0.4rem;
-    border-radius: var(--radius-control);
-    transition: color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard);
+    transition: color var(--motion-fast) var(--ease-standard);
 }
-.help-tabs button:hover { color: var(--text); background: var(--surface-control) }
-.help-tabs button.active {
-    color: var(--primary);
-    background: var(--surface-primary-strong);
-    border-bottom: 0;
-    margin-bottom: 0;
-}
+.help-tabs button:hover:not(:disabled) { color: var(--text); background: none }
+.help-tabs button.active,
+.help-tabs button.active:hover:not(:disabled) { color: var(--text); background: none }
+.help-tabs button.active::after { content: ''; position: absolute; inset: auto 0 -1px; height: 2px; border-radius: 2px 2px 0 0; background: var(--primary) }
 .help-tabs button:focus-visible { outline: 0; box-shadow: var(--focus-ring) }
 .help-content {
     padding: var(--space-xl);
@@ -3123,7 +3120,7 @@ input[type="checkbox"] {
     .workspace-search-field,
     .workspace-search-compact { flex: 1 1 100%; max-width: none }
     .help-tabs { overflow-x: auto }
-    .help-tabs button { flex: 0 0 auto; min-width: 132px }
+    .help-tabs button { flex: 0 0 auto }
     .settings-page-meta { display: none }
 }
 
@@ -5021,8 +5018,6 @@ a:focus-visible,
 .audit-workspace .ac-block-after { background: var(--surface-success-soft) }
 .help-code,
 .help-table { border-color: var(--separator) }
-.help-tabs { border: 1px solid var(--separator); border-radius: 6px; background: var(--surface-neutral-soft) }
-.help-tabs button { border-radius: 4px }
 
 .sk { border: 1px solid var(--separator); border-radius: 4px; background: var(--surface-neutral-soft) }
 .toast-wrap .toast { border-color: var(--border2); border-radius: 6px; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2) }
