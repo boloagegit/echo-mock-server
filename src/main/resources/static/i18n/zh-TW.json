@@ -18,7 +18,20 @@
     "changePassword": "修改密碼",
     "logout": "登出",
     "login": "登入",
-    "accounts": "帳號管理"
+    "accounts": "帳號管理",
+    "manage": "管理",
+    "userMenu": "帳號與偏好設定",
+    "userMenuFor": "{name}：帳號與偏好設定",
+    "appearance": "外觀",
+    "density": "密度",
+    "language": "語言",
+    "languageZh": "繁體中文",
+    "languageEn": "English",
+    "serviceStatus": "服務狀態",
+    "serviceRunning": "執行中",
+    "serviceDisabled": "已停用",
+    "roleAdmin": "管理員",
+    "roleUser": "使用者"
   },
   "rules": {
     "title": "模擬規則",

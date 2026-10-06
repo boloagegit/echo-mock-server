@@ -343,10 +343,24 @@ test('a failed save never reports clean state and retains the draft', async () =
 test('all sidebar buttons have permanent names and current-page semantics', () => {
   const sidebar = source('components/SidebarNav.js');
   const buttons = sidebar.match(/<button[^>]*class="nav-item"[^>]*>/g);
-  assert.equal(buttons.length, 14);
+  assert.equal(buttons.length, 7);
   assert.ok(buttons.every(button => button.includes(':aria-label=')));
   assert.equal(buttons.filter(button => button.includes(':aria-current=')).length, 7);
   assert.ok(!sidebar.includes("helpSeen ? $emit"));
+  // Preferences and account actions moved into the user menu; each keeps a visible, localized name.
+  const trigger = sidebar.match(/<button[^>]*class="user-trigger"[^>]*>/s)[0];
+  for (const attribute of [':aria-label=', ':aria-expanded=', 'aria-controls="sidebar-user-menu"', 'aria-haspopup="dialog"']) {
+    assert.ok(trigger.includes(attribute), attribute);
+  }
+  const menuItems = sidebar.match(/<button[^>]*class="user-menu__item[^"]*"[^>]*>\s*<i[^>]*><\/i><span>\{\{t\('sidebar\.\w+'\)\}\}<\/span>/g);
+  assert.equal(menuItems.length, 4);
+  for (const action of ['show-help', 'change-password', 'logout', 'login']) {
+    assert.ok(sidebar.includes("runMenuAction('" + action + "')"), action);
+  }
+  for (const control of ['sidebar.appearance', 'sidebar.density', 'sidebar.language']) {
+    assert.ok(sidebar.includes(':aria-label="t(\'' + control + '\')"'), control);
+  }
+  assert.ok(sidebar.includes('@keydown.esc.prevent="closeUserMenu()"'));
 });
 
 test('condition controls and discard text are localized in both supported languages', () => {
