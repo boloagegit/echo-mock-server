@@ -52,9 +52,9 @@
     --method-patch: #c9aeff;
     --method-delete: #ff8a80;
     --protocol-jms: #c9aeff;
-    /* Neutral app mark, inverted per theme so it reads as an app icon on both. */
-    --brand-tile: #eceef1;
-    --brand-ink: #14171b;
+    /* Neutral app mark: the same graphite tile and light ink as the favicon in both themes. */
+    --brand-tile: #1f2329;
+    --brand-ink: #eceef1;
 }
 
 /* 深色主題 ＋ 藍色主色 */

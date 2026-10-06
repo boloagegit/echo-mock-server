@@ -60,7 +60,9 @@ class LoginAccessibilityResourceTest {
                 .contains("<span class=\"brand-sub\">Mock Server</span>");
         assertThat(login).contains("<div class=\"login-logo\"><svg class=\"login-mark\"");
         // The mark stays neutral; deployment accents belong to the environment label only.
-        assertThat(resourceText("static/theme.css")).contains("--brand-tile: #eceef1;").contains("--brand-tile: #16191d;");
+        // The tile never inverts between themes, so switching theme does not flip the logo.
+        assertThat(resourceText("static/theme.css")).contains("--brand-tile: #1f2329;").contains("--brand-tile: #16191d;")
+                .doesNotContain("--brand-ink: #14171b;");
         assertThat(favicon).doesNotContainIgnoringCase("#82a8f7").doesNotContainIgnoringCase("#46d3be");
         assertThat(new ClassPathResource("static/favicon.ico").exists()).isTrue();
     }
