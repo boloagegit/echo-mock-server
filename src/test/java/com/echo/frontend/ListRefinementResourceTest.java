@@ -282,13 +282,13 @@ class ListRefinementResourceTest {
 
         assertThat(detail)
                 .contains("<ui-detail-drawer")
-                .contains("class=\"detail-section\"")
+                .contains("<ui-detail-section id=\"rule.conditions\"")
                 .contains("class=\"detail-grid\"")
                 .contains("t('rules.pvSectionConditions')")
                 .contains("t('rules.pvSectionResponse')")
                 .contains("t('rules.pvSectionSettings')")
-                .contains("t('rules.pvSearchBody')")
-                .contains("t('rules.copyFullContent')");
+                // Searching and copying the response body happen in the shared code viewer.
+                .contains("<ui-code-viewer v-else-if=\"body\"");
         assertThat(text("components/RulesPage.js"))
                 .contains("<rule-detail")
                 .contains(":has-prev=\"detailIndex > 0\"")
@@ -717,7 +717,7 @@ class ListRefinementResourceTest {
     void unconditionalRulesArePresentedAsIntentionalDefaultMatches() throws IOException {
         assertThat(text("i18n/zh-TW.json")).contains("\"noCondition\": \"預設匹配\"");
         assertThat(text("i18n/en.json")).contains("\"noCondition\": \"Default match\"");
-        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261007.12");
+        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261007.13");
     }
 
     @Test

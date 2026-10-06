@@ -320,7 +320,9 @@
     "selectedCount": "{count} rules selected",
     "batchDone": "Done",
     "pvSectionResponse": "Response",
-    "pvTargetHost": "Source host"
+    "pvTargetHost": "Source host",
+    "conditionCountSummary": "{count} conditions",
+    "tagCountSummary": "{count} tags"
   },
   "responses": {
     "pagination": "Response pagination",
@@ -1804,6 +1806,15 @@
     "expandBlock": "Expand",
     "collapseBlock": "Collapse",
     "previewTruncated": "Large content: showing the first {shown} of {total}",
-    "showFullContent": "Show full content"
+    "showFullContent": "Show full content",
+    "widenDrawer": "Widen",
+    "narrowDrawer": "Restore width"
+  },
+  "codeViewer": {
+    "search": "Search all",
+    "wrap": "Wrap",
+    "format": "Format",
+    "copy": "Copy all",
+    "status": "{lines} lines · {size}"
   }
 }

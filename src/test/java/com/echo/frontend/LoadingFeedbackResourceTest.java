@@ -46,7 +46,7 @@ class LoadingFeedbackResourceTest {
                     .contains(":stale=\"held.stale\"");
         }
         assertThat(text("components/UiDetailDrawer.js"))
-                .contains(":class=\"{'is-stale': stale}\"")
+                .contains(":class=\"{'is-stale': stale,")
                 .contains(":aria-busy=\"stale ? 'true' : null\"");
         assertThat(text("console.css"))
                 .contains(".ui-detail-drawer.is-stale .ui-detail-drawer__body { opacity: 0.55; transition-delay: 300ms }");

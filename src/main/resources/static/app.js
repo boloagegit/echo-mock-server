@@ -660,6 +660,8 @@ _app.component('ui-button', UiButton);
 _app.component('ui-row-menu', UiRowMenu);
 _app.component('ui-detail-drawer', UiDetailDrawer);
 _app.component('ui-icon', UiIcon);
+_app.component('ui-detail-section', UiDetailSection);
+_app.component('ui-code-viewer', UiCodeViewer);
 _app.component('ui-badge', UiBadge);
 _app.component('ui-status', UiStatus);
 _app.component('ui-toggle', UiToggle);

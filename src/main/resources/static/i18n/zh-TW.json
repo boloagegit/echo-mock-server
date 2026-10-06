@@ -320,7 +320,9 @@
     "selectedCount": "已選取 {count} 條規則",
     "batchDone": "完成",
     "pvSectionResponse": "回應",
-    "pvTargetHost": "來源主機"
+    "pvTargetHost": "來源主機",
+    "conditionCountSummary": "{count} 個條件",
+    "tagCountSummary": "{count} 個標籤"
   },
   "responses": {
     "pagination": "回應分頁",
@@ -1804,6 +1806,15 @@
     "expandBlock": "展開",
     "collapseBlock": "收合",
     "previewTruncated": "內容較大，僅顯示前 {shown}（共 {total}）",
-    "showFullContent": "顯示完整內容"
+    "showFullContent": "顯示完整內容",
+    "widenDrawer": "加寬檢視",
+    "narrowDrawer": "恢復寬度"
+  },
+  "codeViewer": {
+    "search": "搜尋全文",
+    "wrap": "換行",
+    "format": "格式化",
+    "copy": "複製全部",
+    "status": "{lines} 行 · {size}"
   }
 }

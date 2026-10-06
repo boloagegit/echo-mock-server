@@ -5,6 +5,8 @@
  * - Esc 關閉並把焦點還給開啟前的元素（通常是該列）
  * - ↑／↓（或 k／j）切換上一筆／下一筆，由頁面決定實際資料
  * - 有對話框開啟或焦點在輸入框時不攔截按鍵
+ * - 點抽屜以外的地方即收合；點其他列則直接切換（列由頁面處理）
+ * - 「加寬檢視」讓長內容有更多空間，偏好記在這個瀏覽器
  */
 const UiDetailDrawer = {
   inject: ['t'],
@@ -29,6 +31,31 @@ const UiDetailDrawer = {
     const modalOpen = () => !!document.querySelector('.modal-overlay, [aria-modal="true"]');
 
     const close = () => emit('close');
+
+    // Clicking outside closes the drawer, like any floating panel. Rows switch the record instead,
+    // and menus, dialogs, toasts and scrollbars never count as "outside".
+    const KEEP_OPEN = '[data-detail-row], .ui-detail-drawer, .modal-overlay, [aria-modal="true"], .ui-dropdown-menu, .toast-wrap, .user-menu, .tour-overlay';
+    let closedByPointer = false;
+    const onScrollbar = event => {
+      const el = event.target;
+      return (event.offsetX > el.clientWidth && el.scrollHeight > el.clientHeight)
+        || (event.offsetY > el.clientHeight && el.scrollWidth > el.clientWidth);
+    };
+    const onPointerDown = event => {
+      if (!props.open || event.button !== 0 || modalOpen()) { return; }
+      const target = event.target;
+      if (!(target instanceof Element) || !target.isConnected || target.closest(KEEP_OPEN) || onScrollbar(event)) { return; }
+      closedByPointer = true;
+      close();
+    };
+
+    // Wide view gives long content room; one preference for every drawer, kept in this browser.
+    const WIDE_KEY = 'echo.drawerWide';
+    const wide = Vue.ref((() => { try { return localStorage.getItem(WIDE_KEY) === '1'; } catch { return false; } })());
+    const toggleWide = () => {
+      wide.value = !wide.value;
+      try { localStorage.setItem(WIDE_KEY, wide.value ? '1' : '0'); } catch { /* storage unavailable */ }
+    };
     const onKeydown = event => {
       if (!props.open || event.defaultPrevented || modalOpen()) { return; }
       // Escape inside a field belongs to that field (clear / blur); a second Escape closes the drawer.
@@ -55,6 +82,12 @@ const UiDetailDrawer = {
         panelRef.value?.focus({ preventScroll: true });
         return;
       }
+      // Closed by clicking elsewhere: focus stays where the person clicked.
+      if (closedByPointer) {
+        closedByPointer = false;
+        returnFocus = null;
+        return;
+      }
       const selectedRow = document.querySelector('[data-detail-row].is-selected');
       const target = selectedRow || returnFocus;
       returnFocus = null;
@@ -62,8 +95,14 @@ const UiDetailDrawer = {
     });
 
     // Capture phase: decide before the app-level Escape cascade closes a modal.
-    Vue.onMounted(() => document.addEventListener('keydown', onKeydown, true));
-    Vue.onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
+    Vue.onMounted(() => {
+      document.addEventListener('keydown', onKeydown, true);
+      document.addEventListener('pointerdown', onPointerDown, true);
+    });
+    Vue.onBeforeUnmount(() => {
+      document.removeEventListener('keydown', onKeydown, true);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+    });
 
     // Long titles and descriptions show two lines each; "show all" reveals the rest.
     const titleRef = Vue.ref(null);
@@ -77,11 +116,11 @@ const UiDetailDrawer = {
     };
     Vue.watch(() => [props.open, props.title, props.subtitle], () => { headerExpanded.value = false; measureHeader(); }, { immediate: true });
 
-    return { panelRef, headingId, close, titleRef, subtitleRef, headerExpanded, headerClamped };
+    return { panelRef, headingId, close, titleRef, subtitleRef, headerExpanded, headerClamped, wide, toggleWide };
   },
   template: /* html */`
     <Transition name="ui-drawer-motion">
-      <aside v-if="open" ref="panelRef" class="ui-detail-drawer" :class="{'is-stale': stale}" role="complementary" :aria-labelledby="headingId" tabindex="-1">
+      <aside v-if="open" ref="panelRef" class="ui-detail-drawer" :class="{'is-stale': stale, 'is-wide': wide}" role="complementary" :aria-labelledby="headingId" tabindex="-1">
         <header class="ui-detail-drawer__header">
           <div class="ui-detail-drawer__titles">
             <h2 ref="titleRef" :id="headingId" class="ui-detail-drawer__title" :class="{'is-clamped': !headerExpanded}" :title="headerClamped ? title : null">{{title}}</h2>
@@ -95,6 +134,9 @@ const UiDetailDrawer = {
               :title="t('common.previousItem')" :aria-label="t('common.previousItem')" @click="$emit('prev')"><i class="bi bi-chevron-up" aria-hidden="true"></i></ui-button>
             <ui-button type="button" variant="quiet" size="compact" icon-only :disabled="!hasNext"
               :title="t('common.nextItem')" :aria-label="t('common.nextItem')" @click="$emit('next')"><i class="bi bi-chevron-down" aria-hidden="true"></i></ui-button>
+            <ui-button type="button" variant="quiet" size="compact" icon-only class="ui-detail-drawer__widen" :aria-pressed="wide ? 'true' : 'false'"
+              :title="wide ? t('common.narrowDrawer') : t('common.widenDrawer')" :aria-label="wide ? t('common.narrowDrawer') : t('common.widenDrawer')" @click="toggleWide">
+              <i class="bi" :class="wide ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand'" aria-hidden="true"></i></ui-button>
             <ui-button type="button" variant="quiet" size="compact" icon-only
               :title="t('common.close')" :aria-label="t('common.close')" @click="close"><i class="bi bi-x-lg" aria-hidden="true"></i></ui-button>
           </div>

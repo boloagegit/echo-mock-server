@@ -24,11 +24,10 @@ const RuleDetail = {
   },
   emits: ['close', 'prev', 'next', 'retry', 'edit', 'menu', 'clip-copy'],
   data() {
-    return { bodySearch: '', bodyMatchIndex: 0, showFullBody: false, bodyExpanded: false, showAllConditions: false, showAllTags: false };
+    return { showAllConditions: false, showAllTags: false };
   },
   computed: {
     DETAIL_LIST_PREVIEW: () => DETAIL_LIST_PREVIEW,
-    BODY_PREVIEW_CHARS: () => BODY_PREVIEW_CHARS,
     shownDetail() {
       return this.held.value.detail;
     },
@@ -74,36 +73,23 @@ const RuleDetail = {
       if (this.view.isProtected) return null;
       return daysLeft(this.view.createdAt, this.view.extendedAt, this.status?.cleanupRetentionDays);
     },
-    bodyFull() {
-      return formatBodyForReading(this.shownDetail?._previewBody || '');
-    },
-    bodyTruncated() {
-      return !this.showFullBody && this.bodyFull.length > BODY_PREVIEW_CHARS;
-    },
     body() {
-      return this.bodyTruncated ? this.bodyFull.slice(0, BODY_PREVIEW_CHARS) : this.bodyFull;
+      return this.shownDetail?._previewBody || '';
     },
-    bodySegments() {
-      const keyword = this.bodySearch.trim();
-      if (!keyword || !this.body) return [{ text: this.body, hit: false }];
-      const parts = [];
-      const lower = this.body.toLowerCase();
-      const needle = keyword.toLowerCase();
-      let pos = 0;
-      let index = lower.indexOf(needle);
-      let hit = 0;
-      while (index !== -1) {
-        if (index > pos) parts.push({ text: this.body.slice(pos, index), hit: false });
-        parts.push({ text: this.body.slice(index, index + keyword.length), hit: true, current: hit === this.bodyMatchIndex });
-        hit++;
-        pos = index + keyword.length;
-        index = lower.indexOf(needle, pos);
-      }
-      if (pos < this.body.length) parts.push({ text: this.body.slice(pos), hit: false });
-      return parts;
+    /** Shown beside each section title, so a collapsed section still says what it holds. */
+    conditionsSummary() {
+      return this.conditionCount ? this.t('rules.conditionCountSummary', { count: this.conditionCount }) : this.t('rules.noCondition');
     },
-    bodyMatchCount() {
-      return this.bodySegments.filter(part => part.hit).length;
+    responseSummary() {
+      const parts = [this.modeLabel];
+      if (this.showStatusCode) parts.push(String(this.view.status));
+      if (this.body) parts.push(fmtSize(this.body.length));
+      return parts.join(' · ');
+    },
+    settingsSummary() {
+      const parts = [this.t('rules.pvPriority') + ' ' + (this.view.priority || 0)];
+      if (this.tagEntries.length) parts.push(this.t('rules.tagCountSummary', { count: this.tagEntries.length }));
+      return parts.join(' · ');
     },
     menuItems() {
       const t = this.t;
@@ -120,24 +106,12 @@ const RuleDetail = {
   },
   watch: {
     'view.id'() {
-      this.bodySearch = '';
-      this.bodyMatchIndex = 0;
-      this.showFullBody = false;
-      this.bodyExpanded = false;
       this.showAllConditions = false;
       this.showAllTags = false;
     },
-    bodySearch() {
-      this.bodyMatchIndex = 0;
-    },
   },
   methods: {
-    shortId, fmtTime, fmtSize, forwardTargetLabel, forwardTargetEndpoint,
-    stepMatch(direction) {
-      if (!this.bodyMatchCount) return;
-      this.bodyMatchIndex = (this.bodyMatchIndex + direction + this.bodyMatchCount) % this.bodyMatchCount;
-      this.$nextTick(() => this.$refs.bodyPre?.querySelector('.is-current')?.scrollIntoView({ block: 'nearest' }));
-    },
+    shortId, fmtTime, forwardTargetLabel, forwardTargetEndpoint,
     statusTone(code) {
       return code < 400 ? 'success' : code < 500 ? 'warning' : 'danger';
     },
@@ -163,8 +137,7 @@ const RuleDetail = {
         <ui-row-menu :items="menuItems" :label="t('common.moreActions')" @select="$emit('menu', $event, view)"></ui-row-menu>
       </template>
 
-      <section class="detail-section">
-        <div class="detail-section__head"><h3 class="detail-section__title">{{t('rules.pvSectionConditions')}}</h3></div>
+      <ui-detail-section id="rule.conditions" :title="t('rules.pvSectionConditions')" :summary="conditionsSummary">
         <p v-if="!conditionGroups.length" class="detail-empty">{{t('rules.noCondition')}}</p>
         <dl v-else class="detail-grid">
           <template v-for="group in visibleConditionGroups" :key="group.type">
@@ -178,10 +151,9 @@ const RuleDetail = {
         <button v-if="conditionCount > DETAIL_LIST_PREVIEW.conditions" type="button" class="detail-inline-action"
           :aria-expanded="showAllConditions ? 'true' : 'false'" @click="showAllConditions = !showAllConditions">
           {{showAllConditions ? t('common.showLess') : t('common.showAllCount', {count: conditionCount})}}</button>
-      </section>
+      </ui-detail-section>
 
-      <section class="detail-section">
-        <div class="detail-section__head"><h3 class="detail-section__title">{{t('rules.pvSectionResponse')}}</h3></div>
+      <ui-detail-section id="rule.response" :title="t('rules.pvSectionResponse')" :summary="responseSummary">
         <dl class="detail-grid">
           <template v-if="showStatusCode"><dt>{{t('rules.pvStatusCode')}}</dt><dd><ui-badge :tone="statusTone(view.status)">{{view.status}}</ui-badge></dd></template>
           <template v-if="view.action==='FORWARD'">
@@ -197,34 +169,14 @@ const RuleDetail = {
           <template v-if="view.responseHeaders"><dt>{{t('rules.pvResponseHeaders')}}</dt><dd><code>{{view.responseHeaders}}</code></dd></template>
         </dl>
         <template v-if="!hasFault">
-          <div class="detail-section__head">
-            <h4 class="detail-subtitle">{{t('rules.pvResponseContent')}}</h4>
-            <div v-if="body" class="detail-section__tools">
-              <label class="detail-search">
-                <span class="visually-hidden">{{t('rules.pvSearchBody')}}</span>
-                <i class="bi bi-search" aria-hidden="true"></i>
-                <input v-model="bodySearch" type="search" :placeholder="t('rules.pvSearchBody')"
-                  @keydown.enter.prevent="stepMatch($event.shiftKey ? -1 : 1)">
-                <span v-if="bodySearch" class="detail-search__count">{{bodyMatchCount ? bodyMatchIndex + 1 : 0}}/{{bodyMatchCount}}</span>
-              </label>
-              <ui-button type="button" variant="quiet" size="compact" icon-only :title="bodyExpanded ? t('common.collapseBlock') : t('common.expandBlock')"
-                :aria-label="bodyExpanded ? t('common.collapseBlock') : t('common.expandBlock')" :aria-pressed="bodyExpanded ? 'true' : 'false'"
-                @click="bodyExpanded = !bodyExpanded"><i class="bi" :class="bodyExpanded ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand'" aria-hidden="true"></i></ui-button>
-              <ui-button type="button" variant="quiet" size="compact" icon-only :title="t('rules.copyFullContent')" :aria-label="t('rules.copyFullContent')"
-                @click="$emit('clip-copy', view.responseBody || shownDetail?._previewBody || body)"><i class="bi bi-clipboard" aria-hidden="true"></i></ui-button>
-            </div>
-          </div>
+          <h4 class="detail-subtitle">{{t('rules.pvResponseContent')}}</h4>
           <p v-if="!body && shownDetail" class="detail-empty">{{t('rules.empty')}}</p>
-          <pre v-else-if="body" ref="bodyPre" class="detail-code" :class="{'is-expanded': bodyExpanded}"><template v-for="(part, i) in bodySegments" :key="i"><mark v-if="part.hit" :class="{'is-current': part.current}">{{part.text}}</mark><template v-else>{{part.text}}</template></template></pre>
-          <p v-if="bodyTruncated" class="detail-truncated">
-            <span>{{t('common.previewTruncated', {shown: fmtSize(BODY_PREVIEW_CHARS), total: fmtSize(bodyFull.length)})}}</span>
-            <button type="button" class="detail-inline-action" @click="showFullBody = true">{{t('common.showFullContent')}}</button>
-          </p>
+          <ui-code-viewer v-else-if="body" :key="view.id" :value="body" :label="t('rules.pvResponseContent')"
+            @copy="$emit('clip-copy', view.responseBody || $event)"></ui-code-viewer>
         </template>
-      </section>
+      </ui-detail-section>
 
-      <section class="detail-section">
-        <div class="detail-section__head"><h3 class="detail-section__title">{{t('rules.pvSectionSettings')}}</h3></div>
+      <ui-detail-section id="rule.settings" :title="t('rules.pvSectionSettings')" :summary="settingsSummary">
         <dl class="detail-grid">
           <dt>ID</dt>
           <dd><button type="button" class="detail-copy" :title="t('rules.copyId')" @click="$emit('clip-copy', view.id)"><code>{{view.id}}</code><i class="bi bi-copy" aria-hidden="true"></i></button></dd>
@@ -244,7 +196,7 @@ const RuleDetail = {
           <template v-if="view.createdAt"><dt>{{t('rules.pvCreated')}}</dt><dd class="detail-mono">{{fmtTime(view.createdAt, false)}}</dd></template>
           <template v-if="view.updatedAt"><dt>{{t('rules.pvUpdated')}}</dt><dd><span class="detail-mono">{{fmtTime(view.updatedAt, false)}}</span> · {{view.updatedBy || t('rules.unknownOperator')}}</dd></template>
         </dl>
-      </section>
+      </ui-detail-section>
     </ui-detail-drawer>
   `,
 };

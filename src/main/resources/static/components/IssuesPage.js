@@ -301,8 +301,7 @@ const IssuesPage = {
           <ui-row-menu :items="[{ key: 'delete', label: t('issues.delete'), icon: 'bi-trash', danger: true }]" :label="t('common.moreActions')"
             @select="handleIssueMenu($event, selectedIssue)"></ui-row-menu>
         </template>
-        <section v-if="selectedIssue" class="detail-section issue-conversation">
-          <div class="detail-section__head"><h3 class="detail-section__title">{{t('issues.conversation')}}</h3></div>
+        <ui-detail-section v-if="selectedIssue" id="issue.conversation" class="issue-conversation" :title="t('issues.conversation')">
           <article class="issue-message">
             <header class="issue-message__head"><strong>{{selectedIssue.createdBy}}</strong><span class="detail-mono">{{fmtTime(selectedIssue.createdAt, false)}}</span></header>
             <p class="issue-message__body">{{selectedIssue.description}}</p>
@@ -320,7 +319,7 @@ const IssuesPage = {
               <ui-button variant="primary" size="compact" @click="submitReply(selectedIssue)" :disabled="!replyText.trim()">{{t('issues.submitReply')}}</ui-button>
             </div>
           </div>
-        </section>
+        </ui-detail-section>
       </ui-detail-drawer>
 
       <!-- Create Modal -->

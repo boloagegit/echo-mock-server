@@ -230,8 +230,7 @@ const AuditPage = {
         <template v-if="shownLog && shownLog.action!=='DELETE'" #actions>
           <ui-button variant="secondary" size="compact" @click="openTarget(shownLog)"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>{{isResponse(shownLog) ? t('audit.openResponse') : t('audit.openRule')}}</ui-button>
         </template>
-        <section v-if="shownLog" class="detail-section audit-changes">
-          <div class="detail-section__head"><h3 class="detail-section__title">{{t('audit.changesTitle')}}</h3></div>
+        <ui-detail-section v-if="shownLog" id="audit.changes" class="audit-changes" :title="t('audit.changesTitle')" :summary="getAuditChangeCount(shownLog) ? String(getAuditChangeCount(shownLog)) : ''">
                   <template v-for="detail in [getAuditChanges(shownLog)]" :key="shownLog.id">
                   <template v-if="detail.type==='update'">
                     <div v-if="detail.changes.length" class="ac-list">
@@ -278,7 +277,7 @@ const AuditPage = {
                   </template>
                   <div v-else class="audit-no-change">{{t('audit.noChangeData')}}</div>
                   </template>
-        </section>
+        </ui-detail-section>
       </ui-detail-drawer>
     </div>
   `

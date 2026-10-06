@@ -332,8 +332,7 @@ const AccountsPage = {
               ? t('accounts.resetRequestedAt', {time: fmtTime(selectedAccount.passwordResetRequestedAt, false)})
               : t('accounts.resetRequested')}}</span>
           </div>
-          <section class="detail-section">
-            <div class="detail-section__head"><h3 class="detail-section__title">{{t('accounts.detailInfo')}}</h3></div>
+          <ui-detail-section id="account.info" :title="t('accounts.detailInfo')">
             <dl class="detail-grid">
               <dt>{{t('accounts.thLastLoginAt')}}</dt>
               <dd :class="{'detail-mono': selectedAccount.lastLoginAt}">{{selectedAccount.lastLoginAt ? fmtTime(selectedAccount.lastLoginAt, false) : t('accounts.neverLoggedIn')}}</dd>
@@ -341,7 +340,7 @@ const AccountsPage = {
               <template v-if="selectedAccount.updatedAt"><dt>{{t('accounts.thUpdatedAt')}}</dt><dd class="detail-mono">{{fmtTime(selectedAccount.updatedAt, false)}}</dd></template>
               <template v-if="selectedAccount.forceChangePassword"><dt>{{t('accounts.password')}}</dt><dd>{{t('accounts.mustChangePassword')}}</dd></template>
             </dl>
-          </section>
+          </ui-detail-section>
         </template>
       </ui-detail-drawer>
 

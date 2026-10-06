@@ -225,6 +225,7 @@
     bottom: 12px;
     z-index: 120;
     width: min(var(--drawer-w), calc(100vw - 24px));
+    transition: width var(--motion-base) var(--ease-standard);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -235,6 +236,10 @@
 }
 :root[data-theme="light"] .ui-detail-drawer { box-shadow: 0 24px 64px -12px rgba(20, 23, 27, 0.28), 0 2px 6px rgba(20, 23, 27, 0.06) }
 .ui-detail-drawer:focus { outline: none }
+/* Wide view leaves the sidebar and a strip of the list visible. */
+.ui-detail-drawer.is-wide { width: min(var(--drawer-wide-w, 960px), calc(100vw - 280px)) }
+.ui-detail-drawer__widen[aria-pressed="true"] { color: var(--primary) }
+@media (prefers-reduced-motion: reduce) { .ui-detail-drawer { transition: none } }
 .ui-detail-drawer:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px }
 .ui-detail-drawer__header { display: flex; align-items: flex-start; gap: var(--space-md); padding: 16px 12px 14px 20px; border-bottom: 1px solid var(--border) }
 .ui-detail-drawer__titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px }
@@ -279,25 +284,54 @@
 .detail-section__head { display: flex; align-items: center; gap: var(--space-sm); min-height: 24px }
 .detail-section__title { margin: 0; color: var(--text-subtle); font-size: 11px; font-weight: var(--font-weight-semibold); letter-spacing: 0.08em }
 .detail-section__tools { margin-inline-start: auto; display: flex; align-items: center; gap: 4px }
+/* Collapsible drawer sections: the heading sticks to the top of the drawer while its section
+ * scrolls by, and a short summary keeps a collapsed section informative. */
+.ui-detail-section { padding-top: 6px }
+.ui-detail-section.is-collapsed { padding-bottom: 6px }
+/* top: -4px covers the drawer body's top padding, so nothing peeks above a pinned heading. */
+.ui-detail-section__head { --detail-section-head-h: 38px; position: sticky; top: -4px; z-index: 2; min-height: var(--detail-section-head-h); box-sizing: border-box; margin: 0 -20px; padding: 10px 20px 6px; background: var(--card) }
+.ui-detail-section__toggle { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; cursor: pointer }
+.ui-detail-section__toggle:hover { color: var(--text) }
+.ui-detail-section__toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px }
+.ui-detail-section__chevron { font-size: 10px; transform: rotate(90deg); transition: transform var(--motion-fast) var(--ease-standard) }
+.ui-detail-section.is-collapsed .ui-detail-section__chevron { transform: none }
+.ui-detail-section__summary { margin-inline-start: auto; color: var(--text-subtle); font-size: var(--font-xs) }
+.ui-detail-section__summary + .detail-section__tools { margin-inline-start: 8px }
+.ui-detail-section__body { display: flex; flex-direction: column; gap: 10px }
+.issue-conversation .ui-detail-section__body { gap: 12px }
+@media (prefers-reduced-motion: reduce) { .ui-detail-section__chevron { transition: none } }
+
+/* Code viewer: one read-only viewer for long content in every drawer. CodeMirror draws only the
+ * lines in view, so large bodies need no truncation; search covers the full text. */
+/* overflow: clip (not hidden) keeps the rounded corners without breaking the sticky toolbar. */
+.ui-code-viewer { border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--code-bg); overflow: clip }
+.ui-code-viewer__toolbar { position: sticky; top: 34px; z-index: 1; display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--border); background: var(--code-bg) }
+.ui-code-viewer__search { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-subtle) }
+.ui-code-viewer__search:focus-within { border-color: var(--primary) }
+.ui-code-viewer__search input { flex: 1; min-width: 0; border: 0; background: none; color: var(--text); font: 12px var(--font-mono); outline: none }
+.ui-code-viewer__count { flex: none; color: var(--text-subtle); font: 11px var(--font-mono) }
+.ui-code-viewer__toolbar .ui-button[aria-pressed="true"] { background: var(--surface-primary-soft); color: var(--primary) }
+.ui-code-viewer__host .CodeMirror { height: auto; background: transparent; color: var(--text); font: 12.5px/1.6 var(--font-mono) }
+.ui-code-viewer__host .CodeMirror-gutters { border-right: 1px solid var(--separator); background: transparent }
+.ui-code-viewer__host .CodeMirror-linenumber { color: var(--text-subtle) }
+.ui-code-viewer__host .CodeMirror-cursors { display: none }
+.ui-code-viewer__host .CodeMirror-selected,
+.ui-code-viewer__host .CodeMirror-focused .CodeMirror-selected { background: rgba(var(--primary-rgb), 0.18) }
+.ui-code-viewer__host .cm-string { color: var(--warning) }
+.ui-code-viewer__host .cm-property,
+.ui-code-viewer__host .cm-attribute,
+.ui-code-viewer__host .cm-tag { color: var(--primary) }
+.ui-code-viewer__host .cm-number,
+.ui-code-viewer__host .cm-atom { color: var(--purple) }
+.ui-code-viewer__hit { border-radius: 2px; background: rgba(var(--warning-rgb), 0.3) }
+.ui-code-viewer__hit.is-current { background: rgba(var(--warning-rgb), 0.7); box-shadow: 0 0 0 1px var(--warning) }
+.ui-code-viewer__status { padding: 4px 10px; border-top: 1px solid var(--border); color: var(--text-subtle); font-size: 11px }
 .detail-grid { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 9px 16px; margin: 0; font-size: var(--font-sm) }
 .detail-grid dt { color: var(--muted); font-weight: var(--font-weight-regular) }
 .detail-grid dd { min-width: 0; margin: 0; color: var(--text); overflow-wrap: anywhere }
 .detail-grid code,
 .detail-mono { font-family: var(--font-mono); font-size: var(--font-xs) }
 .detail-chips { display: flex; flex-wrap: wrap; gap: 6px }
-.detail-code {
-    margin: 0;
-    max-height: 420px;
-    overflow: auto;
-    padding: 12px 14px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-panel);
-    background: var(--code-bg);
-    color: var(--text);
-    font: 12.5px/1.6 var(--font-mono);
-    white-space: pre-wrap;
-    word-break: break-word;
-}
 .detail-empty { color: var(--muted); font-size: var(--font-sm) }
 
 /* Toasts: errors stay longer, actionable toasts (undo) show their action. */
@@ -433,31 +467,12 @@
 
 /* ===== Drawer content details ===== */
 .detail-subtitle { margin: 6px 0 0; color: var(--muted); font-size: var(--font-sm); font-weight: var(--font-weight-medium) }
-.detail-search { position: relative; display: inline-flex; align-items: center }
-.detail-search > i { position: absolute; left: 9px; color: var(--text-subtle); font-size: 12px; pointer-events: none }
-.detail-search input {
-    width: 168px;
-    height: var(--control-h-sm);
-    padding: 0 44px 0 28px;
-    border: 1px solid var(--border2);
-    border-radius: var(--radius-control);
-    background: var(--input-bg, var(--bg));
-    color: var(--text);
-    font-size: var(--font-xs);
-}
-.detail-search input:focus { outline: 0; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.25) }
-.detail-search__count { position: absolute; right: 8px; color: var(--text-subtle); font-family: var(--font-mono); font-size: 11px }
-/* Long content stays inside its own box; "expand" lets it run the full height of the drawer. */
-.detail-code.is-expanded { max-height: none }
-.detail-truncated { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 8px 0 0; color: var(--text-subtle); font-size: var(--font-xs) }
 .detail-section > .detail-inline-action { margin-top: 2px }
 .detail-chips .ui-badge { max-width: 100%; white-space: normal; overflow-wrap: anywhere; justify-content: flex-start; text-align: start }
 .audit-detail-drawer .ac-block-panel pre,
 .audit-detail-drawer .ac-block-pre,
 .audit-detail-drawer .audit-raw { max-height: 320px; overflow: auto }
 .log-detail-drawer .log-inspector-pane > .pv-pre { max-height: 420px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere }
-.detail-code mark { padding: 0; border-radius: 2px; background: rgba(var(--warning-rgb), 0.3); color: inherit }
-.detail-code mark.is-current { background: rgba(var(--warning-rgb), 0.65); box-shadow: 0 0 0 1px var(--warning) }
 .detail-copy { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 0; border: 0; background: transparent; color: var(--text); font: inherit; text-align: start; cursor: copy }
 .detail-copy code { overflow-wrap: anywhere }
 .detail-copy i { color: var(--text-subtle); font-size: 12px }
@@ -526,7 +541,7 @@
 @container (max-width: 720px) { .log-table .col-time { display: none } .log-table .rule-desc { display: none } }
 
 /* The inspector needs room for request/response bodies, so this drawer is wider and stacks its panes. */
-.ui-detail-drawer.log-detail-drawer { --drawer-w: 760px }
+.ui-detail-drawer.log-detail-drawer { --drawer-w: 760px; --drawer-wide-w: 1120px }
 .log-detail-drawer .log-inspector { display: flex; flex-direction: column; gap: var(--space-md); padding-top: var(--space-md); border: 0; background: transparent }
 .log-detail-drawer .log-inspector-body-grid { grid-template-columns: minmax(0, 1fr) }
 .log-detail-drawer .log-overview-surface { grid-template-columns: minmax(0, 1fr) }

@@ -22,18 +22,15 @@ const ResponseDetail = {
   },
   emits: ['close', 'prev', 'next', 'retry', 'edit', 'menu', 'go-to-rule', 'clip-copy'],
   data() {
-    return { showFullBody: false, bodyExpanded: false, showAllRules: false };
+    return { showAllRules: false };
   },
   watch: {
     'view.id'() {
-      this.showFullBody = false;
-      this.bodyExpanded = false;
       this.showAllRules = false;
     },
   },
   computed: {
     DETAIL_LIST_PREVIEW: () => DETAIL_LIST_PREVIEW,
-    BODY_PREVIEW_CHARS: () => BODY_PREVIEW_CHARS,
     shownDetail() {
       return this.held.value.detail;
     },
@@ -47,14 +44,8 @@ const ResponseDetail = {
       if (this.view.usageCount) return null;
       return daysLeft(this.view.updatedAt, this.view.extendedAt, this.status?.responseRetentionDays);
     },
-    bodyFull() {
-      return formatBodyForReading(this.shownDetail?.body || '');
-    },
-    bodyTruncated() {
-      return !this.showFullBody && this.bodyFull.length > BODY_PREVIEW_CHARS;
-    },
-    formattedBody() {
-      return this.bodyTruncated ? this.bodyFull.slice(0, BODY_PREVIEW_CHARS) : this.bodyFull;
+    body() {
+      return this.shownDetail?.body || '';
     },
     linkedRules() {
       return this.shownDetail?.rules || [];
@@ -90,12 +81,8 @@ const ResponseDetail = {
         <ui-row-menu :items="menuItems" :label="t('common.moreActions')" @select="$emit('menu', $event, view)"></ui-row-menu>
       </template>
 
-      <section class="detail-section">
-        <div class="detail-section__head">
-          <h3 class="detail-section__title">{{t('responses.linkedRulesTitle')}}</h3>
-          <span class="detail-section__tools detail-mono">{{(shownDetail?.rules || []).length}}</span>
-        </div>
-        <p v-if="shownDetail && !shownDetail.rules.length" class="detail-empty">{{view.usageCount ? t('responses.noVisibleLinkedRules') : t('responses.notUsed')}}</p>
+      <ui-detail-section id="response.rules" :title="t('responses.linkedRulesTitle')" :summary="shownDetail ? String(linkedRules.length) : ''">
+        <p v-if="shownDetail && !linkedRules.length" class="detail-empty">{{view.usageCount ? t('responses.noVisibleLinkedRules') : t('responses.notUsed')}}</p>
         <ul v-else-if="shownDetail" class="detail-links">
           <li v-for="rule in visibleLinkedRules" :key="rule.id">
             <button type="button" class="detail-link" @click="$emit('go-to-rule', rule.id)">
@@ -109,29 +96,15 @@ const ResponseDetail = {
         <button v-if="linkedRules.length > DETAIL_LIST_PREVIEW.links" type="button" class="detail-inline-action"
           :aria-expanded="showAllRules ? 'true' : 'false'" @click="showAllRules = !showAllRules">
           {{showAllRules ? t('common.showLess') : t('common.showAllCount', {count: linkedRules.length})}}</button>
-      </section>
+      </ui-detail-section>
 
-      <section class="detail-section">
-        <div class="detail-section__head">
-          <h3 class="detail-section__title">{{t('rules.pvResponseContent')}}</h3>
-          <div v-if="formattedBody" class="detail-section__tools">
-            <ui-button type="button" variant="quiet" size="compact" icon-only :title="bodyExpanded ? t('common.collapseBlock') : t('common.expandBlock')"
-              :aria-label="bodyExpanded ? t('common.collapseBlock') : t('common.expandBlock')" :aria-pressed="bodyExpanded ? 'true' : 'false'"
-              @click="bodyExpanded = !bodyExpanded"><i class="bi" :class="bodyExpanded ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand'" aria-hidden="true"></i></ui-button>
-            <ui-button type="button" variant="quiet" size="compact" icon-only :title="t('rules.copyFullContent')" :aria-label="t('rules.copyFullContent')"
-              @click="$emit('clip-copy', shownDetail.body)"><i class="bi bi-clipboard" aria-hidden="true"></i></ui-button>
-          </div>
-        </div>
-        <p v-if="shownDetail && !formattedBody" class="detail-empty">{{t('rules.empty')}}</p>
-        <pre v-else-if="formattedBody" class="detail-code" :class="{'is-expanded': bodyExpanded}">{{formattedBody}}</pre>
-        <p v-if="bodyTruncated" class="detail-truncated">
-          <span>{{t('common.previewTruncated', {shown: fmtSize(BODY_PREVIEW_CHARS), total: fmtSize(bodyFull.length)})}}</span>
-          <button type="button" class="detail-inline-action" @click="showFullBody = true">{{t('common.showFullContent')}}</button>
-        </p>
-      </section>
+      <ui-detail-section id="response.content" :title="t('rules.pvResponseContent')" :summary="body ? fmtSize(body.length) : ''">
+        <p v-if="shownDetail && !body" class="detail-empty">{{t('rules.empty')}}</p>
+        <ui-code-viewer v-else-if="body" :key="view.id" :value="body" :label="t('rules.pvResponseContent')"
+          @copy="$emit('clip-copy', $event)"></ui-code-viewer>
+      </ui-detail-section>
 
-      <section class="detail-section">
-        <div class="detail-section__head"><h3 class="detail-section__title">{{t('responses.detailInfo')}}</h3></div>
+      <ui-detail-section id="response.info" :title="t('responses.detailInfo')" :summary="view.id != null ? '#' + view.id : ''">
         <dl class="detail-grid">
           <dt>ID</dt><dd class="detail-mono">#{{view.id}}</dd>
           <template v-if="view.createdAt"><dt>{{t('responses.thCreatedAt')}}</dt><dd class="detail-mono">{{fmtTime(view.createdAt, false)}}</dd></template>
@@ -141,7 +114,7 @@ const ResponseDetail = {
             <dd><ui-badge :tone="retention <= 7 ? 'warning' : 'neutral'">{{t('responses.orphanDaysLeft', {days: retention})}}</ui-badge></dd>
           </template>
         </dl>
-      </section>
+      </ui-detail-section>
     </ui-detail-drawer>
   `,
 };

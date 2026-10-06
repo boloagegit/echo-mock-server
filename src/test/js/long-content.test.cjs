@@ -7,37 +7,59 @@ const vm = require('node:vm');
 const staticRoot = path.resolve(__dirname, '../../main/resources/static');
 const source = file => fs.readFileSync(path.join(staticRoot, file), 'utf8');
 
-const context = vm.createContext({
-  Vue: { createApp() {}, ref: value => ({ value }), computed() {}, watch() {}, onMounted() {}, onUnmounted() {} },
-  _t: key => key,
-});
-vm.runInContext(source('utils.js') + `
-this.formatBodyForReading = formatBodyForReading;
-this.BODY_PREVIEW_CHARS = BODY_PREVIEW_CHARS;
-this.DETAIL_LIST_PREVIEW = DETAIL_LIST_PREVIEW;`, context);
-vm.runInContext(source('components/RuleDetail.js') + '\nthis.RuleDetail = RuleDetail;', context);
-const computed = context.RuleDetail.computed;
+function load(files, extra = {}) {
+  const storage = new Map();
+  const context = vm.createContext({
+    Vue: { createApp() {}, ref: value => ({ value }), computed() {}, watch() {}, onMounted() {}, onUnmounted() {} },
+    _t: key => key,
+    localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, String(value)) },
+    ...extra,
+  });
+  vm.runInContext(files.map(source).join('\n') + '\nthis.exports = { UiCodeViewer: typeof UiCodeViewer !== "undefined" ? UiCodeViewer : null, UiDetailSection: typeof UiDetailSection !== "undefined" ? UiDetailSection : null, RuleDetail: typeof RuleDetail !== "undefined" ? RuleDetail : null };', context);
+  return { ...context.exports, storage };
+}
 
-test('small JSON is pretty-printed; other or very large bodies are shown as they are', () => {
-  assert.equal(context.formatBodyForReading('{"a":1}'), '{\n  "a": 1\n}');
-  assert.equal(context.formatBodyForReading('plain <text>'), 'plain <text>');
-  const huge = '{"a":"' + 'x'.repeat(600000) + '"}';
-  assert.equal(context.formatBodyForReading(huge), huge, 'formatting is skipped above 512 KB');
-  assert.equal(context.formatBodyForReading(''), '');
+test('the code viewer formats JSON up to 2 MB and shows anything else as it is', () => {
+  const { UiCodeViewer } = load(['utils.js', 'components/UiCodeViewer.js']);
+  const view = value => {
+    const state = { value, formatted: true };
+    state.mode = UiCodeViewer.computed.mode.call(state);
+    state.canFormat = UiCodeViewer.computed.canFormat.call(state);
+    return UiCodeViewer.computed.text.call(state);
+  };
+  assert.equal(view('{"a":1}'), '{\n  "a": 1\n}');
+  assert.equal(view('<a><b/></a>'), '<a><b/></a>');
+  assert.equal(view('plain text'), 'plain text');
+  const huge = '{"a":"' + 'x'.repeat(2000001) + '"}';
+  assert.equal(view(huge), huge, 'formatting is skipped above 2 MB');
 });
 
-test('a very large body renders only its beginning until the reader asks for all of it', () => {
-  const vmState = { showFullBody: false, shownDetail: { _previewBody: 'y'.repeat(context.BODY_PREVIEW_CHARS + 10) } };
-  vmState.bodyFull = computed.bodyFull.call(vmState);
-  vmState.bodyTruncated = computed.bodyTruncated.call(vmState);
-  assert.equal(vmState.bodyTruncated, true);
-  assert.equal(computed.body.call(vmState).length, context.BODY_PREVIEW_CHARS);
-  vmState.showFullBody = true;
-  vmState.bodyTruncated = computed.bodyTruncated.call(vmState);
-  assert.equal(computed.body.call(vmState).length, context.BODY_PREVIEW_CHARS + 10);
+test('search counts every match in the full text and steps around the ends', () => {
+  const { UiCodeViewer } = load(['utils.js', 'components/UiCodeViewer.js']);
+  const marks = [];
+  const vmState = {
+    text: 'Customer customer CUSTOMER', query: 'customer', marks: [], matches: [], matchIndex: 0, matchCount: 0,
+    cm: { operation: fn => fn(), posFromIndex: i => i, markText: () => { const m = { clear() {} }; marks.push(m); return m; }, scrollIntoView() {} },
+  };
+  vmState.showMatch = UiCodeViewer.methods.showMatch.bind(vmState);
+  UiCodeViewer.methods.search.call(vmState);
+  assert.equal(vmState.matchCount, 3);
+  UiCodeViewer.methods.step.call(vmState, -1);
+  assert.equal(vmState.matchIndex, 2, 'stepping back from the first match wraps to the last');
+});
+
+test('a collapsed drawer section stays collapsed the next time', () => {
+  const { UiDetailSection, storage } = load(['components/UiDetailSection.js']);
+  const section = { id: 'rule.response', ...UiDetailSection.data.call({ id: 'rule.response' }) };
+  assert.equal(section.open, true);
+  UiDetailSection.methods.toggle.call(section);
+  assert.equal(JSON.parse(storage.get('echo.drawerSections'))['rule.response'], true);
+  assert.equal(UiDetailSection.data.call({ id: 'rule.response' }).open, false);
 });
 
 test('many conditions show the first six across groups, then all on request', () => {
+  const { RuleDetail } = load(['utils.js', 'components/RuleDetail.js']);
+  const computed = RuleDetail.computed;
   const groups = [
     { type: 'body', items: Array.from({ length: 4 }, (_, i) => ({ v: 'b' + i })) },
     { type: 'query', items: Array.from({ length: 5 }, (_, i) => ({ v: 'q' + i })) },
