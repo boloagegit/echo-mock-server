@@ -1773,7 +1773,10 @@
     "confirmResolve": "標記解決",
     "confirmResolveMsg": "確定將此問題標記為已解決？",
     "confirmDelete": "刪除問題",
-    "confirmDeleteMsg": "此操作無法復原，確定刪除？"
+    "confirmDeleteMsg": "此操作無法復原，確定刪除？",
+    "replied": "已回覆",
+    "editReply": "編輯回覆",
+    "conversation": "內容"
   },
   "common": {
     "close": "關閉",

@@ -1773,7 +1773,10 @@
     "confirmResolve": "Resolve Issue",
     "confirmResolveMsg": "Mark this issue as resolved?",
     "confirmDelete": "Delete Issue",
-    "confirmDeleteMsg": "This action cannot be undone. Delete this issue?"
+    "confirmDeleteMsg": "This action cannot be undone. Delete this issue?",
+    "replied": "Replied",
+    "editReply": "Edit reply",
+    "conversation": "Conversation"
   },
   "common": {
     "close": "Close",

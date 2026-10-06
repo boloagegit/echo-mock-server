@@ -18,6 +18,7 @@ class ListSystemResourceTest {
             {"StatsPage", "StatsPage", ""},
             {"AuditPage", "AuditPage", ""},
             {"AccountsPage", "AccountsPage", ""},
+            {"IssuesPage", "IssuesPage", ""},
     };
 
     @Test

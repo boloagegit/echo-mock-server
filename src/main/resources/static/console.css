@@ -557,6 +557,23 @@
 .detail-notice.is-warning { border-color: rgba(var(--warning-rgb), 0.4); background: rgba(var(--warning-rgb), 0.08) }
 .detail-notice.is-warning > i { color: var(--warning-text) }
 
+/* ===== Issue list and conversation drawer ===== */
+.issues-table .col-status { width: 112px }
+.issues-table .col-owner { width: 140px }
+.issues-table .col-time { width: 124px }
+.issues-table .col-actions { width: 56px }
+.issue-replied { flex: none; align-self: center; color: var(--text-subtle); font-size: 12px }
+@container (max-width: 720px) { .issues-table .col-owner { display: none } }
+.issue-conversation { gap: 12px }
+.issue-message { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-neutral-soft) }
+.issue-message.is-reply { margin-inline-start: 24px; border-color: rgba(var(--primary-rgb), 0.3); background: rgba(var(--primary-rgb), 0.06) }
+.issue-message__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-sm); margin-bottom: 6px; color: var(--muted); font-size: var(--font-xs) }
+.issue-message__head strong { color: var(--text); font-size: var(--font-sm); font-weight: var(--font-weight-semibold) }
+.issue-message__body { margin: 0; color: var(--text); font-size: var(--font-sm); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere }
+.issue-reply-form { display: flex; flex-direction: column; gap: var(--space-sm) }
+.issue-reply-input { min-height: 96px; resize: vertical }
+.issue-reply-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px }
+
 /* ===== Dialogs and the rule editor =====
  * Dialog headers name what is being edited; footers keep Cancel neutral (accent is
  * for the primary action) and show the save shortcut when saving is possible. */

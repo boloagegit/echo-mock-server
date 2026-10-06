@@ -1,7 +1,8 @@
 /**
  * IssuesPage - Issue Report 頁面
  *
- * 顯示使用者回報的問題，支援建立、篩選、回覆、resolve/reopen。
+ * 使用者回報的問題清單，沿用共用列表語言：工具列搜尋與篩選、資料列、右側詳情抽屜與列選單。
+ * 抽屜內呈現描述與管理者回覆，管理者可直接回覆、標記解決／重新開啟或刪除。
  */
 const IssuesPage = {
   props: {
@@ -32,27 +33,39 @@ const IssuesPage = {
       createAttempted: false,
       creating: false,
       createError: '',
-      expandedId: null,
+      selectedIssueId: null,
       replyText: '',
-      replyingId: null,
-      issueViewportWidth: window.innerWidth,
+      replying: false,
+      saveShortcutKey: SAVE_SHORTCUT_KEY,
       previousFocus: null,
       inertSiblings: []
     };
   },
   computed: {
-    issueDetailColspan() {
-      return this.issueViewportWidth <= 1024 ? 4 : 5;
-    },
     hasIssueFilters() {
       return Boolean(this.issueFilter.status || this.issueFilter.keyword);
     },
     issueStatusFilterOptions() {
       return [
-        { value: '', label: this.t('issues.all') },
         { value: 'OPEN', label: this.t('issues.open') },
         { value: 'RESOLVED', label: this.t('issues.resolved') },
       ];
+    },
+    issueFilterChips() {
+      const chips = [];
+      if (this.issueFilter.status) {
+        chips.push({ key: 'status', label: this.t('filterChips.status') + this.statusLabel(this.issueFilter.status) });
+      }
+      if (this.issueFilter.keyword) {
+        chips.push({ key: 'keyword', label: this.t('filterChips.keyword') + this.issueFilter.keyword });
+      }
+      return chips;
+    },
+    selectedIndex() {
+      return this.pagedIssues.findIndex(issue => issue.id === this.selectedIssueId);
+    },
+    selectedIssue() {
+      return this.selectedIndex >= 0 ? this.pagedIssues[this.selectedIndex] : null;
     },
     createTitleError() {
       if (!this.createAttempted) { return ''; }
@@ -64,17 +77,74 @@ const IssuesPage = {
       return this.newDescription.trim() ? '' : this.t('issues.descriptionRequired');
     }
   },
-  mounted() {
-    window.addEventListener('resize', this.syncIssueViewportWidth, { passive: true });
+  watch: {
+    selectedIssueId() {
+      this.replying = false;
+      this.replyText = '';
+    },
   },
   beforeUnmount() {
-    window.removeEventListener('resize', this.syncIssueViewportWidth);
     restoreOverlaySiblings(this.inertSiblings);
   },
   methods: {
     fmtTime,
-    syncIssueViewportWidth() {
-      this.issueViewportWidth = window.innerWidth;
+    statusLabel(status) {
+      return status === 'OPEN' ? this.t('issues.open') : this.t('issues.resolved');
+    },
+    sortState(field) {
+      if (this.issueSort.field !== field) return 'none';
+      return this.issueSort.asc ? 'ascending' : 'descending';
+    },
+    removeFilterChip(key) {
+      this.$emit('update:issueFilter', { ...this.issueFilter, [key]: '' });
+    },
+    selectIssue(issue) {
+      this.selectedIssueId = this.selectedIssueId === issue.id ? null : issue.id;
+    },
+    onRowKeydown(event, issue) {
+      if (event.target !== event.currentTarget) return;
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.selectIssue(issue); }
+    },
+    stepDetail(direction) {
+      const next = this.pagedIssues[this.selectedIndex + direction];
+      if (next) {
+        this.selectedIssueId = next.id;
+        this.$nextTick(() => document.querySelector('.issues-workspace [data-detail-row].is-selected')?.scrollIntoView({ block: 'nearest' }));
+      }
+    },
+    issueMenuItems(issue) {
+      if (!this.isAdmin) return [];
+      const t = this.t;
+      return [
+        { key: 'reply', label: issue.adminReply ? t('issues.editReply') : t('issues.reply'), icon: 'bi-reply' },
+        issue.status === 'OPEN'
+          ? { key: 'resolve', label: t('issues.resolve'), icon: 'bi-check2-circle' }
+          : { key: 'reopen', label: t('issues.reopen'), icon: 'bi-arrow-counterclockwise' },
+        { key: 'delete', label: t('issues.delete'), icon: 'bi-trash', danger: true, dividerBefore: true },
+      ];
+    },
+    handleIssueMenu(action, issue) {
+      if (action === 'reply') { this.selectedIssueId = issue.id; this.$nextTick(() => this.startReply(issue)); }
+      else if (action === 'resolve') this.$emit('resolve-issue', issue.id);
+      else if (action === 'reopen') this.$emit('reopen-issue', issue.id);
+      else if (action === 'delete') this.$emit('delete-issue', issue.id);
+    },
+    startReply(issue) {
+      this.replying = true;
+      this.replyText = issue.adminReply || '';
+      this.$nextTick(() => this.$refs.replyInput?.focus());
+    },
+    onReplyKeydown(event, issue) {
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        this.submitReply(issue);
+      }
+    },
+    submitReply(issue) {
+      if (!this.replyText.trim()) { return; }
+      this.$emit('reply-issue', issue.id, this.replyText);
+      this.replying = false;
+      this.replyText = '';
     },
     openCreate() {
       this.previousFocus = document.activeElement;
@@ -102,6 +172,11 @@ const IssuesPage = {
         this.closeCreate();
         return;
       }
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        this.submitCreate();
+        return;
+      }
       trapDialogFocus(event, this.$refs.issueCreateDialog);
     },
     submitCreate() {
@@ -121,21 +196,6 @@ const IssuesPage = {
         }
         this.createError = this.t('issues.createFailed');
       });
-    },
-    toggleExpand(id) {
-      this.expandedId = this.expandedId === id ? null : id;
-      this.replyingId = null;
-      this.replyText = '';
-    },
-    startReply(id, existing) {
-      this.replyingId = id;
-      this.replyText = existing || '';
-    },
-    async submitReply(id) {
-      if (!this.replyText.trim()) { return; }
-      this.$emit('reply-issue', id, this.replyText);
-      this.replyingId = null;
-      this.replyText = '';
     }
   },
   template: /* html */`
@@ -146,131 +206,69 @@ const IssuesPage = {
           <span class="page-count">{{issueTotalElements}}</span>
         </div>
         <div class="page-actions">
-          <ui-button class="btn btn-secondary" @click="$emit('load-issues', true)" :disabled="loading.issues">
-            <i class="bi bi-arrow-clockwise" :class="{'spin':loading.issues}"></i> {{t('issues.refresh')}}
-          </ui-button>
-          <ui-button class="btn btn-primary" @click="openCreate">
-            <i class="bi bi-plus-lg"></i> {{t('issues.create')}}
-          </ui-button>
+          <ui-button variant="secondary" @click="$emit('load-issues', true)" :disabled="loading.issues"><i class="bi bi-arrow-clockwise" :class="{'spin':loading.issues}" aria-hidden="true"></i>{{t('issues.refresh')}}</ui-button>
+          <ui-button variant="primary" @click="openCreate"><i class="bi bi-plus-lg" aria-hidden="true"></i>{{t('issues.create')}}</ui-button>
         </div>
       </div>
 
-      <!-- Filter -->
-      <div class="card workspace-filter-card">
-        <div class="card-body filter-row workspace-filter-bar">
-          <div class="workspace-filter-controls">
-            <ui-segmented-control :model-value="issueFilter.status" :options="issueStatusFilterOptions"
-              name="issueStatusFilter" size="compact" :aria-label="t('issues.statusFilter')"
-              @update:model-value="$emit('update:issueFilter', {...issueFilter,status:$event})"></ui-segmented-control>
-            <workspace-search-field
-              input-id="issueSearch"
-              :model-value="issueFilter.keyword"
-              :placeholder="t('issues.searchPlaceholder')"
-              :aria-label="t('issues.searchPlaceholder')"
-              :clear-label="t('issues.clearSearch')"
-              :submit-mode="true"
-              @search="$emit('update:issueFilter', {...issueFilter,keyword:$event})"
-            ></workspace-search-field>
-          </div>
-        </div>
+      <div class="list-toolbar">
+        <workspace-search-field
+          input-id="issueSearch"
+          :model-value="issueFilter.keyword"
+          :placeholder="t('issues.searchPlaceholder')"
+          :aria-label="t('issues.searchPlaceholder')"
+          :clear-label="t('issues.clearSearch')"
+          :submit-mode="true"
+          @search="$emit('update:issueFilter', {...issueFilter,keyword:$event})"
+        ></workspace-search-field>
+        <ui-toggle-group :model-value="issueFilter.status" :options="issueStatusFilterOptions" :aria-label="t('issues.statusFilter')"
+          @update:model-value="$emit('update:issueFilter', {...issueFilter,status:$event})"></ui-toggle-group>
       </div>
+      <ui-filter-chip-list :items="issueFilterChips" :aria-label="t('common.activeFilters')"
+        :clear-label="t('issues.clearFilters')"
+        @remove="removeFilterChip($event)"
+        @clear="$emit('update:issueFilter',{status:'',keyword:''})"></ui-filter-chip-list>
 
-      <!-- List -->
-      <div class="card card-table workspace-table-card">
+      <div class="card card-table list-card">
         <ui-load-state v-if="loading.issuesError && !loading.issues" kind="error" icon="bi-cloud-slash" :title="t('issues.loadFailed')" has-action>
-          <template #action><ui-button type="button" class="btn btn-sm btn-secondary" @click="$emit('load-issues', true)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</ui-button></template>
+          <template #action><ui-button variant="secondary" size="compact" @click="$emit('load-issues', true)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</ui-button></template>
         </ui-load-state>
         <div v-else class="card-table-body">
-          <div v-if="loading.issues && !issues.length" class="loading-reveal" role="status" :aria-label="t('common.loading')">
-            <div v-for="i in 5" :key="'sk-issue-'+i" class="sk-row">
-              <span class="sk sk-badge sk-w-70"></span>
-              <span class="sk sk-text sk-w-40p"></span>
-              <span class="sk sk-text-sm sk-w-80"></span>
-              <span class="sk sk-text-sm sk-w-100"></span>
-            </div>
+          <div v-if="loading.issues && !issues.length" class="list-skeleton" role="status" :aria-label="t('common.loading')">
+            <div v-for="i in 6" :key="'sk-issue-'+i" class="list-skeleton__row"><span class="sk sk-w-15p"></span><span class="sk sk-w-40p"></span><span class="sk sk-w-15p"></span></div>
           </div>
-          <table v-if="pagedIssues.length" class="table-fixed workspace-table workspace-primary-aligned-table issues-list-table">
+          <table v-else-if="pagedIssues.length" class="data-table issues-table">
             <thead><tr>
-              <th class="table-status-column issue-status-column" :aria-sort="issueSort.field==='status'?(issueSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('issues.thStatus')" :active="issueSort.field==='status'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','status')"></ui-table-sort-header></th>
-              <th class="issue-title-column" :aria-sort="issueSort.field==='title'?(issueSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('issues.thTitle')" :active="issueSort.field==='title'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','title')"></ui-table-sort-header></th>
-              <th class="table-owner-column col-hide-md" :aria-sort="issueSort.field==='createdBy'?(issueSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('issues.thCreatedBy')" :active="issueSort.field==='createdBy'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','createdBy')"></ui-table-sort-header></th>
-              <th class="col-datetime issue-time-column" :aria-sort="issueSort.field==='createdAt'?(issueSort.asc?'ascending':'descending'):'none'"><ui-table-sort-header :label="t('issues.thTime')" :active="issueSort.field==='createdAt'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','createdAt')"></ui-table-sort-header></th>
-              <th class="col-actions col-actions-1 issue-disclosure-column">{{t('issues.thActions')}}</th>
+              <th class="col-status" :aria-sort="sortState('status')"><ui-table-sort-header :label="t('issues.thStatus')" :active="issueSort.field==='status'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','status')"></ui-table-sort-header></th>
+              <th class="col-title" :aria-sort="sortState('title')"><ui-table-sort-header :label="t('issues.thTitle')" :active="issueSort.field==='title'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','title')"></ui-table-sort-header></th>
+              <th class="col-owner" :aria-sort="sortState('createdBy')"><ui-table-sort-header :label="t('issues.thCreatedBy')" :active="issueSort.field==='createdBy'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','createdBy')"></ui-table-sort-header></th>
+              <th class="col-time" :aria-sort="sortState('createdAt')"><ui-table-sort-header :label="t('issues.thTime')" :active="issueSort.field==='createdAt'" :ascending="issueSort.asc" @toggle="$emit('toggle-issue-sort','createdAt')"></ui-table-sort-header></th>
+              <th class="col-actions"><span class="visually-hidden">{{t('issues.thActions')}}</span></th>
             </tr></thead>
             <tbody>
-              <template v-for="issue in pagedIssues" :key="issue.id">
-                <tr @click="toggleExpand(issue.id)" class="row-clickable" :class="{active:expandedId===issue.id}">
-                  <td class="issue-status-column"><div class="workspace-row-primary">
-                    <ui-badge class="badge" :class="issue.status==='OPEN'?'badge-warning':'badge-success'">{{issue.status==='OPEN'?t('issues.open'):t('issues.resolved')}}</ui-badge>
-                  </div></td>
-                  <td class="issue-title-column">
-                    <div class="list-record-name workspace-row-primary">{{issue.title}}</div>
-                  </td>
-                  <td class="col-hide-md"><span class="sub-info workspace-row-primary">{{issue.createdBy}}</span></td>
-                  <td class="col-datetime issue-time-column"><span class="sub-info workspace-row-primary" :title="fmtTime(issue.createdAt,false)">{{fmtTime(issue.createdAt)}}</span></td>
-                  <td class="col-actions col-actions-1 issue-disclosure-column">
-                    <div class="workspace-row-primary workspace-row-primary-end"><ui-button class="btn btn-sm btn-icon btn-secondary" :title="expandedId===issue.id?t('issues.collapse'):t('issues.expand')" :aria-label="expandedId===issue.id?t('issues.collapse'):t('issues.expand')" :aria-expanded="expandedId===issue.id" :aria-controls="'issue-detail-'+issue.id">
-                      <i class="bi" :class="expandedId===issue.id?'bi-chevron-up':'bi-chevron-down'"></i>
-                    </ui-button></div>
-                  </td>
-                </tr>
-                <Transition name="ui-detail-row-motion">
-                <tr v-if="expandedId===issue.id" class="rule-preview-row">
-                  <td :colspan="issueDetailColspan" class="detail-row-cell">
-                    <div :id="'issue-detail-'+issue.id" class="rule-preview-content workspace-detail-surface issue-detail">
-                      <!-- Description -->
-                      <div class="issue-message issue-message-user">
-                        <div class="issue-message-label"><i class="bi bi-person"></i> {{t('issues.description')}}</div>
-                        <div class="issue-message-content">{{issue.description}}</div>
-                      </div>
-                      <!-- Admin Reply -->
-                      <div v-if="issue.adminReply" class="issue-message issue-message-admin">
-                        <div class="issue-message-label">
-                          <i class="bi bi-reply"></i> {{t('issues.adminReply')}}
-                          <span v-if="issue.repliedBy"> — {{issue.repliedBy}}</span>
-                          <span v-if="issue.repliedAt"> · {{fmtTime(issue.repliedAt)}}</span>
-                        </div>
-                        <div class="issue-message-content">{{issue.adminReply}}</div>
-                      </div>
-                      <!-- Resolved info -->
-                      <div v-if="issue.resolvedAt" class="sub-info issue-resolved-meta">
-                        <i class="bi bi-check-circle"></i> {{t('issues.resolvedAt')}} {{fmtTime(issue.resolvedAt, false)}}
-                      </div>
-                      <!-- Reply form (admin) -->
-                      <div v-if="isAdmin && replyingId===issue.id" class="issue-reply-form">
-                        <textarea v-model="replyText" class="form-control issue-reply-input" rows="3" :placeholder="t('issues.replyPlaceholder')"></textarea>
-                        <div class="issue-reply-actions">
-                          <ui-button class="btn btn-sm btn-primary" @click.stop="submitReply(issue.id)" :disabled="!replyText.trim()">{{t('issues.submitReply')}}</ui-button>
-                          <ui-button variant="quiet" size="compact" @click.stop="replyingId=null">{{t('issues.cancel')}}</ui-button>
-                        </div>
-                      </div>
-                      <!-- Admin actions -->
-                      <div v-if="isAdmin" class="issue-actions">
-                        <ui-button v-if="replyingId!==issue.id" class="btn btn-sm btn-secondary" @click.stop="startReply(issue.id, issue.adminReply)">
-                          <i class="bi bi-reply"></i> {{t('issues.reply')}}
-                        </ui-button>
-                        <ui-button v-if="issue.status==='OPEN'" class="btn btn-sm btn-success" @click.stop="$emit('resolve-issue', issue.id)">
-                          <i class="bi bi-check-lg"></i> {{t('issues.resolve')}}
-                        </ui-button>
-                        <ui-button v-if="issue.status==='RESOLVED'" class="btn btn-sm btn-warning" @click.stop="$emit('reopen-issue', issue.id)">
-                          <i class="bi bi-arrow-counterclockwise"></i> {{t('issues.reopen')}}
-                        </ui-button>
-                        <ui-button class="btn btn-sm btn-danger" @click.stop="$emit('delete-issue', issue.id)">
-                          <i class="bi bi-trash"></i> {{t('issues.delete')}}
-                        </ui-button>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-                </Transition>
-              </template>
+              <tr v-for="issue in pagedIssues" :key="issue.id" data-detail-row tabindex="0"
+                :class="{'is-selected': selectedIssueId===issue.id}" :aria-selected="selectedIssueId===issue.id ? 'true' : 'false'"
+                @click="selectIssue(issue)" @keydown="onRowKeydown($event, issue)">
+                <td class="col-status"><ui-status :tone="issue.status==='OPEN' ? 'warning' : 'success'">{{statusLabel(issue.status)}}</ui-status></td>
+                <td class="col-title">
+                  <span class="record-name">
+                    <span class="record-name__title">{{issue.title}}</span>
+                    <i v-if="issue.adminReply" class="bi bi-reply issue-replied" :title="t('issues.replied')" :aria-label="t('issues.replied')"></i>
+                  </span>
+                </td>
+                <td class="col-owner cell-subtle">{{issue.createdBy}}</td>
+                <td class="col-time cell-mono cell-subtle" :title="fmtTime(issue.createdAt,false)">{{fmtTime(issue.createdAt)}}</td>
+                <td class="col-actions" @click.stop @dblclick.stop>
+                  <span class="row-actions"><ui-row-menu v-if="isAdmin" :items="issueMenuItems(issue)" :label="t('common.moreActions') + ' ' + issue.title" @select="handleIssueMenu($event, issue)"></ui-row-menu></span>
+                </td>
+              </tr>
             </tbody>
           </table>
-          <ui-load-state v-if="!pagedIssues.length && !loading.issues" kind="empty" :has-action="hasIssueFilters"
+          <ui-load-state v-else kind="empty" :has-action="hasIssueFilters"
             :icon="hasIssueFilters?'bi-search':'bi-inbox'"
             :title="hasIssueFilters?t('issues.emptyFiltered'):t('issues.empty')"
             :hint="hasIssueFilters?t('issues.emptyFilteredHint'):t('issues.emptyHint')">
-            <template #action><ui-button class="btn btn-sm btn-secondary" @click="$emit('update:issueFilter',{status:'',keyword:''})">{{t('issues.clearFilters')}}</ui-button></template>
+            <template #action><ui-button variant="secondary" size="compact" @click="$emit('update:issueFilter',{status:'',keyword:''})">{{t('issues.clearFilters')}}</ui-button></template>
           </ui-load-state>
         </div>
         <workspace-pagination
@@ -288,9 +286,46 @@ const IssuesPage = {
         </workspace-pagination>
       </div>
 
+      <ui-detail-drawer class="issue-detail-drawer" :open="!!selectedIssue" :title="selectedIssue ? selectedIssue.title : ''"
+        :subtitle="selectedIssue ? selectedIssue.createdBy + ' · ' + fmtTime(selectedIssue.createdAt, false) : ''"
+        :has-prev="selectedIndex > 0" :has-next="selectedIndex >= 0 && selectedIndex < pagedIssues.length - 1"
+        @close="selectedIssueId = null" @prev="stepDetail(-1)" @next="stepDetail(1)">
+        <template v-if="selectedIssue" #meta>
+          <ui-status :tone="selectedIssue.status==='OPEN' ? 'warning' : 'success'">{{statusLabel(selectedIssue.status)}}</ui-status>
+          <span v-if="selectedIssue.resolvedAt" class="cell-subtle">{{t('issues.resolvedAt')}} <span class="detail-mono">{{fmtTime(selectedIssue.resolvedAt, false)}}</span></span>
+        </template>
+        <template v-if="selectedIssue && isAdmin" #actions>
+          <ui-button v-if="!replying" variant="secondary" size="compact" @click="startReply(selectedIssue)"><i class="bi bi-reply" aria-hidden="true"></i>{{selectedIssue.adminReply ? t('issues.editReply') : t('issues.reply')}}</ui-button>
+          <ui-button v-if="selectedIssue.status==='OPEN'" variant="secondary" size="compact" @click="$emit('resolve-issue', selectedIssue.id)"><i class="bi bi-check2-circle" aria-hidden="true"></i>{{t('issues.resolve')}}</ui-button>
+          <ui-button v-else variant="secondary" size="compact" @click="$emit('reopen-issue', selectedIssue.id)"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>{{t('issues.reopen')}}</ui-button>
+          <ui-row-menu :items="[{ key: 'delete', label: t('issues.delete'), icon: 'bi-trash', danger: true }]" :label="t('common.moreActions')"
+            @select="handleIssueMenu($event, selectedIssue)"></ui-row-menu>
+        </template>
+        <section v-if="selectedIssue" class="detail-section issue-conversation">
+          <div class="detail-section__head"><h3 class="detail-section__title">{{t('issues.conversation')}}</h3></div>
+          <article class="issue-message">
+            <header class="issue-message__head"><strong>{{selectedIssue.createdBy}}</strong><span class="detail-mono">{{fmtTime(selectedIssue.createdAt, false)}}</span></header>
+            <p class="issue-message__body">{{selectedIssue.description}}</p>
+          </article>
+          <article v-if="selectedIssue.adminReply && !replying" class="issue-message is-reply">
+            <header class="issue-message__head"><strong>{{selectedIssue.repliedBy || t('issues.adminReply')}}</strong><span v-if="selectedIssue.repliedAt" class="detail-mono">{{fmtTime(selectedIssue.repliedAt, false)}}</span></header>
+            <p class="issue-message__body">{{selectedIssue.adminReply}}</p>
+          </article>
+          <div v-if="isAdmin && replying" class="issue-reply-form">
+            <label class="visually-hidden" for="issueReplyInput">{{t('issues.replyPlaceholder')}}</label>
+            <textarea id="issueReplyInput" ref="replyInput" v-model="replyText" class="form-control issue-reply-input" rows="4" :placeholder="t('issues.replyPlaceholder')" @keydown="onReplyKeydown($event, selectedIssue)"></textarea>
+            <div class="issue-reply-actions">
+              <span class="modal-footer-hint"><kbd>{{saveShortcutKey}}</kbd><kbd>Enter</kbd>{{t('issues.submitReply')}}</span>
+              <ui-button variant="quiet" size="compact" @click="replying = false">{{t('issues.cancel')}}</ui-button>
+              <ui-button variant="primary" size="compact" @click="submitReply(selectedIssue)" :disabled="!replyText.trim()">{{t('issues.submitReply')}}</ui-button>
+            </div>
+          </div>
+        </section>
+      </ui-detail-drawer>
+
       <!-- Create Modal -->
       <ui-modal-transition>
-      <div ref="issueCreateOverlay" v-if="showCreateModal" class="modal-overlay" @click.self="closeCreate" @keydown="handleCreateKeydown">
+      <div ref="issueCreateOverlay" v-if="showCreateModal" class="modal-overlay" @keydown="handleCreateKeydown">
         <div ref="issueCreateDialog" class="modal-box workspace-modal issue-create-modal" role="dialog" aria-modal="true" aria-labelledby="issueCreateTitle" tabindex="-1">
           <div class="modal-header">
             <div class="modal-heading"><h2 id="issueCreateTitle">{{t('issues.createTitle')}}</h2></div>
@@ -310,8 +345,9 @@ const IssuesPage = {
             </div>
           </div>
           <div class="modal-footer">
+            <span class="modal-footer-hint"><kbd>{{saveShortcutKey}}</kbd><kbd>Enter</kbd>{{t('issues.submit')}}</span>
             <ui-button type="button" variant="quiet" @click="closeCreate" :disabled="creating">{{t('issues.cancel')}}</ui-button>
-            <ui-button type="button" class="btn btn-primary" @click="submitCreate" :disabled="creating"><i class="bi" :class="creating?'bi-arrow-clockwise spin':'bi-send'" aria-hidden="true"></i>{{t('issues.submit')}}</ui-button>
+            <ui-button type="button" variant="primary" @click="submitCreate" :disabled="creating"><i class="bi" :class="creating?'bi-arrow-clockwise spin':'bi-send'" aria-hidden="true"></i>{{t('issues.submit')}}</ui-button>
           </div>
         </div>
       </div>

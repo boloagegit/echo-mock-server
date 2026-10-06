@@ -19,10 +19,10 @@ class LoadingFeedbackResourceTest {
         assertThat(text("components/UiDetailDrawer.js"))
                 .contains("<div v-if=\"loading\" class=\"ui-detail-drawer__state loading-reveal\" role=\"status\">");
         for (String component : new String[]{"RulesPage", "RuleApplyModal", "RuleEditModal",
-                "ResourceMonitoringPanel", "SettingsPage", "IssuesPage", "StatsPage"}) {
+                "ResourceMonitoringPanel", "SettingsPage", "StatsPage"}) {
             assertThat(text("components/" + component + ".js")).as(component).contains("loading-reveal");
         }
-        for (String list : new String[]{"RulesPage", "ResponsesPage", "StatsPage", "AuditPage", "AccountsPage"}) {
+        for (String list : new String[]{"RulesPage", "ResponsesPage", "StatsPage", "AuditPage", "AccountsPage", "IssuesPage"}) {
             assertThat(text("components/" + list + ".js")).as(list + " skeleton").contains("class=\"list-skeleton\" role=\"status\"");
         }
     }

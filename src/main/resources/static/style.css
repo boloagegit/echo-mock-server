@@ -2370,20 +2370,6 @@ details.form-block[open] > .form-block-summary { margin-bottom: var(--editor-fie
 .audit-raw { margin: 0; padding: 0.5rem 0.75rem; font-size: var(--font-sm); white-space: pre-wrap; word-break: break-word; color: var(--text); background: var(--code-bg); border: 1px solid var(--border); border-radius: 4px }
 tr.active { background: var(--hover) }
 
-/* Issue conversation */
-.issue-detail { display: flex; flex-direction: column; gap: var(--space-md) }
-.issue-message {
-    max-width: min(760px, 92%);
-    padding: var(--space-md) var(--space-lg);
-    border-radius: var(--radius-surface);
-    background: var(--card);
-    box-shadow: none;
-}
-.issue-message-admin { align-self: flex-end; background: var(--surface-primary-soft) }
-.issue-message-label { display: flex; align-items: center; gap: var(--space-xs); margin-bottom: var(--space-xs); color: var(--muted); font-size: var(--font-sm) }
-.issue-message-content { white-space: pre-wrap; word-break: break-word; line-height: 1.6 }
-.issue-reply-form { padding: var(--space-md); border-radius: var(--radius-surface); background: var(--card) }
-.issue-actions { display: flex; gap: var(--space-sm); flex-wrap: wrap; padding-top: var(--space-xs) }
 
 /* Expanded audit diff */
 .audit-workspace .ac-block { border: 0; border-radius: var(--radius-panel); background: var(--card) }
@@ -3137,7 +3123,6 @@ input[type="checkbox"] {
     .workspace-filter-controls { width: 100%; align-items: stretch }
     .workspace-search-field,
     .workspace-search-compact { flex: 1 1 100%; max-width: none }
-    .issue-message { max-width: 100% }
     .help-tabs { overflow-x: auto }
     .help-tabs button { flex: 0 0 auto; min-width: 132px }
     .settings-page-meta { display: none }
@@ -5030,9 +5015,6 @@ a:focus-visible,
 .settings-danger-header { background: rgba(var(--danger-rgb), 0.08) }
 .scenario-row,
 .settings-state-row { border: 1px solid var(--separator); border-radius: 6px; background: var(--surface-neutral-soft) }
-.issue-message,
-.issue-reply-form { border: 1px solid var(--separator); border-radius: 6px }
-.issue-message-admin { border-color: rgba(var(--primary-rgb), 0.28); background: var(--surface-primary-soft) }
 
 .audit-workspace .ac-block { border: 1px solid var(--separator); border-radius: 6px; background: var(--card) }
 .audit-workspace .ac-block-label { border-bottom: 1px solid var(--separator); background: var(--surface-neutral-soft) }
@@ -5665,9 +5647,6 @@ select.form-select-sm { height: var(--control-h-sm); min-height: var(--control-h
 }
 .inline-badge { margin-inline-start: 6px }
 .audit-change-count { display: block; margin-top: 2px }
-.issue-resolved-meta { margin-bottom: var(--space-lg) }
-.issue-reply-input { margin-bottom: var(--space-sm) }
-.issue-reply-actions { display: flex; flex-wrap: wrap; gap: var(--space-sm) }
 .grouped-rule-scroll { padding: 0 }
 .tag-group-key { font-weight: 600 }
 .tag-subgroup-chevron { color: var(--muted); font-size: 11px }
@@ -5767,20 +5746,6 @@ select.form-select-sm { height: var(--control-h-sm); min-height: var(--control-h
     }
     .audit-workspace .ui-toggle-group { justify-self: start }
 
-    .audit-list-table .audit-time-column,
-    .issues-list-table .issue-time-column { width: 96px }
-    .audit-list-table .audit-action-column,
-    .issues-list-table .issue-status-column { width: 80px }
-    .audit-list-table .audit-disclosure-column,
-    .issues-list-table .issue-disclosure-column { width: 48px }
-    .audit-list-table .audit-target-column,
-    .issues-list-table .issue-title-column { width: auto }
-    .audit-list-table .audit-target-column .list-record-name,
-    .issues-list-table .issue-title-column .list-record-name {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
     .page-header { align-items: flex-start }
     .page-actions { justify-content: flex-end }
     .inline-badge { margin-inline-start: var(--space-xs) }

@@ -200,13 +200,15 @@ class ListRefinementResourceTest {
                 .contains(".form-label { font-size: 12px;")
                 .contains(".invalid-feedback { font-size: 11px;");
 
-        for (String page : new String[]{"AccountsPage", "AuditPage", "IssuesPage", "ResponsesPage",
+        for (String page : new String[]{"AccountsPage", "AuditPage", "ResponsesPage",
                 "RuleEditModal", "RuleTable", "RuleDetail", "RulesPage", "StatsPage"}) {
             assertThat(text("components/" + page + ".js"))
                     .as(page + " semantic badges")
                     .doesNotContain("<span class=\"badge")
                     .contains("<ui-badge");
         }
+        // Issue state is a dot status like rules and accounts.
+        assertThat(text("components/IssuesPage.js")).contains("<ui-status").doesNotContain("<span class=\"badge");
         // Settings shows states (agents, JMS, LDAP) as dot statuses and needs no badges.
         assertThat(text("components/SettingsPage.js"))
                 .contains("<ui-status")
@@ -229,7 +231,7 @@ class ListRefinementResourceTest {
 
     @Test
     void listFiltersUseSharedControlsWithCorrectSelectionSemantics() throws IOException {
-        for (String page : new String[]{"RulesPage", "ResponsesPage", "AuditPage", "StatsPage", "AccountsPage"}) {
+        for (String page : new String[]{"RulesPage", "ResponsesPage", "AuditPage", "StatsPage", "AccountsPage", "IssuesPage"}) {
             String source = text("components/" + page + ".js");
             assertThat(source).as(page + " toggle groups")
                     .contains("<ui-toggle-group")
@@ -239,13 +241,11 @@ class ListRefinementResourceTest {
                     .doesNotContain("class=\"filter-chips\"")
                     .doesNotContain("class=\"filter-chip\"");
         }
-        // Issues still uses a required segmented status filter until it moves to the shared list.
-        for (String page : new String[]{"IssuesPage"}) {
-            assertThat(text("components/" + page + ".js"))
-                    .as(page + " required filters")
-                    .contains("<ui-segmented-control")
-                    .contains("size=\"compact\"")
-                    .doesNotContain("<div class=\"btn-group\"");
+        // Optional list filters are clearable toggles; a required "All" radio no longer exists.
+        for (String page : new String[]{"AccountsPage", "IssuesPage"}) {
+            assertThat(text("components/" + page + ".js")).as(page + " optional filters")
+                    .doesNotContain("filterAllRoles")
+                    .doesNotContain("t('issues.all')");
         }
         for (String locale : new String[]{"en", "zh-TW"}) {
             var common = new ObjectMapper().readTree(text("i18n/" + locale + ".json")).path("common");
@@ -351,27 +351,16 @@ class ListRefinementResourceTest {
     }
 
     @Test
-    void multiLineWorkspaceListsShareOnePrimaryAlignmentSlot() throws IOException {
-        String css = text("style.css");
-        assertThat(css)
-                .contains(".workspace-primary-aligned-table {")
-                .contains("--workspace-row-primary-h: 32px;")
-                .contains(".workspace-primary-aligned-table tbody > tr:not(.rule-preview-row):not(.audit-expand):not(.log-detail-row) > td {")
-                .contains("padding-block: var(--space-xs);")
-                .contains("vertical-align: top;")
-                .contains(".workspace-row-primary {")
-                .contains("min-height: var(--workspace-row-primary-h);")
-                .contains(".workspace-row-primary-end { justify-content: flex-end }");
-
-        // Accounts moved to the shared data-table; Issues keeps the aligned slot until it does too.
-        for (String page : new String[]{"IssuesPage"}) {
-            assertThat(text("components/" + page + ".js"))
-                    .as(page + " aligned list rows")
-                    .contains("workspace-primary-aligned-table")
-                    .contains("workspace-row-primary");
+    void everyListRendersTheSharedDataTableRowInsteadOfTheAlignedSlot() throws IOException {
+        // The aligned-row slot existed to line up multi-line legacy rows; every list now uses data-table rows.
+        for (String page : new String[]{"RuleTable", "ResponsesPage", "StatsPage", "AuditPage", "AccountsPage", "IssuesPage", "SettingsPage"}) {
+            assertThat(text("components/" + page + ".js")).as(page)
+                    .doesNotContain("workspace-primary-aligned-table")
+                    .doesNotContain("workspace-row-primary");
         }
-        assertThat(text("components/SettingsPage.js"))
-                .doesNotContain("workspace-primary-aligned-table");
+        for (String page : new String[]{"RuleTable", "ResponsesPage", "StatsPage", "AuditPage", "AccountsPage", "IssuesPage"}) {
+            assertThat(text("components/" + page + ".js")).as(page).contains("class=\"data-table");
+        }
     }
 
     @Test
@@ -388,8 +377,7 @@ class ListRefinementResourceTest {
                 .contains(".ui-segmented-control--compact .ui-segmented-control__option.is-selected {")
                 .contains(".pv-header {\n        display: grid;")
                 .contains(".pv-header-actions {\n        grid-column: 1 / -1;")
-                .contains(".audit-list-table .audit-time-column,")
-                .contains(".issues-list-table .issue-disclosure-column { width: 48px }")
+                .doesNotContain(".issues-list-table .issue-disclosure-column")
                 .contains("select.form-select-sm { height: var(--control-h-sm);")
                 .contains(".response-editor-modal .response-sse-table .form-control-sm {\n    min-height: 32px;")
                 .contains(".response-editor-modal .response-sse-table tbody tr {")
@@ -611,9 +599,11 @@ class ListRefinementResourceTest {
                 .contains("faultType: t('auditFields.faultType')")
                 .contains("forwardTargetMode: t('auditFields.forwardTargetMode')")
                 .contains("enumLabels[key]?.[s]");
+        // Issues open in the shared drawer, so no viewport-dependent colspan is needed.
         assertThat(text("components/IssuesPage.js"))
-                .contains("issueViewportWidth: window.innerWidth")
-                .contains(":colspan=\"issueDetailColspan\"");
+                .contains("<ui-detail-drawer class=\"issue-detail-drawer\"")
+                .doesNotContain("issueViewportWidth")
+                .doesNotContain("colspan");
         // Row actions never trigger the row's own click or double-click, and the row menu closes on Escape.
         assertThat(text("components/RuleTable.js"))
                 .contains("<td class=\"col-actions\" @click.stop @dblclick.stop>")
@@ -733,7 +723,7 @@ class ListRefinementResourceTest {
     void unconditionalRulesArePresentedAsIntentionalDefaultMatches() throws IOException {
         assertThat(text("i18n/zh-TW.json")).contains("\"noCondition\": \"預設匹配\"");
         assertThat(text("i18n/en.json")).contains("\"noCondition\": \"Default match\"");
-        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261007.3");
+        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261007.6");
     }
 
     @Test
