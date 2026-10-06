@@ -55,6 +55,22 @@ class ListSystemResourceTest {
         }
     }
 
+    @Test
+    void pageSwitchKeepsTheHeaderStillAndOnlyEasesContentIn() throws IOException {
+        String style = text("style.css");
+        String console = text("console.css");
+
+        assertThat(style).contains(".page.active { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden }");
+        assertThat(console)
+                .contains(".page.active > .list-card,")
+                .contains("@keyframes pageContentIn { from { opacity: 0.4; transform: translateY(3px) }")
+                .doesNotContain(".page.active > .page-header {");
+        // Notes that used to push the toolbar down now live in a header tooltip.
+        assertThat(text("components/ResponsesPage.js"))
+                .contains(":data-tooltip=\"t('responses.sharedInfo')\"")
+                .doesNotContain("page-subtitle");
+    }
+
     private static String text(String path) throws IOException {
         try (var stream = new ClassPathResource("static/" + path).getInputStream()) {
             return new String(stream.readAllBytes(), StandardCharsets.UTF_8);

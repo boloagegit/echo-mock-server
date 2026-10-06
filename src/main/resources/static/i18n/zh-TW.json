@@ -378,7 +378,8 @@
     "selectedCount": "已選取 {count} 個回應",
     "ruleUnit": "條規則",
     "detailInfo": "回應資訊",
-    "loadFailed": "無法載入回應，請稍後再試。"
+    "loadFailed": "無法載入回應，請稍後再試。",
+    "sharedInfoLabel": "關於共用回應"
   },
   "stats": {
     "title": "請求記錄",

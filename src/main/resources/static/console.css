@@ -441,7 +441,6 @@
 .data-table code { color: inherit }
 
 /* ===== Shared record cells (responses, accounts, issues) ===== */
-.page-subtitle { display: flex; align-items: center; gap: var(--space-sm); margin: calc(var(--space-sm) * -1) 0 var(--space-md); color: var(--text-subtle); font-size: var(--font-sm) }
 .record-name { display: flex; align-items: baseline; gap: var(--space-sm); min-width: 0 }
 .record-name__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text); font-weight: var(--font-weight-medium) }
 .record-name__title.is-empty { color: var(--text-subtle); font-weight: var(--font-weight-regular) }
@@ -505,3 +504,16 @@
 
 /* Collapsed sidebar keeps the app mark visible above the expand toggle. */
 .sidebar.collapsed .sidebar-header { flex-direction: column; gap: var(--space-sm); padding: 12px 0 8px }
+
+/* ===== Page switching =====
+ * The header and toolbar sit at the same position on every page and never
+ * animate; only the content below eases in, so switching pages feels steady. */
+.page.active > .list-card,
+.page.active > .ui-filter-chip-list,
+.page.active > .batch-bar { animation: pageContentIn var(--motion-base) var(--ease-standard) both }
+@keyframes pageContentIn { from { opacity: 0.4; transform: translateY(3px) } to { opacity: 1; transform: none } }
+@media (prefers-reduced-motion: reduce) {
+    .page.active > .list-card,
+    .page.active > .ui-filter-chip-list,
+    .page.active > .batch-bar { animation: none }
+}

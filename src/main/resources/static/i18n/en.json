@@ -378,7 +378,8 @@
     "selectedCount": "{count} responses selected",
     "ruleUnit": "rules",
     "detailInfo": "Details",
-    "loadFailed": "Could not load responses. Please try again."
+    "loadFailed": "Could not load responses. Please try again.",
+    "sharedInfoLabel": "About shared responses"
   },
   "stats": {
     "title": "Request Logs",

@@ -150,7 +150,7 @@ body {
 .main { flex: 1; padding: var(--space-lg) var(--space-xl); overflow: hidden; min-width: 0; display: flex; flex-direction: column; position: relative }
 .page { display: none }
 /* 6. Page transition */
-.page.active { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; animation: fadeIn var(--motion-base) var(--ease-standard) }
+.page.active { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden }
 .page-scroll { overflow-y: auto; flex: 1; min-height: 0 }
 
 /* Sidebar */

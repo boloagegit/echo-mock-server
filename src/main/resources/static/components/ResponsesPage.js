@@ -135,6 +135,10 @@ const ResponsesPage = {
         <div class="page-heading">
           <h1 class="page-title">{{t('responses.title')}}</h1>
           <span class="page-count">{{responseTotalElements}}</span>
+          <button type="button" class="help-tooltip tooltip-align-start" :data-tooltip="t('responses.sharedInfo')"
+            :aria-label="t('responses.sharedInfoLabel')" @keydown.esc="$event.currentTarget.blur()">
+            <i class="bi bi-question-circle" aria-hidden="true"></i>
+          </button>
         </div>
         <div class="page-actions">
           <ui-button variant="secondary" @click="$emit('load-responses', true)" :disabled="loading.responses"><i class="bi bi-arrow-clockwise" :class="{'spin':loading.responses}" aria-hidden="true"></i>{{t('responses.refresh')}}</ui-button>
@@ -147,7 +151,6 @@ const ResponsesPage = {
           <input id="responseImportInput2" type="file" accept=".json" @change="$emit('import-responses', $event)" hidden>
         </div>
       </div>
-      <p class="page-subtitle"><i class="bi bi-info-circle" aria-hidden="true"></i>{{t('responses.sharedInfo')}}</p>
 
       <div class="list-toolbar">
         <workspace-search-field
