@@ -205,6 +205,7 @@ Environment variables:
 | `ECHO_ADMIN_USERNAME` | admin | Admin username |
 | `ECHO_ADMIN_PASSWORD` | admin | Admin password |
 | `ECHO_ENV_LABEL` | DOCKER | Environment label |
+| `ECHO_UI_ACCENT` | teal | UI accent color: `teal` or `blue`, to tell deployments apart (e.g. SIT teal, UAT blue) |
 | `TZ` | Asia/Taipei | Timezone |
 
 JVM options are set in the Dockerfile (default `-Xms256m -Xmx512m`, with a heap dump and process exit on OOM). Override by adding `JAVA_OPTS` to docker-compose.yml `environment`.
@@ -436,6 +437,8 @@ server:
 
 echo:
   env-label:                    # Environment label (e.g., DEV, SIT, UAT)
+  ui:
+    accent: teal                # UI accent: teal or blue (ECHO_UI_ACCENT)
   remember-me:
     key: echo-remember-me-secret  # Remember Me encryption key
     validity: 180d                # Remember Me cookie validity

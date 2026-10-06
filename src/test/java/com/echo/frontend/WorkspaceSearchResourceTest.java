@@ -82,8 +82,8 @@ class WorkspaceSearchResourceTest {
                 .contains("z-index: 4;")
                 .contains("position: static;");
         assertThat(theme)
-                .contains("--table-head: #1d2430;")
-                .contains("--table-head: #f1f4f8;");
+                .contains("--table-head: #14171b;")
+                .contains("--table-head: #ffffff;");
     }
 
     private static void assertExplicitSearch(String path) throws IOException {

@@ -19,6 +19,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cache.CacheManager;
@@ -126,6 +128,35 @@ class AdminControllerTest {
         assertThat(response.getBody().get("scenariosEnabled")).isEqualTo(true);
         assertThat(response.getBody().get("ruleDragSortEnabled")).isEqualTo(true);
         assertThat(response.getBody().get("issueReportingEnabled")).isEqualTo(false);
+    }
+
+    @Test
+    void getStatus_shouldExposeConfiguredUiAccent() {
+        ReflectionTestUtils.setField(controller, "uiAccent", "blue");
+
+        assertThat(controller.getStatus(null).getBody().get("uiAccent")).isEqualTo("blue");
+    }
+
+    @Test
+    void getStatus_shouldFallBackToTealForMissingUiAccent() {
+        ReflectionTestUtils.setField(controller, "uiAccent", null);
+
+        assertThat(controller.getStatus(null).getBody().get("uiAccent")).isEqualTo("teal");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "teal, teal",
+            "blue, blue",
+            "' BLUE ', blue",
+            "Teal, teal",
+            "'', teal",
+            "'   ', teal",
+            "red, teal",
+            "blue;color:red, teal"
+    })
+    void resolveUiAccent_shouldNormalizeOrFallBackToTeal(String configured, String expected) {
+        assertThat(AdminController.resolveUiAccent(configured)).isEqualTo(expected);
     }
 
     @Test

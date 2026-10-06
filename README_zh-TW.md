@@ -185,6 +185,7 @@ docker compose down
 | `ECHO_ADMIN_USERNAME` | admin | 管理員帳號 |
 | `ECHO_ADMIN_PASSWORD` | admin | 管理員密碼 |
 | `ECHO_ENV_LABEL` | DOCKER | 環境標籤 |
+| `ECHO_UI_ACCENT` | teal | 介面主色：`teal`（青綠）或 `blue`（藍），用來區分不同部署環境（例如 SIT 青綠、UAT 藍） |
 | `TZ` | Asia/Taipei | 時區 |
 
 JVM 參數在 Dockerfile 中設定（預設 `-Xms256m -Xmx512m`，OOM 時保留 heap dump 並退出），可透過 docker-compose.yml 的 `environment` 加入 `JAVA_OPTS` 覆蓋。
@@ -411,6 +412,8 @@ server:
 
 echo:
   env-label:                    # 環境標籤（如 DEV、SIT、UAT）
+  ui:
+    accent: teal                # 介面主色：teal 或 blue（ECHO_UI_ACCENT）
   remember-me:
     key: echo-remember-me-secret  # Remember Me 加密金鑰
     validity: 180d                # Remember Me cookie 有效期

@@ -66,9 +66,11 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 管理後台 API 控制器
@@ -174,6 +176,9 @@ public class AdminController {
     @Value("${echo.env-label:}")
     private String envLabel;
 
+    @Value("${echo.ui.accent:teal}")
+    private String uiAccent;
+
     @Value("${echo.cleanup.response-retention-days:180}")
     private int responseRetentionDays;
 
@@ -193,6 +198,18 @@ public class AdminController {
     private boolean issueReportingEnabled;
 
     private final Instant startupTime = Instant.now();
+
+    /** UI 主色僅允許預先定義的值；空白或未知值一律回到預設青綠。 */
+    private static final String DEFAULT_UI_ACCENT = "teal";
+    private static final Set<String> UI_ACCENTS = Set.of("teal", "blue");
+
+    static String resolveUiAccent(String configured) {
+        if (configured == null) {
+            return DEFAULT_UI_ACCENT;
+        }
+        String normalized = configured.trim().toLowerCase(Locale.ROOT);
+        return UI_ACCENTS.contains(normalized) ? normalized : DEFAULT_UI_ACCENT;
+    }
 
     // ========== 系統狀態 ==========
 
@@ -238,6 +255,7 @@ public class AdminController {
         status.put("auditRetentionDays", auditRetentionDays);
         status.put("cleanupRetentionDays", cleanupRetentionDays);
         status.put("envLabel", envLabel);
+        status.put("uiAccent", resolveUiAccent(uiAccent));
         status.put("version", getClass().getPackage().getImplementationVersion() != null 
                 ? getClass().getPackage().getImplementationVersion() : "dev");
         // 檢查孤兒規則

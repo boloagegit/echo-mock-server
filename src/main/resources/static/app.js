@@ -380,6 +380,7 @@ const _app = createApp({
                 httpAlias.value = data.httpAlias || 'HTTP';
                 jmsAlias.value = data.jmsAlias || 'JMS';
                 envLabel.value = data.envLabel || '';
+                window.EchoAccent?.apply(data.uiAccent);
                 document.title = envLabel.value ? `Echo - ${envLabel.value}` : 'Echo Mock Server';
                 if (data.orphanRules > 0) { showToast(t('toast.orphanRulesWarning', {count: data.orphanRules}), 'error'); }
             }

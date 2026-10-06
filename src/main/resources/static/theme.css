@@ -1,72 +1,120 @@
 /**
- * theme.css - 共用主題變數
+ * theme.css - 共用主題變數（Signal Console）
  * 供 index.html (主站) 與 login.html (登入頁) 共用。
+ *
+ * 兩個獨立維度：
+ *   data-theme  : dark（預設）／light，由使用者偏好決定
+ *   data-accent : teal（預設）／blue，由部署設定 echo.ui.accent（ECHO_UI_ACCENT）決定，
+ *                 用來區分不同部署環境（例如 SIT 青綠、UAT 藍）
  */
 
-/* 深色主題（預設） */
+/* 深色主題（預設）＋ 青綠主色 */
 :root {
     color-scheme: dark;
-    --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
-    --bg: #0d1117;
-    --card: #151a22;
-    --border: #2b3441;
-    --border2: #414d5e;
-    /* Echo blue is reserved for interaction, focus, and selected state. */
-    --primary: #82a8f7;
-    --primary-strong: #82a8f7;
-    --primary-rgb: 130, 168, 247;
-    --success: #4fbd82;
-    --success-strong: #4fbd82;
-    --success-rgb: 79, 189, 130;
-    --warning: #d8a94d;
-    --warning-strong: #d8a94d;
-    --warning-text: #e3ba63;
-    --warning-rgb: 216, 169, 77;
-    --danger: #ed7773;
-    --danger-rgb: 237, 119, 115;
-    --danger-text: #ff9a95;
-    --text: #eef2f7;
-    --muted: #a7b0bd;
-    --muted-rgb: 167, 176, 189;
-    --purple: #b08ae8;
-    --purple-rgb: 176, 138, 232;
-    --hover: #1d2430;
-    --code-bg: #0f141b;
-    --table-head: #1d2430;
-    --btn-primary: #426fc1;
-    --btn-primary-hover: #4f7ed1;
-    --btn-primary-rgb: 66, 111, 193;
+    --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+    --bg: #0e1013;
+    --sidebar-bg: #0b0d10;
+    --card: #14171b;
+    --surface-raised: #1b1f24;
+    --border: #252a30;
+    --border2: #353b43;
+    /* The accent is reserved for interaction, focus, selection and the environment marker. */
+    --primary: #46d3be;
+    --primary-strong: #46d3be;
+    --primary-rgb: 70, 211, 190;
+    --success: #5fcb8c;
+    --success-strong: #5fcb8c;
+    --success-rgb: 95, 203, 140;
+    --warning: #f0b95a;
+    --warning-strong: #f0b95a;
+    --warning-text: #f3c77c;
+    --warning-rgb: 240, 185, 90;
+    --danger: #ff8a80;
+    --danger-rgb: 255, 138, 128;
+    --danger-text: #ffa59d;
+    --text: #eceef1;
+    --muted: #a9afb8;
+    --muted-rgb: 169, 175, 184;
+    --text-subtle: #868d97;
+    --purple: #c9aeff;
+    --purple-rgb: 201, 174, 255;
+    --hover: #1b1f24;
+    --code-bg: #0f1215;
+    --table-head: #14171b;
+    --btn-primary: #46d3be;
+    --btn-primary-hover: #6fe0cf;
+    --btn-primary-rgb: 70, 211, 190;
+    --on-primary: #052a24;
+    /* HTTP methods and protocols: always paired with their text label. */
+    --method-get: #6fd39a;
+    --method-post: #7fb4ff;
+    --method-put: #f0b95a;
+    --method-patch: #c9aeff;
+    --method-delete: #ff8a80;
+    --protocol-jms: #c9aeff;
 }
 
-/* 淺色主題 */
+/* 深色主題 ＋ 藍色主色 */
+:root[data-accent="blue"] {
+    --primary: #8db2ff;
+    --primary-strong: #8db2ff;
+    --primary-rgb: 141, 178, 255;
+    --btn-primary: #8db2ff;
+    --btn-primary-hover: #a9c4ff;
+    --btn-primary-rgb: 141, 178, 255;
+    --on-primary: #0a1b3d;
+}
+
+/* 淺色主題 ＋ 青綠主色 */
 :root[data-theme="light"] {
     color-scheme: light;
-    --bg: #f3f6fa;
+    --bg: #f4f5f7;
+    --sidebar-bg: #fafafb;
     --card: #ffffff;
-    --border: #d7dee8;
-    --border2: #b4bfce;
-    --primary: #2862a8;
-    --primary-strong: #174b87;
-    --primary-rgb: 40, 98, 168;
-    --success: #1f7a4d;
+    --surface-raised: #ffffff;
+    --border: #e3e6ea;
+    --border2: #cdd2d9;
+    --primary: #0b7a6c;
+    --primary-strong: #075e53;
+    --primary-rgb: 11, 122, 108;
+    --success: #16794c;
     --success-strong: #145f3a;
-    --success-rgb: 31, 122, 77;
-    --warning: #8b641f;
+    --success-rgb: 22, 121, 76;
+    --warning: #8a5a00;
     --warning-strong: #684709;
     --warning-text: #684709;
-    --warning-rgb: 139, 100, 31;
-    --danger: #c43f48;
-    --danger-rgb: 196, 63, 72;
-    --danger-text: #ad303a;
-    --text: #182230;
-    --muted: #5d6a7b;
-    --muted-rgb: 93, 106, 123;
-    --purple: #7048aa;
-    --purple-rgb: 112, 72, 170;
-    --hover: #edf2f7;
-    --code-bg: #f1f4f8;
-    --table-head: #f1f4f8;
-    --btn-primary: #2862a8;
-    --btn-primary-hover: #1f518f;
-    --btn-primary-rgb: 40, 98, 168;
+    --warning-rgb: 138, 90, 0;
+    --danger: #b3242d;
+    --danger-rgb: 179, 36, 45;
+    --danger-text: #a01f28;
+    --text: #14171b;
+    --muted: #4e5560;
+    --muted-rgb: 78, 85, 96;
+    --text-subtle: #646b76;
+    --purple: #6a46b5;
+    --purple-rgb: 106, 70, 181;
+    --hover: #f3f5f8;
+    --code-bg: #f7f8fa;
+    --table-head: #ffffff;
+    --btn-primary: #0b7a6c;
+    --btn-primary-hover: #096a5e;
+    --btn-primary-rgb: 11, 122, 108;
+    --on-primary: #ffffff;
+    --method-get: #16794c;
+    --method-post: #1e5dbd;
+    --method-put: #8a5a00;
+    --method-patch: #6a46b5;
+    --method-delete: #b3242d;
+    --protocol-jms: #6a46b5;
+}
+
+/* 淺色主題 ＋ 藍色主色 */
+:root[data-theme="light"][data-accent="blue"] {
+    --primary: #2457c5;
+    --primary-strong: #1b4799;
+    --primary-rgb: 36, 87, 197;
+    --btn-primary: #2457c5;
+    --btn-primary-hover: #1d4aa8;
+    --btn-primary-rgb: 36, 87, 197;
+    --on-primary: #ffffff;
 }

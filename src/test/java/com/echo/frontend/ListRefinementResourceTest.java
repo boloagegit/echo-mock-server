@@ -57,7 +57,8 @@ class ListRefinementResourceTest {
                 .doesNotContain("font-weight: 550")
                 .doesNotContain("font-weight: 650");
         assertThat(theme)
-                .contains("--primary-strong: #174b87;")
+                .contains("--primary-strong: #075e53;")
+                .contains("--primary-strong: #1b4799;")
                 .contains("--success-strong: #145f3a;")
                 .contains("--warning-strong: #684709;");
         assertThat(css)

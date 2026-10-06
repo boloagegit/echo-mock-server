@@ -108,6 +108,8 @@ dependencies {
     implementation 'org.webjars.npm:bootstrap-icons:1.13.1'
     // The UI uses CodeMirror 5's global API and /lib paths; 5.65.21 is the latest compatible release.
     implementation 'org.webjars.npm:codemirror:5.65.21'
+    // Bundled monospace font so endpoints and code render the same on Windows and macOS.
+    implementation 'org.webjars.npm:fontsource__jetbrains-mono:4.5.11'
 
     // Feign (compileOnly - for MockRedirectClient reference code)
     compileOnly 'io.github.openfeign:feign-core:13.13'

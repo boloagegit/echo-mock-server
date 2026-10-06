@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Echo－登入</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico?v=20260906.2">
-    <link rel="stylesheet" href="/theme.css?v=20260909.2">
+    <link rel="stylesheet" href="/theme.css?v=20261006.1">
+    <script src="/ui-accent.js?v=20261006.1"></script>
     <link rel="stylesheet" href="/webjars/bootstrap-icons/font/bootstrap-icons.min.css">
     <style>
         /* 登入頁專用衍生變數（基於 theme.css 共用變數） */
@@ -277,6 +278,9 @@
 
             // --- LDAP Hint ---
             fetch('/api/admin/status', { headers: { 'Accept': 'application/json' } }).then(function(r) { return r.json(); }).then(function(data) {
+                if (window.EchoAccent) {
+                    window.EchoAccent.apply(data.uiAccent);
+                }
                 if (data.ldapEnabled) {
                     document.getElementById('ldap-hint').style.display = 'block';
                 }
