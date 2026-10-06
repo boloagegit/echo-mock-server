@@ -1538,7 +1538,7 @@ body.splitter-dragging { user-select: none; cursor: col-resize !important }
 
 /* Form */
 .form-group { margin-bottom: var(--form-gap) }
-.form-label { display: block; font-size: var(--font-base); font-weight: 600; color: var(--text); margin-bottom: 0.25rem }
+.form-label { display: block; font-size: var(--font-base); font-weight: var(--font-weight-medium); color: var(--muted); margin-bottom: 0.25rem }
 .form-label .required { color: var(--danger); margin-left: 2px }
 .form-label .hint { font-weight: 400; text-transform: none; color: var(--muted) }
 .form-control {
@@ -1691,7 +1691,7 @@ textarea.form-control.auto-resize { min-height: 60px; max-height: 200px; resize:
 .rule-editor .input-affix > .form-control:focus { border: 0; background: transparent; box-shadow: none }
 .rule-editor .input-affix:focus-within { border-color: transparent; background: var(--card); box-shadow: var(--focus-ring) }
 .rule-editor .input-affix.is-invalid { border-color: var(--danger) }
-.rule-editor .source-host-hint { color: var(--text); font-weight: 500 }
+.rule-editor .source-host-hint { color: var(--text-subtle); font-size: var(--font-xs) }
 .rule-editor .protocol-switch {
     gap: var(--space-2xs);
     padding: var(--editor-shell-padding);
@@ -1740,19 +1740,19 @@ textarea.form-control.auto-resize { min-height: 60px; max-height: 200px; resize:
 .rule-editor-mode-switch button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px }
 .rule-identity-block { display: flex; flex-direction: column; gap: var(--space-md) }
 .rule-control-row { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: var(--space-md); align-items: center }
-.rule-control-label { color: var(--muted); font-size: var(--font-sm); font-weight: 600 }
-.rule-protocol-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-sm) }
+.rule-control-label { color: var(--muted); font-size: var(--font-sm); font-weight: var(--font-weight-medium) }
+.rule-protocol-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; padding: 2px; border-radius: 8px; background: var(--surface-control) }
 .rule-protocol-option {
     min-width: 0;
-    min-height: var(--control-h);
+    min-height: calc(var(--control-h) - 4px);
     display: inline-flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: center;
     gap: var(--space-sm);
-    padding: var(--space-sm) var(--space-md);
+    padding: 0 var(--space-md);
     border: 0;
-    border-radius: var(--radius-control);
-    background: var(--surface-control);
+    border-radius: 6px;
+    background: transparent;
     color: var(--text);
     font: inherit;
     font-size: var(--font-sm);
@@ -1896,19 +1896,18 @@ textarea.form-control.auto-resize { min-height: 60px; max-height: 200px; resize:
 .form-block-summary { cursor: pointer; margin-bottom: 0 }
 details.form-block[open] > .form-block-summary { margin-bottom: var(--editor-field-gap) }
 .response-mode-toolbar { display: flex; align-items: center; gap: var(--editor-field-gap); flex-wrap: nowrap; padding: var(--editor-toolbar-padding); border-radius: 8px; background: var(--surface-neutral-soft) }
-.response-mode-label { display: inline-flex; align-items: center; gap: var(--space-xs); padding: 0 var(--space-xs); color: var(--text); font-size: var(--font-base); font-weight: 600 }
-.response-mode-label > i { color: var(--primary) }
+.response-mode-label { display: inline-flex; align-items: center; gap: var(--space-xs); padding: 0 var(--space-xs); color: var(--muted); font-size: var(--font-sm); font-weight: var(--font-weight-medium) }
 .response-status-field { display: grid; grid-template-columns: max-content 76px; align-items: center; gap: var(--space-sm); margin-inline-start: auto }
-.response-status-field label { color: var(--text); font-size: var(--font-sm); font-weight: 600; white-space: nowrap }
+.response-status-field label { color: var(--muted); font-size: var(--font-sm); font-weight: var(--font-weight-medium); white-space: nowrap }
 .response-status-field .form-control { min-height: var(--control-h-sm); padding-block: var(--space-xs); font-variant-numeric: tabular-nums }
 .response-status-field .result-field-error { grid-column: 1 / -1 }
 .response-template-actions { display: flex; align-items: center; gap: var(--space-xs); color: var(--muted); font-size: var(--font-xs) }
 .response-template-actions > span { display: inline-flex; align-items: center; gap: var(--space-xs); margin-right: var(--space-xs) }
-.response-template-actions .btn-secondary { border: 0; background: var(--bg); box-shadow: none }
+.response-template-actions .ui-button--quiet { color: var(--muted); font-family: var(--font-mono); font-size: var(--font-xs) }
+.response-template-actions .ui-button--quiet:hover:not(:disabled) { background: var(--hover); color: var(--text) }
 .response-content-block { padding-top: var(--editor-toolbar-padding) !important; padding-bottom: 0 !important }
 .response-content-mode { flex: 1; display: flex; flex-direction: column; gap: var(--editor-field-gap); min-height: 0 }
-.response-content-label { display: inline-flex; align-items: center; gap: var(--space-xs); flex: 0 0 auto; margin-inline-end: var(--space-xs); color: var(--text); font-size: var(--font-base); font-weight: 600; white-space: nowrap }
-.response-content-label > i { color: var(--primary) }
+.response-content-label { display: inline-flex; align-items: center; gap: var(--space-xs); flex: 0 0 auto; margin-inline-end: var(--space-xs); color: var(--muted); font-size: var(--font-sm); font-weight: var(--font-weight-medium); white-space: nowrap }
 .forward-settings { flex: 1; display: flex; flex-direction: column; min-height: 0 }
 .forward-connection-field { width: min(100%, 720px); margin-bottom: var(--block-gap) }
 .forward-connection-select {
@@ -2189,7 +2188,7 @@ details.form-block[open] > .form-block-summary { margin-bottom: var(--editor-fie
 .rule-right-content { display: contents }
 .response-existing-panel { display: flex; flex-direction: column; gap: var(--editor-field-gap); margin-top: var(--editor-field-gap) }
 .response-picker-heading { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-md) }
-.response-picker-heading strong { color: var(--text); font-size: var(--font-sm); font-weight: var(--font-weight-semibold) }
+.response-picker-heading strong { color: var(--muted); font-size: var(--font-sm); font-weight: var(--font-weight-medium) }
 .response-selected-card { display: grid; grid-template-columns: max-content minmax(0, 1fr) auto; align-items: center; gap: var(--editor-field-gap); min-height: var(--editor-selection-h); padding: var(--editor-selection-py) var(--editor-selection-px); border-radius: var(--radius-panel); font-size: var(--font-md) }
 .response-selected-content { display: flex; flex-direction: column; min-width: 0; gap: 2px }
 .response-selected-label { display: inline-flex; align-items: center; gap: var(--space-xs); color: var(--primary); font-size: var(--font-xs); font-weight: var(--font-weight-semibold); white-space: nowrap }
@@ -3522,7 +3521,7 @@ input[type="checkbox"] {
 .connection-form-modal .modal-close:hover { color: var(--text); background: var(--surface-control) }
 .connection-form-modal .modal-close:focus-visible { outline: 0; color: var(--text); box-shadow: var(--focus-ring) }
 .connection-form-modal .modal-body { padding: var(--space-xl) }
-.connection-form-modal .form-label { text-transform: none; letter-spacing: 0; color: var(--text) }
+.connection-form-modal .form-label { text-transform: none; letter-spacing: 0 }
 .connection-form-modal .form-control { border-color: transparent; background-color: var(--surface-control); box-shadow: none }
 .connection-form-modal .form-control:hover { background-color: rgba(var(--muted-rgb), 0.12) }
 .connection-form-modal .form-control:focus { border-color: transparent; background-color: var(--bg); box-shadow: var(--focus-ring) }

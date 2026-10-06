@@ -599,16 +599,19 @@ const RuleEditModal = {
                     <div class="form-block" data-tour="match">
                         <div class="form-block-header">{{form.protocol==='HTTP' ? t('modal.matchPath') : t('modal.matchQueue')}}</div>
                         <template v-if="form.protocol==='HTTP'">
-                            <div class="form-group form-group--tight">
-                                <label class="form-label">{{t('modal.method')}} <span class="required">*</span></label>
-                                <ui-choice-group class="method-group" option-class="method-btn" variant="compact"
-                                    v-model="form.method" :options="methodOptions" :aria-label="t('modal.method')"></ui-choice-group>
-                                <div v-if="formErrors.method" class="invalid-feedback validation-message--visible">{{formErrors.method}}</div>
-                            </div>
-                            <div class="form-group form-group--tight">
-                                <label class="form-label" for="rule-http-path">{{t('modal.pathLabel')}} <span class="required">*</span></label>
-                                <input id="rule-http-path" class="form-control" v-model="form.matchKey" :class="{'is-invalid':formErrors.matchKey}" placeholder="/api/users/{id}">
-                                <div v-if="formErrors.matchKey" class="invalid-feedback validation-message--visible">{{formErrors.matchKey}}</div>
+                            <!-- Method and path read as one request line, like the header ("GET /api/orders"). -->
+                            <div class="rule-request-line">
+                                <div class="form-group form-group--tight">
+                                    <label class="form-label">{{t('modal.method')}} <span class="required">*</span></label>
+                                    <ui-choice-group class="method-group" option-class="method-btn" variant="compact"
+                                        v-model="form.method" :options="methodOptions" :aria-label="t('modal.method')"></ui-choice-group>
+                                    <div v-if="formErrors.method" class="invalid-feedback validation-message--visible">{{formErrors.method}}</div>
+                                </div>
+                                <div class="form-group form-group--tight">
+                                    <label class="form-label" for="rule-http-path">{{t('modal.pathLabel')}} <span class="required">*</span></label>
+                                    <input id="rule-http-path" class="form-control rule-path-input" v-model="form.matchKey" :class="{'is-invalid':formErrors.matchKey}" placeholder="/api/users/{id}">
+                                    <div v-if="formErrors.matchKey" class="invalid-feedback validation-message--visible">{{formErrors.matchKey}}</div>
+                                </div>
                             </div>
                             <div class="form-group form-group--flush">
                                 <label class="form-label" for="rule-source-host">{{t('modal.sourceHostMatch')}}</label>
@@ -961,9 +964,9 @@ const RuleEditModal = {
                             </div>
                             <div v-if="form.responseMode==='new' && form.protocol==='HTTP' && !form.sseEnabled" class="response-template-actions">
                                 <span><i class="bi bi-lightning-charge"></i> {{t('modal.template')}}</span>
-                                <ui-button type="button" class="btn btn-xs btn-secondary" @click="$emit('apply-template','json')">JSON</ui-button>
-                                <ui-button type="button" class="btn btn-xs btn-secondary" @click="$emit('apply-template','xml')">XML</ui-button>
-                                <ui-button type="button" class="btn btn-xs btn-secondary" @click="$emit('apply-template','text')">{{t('modal.plainText')}}</ui-button>
+                                <ui-button type="button" variant="quiet" size="compact" @click="$emit('apply-template','json')">JSON</ui-button>
+                                <ui-button type="button" variant="quiet" size="compact" @click="$emit('apply-template','xml')">XML</ui-button>
+                                <ui-button type="button" variant="quiet" size="compact" @click="$emit('apply-template','text')">{{t('modal.plainText')}}</ui-button>
                             </div>
                         </div>
                         <div v-if="form.responseMode==='new'" class="mock-core-fields">

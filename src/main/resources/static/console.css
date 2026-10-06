@@ -603,6 +603,25 @@
 .rule-modal-actions { display: flex; align-items: center; gap: 6px; flex: none }
 .rule-modal-actions__divider { width: 1px; height: 20px; margin-inline: 4px; background: var(--border) }
 
+/* Method and path read as one request line ("GET /api/orders"), at the same height as
+ * the inputs; when the pane is narrow the line stacks and the methods fill the width. */
+.rule-left { container: rule-left / inline-size }
+.rule-request-line { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-sm); align-items: start; margin-bottom: var(--editor-field-gap) }
+.rule-request-line > .form-group { min-width: 0; margin-bottom: 0 }
+.rule-request-line .method-group { display: grid; grid-template-columns: repeat(5, max-content); height: var(--control-h); padding: 2px }
+.rule-request-line .method-group .method-btn { min-height: calc(var(--control-h) - 4px); padding-inline: 9px }
+.rule-request-line .rule-path-input { font-family: var(--font-mono); font-size: 13px }
+@container rule-left (max-width: 500px) {
+    .rule-request-line { grid-template-columns: minmax(0, 1fr) }
+    .rule-request-line .method-group { grid-template-columns: repeat(5, minmax(0, 1fr)) }
+}
+/* Protocol is one segmented track, like the method group. */
+.ui-choice-group.rule-protocol-options > .rule-protocol-option { border: 0; background: transparent; box-shadow: none }
+.ui-choice-group.rule-protocol-options > .rule-protocol-option:hover:not(:disabled):not(.is-selected) { background: var(--hover) }
+.ui-choice-group.rule-protocol-options > .rule-protocol-option.is-selected { background: var(--surface-primary-strong); color: var(--text); box-shadow: inset 0 0 0 1px rgba(var(--primary-rgb), 0.48) }
+/* Help sits next to the label it explains. */
+.rule-info-grid .form-label-row { justify-content: flex-start }
+
 /* ===== Loading reveal =====
  * Most requests finish quickly. A placeholder that appears for a few frames and is
  * then swapped out reads as a flash, so loading placeholders stay invisible for a

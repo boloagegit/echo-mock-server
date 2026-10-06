@@ -180,6 +180,25 @@ class RuleEditModalResourceTest {
     }
 
     @Test
+    void methodAndPathReadAsOneRequestLineAndLabelsStayQuiet() throws IOException {
+        String component = resourceText("static/components/RuleEditModal.js");
+        int line = component.indexOf("<div class=\"rule-request-line\">");
+
+        assertThat(line).isPositive();
+        assertThat(component.indexOf("<ui-choice-group class=\"method-group\"", line)).isGreaterThan(line)
+                .isLessThan(component.indexOf("id=\"rule-http-path\"", line));
+        assertThat(resourceText("static/console.css"))
+                .contains(".rule-left { container: rule-left / inline-size }")
+                .contains("@container rule-left (max-width: 500px) {")
+                .contains(".ui-choice-group.rule-protocol-options > .rule-protocol-option { border: 0; background: transparent; box-shadow: none }");
+        // Field labels never outweigh the values they describe.
+        assertThat(resourceText("static/style.css"))
+                .contains(".form-label { display: block; font-size: var(--font-base); font-weight: var(--font-weight-medium); color: var(--muted);")
+                .contains(".response-template-actions .ui-button--quiet {");
+        assertThat(component).doesNotContain("btn btn-xs btn-secondary");
+    }
+
+    @Test
     void ctrlOrCmdEnterSavesAndClosesWhenTheRuleCanBeSaved() throws IOException {
         assertThat(resourceText("static/components/RuleEditModal.js"))
                 .contains("if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && props.editorMode === 'form') {")
