@@ -15,7 +15,7 @@ class BootExperienceResourceTest {
         String index = text("index.html");
         String head = index.substring(0, index.indexOf("</head>"));
 
-        assertThat(head).contains("<script src=\"/ui-boot.js?v=20261007.1\"></script>");
+        assertThat(head).contains("<script src=\"/ui-boot.js?v=20261007.3\"></script>");
         assertThat(text("ui-boot.js"))
                 .contains("root.setAttribute('data-theme', effective === 'light' ? 'light' : 'dark');")
                 .contains("root.setAttribute('data-density', density);")
@@ -34,6 +34,19 @@ class BootExperienceResourceTest {
                 .contains(".boot-shell__sidebar { flex: 0 0 var(--sidebar-width);")
                 .contains(".boot-shell.is-leaving { opacity: 0; pointer-events: none }")
                 .contains("@media (prefers-reduced-motion: reduce) { .boot-shell { transition: none } }");
+    }
+
+    @Test
+    void nothingContentfulPaintsBeforeTheAppIsReady() throws IOException {
+        // Browsers keep the previous page until the first contentful paint, so a reload
+        // swaps straight from the old page to the finished one instead of via a skeleton.
+        assertThat(text("ui-boot.js")).contains("root.classList.add('is-booting');");
+        assertThat(text("console.css"))
+                .contains(".is-booting #app { visibility: hidden }")
+                .contains(".boot-shell > * { animation: loadingReveal 160ms var(--ease-standard) 300ms both }");
+        assertThat(text("app.js"))
+                .contains("root.classList.remove('is-booting');")
+                .contains("if (performance.now() < BOOT_SHELL_VISIBLE_AFTER_MS) { shell.remove(); return; }");
     }
 
     @Test

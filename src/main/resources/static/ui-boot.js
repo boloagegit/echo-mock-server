@@ -6,6 +6,9 @@
  */
 (function () {
     var root = document.documentElement;
+    // The app stays invisible until it is ready (see revealApp), so the first contentful
+    // paint is the finished page; browsers keep showing the previous page until then.
+    root.classList.add('is-booting');
     try {
         var theme = localStorage.getItem('theme') || 'dark';
         var effective = theme === 'auto'

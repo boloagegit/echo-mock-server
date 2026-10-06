@@ -154,6 +154,40 @@ class RuleEditModalResourceTest {
     }
 
     @Test
+    void speaksTheSameLanguageAsTheListsAndDrawers() throws IOException {
+        String component = resourceText("static/components/RuleEditModal.js");
+        String stylesheet = resourceText("static/style.css");
+        String console = resourceText("static/console.css");
+
+        // The header names the rule being edited, with the same method colour as the list.
+        assertThat(component)
+                .contains("<p v-if=\"form.matchKey\" class=\"rule-modal-context\">")
+                .contains("<span class=\"rule-method\" :data-method=\"form.protocol==='HTTP' ? (form.method || 'GET') : null\"")
+                .doesNotContain("modal-heading-icon")
+                .doesNotContain("rule-pane-heading-icon");
+        // On/off state uses switches; section headings are text only.
+        assertThat(component)
+                .contains("<ui-toggle :checked=\"form.enabled\"")
+                .contains("<ui-toggle :checked=\"form.isProtected\"")
+                .doesNotContain("class=\"rule-state-control\"")
+                .doesNotContain("<div class=\"form-block-header\"><i ");
+        // A solid accent fill is reserved for the primary button; selections are tinted.
+        assertThat(stylesheet)
+                .doesNotContain(".protocol-btn.active { background: var(--btn-primary)")
+                .doesNotContain(".rule-editor-mode-switch button.active { background: var(--btn-primary)")
+                .contains(".rule-editor .form-block-header { color: var(--text-subtle); font-size: 11px; letter-spacing: 0.08em }");
+        assertThat(console).contains(".workspace-modal .modal-footer > .ui-button--quiet { color: var(--muted) }");
+    }
+
+    @Test
+    void ctrlOrCmdEnterSavesAndClosesWhenTheRuleCanBeSaved() throws IOException {
+        assertThat(resourceText("static/components/RuleEditModal.js"))
+                .contains("if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && props.editorMode === 'form') {")
+                .contains("if (props.canSave && !props.saving) emit('save', true);")
+                .contains("<span v-else class=\"modal-footer-hint\"><kbd>{{saveShortcutKey}}</kbd><kbd>Enter</kbd>");
+    }
+
+    @Test
     void alignsPaneHeadingsAboveTheirPrimaryControls() throws IOException {
         String component = resourceText("static/components/RuleEditModal.js");
         String stylesheet = resourceText("static/style.css");

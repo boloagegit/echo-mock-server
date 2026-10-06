@@ -1253,7 +1253,8 @@
     "scenarioName": "Scenario Name",
     "requiredState": "Required State",
     "newState": "New State",
-    "scenarioStatePlaceholder": "e.g., Started"
+    "scenarioStatePlaceholder": "e.g., Started",
+    "saveAndCloseShortcut": "Save and close"
   },
   "confirm": {
     "discardRuleTitle": "Discard rule changes?",

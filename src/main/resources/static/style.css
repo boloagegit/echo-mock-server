@@ -912,12 +912,7 @@ td .sub-info { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
     background: var(--surface-control);
 }
 .response-type-switch .protocol-btn:hover { border-color: transparent; background: rgba(var(--muted-rgb), 0.12) }
-.response-type-switch .protocol-btn.active {
-    border-color: transparent;
-    background: var(--surface-primary-strong);
-    color: var(--primary);
-    box-shadow: none;
-}
+.response-type-switch .protocol-btn.active { background: var(--surface-primary-strong); border-color: transparent; color: var(--primary); box-shadow: inset 0 0 0 1px rgba(var(--primary-rgb), 0.48) }
 .response-type-check { margin-inline-start: auto; font-size: 14px }
 .response-editor-toolbar { display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-sm) }
 .response-editor-toolbar .form-label { margin: 0 }
@@ -1444,7 +1439,6 @@ kbd {
 .rule-left { flex: none; display: flex; flex-direction: column; gap: var(--block-gap); padding-inline-end: var(--editor-pane-inline); padding-block-end: var(--editor-pane-inline); min-width: 280px }
 .rule-right { flex: 1; display: flex; flex-direction: column; gap: var(--block-gap); min-width: 360px; margin-inline-start: 0; padding-inline-start: var(--editor-pane-inline); padding-block-end: var(--editor-pane-inline); border-radius: var(--radius-surface); background: transparent; container-type: inline-size }
 .rule-pane-heading { min-height: 32px; display: flex; align-items: flex-start; gap: var(--editor-field-gap); padding-bottom: var(--editor-toolbar-padding) }
-.rule-pane-heading-icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; color: var(--primary) }
 .rule-pane-title-row { min-width: 0; min-height: 24px; display: inline-flex; align-items: center; gap: var(--space-xs) }
 .rule-pane-heading strong { color: var(--text); font-size: var(--font-md); font-weight: var(--font-weight-semibold); line-height: 1.35 }
 .help-tooltip {
@@ -1642,8 +1636,7 @@ textarea.form-control.auto-resize { min-height: 60px; max-height: 200px; resize:
     gap: 0.35rem;
 }
 .protocol-btn:hover { border-color: var(--primary); color: var(--text) }
-.protocol-btn.active { background: var(--btn-primary); border-color: var(--btn-primary); color: var(--on-primary) }
-.protocol-btn.jms.active { background: var(--btn-primary); border-color: var(--btn-primary) }
+.protocol-btn.active { background: var(--surface-primary-strong); border-color: transparent; color: var(--primary); box-shadow: inset 0 0 0 1px rgba(var(--primary-rgb), 0.48) }
 .protocol-btn:disabled { opacity: 0.4; cursor: not-allowed }
 .protocol-btn:disabled:hover { border-color: var(--border); color: var(--muted) }
 
@@ -1665,12 +1658,7 @@ textarea.form-control.auto-resize { min-height: 60px; max-height: 200px; resize:
 .method-group .method-btn:last-child { border-radius: 0 var(--radius-control) var(--radius-control) 0 }
 .method-group .method-btn:not(:first-child) { border-left: none }
 .method-group .method-btn:hover { color: var(--text); background: var(--hover) }
-.method-group .method-btn.active { color: var(--on-primary); border-color: transparent }
-.method-group .method-btn.active.GET,
-.method-group .method-btn.active.POST,
-.method-group .method-btn.active.PUT,
-.method-group .method-btn.active.DELETE,
-.method-group .method-btn.active.PATCH { background: var(--btn-primary); color: var(--on-primary) }
+/* Selected methods take their method colour (console.css). */
 
 /* Form Left Panel */
 .form-left { display: flex; flex-direction: column; gap: var(--block-gap) }
@@ -1688,8 +1676,8 @@ textarea.form-control.auto-resize { min-height: 60px; max-height: 200px; resize:
 }
 .form-block-header i { font-size: var(--font-base) }
 .form-block-header .hint { font-weight: 400; margin-left: auto }
-.rule-editor .form-block-header { color: var(--text); font-size: var(--font-base) }
-.rule-editor .form-block-header > i:first-child { color: var(--primary) }
+.rule-editor .form-block-header { color: var(--text-subtle); font-size: 11px; letter-spacing: 0.08em }
+.rule-editor .form-block + .form-block { border-top: 1px solid var(--separator) }
 .rule-editor .form-control {
     border-color: transparent;
     background: var(--surface-control);
@@ -1722,8 +1710,7 @@ textarea.form-control.auto-resize { min-height: 60px; max-height: 200px; resize:
     color: var(--text);
 }
 .rule-editor .protocol-btn:hover { background: rgba(var(--muted-rgb), 0.12) }
-.rule-editor .protocol-btn.active { background: var(--btn-primary); color: var(--on-primary); box-shadow: none }
-.rule-editor .protocol-btn.jms.active { background: var(--btn-primary); color: var(--on-primary) }
+.rule-editor .protocol-btn.active { background: var(--surface-primary-strong); border-color: transparent; color: var(--primary); box-shadow: inset 0 0 0 1px rgba(var(--primary-rgb), 0.48) }
 .rule-editor .method-group { gap: var(--space-2xs); padding: var(--editor-shell-padding); border-radius: 8px; background: var(--surface-control) }
 .rule-editor .method-group .method-btn { border: 0; border-radius: var(--radius-control); background: transparent }
 .rule-editor .method-group .method-btn:first-child,
@@ -1733,17 +1720,17 @@ textarea.form-control.auto-resize { min-height: 60px; max-height: 200px; resize:
 .rule-editor-mode-switch {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-2xs);
-    padding: 3px;
-    border-radius: 8px;
-    background: var(--surface-control);
+    gap: 2px;
+    padding: 2px;
+    border-radius: 7px;
+    background: var(--surface-neutral-soft);
 }
 .rule-editor-mode-switch button {
     display: inline-flex;
     align-items: center;
     gap: var(--space-xs);
-    min-height: var(--control-h-sm);
-    padding: 0 var(--space-md);
+    min-height: calc(var(--control-h-sm) - 6px);
+    padding: 0 var(--space-sm);
     border: 0;
     border-radius: var(--radius-control);
     background: transparent;
@@ -1753,7 +1740,8 @@ textarea.form-control.auto-resize { min-height: 60px; max-height: 200px; resize:
     cursor: pointer;
 }
 .rule-editor-mode-switch button:hover { background: rgba(var(--muted-rgb), 0.12); color: var(--text) }
-.rule-editor-mode-switch button.active { background: var(--btn-primary); color: var(--on-primary) }
+.rule-editor-mode-switch button.active,
+.rule-editor-mode-switch button.active:hover { background: var(--surface-raised); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18) }
 .rule-editor-mode-switch button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px }
 .rule-identity-block { display: flex; flex-direction: column; gap: var(--space-md) }
 .rule-control-row { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: var(--space-md); align-items: center }
@@ -1778,35 +1766,13 @@ textarea.form-control.auto-resize { min-height: 60px; max-height: 200px; resize:
     transition-duration: var(--motion-fast);
 }
 .rule-protocol-option:hover { background: rgba(var(--muted-rgb), 0.12) }
-.rule-protocol-option.is-selected { background: var(--surface-primary-strong); color: var(--text); font-weight: 600 }
+.rule-protocol-option.is-selected { background: var(--surface-primary-strong); color: var(--text); font-weight: 600; box-shadow: inset 0 0 0 1px rgba(var(--primary-rgb), 0.48) }
 .rule-protocol-option.is-selected > i:first-child { color: var(--primary) }
-.rule-protocol-option:focus-visible,
-.rule-state-control:focus-visible { outline: 0; box-shadow: var(--focus-ring) }
+.rule-protocol-option:focus-visible { outline: 0; box-shadow: var(--focus-ring) }
 .rule-protocol-option:disabled { color: var(--muted); opacity: 0.55; cursor: not-allowed }
-.rule-state-controls { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs) }
-.rule-state-control {
-    min-height: var(--control-h-sm);
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-xs);
-    padding: var(--space-xs) var(--space-sm);
-    border: 0;
-    border-radius: var(--radius-control);
-    background: transparent;
-    color: var(--text);
-    font: inherit;
-    font-size: var(--font-sm);
-    cursor: pointer;
-    transition-property: background-color, color;
-    transition-duration: var(--motion-fast);
-}
-.rule-state-control:hover,
-.rule-state-control.is-active { background: var(--surface-neutral-soft) }
-.rule-state-control.is-active { font-weight: 600 }
-.rule-state-control > i { color: var(--muted) }
-.rule-state-control.is-active > i:first-child { color: var(--success) }
-.rule-state-control.is-risk > i:first-child { color: var(--danger) }
-.rule-state-control.is-selected > i:first-child { color: var(--primary) }
+/* On/off rule state uses the same switch as the rule list. */
+.rule-state-controls { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs) var(--space-lg) }
+.rule-switch { display: inline-flex; align-items: center; gap: var(--space-xs); color: var(--text); font-size: var(--font-sm); cursor: pointer; user-select: none }
 .rule-info-grid { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: var(--space-sm); align-items: start }
 .rule-info-grid > .form-group { margin-bottom: var(--editor-field-gap) }
 .rule-info-grid > .form-group > .form-label,
@@ -3590,7 +3556,6 @@ input[type="checkbox"] {
 .connection-form-modal .protocol-switch { gap: var(--space-2xs); padding: 3px; border-radius: 8px; background: var(--surface-control) }
 .connection-form-modal .protocol-btn { border: 0; border-radius: var(--radius-control); background: transparent }
 .connection-form-modal .protocol-btn:hover { background: rgba(var(--muted-rgb), 0.12) }
-.connection-form-modal .protocol-btn.active { background: var(--btn-primary); box-shadow: none }
 .connection-form-modal .modal-footer { border: 0; padding: var(--space-md) var(--space-lg); background: var(--surface-neutral-soft); box-shadow: none }
 .connection-form-modal .modal-footer .btn-secondary { border: 0; background: var(--surface-control) }
 .connection-settings-section .settings-card-header > span { display: inline-flex; align-items: center; gap: var(--space-sm) }
@@ -5016,17 +4981,11 @@ a:focus-visible,
     border-radius: 6px;
     background: var(--code-bg);
 }
-.rule-editor .form-block-header {
-    padding-bottom: var(--space-xs);
-    border-bottom: 1px solid var(--separator);
-}
 .rule-editor .protocol-switch,
 .rule-editor-mode-switch,
 .response-mode-toolbar {
     border: 1px solid var(--separator);
 }
-.rule-editor .protocol-btn.active,
-.rule-editor-mode-switch button.active { background: var(--btn-primary); border-color: var(--btn-primary) }
 .response-mode-toolbar { background: var(--surface-neutral-soft) }
 .response-preview-loading,
 .response-preview-empty { border: 1px dashed var(--border2); background: var(--surface-neutral-soft) }
@@ -5493,8 +5452,7 @@ a:focus-visible,
 .ui-choice-group--compact .ui-choice-group__option { min-height: var(--control-h-sm); padding-inline: 10px; font-size: var(--font-sm) }
 .ui-choice-group__option:hover:not(:disabled) { color: var(--text); background: rgba(var(--muted-rgb), 0.1) }
 .ui-choice-group__option.active { border-color: rgba(var(--primary-rgb), 0.48); background: var(--surface-primary-soft); color: var(--text); font-weight: 600 }
-.ui-choice-group__option.protocol-btn.active { color: var(--on-primary) }
-.response-type-switch .ui-choice-group__option.protocol-btn.active { color: var(--primary) }
+.ui-choice-group__option.protocol-btn.active { color: var(--primary) }
 .ui-choice-group__option:focus-visible { outline: 0; box-shadow: var(--focus-ring) }
 .ui-choice-group__option:disabled { opacity: 0.55; cursor: not-allowed }
 .ui-choice-group__copy { min-width: 0; display: flex; flex-direction: column; text-align: start }
@@ -5951,7 +5909,7 @@ select.form-select-sm { height: var(--control-h-sm); min-height: var(--control-h
     }
     .rule-modal-fullscreen > .modal-header {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-columns: minmax(0, 1fr) auto auto;
         gap: var(--space-sm);
         align-items: center;
     }
@@ -5960,17 +5918,16 @@ select.form-select-sm { height: var(--control-h-sm); min-height: var(--control-h
         grid-column: 1;
         grid-row: 1;
     }
-    .rule-modal-heading-area > .rule-editor-mode-switch {
+    .rule-modal-actions { display: contents }
+    .rule-modal-actions > .rule-editor-mode-switch {
         grid-column: 1 / -1;
         grid-row: 2;
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         width: 100%;
     }
-    .rule-modal-actions {
-        grid-column: 2;
-        grid-row: 1;
-    }
+    .rule-modal-actions > .rule-modal-actions__divider { display: none }
+    .rule-modal-actions > .close-btn { grid-row: 1 }
     .rule-apply-inline > .rule-apply-body { padding: var(--space-sm) }
     .rule-apply-toolbar > .ui-button:last-child { margin-inline-start: 0 }
     .rule-apply-template-controls .ui-button { flex: 1 1 calc(50% - var(--space-xs)) }

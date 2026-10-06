@@ -400,10 +400,20 @@ const _app = createApp({
             setTimeout(() => { loading.value.status = false; }, 2000);
         };
         const BOOT_DATA_WAIT_MS = 600;
-        /** Fade out the static boot shell once the first real frame is ready (idempotent). */
+        // The boot shell fades in after 300 ms (console.css); before that there is nothing to fade out.
+        const BOOT_SHELL_VISIBLE_AFTER_MS = 300;
+        /**
+         * Show the finished app (idempotent). Until now nothing contentful was painted, so on a
+         * reload the browser kept the previous page on screen and swaps straight to this one.
+         * The boot shell only shows if startup is slow; then it fades out instead of cutting.
+         */
         const revealApp = () => {
+            const root = document.documentElement;
+            if (!root.classList.contains('is-booting')) { return; }
+            root.classList.remove('is-booting');
             const shell = document.getElementById('boot-shell');
-            if (!shell || shell.classList.contains('is-leaving')) { return; }
+            if (!shell) { return; }
+            if (performance.now() < BOOT_SHELL_VISIBLE_AFTER_MS) { shell.remove(); return; }
             shell.classList.add('is-leaving');
             setTimeout(() => shell.remove(), 180);
         };
