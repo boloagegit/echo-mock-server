@@ -298,7 +298,10 @@ class ListRefinementResourceTest {
         assertThat(console)
                 .contains(".ui-detail-drawer {")
                 .contains(".detail-grid { display: grid; grid-template-columns: 116px minmax(0, 1fr);")
-                .contains(".main:has(.ui-detail-drawer) { padding-inline-end: calc(var(--drawer-w) + var(--space-lg)) }")
+                // The drawer floats over the list (no layout push) and goes full screen on phones.
+                .doesNotContain(".main:has(.ui-detail-drawer)")
+                .contains("border-radius: var(--radius-surface);\n    background: var(--card);")
+                .contains(".ui-detail-drawer { inset: 0; width: 100vw; border: 0; border-radius: 0 }")
                 .contains("@container (max-width: 860px) {\n    .rule-table .col-cond { display: none }");
     }
 

@@ -211,18 +211,20 @@
 
 .ui-detail-drawer {
     position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
+    top: 12px;
+    right: 12px;
+    bottom: 12px;
     z-index: 120;
-    width: min(var(--drawer-w), 100vw);
+    width: min(var(--drawer-w), calc(100vw - 24px));
     display: flex;
     flex-direction: column;
-    border-left: 1px solid var(--border2);
+    overflow: hidden;
+    border: 1px solid var(--border2);
+    border-radius: var(--radius-surface);
     background: var(--card);
-    box-shadow: -28px 0 56px -28px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.2);
 }
-:root[data-theme="light"] .ui-detail-drawer { box-shadow: -28px 0 56px -28px rgba(20, 23, 27, 0.22) }
+:root[data-theme="light"] .ui-detail-drawer { box-shadow: 0 24px 64px -12px rgba(20, 23, 27, 0.28), 0 2px 6px rgba(20, 23, 27, 0.06) }
 .ui-detail-drawer:focus { outline: none }
 .ui-detail-drawer:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px }
 .ui-detail-drawer__header { display: flex; align-items: flex-start; gap: var(--space-md); padding: 16px 12px 14px 20px; border-bottom: 1px solid var(--border) }
@@ -241,13 +243,13 @@
 .ui-drawer-motion-enter-active,
 .ui-drawer-motion-leave-active { transition: transform var(--motion-slow) var(--ease-standard), opacity var(--motion-base) var(--ease-standard) }
 .ui-drawer-motion-enter-from,
-.ui-drawer-motion-leave-to { transform: translateX(28px); opacity: 0 }
+.ui-drawer-motion-leave-to { transform: translateX(16px) scale(0.99); opacity: 0 }
 @media (prefers-reduced-motion: reduce) {
     .ui-drawer-motion-enter-active,
     .ui-drawer-motion-leave-active { transition: none }
 }
 @media (max-width: 768px) {
-    .ui-detail-drawer { width: 100vw; border-left: 0 }
+    .ui-detail-drawer { inset: 0; width: 100vw; border: 0; border-radius: 0 }
 }
 
 /* Shared building blocks for drawer content. */
@@ -435,14 +437,5 @@
 .rule-detail .ui-detail-drawer__title { font-family: var(--font-mono); font-size: 14px }
 .rule-detail-forward { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px }
 
-/* Wide screens: the open drawer pushes the workspace instead of covering it, so
- * header actions stay reachable and the table drops low-priority columns. */
-@media (min-width: 1100px) {
-    .main { transition: padding-inline-end var(--motion-slow) var(--ease-standard) }
-    .main:has(.ui-detail-drawer) { padding-inline-end: calc(var(--drawer-w) + var(--space-lg)) }
-}
-@media (min-width: 1100px) and (prefers-reduced-motion: reduce) {
-    .main { transition: none }
-}
 .ui-detail-drawer code,
 .data-table code { color: inherit }
