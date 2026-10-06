@@ -1442,9 +1442,6 @@ textarea.form-control { min-height: 80px; font-family: var(--font-mono); font-si
 .rule-editor-mode-switch button.active,
 .rule-editor-mode-switch button.active:hover { background: var(--surface-raised); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18) }
 .rule-editor-mode-switch button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px }
-.rule-identity-block { display: flex; flex-direction: column; gap: var(--space-md) }
-.rule-control-row { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: var(--space-md); align-items: center }
-.rule-control-label { color: var(--muted); font-size: var(--font-sm); font-weight: var(--font-weight-medium) }
 .rule-protocol-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; padding: 2px; border-radius: 8px; background: var(--surface-control) }
 .rule-protocol-option {
     min-width: 0;

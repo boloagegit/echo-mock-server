@@ -1256,7 +1256,16 @@
     "requiredState": "Required State",
     "newState": "New State",
     "scenarioStatePlaceholder": "e.g., Started",
-    "saveAndCloseShortcut": "Save and close"
+    "saveAndCloseShortcut": "Save and close",
+    "ruleNamePlaceholder": "Name this rule",
+    "conditionSummary": "{count} conditions",
+    "requestPane": "Request",
+    "requestPaneHint": "Matches when all of these hold",
+    "responsePane": "Response",
+    "responsePaneHint": "What happens on a match",
+    "conditionAllMatch": "All must match",
+    "ruleSettings": "Rule settings",
+    "responseTypeSseStream": "SSE stream"
   },
   "confirm": {
     "discardRuleTitle": "Discard rule changes?",

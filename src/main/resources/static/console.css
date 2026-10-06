@@ -646,6 +646,50 @@
 .rule-modal-actions { display: flex; align-items: center; gap: 6px; flex: none }
 .rule-modal-actions__divider { width: 1px; height: 20px; margin-inline: 4px; background: var(--border) }
 
+/* Rule editor, request → response layout: the header names the rule and summarises it in
+ * one line; the request pane matches, the response pane answers; testing sits in a bar below. */
+.rule-modal-fullscreen .modal-heading { width: 100% }
+.rule-modal-fullscreen .modal-heading h2 { color: var(--text-subtle); font-size: var(--font-xs); font-weight: var(--font-weight-medium) }
+.rule-modal-name { display: flex; width: 100% }
+.rule-modal-name input { flex: 1; min-width: 0; max-width: 720px; margin-inline-start: -6px; padding: 1px 6px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--text); font-size: 18px; font-weight: var(--font-weight-semibold); line-height: 1.4 }
+.rule-modal-name input:hover { border-color: var(--border) }
+.rule-modal-name input:focus { outline: 0; border-color: var(--primary); background: var(--surface-control) }
+.rule-modal-name input::placeholder { color: var(--text-subtle); font-weight: var(--font-weight-medium) }
+.rule-modal-context { flex-wrap: wrap; gap: 4px 8px; color: var(--muted) }
+.rule-modal-context > .bi { color: var(--text-subtle); font-size: 12px }
+.rule-modal-context__chip { padding: 0 6px; border-radius: 4px; background: var(--surface-neutral-soft); color: var(--muted) }
+.rule-modal-context__result { min-width: 0; overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap }
+.rule-modal-actions .rule-state-controls { flex-wrap: nowrap; gap: 14px }
+.rule-editor .rule-pane-heading { align-items: center; justify-content: space-between; gap: var(--space-md); min-height: 40px; margin-bottom: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--separator) }
+.rule-editor .rule-pane-title-row { align-items: baseline; gap: 8px }
+.rule-pane-hint { color: var(--text-subtle); font-size: var(--font-xs) }
+.rule-pane-heading > .rule-protocol-options,
+.rule-pane-heading > .result-primary-row { flex: none }
+.rule-pane-heading > .rule-protocol-options > .rule-protocol-option { min-height: calc(var(--control-h-sm) - 4px); padding-inline: var(--space-sm); font-size: var(--font-xs) }
+.rule-pane-heading .ui-segmented-control__description { display: none }
+.rule-mode-description { margin: -4px 0 0; color: var(--text-subtle); font-size: var(--font-xs); line-height: 1.5 }
+.form-block-hint { margin-inline-start: 6px; color: var(--text-subtle); font-size: var(--font-xs); font-weight: var(--font-weight-regular); letter-spacing: 0 }
+.response-status-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm) var(--space-md); margin-bottom: var(--editor-field-gap) }
+.response-status-row .response-status-field { margin-inline-start: 0 }
+.rule-settings-disclosure > summary { list-style: none; cursor: pointer }
+.rule-settings-disclosure > summary::-webkit-details-marker { display: none }
+.rule-settings-disclosure > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px }
+.rule-settings-chevron { margin-inline-end: 6px; font-size: 10px; transition: transform var(--motion-fast) var(--ease-standard) }
+.rule-settings-disclosure[open] .rule-settings-chevron { transform: rotate(90deg) }
+.rule-settings-disclosure[open] > summary { margin-bottom: var(--editor-field-gap) }
+.rule-settings-disclosure .rule-info-grid { grid-template-columns: 140px }
+.rule-settings-disclosure .scenario-match-settings { margin-top: var(--editor-field-gap) }
+.rule-test-bar { flex: none; max-height: 45vh; overflow-y: auto; padding: 0 var(--editor-pane-inline); border-top: 1px solid var(--border); background: var(--surface-neutral-soft) }
+.rule-test-bar > .rule-test-block { padding: 0; border-radius: 0; background: transparent }
+.rule-test-bar .rule-test-toggle { min-height: 44px; margin: 0; padding: 0; border: 0 }
+.rule-test-bar .rule-test-panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 10px 20px; padding-bottom: 14px }
+.rule-test-bar .rule-test-panel > * { grid-column: 1 }
+/* The result sits beside the request it answers; before the first run the inputs use the full width. */
+.rule-test-bar .rule-test-panel > .rule-test-output { grid-column: 2; grid-row: 1 / span 4; margin: 0 }
+.rule-test-bar .rule-test-panel:not(:has(> .rule-test-output)) > * { grid-column: 1 / -1 }
+.rule-test-bar .rule-test-body { height: 76px; min-height: 76px }
+@media (prefers-reduced-motion: reduce) { .rule-settings-chevron { transition: none } }
+
 /* Method and path read as one request line ("GET /api/orders"), at the same height as
  * the inputs; when the pane is narrow the line stacks and the methods fill the width. */
 .rule-left { container: rule-left / inline-size }

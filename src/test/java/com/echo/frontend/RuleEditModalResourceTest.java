@@ -199,6 +199,40 @@ class RuleEditModalResourceTest {
     }
 
     @Test
+    void editorReadsAsRequestThenResponseWithSettingsAndTestOutOfTheWay() throws IOException {
+        String component = resourceText("static/components/RuleEditModal.js");
+        int header = component.indexOf("<div class=\"modal-header\">");
+        int body = component.indexOf("<div v-if=\"editorMode==='form'\" class=\"modal-body rule-editor\"");
+        int right = component.indexOf("<div class=\"rule-right\">");
+
+        // Header: the description is the editable title, followed by a one-line summary of the rule;
+        // enabled / protected sit with the window controls.
+        String headerPart = component.substring(header, body);
+        assertThat(headerPart)
+                .contains("<input id=\"ruleDescription\" v-model=\"form.description\" :placeholder=\"t('modal.ruleNamePlaceholder')\"")
+                .contains("<span class=\"rule-modal-context__result\">{{ruleModeSummary}}</span>")
+                .contains("<ui-toggle :checked=\"form.enabled\"")
+                .contains("<ui-toggle :checked=\"form.isProtected\"");
+        // Request pane: protocol in its heading, then the request line, conditions and collapsed settings.
+        String requestPart = component.substring(body, right);
+        assertThat(requestPart)
+                .contains("<strong>{{t('modal.requestPane')}}</strong>")
+                .contains("<ui-choice-group class=\"rule-protocol-options\"")
+                .contains("<details class=\"form-block rule-settings-disclosure\">")
+                .doesNotContain("rule-identity-block")
+                .doesNotContain("rule-test-block");
+        // Response pane: rule mode in its heading; SSE is a response type next to the status code.
+        assertThat(component.substring(right))
+                .contains("<strong>{{t('modal.responsePane')}}</strong>")
+                .contains(":model-value=\"!!form.sseEnabled\" :options=\"responseTypeOptions\"");
+        // Testing lives in a collapsible bar under both panes, its result beside the request.
+        assertThat(component).contains("<section v-if=\"editorMode==='form' && editing\" class=\"rule-test-bar\"");
+        assertThat(resourceText("static/console.css"))
+                .contains(".rule-test-bar .rule-test-panel > .rule-test-output { grid-column: 2; grid-row: 1 / span 4; margin: 0 }")
+                .contains(".rule-pane-heading .ui-segmented-control__description { display: none }");
+    }
+
+    @Test
     void ctrlOrCmdEnterSavesAndClosesWhenTheRuleCanBeSaved() throws IOException {
         assertThat(resourceText("static/components/RuleEditModal.js"))
                 .contains("if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && props.editorMode === 'form') {")

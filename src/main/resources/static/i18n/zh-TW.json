@@ -1256,7 +1256,16 @@
     "requiredState": "前置狀態",
     "newState": "新狀態",
     "scenarioStatePlaceholder": "例如 Started",
-    "saveAndCloseShortcut": "儲存並關閉"
+    "saveAndCloseShortcut": "儲存並關閉",
+    "ruleNamePlaceholder": "為這條規則取個名字",
+    "conditionSummary": "{count} 個條件",
+    "requestPane": "請求",
+    "requestPaneHint": "符合這些條件時命中",
+    "responsePane": "回應",
+    "responsePaneHint": "命中後的處理",
+    "conditionAllMatch": "全部符合才命中",
+    "ruleSettings": "規則設定",
+    "responseTypeSseStream": "SSE 串流"
   },
   "confirm": {
     "discardRuleTitle": "放棄規則修改？",

@@ -316,6 +316,30 @@ const RuleEditModal = {
             }
             return t('modal.ruleResultMockHint');
         });
+        const responseTypeOptions = Vue.computed(() => [
+            { value: false, label: t('modal.responseTypeGeneral') },
+            { value: true, label: t('modal.responseTypeSseStream') },
+        ]);
+        /** The header's one-line summary: request → what happens. */
+        const ruleModeSummary = Vue.computed(() => {
+            if (ruleMode.value === 'FAULT') return t('modal.faultAction');
+            if (ruleMode.value === 'FORWARD') return t('modal.forwardAction') + ' · ' + forwardTargetLabel.value;
+            const parts = [];
+            if (props.form.protocol === 'HTTP' && props.form.status) parts.push(String(props.form.status));
+            if (props.form.responseMode === 'existing') {
+                if (props.form.responseId) parts.push(selectedResponse.value?.description || '#' + props.form.responseId);
+            } else {
+                parts.push(props.form.responseDescription || t('modal.createNewResponse'));
+            }
+            return parts.join(' · ');
+        });
+        const ruleSettingsSummary = Vue.computed(() => {
+            const parts = [t('modal.priority') + ' ' + (props.form.priority || 0)];
+            const tagCount = Object.keys(parseTags(props.form.tags)).length;
+            if (tagCount) parts.push(t('rules.tagCountSummary', { count: tagCount }));
+            if (props.form.scenarioName) parts.push(props.form.scenarioName);
+            return parts.join(' · ');
+        });
         const faultConnectionResetLabel = Vue.computed(() =>
             props.form.protocol === 'JMS'
                 ? t('modal.faultSkipJmsReply')
@@ -524,6 +548,7 @@ const RuleEditModal = {
             selectedResponse, forwardSelection, availableHttpTargetConnections, defaultHttpTargetConnection,
             availableJmsTargetConnections, defaultJmsTargetConnection, targetDisplayName,
             ruleMode, ruleModeOptions, editorModeTabs, protocolOptions, responseModeOptions, methodOptions,
+            responseTypeOptions, ruleModeSummary, ruleSettingsSummary,
             responsePickerFilterOptions, setResponseMode,
             ruleModeDescription, faultEnabled, faultBehaviorHint, faultConnectionResetLabel,
             selectedForwardTarget, forwardSourceSummary, forwardTargetLabel, forwardDestinationUrl,
@@ -543,13 +568,31 @@ const RuleEditModal = {
                 <div class="rule-modal-heading-area">
                     <div class="modal-heading">
                         <h2 id="ruleEditorTitle">{{editing ? t('modal.editRule') : t('modal.addRule')}}</h2>
+                        <label class="rule-modal-name">
+                            <span class="visually-hidden">{{t('modal.ruleDescription')}}</span>
+                            <input id="ruleDescription" v-model="form.description" :placeholder="t('modal.ruleNamePlaceholder')" maxlength="255" autocomplete="off">
+                        </label>
                         <p v-if="form.matchKey" class="rule-modal-context">
                             <span class="rule-method" :data-method="form.protocol==='HTTP' ? (form.method || 'GET') : null" :data-protocol="form.protocol">{{form.protocol==='HTTP' ? (form.method || 'GET') : 'JMS'}}</span>
                             <code>{{form.matchKey}}</code>
+                            <span v-if="conditions.length" class="rule-modal-context__chip">{{t('modal.conditionSummary', {count: conditions.length})}}</span>
+                            <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                            <span class="rule-modal-context__result">{{ruleModeSummary}}</span>
                         </p>
                     </div>
                 </div>
                 <div class="rule-modal-actions">
+                    <div class="rule-state-controls" role="group" :aria-label="t('modal.ruleState')">
+                        <span class="rule-switch" @click="form.enabled=!form.enabled">
+                            <ui-toggle :checked="form.enabled" :aria-label="t('modal.formEnabled')" @toggle="form.enabled=!form.enabled"></ui-toggle>
+                            <span>{{t('modal.formEnabled')}}</span>
+                        </span>
+                        <span class="rule-switch" :title="t('modal.protectedTooltip')" @click="form.isProtected=!form.isProtected">
+                            <ui-toggle :checked="form.isProtected" :aria-label="t('modal.formProtected')" @toggle="form.isProtected=!form.isProtected"></ui-toggle>
+                            <span>{{t('modal.formProtected')}}</span>
+                        </span>
+                    </div>
+                    <span class="rule-modal-actions__divider" aria-hidden="true"></span>
                     <ui-tabs class="rule-editor-mode-switch" :inert="saving" variant="compact" :model-value="editorMode"
                         :items="editorModeTabs" :aria-label="t('modal.settingMode')"
                         @update:model-value="$emit('change-editor-mode',$event)"></ui-tabs>
@@ -561,43 +604,17 @@ const RuleEditModal = {
             <div v-if="editorMode==='form'" class="modal-body rule-editor" :inert="saving" :aria-busy="saving">
                 <!-- 左側：匹配條件 + 測試 -->
                 <div class="rule-left">
-                    <div class="rule-pane-heading">
+                    <div class="rule-pane-heading" data-tour="protocol">
                         <span class="rule-pane-title-row">
-                            <strong>{{t('modal.ruleConditions')}}</strong>
-                            <button type="button" class="help-tooltip tooltip-align-start" :data-tooltip="t('modal.ruleConditionsHint')" :aria-label="t('modal.ruleConditions') + '：' + t('modal.ruleConditionsHint')" @keydown.esc="$event.currentTarget.blur()">
-                                <i class="bi bi-question-circle" aria-hidden="true"></i>
-                            </button>
+                            <strong>{{t('modal.requestPane')}}</strong>
+                            <span class="rule-pane-hint">{{t('modal.requestPaneHint')}}</span>
                         </span>
-                    </div>
-                    <!-- 協定與規則狀態 -->
-                    <div class="form-block rule-identity-block" data-tour="protocol">
-                        <div class="rule-control-row">
-                            <div id="ruleProtocolLabel" class="rule-control-label">{{t('modal.protocolLabel')}}</div>
-                            <ui-choice-group class="rule-protocol-options" option-class="rule-protocol-option"
-                                :model-value="form.protocol" :options="protocolOptions" :aria-label="t('modal.protocolLabel')"
-                                @update:model-value="$emit('set-protocol',$event)"></ui-choice-group>
-                        </div>
-                        <div class="rule-control-row">
-                            <div id="ruleStateLabel" class="rule-control-label">{{t('modal.ruleState')}}</div>
-                            <div class="rule-state-controls" role="group" aria-labelledby="ruleStateLabel">
-                                <span class="rule-switch" @click="form.enabled=!form.enabled">
-                                    <ui-toggle :checked="form.enabled" :aria-label="t('modal.formEnabled')" @toggle="form.enabled=!form.enabled"></ui-toggle>
-                                    <span>{{t('modal.formEnabled')}}</span>
-                                </span>
-                                <span class="rule-switch" :title="t('modal.protectedTooltip')" @click="form.isProtected=!form.isProtected">
-                                    <ui-toggle :checked="form.isProtected" :aria-label="t('modal.formProtected')" @toggle="form.isProtected=!form.isProtected"></ui-toggle>
-                                    <span>{{t('modal.formProtected')}}</span>
-                                </span>
-                                <span v-if="form.protocol==='HTTP' && form.action!=='FORWARD' && !faultEnabled" class="rule-switch" @click="form.sseEnabled=!form.sseEnabled">
-                                    <ui-toggle :checked="form.sseEnabled" aria-label="SSE" @toggle="form.sseEnabled=!form.sseEnabled"></ui-toggle>
-                                    <span>SSE</span>
-                                </span>
-                            </div>
-                        </div>
+                        <ui-choice-group class="rule-protocol-options" option-class="rule-protocol-option" variant="compact"
+                            :model-value="form.protocol" :options="protocolOptions" :aria-label="t('modal.protocolLabel')"
+                            @update:model-value="$emit('set-protocol',$event)"></ui-choice-group>
                     </div>
                     <!-- 匹配路徑 -->
                     <div class="form-block" data-tour="match">
-                        <div class="form-block-header">{{form.protocol==='HTTP' ? t('modal.matchPath') : t('modal.matchQueue')}}</div>
                         <template v-if="form.protocol==='HTTP'">
                             <!-- Method and path read as one request line, like the header ("GET /api/orders"). -->
                             <div class="rule-request-line">
@@ -634,7 +651,7 @@ const RuleEditModal = {
                     <!-- 條件匹配 -->
                     <div class="form-block" data-tour="conditions">
                         <div class="form-block-header">
-                            {{t('modal.conditionMatch')}}
+                            {{t('modal.conditionMatch')}}<span class="form-block-hint">{{t('modal.conditionAllMatch')}}</span>
                             <ui-badge v-if="conditions.length" class="badge badge-muted ms-auto">{{conditions.length}}</ui-badge>
                         </div>
                         <div class="cond-builder">
@@ -661,18 +678,16 @@ const RuleEditModal = {
                             <div v-if="showBodyConditionWarning" class="cond-warning"><i class="bi bi-info-circle"></i> {{t('modal.bodyConditionWarning', {method: form.method})}}</div>
                         </div>
                     </div>
-                    <!-- 規則資訊 -->
-                    <div class="form-block">
-                        <div class="form-block-header">{{t('modal.ruleInfo')}}</div>
+                    <!-- 規則設定：優先度、標籤與情境匹配，平常收合 -->
+                    <details class="form-block rule-settings-disclosure">
+                        <summary class="form-block-header rule-settings-summary">
+                            <i class="bi bi-chevron-right rule-settings-chevron" aria-hidden="true"></i>{{t('modal.ruleSettings')}}<span class="form-block-hint">{{ruleSettingsSummary}}</span>
+                        </summary>
                         <div class="rule-info-grid">
-                            <div class="form-group">
-                                <label class="form-label" for="ruleDescription">{{t('modal.ruleDescription')}}</label>
-                                <input id="ruleDescription" class="form-control" v-model="form.description" :placeholder="t('modal.ruleDescription')" maxlength="255">
-                            </div>
                             <div class="form-group">
                                 <div class="form-label-row">
                                     <label class="form-label" for="rulePriority">{{t('modal.priority')}}</label>
-                                    <button type="button" class="help-tooltip tooltip-align-end" :data-tooltip="t('modal.priorityTooltip')" :aria-label="t('modal.priority') + '：' + t('modal.priorityTooltip')" @keydown.esc="$event.currentTarget.blur()">
+                                    <button type="button" class="help-tooltip tooltip-align-start" :data-tooltip="t('modal.priorityTooltip')" :aria-label="t('modal.priority') + '：' + t('modal.priorityTooltip')" @keydown.esc="$event.currentTarget.blur()">
                                         <i class="bi bi-question-circle" aria-hidden="true"></i>
                                     </button>
                                 </div>
@@ -694,105 +709,22 @@ const RuleEditModal = {
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    <!-- Scenario matching is a condition; the resulting state transition lives in the right pane. -->
-                    <div v-if="scenarioEnabled" class="form-block scenario-match-settings">
-                        <div class="form-block-header">{{t('modal.scenarioMatch')}}</div>
-                        <div class="scenario-match-fields">
-                            <div class="form-group">
-                                <label class="form-label" for="ruleScenarioName">{{t('modal.scenarioName')}}</label>
-                                <input id="ruleScenarioName" class="form-control" v-model.trim="form.scenarioName" :placeholder="t('modal.optional')" maxlength="100" :class="{'is-invalid':formErrors.scenarioName}">
+                        <!-- Scenario matching is a condition; the resulting state transition lives in the response pane. -->
+                        <div v-if="scenarioEnabled" class="scenario-match-settings">
+                            <span class="form-label">{{t('modal.scenarioMatch')}}</span>
+                            <div class="scenario-match-fields">
+                                <div class="form-group">
+                                    <label class="form-label" for="ruleScenarioName">{{t('modal.scenarioName')}}</label>
+                                    <input id="ruleScenarioName" class="form-control" v-model.trim="form.scenarioName" :placeholder="t('modal.optional')" maxlength="100" :class="{'is-invalid':formErrors.scenarioName}">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="ruleRequiredScenarioState">{{t('modal.requiredState')}}</label>
+                                    <input id="ruleRequiredScenarioState" class="form-control" v-model.trim="form.requiredScenarioState" :placeholder="t('modal.scenarioStatePlaceholder')" maxlength="100" :disabled="!form.scenarioName">
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label class="form-label" for="ruleRequiredScenarioState">{{t('modal.requiredState')}}</label>
-                                <input id="ruleRequiredScenarioState" class="form-control" v-model.trim="form.requiredScenarioState" :placeholder="t('modal.scenarioStatePlaceholder')" maxlength="100" :disabled="!form.scenarioName">
-                            </div>
+                            <div v-if="formErrors.scenarioName" class="invalid-feedback scenario-field-error">{{formErrors.scenarioName}}</div>
                         </div>
-                        <div v-if="formErrors.scenarioName" class="invalid-feedback scenario-field-error">{{formErrors.scenarioName}}</div>
-                    </div>
-                    <!-- 測試區 (僅編輯時) -->
-                    <div v-if="editing" class="form-block rule-test-block">
-                        <button type="button" class="form-block-header rule-test-toggle" :aria-expanded="testExpanded" aria-controls="ruleTestPanel" @click="$emit('update:test-expanded',!testExpanded)">
-                            <i class="bi" :class="testExpanded?'bi-chevron-down':'bi-chevron-right'" aria-hidden="true"></i>
-                            <span>{{t('modal.testRule')}}</span>
-                        </button>
-                        <div v-show="testExpanded" id="ruleTestPanel" class="rule-test-panel">
-                            <div class="rule-test-target">
-                                <div class="rule-test-target-primary">
-                                    <template v-if="form.protocol==='HTTP'">
-                                        <ui-badge class="badge badge-method" :data-method="form.method||'GET'">{{form.method||'GET'}}</ui-badge>
-                                        <code>/mock{{form.matchKey==='*'?'/test':form.matchKey}}</code>
-                                    </template>
-                                    <template v-else>
-                                        <ui-badge class="badge badge-jms">JMS</ui-badge>
-                                        <code>{{form.matchKey||'*'}}</code>
-                                    </template>
-                                </div>
-                                <span v-if="form.targetHost" class="rule-test-host"><i class="bi bi-arrow-right" aria-hidden="true"></i>{{form.targetHost}}</span>
-                                <span v-if="conditions.length" class="rule-test-condition-count">{{t('modal.testConditionCount', {count:conditions.length})}}</span>
-                            </div>
-                            <div class="rule-test-fields">
-                                <template v-if="form.protocol==='HTTP'">
-                                    <div class="form-group">
-                                        <label class="form-label" for="testQuery">{{t('modal.testQuery')}}</label>
-                                        <input id="testQuery" class="form-control form-control-sm" v-model="testParams.query" :placeholder="form.queryCondition||'key=value&...'">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label" for="testHeaders">{{t('modal.testHeaders')}}</label>
-                                        <input id="testHeaders" class="form-control form-control-sm" v-model="testParams.headersStr" :placeholder="t('modal.testHeadersPlaceholder')">
-                                    </div>
-                                    <div class="form-group rule-test-wide">
-                                        <label class="form-label" for="testBody">{{t('modal.testBody')}}</label>
-                                        <textarea id="testBody" class="form-control form-control-sm rule-test-body" v-model="testParams.body" rows="6" :placeholder="form.bodyCondition||t('modal.testBodyPlaceholder')"></textarea>
-                                    </div>
-                                </template>
-                                <template v-else>
-                                    <div class="form-group rule-test-wide">
-                                        <label class="form-label" for="testMessage">{{t('modal.testMessage')}}</label>
-                                        <textarea id="testMessage" class="form-control form-control-sm rule-test-body" v-model="testParams.body" rows="6" :placeholder="form.bodyCondition||t('modal.testMessagePlaceholder')"></textarea>
-                                    </div>
-                                    <div class="form-group rule-test-timeout">
-                                        <label class="form-label" for="testTimeout">{{t('modal.testTimeout')}}</label>
-                                        <div class="input-affix"><input id="testTimeout" type="number" class="form-control form-control-sm" v-model.number="testParams.timeout" min="1"><span class="input-affix-postfix">{{t('modal.seconds')}}</span></div>
-                                    </div>
-                                </template>
-                            </div>
-                            <div class="rule-test-actions">
-                                <ui-button type="button" variant="primary" size="compact" @click="$emit('run-test')" :disabled="testLoading">
-                                    <i class="bi" :class="testLoading?'bi-arrow-clockwise spin':'bi-send'" aria-hidden="true"></i>{{t('modal.sendTest')}}
-                                </ui-button>
-                                <ui-button type="button" variant="secondary" size="compact" @click="$emit('generate-test-data')" :disabled="!conditions.length" :title="t('modal.generateTestData')">
-                                    <i class="bi bi-magic" aria-hidden="true"></i>{{t('modal.generateTestData')}}
-                                </ui-button>
-                                <ui-button v-if="testLoading && testSseMode" type="button" variant="danger" size="compact" @click="$emit('stop-sse-test')">
-                                    <i class="bi bi-stop-circle" aria-hidden="true"></i>{{t('modal.stop')}}
-                                </ui-button>
-                            </div>
-                            <section v-if="testSseMode && testSseEvents.length" class="rule-test-output" aria-live="polite">
-                                <div class="rule-test-output-header">
-                                    <span><i class="bi bi-broadcast" aria-hidden="true"></i>{{t('modal.sseEvents')}}</span>
-                                    <span class="rule-test-output-meta">{{t('modal.sseEventCount', {count:testSseEvents.length})}}</span>
-                                </div>
-                                <ol class="rule-test-sse-list">
-                                    <li v-for="(ev, i) in testSseEvents" :key="i" class="rule-test-sse-event">
-                                        <div class="rule-test-sse-meta"><span>{{t('modal.ssePreviewEventIndex', {index:i+1})}}</span><span>{{ev.time}} ms</span><code v-if="ev.event">event: {{ev.event}}</code><code v-if="ev.id">id: {{ev.id}}</code></div>
-                                        <pre>{{ev.data}}</pre>
-                                    </li>
-                                </ol>
-                            </section>
-                            <section v-if="!testSseMode && testResult" class="rule-test-output" :class="{'is-error':testResult.status>=400}" aria-live="polite">
-                                <div class="rule-test-output-header">
-                                    <span><i class="bi" :class="testResult.status<400?'bi-terminal':'bi-exclamation-triangle'" aria-hidden="true"></i>{{testResult.status<400?t('modal.testResult'):t('modal.error')}}</span>
-                                    <span class="rule-test-output-meta tabular-nums">{{testResult.status}} · {{testResult.elapsed}} ms</span>
-                                </div>
-                                <pre class="test-result">{{testResult.body}}</pre>
-                            </section>
-                            <section v-if="testSseMode && testResult" class="rule-test-output is-error" aria-live="assertive">
-                                <div class="rule-test-output-header"><span><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>{{t('modal.error')}}</span><span class="rule-test-output-meta">{{testResult.status}}</span></div>
-                                <pre class="test-result">{{testResult.body}}</pre>
-                            </section>
-                        </div>
-                    </div>
+                    </details>
                 </div>
                 <!-- 拖拽分隔線 -->
                 <div class="rule-splitter" :class="{dragging:splitterDragging}"
@@ -806,17 +738,17 @@ const RuleEditModal = {
                     <div class="rule-right-content" :inert="responseDropdownOpen ? '' : null" :aria-hidden="responseDropdownOpen ? 'true' : undefined">
                     <div class="rule-pane-heading">
                         <span class="rule-pane-title-row">
-                            <strong>{{t('modal.ruleMode')}}</strong>
-                            <button type="button" class="help-tooltip tooltip-align-start" :data-tooltip="t('modal.ruleModeHint')" :aria-label="t('modal.ruleMode') + '：' + t('modal.ruleModeHint')" @keydown.esc="$event.currentTarget.blur()">
-                                <i class="bi bi-question-circle" aria-hidden="true"></i>
-                            </button>
+                            <strong>{{t('modal.responsePane')}}</strong>
+                            <span class="rule-pane-hint">{{t('modal.responsePaneHint')}}</span>
                         </span>
+                        <div class="result-primary-row">
+                            <ui-segmented-control v-model="ruleMode" name="ruleMode" size="compact"
+                                :options="ruleModeOptions" :aria-label="t('modal.ruleMode')"
+                                :description="ruleModeDescription"></ui-segmented-control>
+                        </div>
                     </div>
-                    <div class="result-primary-row">
-                        <ui-segmented-control v-model="ruleMode" name="ruleMode"
-                            :options="ruleModeOptions" :aria-label="t('modal.ruleMode')"
-                            :description="ruleModeDescription"></ui-segmented-control>
-                    </div>
+                    <!-- The control keeps the description for screen readers; this line shows it under the pane heading. -->
+                    <p class="rule-mode-description" aria-hidden="true">{{ruleModeDescription}}</p>
                     <Transition name="ui-mode-panel-motion" mode="out-in">
                         <div v-if="ruleMode==='FORWARD'" key="forward" class="form-block forward-settings">
                             <div class="form-block-header">{{t('modal.forwardTarget')}}</div>
@@ -952,16 +884,23 @@ const RuleEditModal = {
                         </div>
                     <!-- 回應模式 + 統一選擇器 -->
                     <div v-else key="mock" class="form-block mock-result-settings" data-tour="response">
+                        <!-- 回應的形狀：狀態碼與一般／SSE 串流（SSE 描述的是回應，所以放在這裡） -->
+                        <div v-if="form.protocol==='HTTP'" class="response-status-row">
+                            <div class="response-status-field">
+                                <label for="ruleStatus">{{t('modal.statusCode')}}</label>
+                                <input id="ruleStatus" type="number" class="form-control" v-model.number="form.status" min="100" max="599" :class="{'is-invalid':formErrors.status}">
+                                <div v-if="formErrors.status" class="invalid-feedback result-field-error">{{formErrors.status}}</div>
+                            </div>
+                            <ui-choice-group class="protocol-switch response-type-choice" option-class="protocol-btn" variant="compact"
+                                :model-value="!!form.sseEnabled" :options="responseTypeOptions" :aria-label="t('modal.responseType')"
+                                @update:model-value="form.sseEnabled=$event"></ui-choice-group>
+                        </div>
+                        <!-- 回應內容的來源：使用現有回應或建立新的 -->
                         <div class="response-mode-toolbar">
                             <span class="response-mode-label">{{t('modal.responseMode')}}</span>
                             <ui-choice-group class="protocol-switch" option-class="protocol-btn" variant="compact"
                                 :model-value="form.responseMode" :options="responseModeOptions" :aria-label="t('modal.responseMode')"
                                 @update:model-value="setResponseMode"></ui-choice-group>
-                            <div v-if="form.protocol==='HTTP'" class="response-status-field">
-                                <label for="ruleStatus">{{t('modal.statusCode')}}</label>
-                                <input id="ruleStatus" type="number" class="form-control" v-model.number="form.status" min="100" max="599" :class="{'is-invalid':formErrors.status}">
-                                <div v-if="formErrors.status" class="invalid-feedback result-field-error">{{formErrors.status}}</div>
-                            </div>
                             <div v-if="form.responseMode==='new' && form.protocol==='HTTP' && !form.sseEnabled" class="response-template-actions">
                                 <span><i class="bi bi-lightning-charge"></i> {{t('modal.template')}}</span>
                                 <ui-button type="button" variant="quiet" size="compact" @click="$emit('apply-template','json')">JSON</ui-button>
@@ -1249,6 +1188,92 @@ const RuleEditModal = {
                 </div>
             </div>
             <slot v-else name="declarative"></slot>
+            <!-- 測試列：在兩個窗格下方，平常收合 -->
+            <section v-if="editorMode==='form' && editing" class="rule-test-bar" :aria-label="t('modal.testRule')">
+                    <div class="form-block rule-test-block">
+                        <button type="button" class="form-block-header rule-test-toggle" :aria-expanded="testExpanded" aria-controls="ruleTestPanel" @click="$emit('update:test-expanded',!testExpanded)">
+                            <i class="bi" :class="testExpanded?'bi-chevron-down':'bi-chevron-right'" aria-hidden="true"></i>
+                            <span>{{t('modal.testRule')}}</span>
+                        </button>
+                        <div v-show="testExpanded" id="ruleTestPanel" class="rule-test-panel">
+                            <div class="rule-test-target">
+                                <div class="rule-test-target-primary">
+                                    <template v-if="form.protocol==='HTTP'">
+                                        <ui-badge class="badge badge-method" :data-method="form.method||'GET'">{{form.method||'GET'}}</ui-badge>
+                                        <code>/mock{{form.matchKey==='*'?'/test':form.matchKey}}</code>
+                                    </template>
+                                    <template v-else>
+                                        <ui-badge class="badge badge-jms">JMS</ui-badge>
+                                        <code>{{form.matchKey||'*'}}</code>
+                                    </template>
+                                </div>
+                                <span v-if="form.targetHost" class="rule-test-host"><i class="bi bi-arrow-right" aria-hidden="true"></i>{{form.targetHost}}</span>
+                                <span v-if="conditions.length" class="rule-test-condition-count">{{t('modal.testConditionCount', {count:conditions.length})}}</span>
+                            </div>
+                            <div class="rule-test-fields">
+                                <template v-if="form.protocol==='HTTP'">
+                                    <div class="form-group">
+                                        <label class="form-label" for="testQuery">{{t('modal.testQuery')}}</label>
+                                        <input id="testQuery" class="form-control form-control-sm" v-model="testParams.query" :placeholder="form.queryCondition||'key=value&...'">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label" for="testHeaders">{{t('modal.testHeaders')}}</label>
+                                        <input id="testHeaders" class="form-control form-control-sm" v-model="testParams.headersStr" :placeholder="t('modal.testHeadersPlaceholder')">
+                                    </div>
+                                    <div class="form-group rule-test-wide">
+                                        <label class="form-label" for="testBody">{{t('modal.testBody')}}</label>
+                                        <textarea id="testBody" class="form-control form-control-sm rule-test-body" v-model="testParams.body" rows="6" :placeholder="form.bodyCondition||t('modal.testBodyPlaceholder')"></textarea>
+                                    </div>
+                                </template>
+                                <template v-else>
+                                    <div class="form-group rule-test-wide">
+                                        <label class="form-label" for="testMessage">{{t('modal.testMessage')}}</label>
+                                        <textarea id="testMessage" class="form-control form-control-sm rule-test-body" v-model="testParams.body" rows="6" :placeholder="form.bodyCondition||t('modal.testMessagePlaceholder')"></textarea>
+                                    </div>
+                                    <div class="form-group rule-test-timeout">
+                                        <label class="form-label" for="testTimeout">{{t('modal.testTimeout')}}</label>
+                                        <div class="input-affix"><input id="testTimeout" type="number" class="form-control form-control-sm" v-model.number="testParams.timeout" min="1"><span class="input-affix-postfix">{{t('modal.seconds')}}</span></div>
+                                    </div>
+                                </template>
+                            </div>
+                            <div class="rule-test-actions">
+                                <ui-button type="button" variant="primary" size="compact" @click="$emit('run-test')" :disabled="testLoading">
+                                    <i class="bi" :class="testLoading?'bi-arrow-clockwise spin':'bi-send'" aria-hidden="true"></i>{{t('modal.sendTest')}}
+                                </ui-button>
+                                <ui-button type="button" variant="secondary" size="compact" @click="$emit('generate-test-data')" :disabled="!conditions.length" :title="t('modal.generateTestData')">
+                                    <i class="bi bi-magic" aria-hidden="true"></i>{{t('modal.generateTestData')}}
+                                </ui-button>
+                                <ui-button v-if="testLoading && testSseMode" type="button" variant="danger" size="compact" @click="$emit('stop-sse-test')">
+                                    <i class="bi bi-stop-circle" aria-hidden="true"></i>{{t('modal.stop')}}
+                                </ui-button>
+                            </div>
+                            <section v-if="testSseMode && testSseEvents.length" class="rule-test-output" aria-live="polite">
+                                <div class="rule-test-output-header">
+                                    <span><i class="bi bi-broadcast" aria-hidden="true"></i>{{t('modal.sseEvents')}}</span>
+                                    <span class="rule-test-output-meta">{{t('modal.sseEventCount', {count:testSseEvents.length})}}</span>
+                                </div>
+                                <ol class="rule-test-sse-list">
+                                    <li v-for="(ev, i) in testSseEvents" :key="i" class="rule-test-sse-event">
+                                        <div class="rule-test-sse-meta"><span>{{t('modal.ssePreviewEventIndex', {index:i+1})}}</span><span>{{ev.time}} ms</span><code v-if="ev.event">event: {{ev.event}}</code><code v-if="ev.id">id: {{ev.id}}</code></div>
+                                        <pre>{{ev.data}}</pre>
+                                    </li>
+                                </ol>
+                            </section>
+                            <section v-if="!testSseMode && testResult" class="rule-test-output" :class="{'is-error':testResult.status>=400}" aria-live="polite">
+                                <div class="rule-test-output-header">
+                                    <span><i class="bi" :class="testResult.status<400?'bi-terminal':'bi-exclamation-triangle'" aria-hidden="true"></i>{{testResult.status<400?t('modal.testResult'):t('modal.error')}}</span>
+                                    <span class="rule-test-output-meta tabular-nums">{{testResult.status}} · {{testResult.elapsed}} ms</span>
+                                </div>
+                                <pre class="test-result">{{testResult.body}}</pre>
+                            </section>
+                            <section v-if="testSseMode && testResult" class="rule-test-output is-error" aria-live="assertive">
+                                <div class="rule-test-output-header"><span><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>{{t('modal.error')}}</span><span class="rule-test-output-meta">{{testResult.status}}</span></div>
+                                <pre class="test-result">{{testResult.body}}</pre>
+                            </section>
+                        </div>
+                    </div>
+            </section>
+
             <div v-if="editorMode==='form' && showCatchAllWarning" class="catch-all-warning">
                 <i class="bi bi-exclamation-triangle-fill"></i>
                 <span>{{t('modal.catchAllWarning')}}</span>
