@@ -8,6 +8,7 @@ const UiRowMenu = {
   props: {
     items: { type: Array, required: true },
     label: { type: String, required: true },
+    icon: { type: String, default: 'bi-three-dots-vertical' },
   },
   emits: ['select'],
   data() {
@@ -33,7 +34,7 @@ const UiRowMenu = {
   },
   template: /* html */`
     <ui-dropdown-menu class="ui-row-menu" :open="open" :items="items" :trigger-label="label" viewport-safe
-      trigger-variant="quiet" trigger-size="compact"
+      trigger-variant="quiet" trigger-size="compact" :trigger-icon="icon"
       @toggle="open = !open" @close="open = false" @select="select"></ui-dropdown-menu>
   `,
 };

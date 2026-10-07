@@ -90,6 +90,43 @@ class ResponseContentEditorResourceTest {
                 .contains(".response-picker-drawer-results.is-stale > .response-picker-drawer-item { opacity: 0.55;");
     }
 
+    @Test
+    void responsePaneUsesOneLabelColumnAndOneToolbarRowWithIconActions() throws IOException {
+        String rule = text("components/RuleEditModal.js");
+        String viewer = text("components/UiCodeViewer.js");
+        String console = text("console.css");
+
+        // Wrap, format and copy are icon buttons with names; the label and state sit in the toolbar's lead slot.
+        assertThat(viewer)
+                .contains("<div v-if=\"$slots.lead\" class=\"ui-code-viewer__lead\"><slot name=\"lead\"></slot></div>")
+                .contains(":title=\"t('codeViewer.wrap')\" :aria-label=\"t('codeViewer.wrap')\"")
+                .contains(":title=\"t('codeViewer.format')\" :aria-label=\"t('codeViewer.format')\"");
+        assertThat(rule)
+                .contains("class=\"response-edit-toggle\" @click=\"$emit('toggle-preview-editing')\" :title=\"editResponseLabel\" :aria-label=\"editResponseLabel\"")
+                .contains(":title=\"t('modal.searchDifferentResponseLabel')\" :aria-label=\"t('modal.searchDifferentResponseLabel')\"")
+                .contains("<strong>{{t('modal.currentSelection')}}</strong>")
+                .doesNotContain("class=\"response-selected-label\"");
+        assertThat(console)
+                .contains(".mock-result-settings { --result-label-w: 148px }")
+                .contains(".mock-result-settings .response-existing-panel.has-selection { display: grid; grid-template-columns: var(--result-label-w) minmax(0, 1fr);")
+                .contains(".rule-editor .result-advanced-summary-icon { display: none }");
+    }
+
+    @Test
+    void onlyTheEditorScrollsAndThePickerAlwaysStartsAtThePaneTop() throws IOException {
+        String console = text("console.css");
+
+        // The body fills what the settings leave (220px minimum) instead of a fixed 420px that pushed the
+        // editor and its status line below the pane; scrolling inside it does not carry on into the pane.
+        assertThat(console)
+                .contains(".rule-editor .response-content-block { flex: 1 1 auto; min-height: 220px }")
+                .contains(".ui-code-viewer__host .CodeMirror-scroll { overscroll-behavior: contain }")
+                .contains(".rule-right:has(> .response-picker-drawer) { overflow: hidden }")
+                .contains(".rule-editor .response-picker-drawer { inset: 0;");
+        assertThat(text("components/RuleEditModal.js"))
+                .contains("dialogRef.value?.querySelector('.rule-right')?.scrollTo({ top: 0 });");
+    }
+
     private static String text(String name) throws IOException {
         return new ClassPathResource("static/" + name).getContentAsString(StandardCharsets.UTF_8);
     }

@@ -63,7 +63,7 @@ class AlignmentPassResourceTest {
     void responseModeToolbarWrapsInsteadOfSqueezingItsLabels() throws IOException {
         assertThat(text("console.css"))
                 .contains(".response-mode-toolbar { flex-wrap: wrap; row-gap: var(--space-xs) }")
-                .contains(".response-mode-toolbar .protocol-btn,\n.response-template-actions { white-space: nowrap }");
+                .contains(".response-mode-label,\n.response-mode-toolbar .protocol-btn { white-space: nowrap }");
     }
 
     @Test

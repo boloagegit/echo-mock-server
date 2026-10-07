@@ -1,7 +1,7 @@
 /**
  * RuleEditModal - 規則建立/編輯 Modal
  * 最大的元件，包含協定切換、條件匹配、回應編輯、SSE 編輯器、測試區等功能。
- * CodeMirror 編輯器使用 DOM id-based getter pattern 讓父層 renderEditor() 仍可運作。
+ * 回應內容使用共用的 ui-code-viewer（與抽屜相同的工具列），以 props／事件與父層同步。
  */
 const RuleEditModal = {
     props: {
@@ -80,6 +80,15 @@ const RuleEditModal = {
         const responsePickerActiveIndex = ref(-1);
         // The response content can take over the whole editor body for long bodies; Esc returns.
         const contentExpanded = ref(false);
+        const templateMenuItems = Vue.computed(() => [
+            { key: 'json', label: 'JSON', icon: 'bi-braces' },
+            { key: 'xml', label: 'XML', icon: 'bi-code-slash' },
+            { key: 'text', label: t('modal.plainText'), icon: 'bi-file-text' },
+        ]);
+        // The viewer shows once a selected response has loaded and has a body (or is being edited).
+        const showPreviewViewer = Vue.computed(() => !!props.form?.responseId && !props.previewResponseLoading && !props.previewResponseLoadFailed
+            && (!!props.previewResponseBody?.length || props.previewEditing));
+        const editResponseLabel = Vue.computed(() => (selectedResponse.value?.usageCount || props.previewResponseUsageCount) > 1 ? t('modal.editSharedResponse') : t('modal.editResponse2'));
         const responsePickerResults = ref(null);
         // A new page (or search) starts at its first row.
         Vue.watch(() => props.filteredResponsePicker, () => Vue.nextTick(() => { if (responsePickerResults.value) responsePickerResults.value.scrollTop = 0; }));
@@ -109,6 +118,8 @@ const RuleEditModal = {
         });
         const openResponsePicker = () => {
             responsePickerActiveIndex.value = -1;
+            // The picker covers the pane from its top; start there so it is never half off screen.
+            dialogRef.value?.querySelector('.rule-right')?.scrollTo({ top: 0 });
             emit('open-response-picker');
         };
         const toggleResponsePicker = () => {
@@ -548,7 +559,7 @@ const RuleEditModal = {
             if (previousFocus instanceof HTMLElement && document.contains(previousFocus)) previousFocus.focus();
         });
         return {
-            dialogRef, responsePickerLaunch, responsePickerInput, responsePickerActiveIndex, contentExpanded, responsePickerResults,
+            dialogRef, responsePickerLaunch, responsePickerInput, responsePickerActiveIndex, contentExpanded, responsePickerResults, showPreviewViewer, editResponseLabel, templateMenuItems,
             responseOptionId, openResponsePicker, closeResponsePicker, toggleResponsePicker, selectResponse,
             onResponsePickerKeydown, onResponseSearchInput, clearResponseSearch, onDialogKeydown, saveShortcutKey,
             selectedResponse, forwardSelection, availableHttpTargetConnections, defaultHttpTargetConnection,
@@ -915,12 +926,6 @@ const RuleEditModal = {
                             <ui-choice-group class="protocol-switch" option-class="protocol-btn" variant="compact"
                                 :model-value="form.responseMode" :options="responseModeOptions" :aria-label="t('modal.responseMode')"
                                 @update:model-value="setResponseMode"></ui-choice-group>
-                            <div v-if="form.responseMode==='new' && form.protocol==='HTTP' && !form.sseEnabled" class="response-template-actions">
-                                <span><i class="bi bi-lightning-charge"></i> {{t('modal.template')}}</span>
-                                <ui-button type="button" variant="quiet" size="compact" @click="$emit('apply-template','json')">JSON</ui-button>
-                                <ui-button type="button" variant="quiet" size="compact" @click="$emit('apply-template','xml')">XML</ui-button>
-                                <ui-button type="button" variant="quiet" size="compact" @click="$emit('apply-template','text')">{{t('modal.plainText')}}</ui-button>
-                            </div>
                         </div>
                         <div v-if="form.responseMode==='new'" class="mock-core-fields">
                             <div class="form-group result-description-field">
@@ -930,11 +935,10 @@ const RuleEditModal = {
                         </div>
                         <div v-if="form.responseMode==='existing'" class="response-existing-panel" :class="{'has-selection':form.responseId}">
                             <div v-if="form.responseId" class="response-picker-heading">
-                                <strong>{{t('modal.responsePickerLabel')}}</strong>
+                                <strong>{{t('modal.currentSelection')}}</strong>
                             </div>
                             <!-- 已選擇的回應 -->
                             <div v-if="form.responseId" class="response-selected-card">
-                                <span class="response-selected-label"><i class="bi bi-check-circle-fill" aria-hidden="true"></i>{{t('modal.currentSelection')}}</span>
                                 <div class="response-selected-content">
                                     <strong class="response-selected-desc">{{selectedResponse?.description||t('responses.noDescription')}}</strong>
                                     <div class="response-selected-meta">
@@ -949,8 +953,8 @@ const RuleEditModal = {
                                     </div>
                                 </div>
                                 <div class="response-selected-actions">
-                                    <ui-button ref="responsePickerLaunch" type="button" variant="secondary" size="compact" class="response-picker-change" @click="toggleResponsePicker" aria-controls="ruleResponsePickerDrawer" :aria-expanded="responseDropdownOpen">
-                                        <i class="bi bi-search" aria-hidden="true"></i>{{t('modal.searchDifferentResponseLabel')}}
+                                    <ui-button ref="responsePickerLaunch" type="button" variant="secondary" size="compact" icon-only class="response-picker-change" @click="toggleResponsePicker" aria-controls="ruleResponsePickerDrawer" :aria-expanded="responseDropdownOpen" :title="t('modal.searchDifferentResponseLabel')" :aria-label="t('modal.searchDifferentResponseLabel')">
+                                        <i class="bi bi-arrow-left-right" aria-hidden="true"></i>
                                     </ui-button>
                                     <ui-button type="button" variant="secondary" size="compact" icon-only @click="$emit('go-to-responses',form.responseId)" :title="t('modal.goToResponseManagement')" :aria-label="t('modal.goToResponseManagement')"><i class="bi bi-box-arrow-up-right"></i></ui-button>
                                     <ui-button type="button" variant="secondary" size="compact" icon-only @click="$emit('clear-response-selection')" :title="t('modal.clearSelection')" :aria-label="t('modal.clearSelection')"><i class="bi bi-x-lg"></i></ui-button>
@@ -1087,46 +1091,51 @@ const RuleEditModal = {
                             <div v-if="formErrors.responseBody" class="invalid-feedback rule-sse-error">{{formErrors.responseBody}}</div>
                         </div>
                         <!-- 使用現有回應 (非 SSE) -->
+                        <!-- The label, state and actions live in the viewer's own toolbar: one row above the body
+                             instead of a header row plus a toolbar row. Secondary actions are icon buttons. -->
                         <div v-else-if="form.responseMode==='existing'" class="response-content-mode">
-                            <div class="preview-toolbar">
+                            <div v-if="!showPreviewViewer" class="preview-toolbar">
                                 <span class="response-content-label">{{t('modal.responseContent')}}</span>
                                 <template v-if="form.responseId && !previewResponseLoading && !previewResponseLoadFailed">
-                                    <ui-button type="button" variant="quiet" size="compact" :class="previewEditing?'btn-warning':'btn-secondary'" @click="$emit('toggle-preview-editing')" :title="previewEditing ? t('modal.cancelEdit') : t('modal.editResponse2')">
-                                        <i class="bi" :class="previewEditing?'bi-x-lg':'bi-pencil'"></i>
-                                        {{previewEditing ? t('modal.cancelEdit') : ((selectedResponse?.usageCount||previewResponseUsageCount) > 1 ? t('modal.editSharedResponse') : t('modal.editResponse2'))}}
-                                    </ui-button>
-                                    <span v-if="previewEditing && previewResponseUsageCount > 1" class="badge badge-warning response-shared-warning" :title="t('modal.modifyAffectsAll')">
-                                        <i class="bi bi-exclamation-triangle"></i> {{t('modal.sharedWarning', {count: previewResponseUsageCount})}}
-                                    </span>
-                                    <span v-if="!previewResponseBody.length" class="response-body-state"><i class="bi bi-file-earmark" aria-hidden="true"></i>{{t('modal.emptyResponseBody')}}</span>
-                                    <span class="response-body-size">{{fmtSize(previewResponseBody.length)}}</span>
-                                    <ui-button v-if="previewEditing" type="button" variant="primary" size="compact" class="preview-save-action" @click="$emit('save-preview-response')" :disabled="previewSaving">
-                                        <i class="bi" :class="previewSaving?'bi-hourglass-split':'bi-check-lg'"></i> {{t('modal.saveResponse')}}
-                                    </ui-button>
+                                    <span class="response-body-state"><i class="bi bi-file-earmark" aria-hidden="true"></i>{{t('modal.emptyResponseBody')}}</span>
+                                    <ui-button v-if="!previewEditing" type="button" variant="quiet" size="compact" icon-only class="response-edit-toggle" @click="$emit('toggle-preview-editing')" :title="editResponseLabel" :aria-label="editResponseLabel"><i class="bi bi-pencil" aria-hidden="true"></i></ui-button>
                                 </template>
                             </div>
                             <div v-if="form.responseId && previewResponseLoading" class="response-preview-loading loading-reveal"><i class="bi bi-hourglass-split spin"></i> {{t('modal.loadingResponse')}}</div>
                             <div v-else-if="form.responseId && previewResponseLoadFailed" class="response-preview-empty response-preview-error"><i class="bi bi-exclamation-circle" aria-hidden="true"></i><span>{{t('modal.responseLoadFailed')}}</span></div>
-                            <div v-else-if="form.responseId" v-show="previewResponseBody.length || previewEditing" class="response-preview-wrap">
+                            <div v-else-if="form.responseId" v-show="showPreviewViewer" class="response-preview-wrap">
                                 <!-- One viewer for reading and editing (same toolbar as the drawers); it switches in place, so nothing blinks. -->
                                 <ui-code-viewer class="rule-response-code" :class="{'is-warning': previewEditing}" fill :editable="previewEditing" :label="t('modal.responseContent')"
                                     :value="previewEditing ? (previewEditBody || '') : previewResponseBody"
                                     @update:value="$emit('update:preview-edit-body', $event)" @copy="$emit('copy-text', $event)">
-                                    <template #tools><ui-button type="button" variant="quiet" size="compact" icon-only class="rule-response-expand" :aria-pressed="contentExpanded ? 'true' : 'false'" :title="contentExpanded ? t('modal.collapseContent') : t('modal.expandContent')" :aria-label="contentExpanded ? t('modal.collapseContent') : t('modal.expandContent')" @click="contentExpanded = !contentExpanded"><i class="bi" :class="contentExpanded ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand'" aria-hidden="true"></i></ui-button></template>
+                                    <template #lead>
+                                        <span class="response-content-label">{{t('modal.responseContent')}}</span>
+                                        <span v-if="previewEditing && previewResponseUsageCount > 1" class="response-shared-warning" :title="t('modal.modifyAffectsAll')"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>{{t('modal.sharedWarning', {count: previewResponseUsageCount})}}</span>
+                                    </template>
+                                    <template #tools>
+                                        <ui-button v-if="!previewEditing" type="button" variant="quiet" size="compact" icon-only class="response-edit-toggle" @click="$emit('toggle-preview-editing')" :title="editResponseLabel" :aria-label="editResponseLabel"><i class="bi bi-pencil" aria-hidden="true"></i></ui-button>
+                                        <ui-button v-else type="button" variant="quiet" size="compact" icon-only class="response-edit-toggle" @click="$emit('toggle-preview-editing')" :title="t('modal.cancelEdit')" :aria-label="t('modal.cancelEdit')"><i class="bi bi-x-lg" aria-hidden="true"></i></ui-button>
+                                        <ui-button type="button" variant="quiet" size="compact" icon-only class="rule-response-expand" :aria-pressed="contentExpanded ? 'true' : 'false'" :title="contentExpanded ? t('modal.collapseContent') : t('modal.expandContent')" :aria-label="contentExpanded ? t('modal.collapseContent') : t('modal.expandContent')" @click="contentExpanded = !contentExpanded"><i class="bi" :class="contentExpanded ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand'" aria-hidden="true"></i></ui-button>
+                                        <ui-button v-if="previewEditing" type="button" variant="primary" size="compact" class="preview-save-action" @click="$emit('save-preview-response')" :disabled="previewSaving">
+                                            <i class="bi" :class="previewSaving?'bi-hourglass-split':'bi-check-lg'" aria-hidden="true"></i>{{t('modal.saveResponse')}}
+                                        </ui-button>
+                                    </template>
                                 </ui-code-viewer>
                             </div>
                             <div v-else class="response-preview-empty">{{t('modal.selectResponse')}}</div>
                         </div>
                         <!-- 建立新回應 (非 SSE) -->
                         <div v-else class="response-content-mode">
-                            <div class="edit-toolbar">
-                                <span class="response-content-label">{{t('modal.responseContent')}}</span>
-                                <span class="sub-info response-content-size">{{fmtSize(form.responseBody?.length || 0)}}</span>
-                                <span v-if="(form.responseBody?.length || 0) > 5242880" class="badge badge-warning" :title="t('modal.exceedCacheTooltip')"><i class="bi bi-exclamation-triangle"></i></span>
-                            </div>
                             <ui-code-viewer class="rule-response-code" fill editable :label="t('modal.responseContent')" :placeholder="t('modal.responseBodyPlaceholder')"
                                 :value="form.responseBody || ''" @update:value="form.responseBody = $event" @copy="$emit('copy-text', $event)">
-                                <template #tools><ui-button type="button" variant="quiet" size="compact" icon-only class="rule-response-expand" :aria-pressed="contentExpanded ? 'true' : 'false'" :title="contentExpanded ? t('modal.collapseContent') : t('modal.expandContent')" :aria-label="contentExpanded ? t('modal.collapseContent') : t('modal.expandContent')" @click="contentExpanded = !contentExpanded"><i class="bi" :class="contentExpanded ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand'" aria-hidden="true"></i></ui-button></template>
+                                <template #lead>
+                                    <span class="response-content-label">{{t('modal.responseContent')}}</span>
+                                    <span v-if="(form.responseBody?.length || 0) > 5242880" class="response-shared-warning" :title="t('modal.exceedCacheTooltip')"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>{{t('modal.exceedCacheThreshold')}}</span>
+                                </template>
+                                <template #tools>
+                                    <!-- Templates fill the body, so they live with it: one menu instead of a row of buttons. -->
+                                    <ui-row-menu v-if="form.protocol==='HTTP'" class="response-template-menu" icon="bi-lightning-charge" :label="t('modal.template')" :items="templateMenuItems" @select="$emit('apply-template', $event)"></ui-row-menu>
+                                    <ui-button type="button" variant="quiet" size="compact" icon-only class="rule-response-expand" :aria-pressed="contentExpanded ? 'true' : 'false'" :title="contentExpanded ? t('modal.collapseContent') : t('modal.expandContent')" :aria-label="contentExpanded ? t('modal.collapseContent') : t('modal.expandContent')" @click="contentExpanded = !contentExpanded"><i class="bi" :class="contentExpanded ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand'" aria-hidden="true"></i></ui-button></template>
                             </ui-code-viewer>
                         </div>
                     </div>

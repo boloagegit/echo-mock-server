@@ -876,13 +876,11 @@
     .rule-editor .rule-pane-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 }
 
-/* Response mode toolbar (new rule): the template shortcuts move to a second line when the row is
- * full, instead of squeezing "Response Mode" and "Create New Response" onto two lines each. */
+/* Response mode row: labels never squeeze onto two lines (the template shortcuts moved to a menu
+ * in the content toolbar, so the row holds just the label and the switch). */
 .response-mode-toolbar { flex-wrap: wrap; row-gap: var(--space-xs) }
 .response-mode-label,
-.response-mode-toolbar .protocol-btn,
-.response-template-actions { white-space: nowrap }
-.response-template-actions { margin-inline-start: auto }
+.response-mode-toolbar .protocol-btn { white-space: nowrap }
 
 /* Drawer: the ⋯ menu lines up under the close button. */
 .ui-detail-drawer__actions .ui-row-menu { margin-inline-end: -8px }
@@ -972,3 +970,62 @@
 .response-picker-drawer-results { scrollbar-gutter: stable }
 .response-picker-drawer-results.is-stale > .response-picker-drawer-item { opacity: 0.55; transition: opacity var(--motion-fast) var(--ease-standard) 300ms }
 
+
+/* ===== Response pane, tidied (2026-10-07) =====
+ * One label column for the mock settings (status, response mode, selected response, description),
+ * advanced settings as a light disclosure row like "Rule settings" on the left, and the response
+ * content's label and actions in the viewer's own toolbar (one row, secondary actions as icons). */
+.mock-result-settings { --result-label-w: 148px }
+.mock-result-settings .response-status-row { gap: var(--space-sm) }
+.mock-result-settings .response-status-field { grid-template-columns: var(--result-label-w) 76px; margin-inline-start: 0 }
+.mock-result-settings .response-reply-label { flex: none; width: var(--result-label-w) }
+.mock-result-settings .response-mode-toolbar { gap: var(--space-xs) var(--space-sm); margin-top: var(--editor-field-gap); padding: 0; border: 0; border-radius: 0; background: transparent }
+.mock-result-settings .response-mode-label { flex: none; width: var(--result-label-w); padding: 0 }
+.mock-result-settings .result-description-field { grid-template-columns: var(--result-label-w) minmax(0, 1fr); gap: var(--space-sm) }
+.mock-result-settings .result-description-field > .form-label { color: var(--muted); font-size: var(--font-sm); font-weight: var(--font-weight-medium); white-space: nowrap }
+.mock-result-settings .response-picker-heading strong { white-space: nowrap }
+.mock-result-settings .response-existing-panel.has-selection { display: grid; grid-template-columns: var(--result-label-w) minmax(0, 1fr); align-items: center; gap: var(--space-sm) }
+.mock-result-settings .response-picker-heading strong { color: var(--muted); font-size: var(--font-sm); font-weight: var(--font-weight-medium) }
+/* The row label ("Current selection") names the card, so the card holds only the response and its actions. */
+.mock-result-settings .response-selected-card { grid-template-columns: minmax(0, 1fr) auto }
+.mock-result-settings .response-selected-desc { font-size: var(--font-sm) }
+
+.rule-editor .result-advanced-disclosure { border-top: 1px solid var(--separator); border-bottom: 1px solid var(--separator); border-radius: 0; background: transparent }
+.rule-editor .result-advanced-disclosure > summary { grid-template-columns: 16px minmax(0, 1fr); min-height: 40px; padding: 8px 0 }
+.rule-editor .result-advanced-disclosure > summary:hover { background: transparent; color: var(--text) }
+.rule-editor .result-advanced-summary-icon { display: none }
+.rule-editor .result-advanced-chevron { order: -1; font-size: 10px; transform: rotate(-90deg) }
+.rule-editor .result-advanced-disclosure[open] .result-advanced-chevron { transform: none }
+.rule-editor .result-advanced-summary-copy { flex-direction: row; align-items: baseline; gap: var(--space-sm) }
+.rule-editor .result-advanced-summary-copy strong { color: var(--text-subtle); font-size: 11px; font-weight: var(--font-weight-semibold); letter-spacing: 0.08em }
+.rule-editor .result-advanced-summary-copy small { overflow: hidden; color: var(--text-subtle); font-size: var(--font-xs); text-overflow: ellipsis; white-space: nowrap }
+.rule-editor .result-advanced-content { padding: 0 0 var(--editor-field-gap) 24px }
+
+.ui-code-viewer__lead { flex: none; display: flex; align-items: center; gap: var(--space-sm); min-width: 0; padding-inline: 4px 6px }
+.ui-code-viewer__lead .response-content-label { color: var(--text); font-size: var(--font-sm); font-weight: var(--font-weight-medium); white-space: nowrap }
+.ui-code-viewer__lead .response-shared-warning { white-space: nowrap }
+.ui-code-viewer__search { min-width: 120px }
+.ui-code-viewer__toolbar .preview-save-action { margin-inline-start: 4px }
+
+/* The content fills what the settings above leave, so the editor and its status line stay in view
+ * and only the editor scrolls; the pane itself scrolls only when the settings alone are too tall. */
+.rule-editor .response-content-block { flex: 1 1 auto; min-height: 220px }
+.rule-editor .response-content-block:has(> .sse-editor-wrap) { flex: 0 0 auto; min-height: auto }
+/* Scrolling inside the editor never carries on into the pane behind it. */
+.ui-code-viewer__host .CodeMirror-scroll { overscroll-behavior: contain }
+
+/* The response picker replaces the pane's content (same edges, no floating card); the pane is
+ * scrolled to the top and held there while it is open, so the picker is never half off screen. */
+.rule-right:has(> .response-picker-drawer) { overflow: hidden }
+.rule-editor .response-picker-drawer { inset: 0; padding: 0 0 var(--editor-pane-inline) var(--editor-pane-inline); border-radius: 0; box-shadow: none }
+/* Narrow response pane (phones, stacked editor): labels go above their controls, and the content
+ * toolbar lets its label take a line of its own so every action stays reachable. */
+@container (max-width: 560px) {
+    .mock-result-settings .response-status-field { grid-template-columns: minmax(0, 1fr) 88px }
+    .mock-result-settings .response-mode-label,
+    .mock-result-settings .response-reply-label { width: 100% }
+    .mock-result-settings .result-description-field,
+    .mock-result-settings .response-existing-panel.has-selection { grid-template-columns: minmax(0, 1fr); gap: var(--space-xs) }
+    .rule-right .ui-code-viewer__toolbar { flex-wrap: wrap }
+    .rule-right .ui-code-viewer__lead { flex: 1 1 100% }
+}

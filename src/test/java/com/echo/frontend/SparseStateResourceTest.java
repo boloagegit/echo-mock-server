@@ -23,7 +23,9 @@ class SparseStateResourceTest {
                 .contains("class=\"cond-builder-actions\"")
                 .contains("v-if=\"!conditions.length\" class=\"sub-info\"")
                 .contains("v-if=\"form.responseId\" class=\"response-picker-heading\"")
-                .contains("v-show=\"previewResponseBody.length || previewEditing\"")
+                // The body viewer shows once the selected response has a body or is being edited.
+                .contains("v-show=\"showPreviewViewer\"")
+                .contains("(!!props.previewResponseBody?.length || props.previewEditing)")
                 .contains("$emit('add-condition')");
         assertThat(text("style.css"))
                 .contains(".rule-editor .response-preview-empty { flex: 0 0 auto; min-height: 0;")

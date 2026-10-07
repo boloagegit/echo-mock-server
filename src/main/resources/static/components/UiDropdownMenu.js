@@ -19,6 +19,8 @@ const UiDropdownMenu = {
     // Row menus use a quiet compact trigger; page headers keep the secondary button.
     triggerVariant: { type: String, default: 'secondary' },
     triggerSize: { type: String, default: 'default' },
+    // The trigger shows ⋯ unless the menu offers one kind of action (e.g. insert a template).
+    triggerIcon: { type: String, default: 'bi-three-dots-vertical' },
   },
   emits: ['toggle', 'select', 'close'],
   setup(props, { emit }) {
@@ -91,7 +93,7 @@ const UiDropdownMenu = {
         :title="triggerLabel" :aria-label="triggerLabel"
         :aria-expanded="open ? 'true' : 'false'" aria-haspopup="menu"
         @click.stop="$emit('toggle')" @keydown.down.prevent="open ? focusFirst() : $emit('toggle')">
-        <i class="bi bi-three-dots-vertical" aria-hidden="true"></i>
+        <i class="bi" :class="triggerIcon" aria-hidden="true"></i>
       </ui-button>
       <Transition name="ui-popover-motion">
         <div v-if="open" ref="menuRef" class="data-dropdown ui-dropdown-menu__panel"

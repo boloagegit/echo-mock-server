@@ -159,6 +159,7 @@ const UiCodeViewer = {
   template: /* html */`
     <div class="ui-code-viewer" :class="{'is-fill': fill, 'is-editable': editable, 'is-read-only': readOnly}">
       <div class="ui-code-viewer__toolbar">
+        <div v-if="$slots.lead" class="ui-code-viewer__lead"><slot name="lead"></slot></div>
         <label class="ui-code-viewer__search">
           <span class="visually-hidden">{{t('codeViewer.search')}}</span>
           <i class="bi bi-search" aria-hidden="true"></i>
@@ -166,8 +167,8 @@ const UiCodeViewer = {
             @keydown.enter.prevent="step($event.shiftKey ? -1 : 1)">
           <span v-if="query" class="ui-code-viewer__count" aria-live="polite">{{matchCount ? matchIndex + 1 : 0}} / {{matchCount}}</span>
         </label>
-        <ui-button type="button" variant="quiet" size="compact" :aria-pressed="wrap ? 'true' : 'false'" @click="wrap = !wrap">{{t('codeViewer.wrap')}}</ui-button>
-        <ui-button v-if="canFormat" type="button" variant="quiet" size="compact" :aria-pressed="formatted ? 'true' : 'false'" @click="formatted = !formatted">{{t('codeViewer.format')}}</ui-button>
+        <ui-button type="button" variant="quiet" size="compact" icon-only :aria-pressed="wrap ? 'true' : 'false'" :title="t('codeViewer.wrap')" :aria-label="t('codeViewer.wrap')" @click="wrap = !wrap"><i class="bi bi-text-wrap" aria-hidden="true"></i></ui-button>
+        <ui-button v-if="canFormat" type="button" variant="quiet" size="compact" icon-only :aria-pressed="formatted ? 'true' : 'false'" :title="t('codeViewer.format')" :aria-label="t('codeViewer.format')" @click="formatted = !formatted"><i class="bi bi-braces" aria-hidden="true"></i></ui-button>
         <ui-button type="button" variant="quiet" size="compact" icon-only :title="t('codeViewer.copy')" :aria-label="t('codeViewer.copy')" @click="$emit('copy', value)"><i class="bi bi-clipboard" aria-hidden="true"></i></ui-button>
         <slot name="tools"></slot>
       </div>

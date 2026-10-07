@@ -427,7 +427,7 @@ class ListRefinementResourceTest {
     void listHeadersMenusAndLoadStatesUseSharedAccessiblePrimitives() throws IOException {
         assertThat(text("index.html"))
                 .contains("/components/UiTableSortHeader.js?v=20260909.1")
-                .contains("/components/UiDropdownMenu.js?v=20261007.1")
+                .contains("/components/UiDropdownMenu.js?v=20261007.21")
                 .contains("/components/UiLoadState.js?v=20260909.1");
         assertThat(text("app.js"))
                 .contains("_app.component('ui-table-sort-header', UiTableSortHeader);")

@@ -199,7 +199,11 @@ class RuleEditModalResourceTest {
         // Field labels never outweigh the values they describe.
         assertThat(resourceText("static/style.css"))
                 .contains(".form-label { display: block; font-size: var(--font-base); font-weight: var(--font-weight-medium); color: var(--muted);")
-                .contains(".response-template-actions .ui-button--quiet {");
+                .doesNotContain(".response-template-actions");
+        // Response templates are one menu in the content toolbar (they fill the body), not a row of buttons.
+        assertThat(component)
+                .contains("<ui-row-menu v-if=\"form.protocol==='HTTP'\" class=\"response-template-menu\" icon=\"bi-lightning-charge\" :label=\"t('modal.template')\" :items=\"templateMenuItems\" @select=\"$emit('apply-template', $event)\"></ui-row-menu>")
+                .doesNotContain("class=\"response-template-actions\"");
         assertThat(component).doesNotContain("btn btn-xs btn-secondary");
     }
 

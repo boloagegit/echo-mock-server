@@ -1582,7 +1582,6 @@ textarea.form-control { min-height: 80px; font-family: var(--font-mono); font-si
 @container (max-width: 620px) {
     .response-mode-toolbar { flex-wrap: wrap }
     .response-status-field { margin-inline-start: 0 }
-    .response-template-actions { margin-inline-start: auto }
 }
 @container (max-width: 680px) {
     .scenario-transition-row { grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr); gap: var(--space-sm) }
@@ -1597,10 +1596,6 @@ textarea.form-control { min-height: 80px; font-family: var(--font-mono); font-si
 .response-status-field label { color: var(--muted); font-size: var(--font-sm); font-weight: var(--font-weight-medium); white-space: nowrap }
 .response-status-field .form-control { min-height: var(--control-h-sm); padding-block: var(--space-xs); font-variant-numeric: tabular-nums }
 .response-status-field .result-field-error { grid-column: 1 / -1 }
-.response-template-actions { display: flex; align-items: center; gap: var(--space-xs); color: var(--muted); font-size: var(--font-xs) }
-.response-template-actions > span { display: inline-flex; align-items: center; gap: var(--space-xs); margin-right: var(--space-xs) }
-.response-template-actions .ui-button--quiet { color: var(--muted); font-family: var(--font-mono); font-size: var(--font-xs) }
-.response-template-actions .ui-button--quiet:hover:not(:disabled) { background: var(--hover); color: var(--text) }
 .response-content-block { padding-top: var(--editor-toolbar-padding) !important; padding-bottom: 0 !important }
 .response-content-mode { flex: 1; display: flex; flex-direction: column; gap: var(--editor-field-gap); min-height: 0 }
 .response-content-label { display: inline-flex; align-items: center; gap: var(--space-xs); flex: 0 0 auto; margin-inline-end: var(--space-xs); color: var(--muted); font-size: var(--font-sm); font-weight: var(--font-weight-medium); white-space: nowrap }
@@ -4126,10 +4121,6 @@ a:focus-visible,
         width: 100%;
         grid-template-columns: minmax(0, 1fr) 88px;
         margin-inline-start: 0;
-    }
-    .response-template-actions {
-        margin-inline-start: 0;
-        flex-wrap: wrap;
     }
 }
 
