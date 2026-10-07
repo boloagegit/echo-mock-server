@@ -60,6 +60,13 @@ class AlignmentPassResourceTest {
     }
 
     @Test
+    void responseModeToolbarWrapsInsteadOfSqueezingItsLabels() throws IOException {
+        assertThat(text("console.css"))
+                .contains(".response-mode-toolbar { flex-wrap: wrap; row-gap: var(--space-xs) }")
+                .contains(".response-mode-toolbar .protocol-btn,\n.response-template-actions { white-space: nowrap }");
+    }
+
+    @Test
     void footersAndEmptyStatesAreBalanced() throws IOException {
         assertThat(text("console.css"))
                 .contains(".workspace-page-size .form-control { height: max(32px, var(--control-h-sm)); min-height: max(32px, var(--control-h-sm)) }")

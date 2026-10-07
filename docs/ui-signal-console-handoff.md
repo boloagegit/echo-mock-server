@@ -48,7 +48,7 @@
 
 ## 改動時的規則（踩過的坑）
 
-1. **快取版本**：改到哪個靜態檔，就要把 `index.html` 裡它的 `?v=` 調升。目前 `console.css` 是 `20261007.18`、`style.css` 是 `20261007.15`，同一天再加後綴。i18n 的版本在 `composables/useI18n.js`。部分測試會固定版本號（如 `LoginAccessibilityResourceTest`、`ListRefinementResourceTest`），要一起更新。
+1. **快取版本**：改到哪個靜態檔，就要把 `index.html` 裡它的 `?v=` 調升。目前 `console.css` 是 `20261007.19`、`style.css` 是 `20261007.15`，同一天再加後綴。i18n 的版本在 `composables/useI18n.js`。部分測試會固定版本號（如 `LoginAccessibilityResourceTest`、`ListRefinementResourceTest`），要一起更新。
 2. **前端測試政策**：
    - 元件重做後，原本寫死字串的 assertion 要改寫成行為／a11y 測試。
    - 不能刪測試，也不能跳過失敗的測試。
@@ -102,6 +102,7 @@ node --test src/test/js/*.cjs
 - 可排序表頭的文字與下方資料同一條邊；數字欄（Priority、Size、Duration）靠右。表頭字重統一，只有目前排序的欄位加粗。
 - 分頁按鈕與每頁筆數一樣高；空狀態置中；設定頁「詳細資料」連結對齊該列第一行。
 - 編輯器左右兩欄到分隔線一樣寬；桌面寬度下欄位標題維持一行，說明文字太長時用省略號收尾。抽屜的 ⋯ 與關閉按鈕對齊。
+- 新增規則時的「Response Mode」列：放不下時，範本捷徑（Template／JSON／XML／Plain Text）改排到第二行，不再把「Response Mode」和「Create New Response」各擠成兩行。
 - 手機寬：編輯器標題列改成格線排列，編輯器滿版；設定總覽改為上下排列；窄列表縮小固定欄寬，讓 endpoint 看得到。
 
 ## 待辦

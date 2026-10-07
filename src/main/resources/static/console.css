@@ -880,6 +880,14 @@
     .rule-editor .rule-pane-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 }
 
+/* Response mode toolbar (new rule): the template shortcuts move to a second line when the row is
+ * full, instead of squeezing "Response Mode" and "Create New Response" onto two lines each. */
+.response-mode-toolbar { flex-wrap: wrap; row-gap: var(--space-xs) }
+.response-mode-label,
+.response-mode-toolbar .protocol-btn,
+.response-template-actions { white-space: nowrap }
+.response-template-actions { margin-inline-start: auto }
+
 /* Drawer: the ⋯ menu lines up under the close button. */
 .ui-detail-drawer__actions .ui-row-menu { margin-inline-end: -8px }
 
