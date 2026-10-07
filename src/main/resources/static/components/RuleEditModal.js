@@ -48,8 +48,6 @@ const RuleEditModal = {
         previewEditBody: String,
         previewResponseUsageCount: Number,
         previewSaving: Boolean,
-        previewFormatted: Boolean,
-        editFormatted: Boolean,
         newTag: Object,
         newHeader: Object,
     },
@@ -64,8 +62,8 @@ const RuleEditModal = {
         'update:response-picker-sse-only',
         'open-response-picker', 'search-response-picker',
         'change-response-picker-page', 'select-response',
-        'toggle-preview-editing', 'save-preview-response', 'toggle-preview-format',
-        'toggle-edit-format',
+        'toggle-preview-editing', 'save-preview-response',
+        'update:preview-edit-body', 'copy-text',
         'go-to-responses',
         'clear-response-selection',
         'reorder-sse-events',
@@ -80,6 +78,11 @@ const RuleEditModal = {
         const responsePickerLaunch = ref(null);
         const responsePickerInput = ref(null);
         const responsePickerActiveIndex = ref(-1);
+        // The response content can take over the whole editor body for long bodies; Esc returns.
+        const contentExpanded = ref(false);
+        const responsePickerResults = ref(null);
+        // A new page (or search) starts at its first row.
+        Vue.watch(() => props.filteredResponsePicker, () => Vue.nextTick(() => { if (responsePickerResults.value) responsePickerResults.value.scrollTop = 0; }));
         let previousFocus = null;
         let lastOutsideInteraction = null;
 
@@ -180,6 +183,7 @@ const RuleEditModal = {
                 event.preventDefault();
                 event.stopPropagation();
                 if (props.responseDropdownOpen) closeResponsePicker();
+                else if (contentExpanded.value) contentExpanded.value = false;
                 else emit('close');
                 return;
             }
@@ -536,13 +540,15 @@ const RuleEditModal = {
             else if (ruleMode.value === 'FAULT') faultAdvancedOpen.value = true;
             else mockAdvancedOpen.value = true;
         });
+        // A closed editor, or one showing another rule, starts with the normal layout.
+        Vue.watch(() => [props.show, props.editing?.id], () => { contentExpanded.value = false; });
         Vue.onMounted(() => document.addEventListener('pointerdown', rememberOutsideInteraction, true));
         Vue.onBeforeUnmount(() => {
             document.removeEventListener('pointerdown', rememberOutsideInteraction, true);
             if (previousFocus instanceof HTMLElement && document.contains(previousFocus)) previousFocus.focus();
         });
         return {
-            dialogRef, responsePickerLaunch, responsePickerInput, responsePickerActiveIndex,
+            dialogRef, responsePickerLaunch, responsePickerInput, responsePickerActiveIndex, contentExpanded, responsePickerResults,
             responseOptionId, openResponsePicker, closeResponsePicker, toggleResponsePicker, selectResponse,
             onResponsePickerKeydown, onResponseSearchInput, clearResponseSearch, onDialogKeydown, saveShortcutKey,
             selectedResponse, forwardSelection, availableHttpTargetConnections, defaultHttpTargetConnection,
@@ -602,7 +608,7 @@ const RuleEditModal = {
                     <ui-button class="close-btn" :disabled="saving" @click="$emit('close')" :aria-label="t('modal.cancel')"><i class="bi bi-x-lg"></i></ui-button>
                 </div>
             </div>
-            <div v-if="editorMode==='form'" class="modal-body rule-editor" :inert="saving" :aria-busy="saving">
+            <div v-if="editorMode==='form'" class="modal-body rule-editor" :inert="saving" :aria-busy="saving" :class="{'is-content-expanded': contentExpanded}">
                 <!-- 左側：匹配條件 + 測試 -->
                 <div class="rule-left">
                     <div class="rule-pane-heading" data-tour="protocol">
@@ -616,7 +622,6 @@ const RuleEditModal = {
                     </div>
                     <!-- 匹配路徑 -->
                     <div class="form-block rule-protocol-slot" data-tour="match">
-                        <Transition name="rule-protocol-swap">
                         <div v-if="form.protocol==='HTTP'" key="http" class="rule-protocol-fields">
                             <!-- Method and path read as one request line, like the header ("GET /api/orders"). -->
                             <div class="rule-request-line">
@@ -652,7 +657,6 @@ const RuleEditModal = {
                                 <p class="rule-readonly-value"><code>JMSReplyTo</code><span>{{t('modal.replyQueueFromRequest')}}</span></p>
                             </div>
                         </div>
-                        </Transition>
                     </div>
                     <!-- 條件匹配 -->
                     <div class="form-block" data-tour="conditions">
@@ -755,7 +759,6 @@ const RuleEditModal = {
                     </div>
                     <!-- The control keeps the description for screen readers; this line shows it under the pane heading. -->
                     <p class="rule-mode-description" aria-hidden="true">{{ruleModeDescription}}</p>
-                    <Transition name="ui-mode-panel-motion" mode="out-in">
                         <div v-if="ruleMode==='FORWARD'" key="forward" class="form-block forward-settings">
                             <div class="form-block-header">{{t('modal.forwardTarget')}}</div>
                             <div class="form-group forward-connection-field">
@@ -891,7 +894,6 @@ const RuleEditModal = {
                     <!-- 回應模式 + 統一選擇器 -->
                     <div v-else key="mock" class="form-block mock-result-settings" data-tour="response">
                         <!-- 回應的形狀：狀態碼與一般／SSE 串流（SSE 描述的是回應，所以放在這裡） -->
-                        <Transition name="rule-protocol-swap">
                         <div v-if="form.protocol==='HTTP'" key="http" class="response-status-row">
                             <div class="response-status-field">
                                 <label for="ruleStatus">{{t('modal.statusCode')}}</label>
@@ -907,7 +909,6 @@ const RuleEditModal = {
                             <code class="response-reply-type">TextMessage</code>
                             <span class="sub-info">{{t('modal.jmsReplyHint')}}</span>
                         </div>
-                        </Transition>
                         <!-- 回應內容的來源：使用現有回應或建立新的 -->
                         <div class="response-mode-toolbar">
                             <span class="response-mode-label">{{t('modal.responseMode')}}</span>
@@ -1010,7 +1011,6 @@ const RuleEditModal = {
                             </div>
                         </details>
                     </div>
-                    </Transition>
                     <!-- 回應內容 -->
                     <div v-if="ruleMode==='MOCK'" class="form-block response-content-block">
                         <!-- SSE 表格編輯器 -->
@@ -1098,11 +1098,6 @@ const RuleEditModal = {
                                     <span v-if="previewEditing && previewResponseUsageCount > 1" class="badge badge-warning response-shared-warning" :title="t('modal.modifyAffectsAll')">
                                         <i class="bi bi-exclamation-triangle"></i> {{t('modal.sharedWarning', {count: previewResponseUsageCount})}}
                                     </span>
-                                    <ui-button type="button" variant="secondary" size="compact" @click="$emit('toggle-preview-format')">
-                                        <i class="bi" :class="previewFormatted?'bi-code':'bi-braces'"></i>
-                                        {{previewFormatted ? t('modal.plainText') : t('modal.format')}}
-                                        <span v-if="previewResponseBody.length>512000" class="text-warning">{{t('modal.largeFile')}}</span>
-                                    </ui-button>
                                     <span v-if="!previewResponseBody.length" class="response-body-state"><i class="bi bi-file-earmark" aria-hidden="true"></i>{{t('modal.emptyResponseBody')}}</span>
                                     <span class="response-body-size">{{fmtSize(previewResponseBody.length)}}</span>
                                     <ui-button v-if="previewEditing" type="button" variant="primary" size="compact" class="preview-save-action" @click="$emit('save-preview-response')" :disabled="previewSaving">
@@ -1113,7 +1108,12 @@ const RuleEditModal = {
                             <div v-if="form.responseId && previewResponseLoading" class="response-preview-loading loading-reveal"><i class="bi bi-hourglass-split spin"></i> {{t('modal.loadingResponse')}}</div>
                             <div v-else-if="form.responseId && previewResponseLoadFailed" class="response-preview-empty response-preview-error"><i class="bi bi-exclamation-circle" aria-hidden="true"></i><span>{{t('modal.responseLoadFailed')}}</span></div>
                             <div v-else-if="form.responseId" v-show="previewResponseBody.length || previewEditing" class="response-preview-wrap">
-                                <div id="rulePreviewEditor" class="preview-editor" :class="{editing:previewEditing}"></div>
+                                <!-- One viewer for reading and editing (same toolbar as the drawers); it switches in place, so nothing blinks. -->
+                                <ui-code-viewer class="rule-response-code" :class="{'is-warning': previewEditing}" fill :editable="previewEditing" :label="t('modal.responseContent')"
+                                    :value="previewEditing ? (previewEditBody || '') : previewResponseBody"
+                                    @update:value="$emit('update:preview-edit-body', $event)" @copy="$emit('copy-text', $event)">
+                                    <template #tools><ui-button type="button" variant="quiet" size="compact" icon-only class="rule-response-expand" :aria-pressed="contentExpanded ? 'true' : 'false'" :title="contentExpanded ? t('modal.collapseContent') : t('modal.expandContent')" :aria-label="contentExpanded ? t('modal.collapseContent') : t('modal.expandContent')" @click="contentExpanded = !contentExpanded"><i class="bi" :class="contentExpanded ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand'" aria-hidden="true"></i></ui-button></template>
+                                </ui-code-viewer>
                             </div>
                             <div v-else class="response-preview-empty">{{t('modal.selectResponse')}}</div>
                         </div>
@@ -1121,14 +1121,13 @@ const RuleEditModal = {
                         <div v-else class="response-content-mode">
                             <div class="edit-toolbar">
                                 <span class="response-content-label">{{t('modal.responseContent')}}</span>
-                                <ui-button type="button" variant="secondary" size="compact" @click="$emit('toggle-edit-format')">
-                                    <i class="bi" :class="editFormatted?'bi-code':'bi-braces'"></i>
-                                    {{editFormatted ? t('modal.plainText') : t('modal.format')}}
-                                </ui-button>
                                 <span class="sub-info response-content-size">{{fmtSize(form.responseBody?.length || 0)}}</span>
                                 <span v-if="(form.responseBody?.length || 0) > 5242880" class="badge badge-warning" :title="t('modal.exceedCacheTooltip')"><i class="bi bi-exclamation-triangle"></i></span>
                             </div>
-                            <div id="ruleEditEditor" class="edit-editor"></div>
+                            <ui-code-viewer class="rule-response-code" fill editable :label="t('modal.responseContent')" :placeholder="t('modal.responseBodyPlaceholder')"
+                                :value="form.responseBody || ''" @update:value="form.responseBody = $event" @copy="$emit('copy-text', $event)">
+                                <template #tools><ui-button type="button" variant="quiet" size="compact" icon-only class="rule-response-expand" :aria-pressed="contentExpanded ? 'true' : 'false'" :title="contentExpanded ? t('modal.collapseContent') : t('modal.expandContent')" :aria-label="contentExpanded ? t('modal.collapseContent') : t('modal.expandContent')" @click="contentExpanded = !contentExpanded"><i class="bi" :class="contentExpanded ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand'" aria-hidden="true"></i></ui-button></template>
+                            </ui-code-viewer>
                         </div>
                     </div>
                     <div v-if="scenarioEnabled && form.scenarioName" class="form-block result-scenario-transition">
@@ -1168,8 +1167,9 @@ const RuleEditModal = {
                                 :model-value="responsePickerSseOnly" :options="responsePickerFilterOptions" :aria-label="t('modal.responseTypeFilter')"
                                 @update:model-value="$emit('update:response-picker-sse-only',$event)"></ui-choice-group>
                         </div>
-                        <div id="ruleResponsePickerList" class="response-picker-drawer-results" role="listbox" :aria-label="t('modal.responsePickerResults')" :aria-busy="responsePickerLoading">
-                            <div v-if="responsePickerLoading" class="response-picker-state loading-reveal"><span class="spinner-sm" aria-hidden="true"></span>{{t('modal.loadingResponses')}}</div>
+                        <!-- While the next page loads the current one stays in place (dimmed only if the wait is noticeable), so paging never blanks the list. -->
+                        <div id="ruleResponsePickerList" ref="responsePickerResults" class="response-picker-drawer-results" :class="{'is-stale': responsePickerLoading && filteredResponsePicker.length}" role="listbox" :aria-label="t('modal.responsePickerResults')" :aria-busy="responsePickerLoading">
+                            <div v-if="responsePickerLoading && !filteredResponsePicker.length" class="response-picker-state loading-reveal"><span class="spinner-sm" aria-hidden="true"></span>{{t('modal.loadingResponses')}}</div>
                             <div v-else-if="responsePickerError" class="response-picker-state is-error">
                                 <span>{{t('modal.responsePickerLoadFailed')}}</span>
                                 <ui-button type="button" variant="secondary" size="compact" @click="$emit('search-response-picker')">{{t('common.retry')}}</ui-button>
@@ -1193,8 +1193,8 @@ const RuleEditModal = {
                         <footer class="response-picker-drawer-footer">
                             <span>{{t('modal.responsePickerPageStatus', {page:responsePickerPage + 1, total:responsePickerTotalPages || 1})}}</span>
                             <div>
-                                <ui-button type="button" variant="secondary" size="compact" icon-only :disabled="responsePickerPage <= 0 || responsePickerLoading" @click="$emit('change-response-picker-page',responsePickerPage - 1)" :aria-label="t('modal.previousPage')" :title="t('modal.previousPage')"><i class="bi bi-chevron-left" aria-hidden="true"></i></ui-button>
-                                <ui-button type="button" variant="secondary" size="compact" icon-only :disabled="responsePickerPage + 1 >= responsePickerTotalPages || responsePickerLoading" @click="$emit('change-response-picker-page',responsePickerPage + 1)" :aria-label="t('modal.nextPage')" :title="t('modal.nextPage')"><i class="bi bi-chevron-right" aria-hidden="true"></i></ui-button>
+                                <ui-button type="button" variant="secondary" size="compact" icon-only :disabled="responsePickerPage <= 0" @click="$emit('change-response-picker-page',responsePickerPage - 1)" :aria-label="t('modal.previousPage')" :title="t('modal.previousPage')"><i class="bi bi-chevron-left" aria-hidden="true"></i></ui-button>
+                                <ui-button type="button" variant="secondary" size="compact" icon-only :disabled="responsePickerPage + 1 >= responsePickerTotalPages" @click="$emit('change-response-picker-page',responsePickerPage + 1)" :aria-label="t('modal.nextPage')" :title="t('modal.nextPage')"><i class="bi bi-chevron-right" aria-hidden="true"></i></ui-button>
                             </div>
                         </footer>
                     </section>

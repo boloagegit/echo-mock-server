@@ -727,7 +727,7 @@ class ListRefinementResourceTest {
     void unconditionalRulesArePresentedAsIntentionalDefaultMatches() throws IOException {
         assertThat(text("i18n/zh-TW.json")).contains("\"noCondition\": \"預設匹配\"");
         assertThat(text("i18n/en.json")).contains("\"noCondition\": \"Default match\"");
-        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261007.16");
+        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261007.20");
     }
 
     @Test
@@ -749,9 +749,10 @@ class ListRefinementResourceTest {
 
     @Test
     void generatedResponseEditorsHaveAccessibleNames() throws IOException {
-        assertThat(text("composables/useEditor.js"))
-                .contains("editors[key].getInputField().setAttribute('aria-label', t('modal.responseContent'))")
-                .contains("ta.setAttribute('aria-label', t('modal.responseContent'))");
+        // Response bodies are edited in the shared viewer, which names its input from the label it is given.
+        assertThat(text("components/UiCodeViewer.js")).contains("this.cm.getInputField()?.setAttribute('aria-label', this.label);");
+        assertThat(text("components/RuleEditModal.js")).contains(":label=\"t('modal.responseContent')\"");
+        assertThat(text("components/ResponseEditModal.js")).contains(":label=\"t('modal.responseContent')\"");
     }
 
     private static String text(String path) throws IOException {

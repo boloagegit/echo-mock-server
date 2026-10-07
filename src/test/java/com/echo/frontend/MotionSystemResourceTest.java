@@ -35,8 +35,10 @@ class MotionSystemResourceTest {
                     .contains("<ui-modal-transition>")
                     .contains("</ui-modal-transition>");
         }
+        // Mock / forward / fault panels swap in one frame: an out-in transition left a blank frame between them.
         assertThat(resourceText("static/components/RuleEditModal.js"))
-                .contains("<Transition name=\"ui-mode-panel-motion\" mode=\"out-in\">");
+                .doesNotContain("<Transition name=\"ui-mode-panel-motion\"")
+                .doesNotContain("mode=\"out-in\"");
         // Issues moved from an expanded row to the shared drawer as well.
         assertThat(resourceText("static/components/IssuesPage.js")).contains("<ui-detail-drawer class=\"issue-detail-drawer\"");
         // Rule details moved from an expanded row to the shared drawer, which animates and honours reduced motion.
@@ -63,7 +65,7 @@ class MotionSystemResourceTest {
                 .contains("width: 16px;")
                 .contains("height: 16px;")
                 .contains(".ui-modal-motion-enter-active")
-                .contains(".ui-mode-panel-motion-enter-active")
+                .doesNotContain(".ui-mode-panel-motion-enter-active")
                 .contains(".ui-detail-row-motion-enter-active")
                 .contains("@media (prefers-reduced-motion: reduce)")
                 .contains("transition-duration: 0.01ms !important")

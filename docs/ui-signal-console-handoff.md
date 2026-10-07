@@ -29,9 +29,11 @@
     - 可收合，捲動時標題固定。
     - 收合狀態記在 `localStorage echo.drawerSections`。
   - `ui-code-viewer`
-    - 用在所有長內容：規則、回應、請求記錄的 body，以及修訂記錄的長欄位。
-    - CodeMirror 唯讀，只繪製看得到的行。
+    - 用在所有長內容：規則、回應、請求記錄的 body，以及修訂記錄的長欄位。規則編輯器與回應對話框的回應內容也用它。
+    - CodeMirror 只繪製看得到的行。
     - 提供全文搜尋（最多標示 2000 筆，計數涵蓋全部）、換行、JSON／XML 格式化（2 MB 以內）、複製。
+    - `editable`：可編輯，以 `update:value` 回報。格式化只改變顯示：開著時是唯讀的排版檢視，關掉才能編輯原文，存檔永遠是原文（使用者決定，避免改到模板語法與回應的實際內容）。
+    - `fill`：高度填滿父層。檢視、編輯、格式化都在同一個 CodeMirror 實例裡切換，不會重建，所以不會閃。
   - `ui-toggle`
     - 是 `role="switch"` 的 button，外觀由 `aria-checked` 決定。
     - 不要改回原生 checkbox：取消預設動作的 checkbox 會在事件結束後還原外觀，結果是資料改了、畫面沒變。
@@ -44,11 +46,13 @@
 - **規則編輯器**（方案 B）：
   - 版型：左邊請求、右邊回應，測試列在兩欄下方。
   - HTTP／JMS 共用相同欄位位置，切換協定時只換欄位，其他區塊不移動。標題下的摘要列一直存在。
-  - 只有切進來的欄位淡入（`rule-protocol-swap`）。
+  - 切換協定、Mock／Forward／Fault、使用現有／建立新回應時，都在同一個畫格內替換，沒有淡入淡出。從空白淡入看起來就是閃一下，所以拿掉了。
+  - 回應內容可以放大到整個編輯區（工具列右側的按鈕），再按一次或按 Esc 還原。
+  - 選擇其他回應的清單每頁 20 筆（使用者決定維持）。換頁時舊的列表保留到新資料到為止，等待較久才變淡；列表固定預留捲軸寬度，換頁後捲回頂端。
 
 ## 改動時的規則（踩過的坑）
 
-1. **快取版本**：改到哪個靜態檔，就要把 `index.html` 裡它的 `?v=` 調升。目前 `console.css` 是 `20261007.19`、`style.css` 是 `20261007.15`，同一天再加後綴。i18n 的版本在 `composables/useI18n.js`。部分測試會固定版本號（如 `LoginAccessibilityResourceTest`、`ListRefinementResourceTest`），要一起更新。
+1. **快取版本**：改到哪個靜態檔，就要把 `index.html` 裡它的 `?v=` 調升。目前 `console.css`、`style.css` 與這次改到的元件都是 `20261007.20`，同一天再加後綴。i18n 的版本在 `composables/useI18n.js`。部分測試會固定版本號（如 `LoginAccessibilityResourceTest`、`ListRefinementResourceTest`），要一起更新。
 2. **前端測試政策**：
    - 元件重做後，原本寫死字串的 assertion 要改寫成行為／a11y 測試。
    - 不能刪測試，也不能跳過失敗的測試。
@@ -88,6 +92,7 @@ node --test src/test/js/*.cjs
 
 - **閃爍檢查**：用 Chrome DevTools Protocol 逐格截圖。重點看重新整理後的第一格，要和最終畫面一樣。
 - **版面位移檢查**：量測各區塊的 `getBoundingClientRect()`，例如 HTTP／JMS 切換前後各列的 top 要相同。除了 1440 寬，也要在 1366、1280、1180、1081 寬各量一次。
+- **閃爍檢查（逐格）**：用 CDP `Page.startScreencast` 錄下操作前後的每一格，找出同時跟「操作前」與「操作後」都不一樣的格。目前只剩切換按鈕本身的選取動畫。
 - **對齊檢查**：量測文字本身的位置，不要量按鈕外框。例如可排序表頭要比 `button span` 的 left 與下方儲存格文字的 left；數字欄比圖示的 right 與數值的 right。
 - **headless 截圖時要注意**：
   - 編輯器有未儲存變更時，離開頁面會跳出「離開網站？」，要自動接受。

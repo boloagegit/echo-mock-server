@@ -795,7 +795,8 @@
 /* ===== Protocol switch =====
  * HTTP and JMS fill the same slots with rows of the same height (request: destination row,
  * then a field with one hint; response: one shape row), so switching swaps fields in place
- * instead of moving the rest of the editor. Only the swapped fields fade in. */
+ * instead of moving the rest of the editor. The swap happens in one frame: a fade-in from empty
+ * read as a blink, so there is none. */
 .rule-queue-field { margin-bottom: var(--editor-field-gap) }
 /* JMS reply destination: read-only, in an input-sized box with a dashed edge so it reads as not editable. */
 .rule-readonly-value { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; min-height: var(--control-h); margin: 0; padding: 0 12px; border: 1px dashed var(--border2); border-radius: var(--radius-control); color: var(--muted); font-size: var(--font-sm) }
@@ -806,11 +807,6 @@
 .response-reply-label { color: var(--muted); font-size: var(--font-sm); font-weight: var(--font-weight-medium); white-space: nowrap }
 .response-reply-type { padding: 2px 8px; border-radius: 4px; background: var(--surface-neutral-soft); color: var(--text); font-family: var(--font-mono); font-size: 12px }
 .response-status-row--jms .sub-info { min-width: 0; color: var(--text-subtle); font-size: var(--font-xs) }
-.rule-protocol-swap-enter-active { transition: opacity var(--motion-fast) var(--ease-standard) }
-.rule-protocol-swap-enter-from { opacity: 0 }
-/* The outgoing fields leave at once, so the two sets never stack for a frame. */
-.rule-protocol-swap-leave-active { display: none }
-@media (prefers-reduced-motion: reduce) { .rule-protocol-swap-enter-active { transition: none } }
 
 /* ===== Alignment pass (2026-10-07) =====
  * Layout only: shared edges and centre lines so the sidebar, headers, tables and
@@ -931,3 +927,48 @@
     .log-table th.col-actions,
     .log-table td.col-actions { width: 44px }
 }
+
+/* ===== Response content (2026-10-07) =====
+ * The rule editor and the response dialog use the drawers' code viewer for the body: line
+ * numbers, highlighting, search, wrap, format and copy, with the same toolbar everywhere.
+ * Format only changes the view (read-only while on), so what is saved is always the text as
+ * written and template syntax is never rewritten. */
+.ui-code-viewer__body { position: relative; min-height: 0 }
+.ui-code-viewer__status { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm) }
+.ui-code-viewer__mode { color: var(--text-subtle) }
+.ui-code-viewer.is-fill { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column }
+.ui-code-viewer.is-fill .ui-code-viewer__toolbar { position: static }
+.ui-code-viewer.is-fill .ui-code-viewer__body { flex: 1 1 auto; display: flex; flex-direction: column }
+.ui-code-viewer.is-fill .ui-code-viewer__host { flex: 1 1 auto; min-height: 0 }
+.ui-code-viewer.is-fill .ui-code-viewer__host .CodeMirror { height: 100% }
+/* Editable: a caret, the input focus ring, and an empty-state hint where the text will go. */
+.ui-code-viewer.is-editable:not(.is-read-only) .ui-code-viewer__host .CodeMirror-cursors { display: block }
+.ui-code-viewer.is-editable:not(.is-read-only):focus-within { border-color: var(--primary) }
+.ui-code-viewer.is-warning { border-color: var(--warning) }
+.ui-code-viewer__placeholder { position: absolute; top: 4px; left: 40px; color: var(--text-subtle); font: 12.5px/1.6 var(--font-mono); pointer-events: none }
+.response-content-mode > .ui-code-viewer,
+.response-preview-wrap > .ui-code-viewer { min-height: 240px }
+.response-text-editor > .ui-code-viewer { min-height: 280px }
+
+/* The response body can take over the whole editor body (both panes) for long content; the
+ * same toolbar button or Esc returns. Everything underneath is hidden, so focus stays inside. */
+.rule-editor { position: relative }
+.rule-editor.is-content-expanded .rule-right { position: static }
+.rule-editor.is-content-expanded .response-content-block {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    margin: 0;
+    padding: var(--block-gap) var(--editor-pane-inline);
+    background: var(--card);
+}
+.rule-editor.is-content-expanded .rule-left,
+.rule-editor.is-content-expanded .rule-splitter,
+.rule-editor.is-content-expanded .rule-right-content > :not(.response-content-block) { visibility: hidden }
+.rule-response-expand[aria-pressed="true"] { color: var(--primary) }
+
+/* Response picker: a page that is loading keeps the current rows (dimmed only after a noticeable
+ * wait), and the list reserves its scrollbar so rows never shift sideways when it appears. */
+.response-picker-drawer-results { scrollbar-gutter: stable }
+.response-picker-drawer-results.is-stale > .response-picker-drawer-item { opacity: 0.55; transition: opacity var(--motion-fast) var(--ease-standard) 300ms }
+

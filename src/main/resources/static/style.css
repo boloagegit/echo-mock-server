@@ -652,7 +652,6 @@ td .sub-info { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
     flex-direction: column;
     min-height: 0;
 }
-.response-text-editor .edit-editor { flex: 1; min-height: 240px }
 
 .response-sse-workspace {
     display: grid;
@@ -1233,7 +1232,6 @@ kbd {
 body.splitter-dragging { user-select: none; cursor: col-resize !important }
 .response-content-block { flex: 1 0 var(--editor-content-min-h); display: flex; flex-direction: column; min-height: var(--editor-content-min-h) }
 .response-content-block:has(> .sse-editor-wrap) { min-height: auto }
-.response-body-editor { flex: 1; min-height: 280px; font-family: var(--font-mono); font-size: var(--font-sm) }
 @media (max-width: 1080px) {
     .rule-modal-fullscreen { width: 100% !important; max-width: 100% !important; height: 100vh; max-height: 100vh; border-radius: 0 }
     .rule-editor { flex-direction: column; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border2) transparent }
@@ -1243,7 +1241,6 @@ body.splitter-dragging { user-select: none; cursor: col-resize !important }
     .rule-right { min-height: 400px }
     .rule-splitter { display: none }
     .response-content-block { min-height: 300px }
-    .preview-editor, .edit-editor { min-height: 200px }
     .response-modal { width: 98%; max-width: 98%; height: 95vh }
 }
 
@@ -1671,8 +1668,6 @@ textarea.form-control { min-height: 80px; font-family: var(--font-mono); font-si
 .rule-editor .cond-add:hover { background: rgba(var(--primary-rgb), 0.1) }
 .rule-editor .tag-add-inline { border: 0; background: var(--surface-control) }
 .rule-editor .response-selected-card { border: 0; background: var(--surface-control) }
-.rule-editor .preview-editor,
-.rule-editor .edit-editor { border: 0; border-radius: 8px; background: var(--surface-control); box-shadow: none }
 .rule-editor .response-preview-loading,
 .rule-editor .response-preview-empty { border: 0; border-radius: 8px; background: var(--surface-neutral-soft) }
 .form-control-sm { min-height: var(--control-h-sm); padding: 0.35rem 0.5rem; font-size: var(--font-sm) }
@@ -1846,12 +1841,6 @@ textarea.form-control { min-height: 80px; font-family: var(--font-mono); font-si
 .preview-toolbar, .edit-toolbar { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0 }
 .response-body-state { display: inline-flex; align-items: center; gap: var(--space-xs); color: var(--muted); font-size: var(--font-xs) }
 .response-body-size { color: var(--muted); font-size: var(--font-xs) }
-.preview-editor, .edit-editor { flex: 1; min-height: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 4px }
-.preview-editor .response-body-editor, .edit-editor .response-body-editor { height: 100%; resize: none; box-sizing: border-box }
-.preview-editor.editing { border-color: var(--warning) }
-.preview-editor .CodeMirror, .edit-editor .CodeMirror { height: 100% }
-.plain-preview { margin: 0; padding: 0.75rem; font-size: var(--font-base); font-family: var(--font-mono); white-space: pre-wrap; word-break: break-all; background: var(--card); height: 100%; overflow: auto; box-sizing: border-box }
-.edit-editor .response-body-editor { height: 100%; resize: none }
 .response-preview-loading, .response-preview-empty { flex: 1; display: flex; align-items: center; justify-content: center; gap: var(--space-sm); color: var(--muted); font-size: var(--font-md); border: 1px dashed var(--border); border-radius: 4px }
 .response-preview-error { color: var(--danger) }
 
@@ -3573,15 +3562,6 @@ a:focus-visible,
     background-color: var(--card);
 }
 
-/* Keep editors recognisable as code blocks without adding decorative panels. */
-.preview-editor,
-.edit-editor,
-.rule-editor .preview-editor,
-.rule-editor .edit-editor {
-    border: 1px solid var(--separator);
-    border-radius: 6px;
-    background: var(--code-bg);
-}
 .rule-editor .protocol-switch,
 .rule-editor-mode-switch,
 .response-mode-toolbar {
@@ -3844,20 +3824,6 @@ a:focus-visible,
 .ui-modal-motion-leave-to { opacity: 0 }
 .ui-modal-motion-enter-from > .modal-box { opacity: 0; transform: translateY(6px) scale(0.98) }
 .ui-modal-motion-leave-to > .modal-box { opacity: 0; transform: translateY(-4px) scale(0.99) }
-
-/* Rule-result panels change context without sweeping across the workbench. */
-.ui-mode-panel-motion-enter-active,
-.ui-mode-panel-motion-leave-active {
-    transition-property: opacity, transform;
-    transition-timing-function: var(--ease-standard);
-}
-.ui-mode-panel-motion-enter-active { transition-duration: var(--motion-base) }
-.ui-mode-panel-motion-leave-active {
-    transition-duration: var(--motion-fast);
-    transition-timing-function: var(--ease-exit);
-}
-.ui-mode-panel-motion-enter-from { opacity: 0; transform: translateY(4px) }
-.ui-mode-panel-motion-leave-to { opacity: 0; transform: translateY(-3px) }
 
 /* Expanded rows keep table geometry stable while their detail content settles in. */
 .ui-detail-row-motion-enter-active,

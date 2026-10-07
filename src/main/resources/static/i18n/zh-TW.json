@@ -1271,7 +1271,9 @@
     "queueMatchHint": "填 * 代表所有佇列；指定佇列名稱的規則會先比對。",
     "jmsReplyLabel": "回覆訊息",
     "jmsReplyHint": "CorrelationID 帶入請求的 MessageID",
-    "replyQueueFromRequest": "依請求訊息指定的佇列回覆"
+    "replyQueueFromRequest": "依請求訊息指定的佇列回覆",
+    "expandContent": "放大回應內容",
+    "collapseContent": "還原版面"
   },
   "confirm": {
     "discardRuleTitle": "放棄規則修改？",
@@ -1830,6 +1832,7 @@
     "wrap": "換行",
     "format": "格式化",
     "copy": "複製全部",
-    "status": "{lines} 行 · {size}"
+    "status": "{lines} 行 · {size}",
+    "formattedReadOnly": "排版檢視（唯讀）· 關閉「格式化」即可編輯"
   }
 }

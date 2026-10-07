@@ -2,7 +2,7 @@
  * ResponseEditModal - 回應編輯 Modal
  *
  * 用於建立或編輯共用回應內容，支援一般文字與 SSE 事件兩種模式。
- * CodeMirror 編輯器由父元件管理，透過 ref 傳入。
+ * 一般文字使用共用的 ui-code-viewer（可編輯），工具列與抽屜相同；格式化只改變顯示，存檔永遠是原文。
  */
 const ResponseEditModal = {
   props: {
@@ -13,11 +13,10 @@ const ResponseEditModal = {
     saving: Boolean,
     sseEvents: Array,
     ssePreview: String,
-    responseFormFormatted: Boolean,
   },
   emits: [
     'close', 'save', 'update:form', 'update:maximized',
-    'update:sseEvents', 'toggle-format',
+    'update:sseEvents', 'copy-text',
   ],
   inject: ['t'],
   data() {
@@ -210,6 +209,9 @@ const ResponseEditModal = {
     updateDescription(description) {
       this.$emit('update:form', { ...this.form, description });
     },
+    updateBody(body) {
+      this.$emit('update:form', { ...this.form, body });
+    },
   },
   template: /* html */`
     <ui-modal-transition>
@@ -235,14 +237,11 @@ const ResponseEditModal = {
           <div v-if="form.contentType==='text'" class="form-group response-text-editor">
             <div class="response-editor-toolbar">
               <label class="form-label">{{t('modal.responseContent')}}</label>
-              <ui-button type="button" class="btn btn-xs btn-secondary" @click="$emit('toggle-format')">
-                <i class="bi" :class="responseFormFormatted?'bi-code':'bi-braces'" aria-hidden="true"></i>
-                {{responseFormFormatted ? t('modal.plainText') : t('modal.format')}}
-              </ui-button>
               <span class="sub-info response-content-size">{{fmtSize(form.body?.length || 0)}}</span>
               <span v-if="(form.body?.length || 0) > 5242880" class="badge badge-warning" :title="t('modal.exceedCacheTooltip')"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> {{t('modal.exceedCacheThreshold')}}</span>
             </div>
-            <div id="responseFormEditorEl" class="edit-editor"></div>
+            <ui-code-viewer class="response-form-code" fill editable :label="t('modal.responseContent')" :placeholder="t('modal.responseBodyPlaceholder')"
+              :value="form.body || ''" @update:value="updateBody" @copy="$emit('copy-text', $event)"></ui-code-viewer>
           </div>
           <div v-else class="form-group response-sse-workspace">
             <section class="response-sse-editor-pane" aria-labelledby="sseEventsTitle">

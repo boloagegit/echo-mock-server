@@ -67,20 +67,24 @@ class RuleEditModalResourceTest {
     }
 
     @Test
-    void keepsNewResponseEditorOutsideTheModeTransitionRoot() throws IOException {
+    void responseContentUsesTheSharedCodeViewerAndModePanelsSwapInOneFrame() throws IOException {
         String component = resourceText("static/components/RuleEditModal.js");
-        int modeTransition = component.indexOf("<Transition name=\"ui-mode-panel-motion\" mode=\"out-in\">");
-        int modeTransitionEnd = component.indexOf("</Transition>", modeTransition);
         int responseContent = component.indexOf("<div v-if=\"ruleMode==='MOCK'\" class=\"form-block response-content-block\">");
 
-        assertThat(modeTransition).isGreaterThanOrEqualTo(0);
-        assertThat(modeTransitionEnd).isGreaterThan(modeTransition);
-        assertThat(responseContent).isGreaterThan(modeTransitionEnd);
-        assertThat(component.substring(modeTransition, modeTransitionEnd))
-                .doesNotContain("response-content-block");
+        // No transition wraps the mode panels or the protocol fields: each switch is a single-frame swap.
+        assertThat(component).doesNotContain("<Transition");
+        assertThat(responseContent).isPositive();
+        // Both sources (an existing response and a new one) use the drawers' viewer, editable and filling the pane;
+        // nothing is re-created by id, so switching modes or starting an edit never shows an empty editor.
         assertThat(component.substring(responseContent))
                 .contains("class=\"response-content-mode\"")
-                .contains("id=\"ruleEditEditor\"");
+                .contains("<ui-code-viewer class=\"rule-response-code\" :class=\"{'is-warning': previewEditing}\" fill :editable=\"previewEditing\"")
+                .contains("@update:value=\"$emit('update:preview-edit-body', $event)\"")
+                .contains("<ui-code-viewer class=\"rule-response-code\" fill editable")
+                .contains("@update:value=\"form.responseBody = $event\"")
+                .doesNotContain("id=\"ruleEditEditor\"")
+                .doesNotContain("id=\"rulePreviewEditor\"")
+                .doesNotContain("toggle-edit-format");
     }
 
     @Test
@@ -258,13 +262,11 @@ class RuleEditModalResourceTest {
         assertThat(component)
                 .contains("<div v-else key=\"jms\" class=\"response-status-row response-status-row--jms\">")
                 .contains("<code class=\"response-reply-type\">TextMessage</code>");
-        assertThat(component.split("<Transition name=\"rule-protocol-swap\">", -1)).hasSize(3);
-        // Only the incoming fields fade; the outgoing ones leave at once so the two sets never stack.
+        // The swap is one frame: a fade-in from empty read as a blink, so the fields are not wrapped in a transition.
+        assertThat(component).doesNotContain("rule-protocol-swap");
         assertThat(console)
                 .contains(".response-status-row { min-height: calc(var(--control-h-sm) + 2 * var(--editor-shell-padding) + 2px) }")
-                .contains(".rule-protocol-swap-enter-from { opacity: 0 }")
-                .contains(".rule-protocol-swap-leave-active { display: none }")
-                .contains("@media (prefers-reduced-motion: reduce) { .rule-protocol-swap-enter-active { transition: none } }");
+                .doesNotContain(".rule-protocol-swap-enter-from");
         for (String lang : new String[]{"zh-TW", "en"}) {
             assertThat(resourceText("static/i18n/" + lang + ".json")).as(lang)
                     .contains("\"pathPending\"").contains("\"queuePending\"").contains("\"queueMatchHint\"")

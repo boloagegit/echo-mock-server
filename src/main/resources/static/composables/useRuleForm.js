@@ -26,15 +26,6 @@
  * @param {Function} deps.rulesMarkDirty - 標記規則資料需重新載入（來自 useRules）
  * @param {Function} deps.responsesMarkDirty - 標記回應資料需重新載入（來自 useResponses）
  * @param {import('vue').Ref} deps.responseSseEvents - 回應 SSE 事件（來自 useResponses）
- * @param {Function} deps.renderEditor - 渲染編輯器函式（來自 useEditor）
- * @param {Function} deps.editEditorRef - 編輯器 ref getter（來自 useEditor）
- * @param {import('vue').Ref} deps.editFormatted - 編輯器格式化狀態（來自 useEditor）
- * @param {Function} deps.previewEditorRef - 預覽編輯器 ref getter（來自 useEditor）
- * @param {import('vue').Ref} deps.previewFormatted - 預覽格式化狀態（來自 useEditor）
- * @param {Function} deps.responseFormEditorRef - 回應表單編輯器 ref getter（來自 useEditor）
- * @param {import('vue').Ref} deps.responseFormFormatted - 回應表單格式化狀態（來自 useEditor）
- * @param {Function} deps.detectMode - 偵測內容模式函式（來自 useEditor）
- * @param {Object} deps.editors - 編輯器物件（來自 useEditor）
  * @param {import('vue').Ref} deps.jmsEnabled - JMS 是否啟用（來自 app.js）
  * @returns {Object} 規則表單相關的狀態與方法
  */
@@ -42,9 +33,7 @@ const useRuleForm = (deps) => {
     const { ref, computed, watch } = Vue;
     const { showToast, showConfirm, t, requireLogin, login,
             loadRules, rulePreviewCache, ruleDetailId, loadRuleDetail, rulesMarkDirty,
-            responsesMarkDirty, responseSseEvents,
-            renderEditor, editEditorRef, editFormatted, previewEditorRef, previewFormatted,
-            responseFormEditorRef, responseFormFormatted } = deps;
+            responsesMarkDirty, responseSseEvents } = deps;
 
     // --- 工具函式 ---
     const matchAll = (text, keywords) => keywords.every(kw => text.includes(kw));
@@ -774,7 +763,6 @@ const useRuleForm = (deps) => {
             if (!rr || !rr.ok) { saving.value = false; showToast(t('toast.responseSaveFailed'), 'error'); return; }
             previewResponseBody.value = previewEditBody.value;
             previewEditing.value = false;
-            renderEditor('preview', previewEditorRef, previewResponseBody.value, true);
             responsesMarkDirty();
         }
         const payload = { ...form.value };
@@ -846,12 +834,8 @@ const useRuleForm = (deps) => {
             } catch { previewResponseUsageCount.value = 0; }
             previewEditBody.value = previewResponseBody.value;
             previewEditing.value = true;
-            previewFormatted.value = false;
-            renderEditor('preview', previewEditorRef, previewEditBody.value, false, v => { previewEditBody.value = v; });
         } else {
             previewEditing.value = false;
-            previewFormatted.value = false;
-            renderEditor('preview', previewEditorRef, previewResponseBody.value, true);
         }
     };
 
@@ -867,8 +851,6 @@ const useRuleForm = (deps) => {
                 showToast(t('toast.responseSaveSuccess'), 'success');
                 previewResponseBody.value = previewEditBody.value;
                 previewEditing.value = false;
-                previewFormatted.value = false;
-                renderEditor('preview', previewEditorRef, previewResponseBody.value, true);
                 responsesMarkDirty();
                 rulePreviewCache.value = {};
                 loadResponsePicker(responsePickerPage.value);
@@ -877,8 +859,6 @@ const useRuleForm = (deps) => {
         previewSaving.value = false;
     };
 
-    const togglePreviewFormat = () => { previewFormatted.value = !previewFormatted.value; renderEditor('preview', previewEditorRef, previewEditing.value ? previewEditBody.value : previewResponseBody.value, !previewEditing.value, previewEditing.value ? v => { previewEditBody.value = v; } : undefined); };
-    const toggleEditFormat = () => { editFormatted.value = !editFormatted.value; renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; }); };
 
     let previewLoadSequence = 0;
     const loadSelectedResponse = async id => {
@@ -924,9 +904,6 @@ const useRuleForm = (deps) => {
         } finally {
             if (sequence === previewLoadSequence && form.value.responseId === id) {
                 previewResponseLoading.value = false;
-                if (!previewResponseLoadFailed.value && form.value.responseMode === 'existing' && !form.value.sseEnabled) {
-                    Vue.nextTick(() => renderEditor('preview', previewEditorRef, previewResponseBody.value, true));
-                }
             }
         }
     };
@@ -937,65 +914,17 @@ const useRuleForm = (deps) => {
             if (!val) { showCatchAllWarning.value = false; catchAllConfirmed.value = false; }
         });
 
-        watch(showModal, open => {
-            if (open) {
-                Vue.nextTick(() => {
-                    if (form.value.faultType && form.value.faultType !== 'NONE') return;
-                    if (form.value.responseMode === 'new' && !form.value.sseEnabled) {
-                        renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; });
-                    } else if (form.value.responseMode === 'existing' && form.value.responseId && !previewResponseLoading.value && !previewResponseLoadFailed.value) {
-                        renderEditor('preview', previewEditorRef, previewResponseBody.value, !previewEditing.value);
-                    }
-                });
-            }
-        });
-
+        // The response content is a bound ui-code-viewer: it follows form.responseBody / the selected
+        // response by itself, so mode, action and fault switches no longer re-create an editor.
         watch(() => form.value.responseId, (id, oldId) => {
-            previewFormatted.value = false;
             previewEditing.value = false;
             previewEditBody.value = '';
             if (id !== oldId) loadSelectedResponse(id);
         });
 
-        watch(() => form.value.responseMode, mode => {
-            editFormatted.value = false;
-            previewFormatted.value = false;
+        watch(() => form.value.responseMode, () => {
             previewEditing.value = false;
             previewEditBody.value = '';
-            if (form.value.faultType && form.value.faultType !== 'NONE') return;
-            if (mode === 'new') {
-                if (!form.value.sseEnabled) {
-                    renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; });
-                }
-            }
-            else if (mode === 'existing' && form.value.responseId && !previewResponseLoading.value && !previewResponseLoadFailed.value) {
-                Vue.nextTick(() => renderEditor('preview', previewEditorRef, previewResponseBody.value, true));
-            }
-        });
-
-        watch(() => form.value.action, action => {
-            if (action !== 'FORWARD' && (!form.value.faultType || form.value.faultType === 'NONE')) {
-                Vue.nextTick(() => {
-                    if (form.value.responseMode === 'new' && !form.value.sseEnabled) {
-                        renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; });
-                    } else if (form.value.responseMode === 'existing' && form.value.responseId && !previewResponseLoading.value && !previewResponseLoadFailed.value) {
-                        renderEditor('preview', previewEditorRef, previewResponseBody.value, !previewEditing.value);
-                    }
-                });
-            }
-        });
-
-        watch(() => form.value.faultType, (faultType, previousFaultType) => {
-            const faultEnabled = faultType && faultType !== 'NONE';
-            const faultWasEnabled = previousFaultType && previousFaultType !== 'NONE';
-            if (faultEnabled || !faultWasEnabled) return;
-            Vue.nextTick(() => {
-                if (form.value.responseMode === 'new' && !form.value.sseEnabled) {
-                    renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; });
-                } else if (form.value.responseMode === 'existing' && form.value.responseId && !previewResponseLoading.value && !previewResponseLoadFailed.value) {
-                    renderEditor('preview', previewEditorRef, previewResponseBody.value, !previewEditing.value);
-                }
-            });
         });
 
         watch(() => form.value.sseEnabled, (sse, oldSse) => {
@@ -1010,11 +939,6 @@ const useRuleForm = (deps) => {
                     } else {
                         form.value.responseBody = serialized;
                     }
-                }
-                if (form.value.responseMode === 'new') {
-                    Vue.nextTick(() => renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; }));
-                } else if (form.value.responseMode === 'existing' && form.value.responseId && !previewResponseLoading.value && !previewResponseLoadFailed.value) {
-                    Vue.nextTick(() => renderEditor('preview', previewEditorRef, previewResponseBody.value, !previewEditing.value));
                 }
             }
         });
@@ -1071,7 +995,7 @@ const useRuleForm = (deps) => {
         // Modal 最大化
         ruleModalMaximized, responseModalMaximized,
         // 格式切換
-        togglePreviewFormat, toggleEditFormat,
+
         // watchers
         setupFormWatchers,
         // 回應選擇抽屜關閉

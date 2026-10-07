@@ -14,8 +14,8 @@
     <link rel="stylesheet" href="/webjars/bootstrap-icons/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="/webjars/codemirror/lib/codemirror.css">
     <link rel="stylesheet" href="/theme.css?v=20261006.1">
-    <link rel="stylesheet" href="/style.css?v=20261007.15">
-    <link rel="stylesheet" href="/console.css?v=20261007.19">
+    <link rel="stylesheet" href="/style.css?v=20261007.20">
+    <link rel="stylesheet" href="/console.css?v=20261007.20">
     <script src="/ui-boot.js?v=20261007.3"></script>
     <script src="/ui-accent.js?v=20261006.1"></script>
 </head>
@@ -251,13 +251,12 @@
         :show="showResponseModal" :editing="editingResponse"
         :form="responseForm" :maximized="responseModalMaximized" :saving="loading.responseSave"
         :sse-events="responseSseEvents" :sse-preview="responseSsePreview"
-        :response-form-formatted="responseFormFormatted"
         @close="showResponseModal=false"
         @save="saveResponse"
         @update:form="Object.assign(responseForm, $event)"
         @update:maximized="responseModalMaximized=$event"
         @update:sse-events="responseSseEvents=$event"
-        @toggle-format="toggleResponseFormFormat"
+        @copy-text="clipCopy($event)"
     ></response-edit-modal>
 
     <!-- Create/Edit Modal -->
@@ -280,8 +279,7 @@
         :preview-response-body="previewResponseBody" :preview-response-loading="previewResponseLoading"
         :preview-response-load-failed="previewResponseLoadFailed" :preview-editing="previewEditing"
         :preview-edit-body="previewEditBody" :preview-response-usage-count="previewResponseUsageCount"
-        :preview-saving="previewSaving" :preview-formatted="previewFormatted"
-        :edit-formatted="editFormatted" :new-tag="newTag" :new-header="newHeader"
+        :preview-saving="previewSaving" :new-tag="newTag" :new-header="newHeader"
         @close="closeModal" @save="(close) => saveRule(close)"
         @change-editor-mode="changeRuleEditorMode($event)"
         @update:catch-all-confirmed="catchAllConfirmed=$event"
@@ -304,8 +302,8 @@
         @select-response="selectResponseOption($event)"
         @toggle-preview-editing="togglePreviewEditing"
         @save-preview-response="savePreviewResponse"
-        @toggle-preview-format="togglePreviewFormat"
-        @toggle-edit-format="toggleEditFormat"
+        @update:preview-edit-body="previewEditBody = $event"
+        @copy-text="clipCopy($event)"
         @go-to-responses="leaveRuleForResponses($event)"
         @clear-response-selection="clearResponseSelection"
         @reorder-sse-events="sseEvents=$event"
@@ -362,19 +360,19 @@
 <script src="/webjars/codemirror/mode/xml/xml.js"></script>
 <script src="/utils.js?v=20261007.13"></script>
 <!-- Composables (載入順序：utils.js → composables → components → app.js) -->
-<script src="/composables/useI18n.js?v=20261007.16"></script>
+<script src="/composables/useI18n.js?v=20261007.20"></script>
 <script src="/composables/useToast.js"></script>
 <script src="/composables/useDiscardGuard.js?v=20261001.2"></script>
 <script src="/composables/useAuth.js?v=20261007.5"></script>
 <script src="/composables/useTheme.js?v=20261006.1"></script>
 <script src="/composables/useTour.js?v=20261001.2"></script>
-<script src="/composables/useEditor.js"></script>
+<script src="/composables/useEditor.js?v=20261007.20"></script>
 <script src="/composables/useStats.js?v=20260812.1"></script>
 <script src="/composables/useAudit.js?v=20260812.1"></script>
 <script src="/composables/useResponses.js?v=20260812.1"></script>
 <script src="/composables/useRules.js?v=20260909.1"></script>
 <script src="/composables/useRuleApply.js?v=20260809.3"></script>
-<script src="/composables/useRuleForm.js?v=20261001.2"></script>
+<script src="/composables/useRuleForm.js?v=20261007.20"></script>
 <script src="/composables/useAccounts.js?v=20260904.1"></script>
 <script src="/composables/useIssues.js?v=20261001.1"></script>
 <script src="/composables/useRouter.js?v=20261007.2"></script>
@@ -391,7 +389,7 @@
 <script src="/components/UiDetailDrawer.js?v=20261007.13"></script>
 <script src="/components/UiIcon.js?v=20261007.8"></script>
 <script src="/components/UiDetailSection.js?v=20261007.13"></script>
-<script src="/components/UiCodeViewer.js?v=20261007.15"></script>
+<script src="/components/UiCodeViewer.js?v=20261007.20"></script>
 <script src="/components/UiLoadState.js?v=20260909.1"></script>
 <script src="/components/UiTabs.js?v=20260909.1"></script>
 <script src="/components/UiChoiceGroup.js?v=20260909.1"></script>
@@ -407,7 +405,7 @@
 <script src="/components/AuditPage.js?v=20261007.15"></script>
 <script src="/components/IssuesPage.js?v=20261007.13"></script>
 <script src="/components/StatsPage.js?v=20261007.15"></script>
-<script src="/components/ResponseEditModal.js?v=20261007.5"></script>
+<script src="/components/ResponseEditModal.js?v=20261007.20"></script>
 <script src="/components/ChangePasswordModal.js?v=20261007.5"></script>
     <script src="/components/ResponsesPage.js?v=20261007.9"></script>
     <script src="/components/ResponseDetail.js?v=20261007.13"></script>
@@ -419,9 +417,9 @@
 <script src="/components/RuleDetail.js?v=20261007.13"></script>
 <script src="/components/RulesPage.js?v=20261007.9"></script>
 <script src="/components/AccountsPage.js?v=20261007.13"></script>
-<script src="/components/RuleEditModal.js?v=20261007.16"></script>
+<script src="/components/RuleEditModal.js?v=20261007.20"></script>
 <script src="/components/RuleApplyModal.js?v=20261007.2"></script>
 <script src="/components/OpenApiPreviewModal.js?v=20261007.5"></script>
-<script src="/app.js?v=20261007.16"></script>
+<script src="/app.js?v=20261007.20"></script>
 </body>
 </html>

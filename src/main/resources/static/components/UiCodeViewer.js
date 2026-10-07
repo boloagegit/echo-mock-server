@@ -1,9 +1,14 @@
 /**
- * UiCodeViewer - 抽屜裡的長內容檢視器（唯讀）
+ * UiCodeViewer - 長內容檢視器，抽屜與規則編輯器共用
  *
  * 行號、換行切換、格式化（JSON／XML）、複製與全文搜尋（Enter／Shift+Enter 跳下一筆／上一筆）。
  * 高度依內容，最多 maxHeight（抽屜加寬時更高），超過就在檢視器內捲動；CodeMirror 只繪製
  * 看得到的行，幾百 KB 的內容也不必截斷。
+ *
+ * editable：可編輯（規則編輯器的回應內容），以 update:value 回報。格式化只改變顯示：開啟時是
+ * 唯讀的排版檢視，關閉才編輯原文，存檔永遠是原文（模板語法不會被改寫）。
+ * fill：高度填滿父層，不依內容伸縮。同一個 CodeMirror 實例在檢視、編輯、格式化之間切換，
+ * 不重建，所以切換時不會閃一下空白。
  */
 const CODE_VIEWER_MARK_LIMIT = 2000;
 const CODE_VIEWER_FORMAT_LIMIT = 2000000;
@@ -26,10 +31,14 @@ const UiCodeViewer = {
     value: { type: String, default: '' },
     label: { type: String, required: true },
     maxHeight: { type: Number, default: 420 },
+    editable: { type: Boolean, default: false },
+    fill: { type: Boolean, default: false },
+    placeholder: { type: String, default: '' },
   },
-  emits: ['copy'],
+  emits: ['copy', 'update:value'],
   data() {
-    return { wrap: true, formatted: true, query: '', matchIndex: 0, matchCount: 0, lineCount: 0 };
+    // Read-only content opens formatted (as in the drawers); editable content opens as written.
+    return { wrap: true, formatted: !this.editable, query: '', matchIndex: 0, matchCount: 0, lineCount: 0 };
   },
   computed: {
     mode() {
@@ -41,6 +50,10 @@ const UiCodeViewer = {
     canFormat() {
       return this.mode !== 'text/plain' && this.value.length <= CODE_VIEWER_FORMAT_LIMIT;
     },
+    /** Editable content is read-only while the formatted view is on: what you edit is always the original. */
+    readOnly() {
+      return !this.editable || (this.formatted && this.canFormat);
+    },
     text() {
       if (!this.formatted || !this.canFormat) return this.value;
       if (this.mode === 'xml') return formatXmlForReading(this.value);
@@ -50,9 +63,13 @@ const UiCodeViewer = {
   watch: {
     text(value) {
       if (!this.cm) return;
-      this.cm.setValue(value);
+      // While typing, the editor already holds this text; replacing it would move the cursor.
+      if (this.cm.getValue() !== value) this.cm.setValue(value);
       this.afterContentChange();
     },
+    readOnly(value) { this.cm?.setOption('readOnly', value); },
+    // Starting to edit shows the original text; leaving edit mode returns to the formatted view.
+    editable(value) { this.formatted = !value; },
     mode(value) { this.cm?.setOption('mode', value); },
     wrap(value) {
       this.cm?.setOption('lineWrapping', value);
@@ -69,12 +86,16 @@ const UiCodeViewer = {
     this.cm = CodeMirror(this.$refs.host, {
       value: this.text,
       mode: this.mode,
-      readOnly: true,
+      readOnly: this.readOnly,
       lineNumbers: true,
       lineWrapping: this.wrap,
       viewportMargin: 20,
     });
     this.cm.getInputField()?.setAttribute('aria-label', this.label);
+    this.cm.on('change', (cm, change) => {
+      if (change.origin === 'setValue' || this.readOnly) return;
+      this.$emit('update:value', cm.getValue());
+    });
     // Follows the drawer's width (wide view, window resize): re-measure and refit.
     this.resizeObserver = new ResizeObserver(() => { this.cm.refresh(); this.fit(); });
     this.resizeObserver.observe(this.$refs.host);
@@ -93,6 +114,7 @@ const UiCodeViewer = {
     /** As tall as the content, up to the limit (taller in the wide drawer); longer content scrolls inside. */
     fit() {
       if (!this.cm) return;
+      if (this.fill) { this.cm.setSize(null, '100%'); return; }
       const wide = !!this.$el.closest?.('.ui-detail-drawer.is-wide');
       const limit = wide ? Math.max(this.maxHeight, window.innerHeight - 320) : this.maxHeight;
       const content = this.cm.heightAtLine(this.cm.lineCount(), 'local') + 12;
@@ -135,7 +157,7 @@ const UiCodeViewer = {
     },
   },
   template: /* html */`
-    <div class="ui-code-viewer">
+    <div class="ui-code-viewer" :class="{'is-fill': fill, 'is-editable': editable, 'is-read-only': readOnly}">
       <div class="ui-code-viewer__toolbar">
         <label class="ui-code-viewer__search">
           <span class="visually-hidden">{{t('codeViewer.search')}}</span>
@@ -147,9 +169,16 @@ const UiCodeViewer = {
         <ui-button type="button" variant="quiet" size="compact" :aria-pressed="wrap ? 'true' : 'false'" @click="wrap = !wrap">{{t('codeViewer.wrap')}}</ui-button>
         <ui-button v-if="canFormat" type="button" variant="quiet" size="compact" :aria-pressed="formatted ? 'true' : 'false'" @click="formatted = !formatted">{{t('codeViewer.format')}}</ui-button>
         <ui-button type="button" variant="quiet" size="compact" icon-only :title="t('codeViewer.copy')" :aria-label="t('codeViewer.copy')" @click="$emit('copy', value)"><i class="bi bi-clipboard" aria-hidden="true"></i></ui-button>
+        <slot name="tools"></slot>
       </div>
-      <div ref="host" class="ui-code-viewer__host"></div>
-      <div class="ui-code-viewer__status">{{t('codeViewer.status', {lines: lineCount.toLocaleString(), size: fmtSize(value.length)})}}</div>
+      <div class="ui-code-viewer__body">
+        <div ref="host" class="ui-code-viewer__host"></div>
+        <span v-if="editable && !value && placeholder" class="ui-code-viewer__placeholder" aria-hidden="true">{{placeholder}}</span>
+      </div>
+      <div class="ui-code-viewer__status">
+        <span>{{t('codeViewer.status', {lines: lineCount.toLocaleString(), size: fmtSize(value.length)})}}</span>
+        <span v-if="editable && readOnly" class="ui-code-viewer__mode">{{t('codeViewer.formattedReadOnly')}}</span>
+      </div>
     </div>
   `,
 };

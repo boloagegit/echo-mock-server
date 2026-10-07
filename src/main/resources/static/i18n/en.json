@@ -1271,7 +1271,9 @@
     "queueMatchHint": "Use * for any queue; rules naming a specific queue are checked first.",
     "jmsReplyLabel": "Reply message",
     "jmsReplyHint": "CorrelationID is set to the request's MessageID",
-    "replyQueueFromRequest": "Replies go where the request asks"
+    "replyQueueFromRequest": "Replies go where the request asks",
+    "expandContent": "Expand response content",
+    "collapseContent": "Restore layout"
   },
   "confirm": {
     "discardRuleTitle": "Discard rule changes?",
@@ -1830,6 +1832,7 @@
     "wrap": "Wrap",
     "format": "Format",
     "copy": "Copy all",
-    "status": "{lines} lines · {size}"
+    "status": "{lines} lines · {size}",
+    "formattedReadOnly": "Formatted view (read-only) · turn off Format to edit"
   }
 }
