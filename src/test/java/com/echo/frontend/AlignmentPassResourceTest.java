@@ -44,6 +44,22 @@ class AlignmentPassResourceTest {
     }
 
     @Test
+    void switchingProtocolKeepsTheRequestRowsInPlaceInNarrowerPanes() throws IOException {
+        String console = text("console.css");
+
+        // A 1280px window (or 1366px at 125%) gives the request pane under 500px; the HTTP request
+        // line must stay one row there, because JMS fills the same slot with one row.
+        assertThat(console)
+                .contains("@container rule-left (max-width: 500px) {\n    .rule-request-line .method-group .method-btn { padding-inline: 6px }\n}")
+                .contains("@container rule-left (max-width: 600px) {\n    .rule-protocol-fields .source-host-hint { min-height: 2lh }\n}")
+                .contains("@container rule-left (max-width: 380px) {\n    .rule-request-line { grid-template-columns: minmax(0, 1fr) }");
+        // Desktop pane headings stay on one line; the hint shortens instead of pushing the switch down.
+        assertThat(console)
+                .contains("    .rule-editor .rule-pane-heading { flex-wrap: nowrap }")
+                .contains("    .rule-editor .rule-pane-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }");
+    }
+
+    @Test
     void footersAndEmptyStatesAreBalanced() throws IOException {
         assertThat(text("console.css"))
                 .contains(".workspace-page-size .form-control { height: max(32px, var(--control-h-sm)); min-height: max(32px, var(--control-h-sm)) }")

@@ -189,7 +189,8 @@ class RuleEditModalResourceTest {
                 .isLessThan(component.indexOf("id=\"rule-http-path\"", line));
         assertThat(resourceText("static/console.css"))
                 .contains(".rule-left { container: rule-left / inline-size }")
-                .contains("@container rule-left (max-width: 500px) {")
+                .contains("@container rule-left (max-width: 500px) {\n    .rule-request-line .method-group .method-btn { padding-inline: 6px }")
+                .contains("@container rule-left (max-width: 380px) {\n    .rule-request-line { grid-template-columns: minmax(0, 1fr) }")
                 .contains(".ui-choice-group.rule-protocol-options > .rule-protocol-option { border: 0; background: transparent; box-shadow: none }");
         // Field labels never outweigh the values they describe.
         assertThat(resourceText("static/style.css"))
