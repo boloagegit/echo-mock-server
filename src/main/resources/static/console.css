@@ -800,3 +800,108 @@
 /* The outgoing fields leave at once, so the two sets never stack for a frame. */
 .rule-protocol-swap-leave-active { display: none }
 @media (prefers-reduced-motion: reduce) { .rule-protocol-swap-enter-active { transition: none } }
+
+/* ===== Alignment pass (2026-10-07) =====
+ * Layout only: shared edges and centre lines so the sidebar, headers, tables and
+ * footers line up. No control, field order or behaviour changes. */
+
+/* The sidebar brand row shares the page header's centre line (main padding 16px + 48px header),
+ * and the mark, section labels, nav icons, service rows and avatar share one left edge (22px). */
+.sidebar-header { min-height: 64px; padding: 16px 12px 0 22px; align-items: center }
+.service-status { padding-inline: 9px }
+.user-trigger { padding-inline: 9px }
+.boot-shell__sidebar { padding: 24px 12px 0 22px }
+
+/* Search takes the width the filters leave (DESIGN.md: "search receives the remaining width").
+ * The rules toolbar has more filters than one line holds, so its search gets its own line and the
+ * filters and view switch share the next one instead of leaving one filter alone on a second row. */
+.list-toolbar > .workspace-search-field { max-width: none }
+.list-toolbar:has(> .list-toolbar__end) > .workspace-search-field { flex-basis: 100% }
+
+/* Sortable headings read like the other headings; only the active one is emphasised. The button's
+ * hover padding hangs outside the cell so the label starts (or, in numeric columns, ends) on the
+ * same edge as the values below it. */
+.data-table th .ui-table-sort-header.ui-button {
+    margin-inline: -6px 0;
+    padding-inline: 5px;
+    color: var(--text-subtle);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 0;
+}
+.data-table th .ui-table-sort-header.ui-button.is-active { color: var(--text); font-weight: var(--font-weight-semibold) }
+.data-table th .ui-table-sort-header.ui-button:hover:not(:disabled) { color: var(--text) }
+.data-table th.cell-end .ui-table-sort-header.ui-button,
+.rule-table th.col-priority .ui-table-sort-header.ui-button { margin-inline: 0 -6px }
+/* Priority is a number: right-aligned like Size and Duration, with room for its heading. */
+.rule-table th.col-priority,
+.rule-table td.col-priority { width: 96px; text-align: end }
+/* Wide enough that "Duration" and its sort icon fit, so the heading ends on the values' edge. */
+.log-table .col-duration { width: 108px }
+
+/* Pager buttons and the page-size select are one height. */
+.workspace-page-size .form-control { height: max(32px, var(--control-h-sm)); min-height: max(32px, var(--control-h-sm)) }
+
+/* An empty or failed list centres its message in the card (slightly above the middle)
+ * instead of leaving it at the top of a mostly blank card. */
+.card-table-body:has(> .ui-load-state) { display: flex; flex-direction: column }
+.card-table-body > .ui-load-state { flex: 1 0 auto; padding-bottom: calc(var(--space-xl) + 8vh) }
+
+/* Settings overview: headings match the lists; the detail link sits on the first line of its row
+ * and its chevron ends on the heading's edge. */
+.settings-table thead th { color: var(--text-subtle); font-weight: var(--font-weight-medium) }
+.resource-overview-table td.settings-table-actions > .ui-button { margin-block: -6px; margin-inline-end: -8px }
+
+/* Rule editor: both panes keep the same space on each side of the divider. The left pane's
+ * thin scrollbar gutter (about 10px) sits next to the divider, so its end padding is that much
+ * smaller. Below 1081px the panes stack and have no side padding. */
+@media (min-width: 1081px) {
+    .rule-left { padding-inline-end: max(0px, calc(var(--editor-pane-inline) - 10px)) }
+}
+
+/* A pane heading that cannot fit its title, hint and switch on one line moves the switch below
+ * instead of squeezing the hint into a one-word column. */
+.rule-editor .rule-pane-heading { flex-wrap: wrap; row-gap: var(--space-sm) }
+
+/* Drawer: the ⋯ menu lines up under the close button. */
+.ui-detail-drawer__actions .ui-row-menu { margin-inline-end: -8px }
+
+/* ===== Phone widths (2026-10-07) ===== */
+/* Rule editor header: name and context get the full width; window buttons stay top-right and the
+ * state switches and editor mode sit on their own rows. The editor fills the screen. */
+@media (max-width: 640px) {
+    .modal-overlay:has(> .rule-modal-fullscreen) { padding: 0 }
+    .rule-modal-fullscreen,
+    .rule-modal-fullscreen.maximized { width: 100% !important; max-width: 100% !important; height: 100dvh; max-height: 100dvh; border-radius: 0 }
+    .rule-modal-fullscreen > .modal-header { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: start; gap: var(--space-sm) 2px }
+    .rule-modal-fullscreen > .modal-header > .rule-modal-heading-area { grid-column: 1; grid-row: 1 }
+    .rule-modal-fullscreen .rule-modal-actions { display: contents }
+    .rule-modal-fullscreen .rule-modal-actions > .close-btn { grid-row: 1 }
+    .rule-modal-fullscreen .rule-modal-actions__divider { display: none }
+    .rule-modal-fullscreen .rule-modal-actions > .rule-state-controls { grid-column: 1 / -1; grid-row: 2 }
+    .rule-modal-fullscreen .rule-modal-actions > .rule-editor-mode-switch { grid-column: 1 / -1; grid-row: 3; justify-self: start }
+}
+/* Settings overview: each summary stacks (name, values, link) instead of squeezing the name into 80px. */
+@media (max-width: 560px) {
+    .resource-overview-table tr { grid-template-columns: minmax(0, 1fr) }
+    .resource-overview-table tbody th { color: var(--text-subtle); font-size: var(--font-xs) }
+    .resource-overview-table td:last-child { grid-column: 1; text-align: start }
+    .resource-overview-table td.settings-table-actions > .ui-button { margin: 0 0 0 -11px }
+}
+/* Narrow lists: tighter cell padding and smaller fixed columns leave room for the endpoint. */
+@container (max-width: 480px) {
+    .data-table th,
+    .data-table td { padding-inline: 8px }
+    .data-table th:first-child,
+    .data-table td:first-child { padding-inline-start: 12px }
+    .rule-table th.col-actions,
+    .rule-table td.col-actions,
+    .response-table th.col-actions,
+    .response-table td.col-actions { width: 80px }
+    .rule-table .col-method,
+    .log-table .col-method { width: 60px }
+    .rule-table .rule-method { min-width: 0 }
+    .log-table .col-result { width: 128px }
+    .response-table .col-usage { width: 96px }
+    .log-table th.col-actions,
+    .log-table td.col-actions { width: 44px }
+}
