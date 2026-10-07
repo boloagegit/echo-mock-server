@@ -786,6 +786,10 @@
  * then a field with one hint; response: one shape row), so switching swaps fields in place
  * instead of moving the rest of the editor. Only the swapped fields fade in. */
 .rule-queue-field { margin-bottom: var(--editor-field-gap) }
+/* JMS reply destination: read-only, in an input-sized box with a dashed edge so it reads as not editable. */
+.rule-readonly-value { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; min-height: var(--control-h); margin: 0; padding: 0 12px; border: 1px dashed var(--border2); border-radius: var(--radius-control); color: var(--muted); font-size: var(--font-sm) }
+.rule-readonly-value code { flex: none; color: var(--text); font-family: var(--font-mono); font-size: 13px }
+.rule-readonly-value span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 /* As tall as the HTTP type switch (option + shell padding + border) in every density. */
 .response-status-row { min-height: calc(var(--control-h-sm) + 2 * var(--editor-shell-padding) + 2px) }
 .response-reply-label { color: var(--muted); font-size: var(--font-sm); font-weight: var(--font-weight-medium); white-space: nowrap }

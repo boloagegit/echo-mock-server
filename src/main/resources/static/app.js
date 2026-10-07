@@ -141,7 +141,6 @@ const _app = createApp({
             }).spec,
             conditions: conditions.value,
             responseMode: form.value.responseMode,
-            replyQueue: form.value.replyQueue || null,
             sseDraft: form.value.sseEnabled && (form.value.responseMode !== 'existing'
                 || draftFingerprint(sseEvents.value) !== draftFingerprint(deserializeSseEvents(previewResponseBody.value)))
                 ? sseEvents.value : null,

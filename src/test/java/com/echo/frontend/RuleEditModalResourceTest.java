@@ -25,7 +25,7 @@ class RuleEditModalResourceTest {
     @Test
     void associatesMatchingFieldsAndAnnouncesMethodSelection() throws IOException {
         String component = resourceText("static/components/RuleEditModal.js");
-        for (String field : new String[]{"rule-http-path", "rule-source-host", "rule-jms-queue", "rule-jms-reply"}) {
+        for (String field : new String[]{"rule-http-path", "rule-source-host", "rule-jms-queue"}) {
             assertThat(component).contains("for=\"" + field + "\"").contains("id=\"" + field + "\"");
         }
         assertThat(component).contains("<ui-choice-group class=\"method-group\"")
@@ -247,7 +247,12 @@ class RuleEditModalResourceTest {
                 .contains("<div v-if=\"form.protocol==='HTTP'\" key=\"http\" class=\"rule-protocol-fields\">")
                 .contains("<div v-else key=\"jms\" class=\"rule-protocol-fields\">")
                 .contains("<input id=\"rule-jms-queue\" class=\"form-control rule-path-input\"")
-                .contains("{{t('modal.queueMatchHint')}}");
+                .contains("{{t('modal.queueMatchHint')}}")
+                // Replies go to the request's JMSReplyTo: shown read-only in the input's place, never an unsaved input.
+                .contains("<p class=\"rule-readonly-value\"><code>JMSReplyTo</code><span>{{t('modal.replyQueueFromRequest')}}</span></p>")
+                .doesNotContain("v-model=\"form.replyQueue\"");
+        assertThat(console)
+                .contains(".rule-readonly-value { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; min-height: var(--control-h);");
         // Response: JMS keeps the shape row and says what the reply is instead of dropping it.
         assertThat(component)
                 .contains("<div v-else key=\"jms\" class=\"response-status-row response-status-row--jms\">")
@@ -262,8 +267,11 @@ class RuleEditModalResourceTest {
         for (String lang : new String[]{"zh-TW", "en"}) {
             assertThat(resourceText("static/i18n/" + lang + ".json")).as(lang)
                     .contains("\"pathPending\"").contains("\"queuePending\"").contains("\"queueMatchHint\"")
-                    .contains("\"jmsReplyLabel\"").contains("\"jmsReplyHint\"");
+                    .contains("\"jmsReplyLabel\"").contains("\"jmsReplyHint\"").contains("\"replyQueueFromRequest\"");
         }
+        // The help describes what the listener does: reply to JMSReplyTo, or not at all.
+        assertThat(resourceText("static/i18n/zh-TW.json"))
+                .contains("\"jmsFieldReplyQueue\": \"回覆送到請求訊息指定的佇列（JMSReplyTo）；請求沒有指定時不回覆。\"");
     }
 
     @Test

@@ -646,9 +646,10 @@ const RuleEditModal = {
                                 <div v-if="formErrors.matchKey" class="invalid-feedback validation-message--visible">{{formErrors.matchKey}}</div>
                                 <div class="sub-info source-host-hint">{{t('modal.queueMatchHint')}}</div>
                             </div>
+                            <!-- Replies go where the request asks (JMSReplyTo); shown, not edited, in the input's place. -->
                             <div class="form-group form-group--flush">
-                                <label class="form-label" for="rule-jms-reply">{{t('modal.replyQueue')}}</label>
-                                <input id="rule-jms-reply" class="form-control rule-path-input" v-model="form.replyQueue" placeholder="REPLY.QUEUE">
+                                <span class="form-label">{{t('modal.replyQueue')}}</span>
+                                <p class="rule-readonly-value"><code>JMSReplyTo</code><span>{{t('modal.replyQueueFromRequest')}}</span></p>
                             </div>
                         </div>
                         </Transition>

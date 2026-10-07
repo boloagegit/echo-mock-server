@@ -1270,7 +1270,8 @@
     "queuePending": "尚未設定佇列",
     "queueMatchHint": "填 * 代表所有佇列；指定佇列名稱的規則會先比對。",
     "jmsReplyLabel": "回覆訊息",
-    "jmsReplyHint": "CorrelationID 帶入請求的 MessageID"
+    "jmsReplyHint": "CorrelationID 帶入請求的 MessageID",
+    "replyQueueFromRequest": "依請求訊息指定的佇列回覆"
   },
   "confirm": {
     "discardRuleTitle": "放棄規則修改？",
@@ -1645,7 +1646,7 @@
     "jmsMessageFlow": "JMS 訊息流程",
     "jmsRuleFields": "JMS 規則欄位",
     "jmsFieldQueue": "監聽的佇列名稱，例如 <code>ORDER.REQUEST</code>",
-    "jmsFieldReplyQueue": "傳送回覆的佇列；留空時使用訊息的 ReplyTo。",
+    "jmsFieldReplyQueue": "回覆送到請求訊息指定的佇列（JMSReplyTo）；請求沒有指定時不回覆。",
     "jmsFieldDelay": "回應延遲毫秒數",
     "jmsCondMatch": "匹配訊息內容（JSON/XML），語法同 HTTP",
     "jmsCondNote": "JMS 僅支援內容條件，不支援查詢參數與標頭條件。",

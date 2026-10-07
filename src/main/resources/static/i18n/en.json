@@ -1270,7 +1270,8 @@
     "queuePending": "No queue yet",
     "queueMatchHint": "Use * for any queue; rules naming a specific queue are checked first.",
     "jmsReplyLabel": "Reply message",
-    "jmsReplyHint": "CorrelationID is set to the request's MessageID"
+    "jmsReplyHint": "CorrelationID is set to the request's MessageID",
+    "replyQueueFromRequest": "Replies go where the request asks"
   },
   "confirm": {
     "discardRuleTitle": "Discard rule changes?",
@@ -1645,7 +1646,7 @@
     "jmsMessageFlow": "JMS Message Flow",
     "jmsRuleFields": "JMS Rule Fields",
     "jmsFieldQueue": "Queue name to listen on (e.g., <code>ORDER.REQUEST</code>)",
-    "jmsFieldReplyQueue": "Queue for sending replies. Leave empty to use the message's ReplyTo.",
+    "jmsFieldReplyQueue": "Replies go to the queue the request names (JMSReplyTo); a request that names none gets no reply.",
     "jmsFieldDelay": "Response delay in milliseconds",
     "jmsCondMatch": "Match message content (JSON/XML), same syntax as HTTP",
     "jmsCondNote": "JMS only supports Body conditions. Query and Header are not supported.",

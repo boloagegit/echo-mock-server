@@ -94,9 +94,8 @@ node --test src/test/js/*.cjs
 
 ## 待辦
 
-- [ ] **JMS「回覆佇列」欄位沒有存檔**。這是既有的問題，不是這次改版造成的。
-  - `form.replyQueue` 只用在草稿偵測。後端一律回覆到請求的 JMSReplyTo（TextMessage，CorrelationID 帶入請求的 MessageID）。
-  - 要請使用者決定：存成規則欄位（需要改 Entity，先確認），或拿掉欄位改成說明文字。
-  - 已另開背景任務。
+- [x] **JMS「回覆佇列」**：這個輸入框從來沒有存檔過；後端一律回覆到請求的 JMSReplyTo（TextMessage，CorrelationID 帶入請求的 MessageID），請求沒帶就不回覆。
+  - 已依使用者決定，改成唯讀說明，後端不動。說明視窗的文字也一併更正。
+  - 若日後真的需要「請求沒帶回覆地址時，回到固定佇列」：只在沒有 JMSReplyTo 時才使用規則設定的佇列，這樣不影響現有情境。這需要改 Entity，要先經使用者同意。
 - [ ] **最終截圖**：每個畫面在深色與淺色主題、SIT 與 UAT accent、1440 寬與手機寬各一張，交給使用者。
 - [ ] 使用者同意後才 push、開 PR 到 `main`。版本與 tag 依 `AGENTS.md`（`vYYYY.MM.DD`）。

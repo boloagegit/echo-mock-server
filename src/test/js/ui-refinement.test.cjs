@@ -140,10 +140,15 @@ test('actual app draft comparison distinguishes cleared and JSON-null declaratio
   }
 });
 
-test('actual app comparison includes JMS reply queue without changing the declarative contract', () => {
+test('actual app comparison follows the JMS queue; replies follow the request, so there is no reply-queue draft', () => {
   const h = appDraftHarness();
-  h.form.value.replyQueue = 'REPLY.ORDER';
-  assert.equal(h.guard.isDirty(), true);
+  h.form.value.matchKey = 'ORDER.V2';
+  assert.equal(h.guard.isDirty(), true, 'changing the queue is an unsaved change');
+  // Mock replies always go to the request's JMSReplyTo; the editor shows that instead of an input that was never saved.
+  const fresh = appDraftHarness();
+  fresh.form.value.replyQueue = 'REPLY.ORDER';
+  assert.equal(fresh.guard.isDirty(), false);
+  assert.ok(!source('components/RuleEditModal.js').includes('v-model="form.replyQueue"'));
 });
 
 test('complete save interval locks both editor bodies and mode controls, including before and after the API response', () => {
