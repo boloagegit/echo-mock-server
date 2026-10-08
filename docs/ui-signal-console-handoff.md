@@ -114,6 +114,30 @@ node --test src/test/js/*.cjs
 - 新增規則時的「Response Mode」列：放不下時，範本捷徑（Template／JSON／XML／Plain Text）改排到第二行，不再把「Response Mode」和「Create New Response」各擠成兩行。
 - 手機寬：編輯器標題列改成格線排列，編輯器滿版；設定總覽改為上下排列；窄列表縮小固定欄寬，讓 endpoint 看得到。
 
+## 介面彩蛋：Echo Strike（2026-10-08）
+
+在頁面上（游標不在輸入框、下拉選單或程式碼編輯器裡）依序按 ↑ ↑ ↓ ↓ ← → ← → A B（最後兩鍵按 B A 也可以），會開啟一個縱向射擊小遊戲。測試在 `EasterEggResourceTest`。
+
+- 檔案：`easter-egg.js` 只負責偵測按鍵，跟著頁面載入。`echo-strike.js` 是遊戲本體，觸發後才載入。兩個都放在 static 根目錄，因為 SecurityConfig 只對根目錄的 `/*.js` 放行。
+- 開關：`echo.ui.easter-egg`，對應環境變數 `ECHO_UI_EASTER_EGG`，預設 `true`。`/api/admin/status` 回傳 `uiEasterEgg`，`app.js` 的 `applyStatus` 再呼叫 `EchoEasterEgg.setEnabled`。預設是關閉狀態，要等狀態 API 回傳 `true` 才會開啟。正式環境可以設 `false`。
+- 遊戲內容都是原創，不使用任何外部資源，也不發出網路請求。
+  - 玩家機體的顏色跟著部署主色（teal／blue）。
+  - 敵人是 HTTP 方法標籤造型，顏色沿用列表裡的方法色。
+  - 道具是「200」，炸彈道具是「BOMB」，魔王是「500 Internal Server Error」。打倒魔王後進入下一輪，難度提高。
+  - 最高分存在 localStorage 的 `echo.strike.hiscore`。
+- 遊戲開著的時候，鍵盤只交給遊戲，按鍵不會傳到下層的頁面。
+  - Esc 或右上角的 × 關閉遊戲，焦點回到原本的位置。
+  - 切到別的分頁或視窗失去焦點時，遊戲自動暫停。
+  - 系統設定「減少動態效果」時，不閃光也不震動。
+  - 觸控裝置：拖曳移動，點兩下放炸彈，標題畫面只顯示觸控操作說明。
+- 已驗證的項目：
+  - 在搜尋框裡輸入這組按鍵不會觸發，遊戲檔案也不會載入。
+  - 1440 寬的畫面維持 60 fps。
+  - 用加速版跑過魔王出場、打倒魔王和遊戲結束三種畫面。
+  - `ECHO_UI_EASTER_EGG=false` 時不會觸發。
+  - 手機寬度可以正常顯示。
+  - 主控台沒有錯誤訊息。
+
 ## 待辦
 
 - [x] **JMS「回覆佇列」**：這個輸入框從來沒有存檔過；後端一律回覆到請求的 JMSReplyTo（TextMessage，CorrelationID 帶入請求的 MessageID），請求沒帶就不回覆。

@@ -92,6 +92,7 @@ echo:
   env-label:                    # 環境別名（如 DEV、SIT、UAT），可用環境變數 ECHO_ENV_LABEL 覆蓋
   ui:
     accent: ${ECHO_UI_ACCENT:teal}  # 介面主色：teal（青綠）或 blue（藍），用來區分不同部署環境；其他值視為 teal
+    easter-egg: ${ECHO_UI_EASTER_EGG:true}  # 介面彩蛋（↑↑↓↓←→←→AB 開小遊戲）；設 false 關閉
   features:
     issue-reporting-enabled: ${ECHO_ISSUE_REPORTING_ENABLED:false}      # 問題回報，預設關閉
     bulk-import-export-enabled: ${ECHO_BULK_IMPORT_EXPORT_ENABLED:false}  # 批次匯入／匯出，預設關閉

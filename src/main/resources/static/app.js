@@ -362,7 +362,7 @@ const _app = createApp({
         // The last status is cached per tab so a reload can draw the signed-in sidebar
         // (identity, admin sections, environment) immediately; the live response then replaces it.
         const STATUS_CACHE_KEY = 'echo.statusCache';
-        const STATUS_CACHE_FIELDS = ['isLoggedIn', 'isAdmin', 'username', 'isBuiltinUser', 'envLabel', 'uiAccent', 'jmsEnabled',
+        const STATUS_CACHE_FIELDS = ['isLoggedIn', 'isAdmin', 'username', 'isBuiltinUser', 'envLabel', 'uiAccent', 'uiEasterEgg', 'jmsEnabled',
             'httpAlias', 'jmsAlias', 'serverPort', 'artemisBrokerUrl', 'bulkImportExportEnabled', 'scenariosEnabled',
             'ruleDragSortEnabled', 'issueReportingEnabled', 'cleanupRetentionDays', 'responseRetentionDays'];
         const readCachedStatus = () => {
@@ -377,6 +377,7 @@ const _app = createApp({
             jmsAlias.value = data.jmsAlias || 'JMS';
             envLabel.value = data.envLabel || '';
             window.EchoAccent?.apply(data.uiAccent);
+            window.EchoEasterEgg?.setEnabled(data.uiEasterEgg === true);
             document.title = envLabel.value ? `Echo - ${envLabel.value}` : 'Echo Mock Server';
         };
         const loadStatus = async () => {

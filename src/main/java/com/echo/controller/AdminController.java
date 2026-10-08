@@ -179,6 +179,10 @@ public class AdminController {
     @Value("${echo.ui.accent:teal}")
     private String uiAccent;
 
+    /** 介面彩蛋（↑↑↓↓←→←→AB 小遊戲）；正式環境可用 ECHO_UI_EASTER_EGG=false 關閉。 */
+    @Value("${echo.ui.easter-egg:true}")
+    private boolean uiEasterEgg;
+
     @Value("${echo.cleanup.response-retention-days:180}")
     private int responseRetentionDays;
 
@@ -256,6 +260,7 @@ public class AdminController {
         status.put("cleanupRetentionDays", cleanupRetentionDays);
         status.put("envLabel", envLabel);
         status.put("uiAccent", resolveUiAccent(uiAccent));
+        status.put("uiEasterEgg", uiEasterEgg);
         status.put("version", getClass().getPackage().getImplementationVersion() != null 
                 ? getClass().getPackage().getImplementationVersion() : "dev");
         // 檢查孤兒規則

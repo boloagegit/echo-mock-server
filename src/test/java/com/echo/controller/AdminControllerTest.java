@@ -138,6 +138,15 @@ class AdminControllerTest {
     }
 
     @Test
+    void getStatus_shouldExposeEasterEggSwitch() {
+        ReflectionTestUtils.setField(controller, "uiEasterEgg", true);
+        assertThat(controller.getStatus(null).getBody().get("uiEasterEgg")).isEqualTo(true);
+
+        ReflectionTestUtils.setField(controller, "uiEasterEgg", false);
+        assertThat(controller.getStatus(null).getBody().get("uiEasterEgg")).isEqualTo(false);
+    }
+
+    @Test
     void getStatus_shouldFallBackToTealForMissingUiAccent() {
         ReflectionTestUtils.setField(controller, "uiAccent", null);
 
