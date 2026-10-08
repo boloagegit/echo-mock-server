@@ -94,7 +94,9 @@ class AlignmentPassResourceTest {
                 .contains(".resource-overview-table tr { grid-template-columns: minmax(0, 1fr) }")
                 .contains("@container (max-width: 480px) {")
                 .contains(".rule-table .rule-method { min-width: 0 }")
-                .contains(".log-table .col-result { width: 128px }");
+                .contains(".log-table .col-result { width: 128px }")
+                // No keyboard shortcut hint on phones, so the three footer buttons stay on one row.
+                .contains("@media (max-width: 640px), (hover: none) and (pointer: coarse) {\n    .rule-modal-fullscreen > .modal-footer > .modal-footer-hint { display: none }");
         // The editor's controls are only rearranged on phones, never hidden.
         assertThat(phone).doesNotContain(".close-btn { display: none }");
     }

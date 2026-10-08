@@ -1030,6 +1030,12 @@
     .rule-right .ui-code-viewer__lead { flex: 1 1 100% }
 }
 
+/* Editor footer on phones and touch-only devices: the Ctrl/⌘+Enter hint has no keyboard to use
+   and pushed "Save & close" onto a second row; without it Cancel, Save and Save & close share one row. */
+@media (max-width: 640px), (hover: none) and (pointer: coarse) {
+    .rule-modal-fullscreen > .modal-footer > .modal-footer-hint { display: none }
+}
+
 /* ===== Easter egg (2026-10-08) ===== */
 /* ↑↑↓↓←→←→AB opens Echo Strike (echo-strike.js, loaded on demand); above modals and toasts. */
 .echo-strike {
