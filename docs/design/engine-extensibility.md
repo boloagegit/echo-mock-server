@@ -410,7 +410,7 @@ v1 與 v2 透過同一個 `RuleDefinition` 雙向轉換；`/rules/schema` 提供
 | 4 | `SelectionPolicy` 收斂 5 份選擇邏輯；`RuleIndex` 不可變快照 | 無 | 完成（見 7.2.2） |
 | 5 | `Responder`／`ResponsePlan`，SSE 播放移出控制器；`ServeEventListener` 與請求紀錄改用 `ServeEvent` | 無 | 完成（見 7.2.3） |
 | 6 | `ProtocolId`、`ProtocolAdapter`、`ProtocolRegistry`，移除核心以外的協定分支 | 無 | 部分完成（見 7.2.4） |
-| 7 | `match_spec` 欄位、v2 文件、新 op（exists／absent／數值／in／equalToJson）、`any`／`not` | **新功能** | 未開始 |
+| 7 | `match_spec` 欄位、v2 文件、新 op（exists／absent／數值／in／equalToJson）、`any`／`not` | **新功能** | 完成（見 7.2.5；UI 為步驟 8） |
 | 8 | UI 進階條件編輯器、`/match/parse` 端點、前端改用結構化條件 | **新功能** | 未開始 |
 | 9 | 移除 `echo.engine.matcher=legacy` 開關與舊實作（至少間隔一個正式版本） | 無 | 未開始 |
 
@@ -520,6 +520,52 @@ ArchUnit 新增規則：`RuleQueryService` 與 `CacheInvalidationService` 不得
   `HttpMockPipeline`／`JmsMockPipeline` 與 `SseMockHandler`，等 `RuleDefinition`／`ResponseSpec` 出現後再抽成核心介面。
 - 仍保留的協定分支：`RuleApplyContractService` 的 v1 文件驗證、`AdminController` 的「從請求紀錄建立規則」
   與故障／轉發欄位正規化、SSE 規則驗證。這些都依附在現行 DTO 欄位上，會在步驟 7 的 v2 文件與 `ResponseSpec` 一起改寫。
+
+### 7.2.5 步驟 7 實作與驗證紀錄
+
+**儲存**：`http_rules`／`jms_rules` 新增可為空的 `match_spec`（`Length.LONG32`，`ddl-auto: update` 自動加欄位）。
+與 §6.2 原規劃不同：**只有無法用舊字串表達的條件才寫入 `match_spec`**，可表達的（只由 `legacy` 片段組成的 `all`）
+寫回三個舊欄位、`match_spec` 為 null。原因是舊版 UI、Excel 會直接編輯舊欄位，若兩邊都存，`match_spec` 會在
+舊 UI 編輯後過期，而且它優先，結果會與畫面不一致。
+
+**儲存時檢查**（`MatchSpecs`）：結構、運算子與選項（沿用核心的 `MatcherCompiler`）、各協定可用的取值來源
+（`ProtocolDescriptor.matchSources()`：HTTP 為 body／query／header，JMS 為 body；method／path 已由路由決定，不開放），
+以及大小上限：64 KiB、16 層、256 個節點、`in` 最多 1,000 個值。錯誤訊息帶 JSON 路徑，例如 `$.all[1].any[0].op`。
+
+**整筆取代與舊介面**：`PUT /rules/{id}` 是整筆取代，而舊版 UI 的宣告式編輯、Excel 與 v1 文件都不認得 `matchSpec`。
+因此請求中沒有 `matchSpec`、也沒有任何舊版條件時，保留既有規則的 `matchSpec`；要清除請送 `{"all": []}`。
+`matchSpec` 與舊版條件同時出現時拒絕（400），不猜使用者的意圖。
+
+**比對**：有 `matchSpec` 的規則一律用新引擎（不受 `echo.engine.matcher` 影響）；舊規則的呼叫路徑完全不變。
+已儲存的條件若無法編譯（例如資料庫被直接修改），該規則視為永遠不符合並記錄警告，不讓每個請求都失敗。
+候選規則中有 `matchSpec` 時一律先解析 body；JMS 只在這種情況改用完整解析，其餘維持串流 XML。
+匹配鏈分析把結構化條件攤平成逐筆結果（type 為 `matchSpec`），`not` 底下的條件以「對整體的貢獻」呈現 PASS／FAIL。
+請求紀錄 spool 的候選規則紀錄新增可為空的 `matchSpec`，舊資料讀回時為 null。
+
+**v2 文件**：`echo.mock/v2` = v1 的所有欄位 + `spec.match`（與舊版條件互斥）。v1 完全不變，帶 `spec.match` 仍回
+`UNKNOWN_FIELD`。與 §6.1 原規劃不同：進階規則的 manifest 直接以 v2 輸出，而不是回 409，這樣匯出／檢視不會失敗；
+`/rules/schema?apiVersion=echo.mock/v2` 提供 v2 schema。
+
+**驗證**：
+
+| 項目 | 結果 |
+|------|------|
+| 完整檢查（測試、SpotBugs、H2 轉換工具） | 通過 |
+| 全部測試以 compiled 引擎重跑 | 1,836 通過 |
+| 端到端回歸 `test-match-scenarios.py` | 138/138 |
+| 舊規則 RPS（步驟 6 對照，交替兩輪，每情境 15 秒） | 簡單 JSON +0.5%、小型 XML +1%、大型 XML −3%，皆在雜訊內 |
+| 「複雜 JSON」單獨交替三輪（第一次對照顯示 −7%，再確認） | 步驟 6 平均 1,079 RPS、步驟 7 平均 1,115 RPS（+3%）；先前差異來自情境順序與暖機 |
+
+進階條件壓測（同一路徑 50 條候選、目標規則排最後，16 執行緒、各 10 秒）：
+
+| 情境 | RPS | p50 | p99 |
+|------|-----|-----|-----|
+| 舊版字串條件（兩個 JSON 欄位相等） | 1,130 | 13.0 ms | 34.8 ms |
+| 等價的結構化條件 | 1,409 | 10.0 ms | 29.2 ms |
+| 新運算子（any／not／gte／in／exists） | 1,600 | 9.0 ms | 23.5 ms |
+| `equalToJson` + 忽略順序，200 個元素（10 條候選） | 915 | 16.1 ms | 38.3 ms |
+
+結構化條件比等價的舊字串條件快（新引擎編譯一次、JSONPath 取值共用）；最貴的 `equalToJson` 在上限內仍維持約 900 RPS。
 
 ### 7.3 風險
 
