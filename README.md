@@ -383,6 +383,36 @@ Multiple conditions separated by `;` must all match (AND logic):
 | `Header*=value` | Contains | `Content-Type*=json` |
 | `Header~=regex` | Regex match | `Authorization~=Bearer.*` |
 
+### Advanced Conditions (`matchSpec`)
+
+When `;`-joined AND conditions are not enough, a rule can carry a structured condition tree in
+`matchSpec` (REST API, JSON import/export, or `echo.mock/v2` documents as `spec.match`). It supports
+`all` / `any` / `not` groups and these operators: `equals`, `notEquals`, `contains`, `matches`,
+`exists`, `absent`, `gt` / `gte` / `lt` / `lte` (numeric), `in`, and `equalToJson`.
+
+```json
+{
+  "protocol": "HTTP", "matchKey": "/orders", "method": "POST", "responseBody": "{\"tier\":\"gold\"}",
+  "matchSpec": {"all": [
+    {"source": "header", "name": "X-Tenant", "op": "equals", "value": "acme"},
+    {"any": [
+      {"source": "body", "selector": {"jsonPath": "$.amount"}, "op": "gte", "value": 1000},
+      {"source": "query", "name": "vip", "op": "exists"}
+    ]},
+    {"not": {"source": "body", "selector": {"jsonPath": "$.status"}, "op": "equals", "value": "CANCELLED"}}
+  ]}
+}
+```
+
+- Sources: HTTP rules use `body`, `query` and `header`; JMS rules use `body` (selectors `jsonPath`, `xpath`, `field`, `raw`).
+- Invalid trees are rejected on save with the JSON path of the problem (for example `$.all[1].any[0].op`).
+  Limits: 64 KiB, 16 levels, 256 nodes, 1,000 `in` values.
+- `matchSpec` and `bodyCondition` / `queryCondition` / `headerCondition` are mutually exclusive. A tree that is only
+  an `all` of `{"legacy": {"source": ..., "condition": ...}}` fragments is stored as the legacy fields.
+- The rule editor does not edit structured conditions yet. Saving such a rule from the editor (or with a
+  request that omits both `matchSpec` and legacy conditions) keeps its conditions; send `{"all": []}` to clear them.
+- Rules with `matchSpec` always use the compiled engine, whatever `ECHO_ENGINE_MATCHER` is set to.
+
 ## Stateful Scenarios
 
 Rules can participate in a named state machine using `scenarioName`, match only in

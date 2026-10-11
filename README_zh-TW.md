@@ -361,6 +361,34 @@ Echo 可作為 JMS Proxy，在開發環境攔截 JMS 訊息：
 | `Header*=value` | 包含 | `Content-Type*=json` |
 | `Header~=regex` | 正則匹配 | `Authorization~=Bearer.*` |
 
+### 進階條件（`matchSpec`）
+
+`;` 串接的「而且」條件不夠用時，規則可以在 `matchSpec` 寫結構化條件（REST API、JSON 匯入匯出，
+或 `echo.mock/v2` 文件的 `spec.match`）。支援 `all`／`any`／`not` 組合，以及運算子：`equals`、`notEquals`、
+`contains`、`matches`、`exists`、`absent`、`gt`／`gte`／`lt`／`lte`（數值）、`in`、`equalToJson`。
+
+```json
+{
+  "protocol": "HTTP", "matchKey": "/orders", "method": "POST", "responseBody": "{\"tier\":\"gold\"}",
+  "matchSpec": {"all": [
+    {"source": "header", "name": "X-Tenant", "op": "equals", "value": "acme"},
+    {"any": [
+      {"source": "body", "selector": {"jsonPath": "$.amount"}, "op": "gte", "value": 1000},
+      {"source": "query", "name": "vip", "op": "exists"}
+    ]},
+    {"not": {"source": "body", "selector": {"jsonPath": "$.status"}, "op": "equals", "value": "CANCELLED"}}
+  ]}
+}
+```
+
+- 取值來源：HTTP 規則可用 `body`、`query`、`header`；JMS 規則可用 `body`（selector：`jsonPath`、`xpath`、`field`、`raw`）。
+- 條件不合法時，儲存就會被拒絕並指出位置（例如 `$.all[1].any[0].op`）。上限：64 KiB、16 層、256 個節點、`in` 最多 1,000 個值。
+- `matchSpec` 與 `bodyCondition`／`queryCondition`／`headerCondition` 互斥；只由 `{"legacy": {"source": ..., "condition": ...}}`
+  片段組成的 `all` 會存成舊欄位。
+- 規則編輯畫面目前還不能編輯結構化條件。從編輯畫面儲存這類規則（或請求中沒有 `matchSpec` 也沒有舊版條件）時會保留原本的條件；
+  要清除請送 `{"all": []}`。
+- 有 `matchSpec` 的規則一律使用新引擎比對，不受 `ECHO_ENGINE_MATCHER` 影響。
+
 ## 狀態機場景（Stateful Scenarios）
 
 規則可透過 `scenarioName` 加入指定狀態機，只在 `requiredScenarioState`
