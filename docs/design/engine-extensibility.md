@@ -567,6 +567,9 @@ ArchUnit 新增規則：`RuleQueryService` 與 `CacheInvalidationService` 不得
 
 結構化條件比等價的舊字串條件快（新引擎編譯一次、JSONPath 取值共用）；最貴的 `equalToJson` 在上限內仍維持約 900 RPS。
 
+記憶體：200 條結構化條件規則，每輪全部改成新條件（強迫重新編譯與快照重建）並送請求，共 8 輪；
+每輪兩次 Full GC 後 heap 為 95、95、94、96、94、94、94、88 MiB，沒有成長，舊的編譯結果會隨快照淘汰而回收。
+
 ### 7.3 風險
 
 | 風險 | 緩解 |
