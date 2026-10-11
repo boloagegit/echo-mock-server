@@ -1,5 +1,9 @@
 package com.echo.controller;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.echo.service.MatchSpecs;
+import com.echo.protocol.ProtocolDescriptor;
+import com.echo.core.match.InvalidMatchSpecException;
 import com.echo.agent.AgentRegistry;
 import com.echo.dto.AgentStatusDto;
 import com.echo.dto.RuleApplyDocument;
@@ -559,8 +563,8 @@ public class AdminController {
 
     /** Returns the machine-readable contract used by the declarative editor and server validator. */
     @GetMapping("/rules/schema")
-    public RuleApplySchema getRuleApplySchema() {
-        return ruleApplyContractService.schema();
+    public RuleApplySchema getRuleApplySchema(@RequestParam(required = false) String apiVersion) {
+        return ruleApplyContractService.schema(apiVersion);
     }
 
     /** Creates a rule from a complete declarative JSON document. */
@@ -1327,6 +1331,7 @@ public class AdminController {
 
     private SaveResult saveRule(RuleDto dto) {
         validateRuleFields(dto);
+        applyMatchSpec(dto);
         Response response;
         boolean faulting = dto.getFaultType() != null
                 && !dto.getFaultType().isBlank()
@@ -1402,6 +1407,50 @@ public class AdminController {
         evictCacheByProtocol(dto.getProtocol());
         cacheInvalidationService.ifPresent(s -> s.publishInvalidation(dto.getProtocol()));
         return new SaveResult(saved, handler.toDto(saved, response, false));
+    }
+
+    /**
+     * 檢查並正規化結構化條件（見 {@link MatchSpecs}）。
+     * <p>
+     * 規則以整筆取代的方式儲存，而舊版 UI、Excel 與 v1 文件不認得 {@code matchSpec}：沒有送出結構化條件、
+     * 也沒有任何舊版條件時，保留既有規則的結構化條件，避免編輯其他欄位時把進階條件清掉。
+     * 要清除進階條件請明確送出 {@code {"all": []}}。
+     */
+    private void applyMatchSpec(RuleDto dto) {
+        JsonNode spec = dto.getMatchSpec();
+        boolean hasSpec = spec != null && !spec.isNull() && !spec.isMissingNode();
+        boolean hasLegacy = notBlank(dto.getBodyCondition()) || notBlank(dto.getQueryCondition())
+                || notBlank(dto.getHeaderCondition());
+        if (!hasSpec) {
+            dto.setMatchSpec(null);
+            if (!hasLegacy && dto.getId() != null) {
+                protocolHandlerRegistry.findById(dto.getId())
+                        .map(BaseRule::getMatchSpec)
+                        .flatMap(MatchSpecs::read)
+                        .ifPresent(dto::setMatchSpec);
+            }
+            return;
+        }
+        if (hasLegacy) {
+            throw new IllegalArgumentException(
+                    "matchSpec cannot be combined with bodyCondition, queryCondition or headerCondition");
+        }
+        ProtocolDescriptor protocol = protocolHandlerRegistry.descriptor(dto.getProtocol())
+                .orElseThrow(() -> new IllegalArgumentException("Unknown protocol: " + dto.getProtocol()));
+        MatchSpecs.Normalized normalized;
+        try {
+            normalized = MatchSpecs.normalize(spec, protocol.matchSources());
+        } catch (InvalidMatchSpecException e) {
+            throw new IllegalArgumentException("Invalid matchSpec: " + e.getMessage(), e);
+        }
+        dto.setBodyCondition(normalized.bodyCondition());
+        dto.setQueryCondition(normalized.queryCondition());
+        dto.setHeaderCondition(normalized.headerCondition());
+        dto.setMatchSpec(normalized.advanced() ? MatchSpecs.read(normalized.matchSpec()).orElseThrow() : null);
+    }
+
+    private static boolean notBlank(String value) {
+        return value != null && !value.isBlank();
     }
 
     private void validateSseRule(RuleDto dto, String body) {

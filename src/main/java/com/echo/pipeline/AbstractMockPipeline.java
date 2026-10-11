@@ -401,6 +401,10 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     private boolean conditionsMatch(T rule, ConditionMatcher.PreparedBody prepared,
                                     String queryString, Map<String, String> headers) {
         ConditionSet conditions = extractConditions(rule);
+        if (conditions.getMatchSpec() != null) {
+            return conditionMatcher.matchesPrepared(conditions.getMatchSpec(), null, null, null,
+                    prepared, queryString, headers);
+        }
         return conditionMatcher.matchesPrepared(
                 conditions.getBodyCondition(),
                 conditions.getQueryCondition(),
@@ -408,14 +412,18 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                 prepared, queryString, headers);
     }
 
-    /** JSON/XML 只在至少一條啟用候選規則真的使用 body 條件時解析。 */
+    /**
+     * JSON/XML 只在至少一條啟用候選規則真的使用 body 條件時解析。
+     * 結構化條件一律視為需要 body（只有使用進階條件的規則會因此多一次解析）。
+     */
     private boolean requiresBodyParsing(List<T> candidates) {
         for (T rule : candidates) {
             if (Boolean.FALSE.equals(rule.getEnabled())) {
                 continue;
             }
-            String bodyCondition = extractConditions(rule).getBodyCondition();
-            if (bodyCondition != null && !bodyCondition.isBlank()) {
+            ConditionSet conditions = extractConditions(rule);
+            String bodyCondition = conditions.getBodyCondition();
+            if ((bodyCondition != null && !bodyCondition.isBlank()) || conditions.getMatchSpec() != null) {
                 return true;
             }
         }

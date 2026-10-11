@@ -12,6 +12,7 @@ import com.echo.core.match.MatcherRegistry;
 import com.echo.core.match.RequestView;
 import com.echo.core.util.InterruptibleCharSequence;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -49,6 +50,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -166,11 +168,11 @@ public class ConditionMatcher {
         }
     }
 
-    private record ConditionKey(String body, String query, String header) {
+    private record ConditionKey(String matchSpec, String body, String query, String header) {
     }
 
     /**
-     * 一組規則條件（舊版三個欄位）。compiled 模式第一次比對時才編譯，之後重用；legacy 模式不編譯。
+     * 一組規則條件（結構化條件，或舊版三個欄位）。第一次比對時才編譯，之後重用；legacy 模式的舊版條件不編譯。
      * 呼叫端（規則快照）持有此物件，就能讓編譯結果在快照的生命週期內保留。
      */
     public static final class RuleConditions {
@@ -188,24 +190,52 @@ public class ConditionMatcher {
             CompiledMatcher result = compiled;
             if (result == null) {
                 // 並行時可能重複編譯一次；結果相同且不可變，因此不需加鎖
-                result = compiler.compile(LegacyConditions.toMatchNode(key.body(), key.query(), key.header()));
+                result = key.matchSpec() != null
+                        ? compileStored(key.matchSpec())
+                        : compiler.compile(LegacyConditions.toMatchNode(key.body(), key.query(), key.header()));
                 compiled = result;
             }
             return result;
         }
+
+        /**
+         * 儲存時已檢查過；資料庫被直接修改等情況下仍無法編譯時，這條規則視為永遠不符合，
+         * 避免每個請求都因例外而失敗。
+         */
+        private CompiledMatcher compileStored(String matchSpec) {
+            try {
+                return compiler.compile(STORED_SPEC_READER.readTree(matchSpec));
+            } catch (JsonProcessingException | IllegalArgumentException e) {
+                log.warn("Rule matchSpec cannot be compiled; the rule will never match: {}", e.getMessage());
+                return compiler.compile(new MatchNode.Any(List.of()));
+            }
+        }
     }
 
+    private static final ObjectMapper STORED_SPEC_READER = new ObjectMapper();
+
     /**
-     * 取得一組條件的共用物件；相同條件字串在使用期間回傳同一個物件。
-     * 規則快照應持有回傳值，讓 compiled 模式的編譯結果在快照存在期間不被回收。
+     * 取得一組條件的共用物件；相同條件在使用期間回傳同一個物件。
+     * 規則快照應持有回傳值，讓編譯結果在快照存在期間不被回收。
      */
-    public RuleConditions conditions(String bodyCondition, String queryCondition, String headerCondition) {
-        return conditionRegistry.get(new ConditionKey(bodyCondition, queryCondition, headerCondition),
+    public RuleConditions conditions(String matchSpec, String bodyCondition, String queryCondition,
+                                     String headerCondition) {
+        String spec = hasMatchSpec(matchSpec) ? matchSpec : null;
+        return conditionRegistry.get(new ConditionKey(spec, bodyCondition, queryCondition, headerCondition),
                 key -> new RuleConditions(key, compiler));
     }
 
-    private CompiledMatcher compiled(String bodyCondition, String queryCondition, String headerCondition) {
-        return conditions(bodyCondition, queryCondition, headerCondition).compiled();
+    public RuleConditions conditions(String bodyCondition, String queryCondition, String headerCondition) {
+        return conditions(null, bodyCondition, queryCondition, headerCondition);
+    }
+
+    private CompiledMatcher compiled(String matchSpec, String bodyCondition, String queryCondition,
+                                     String headerCondition) {
+        return conditions(matchSpec, bodyCondition, queryCondition, headerCondition).compiled();
+    }
+
+    private static boolean hasMatchSpec(String matchSpec) {
+        return matchSpec != null && !matchSpec.isBlank();
     }
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -837,8 +867,18 @@ public class ConditionMatcher {
      */
     public boolean matchesPrepared(String bodyCondition, String queryCondition, String headerCondition,
                                    PreparedBody prepared, String queryString, Map<String, String> headers) {
-        if (engineMode == EngineMode.COMPILED) {
-            return compiled(bodyCondition, queryCondition, headerCondition)
+        return matchesPrepared(null, bodyCondition, queryCondition, headerCondition, prepared, queryString, headers);
+    }
+
+    /**
+     * 同 {@link #matchesPrepared(String, String, String, PreparedBody, String, Map)}，另外支援結構化條件。
+     * 有 {@code matchSpec} 時以它為準，並且一律使用新引擎（舊引擎無法評估 any／not 與新運算子）。
+     */
+    public boolean matchesPrepared(String matchSpec, String bodyCondition, String queryCondition,
+                                   String headerCondition, PreparedBody prepared, String queryString,
+                                   Map<String, String> headers) {
+        if (engineMode == EngineMode.COMPILED || hasMatchSpec(matchSpec)) {
+            return compiled(matchSpec, bodyCondition, queryCondition, headerCondition)
                     .matches(evalContext(prepared, queryString, headers));
         }
         if (bodyCondition != null && !bodyCondition.isBlank()) {
@@ -878,8 +918,16 @@ public class ConditionMatcher {
      */
     public ConditionDetail matchesPreparedWithDetail(String bodyCondition, String queryCondition, String headerCondition,
                                                      PreparedBody prepared, String queryString, Map<String, String> headers) {
-        if (engineMode == EngineMode.COMPILED) {
-            return toConditionDetail(compiled(bodyCondition, queryCondition, headerCondition)
+        return matchesPreparedWithDetail(null, bodyCondition, queryCondition, headerCondition,
+                prepared, queryString, headers);
+    }
+
+    /** 同上，另外支援結構化條件；有 {@code matchSpec} 時以它為準並使用新引擎。 */
+    public ConditionDetail matchesPreparedWithDetail(String matchSpec, String bodyCondition, String queryCondition,
+                                                     String headerCondition, PreparedBody prepared,
+                                                     String queryString, Map<String, String> headers) {
+        if (engineMode == EngineMode.COMPILED || hasMatchSpec(matchSpec)) {
+            return toConditionDetail(compiled(matchSpec, bodyCondition, queryCondition, headerCondition)
                     .explain(evalContext(prepared, queryString, headers)));
         }
         List<ConditionResult> results = new ArrayList<>();
@@ -910,22 +958,59 @@ public class ConditionMatcher {
         return (prepared != null ? prepared : PreparedBody.empty()).evalContext(queryString, headers);
     }
 
+    /**
+     * 舊版條件的說明與舊版完全相同；結構化條件則把每個條件（葉節點）攤平成一筆，type 為 {@code matchSpec}，
+     * 整體是否符合仍以整棵樹（含 any／not）的結果為準。
+     */
     private static ConditionDetail toConditionDetail(MatchExplanation explanation) {
         List<ConditionResult> results = new ArrayList<>(explanation.children().size());
-        for (MatchExplanation child : explanation.children()) {
-            MatchNode.LegacySource source = LegacyConditions.sourceOf(child).orElseThrow();
-            results.add(ConditionResult.builder()
-                    .type(source.fieldName())
-                    .condition(child.expected())
-                    .passed(child.passed())
-                    .detail(LegacyConditions.legacyDetail(child).orElseThrow())
-                    .build());
-        }
+        addConditionResults(explanation, false, results);
         return ConditionDetail.builder()
                 .overallMatch(explanation.passed())
                 .results(results)
                 .build();
     }
+
+    /** {@code not} 底下的條件以「不符合才算通過」呈現，讓每一筆的 PASS／FAIL 與它對整體的貢獻一致。 */
+    private static void addConditionResults(MatchExplanation explanation, boolean negated,
+                                            List<ConditionResult> results) {
+        if (explanation.isCondition()) {
+            addConditionResult(explanation, negated, results);
+            return;
+        }
+        boolean childNegated = "not".equals(explanation.node()) != negated;
+        for (MatchExplanation child : explanation.children()) {
+            addConditionResults(child, childNegated, results);
+        }
+    }
+
+    private static void addConditionResult(MatchExplanation explanation, boolean negated,
+                                           List<ConditionResult> results) {
+        Optional<MatchNode.LegacySource> legacy = LegacyConditions.sourceOf(explanation);
+        if (legacy.isPresent() && !negated) {
+            results.add(ConditionResult.builder()
+                    .type(legacy.get().fieldName())
+                    .condition(explanation.expected())
+                    .passed(explanation.passed())
+                    .detail(LegacyConditions.legacyDetail(explanation).orElseThrow())
+                    .build());
+            return;
+        }
+        String condition = negated ? "not " + explanation.expected() : explanation.expected();
+        boolean passed = explanation.passed() != negated;
+        String detail = passed
+                ? MATCH_SPEC_TYPE + " PASS (" + condition + ")"
+                : MATCH_SPEC_TYPE + " FAIL (expected " + condition + ", actual " + explanation.actual() + ")";
+        results.add(ConditionResult.builder()
+                .type(MATCH_SPEC_TYPE)
+                .condition(condition)
+                .passed(passed)
+                .detail(detail)
+                .build());
+    }
+
+    /** 結構化條件在匹配鏈中的類型名稱。 */
+    public static final String MATCH_SPEC_TYPE = "matchSpec";
 
     private boolean cachedMatch(PreparedBody prepared, String key, BooleanSupplier matcher) {
         return prepared == null ? matcher.getAsBoolean() : prepared.cachedMatch(key, matcher);

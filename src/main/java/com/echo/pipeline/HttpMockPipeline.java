@@ -260,7 +260,8 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
 
     @Override
     protected boolean hasCondition(HttpRule rule) {
-        return (rule.getBodyCondition() != null && !rule.getBodyCondition().isBlank())
+        return rule.getMatchSpec() != null
+                || (rule.getBodyCondition() != null && !rule.getBodyCondition().isBlank())
                 || (rule.getQueryCondition() != null && !rule.getQueryCondition().isBlank())
                 || (rule.getHeaderCondition() != null && !rule.getHeaderCondition().isBlank());
     }
@@ -271,6 +272,7 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
                 .bodyCondition(rule.getBodyCondition())
                 .queryCondition(rule.getQueryCondition())
                 .headerCondition(rule.getHeaderCondition())
+                .matchSpec(rule.getMatchSpec())
                 .build();
     }
 

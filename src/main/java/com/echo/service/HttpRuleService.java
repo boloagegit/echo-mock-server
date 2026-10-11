@@ -119,8 +119,11 @@ public class HttpRuleService {
         ConditionMatcher.PreparedBody prepared = conditionMatcher.prepareBody(body);
         HttpRule matched = RuleSelector.select(rules, RuleSelector.FallbackPolicy.FIRST_UNCONDITIONAL,
                 HTTP_RULE_TRAITS, rule -> true,
-                rule -> conditionMatcher.matchesPrepared(rule.getBodyCondition(), rule.getQueryCondition(),
-                        rule.getHeaderCondition(), prepared, queryString, headers))
+                rule -> rule.getMatchSpec() != null
+                        ? conditionMatcher.matchesPrepared(rule.getMatchSpec(), null, null, null,
+                                prepared, queryString, headers)
+                        : conditionMatcher.matchesPrepared(rule.getBodyCondition(), rule.getQueryCondition(),
+                                rule.getHeaderCondition(), prepared, queryString, headers))
                 .selected();
 
         List<MatchChainEntry> chain = matched != null
@@ -137,8 +140,8 @@ public class HttpRuleService {
 
         @Override
         public boolean unconditional(HttpRule rule) {
-            return isBlank(rule.getBodyCondition()) && isBlank(rule.getQueryCondition())
-                    && isBlank(rule.getHeaderCondition());
+            return rule.getMatchSpec() == null && isBlank(rule.getBodyCondition())
+                    && isBlank(rule.getQueryCondition()) && isBlank(rule.getHeaderCondition());
         }
 
         private boolean isBlank(String value) {

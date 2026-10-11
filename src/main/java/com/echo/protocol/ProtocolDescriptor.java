@@ -4,6 +4,7 @@ import com.echo.entity.BaseRule;
 import com.echo.entity.Protocol;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * 一個協定在協定無關程式（規則查詢、快取失效、管理 API）中需要的資訊，由該協定的 {@link ProtocolHandler} 提供。
@@ -15,16 +16,19 @@ import java.util.List;
  * @param searchFields   規則清單關鍵字搜尋的欄位（entity 屬性名稱）
  * @param mockAction     規則 {@code action} 欄位代表「回傳 mock」的值
  * @param forwardAction  規則 {@code action} 欄位代表「轉發」的值
+ * @param matchSources   結構化條件（{@code matchSpec}）可使用的取值來源，例如 {@code body}、{@code header}
  */
 public record ProtocolDescriptor(Protocol id,
                                  Class<? extends BaseRule> ruleType,
                                  String rulesCacheName,
                                  List<String> searchFields,
                                  Enum<?> mockAction,
-                                 Enum<?> forwardAction) {
+                                 Enum<?> forwardAction,
+                                 Set<String> matchSources) {
 
     public ProtocolDescriptor {
         searchFields = List.copyOf(searchFields);
+        matchSources = Set.copyOf(matchSources);
     }
 
     /** 多實例同步時，代表「此協定的規則已變更」的事件類型。 */

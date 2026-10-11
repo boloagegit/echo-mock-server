@@ -362,6 +362,7 @@ public class RequestLogSpool {
             characters = addStringLength(characters, candidate.getBodyCondition());
             characters = addStringLength(characters, candidate.getQueryCondition());
             characters = addStringLength(characters, candidate.getHeaderCondition());
+            characters = addStringLength(characters, candidate.getMatchSpec());
             characters = saturatingAdd(characters, 32);
         }
         for (Map.Entry<String, String> header : task.getHeaders().entrySet()) {
@@ -1306,19 +1307,22 @@ public class RequestLogSpool {
 
     private record CandidateRecord(
             String ruleId, String endpoint, String description, boolean enabled,
-            String bodyCondition, String queryCondition, String headerCondition, int priority) {
+            String bodyCondition, String queryCondition, String headerCondition, int priority,
+            String matchSpec) {
 
+        /** matchSpec 放在最後並可為 null：舊版寫入的紀錄沒有這個欄位，讀回時為 null。 */
         static CandidateRecord from(CandidateSnapshot candidate) {
             return new CandidateRecord(candidate.getRuleId(), candidate.getEndpoint(),
                     candidate.getDescription(), candidate.isEnabled(), candidate.getBodyCondition(),
-                    candidate.getQueryCondition(), candidate.getHeaderCondition(), candidate.getPriority());
+                    candidate.getQueryCondition(), candidate.getHeaderCondition(), candidate.getPriority(),
+                    candidate.getMatchSpec());
         }
 
         CandidateSnapshot toCandidate() {
             return CandidateSnapshot.builder()
                     .ruleId(ruleId).endpoint(endpoint).description(description).enabled(enabled)
                     .bodyCondition(bodyCondition).queryCondition(queryCondition)
-                    .headerCondition(headerCondition).priority(priority).build();
+                    .headerCondition(headerCondition).matchSpec(matchSpec).priority(priority).build();
         }
     }
 

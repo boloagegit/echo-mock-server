@@ -145,7 +145,9 @@ public class JmsRuleService {
                 ? preparedBody : conditionMatcher.prepareBody(body);
         JmsRule matched = RuleSelector.select(rules, RuleSelector.FallbackPolicy.EXACT_BEFORE_WILDCARD,
                 JMS_RULE_TRAITS, rule -> true,
-                rule -> conditionMatcher.matchesPrepared(rule.getBodyCondition(), null, null, prepared, null, null))
+                rule -> rule.getMatchSpec() != null
+                        ? conditionMatcher.matchesPrepared(rule.getMatchSpec(), null, null, null, prepared, null, null)
+                        : conditionMatcher.matchesPrepared(rule.getBodyCondition(), null, null, prepared, null, null))
                 .selected();
 
         List<MatchChainEntry> chain = matched != null
@@ -162,7 +164,8 @@ public class JmsRuleService {
 
         @Override
         public boolean unconditional(JmsRule rule) {
-            return rule.getBodyCondition() == null || rule.getBodyCondition().isBlank();
+            return rule.getMatchSpec() == null
+                    && (rule.getBodyCondition() == null || rule.getBodyCondition().isBlank());
         }
 
         @Override

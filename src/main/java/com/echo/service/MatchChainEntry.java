@@ -45,10 +45,14 @@ public class MatchChainEntry implements MatchChainInfo {
     }
 
     public static MatchChainEntry fromJms(JmsRule rule, String reason) {
-        return from(rule, rule.getQueueName(), rule.getBodyCondition(), reason);
+        return from(rule, rule.getQueueName(),
+                rule.getMatchSpec() != null ? "match: " + rule.getMatchSpec() : rule.getBodyCondition(), reason);
     }
 
     private static String buildHttpCondition(HttpRule rule) {
+        if (rule.getMatchSpec() != null) {
+            return "match: " + rule.getMatchSpec();
+        }
         String body = rule.getBodyCondition();
         String query = rule.getQueryCondition();
         if ((body == null || body.isBlank()) && (query == null || query.isBlank())) {

@@ -53,7 +53,7 @@ final class HttpRuleSnapshot {
                 ruleMethods.add(rule.getMethod());
             }
             if (conditions != null) {
-                ConditionMatcher.RuleConditions ruleConditions = conditions.conditions(
+                ConditionMatcher.RuleConditions ruleConditions = conditions.conditions(rule.getMatchSpec(),
                         rule.getBodyCondition(), rule.getQueryCondition(), rule.getHeaderCondition());
                 if (ruleConditions != null) {
                     pinned.add(ruleConditions);

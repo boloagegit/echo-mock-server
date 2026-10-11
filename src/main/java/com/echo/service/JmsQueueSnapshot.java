@@ -51,7 +51,7 @@ final class JmsQueueSnapshot {
             }
             if (conditions != null) {
                 ConditionMatcher.RuleConditions ruleConditions =
-                        conditions.conditions(rule.getBodyCondition(), null, null);
+                        conditions.conditions(rule.getMatchSpec(), rule.getBodyCondition(), null, null);
                 if (ruleConditions != null) {
                     pinned.add(ruleConditions);
                 }
