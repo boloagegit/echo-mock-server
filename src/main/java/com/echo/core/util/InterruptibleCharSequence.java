@@ -1,4 +1,4 @@
-package com.echo.service;
+package com.echo.core.util;
 
 /**
  * A CharSequence that throws RuntimeException if regex matching exceeds a time limit.

@@ -162,32 +162,57 @@ ArchUnit 規則（Phase 1 先建立）：
 
 ### 4.2 Java SPI
 
+已於步驟 1 實作（`com.echo.core.match`）：
+
 ```java
-/** 由 MatcherRegistry 依 op 名稱查找；內建與外掛都走同一條路。 */
+/** 運算子擴充點；內建運算子見 BuiltinPredicates。 */
 public interface PredicateFactory {
     String op();
-    Set<String> supportedOptions();
-    CompiledPredicate compile(JsonNode value, Map<String, JsonNode> options) throws InvalidMatchSpecException;
+    default Set<String> supportedOptions() { return Set.of(); }
+    default boolean requiresValue() { return true; }       // exists／absent 為 false
+    default boolean passesWhenMissing() { return false; }  // onMissing=auto 時取不到值的結果
+    default boolean allowsOnMissing() { return true; }
+    CompiledPredicate compile(JsonNode expected, Map<String, JsonNode> options, MatcherLimits limits);
 }
 
 public interface CompiledPredicate {
-    boolean test(ExtractedValue actual);          // 已處理 NULL／MISSING 之外的實際值
+    boolean test(Value actual);        // Value = 文字形式 + 原始 JSON 節點（若有）
 }
 
-/** 從請求取值；body selector 另外宣告 BodyRequirement，供 BodyPlan 規劃解析方式。 */
+/** 取值來源擴充點；內建 body／query／header／method／path，協定可註冊例如 jms.property。 */
+public interface ValueSourceFactory {
+    String source();
+    boolean requiresName();
+    Set<Selector.Kind> supportedSelectors();
+    ValueExtractor create(String name, Selector selector, MatcherLimits limits);
+}
+
 public interface ValueExtractor {
-    Extracted extract(RequestView request, PreparedBody body);   // FOUND(values) | NULL | MISSING
-    BodyRequirement bodyRequirement();                           // NONE | RAW | JSON | XML_DOM | XML_STREAM(selector)
+    Extracted extract(RequestView request);   // FOUND(values) | MISSING | UNAVAILABLE
 }
 
 /** 編譯後的不可變匹配樹；fast path 只回傳布林，explain path 回傳細節。 */
 public interface CompiledMatcher {
     boolean matches(EvalContext ctx);
     MatchExplanation explain(EvalContext ctx);   // 給匹配鏈分析與「測試規則」使用
-    String cacheKey();                           // 規範化序列化，作為同一請求的 memo key
-    List<CompiledLeaf> leaves();                 // 給 BodyPlan 與 near-miss 計分
+    String cacheKey();                           // 規範化 JSON，作為同一請求的 memo key
+    default boolean isUnconditional() { ... }    // 空的 all，規則選擇時視為 fallback
 }
 ```
+
+`MatcherRegistry` 註冊運算子與來源，`MatcherCompiler` 依註冊表檢查並編譯，所有錯誤以
+`InvalidMatchSpecException`（含 `$.all[1].op` 形式的位置）在儲存時回報。
+
+取值的三種狀態：
+
+| 狀態 | 意義 | 判斷 |
+|------|------|------|
+| `FOUND` | 取到一個以上的值 | 依 `quantifier` 對每個值套用運算子 |
+| `MISSING` | 欄位不存在 | 依 `onMissing`；`auto` 時由運算子決定 |
+| `UNAVAILABLE` | 無法判斷（body 過大、值都超過長度上限） | 一律不符合（外層 `not` 會反轉為符合） |
+
+`ValueExtractor` 目前直接讀 `RequestView.body()`（`BodyView`，延遲解析 JSON／XML）。步驟 3 再加入
+`BodyRequirement` 讓 `BodyPlan` 規劃解析方式（例如 JMS 串流 XML），以及 `leaves()` 供計分使用。
 
 規則編譯時機：規則載入索引（§5.2）時編譯一次，與規則版本綁定；執行期不再解析字串。
 
@@ -346,21 +371,21 @@ v1 與 v2 透過同一個 `RuleDefinition` 雙向轉換；`/rules/schema` 提供
 3. **效能關卡**：`scripts/stress-test-rps.py`、`stress-test-1600-rules.py`、`bench-2000-jms.py`、`stress-test-xml-body.py`。p50／p99 退步不得超過 5%，配置量（JFR allocation）不得明顯上升。
 4. **前端契約**：既有的 `src/test/java/com/echo/frontend` 與 `src/test/js` 測試全部通過。
 
-### 7.2 PR 拆分（每一步都可獨立上線、可回退）
+### 7.2 實作步驟（同一分支依序提交；每一步都可獨立驗證、可回退）
 
-| # | 內容 | 對外行為 |
-|---|------|------|
-| 1 | ArchUnit 規則、`com.echo.core` 骨架、`MatchSpec` 模型、內建 op 與組合節點、單元測試 | 無 |
-| 2 | `LegacyConditionCompiler` + `legacy` selector + 差異測試 | 無 |
-| 3 | `BodyPlan`、`CompiledMatcher` 接入 pipeline 與 `LogAgent`，以 `echo.engine.matcher=legacy\|compiled` 切換（預設 legacy）；跑效能關卡後改預設為 compiled | 無（可切回） |
-| 4 | `SelectionPolicy` 收斂 5 份選擇邏輯；`RuleIndex` 不可變快照 | 無 |
-| 5 | `Responder`／`ResponsePlan`，SSE 播放移出控制器；`ServeEventListener` 與請求紀錄改用 `ServeEvent` | 無 |
-| 6 | `ProtocolId`、`ProtocolAdapter`、`ProtocolRegistry`，移除核心以外的協定分支 | 無 |
-| 7 | `match_spec` 欄位、v2 文件、新 op（exists／absent／數值／in／equalToJson）、`any`／`not` | **新功能** |
-| 8 | UI 進階條件編輯器、`/match/parse` 端點、前端改用結構化條件 | **新功能** |
-| 9 | 移除 `echo.engine.matcher=legacy` 開關與舊實作（至少間隔一個正式版本） | 無 |
+| # | 內容 | 對外行為 | 狀態 |
+|---|------|------|------|
+| 1 | ArchUnit 規則、`com.echo.core` 骨架、`MatchSpec` 模型、內建 op 與組合節點、單元測試 | 無 | 完成 |
+| 2 | `LegacyConditionCompiler` + `legacy` selector + 差異測試 | 無 | 未開始 |
+| 3 | `BodyPlan`、`CompiledMatcher` 接入 pipeline 與 `LogAgent`，以 `echo.engine.matcher=legacy\|compiled` 切換（預設 legacy）；跑效能關卡後改預設為 compiled | 無（可切回） | 未開始 |
+| 4 | `SelectionPolicy` 收斂 5 份選擇邏輯；`RuleIndex` 不可變快照 | 無 | 未開始 |
+| 5 | `Responder`／`ResponsePlan`，SSE 播放移出控制器；`ServeEventListener` 與請求紀錄改用 `ServeEvent` | 無 | 未開始 |
+| 6 | `ProtocolId`、`ProtocolAdapter`、`ProtocolRegistry`，移除核心以外的協定分支 | 無 | 未開始 |
+| 7 | `match_spec` 欄位、v2 文件、新 op（exists／absent／數值／in／equalToJson）、`any`／`not` | **新功能** | 未開始 |
+| 8 | UI 進階條件編輯器、`/match/parse` 端點、前端改用結構化條件 | **新功能** | 未開始 |
+| 9 | 移除 `echo.engine.matcher=legacy` 開關與舊實作（至少間隔一個正式版本） | 無 | 未開始 |
 
-PR 1～6 為純重構，屬於「先讓架構可擴充，再加功能」；PR 7 起才是使用者看得到的變更。
+步驟 1～6 為純重構，屬於「先讓架構可擴充，再加功能」；步驟 7 起才是使用者看得到的變更。
 
 ### 7.3 風險
 
@@ -375,7 +400,7 @@ PR 1～6 為純重構，屬於「先讓架構可擴充，再加功能」；PR 7 
 ## 8. 待決策事項
 
 1. **儲存的最終形態**：長期是否將 `http_rules`／`jms_rules` 合併為通用的 `rules` 表（`protocol`、`route_key`、`route_spec`、`match_spec`、`response_spec`）？建議：新協定直接使用通用表；HTTP／JMS 等 Flyway 上線、有正式 migration 後再評估是否搬移。
-2. **`matchesJsonSchema` 的依賴**：需要引入 JSON Schema 驗證函式庫（例如 networknt `json-schema-validator`）。建議放在 PR 7 之後，視需求再加入。
-3. **`echo-core` 抽成獨立 Gradle 模組的時機**：建議 PR 6 完成、ArchUnit 規則穩定後立即進行，作為 Phase 3 嵌入式模式、Java SDK、Testcontainers 的前提。
+2. **`matchesJsonSchema` 的依賴**：需要引入 JSON Schema 驗證函式庫（例如 networknt `json-schema-validator`）。建議放在步驟 7 之後，視需求再加入。
+3. **`echo-core` 抽成獨立 Gradle 模組的時機**：建議步驟 6 完成、ArchUnit 規則穩定後立即進行，作為 Phase 3 嵌入式模式、Java SDK、Testcontainers 的前提。
 4. **舊字串語法的定位**：建議永久保留讀寫（相容與快速輸入），但新功能只出現在結構化模型中。
 5. **v2 文件命名**：`echo.mock/v2` 或沿用 v1 加上可選的 `spec.match`？建議採用 v2，讓 v1 的語意保持凍結、容易說明。

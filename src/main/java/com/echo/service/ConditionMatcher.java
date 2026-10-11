@@ -1,5 +1,6 @@
 package com.echo.service;
 
+import com.echo.core.util.InterruptibleCharSequence;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;

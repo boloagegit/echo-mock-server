@@ -1,5 +1,6 @@
 package com.echo.service;
 
+import com.echo.core.util.InterruptibleCharSequence;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.jknack.handlebars.Handlebars;

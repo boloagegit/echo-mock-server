@@ -1,4 +1,4 @@
-package com.echo.service;
+package com.echo.core.util;
 
 import org.junit.jupiter.api.Test;
 
