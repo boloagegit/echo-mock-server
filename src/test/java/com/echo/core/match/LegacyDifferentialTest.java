@@ -52,6 +52,8 @@ class LegacyDifferentialTest {
             XML_ORDER,
             XML_SOAP,
             "<Root xmlns=\"urn:default\"><Status>CLOSED</Status><Type>vip</Type></Root>",
+            "<a:Root xmlns:a=\"u1\" xmlns:b=\"u2\"><a:Item>1</a:Item><b:Item>2</b:Item><Item>3</Item>"
+                    + "<c:d:Item xmlns:c=\"u3\">4</c:d:Item><b:Type> vip </b:Type></a:Root>",
             "<?xml version=\"1.0\"?><a><b>1</b><b>2</b></a>",
             "<broken><xml>",
             "hello world",
@@ -65,12 +67,13 @@ class LegacyDifferentialTest {
             "$.user.type", "$.items[*].sku", "$..sku", "$.user.note", "$.missing", "$[0].sku", "$.n",
             "$[?(@.sku=='S1')].sku", "$.[", "//Status", "Status", "/Order/Status", "//Item/@sku", "Item",
             "//Customer/Type", "ServiceName", "ns:ServiceName", "//ServiceName", "/Envelope/Body/Req/Type",
-            "//*[local-name()='Type']", "Type", "b", "//b", "hello", "world", "x y", "it's");
+            "//*[local-name()='Type']", "Type", "b", "//b", "hello", "world", "x y", "it's",
+            "d:Item", "a:Item", "Root", "//Item", "/Root/Item");
     private static final List<String> OPS = List.of("=", "!=", "*=", "~=", "==", "!==", " = ", "");
     private static final List<String> VALUES = List.of(
             "vip", "\"vip\"", "normal", "OPEN", "CLOSED", "S1", "S2", "5", "2", "30", "1.5", "1.50", "true",
             "null", "", "\"\"", "Alice Smith", "Ali", "v.p", ".*", "[", "deep", "OrderService", "a", "B",
-            "[\"a\",\"b\"]", "x");
+            "[\"a\",\"b\"]", "x", "1", "3", "4");
     private static final List<String> RAW_FRAGMENTS = List.of(
             "hello", "world", "=vip", "==vip", "type=vip", "user.type=vip", "~=v.*", "a=b=c");
 

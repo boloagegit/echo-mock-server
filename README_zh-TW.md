@@ -115,6 +115,7 @@ SPRING_JPA_HIBERNATE_DDL_AUTO=validate \
 | `SPRING_DATASOURCE_PASSWORD` | 外部資料庫密碼；請透過部署平台的 secret 機制注入 |
 | `SPRING_JPA_HIBERNATE_DDL_AUTO` | 目前 profile 預設為 `update`；完成受控 schema 遷移後使用 `validate` |
 | `ECHO_REQUEST_LOG_ENABLED` | 設為 `false` 會停止建立請求記錄、Log Agent 與本機 spool；預設為 `true` |
+| `ECHO_ENGINE_MATCHER` | 條件比對引擎：`legacy`（預設，原本實作）或 `compiled`（新引擎，語意相同並經差異測試驗證；有問題時改回 `legacy` 重啟即可） |
 | `ECHO_REQUEST_LOG_SPOOL_PATH` | 每實例本機 SQLite request-log spool 路徑；預設 `./data/request-log-spool.sqlite` |
 | `ECHO_CACHE_TEMPLATE_MAX_WEIGHT_MB` | 編譯模板快取容量（MiB），預設 `16`；超大模板仍可渲染但不保留於快取 |
 | `ECHO_DB_POOL_MAX_SIZE`／`ECHO_DB_POOL_MIN_IDLE` | 外部 profile 的 Hikari connection pool 大小 |

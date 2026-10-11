@@ -120,6 +120,7 @@ SPRING_JPA_HIBERNATE_DDL_AUTO=validate \
 | `SPRING_DATASOURCE_PASSWORD` | External database password; inject it through the deployment secret mechanism |
 | `SPRING_JPA_HIBERNATE_DDL_AUTO` | Current profiles default to `update`; use `validate` after a controlled schema migration |
 | `ECHO_REQUEST_LOG_ENABLED` | Set to `false` to stop creating request logs, the log agent, and the local spool; defaults to `true` |
+| `ECHO_ENGINE_MATCHER` | Condition-matching engine: `legacy` (default, original implementation) or `compiled` (new engine with identical semantics, verified by differential tests; switch back to `legacy` and restart if needed) |
 | `ECHO_REQUEST_LOG_SPOOL_PATH` | Per-instance local SQLite request-log spool path; default `./data/request-log-spool.sqlite` |
 | `ECHO_CACHE_TEMPLATE_MAX_WEIGHT_MB` | Compiled-template cache budget in MiB; default `16`; oversized templates still render without being retained |
 | `ECHO_DB_POOL_MAX_SIZE` / `ECHO_DB_POOL_MIN_IDLE` | Hikari connection-pool sizing for external profiles |

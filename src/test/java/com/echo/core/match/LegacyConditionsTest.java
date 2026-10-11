@@ -100,6 +100,19 @@ class LegacyConditionsTest {
     }
 
     @Test
+    void sameJsonPathIsEvaluatedOncePerRequestAcrossRules() {
+        MatcherCompiler compiler = MatcherCompiler.withDefaults();
+        EvalContext context = new EvalContext(RequestView.of("POST", "/", null, Map.of(),
+                BodyView.of("{\"user\":{\"id\":\"U-9\"}}", MatcherLimits.DEFAULT)));
+
+        for (int i = 0; i < 10; i++) {
+            compiler.compile(LegacyConditions.toMatchNode("$.user.id=U-" + i, null, null)).matches(context);
+        }
+
+        assertThat(context.cachedValueCount()).isEqualTo(1);
+    }
+
+    @Test
     void formatsLegacyDetailText() {
         CompiledMatcher matcher = MatcherCompiler.withDefaults()
                 .compile(LegacyConditions.toMatchNode("user.type=vip", null, null));

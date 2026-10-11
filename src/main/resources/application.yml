@@ -194,6 +194,9 @@ echo:
       enabled: true                 # 啟用匹配鏈分析（near-miss / shadowed 偵測）
   matcher:
     max-field-value-length: 2097152  # 單一欄位值長度上限 (bytes)，超過跳過比對，預設 2MB
+  engine:
+    # 條件比對引擎：legacy（原本實作，預設）或 compiled（新核心，語意相同，見 docs/design/engine-extensibility.md）
+    matcher: ${ECHO_ENGINE_MATCHER:legacy}
   builtin-account:
     self-registration: false  # 設為 true 允許未登入使用者自行申請帳號
   ldap:

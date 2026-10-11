@@ -42,6 +42,12 @@
         <Class name="~com\.echo\.service\.ConditionMatcher\$PreparedBody"/>
     </Match>
 
+    <!-- compiled 模式的 PreparedBody 轉接：直接提供已解析的 DOM 與呼叫端的 header map（不複製），介面約定為唯讀 -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP"/>
+        <Class name="~com\.echo\.service\.ConditionMatcher\$(PreparedBody\$PreparedBodyView|PreparedRequestView)"/>
+    </Match>
+
     <!-- BodyView 回傳同一請求共用的解析結果（JSON／DOM），介面約定為唯讀，複製會抵銷延遲解析的效益 -->
     <Match>
         <Bug pattern="EI_EXPOSE_REP"/>

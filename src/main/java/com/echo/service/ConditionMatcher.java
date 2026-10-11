@@ -1,5 +1,15 @@
 package com.echo.service;
 
+import com.echo.core.match.BodyView;
+import com.echo.core.match.CompiledMatcher;
+import com.echo.core.match.EvalContext;
+import com.echo.core.match.LegacyConditions;
+import com.echo.core.match.MatchExplanation;
+import com.echo.core.match.MatchNode;
+import com.echo.core.match.MatcherCompiler;
+import com.echo.core.match.MatcherLimits;
+import com.echo.core.match.MatcherRegistry;
+import com.echo.core.match.RequestView;
 import com.echo.core.util.InterruptibleCharSequence;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,10 +23,13 @@ import com.jayway.jsonpath.spi.mapper.JacksonMappingProvider;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.w3c.dom.Document;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -28,6 +41,7 @@ import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpression;
 import javax.xml.xpath.XPathFactory;
 import jakarta.annotation.PreDestroy;
+import java.io.IOException;
 import java.io.StringReader;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -36,6 +50,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
@@ -72,17 +87,88 @@ public class ConditionMatcher {
     private static final int MAX_REGEX_PATTERN_LENGTH = 200;
     private static final long REGEX_TIMEOUT_MS = 1000;
 
+    private static final int DEFAULT_MAX_FIELD_VALUE_LENGTH = 2 * 1024 * 1024;
+    private static final int MAX_COMPILED_CONDITIONS = 10_000;
+
     /** 單一欄位值長度上限，超過則跳過比對（防止 base64 等大值拖慢匹配） */
     private final int maxFieldValueLength;
 
+    /** 條件比對引擎；見 {@link EngineMode}。 */
+    private final EngineMode engineMode;
+    private final MatcherCompiler compiler;
+    /** 依條件字串快取編譯結果；規則修改後字串不同，自然對應到新的項目，舊項目依 LRU 淘汰。 */
+    private final Cache<ConditionKey, CompiledMatcher> compiledConditions = Caffeine.newBuilder()
+            .maximumSize(MAX_COMPILED_CONDITIONS)
+            .build();
+
     /** 預設建構子，使用 2MB 上限（供測試及非 Spring 環境使用） */
     public ConditionMatcher() {
-        this(2 * 1024 * 1024);
+        this(DEFAULT_MAX_FIELD_VALUE_LENGTH);
     }
 
+    /** 供測試及非 Spring 環境使用；引擎模式取自系統屬性 {@code echo.engine.matcher}，預設 legacy。 */
+    public ConditionMatcher(int maxFieldValueLength) {
+        this(maxFieldValueLength, EngineMode.fromSystemProperty());
+    }
+
+    @Autowired
     public ConditionMatcher(
-            @org.springframework.beans.factory.annotation.Value("${echo.matcher.max-field-value-length:2097152}") int maxFieldValueLength) {
+            @Value("${echo.matcher.max-field-value-length:2097152}") int maxFieldValueLength,
+            @Value("${echo.engine.matcher:legacy}") String engineMode) {
+        this(maxFieldValueLength, EngineMode.parse(engineMode));
+    }
+
+    public ConditionMatcher(int maxFieldValueLength, EngineMode engineMode) {
         this.maxFieldValueLength = maxFieldValueLength;
+        this.engineMode = engineMode;
+        this.compiler = new MatcherCompiler(MatcherRegistry.defaults(),
+                MatcherLimits.DEFAULT.withMaxFieldValueLength(maxFieldValueLength));
+        if (engineMode == EngineMode.COMPILED) {
+            log.info("Condition matcher engine: compiled (com.echo.core.match)");
+        }
+    }
+
+    public EngineMode getEngineMode() {
+        return engineMode;
+    }
+
+    /**
+     * 條件比對引擎。
+     * <ul>
+     *   <li>{@code legacy}：原本的實作（預設）</li>
+     *   <li>{@code compiled}：{@code com.echo.core.match} 新引擎；條件在第一次使用時編譯並快取，
+     *       語意與 legacy 相同（由差異測試保證），出問題時改回 legacy 重啟即可</li>
+     * </ul>
+     */
+    public enum EngineMode {
+        LEGACY, COMPILED;
+
+        static final String PROPERTY = "echo.engine.matcher";
+
+        public static EngineMode parse(String value) {
+            if (value == null || value.isBlank()) {
+                return LEGACY;
+            }
+            for (EngineMode mode : values()) {
+                if (mode.name().equalsIgnoreCase(value.trim())) {
+                    return mode;
+                }
+            }
+            throw new IllegalArgumentException(
+                    PROPERTY + " must be 'legacy' or 'compiled' but was '" + value + "'");
+        }
+
+        static EngineMode fromSystemProperty() {
+            return parse(System.getProperty(PROPERTY));
+        }
+    }
+
+    private record ConditionKey(String body, String query, String header) {
+    }
+
+    private CompiledMatcher compiled(String bodyCondition, String queryCondition, String headerCondition) {
+        return compiledConditions.get(new ConditionKey(bodyCondition, queryCondition, headerCondition),
+                key -> compiler.compile(LegacyConditions.toMatchNode(key.body(), key.query(), key.header())));
     }
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -192,6 +278,11 @@ public class ConditionMatcher {
         private final Map<String, Boolean> matchOutcomes = new HashMap<>();
         private final Map<String, JsonPathResult> jsonPathResults = new HashMap<>();
         private final Map<String, String> xmlActualValues = new HashMap<>();
+        /** 新引擎（compiled 模式）專用的狀態，見 {@link #evalContext(String, Map)}。 */
+        private EvalContext compiledContext;
+        private String contextQueryString;
+        private Map<String, String> contextHeaders;
+        private Document lazyXmlDoc;
 
         enum BodyType { XML, JSON, PLAIN, EMPTY, TOO_LARGE }
 
@@ -289,8 +380,81 @@ public class ConditionMatcher {
             return jsonPathResults.computeIfAbsent(path, ignored -> reader.get());
         }
 
+        /** 本請求已評估的 JSONPath 數量；compiled 模式的結果保存在新引擎的評估狀態中。 */
         int cachedJsonPathCount() {
-            return jsonPathResults.size();
+            return jsonPathResults.size() + (compiledContext == null ? 0 : compiledContext.cachedValueCount());
+        }
+
+        /**
+         * 新引擎的評估狀態。同一請求內 query／header 不變，因此重用同一個 context；
+         * 結果暫存直接共用 {@link #matchOutcomes}，與舊版及串流 XML 預先算好的結果互通。
+         */
+        @SuppressWarnings("ReferenceEquality") // 同一請求傳入的是同一個 headers 物件，比對身分即可
+        private EvalContext evalContext(String queryString, Map<String, String> headers) {
+            if (compiledContext == null || !Objects.equals(contextQueryString, queryString)
+                    || contextHeaders != headers) {
+                contextQueryString = queryString;
+                contextHeaders = headers;
+                compiledContext = new EvalContext(
+                        new PreparedRequestView(queryString, headers, new PreparedBodyView()), matchOutcomes);
+            }
+            return compiledContext;
+        }
+
+        /** 把已解析的內容提供給新引擎，不重新解析。 */
+        private final class PreparedBodyView implements BodyView {
+
+            @Override
+            public String raw() {
+                return raw;
+            }
+
+            @Override
+            public boolean tooLarge() {
+                return type == BodyType.TOO_LARGE;
+            }
+
+            @Override
+            public JsonNode json() {
+                return jsonNode;
+            }
+
+            /** JMS 串流 XML 沒有 DOM；與舊版 matchXPath 相同，真的需要時才解析。 */
+            @Override
+            public Document xml() {
+                if (xmlDoc != null) {
+                    return xmlDoc;
+                }
+                if (type == BodyType.XML && lazyXmlDoc == null && raw != null) {
+                    lazyXmlDoc = parseXmlQuietly(raw);
+                }
+                return lazyXmlDoc;
+            }
+        }
+    }
+
+    /** Header map 直接沿用呼叫端的物件（不複製），保留舊版依迭代順序取第一個 header 的行為。 */
+    private record PreparedRequestView(String queryString, Map<String, String> headers, BodyView body)
+            implements RequestView {
+
+        @Override
+        public String method() {
+            return null;
+        }
+
+        @Override
+        public String path() {
+            return null;
+        }
+    }
+
+    private static Document parseXmlQuietly(String xml) {
+        try {
+            DocumentBuilder builder = DOC_BUILDER.get();
+            builder.reset();
+            return builder.parse(new InputSource(new StringReader(xml)));
+        } catch (SAXException | IOException e) {
+            return null;
         }
     }
 
@@ -636,6 +800,10 @@ public class ConditionMatcher {
      */
     public boolean matchesPrepared(String bodyCondition, String queryCondition, String headerCondition,
                                    PreparedBody prepared, String queryString, Map<String, String> headers) {
+        if (engineMode == EngineMode.COMPILED) {
+            return compiled(bodyCondition, queryCondition, headerCondition)
+                    .matches(evalContext(prepared, queryString, headers));
+        }
         if (bodyCondition != null && !bodyCondition.isBlank()) {
             for (String c : bodyCondition.split(";")) {
                 String trimmed = c.trim();
@@ -673,6 +841,10 @@ public class ConditionMatcher {
      */
     public ConditionDetail matchesPreparedWithDetail(String bodyCondition, String queryCondition, String headerCondition,
                                                      PreparedBody prepared, String queryString, Map<String, String> headers) {
+        if (engineMode == EngineMode.COMPILED) {
+            return toConditionDetail(compiled(bodyCondition, queryCondition, headerCondition)
+                    .explain(evalContext(prepared, queryString, headers)));
+        }
         List<ConditionResult> results = new ArrayList<>();
 
         evaluateConditions(bodyCondition, "bodyCondition", results,
@@ -693,6 +865,27 @@ public class ConditionMatcher {
         boolean overallMatch = results.stream().allMatch(ConditionResult::isPassed);
         return ConditionDetail.builder()
                 .overallMatch(overallMatch)
+                .results(results)
+                .build();
+    }
+
+    private static EvalContext evalContext(PreparedBody prepared, String queryString, Map<String, String> headers) {
+        return (prepared != null ? prepared : PreparedBody.empty()).evalContext(queryString, headers);
+    }
+
+    private static ConditionDetail toConditionDetail(MatchExplanation explanation) {
+        List<ConditionResult> results = new ArrayList<>(explanation.children().size());
+        for (MatchExplanation child : explanation.children()) {
+            MatchNode.LegacySource source = LegacyConditions.sourceOf(child).orElseThrow();
+            results.add(ConditionResult.builder()
+                    .type(source.fieldName())
+                    .condition(child.expected())
+                    .passed(child.passed())
+                    .detail(LegacyConditions.legacyDetail(child).orElseThrow())
+                    .build());
+        }
+        return ConditionDetail.builder()
+                .overallMatch(explanation.passed())
                 .results(results)
                 .build();
     }

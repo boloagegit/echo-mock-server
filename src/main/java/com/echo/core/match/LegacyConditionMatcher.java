@@ -4,6 +4,7 @@ import com.echo.core.util.InterruptibleCharSequence;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.jayway.jsonpath.JsonPath;
 import org.w3c.dom.Document;
+import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import javax.xml.xpath.XPath;
@@ -11,6 +12,7 @@ import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpression;
 import javax.xml.xpath.XPathExpressionException;
 import javax.xml.xpath.XPathFactory;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -54,16 +56,16 @@ final class LegacyConditionMatcher implements CompiledMatcher {
 
     @Override
     public boolean matches(EvalContext context) {
-        return context.memoized(cacheKey, () -> evaluate(context.request()));
+        return context.memoized(cacheKey, () -> evaluate(context));
     }
 
     @Override
     public MatchExplanation explain(EvalContext context) {
-        RequestView request = context.request();
         boolean passed = matches(context);
         Parsed described = source == MatchNode.LegacySource.BODY ? parsedWithoutDoubleEquals : parsed;
-        String actual = described.field + "=" + actualValue(request, described);
-        return new MatchExplanation("legacy." + source.jsonName(), passed, condition, actual, List.of());
+        String actual = described.field + "=" + actualValue(context, described);
+        return new MatchExplanation(LegacyConditions.LEGACY_NODE_PREFIX + source.jsonName(),
+                passed, condition, actual, List.of());
     }
 
     @Override
@@ -71,9 +73,10 @@ final class LegacyConditionMatcher implements CompiledMatcher {
         return cacheKey;
     }
 
-    private boolean evaluate(RequestView request) {
+    private boolean evaluate(EvalContext context) {
+        RequestView request = context.request();
         return switch (source) {
-            case BODY -> matchBody(request.body());
+            case BODY -> matchBody(context);
             case QUERY -> matchQuery(request.queryString());
             case HEADER -> matchHeader(request.headers());
         };
@@ -112,13 +115,14 @@ final class LegacyConditionMatcher implements CompiledMatcher {
 
     // ==================== body ====================
 
-    private boolean matchBody(BodyView body) {
+    private boolean matchBody(EvalContext context) {
+        BodyView body = context.request().body();
         BodyType type = BodyType.of(body);
         if (type == BodyType.EMPTY || type == BodyType.TOO_LARGE) {
             return false;
         }
         if (condition.startsWith("$.")) {
-            return matchJsonPath(body.json());
+            return matchJsonPath(context);
         }
         if (condition.startsWith("//")) {
             return type == BodyType.XML && matchXmlNodes(parsed, body.xml());
@@ -132,8 +136,8 @@ final class LegacyConditionMatcher implements CompiledMatcher {
         return body.raw().trim().contains(condition);
     }
 
-    private boolean matchJsonPath(JsonNode json) {
-        JsonPathResult result = readJsonPath(json);
+    private boolean matchJsonPath(EvalContext context) {
+        JsonPathResult result = readJsonPath(context);
         if (!result.found) {
             return false;
         }
@@ -143,10 +147,16 @@ final class LegacyConditionMatcher implements CompiledMatcher {
         return parsed.test(result.value);
     }
 
-    private JsonPathResult readJsonPath(JsonNode json) {
+    /** 與舊版相同：同一請求內同一個 JSONPath 只評估一次，結果跨條件共用。 */
+    private JsonPathResult readJsonPath(EvalContext context) {
+        JsonNode json = context.request().body().json();
         if (json == null || jsonPath == null) {
             return JsonPathResult.MISSING;
         }
+        return context.cachedValue(new JsonPathKey(parsed.field), () -> evaluateJsonPath(json));
+    }
+
+    private JsonPathResult evaluateJsonPath(JsonNode json) {
         try {
             Object value = jsonPath.read(json, BuiltinSources.JSON_PATH_CONFIGURATION);
             if (value instanceof JsonNode node) {
@@ -218,22 +228,24 @@ final class LegacyConditionMatcher implements CompiledMatcher {
 
     // ==================== actual value（匹配鏈說明） ====================
 
-    private String actualValue(RequestView request, Parsed described) {
+    private String actualValue(EvalContext context, Parsed described) {
+        RequestView request = context.request();
         return switch (source) {
-            case BODY -> bodyActual(request.body(), described);
+            case BODY -> bodyActual(context, described);
             case QUERY -> queryActual(request.queryString(), described.field);
             case HEADER -> headerActual(request.headers(), described.field);
         };
     }
 
-    private String bodyActual(BodyView body, Parsed described) {
+    private String bodyActual(EvalContext context, Parsed described) {
+        BodyView body = context.request().body();
         BodyType type = BodyType.of(body);
         if (type == BodyType.EMPTY || type == BodyType.TOO_LARGE) {
             return "null";
         }
         try {
             if (condition.startsWith("$.")) {
-                JsonPathResult result = readJsonPath(body.json());
+                JsonPathResult result = readJsonPath(context);
                 if (!result.found) {
                     return "not found";
                 }
@@ -325,10 +337,59 @@ final class LegacyConditionMatcher implements CompiledMatcher {
                 return nodes;
             }
         }
+        if (!field.startsWith("/") && field.indexOf('\'') < 0) {
+            return elementsByLocalName(doc, field);
+        }
         String xpath = field.startsWith("/")
                 ? namespaceAgnosticXPath(field)
                 : "//*[local-name()='" + field + "']";
         return (NodeList) compiledXPath(xpath).evaluate(doc, XPathConstants.NODESET);
+    }
+
+    /**
+     * 等同 XPath {@code //*[local-name()='name']}（依文件順序），但直接走訪 DOM，比 XPath 快一個數量級。
+     * <p>
+     * 舊版 SOAP 類條件（例如 {@code CustomerId=...} 對上 {@code <ns:CustomerId>}）每次都會走到這裡。
+     * DOM 不分 namespace 時 local name 取 {@code :} 之後的部分，與 JDK XPath 的 {@code local-name()} 一致；
+     * 名稱含 {@code '} 時 XPath 字面值會失效，維持走原本的 XPath 以保留相同結果。
+     */
+    private static NodeList elementsByLocalName(Document doc, String name) {
+        NodeList all = doc.getElementsByTagName("*");
+        List<Node> matches = new ArrayList<>();
+        for (int i = 0; i < all.getLength(); i++) {
+            Node node = all.item(i);
+            if (name.equals(localName(node))) {
+                matches.add(node);
+            }
+        }
+        return new ListNodeList(matches);
+    }
+
+    private static String localName(Node node) {
+        String localName = node.getLocalName();
+        if (localName != null) {
+            return localName;
+        }
+        String qualifiedName = node.getNodeName();
+        int colon = qualifiedName.indexOf(':');
+        return colon < 0 ? qualifiedName : qualifiedName.substring(colon + 1);
+    }
+
+    private record ListNodeList(List<Node> nodes) implements NodeList {
+
+        ListNodeList {
+            nodes = List.copyOf(nodes);
+        }
+
+        @Override
+        public Node item(int index) {
+            return index >= 0 && index < nodes.size() ? nodes.get(index) : null;
+        }
+
+        @Override
+        public int getLength() {
+            return nodes.size();
+        }
     }
 
     /**
@@ -492,6 +553,10 @@ final class LegacyConditionMatcher implements CompiledMatcher {
         protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
             return size() > maxSize;
         }
+    }
+
+    /** {@link EvalContext#cachedValue} 的 key；同一路徑字串對應同一個結果。 */
+    private record JsonPathKey(String path) {
     }
 
     private record JsonPathResult(boolean found, String value) {

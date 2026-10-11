@@ -11,6 +11,9 @@ import java.util.Optional;
  */
 public final class LegacyConditions {
 
+    /** {@link MatchExplanation#node()} 中舊版片段的前綴，例如 {@code legacy.body}。 */
+    static final String LEGACY_NODE_PREFIX = "legacy.";
+
     private LegacyConditions() {
     }
 
@@ -67,18 +70,22 @@ public final class LegacyConditions {
      * @return 非舊版片段的說明時回傳 empty
      */
     public static Optional<String> legacyDetail(MatchExplanation explanation) {
-        if (!explanation.node().startsWith("legacy.")) {
+        return sourceOf(explanation).map(source -> detail(source.fieldName(), explanation));
+    }
+
+    /** 舊版片段說明來自哪個舊欄位；不是舊版片段時回傳 empty。 */
+    public static Optional<MatchNode.LegacySource> sourceOf(MatchExplanation explanation) {
+        if (!explanation.node().startsWith(LEGACY_NODE_PREFIX)) {
             return Optional.empty();
         }
-        MatchNode.LegacySource source =
-                MatchNode.LegacySource.fromJsonName(explanation.node().substring("legacy.".length()));
-        if (source == null) {
-            return Optional.empty();
-        }
-        String type = source.fieldName();
-        return Optional.of(explanation.passed()
+        return Optional.ofNullable(
+                MatchNode.LegacySource.fromJsonName(explanation.node().substring(LEGACY_NODE_PREFIX.length())));
+    }
+
+    private static String detail(String type, MatchExplanation explanation) {
+        return explanation.passed()
                 ? type + " PASS (" + explanation.expected() + ")"
-                : type + " FAIL (expected " + explanation.expected() + ", actual " + explanation.actual() + ")");
+                : type + " FAIL (expected " + explanation.expected() + ", actual " + explanation.actual() + ")";
     }
 
     private static void addFragments(List<MatchNode> fragments, MatchNode.LegacySource source, String condition) {
