@@ -8,8 +8,10 @@ import org.w3c.dom.NodeList;
 
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpression;
 import javax.xml.xpath.XPathExpressionException;
 import javax.xml.xpath.XPathFactory;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -26,6 +28,9 @@ final class LegacyConditionMatcher implements CompiledMatcher {
 
     private static final ThreadLocal<XPath> XPATH =
             ThreadLocal.withInitial(() -> XPathFactory.newInstance().newXPath());
+    private static final int XPATH_CACHE_SIZE = 512;
+    private static final ThreadLocal<Map<String, XPathExpression>> XPATH_CACHE =
+            ThreadLocal.withInitial(() -> new LruCache<>(XPATH_CACHE_SIZE));
 
     private final MatchNode.LegacySource source;
     private final String condition;
@@ -323,9 +328,23 @@ final class LegacyConditionMatcher implements CompiledMatcher {
         String xpath = field.startsWith("/")
                 ? namespaceAgnosticXPath(field)
                 : "//*[local-name()='" + field + "']";
-        XPath evaluator = XPATH.get();
-        evaluator.reset();
-        return (NodeList) evaluator.compile(xpath).evaluate(doc, XPathConstants.NODESET);
+        return (NodeList) compiledXPath(xpath).evaluate(doc, XPathConstants.NODESET);
+    }
+
+    /**
+     * 每個執行緒各自快取編譯後的 XPath（XPathExpression 不是執行緒安全的）。
+     * 舊版以跨執行緒共用的快取避免重複編譯；少了快取時 SOAP 類條件會慢約 15%。
+     */
+    private static XPathExpression compiledXPath(String xpath) throws XPathExpressionException {
+        Map<String, XPathExpression> cache = XPATH_CACHE.get();
+        XPathExpression compiled = cache.get(xpath);
+        if (compiled == null) {
+            XPath evaluator = XPATH.get();
+            evaluator.reset();
+            compiled = evaluator.compile(xpath);
+            cache.put(xpath, compiled);
+        }
+        return compiled;
     }
 
     private static String simpleElementName(String field) {
@@ -454,6 +473,24 @@ final class LegacyConditionMatcher implements CompiledMatcher {
             } catch (PatternSyntaxException e) {
                 return null;
             }
+        }
+    }
+
+    /** 依存取順序淘汰的小型快取。 */
+    private static final class LruCache<K, V> extends LinkedHashMap<K, V> {
+
+        private static final long serialVersionUID = 1L;
+
+        private final int maxSize;
+
+        LruCache(int maxSize) {
+            super(16, 0.75f, true);
+            this.maxSize = maxSize;
+        }
+
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
+            return size() > maxSize;
         }
     }
 

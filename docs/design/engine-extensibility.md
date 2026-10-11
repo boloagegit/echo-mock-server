@@ -261,6 +261,19 @@ public interface CompiledMatcher {
 - 引擎蒐集候選規則所有葉節點的 `BodyRequirement`：全是 `NONE` → `rawOnly`；有 `JSON` → 解析一次 Jackson tree；全部是 `XML_STREAM` → 單次 StAX 掃描、預先填入結果（取代現在的 `streamingConditions`）；任一需要 `XML_DOM` → 建一次 DOM 給所有規則共用。
 - 「是否可串流」由 selector 自己宣告，不再由 `ConditionMatcher` 用字串規則判斷。
 
+**效能量測（步驟 2，31 條規則、命中最後一條，每請求平均）**：
+
+| 情境 | 舊 `ConditionMatcher` | 新引擎（舊語法相容層） |
+|------|------|------|
+| JSON body，body＋query＋header 條件 | 約 14～16 µs | 約 9～10 µs（快約 37%） |
+| 一般 XML | 約 21 µs | 約 14 µs（快約 34%） |
+| SOAP（帶 namespace 前綴的 XML） | 約 1,100 µs | 約 1,100 µs（持平） |
+
+新引擎較快是因為條件在載入時就解析好，每個請求不再重複切字串、解析運算子與組暫存 key。
+SOAP 情境兩者都很慢：`CustomerId` 這類條件遇到 `<ns:CustomerId>` 時，`getElementsByTagName` 找不到，
+退回 `//*[local-name()='CustomerId']` XPath，每次約 17 µs。這是**既有瓶頸**，步驟 3 規劃以 DOM 走訪比對
+local name 取代這段 XPath（以差異測試確保結果與順序相同）；JMS 的串流 XML 路徑不受影響。
+
 ### 4.6 匹配鏈與 near-miss
 
 - `explain()` 回傳樹狀結果：每個葉節點包含 expected、actual、passed。
