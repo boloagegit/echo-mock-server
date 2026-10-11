@@ -1,5 +1,6 @@
 package com.echo.pipeline;
 
+import com.echo.core.engine.RuleSelector;
 import com.echo.entity.BaseRule;
 import com.echo.entity.FaultType;
 import com.echo.entity.Protocol;
@@ -318,69 +319,86 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     // ==================== 共用匹配邏輯 ====================
 
     /**
-     * 共用匹配邏輯：遍歷候選規則，跳過 disabled，條件匹配或 fallback
+     * 共用匹配邏輯：依序挑選規則（見 {@link RuleSelector}），並記錄匹配鏈。
      * <p>
      * 匹配優先順序：
      * <ol>
-     *   <li>有條件且條件匹配成功 → 立即回傳</li>
-     *   <li>無條件 → 記為 fallback（第一個）</li>
-     *   <li>遍歷完畢 → 回傳 fallback 或空 MatchResult</li>
+     *   <li>Scenario 狀態不符的規則略過，並記入匹配鏈</li>
+     *   <li>有條件且條件匹配成功 → 立即選中</li>
+     *   <li>都不成立 → 依 {@link #fallbackPolicy()} 選無條件規則，或沒有匹配</li>
      * </ol>
      */
     public MatchResult<T> matchRule(List<T> candidates,
                                     ConditionMatcher.PreparedBody prepared,
                                     String queryString,
                                     Map<String, String> headers) {
-        T matched = null;
-        T fallbackRule = null;
         List<MatchChainEntry> chain = new ArrayList<>();
-
-        for (T rule : candidates) {
-            if (Boolean.FALSE.equals(rule.getEnabled())) {
-                continue;
-            }
-
-            // Scenario 狀態檢查
-            if (rule.getScenarioName() != null && !rule.getScenarioName().isBlank()
-                    && rule.getRequiredScenarioState() != null && !rule.getRequiredScenarioState().isBlank()) {
-                String currentState = scenarioService.getCurrentState(rule.getScenarioName());
-                if (!rule.getRequiredScenarioState().equals(currentState)) {
-                    chain.add(new MatchChainEntry(
-                            rule.getId(), "scenario_state_mismatch",
-                            null, rule.getDescription(), null,
-                            null,
-                            "scenario: " + rule.getScenarioName()
-                                    + " (required: " + rule.getRequiredScenarioState()
-                                    + ", current: " + currentState + ")",
-                            false));
-                    continue;
-                }
-            }
-
-            if (hasCondition(rule)) {
-                ConditionSet conditions = extractConditions(rule);
-                if (conditionMatcher.matchesPrepared(
-                        conditions.getBodyCondition(),
-                        conditions.getQueryCondition(),
-                        conditions.getHeaderCondition(),
-                        prepared, queryString, headers)) {
-                    matched = rule;
-                    chain.add(createMatchChainEntry(rule, "match"));
-                    break;
-                }
-            } else {
-                if (fallbackRule == null) {
-                    fallbackRule = rule;
-                }
-            }
+        RuleSelector.Selection<T> selection = RuleSelector.select(candidates, fallbackPolicy(), ruleTraits,
+                rule -> passesScenarioGate(rule, chain),
+                rule -> conditionsMatch(rule, prepared, queryString, headers));
+        T matched = selection.selected();
+        if (matched != null) {
+            chain.add(createMatchChainEntry(matched, "match"));
         }
-
-        if (matched == null && fallbackRule != null) {
-            matched = fallbackRule;
-            chain.add(createMatchChainEntry(fallbackRule, "match"));
-        }
-
         return new MatchResult<>(matched, chain);
+    }
+
+    /** 沒有條件成立時如何挑選無條件規則；JMS 覆寫為非萬用優先。 */
+    protected RuleSelector.FallbackPolicy fallbackPolicy() {
+        return RuleSelector.FallbackPolicy.FIRST_UNCONDITIONAL;
+    }
+
+    /** 萬用規則（只在 {@link RuleSelector.FallbackPolicy#EXACT_BEFORE_WILDCARD} 時有意義）。 */
+    protected boolean isWildcard(T rule) {
+        return false;
+    }
+
+    private final RuleSelector.Traits<T> ruleTraits = new RuleSelector.Traits<>() {
+        @Override
+        public boolean enabled(T rule) {
+            return !Boolean.FALSE.equals(rule.getEnabled());
+        }
+
+        @Override
+        public boolean unconditional(T rule) {
+            return !hasCondition(rule);
+        }
+
+        @Override
+        public boolean wildcard(T rule) {
+            return isWildcard(rule);
+        }
+    };
+
+    /** Scenario 狀態不符時記入匹配鏈並回傳 false。 */
+    private boolean passesScenarioGate(T rule, List<MatchChainEntry> chain) {
+        if (rule.getScenarioName() == null || rule.getScenarioName().isBlank()
+                || rule.getRequiredScenarioState() == null || rule.getRequiredScenarioState().isBlank()) {
+            return true;
+        }
+        String currentState = scenarioService.getCurrentState(rule.getScenarioName());
+        if (rule.getRequiredScenarioState().equals(currentState)) {
+            return true;
+        }
+        chain.add(new MatchChainEntry(
+                rule.getId(), "scenario_state_mismatch",
+                null, rule.getDescription(), null,
+                null,
+                "scenario: " + rule.getScenarioName()
+                        + " (required: " + rule.getRequiredScenarioState()
+                        + ", current: " + currentState + ")",
+                false));
+        return false;
+    }
+
+    private boolean conditionsMatch(T rule, ConditionMatcher.PreparedBody prepared,
+                                    String queryString, Map<String, String> headers) {
+        ConditionSet conditions = extractConditions(rule);
+        return conditionMatcher.matchesPrepared(
+                conditions.getBodyCondition(),
+                conditions.getQueryCondition(),
+                conditions.getHeaderCondition(),
+                prepared, queryString, headers);
     }
 
     /** JSON/XML 只在至少一條啟用候選規則真的使用 body 條件時解析。 */

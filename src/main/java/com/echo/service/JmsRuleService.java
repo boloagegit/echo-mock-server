@@ -2,6 +2,7 @@ package com.echo.service;
 
 import com.echo.config.CacheConfig;
 import com.echo.config.JmsProperties;
+import com.echo.core.engine.RuleSelector;
 import com.echo.entity.JmsRule;
 import com.echo.entity.Protocol;
 import com.echo.protocol.jms.JmsProtocolHandler;
@@ -183,45 +184,35 @@ public class JmsRuleService {
 
     private MatchResult<JmsRule> matchJmsRules(List<JmsRule> rules, String body,
                                                 ConditionMatcher.PreparedBody preparedBody) {
-        JmsRule matched = null;
-        JmsRule noConditionRule = null;
-        JmsRule wildcardRule = null;
         ConditionMatcher.PreparedBody prepared = (preparedBody != null)
                 ? preparedBody : conditionMatcher.prepareBody(body);
-
-        for (JmsRule rule : rules) {
-            if (Boolean.FALSE.equals(rule.getEnabled())) {
-                continue;
-            }
-            boolean isWildcard = "*".equals(rule.getQueueName());
-            boolean hasCondition = rule.getBodyCondition() != null && !rule.getBodyCondition().isBlank();
-
-            if (hasCondition) {
-                if (conditionMatcher.matchesPrepared(
-                        rule.getBodyCondition(), null, null, prepared, null, null)) {
-                    matched = rule;
-                    break;
-                }
-            } else if (isWildcard) {
-                if (wildcardRule == null) {
-                    wildcardRule = rule;
-                }
-            } else {
-                if (noConditionRule == null) {
-                    noConditionRule = rule;
-                }
-            }
-        }
-
-        if (matched == null) {
-            matched = noConditionRule != null ? noConditionRule : wildcardRule;
-        }
+        JmsRule matched = RuleSelector.select(rules, RuleSelector.FallbackPolicy.EXACT_BEFORE_WILDCARD,
+                JMS_RULE_TRAITS, rule -> true,
+                rule -> conditionMatcher.matchesPrepared(rule.getBodyCondition(), null, null, prepared, null, null))
+                .selected();
 
         List<MatchChainEntry> chain = matched != null
                 ? List.of(MatchChainEntry.fromJms(matched, "match"))
                 : List.of();
         return new MatchResult<>(matched, chain);
     }
+
+    private static final RuleSelector.Traits<JmsRule> JMS_RULE_TRAITS = new RuleSelector.Traits<>() {
+        @Override
+        public boolean enabled(JmsRule rule) {
+            return !Boolean.FALSE.equals(rule.getEnabled());
+        }
+
+        @Override
+        public boolean unconditional(JmsRule rule) {
+            return rule.getBodyCondition() == null || rule.getBodyCondition().isBlank();
+        }
+
+        @Override
+        public boolean wildcard(JmsRule rule) {
+            return "*".equals(rule.getQueueName());
+        }
+    };
 
     public List<JmsRule> findAllJmsRules() {
         if (!isJmsEnabled()) {

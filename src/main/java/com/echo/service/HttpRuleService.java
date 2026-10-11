@@ -1,6 +1,7 @@
 package com.echo.service;
 
 import com.echo.config.CacheConfig;
+import com.echo.core.engine.RuleSelector;
 import com.echo.entity.HttpRule;
 import com.echo.entity.Protocol;
 import com.echo.protocol.http.HttpProtocolHandler;
@@ -99,42 +100,35 @@ public class HttpRuleService {
 
     private MatchResult<HttpRule> findMatchingHttpRuleInternal(List<HttpRule> rules, String body,
             String queryString, Map<String, String> headers) {
-        HttpRule matched = null;
-        HttpRule fallbackRule = null;
         ConditionMatcher.PreparedBody prepared = conditionMatcher.prepareBody(body);
-
-        for (HttpRule rule : rules) {
-            if (Boolean.FALSE.equals(rule.getEnabled())) {
-                continue;
-            }
-
-            boolean hasCondition = (rule.getBodyCondition() != null && !rule.getBodyCondition().isBlank())
-                    || (rule.getQueryCondition() != null && !rule.getQueryCondition().isBlank())
-                    || (rule.getHeaderCondition() != null && !rule.getHeaderCondition().isBlank());
-
-            if (hasCondition) {
-                if (conditionMatcher.matchesPrepared(
-                        rule.getBodyCondition(), rule.getQueryCondition(),
-                        rule.getHeaderCondition(), prepared, queryString, headers)) {
-                    matched = rule;
-                    break;
-                }
-            } else {
-                if (fallbackRule == null) {
-                    fallbackRule = rule;
-                }
-            }
-        }
-
-        if (matched == null && fallbackRule != null) {
-            matched = fallbackRule;
-        }
+        HttpRule matched = RuleSelector.select(rules, RuleSelector.FallbackPolicy.FIRST_UNCONDITIONAL,
+                HTTP_RULE_TRAITS, rule -> true,
+                rule -> conditionMatcher.matchesPrepared(rule.getBodyCondition(), rule.getQueryCondition(),
+                        rule.getHeaderCondition(), prepared, queryString, headers))
+                .selected();
 
         List<MatchChainEntry> chain = matched != null
                 ? List.of(MatchChainEntry.fromHttp(matched, "match"))
                 : List.of();
         return new MatchResult<>(matched, chain);
     }
+
+    private static final RuleSelector.Traits<HttpRule> HTTP_RULE_TRAITS = new RuleSelector.Traits<>() {
+        @Override
+        public boolean enabled(HttpRule rule) {
+            return !Boolean.FALSE.equals(rule.getEnabled());
+        }
+
+        @Override
+        public boolean unconditional(HttpRule rule) {
+            return isBlank(rule.getBodyCondition()) && isBlank(rule.getQueryCondition())
+                    && isBlank(rule.getHeaderCondition());
+        }
+
+        private boolean isBlank(String value) {
+            return value == null || value.isBlank();
+        }
+    };
 
     public List<HttpRule> findAllHttpRules() {
         return httpHandler.findAllRules();
