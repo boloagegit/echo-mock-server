@@ -97,7 +97,7 @@ Echo 的功能已涵蓋 HTTP／JMS mock、轉發、故障注入、SSE、Scenario
 
 ```
 com.echo.core.model      RuleDefinition, RouteSpec, MatchSpec, ResponseSpec, ProtocolId
-com.echo.core.match      Matcher SPI、內建 matchers、LegacyConditionCompiler、BodyPlan
+com.echo.core.match      Matcher SPI、內建 matchers、LegacyConditions（舊語法相容層）、BodyPlan
 com.echo.core.respond    Responder SPI、ResponsePlan
 com.echo.core.engine     MockEngine, RuleIndex, SelectionPolicy, ServeEvent
 com.echo.core.spi        ProtocolAdapter, RuleStore, ServeEventListener
@@ -218,16 +218,31 @@ public interface CompiledMatcher {
 
 ### 4.3 舊語法的相容策略
 
-1. **`LegacyConditionCompiler`** 把三個舊欄位轉成 `all[...]`。每個以 `;` 切出的片段：
-   - `queryCondition` 片段 → `{source: query, name, op, value, onMissing: auto}`，並帶 `options.legacyQuery = true`（不 decode、取第一個）。
-   - `headerCondition` 片段 → `{source: header, ...}`，並帶 `options.legacyEmptyHeadersFail = true`，重現 §2.3「headers 為空時 `!=` 也是 false」。
-   - `bodyCondition` 片段 → **`{source: body, selector: {legacy: "<原片段>"}}`**。`legacy` selector 原封不動地實作 §2.2 的執行期派送（JSONPath／XPath／點路徑／XML 元素／PLAIN contains），包含各分支在欄位不存在時的不同行為。
+已於步驟 2 實作（`LegacyConditions`、`LegacyConditionMatcher`）。
 
-   body 條件不嘗試「靜態推斷」成 `jsonPath`／`xpath`，因為舊語意取決於**執行期**的 body 型別（同一條件遇到 JSON 與 XML 會走不同路徑）。只有使用者在 UI 編輯該條件時，才提示升級成明確的 selector。
+1. **舊片段是獨立的節點型別 `legacy`**，而不是 `Leaf` 的一種 selector：
 
-2. **反向轉換**：`MatchSpec` 若只由「all + 舊語法可表達的葉節點」組成，就能無損還原成三個舊字串。這決定 v1 API 與舊 UI 能不能顯示或編輯該規則（§6）。
+   ```json
+   {"all": [
+     {"legacy": {"source": "body",   "condition": "user.type=vip"}},
+     {"legacy": {"source": "query",  "condition": "page!=1"}},
+     {"legacy": {"source": "header", "condition": "X-Tenant~=acme.*"}}
+   ]}
+   ```
 
-3. **memo key 相容**：legacy 葉節點的 `cacheKey()` 維持 `"body:" + 片段`、`"query:" + 片段`、`"header:" + 片段`，讓 `PreparedBody.matchOutcomes` 與 `LogAgent` 的重用機制不需改動。
+   原本規劃把 body 片段做成 `{source: body, selector: {legacy: ...}}`。實作時發現舊語意中「運算子」本身也取決於執行期的 body 型別（PLAIN body 是用**整段條件字串**做 contains，連 `=` 和值都算在內），無法拆成「取值 + 運算子」，硬塞進 `Leaf` 只會讓 `Leaf` 的語意變得不一致。因此 `legacy` 節點直接包住整段片段，評估邏輯逐行移植自 `ConditionMatcher`；query 與 header 片段也一併這樣處理，三者行為完全一致。
+
+   body 條件不嘗試「靜態推斷」成 `jsonPath`／`xpath`，因為同一條件遇到 JSON 與 XML 會走不同路徑。只有使用者在 UI 編輯該條件時，才提示升級成明確的 `Leaf`。
+
+2. **轉換只在記憶體中進行**：`LegacyConditions.toMatchNode(body, query, header)` 依 body → query → header 的順序產生 `all[legacy...]`；三個欄位都空時是空的 `all`（無條件 fallback）。資料庫字串不變，不需要資料遷移。
+
+3. **反向轉換**：`LegacyConditions.toStrings(node)` 只接受「空的 `all`」或「只含 `legacy` 節點的 `all`」，其他（用到 `any`、`not` 或新運算子）回傳 empty，呼叫端不可寫回舊欄位。這決定 v1 API 與舊 UI 能不能顯示或編輯該規則（§6）。
+
+4. **memo key 相容**：`legacy` 節點的 `cacheKey()` 維持 `"body:" + 片段`、`"query:" + 片段`、`"header:" + 片段`，讓 `PreparedBody.matchOutcomes` 與 `LogAgent` 的重用機制不需改動。
+
+5. **匹配鏈說明相容**：`explain()` 產生的 `legacy.*` 節點經 `LegacyConditions.legacyDetail()` 可得到與舊版完全相同的文字，例如 `bodyCondition FAIL (expected user.type=vip, actual user.type=normal)`。
+
+6. **差異測試**（`LegacyDifferentialTest`）：舊 `ConditionMatcher` 為標準答案，以 jqwik 隨機產生 5,000 組條件與請求（JSON、XML 含 namespace／SOAP、PLAIN、空白、壞掉的 JSON/XML、各種前綴與運算子、`;` 分隔變化），另加 29 個指定邊界案例與超大 body 案例，比對「是否符合、每個條件的說明文字、分數、暫存 key」四項必須完全一致。已驗證：故意改壞一個分支時，隨機與指定案例都會失敗。
 
 ### 4.4 需要先定案的既有不一致
 
@@ -237,6 +252,7 @@ public interface CompiledMatcher {
 | 2 | 前端儲存時會濾掉 value 為空的條件（`c.field && c.value`），所以 `field=` 無法透過表單儲存 | 新模型以 `exists`／`equals ""` 明確表達；舊表單行為維持不變 |
 | 3 | `$.a==b` 在 JSONPath 分支不會替換 `==`，實際比對的是 value `"=b"` | 保留舊行為（相容），在條件驗證時提出警告 |
 | 4 | JSONPath 欄位不存在時 `!=` 為 false，點路徑則為 true | 保留舊行為；新模型以 `onMissing` 明確表達 |
+| 5 | 期望值只有一個 `"`（例如 `a="`）時，舊版去引號會丟出 `StringIndexOutOfBoundsException`：query／header 條件會讓請求回 500，body 條件則視為不符合 | **刻意修正**：新引擎把單一 `"` 當成字面值比對。這是相容層唯一與舊版不同的地方 |
 
 ### 4.5 Body 解析規劃（`BodyPlan`）
 
@@ -376,7 +392,7 @@ v1 與 v2 透過同一個 `RuleDefinition` 雙向轉換；`/rules/schema` 提供
 | # | 內容 | 對外行為 | 狀態 |
 |---|------|------|------|
 | 1 | ArchUnit 規則、`com.echo.core` 骨架、`MatchSpec` 模型、內建 op 與組合節點、單元測試 | 無 | 完成 |
-| 2 | `LegacyConditionCompiler` + `legacy` selector + 差異測試 | 無 | 未開始 |
+| 2 | `LegacyConditions` + `legacy` 節點 + 差異測試 | 無 | 完成 |
 | 3 | `BodyPlan`、`CompiledMatcher` 接入 pipeline 與 `LogAgent`，以 `echo.engine.matcher=legacy\|compiled` 切換（預設 legacy）；跑效能關卡後改預設為 compiled | 無（可切回） | 未開始 |
 | 4 | `SelectionPolicy` 收斂 5 份選擇邏輯；`RuleIndex` 不可變快照 | 無 | 未開始 |
 | 5 | `Responder`／`ResponsePlan`，SSE 播放移出控制器；`ServeEventListener` 與請求紀錄改用 `ServeEvent` | 無 | 未開始 |
@@ -391,7 +407,7 @@ v1 與 v2 透過同一個 `RuleDefinition` 雙向轉換；`/rules/schema` 提供
 
 | 風險 | 緩解 |
 |------|------|
-| 語意漂移（尤其是 §2.2 的執行期派送與缺漏欄位行為） | `legacy` selector 原樣搬移演算法，加上差異測試；功能開關可立即切回 |
+| 語意漂移（尤其是 §2.2 的執行期派送與缺漏欄位行為） | `legacy` 節點原樣搬移演算法，加上差異測試；功能開關可立即切回 |
 | 樹狀評估造成額外配置、降低吞吐量 | fast path 只回傳布林；葉節點與 predicate 預先編譯；效能關卡把關 |
 | JMS 串流 XML 的記憶體特性改變 | `XML_STREAM` 需求由 selector 宣告，維持「全部可串流才串流」的條件；`JmsMessageMemoryBudget` 不變 |
 | 多實例快取一致性 | 沿用 `CacheInvalidationService` 事件，只把「清除 Caffeine」換成「重建快照」 |

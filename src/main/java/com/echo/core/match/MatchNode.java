@@ -14,7 +14,8 @@ import java.util.Objects;
  * 由 {@link MatchSpecCodec#parse(JsonNode)} 從 JSON 產生，再交給 {@link MatcherCompiler} 編譯。
  * 所有節點皆為不可變物件。
  */
-public sealed interface MatchNode permits MatchNode.All, MatchNode.Any, MatchNode.Not, MatchNode.Leaf {
+public sealed interface MatchNode
+        permits MatchNode.All, MatchNode.Any, MatchNode.Not, MatchNode.Leaf, MatchNode.Legacy {
 
     /** 全部子節點都符合才符合；沒有子節點時視為無條件（永遠符合）。 */
     record All(List<MatchNode> children) implements MatchNode {
@@ -79,6 +80,59 @@ public sealed interface MatchNode permits MatchNode.All, MatchNode.Any, MatchNod
             Map<String, JsonNode> copy = new LinkedHashMap<>();
             options.forEach((key, node) -> copy.put(key, node.deepCopy()));
             return Collections.unmodifiableMap(copy);
+        }
+    }
+
+    /**
+     * 舊版字串條件的單一片段（以 {@code ;} 切開後的一段），依舊版 {@code ConditionMatcher} 的語意原樣評估。
+     * <p>
+     * 舊語意中運算子解析與 body 型別（JSON／XML／純文字）在執行期才決定，無法無損轉成
+     * {@link Leaf}，因此獨立成一種節點。見 {@link LegacyConditions}。
+     *
+     * @param source    片段來自哪個舊欄位
+     * @param condition 已去除前後空白、不含 {@code ;} 的片段
+     */
+    record Legacy(LegacySource source, String condition) implements MatchNode {
+        public Legacy {
+            Objects.requireNonNull(source, "source");
+            Objects.requireNonNull(condition, "condition");
+            if (condition.isEmpty() || !condition.equals(condition.trim()) || condition.indexOf(';') >= 0) {
+                throw new IllegalArgumentException("Legacy condition must be a single trimmed fragment");
+            }
+        }
+    }
+
+    /** 舊版條件欄位。 */
+    enum LegacySource {
+        BODY("body", "bodyCondition"),
+        QUERY("query", "queryCondition"),
+        HEADER("header", "headerCondition");
+
+        private final String jsonName;
+        private final String fieldName;
+
+        LegacySource(String jsonName, String fieldName) {
+            this.jsonName = jsonName;
+            this.fieldName = fieldName;
+        }
+
+        /** JSON 表示中的名稱，也是舊版暫存 key 的前綴（例如 {@code body:}）。 */
+        public String jsonName() {
+            return jsonName;
+        }
+
+        /** 舊版規則欄位與匹配鏈使用的名稱，例如 {@code bodyCondition}。 */
+        public String fieldName() {
+            return fieldName;
+        }
+
+        static LegacySource fromJsonName(String name) {
+            for (LegacySource source : values()) {
+                if (source.jsonName.equals(name)) {
+                    return source;
+                }
+            }
+            return null;
         }
     }
 

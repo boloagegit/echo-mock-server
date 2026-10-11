@@ -56,6 +56,9 @@ public final class MatcherCompiler {
         if (node instanceof MatchNode.Not not) {
             return new CompiledNodes.Not(compile(not.child(), path + ".not"), cacheKey);
         }
+        if (node instanceof MatchNode.Legacy legacy) {
+            return new LegacyConditionMatcher(legacy.source(), legacy.condition(), limits);
+        }
         return compileLeaf((MatchNode.Leaf) node, path, cacheKey);
     }
 

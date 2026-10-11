@@ -26,6 +26,7 @@ import java.util.TreeMap;
  * {"source": "header", "name": "X-Tenant", "op": "equals", "value": "acme",
  *  "quantifier": "any", "onMissing": "auto", "options": {"caseInsensitive": true}}
  * {"source": "body", "selector": {"jsonPath": "$.amount"}, "op": "gte", "value": 1000}
+ * {"legacy": {"source": "body", "condition": "user.type=vip"}}
  * }</pre>
  */
 public final class MatchSpecCodec {
@@ -55,6 +56,10 @@ public final class MatchSpecCodec {
             json.set("any", toJsonArray(any.children()));
         } else if (node instanceof MatchNode.Not not) {
             json.set("not", toJson(not.child()));
+        } else if (node instanceof MatchNode.Legacy legacy) {
+            json.putObject("legacy")
+                    .put("source", legacy.source().jsonName())
+                    .put("condition", legacy.condition());
         } else {
             writeLeaf((MatchNode.Leaf) node, json);
         }
@@ -76,6 +81,10 @@ public final class MatchSpecCodec {
         if (json.has("not")) {
             requireOnlyField(json, "not", path);
             return new MatchNode.Not(parse(json.get("not"), path + ".not"));
+        }
+        if (json.has("legacy")) {
+            requireOnlyField(json, "legacy", path);
+            return parseLegacy(json.get("legacy"), path + ".legacy");
         }
         return parseLeaf(json, path);
     }
@@ -113,6 +122,23 @@ public final class MatchSpecCodec {
         MatchNode.OnMissing onMissing = parseEnum(json, "onMissing", MatchNode.OnMissing.class, path);
         Map<String, JsonNode> options = parseOptions(json.get("options"), path + ".options");
         return new MatchNode.Leaf(source, name, selector, op, json.get("value"), quantifier, onMissing, options);
+    }
+
+    private static MatchNode.Legacy parseLegacy(JsonNode json, String path) {
+        if (json == null || !json.isObject() || json.size() != 2 || !json.has("source") || !json.has("condition")) {
+            throw new InvalidMatchSpecException(path, "expected an object with exactly source and condition");
+        }
+        String sourceName = requiredText(json, "source", path);
+        MatchNode.LegacySource source = MatchNode.LegacySource.fromJsonName(sourceName);
+        if (source == null) {
+            throw new InvalidMatchSpecException(path + ".source", "expected body, query or header");
+        }
+        String condition = requiredText(json, "condition", path);
+        try {
+            return new MatchNode.Legacy(source, condition);
+        } catch (IllegalArgumentException e) {
+            throw new InvalidMatchSpecException(path + ".condition", e.getMessage(), e);
+        }
     }
 
     private static Selector parseSelector(JsonNode json, String path) {

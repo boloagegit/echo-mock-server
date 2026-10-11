@@ -30,7 +30,7 @@ import java.util.regex.Pattern;
 public final class BuiltinSources {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final Configuration JSON_PATH_CONFIGURATION = Configuration.builder()
+    static final Configuration JSON_PATH_CONFIGURATION = Configuration.builder()
             .jsonProvider(new JacksonJsonNodeJsonProvider(MAPPER))
             .mappingProvider(new JacksonMappingProvider(MAPPER))
             .build();
