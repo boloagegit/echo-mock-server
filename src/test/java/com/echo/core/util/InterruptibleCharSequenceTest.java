@@ -43,4 +43,23 @@ class InterruptibleCharSequenceTest {
         CharSequence sub = wrapped.subSequence(0, 5);
         assertThat(sub.toString()).isEqualTo("hello");
     }
+
+    @Test
+    void expiredDeadlineIsDetectedWithinCheckInterval() {
+        CharSequence wrapped = new InterruptibleCharSequence("a".repeat(1000), -1);
+
+        assertThatThrownBy(() -> {
+            for (int i = 0; i <= InterruptibleCharSequence.CHECK_INTERVAL; i++) {
+                wrapped.charAt(i);
+            }
+        }).isInstanceOf(InterruptibleCharSequence.RegexTimeoutException.class);
+    }
+
+    @Test
+    void subSequenceKeepsOriginalDeadline() {
+        CharSequence sub = new InterruptibleCharSequence("hello world", -1).subSequence(0, 5);
+
+        assertThatThrownBy(() -> sub.charAt(0))
+                .isInstanceOf(InterruptibleCharSequence.RegexTimeoutException.class);
+    }
 }

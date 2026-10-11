@@ -125,13 +125,13 @@ final class LegacyConditionMatcher implements CompiledMatcher {
             return matchJsonPath(context);
         }
         if (condition.startsWith("//")) {
-            return type == BodyType.XML && matchXmlNodes(parsed, body.xml());
+            return type == BodyType.XML && matchXmlNodes(context, parsed, body.xml());
         }
         if (type == BodyType.JSON) {
             return matchJsonField(body.json());
         }
         if (type == BodyType.XML) {
-            return matchXmlNodes(parsed, body.xml());
+            return matchXmlNodes(context, parsed, body.xml());
         }
         return body.raw().trim().contains(condition);
     }
@@ -205,12 +205,12 @@ final class LegacyConditionMatcher implements CompiledMatcher {
         }
     }
 
-    private boolean matchXmlNodes(Parsed cond, Document doc) {
+    private boolean matchXmlNodes(EvalContext context, Parsed cond, Document doc) {
         if (doc == null) {
             return false;
         }
         try {
-            NodeList nodes = findXmlNodes(cond.field, doc);
+            NodeList nodes = xmlNodes(context, cond.field, doc);
             for (int i = 0; i < nodes.getLength(); i++) {
                 String text = nodes.item(i).getTextContent().trim();
                 if (text.length() > limits.maxFieldValueLength()) {
@@ -252,13 +252,13 @@ final class LegacyConditionMatcher implements CompiledMatcher {
                 return result.value != null ? result.value : "null";
             }
             if (condition.startsWith("//")) {
-                return type == BodyType.XML ? xmlActual(described.field, body.xml()) : "not found";
+                return type == BodyType.XML ? xmlActual(context, described.field, body.xml()) : "not found";
             }
             if (type == BodyType.JSON) {
                 return jsonFieldActual(described.field, body.json());
             }
             if (type == BodyType.XML) {
-                return xmlActual(described.field, body.xml());
+                return xmlActual(context, described.field, body.xml());
             }
         } catch (RuntimeException e) {
             // 與舊版相同：取值失敗時顯示 not found
@@ -290,9 +290,9 @@ final class LegacyConditionMatcher implements CompiledMatcher {
         return node.isTextual() ? node.asText() : node.toString();
     }
 
-    private static String xmlActual(String field, Document doc) {
+    private static String xmlActual(EvalContext context, String field, Document doc) {
         try {
-            NodeList nodes = findXmlNodes(field, doc);
+            NodeList nodes = xmlNodes(context, field, doc);
             if (nodes.getLength() > 0) {
                 return nodes.item(0).getTextContent().trim();
             }
@@ -328,6 +328,25 @@ final class LegacyConditionMatcher implements CompiledMatcher {
     }
 
     // ==================== XML lookup ====================
+
+    /**
+     * 同一請求內相同欄位只查找一次（例如 30 條規則都檢查 {@code CustomerId}），結果跨條件共用。
+     * 查找失敗也會保存，之後以同樣的例外回報，讓呼叫端維持舊版的處理方式。
+     */
+    private static NodeList xmlNodes(EvalContext context, String field, Document doc)
+            throws XPathExpressionException {
+        XmlLookup lookup = context.cachedValue(new XmlLookupKey(field), () -> {
+            try {
+                return new XmlLookup(findXmlNodes(field, doc));
+            } catch (XPathExpressionException | RuntimeException e) {
+                return XmlLookup.FAILED;
+            }
+        });
+        if (lookup.nodes() == null) {
+            throw new XPathExpressionException("XML lookup failed for " + field);
+        }
+        return lookup.nodes();
+    }
 
     private static NodeList findXmlNodes(String field, Document doc) throws XPathExpressionException {
         String simpleName = simpleElementName(field);
@@ -557,6 +576,14 @@ final class LegacyConditionMatcher implements CompiledMatcher {
 
     /** {@link EvalContext#cachedValue} 的 key；同一路徑字串對應同一個結果。 */
     private record JsonPathKey(String path) {
+    }
+
+    private record XmlLookupKey(String field) {
+    }
+
+    /** {@code nodes} 為 null 表示查找失敗（XPath 語法錯誤等）。 */
+    private record XmlLookup(NodeList nodes) {
+        static final XmlLookup FAILED = new XmlLookup(null);
     }
 
     private record JsonPathResult(boolean found, String value) {
