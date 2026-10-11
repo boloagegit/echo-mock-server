@@ -68,18 +68,39 @@ public class HttpRuleService {
         if (applicationContext == null) {
             return prepareHttpRules(httpHandler.findWithFallback(host, path, method));
         }
-        return proxy().findPreparedHttpRuleSet(host, method).stream()
+        return proxy().httpRuleSnapshot().candidates(host, method).stream()
                 .filter(rule -> httpHandler.matchesRequestPath(rule.getMatchKey(), path))
                 .toList();
     }
 
-    @Cacheable(cacheNames = CacheConfig.HTTP_RULES_CACHE,
-               key = "'http-prepared-set:' + #host + ':' + #method")
+    /** host + method 的候選規則（已排序、未依路徑篩選），取自目前的規則快照。 */
     public List<HttpRule> findPreparedHttpRuleSet(String host, String method) {
-        log.debug("Cache miss - preparing HTTP rule set: host={}, method={}", host, method);
-        List<HttpRule> rules = httpHandler.findByHostAndMethod(host, method);
-        return prepareHttpRules(rules);
+        return proxy().httpRuleSnapshot().candidates(host, method);
     }
+
+    /**
+     * 目前的 HTTP 規則快照。存放在 {@code httpRules} 快取的單一項目，任何規則或 Response 異動清除快取時一併淘汰；
+     * {@code sync = true} 讓並行請求只建立一次。
+     */
+    @Cacheable(cacheNames = CacheConfig.HTTP_RULES_CACHE, key = "'http-snapshot'", sync = true)
+    public HttpRuleSnapshot httpRuleSnapshot() {
+        List<HttpRule> rules = httpRuleRepository.findByEnabledTrueOrderByIdAsc();
+        Set<Long> validResponseIds = ruleService.getValidResponseIds(rules.stream()
+                .map(HttpRule::getResponseId).filter(id -> id != null).collect(Collectors.toSet()));
+        List<HttpRule> valid = rules.stream()
+                .filter(r -> r.getResponseId() == null || validResponseIds.contains(r.getResponseId()))
+                .toList();
+        log.debug("Building HTTP rule snapshot: {} enabled rules", valid.size());
+        return new HttpRuleSnapshot(valid, HTTP_RULE_ORDER, conditionMatcher);
+    }
+
+    /** 候選規則優先順序：非萬用路徑 → priority 高 → 有指定 host → 建立時間新。 */
+    static final Comparator<HttpRule> HTTP_RULE_ORDER = Comparator
+            .comparing((HttpRule r) -> "*".equals(r.getMatchKey()) ? 1 : 0)
+            .thenComparing(Comparator.<HttpRule, Integer>comparing(
+                    r -> r.getPriority() != null ? r.getPriority() : Integer.MIN_VALUE).reversed())
+            .thenComparing(r -> r.getTargetHost() == null || r.getTargetHost().isEmpty() ? 1 : 0)
+            .thenComparing(HttpRule::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder()));
 
     private List<HttpRule> prepareHttpRules(List<HttpRule> rules) {
         if (rules.isEmpty()) {
@@ -89,12 +110,7 @@ public class HttpRuleService {
                 .map(HttpRule::getResponseId).filter(id -> id != null).collect(Collectors.toSet()));
         return rules.stream()
                 .filter(r -> r.getResponseId() == null || validResponseIds.contains(r.getResponseId()))
-                .sorted(Comparator
-                        .comparing((HttpRule r) -> "*".equals(r.getMatchKey()) ? 1 : 0)
-                        .thenComparing(Comparator.<HttpRule, Integer>comparing(
-                                r -> r.getPriority() != null ? r.getPriority() : Integer.MIN_VALUE).reversed())
-                        .thenComparing(r -> r.getTargetHost() == null || r.getTargetHost().isEmpty() ? 1 : 0)
-                        .thenComparing(HttpRule::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .sorted(HTTP_RULE_ORDER)
                 .toList();
     }
 

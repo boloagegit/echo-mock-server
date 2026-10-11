@@ -88,7 +88,6 @@ public class ConditionMatcher {
     private static final long REGEX_TIMEOUT_MS = 1000;
 
     private static final int DEFAULT_MAX_FIELD_VALUE_LENGTH = 2 * 1024 * 1024;
-    private static final int MAX_COMPILED_CONDITIONS = 10_000;
 
     /** 單一欄位值長度上限，超過則跳過比對（防止 base64 等大值拖慢匹配） */
     private final int maxFieldValueLength;
@@ -96,9 +95,13 @@ public class ConditionMatcher {
     /** 條件比對引擎；見 {@link EngineMode}。 */
     private final EngineMode engineMode;
     private final MatcherCompiler compiler;
-    /** 依條件字串快取編譯結果；規則修改後字串不同，自然對應到新的項目，舊項目依 LRU 淘汰。 */
-    private final Cache<ConditionKey, CompiledMatcher> compiledConditions = Caffeine.newBuilder()
-            .maximumSize(MAX_COMPILED_CONDITIONS)
+    /**
+     * 條件字串 → {@link RuleConditions}，以弱參照保存：規則快照（{@code HttpRuleSnapshot}／{@code JmsQueueSnapshot}）
+     * 持有使用中的條件，因此不會被回收也不需要容量上限；快照被淘汰後，沒有人使用的條件由 GC 回收。
+     * 取代原本上限 10,000 筆的 LRU 快取，避免條件數超過上限時反覆重新編譯。
+     */
+    private final Cache<ConditionKey, RuleConditions> conditionRegistry = Caffeine.newBuilder()
+            .weakValues()
             .build();
 
     /** 預設建構子，使用 2MB 上限（供測試及非 Spring 環境使用） */
@@ -166,9 +169,43 @@ public class ConditionMatcher {
     private record ConditionKey(String body, String query, String header) {
     }
 
+    /**
+     * 一組規則條件（舊版三個欄位）。compiled 模式第一次比對時才編譯，之後重用；legacy 模式不編譯。
+     * 呼叫端（規則快照）持有此物件，就能讓編譯結果在快照的生命週期內保留。
+     */
+    public static final class RuleConditions {
+
+        private final ConditionKey key;
+        private final MatcherCompiler compiler;
+        private volatile CompiledMatcher compiled;
+
+        private RuleConditions(ConditionKey key, MatcherCompiler compiler) {
+            this.key = key;
+            this.compiler = compiler;
+        }
+
+        private CompiledMatcher compiled() {
+            CompiledMatcher result = compiled;
+            if (result == null) {
+                // 並行時可能重複編譯一次；結果相同且不可變，因此不需加鎖
+                result = compiler.compile(LegacyConditions.toMatchNode(key.body(), key.query(), key.header()));
+                compiled = result;
+            }
+            return result;
+        }
+    }
+
+    /**
+     * 取得一組條件的共用物件；相同條件字串在使用期間回傳同一個物件。
+     * 規則快照應持有回傳值，讓 compiled 模式的編譯結果在快照存在期間不被回收。
+     */
+    public RuleConditions conditions(String bodyCondition, String queryCondition, String headerCondition) {
+        return conditionRegistry.get(new ConditionKey(bodyCondition, queryCondition, headerCondition),
+                key -> new RuleConditions(key, compiler));
+    }
+
     private CompiledMatcher compiled(String bodyCondition, String queryCondition, String headerCondition) {
-        return compiledConditions.get(new ConditionKey(bodyCondition, queryCondition, headerCondition),
-                key -> compiler.compile(LegacyConditions.toMatchNode(key.body(), key.query(), key.header())));
+        return conditions(bodyCondition, queryCondition, headerCondition).compiled();
     }
 
     private final ObjectMapper objectMapper = new ObjectMapper();

@@ -19,6 +19,9 @@ public interface HttpRuleRepository extends JpaRepository<HttpRule, String> {
 
     List<HttpRule> findAllByOrderByIdDesc();
 
+    /** 規則快照使用：所有啟用中的規則，依 id 排序（與 findByTargetHostOrWildcard 的順序一致）。 */
+    List<HttpRule> findByEnabledTrueOrderByIdAsc();
+
     int countByResponseId(Long responseId);
 
     List<HttpRule> findByResponseId(Long responseId);
