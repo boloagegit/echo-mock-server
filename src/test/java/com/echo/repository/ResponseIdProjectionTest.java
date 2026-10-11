@@ -43,4 +43,22 @@ class ResponseIdProjectionTest {
         assertThat(statistics.getQueryExecutionCount()).isEqualTo(1);
         assertThat(statistics.getEntityLoadCount()).isZero();
     }
+
+    @Test
+    void findAllIds_shouldUseOneQueryAndLoadNoEntitiesOrLobsOnH2() {
+        String largeBody = "x".repeat(2 * 1024 * 1024);
+        Response first = repository.save(Response.builder().description("first").body(largeBody).build());
+        Response second = repository.save(Response.builder().description("second").body(largeBody).build());
+        repository.flush();
+        entityManager.clear();
+
+        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        statistics.clear();
+
+        List<Long> ids = repository.findAllIds();
+
+        assertThat(ids).contains(first.getId(), second.getId());
+        assertThat(statistics.getQueryExecutionCount()).isEqualTo(1);
+        assertThat(statistics.getEntityLoadCount()).isZero();
+    }
 }
