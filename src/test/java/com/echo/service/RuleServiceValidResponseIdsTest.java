@@ -20,7 +20,8 @@ import static org.mockito.Mockito.when;
 class RuleServiceValidResponseIdsTest {
 
     private final ResponseRepository responses = mock(ResponseRepository.class);
-    private final RuleService ruleService = new RuleService(null, responses, null, null, null, null, null);
+    private final RuleService ruleService = new RuleService(null, responses, null, null,
+            java.util.Optional.empty(), java.util.Optional.empty(), null);
 
     @Test
     void smallSetsStillUseInListQuery() {

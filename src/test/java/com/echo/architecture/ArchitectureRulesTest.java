@@ -50,4 +50,17 @@ class ArchitectureRulesTest {
     static final ArchRule jmsProtocolDoesNotDependOnHttp = noClasses()
             .that().resideInAnyPackage("com.echo.protocol.jms..", "com.echo.jms..")
             .should().dependOnClassesThat().resideInAPackage("com.echo.protocol.http..");
+
+    /**
+     * 跨協定的規則查詢與快取同步不直接引用特定協定的規則類別，
+     * 協定差異由 {@code ProtocolDescriptor} 提供；新增協定時不需要修改這些類別。
+     */
+    @ArchTest
+    static final ArchRule protocolAgnosticServicesUseDescriptors = noClasses()
+            .that().haveFullyQualifiedName("com.echo.service.RuleQueryService")
+            .or().haveFullyQualifiedName("com.echo.service.CacheInvalidationService")
+            .should().dependOnClassesThat().haveFullyQualifiedName("com.echo.entity.HttpRule")
+            .orShould().dependOnClassesThat().haveFullyQualifiedName("com.echo.entity.JmsRule")
+            .orShould().dependOnClassesThat().haveFullyQualifiedName("com.echo.entity.HttpRuleAction")
+            .orShould().dependOnClassesThat().haveFullyQualifiedName("com.echo.entity.JmsRuleAction");
 }

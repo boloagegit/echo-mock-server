@@ -1,5 +1,6 @@
 package com.echo.protocol.http;
 
+import com.echo.config.CacheConfig;
 import com.echo.dto.RuleDto;
 import com.echo.entity.BaseRule;
 import com.echo.entity.FaultType;
@@ -9,6 +10,7 @@ import com.echo.entity.HttpForwardTargetMode;
 import com.echo.entity.Protocol;
 import com.echo.entity.Response;
 import com.echo.protocol.AbstractProtocolHandler;
+import com.echo.protocol.ProtocolDescriptor;
 import com.echo.repository.HttpRuleRepository;
 import com.echo.service.ContentTypeConstraints;
 import lombok.RequiredArgsConstructor;
@@ -33,9 +35,20 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
 
     private final HttpRuleRepository repository;
 
+    public static final ProtocolDescriptor DESCRIPTOR = new ProtocolDescriptor(
+            Protocol.HTTP, HttpRule.class, CacheConfig.HTTP_RULES_CACHE, List.of(
+            "id", "matchKey", "description", "targetHost", "tags",
+            "bodyCondition", "queryCondition", "headerCondition"),
+            HttpRuleAction.MOCK, HttpRuleAction.FORWARD);
+
     @Override
     public Protocol getProtocol() {
         return Protocol.HTTP;
+    }
+
+    @Override
+    public ProtocolDescriptor descriptor() {
+        return DESCRIPTOR;
     }
 
     @Override

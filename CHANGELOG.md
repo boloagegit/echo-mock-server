@@ -26,6 +26,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Changed
 - **Breaking:** H2 is no longer supported or bundled. SQLite is the default database (`./data/mockdb.sqlite`, inside the Docker `/app/data` volume); the `sqlite` profile keeps `./mockdb.sqlite`. Echo refuses to start with an H2 profile/URL or with unmigrated legacy `mockdb.mv.db` data; convert with `scripts/migrate-h2-to-sqlite.py`, which now runs from its own Gradle source set
 - HTTP/JMS rule candidates come from immutable per-protocol snapshots invalidated by the existing rule-cache eviction paths; one shared rule selector replaces four copies of the selection loop
+- Request handling is split into pluggable pieces without behaviour changes: responders (fault, forward, mock) produce the response plan, SSE playback lives in `protocol.http.sse` instead of the HTTP controller, and request logging receives a single `ServeEvent` through `ServeEventListener` (additional listeners cannot affect the response; request-log failures still return 503 or redeliver JMS)
+- Rule list queries and multi-instance cache invalidation read per-protocol descriptors from the protocol registry instead of hard-coded HTTP/JMS branches; cache event names are unchanged
 - Tests run on SQLite (one temporary database per Spring context) instead of embedded H2
 - System Settings now separates overview, resource details, forwarding targets, data/backups, and service configuration; shared target tables and six metric disclosures retain manual-refresh behavior
 - Priority field semantics reversed to higher-number-higher-priority

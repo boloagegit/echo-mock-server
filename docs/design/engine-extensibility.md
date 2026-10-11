@@ -409,7 +409,7 @@ v1 與 v2 透過同一個 `RuleDefinition` 雙向轉換；`/rules/schema` 提供
 | 3 | 以 `echo.engine.matcher=legacy\|compiled` 切換（預設 legacy），新引擎接入所有比對呼叫端；JMS 串流 XML 結果直接沿用 | 無（可切回） | 完成（預設仍為 legacy） |
 | 4 | `SelectionPolicy` 收斂 5 份選擇邏輯；`RuleIndex` 不可變快照 | 無 | 完成（見 7.2.2） |
 | 5 | `Responder`／`ResponsePlan`，SSE 播放移出控制器；`ServeEventListener` 與請求紀錄改用 `ServeEvent` | 無 | 完成（見 7.2.3） |
-| 6 | `ProtocolId`、`ProtocolAdapter`、`ProtocolRegistry`，移除核心以外的協定分支 | 無 | 未開始 |
+| 6 | `ProtocolId`、`ProtocolAdapter`、`ProtocolRegistry`，移除核心以外的協定分支 | 無 | 部分完成（見 7.2.4） |
 | 7 | `match_spec` 欄位、v2 文件、新 op（exists／absent／數值／in／equalToJson）、`any`／`not` | **新功能** | 未開始 |
 | 8 | UI 進階條件編輯器、`/match/parse` 端點、前端改用結構化條件 | **新功能** | 未開始 |
 | 9 | 移除 `echo.engine.matcher=legacy` 開關與舊實作（至少間隔一個正式版本） | 無 | 未開始 |
@@ -498,6 +498,28 @@ pipeline 與 SSE 都透過 `ServeEventDispatcher` 發出事件：請求紀錄一
 
 **驗證**：既有測試中對 `record(...)` 26 個參數的驗證全部改為檢查 `ServeEvent` 欄位，期望值不變；
 SSE 播放測試改為直接測 `SsePlayer`；另新增 `ServeEventDispatcherTest` 與 pipeline 的 `publish()` 測試。
+
+### 7.2.4 步驟 6 實作與驗證紀錄
+
+**做了什麼**：每個協定在自己的 `ProtocolHandler` 提供一份 `ProtocolDescriptor`（規則 entity、規則快取名稱、
+清單搜尋欄位、mock／轉發的 action 值、多實例同步的事件名稱）；`ProtocolHandlerRegistry` 就是協定註冊表，
+只包含已啟用的協定（JMS 未啟用時沒有 JMS handler）。下列跨協定程式改為查詢註冊表，不再寫死 HTTP／JMS：
+
+- `RuleQueryService`：規則清單查詢、分組查詢逐一查詢已啟用協定（原本以 `echo.jms.enabled` 判斷，與 handler 是否存在同義）。
+- `CacheInvalidationService`：事件名稱與要清除的快取由描述提供；事件字串（`HTTP_RULE_CHANGED`、`JMS_RULE_CHANGED`、
+  `RULE_CHANGED`）不變，舊版與新版實例可以混合運作。本實例未啟用的協定事件不清除任何快取。
+- `AdminController`：Excel 匯入與規則異動後的快取清除。
+
+ArchUnit 新增規則：`RuleQueryService` 與 `CacheInvalidationService` 不得引用 `HttpRule`／`JmsRule` 等協定類別
+（已用刻意加入的依賴確認規則會失敗）；`ProtocolDescriptorContractTest` 檢查每個描述的搜尋欄位、action 型別與快取名稱。
+
+**刻意延後**（需要步驟 7 的規則模型，現在做會產生之後要丟掉的轉接程式）：
+
+- `Protocol` enum 換成 `ProtocolId`：enum 存在 entity、DTO、API 與前端，換掉的成本高，而目前只有兩個協定。
+- 核心層的 `ProtocolAdapter`（`RouteCodec`、`RuleIndex`、`ResponseWriter`）：目前執行期的協定差異已集中在
+  `HttpMockPipeline`／`JmsMockPipeline` 與 `SseMockHandler`，等 `RuleDefinition`／`ResponseSpec` 出現後再抽成核心介面。
+- 仍保留的協定分支：`RuleApplyContractService` 的 v1 文件驗證、`AdminController` 的「從請求紀錄建立規則」
+  與故障／轉發欄位正規化、SSE 規則驗證。這些都依附在現行 DTO 欄位上，會在步驟 7 的 v2 文件與 `ResponseSpec` 一起改寫。
 
 ### 7.3 風險
 

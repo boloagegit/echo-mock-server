@@ -1,5 +1,6 @@
 package com.echo.protocol.jms;
 
+import com.echo.config.CacheConfig;
 import com.echo.dto.RuleDto;
 import com.echo.entity.BaseRule;
 import com.echo.entity.FaultType;
@@ -10,6 +11,7 @@ import com.echo.entity.Protocol;
 import com.echo.entity.Response;
 import com.echo.jms.JmsConnectionManager;
 import com.echo.protocol.AbstractProtocolHandler;
+import com.echo.protocol.ProtocolDescriptor;
 import com.echo.repository.JmsRuleRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -39,9 +41,19 @@ public class JmsProtocolHandler extends AbstractProtocolHandler {
         this.jmsConnectionManager = Optional.ofNullable(jmsConnectionManager);
     }
 
+    public static final ProtocolDescriptor DESCRIPTOR = new ProtocolDescriptor(
+            Protocol.JMS, JmsRule.class, CacheConfig.JMS_RULES_CACHE, List.of(
+            "id", "queueName", "description", "tags", "bodyCondition"),
+            JmsRuleAction.MOCK, JmsRuleAction.FORWARD);
+
     @Override
     public Protocol getProtocol() {
         return Protocol.JMS;
+    }
+
+    @Override
+    public ProtocolDescriptor descriptor() {
+        return DESCRIPTOR;
     }
 
     @Override

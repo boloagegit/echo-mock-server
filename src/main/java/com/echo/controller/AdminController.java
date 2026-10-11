@@ -688,8 +688,7 @@ public class AdminController {
                 }
             }
             if (imported > 0) {
-                evictCacheByProtocol(Protocol.HTTP);
-                evictCacheByProtocol(Protocol.JMS);
+                protocolHandlerRegistry.descriptors().forEach(protocol -> evictCache(protocol.rulesCacheName()));
                 cacheInvalidationService.ifPresent(CacheInvalidationService::publishInvalidation);
             }
             return ResponseEntity.ok(Map.of("imported", imported, "total", parsedRules.size()));
@@ -1224,9 +1223,11 @@ public class AdminController {
 
     /** 根據協定清除對應的規則快取 */
     private void evictCacheByProtocol(Protocol protocol) {
-        String cacheName = (protocol == Protocol.JMS)
-                ? CacheConfig.JMS_RULES_CACHE
-                : CacheConfig.HTTP_RULES_CACHE;
+        protocolHandlerRegistry.descriptor(protocol)
+                .ifPresent(descriptor -> evictCache(descriptor.rulesCacheName()));
+    }
+
+    private void evictCache(String cacheName) {
         var cache = cacheManager.getCache(cacheName);
         if (cache != null) {
             cache.clear();

@@ -1,5 +1,10 @@
 package com.echo.service;
 
+import com.echo.protocol.ProtocolDescriptor;
+import com.echo.protocol.ProtocolHandler;
+import com.echo.protocol.ProtocolHandlerRegistry;
+import com.echo.protocol.http.HttpProtocolHandler;
+import com.echo.protocol.jms.JmsProtocolHandler;
 import com.echo.config.CacheConfig;
 import com.echo.entity.CacheEvent;
 import com.echo.entity.Protocol;
@@ -32,7 +37,8 @@ class CacheInvalidationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CacheInvalidationService(eventRepository, cacheManager);
+        service = new CacheInvalidationService(eventRepository, cacheManager, registry(
+                HttpProtocolHandler.DESCRIPTOR, JmsProtocolHandler.DESCRIPTOR));
     }
 
     @Test
@@ -103,6 +109,39 @@ class CacheInvalidationServiceTest {
         service.checkForInvalidation();
 
         verify(cacheManager, never()).getCache(any());
+    }
+
+    @Test
+    void checkForInvalidation_withEventOfDisabledProtocol_shouldClearNothing() {
+        service = new CacheInvalidationService(eventRepository, cacheManager, registry(HttpProtocolHandler.DESCRIPTOR));
+        when(eventRepository.findByTimestampAfter(any())).thenReturn(List.of(new CacheEvent("JMS_RULE_CHANGED")));
+
+        service.checkForInvalidation();
+
+        verify(cacheManager, never()).getCache(any());
+    }
+
+    @Test
+    void checkForInvalidation_withUnknownEvent_shouldClearAllEnabledProtocols() {
+        service = new CacheInvalidationService(eventRepository, cacheManager, registry(HttpProtocolHandler.DESCRIPTOR));
+        when(eventRepository.findByTimestampAfter(any())).thenReturn(List.of(new CacheEvent("SOMETHING_ELSE")));
+        when(cacheManager.getCache(CacheConfig.HTTP_RULES_CACHE)).thenReturn(httpCache);
+
+        service.checkForInvalidation();
+
+        verify(httpCache).clear();
+        verify(cacheManager, never()).getCache(CacheConfig.JMS_RULES_CACHE);
+    }
+
+    private static ProtocolHandlerRegistry registry(ProtocolDescriptor... descriptors) {
+        List<ProtocolHandler> handlers = new java.util.ArrayList<>();
+        for (ProtocolDescriptor descriptor : descriptors) {
+            ProtocolHandler handler = mock(ProtocolHandler.class);
+            lenient().when(handler.getProtocol()).thenReturn(descriptor.id());
+            lenient().when(handler.descriptor()).thenReturn(descriptor);
+            handlers.add(handler);
+        }
+        return new ProtocolHandlerRegistry(handlers);
     }
 
     @Test

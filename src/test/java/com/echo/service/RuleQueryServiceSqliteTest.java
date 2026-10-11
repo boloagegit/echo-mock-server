@@ -1,5 +1,8 @@
 package com.echo.service;
 
+import com.echo.protocol.ProtocolHandlerRegistry;
+import com.echo.protocol.http.HttpProtocolHandler;
+import com.echo.protocol.jms.JmsProtocolHandler;
 import com.echo.entity.HttpRule;
 import com.echo.entity.JmsRule;
 import com.echo.repository.HttpRuleRepository;
@@ -24,7 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "echo.jms.enabled=true"
 })
-@Import(RuleQueryService.class)
+@Import({RuleQueryService.class, ProtocolHandlerRegistry.class,
+        HttpProtocolHandler.class, JmsProtocolHandler.class})
 class RuleQueryServiceSqliteTest {
 
     @Autowired

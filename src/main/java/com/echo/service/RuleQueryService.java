@@ -1,12 +1,10 @@
 package com.echo.service;
 
 import com.echo.entity.BaseRule;
-import com.echo.entity.HttpRule;
-import com.echo.entity.HttpRuleAction;
-import com.echo.entity.JmsRule;
-import com.echo.entity.JmsRuleAction;
 import com.echo.entity.FaultType;
 import com.echo.entity.Protocol;
+import com.echo.protocol.ProtocolDescriptor;
+import com.echo.protocol.ProtocolHandlerRegistry;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
@@ -42,16 +40,10 @@ public class RuleQueryService {
     private static final int ID_QUERY_CHUNK_SIZE = 500;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("updatedAt", "createdAt", "priority");
-    private static final List<String> HTTP_SEARCH_FIELDS = List.of(
-            "id", "matchKey", "description", "targetHost", "tags",
-            "bodyCondition", "queryCondition", "headerCondition");
-    private static final List<String> JMS_SEARCH_FIELDS = List.of(
-            "id", "queueName", "description", "tags", "bodyCondition");
 
     private final EntityManager entityManager;
-
-    @Value("${echo.jms.enabled:false}")
-    private boolean jmsEnabled;
+    /** 已啟用的協定；每個協定的規則 entity 與搜尋欄位由其 {@link ProtocolDescriptor} 提供。 */
+    private final ProtocolHandlerRegistry protocols;
 
     @Value("${echo.cleanup.rule-retention-days:180}")
     private int ruleRetentionDays;
@@ -66,18 +58,14 @@ public class RuleQueryService {
         LocalDateTime expiringCutoff = Boolean.TRUE.equals(query.expiring())
                 ? LocalDateTime.now().minusDays(Math.max(0, ruleRetentionDays - 7L)) : null;
 
-        boolean includeHttp = query.protocol() == null || query.protocol() == Protocol.HTTP;
-        boolean includeJms = jmsEnabled && (query.protocol() == null || query.protocol() == Protocol.JMS);
-
-        long httpCount = includeHttp
-                ? count(HttpRule.class, query.enabled(), query.isProtected(), query.mode(),
-                        expiringCutoff, keywords, HTTP_SEARCH_FIELDS)
-                : 0;
-        long jmsCount = includeJms
-                ? count(JmsRule.class, query.enabled(), query.isProtected(), query.mode(),
-                        expiringCutoff, keywords, JMS_SEARCH_FIELDS)
-                : 0;
-        long totalElements = httpCount + jmsCount;
+        Map<ProtocolDescriptor, Long> counts = new LinkedHashMap<>();
+        long totalElements = 0;
+        for (ProtocolDescriptor protocol : protocolsFor(query.protocol())) {
+            long protocolCount = count(protocol.ruleType(), query.enabled(), query.isProtected(), query.mode(),
+                    expiringCutoff, keywords, protocol.searchFields());
+            counts.put(protocol, protocolCount);
+            totalElements += protocolCount;
+        }
         int totalPages = totalElements == 0 ? 0
                 : (int) Math.ceil((double) totalElements / pageSize);
         int page = totalPages == 0 ? 0 : Math.min(requestedPage, totalPages - 1);
@@ -85,17 +73,14 @@ public class RuleQueryService {
         long prefixSize = Math.min(totalElements, offset + pageSize);
 
         List<BaseRule> candidates = new ArrayList<>();
-        if (httpCount > 0) {
-            int limit = Math.toIntExact(Math.min(httpCount, prefixSize));
-            candidates.addAll(fetch(HttpRule.class, query.enabled(), query.isProtected(), query.mode(),
-                    expiringCutoff, keywords,
-                    HTTP_SEARCH_FIELDS, sortField, ascending, limit));
-        }
-        if (jmsCount > 0) {
-            int limit = Math.toIntExact(Math.min(jmsCount, prefixSize));
-            candidates.addAll(fetch(JmsRule.class, query.enabled(), query.isProtected(), query.mode(),
-                    expiringCutoff, keywords,
-                    JMS_SEARCH_FIELDS, sortField, ascending, limit));
+        for (Map.Entry<ProtocolDescriptor, Long> entry : counts.entrySet()) {
+            if (entry.getValue() > 0) {
+                ProtocolDescriptor protocol = entry.getKey();
+                int limit = Math.toIntExact(Math.min(entry.getValue(), prefixSize));
+                candidates.addAll(fetch(protocol.ruleType(), query.enabled(), query.isProtected(), query.mode(),
+                        expiringCutoff, keywords,
+                        protocol.searchFields(), sortField, ascending, limit));
+            }
         }
 
         candidates.sort(ruleComparator(sortField, ascending));
@@ -139,18 +124,14 @@ public class RuleQueryService {
         String sortField = normalizeSortField(query.sortField());
         boolean ascending = "asc".equalsIgnoreCase(query.direction());
 
-        List<String> httpIds = matchingRows.stream()
-                .filter(row -> row.protocol() == Protocol.HTTP)
-                .map(TagRow::id)
-                .toList();
-        List<String> jmsIds = matchingRows.stream()
-                .filter(row -> row.protocol() == Protocol.JMS)
-                .map(TagRow::id)
-                .toList();
-
         List<BaseRule> candidates = new ArrayList<>();
-        candidates.addAll(fetchByIds(HttpRule.class, httpIds, sortField, ascending, limit));
-        candidates.addAll(fetchByIds(JmsRule.class, jmsIds, sortField, ascending, limit));
+        for (ProtocolDescriptor protocol : protocols.descriptors()) {
+            List<String> ids = matchingRows.stream()
+                    .filter(row -> row.protocol() == protocol.id())
+                    .map(TagRow::id)
+                    .toList();
+            candidates.addAll(fetchByIds(protocol.ruleType(), ids, sortField, ascending, limit));
+        }
         candidates.sort(ruleComparator(sortField, ascending));
         return new RuleGroupContent(List.copyOf(candidates.subList(0, Math.min(limit, candidates.size()))),
                 matchingRows.size());
@@ -161,17 +142,26 @@ public class RuleQueryService {
         LocalDateTime expiringCutoff = Boolean.TRUE.equals(query.expiring())
                 ? LocalDateTime.now().minusDays(Math.max(0, ruleRetentionDays - 7L)) : null;
         List<TagRow> rows = new ArrayList<>();
-        if (query.protocol() == null || query.protocol() == Protocol.HTTP) {
-            rows.addAll(findTagRows(HttpRule.class, Protocol.HTTP, query.enabled(), query.isProtected(),
+        for (ProtocolDescriptor protocol : protocolsFor(query.protocol())) {
+            rows.addAll(findTagRows(protocol.ruleType(), protocol.id(), query.enabled(), query.isProtected(),
                     query.mode(), expiringCutoff,
-                    keywords, HTTP_SEARCH_FIELDS));
-        }
-        if (jmsEnabled && (query.protocol() == null || query.protocol() == Protocol.JMS)) {
-            rows.addAll(findTagRows(JmsRule.class, Protocol.JMS, query.enabled(), query.isProtected(),
-                    query.mode(), expiringCutoff,
-                    keywords, JMS_SEARCH_FIELDS));
+                    keywords, protocol.searchFields()));
         }
         return rows;
+    }
+
+    private ProtocolDescriptor protocolOf(Class<?> entityType) {
+        return protocols.descriptors().stream()
+                .filter(protocol -> protocol.ruleType() == entityType)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No protocol for rule type " + entityType.getName()));
+    }
+
+    /** 查詢指定的協定；未指定時為所有已啟用協定。指定的協定未啟用時沒有結果。 */
+    private List<ProtocolDescriptor> protocolsFor(Protocol requested) {
+        return protocols.descriptors().stream()
+                .filter(protocol -> requested == null || protocol.id() == requested)
+                .toList();
     }
 
     private <T extends BaseRule> List<TagRow> findTagRows(Class<T> entityType, Protocol protocol,
@@ -256,8 +246,9 @@ public class RuleQueryService {
             result.add(isProtected ? cb.isTrue(root.get("isProtected")) : cb.isFalse(root.get("isProtected")));
         }
         if (mode != null) {
-            Object mockAction = entityType == HttpRule.class ? HttpRuleAction.MOCK : JmsRuleAction.MOCK;
-            Object forwardAction = entityType == HttpRule.class ? HttpRuleAction.FORWARD : JmsRuleAction.FORWARD;
+            ProtocolDescriptor protocol = protocolOf(entityType);
+            Object mockAction = protocol.mockAction();
+            Object forwardAction = protocol.forwardAction();
             Predicate noFault = cb.or(cb.isNull(root.get("faultType")), cb.equal(root.get("faultType"), FaultType.NONE));
             switch (mode) {
                 case MOCK -> result.add(cb.and(
