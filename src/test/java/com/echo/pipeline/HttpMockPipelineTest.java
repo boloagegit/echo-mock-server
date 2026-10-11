@@ -1,5 +1,7 @@
 package com.echo.pipeline;
 
+import com.echo.service.ServeEvent;
+import com.echo.service.ServeEventCaptor;
 import com.echo.entity.HttpRule;
 import com.echo.entity.Protocol;
 import com.echo.service.ConditionMatcher;
@@ -333,33 +335,20 @@ class HttpMockPipelineTest {
 
             pipeline.execute(defaultRequest());
 
-            verify(requestLogService).record(
-                    eq("rule-log"),          // ruleId
-                    eq(Protocol.HTTP),       // protocol
-                    eq("POST"),              // method
-                    eq("/api/users"),        // endpoint
-                    eq(true),                // matched
-                    anyInt(),                // responseTimeMs
-                    eq("127.0.0.1"),         // clientIp
-                    any(),                   // matchChainJson
-                    eq("default"),           // targetHost (matched → includes targetHost)
-                    eq(false),               // forwarded
-                    isNull(),                // forwardTarget
-                    any(),                   // proxyStatus
-                    isNull(),                // proxyError
-                    eq(200),                 // responseStatus
-                    anyInt(),                // matchTimeMs
-                    eq("{\"name\":\"test\"}"), // requestBody
-                    eq("log body"),          // responseBody
-                    anyList(),               // candidates
-                    any(),                   // preparedBody
-                    any(),                   // queryString
-                    any(),                   // headers
-                    any(),                   // faultType
-                    any(),                   // scenarioName
-                    any(),                   // scenarioFromState
-                    any()                    // scenarioToState
-            );
+            ServeEvent served = ServeEventCaptor.single(requestLogService);
+            assertThat(served.getRuleId()).isEqualTo("rule-log");
+            assertThat(served.getProtocol()).isEqualTo(Protocol.HTTP);
+            assertThat(served.getMethod()).isEqualTo("POST");
+            assertThat(served.getEndpoint()).isEqualTo("/api/users");
+            assertThat(served.isMatched()).isTrue();
+            assertThat(served.getClientIp()).isEqualTo("127.0.0.1");
+            assertThat(served.getTargetHost()).isEqualTo("default");
+            assertThat(served.isForwarded()).isFalse();
+            assertThat(served.getForwardTarget()).isNull();
+            assertThat(served.getProxyError()).isNull();
+            assertThat(served.getResponseStatus()).isEqualTo(200);
+            assertThat(served.getRequestBody()).isEqualTo("{\"name\":\"test\"}");
+            assertThat(served.getResponseBody()).isEqualTo("log body");
         }
 
         @Test
@@ -370,33 +359,21 @@ class HttpMockPipelineTest {
 
             pipeline.execute(defaultRequest());
 
-            verify(requestLogService).record(
-                    isNull(),                // ruleId = null (no match)
-                    eq(Protocol.HTTP),       // protocol
-                    eq("POST"),              // method
-                    eq("/api/users"),        // endpoint
-                    eq(false),               // matched = false
-                    anyInt(),                // responseTimeMs
-                    eq("127.0.0.1"),         // clientIp
-                    any(),                   // matchChainJson
-                    isNull(),                // targetHost = null (handleNoMatch path)
-                    eq(false),               // forwarded
-                    isNull(),                // forwardTarget
-                    isNull(),                // proxyStatus
-                    isNull(),                // proxyError
-                    eq(404),                 // responseStatus
-                    anyInt(),                // matchTimeMs
-                    eq("{\"name\":\"test\"}"), // requestBody
-                    eq("No mock rule found for: POST /api/users"), // responseBody
-                    anyList(),               // candidates
-                    any(),                   // preparedBody
-                    any(),                   // queryString
-                    any(),                   // headers
-                    any(),                   // faultType
-                    any(),                   // scenarioName
-                    any(),                   // scenarioFromState
-                    any()                    // scenarioToState
-            );
+            ServeEvent served2 = ServeEventCaptor.single(requestLogService);
+            assertThat(served2.getRuleId()).isNull();
+            assertThat(served2.getProtocol()).isEqualTo(Protocol.HTTP);
+            assertThat(served2.getMethod()).isEqualTo("POST");
+            assertThat(served2.getEndpoint()).isEqualTo("/api/users");
+            assertThat(served2.isMatched()).isFalse();
+            assertThat(served2.getClientIp()).isEqualTo("127.0.0.1");
+            assertThat(served2.getTargetHost()).isNull();
+            assertThat(served2.isForwarded()).isFalse();
+            assertThat(served2.getForwardTarget()).isNull();
+            assertThat(served2.getProxyStatus()).isNull();
+            assertThat(served2.getProxyError()).isNull();
+            assertThat(served2.getResponseStatus()).isEqualTo(404);
+            assertThat(served2.getRequestBody()).isEqualTo("{\"name\":\"test\"}");
+            assertThat(served2.getResponseBody()).isEqualTo("No mock rule found for: POST /api/users");
         }
     }
 }

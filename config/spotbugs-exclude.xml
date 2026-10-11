@@ -93,9 +93,13 @@
         <Method name="defaultForType"/>
     </Match>
 
-    <!-- H2SchemaMigration: null check on maxId is handled by surrounding conditional -->
+    <!-- ServeEvent／SSE 播放的請求資訊：只在處理同一請求時同步傳遞，複製 headers 與候選規則會增加每個請求的配置 -->
     <Match>
-        <Bug pattern="NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE"/>
-        <Class name="com.echo.config.H2SchemaMigration"/>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+        <Class name="~com\.echo\.service\.ServeEvent(\$.*)?"/>
+    </Match>
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+        <Class name="com.echo.protocol.http.sse.SsePlayer$RequestContext"/>
     </Match>
 </FindBugsFilter>

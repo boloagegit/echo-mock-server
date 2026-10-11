@@ -1,40 +1,20 @@
-package com.echo.controller;
+package com.echo.protocol.http.sse;
 
-import com.echo.controller.UniversalMockController.SseEvent;
+import com.echo.protocol.http.sse.SsePlayer.SseEvent;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import net.jqwik.api.*;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.echo.service.HttpRuleService;
-import com.echo.service.RequestLogService;
-import com.echo.service.ResponseTemplateService;
-import com.echo.service.RuleService;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@ExtendWith(MockitoExtension.class)
 class SseEventParserTest {
 
-    @Mock private RuleService ruleService;
-    @Mock private HttpRuleService httpRuleService;
-    @Mock private RequestLogService requestLogService;
-    @Mock private ResponseTemplateService templateService;
 
-    private UniversalMockController controller;
     private final ObjectMapper objectMapper = new ObjectMapper();
-
-    @BeforeEach
-    void setUp() {
-        controller = new UniversalMockController(
-                ruleService, httpRuleService, requestLogService, templateService, null);
-    }
 
     // --- Valid JSON array parsing ---
 
@@ -42,7 +22,7 @@ class SseEventParserTest {
     void parseSingleEvent() {
         String json = """
                 [{"event":"msg","data":"hello","id":"1","delayMs":100}]""";
-        List<SseEvent> events = controller.parseSseEvents(json);
+        List<SseEvent> events = SsePlayer.parseEvents(json);
         assertThat(events).hasSize(1);
         SseEvent e = events.get(0);
         assertThat(e.event()).isEqualTo("msg");
@@ -59,7 +39,7 @@ class SseEventParserTest {
                   {"event":"b","data":"d2","id":"2","delayMs":500},
                   {"event":"c","data":"d3","id":"3","delayMs":1000}
                 ]""";
-        List<SseEvent> events = controller.parseSseEvents(json);
+        List<SseEvent> events = SsePlayer.parseEvents(json);
         assertThat(events).hasSize(3);
         assertThat(events.get(0).event()).isEqualTo("a");
         assertThat(events.get(1).event()).isEqualTo("b");
@@ -70,7 +50,7 @@ class SseEventParserTest {
     void parseDataOnlyEvent() {
         String json = """
                 [{"data":"hello"}]""";
-        List<SseEvent> events = controller.parseSseEvents(json);
+        List<SseEvent> events = SsePlayer.parseEvents(json);
         assertThat(events).hasSize(1);
         SseEvent e = events.get(0);
         assertThat(e.data()).isEqualTo("hello");
@@ -83,22 +63,22 @@ class SseEventParserTest {
 
     @Test
     void nullInput_returnsEmptyList() {
-        assertThat(controller.parseSseEvents(null)).isEmpty();
+        assertThat(SsePlayer.parseEvents(null)).isEmpty();
     }
 
     @Test
     void emptyString_returnsEmptyList() {
-        assertThat(controller.parseSseEvents("")).isEmpty();
+        assertThat(SsePlayer.parseEvents("")).isEmpty();
     }
 
     @Test
     void blankString_returnsEmptyList() {
-        assertThat(controller.parseSseEvents("   ")).isEmpty();
+        assertThat(SsePlayer.parseEvents("   ")).isEmpty();
     }
 
     @Test
     void emptyArray_returnsEmptyList() {
-        assertThat(controller.parseSseEvents("[]")).isEmpty();
+        assertThat(SsePlayer.parseEvents("[]")).isEmpty();
     }
 
     // --- Data null or empty string skips event ---
@@ -107,14 +87,14 @@ class SseEventParserTest {
     void dataNullEvent_isSkipped() {
         String json = """
                 [{"event":"msg","data":null,"id":"1"}]""";
-        assertThat(controller.parseSseEvents(json)).isEmpty();
+        assertThat(SsePlayer.parseEvents(json)).isEmpty();
     }
 
     @Test
     void dataEmptyString_isSkipped() {
         String json = """
                 [{"data":""}]""";
-        assertThat(controller.parseSseEvents(json)).isEmpty();
+        assertThat(SsePlayer.parseEvents(json)).isEmpty();
     }
 
     // --- Mixed valid/invalid events ---
@@ -128,7 +108,7 @@ class SseEventParserTest {
                   {"data":"good"},
                   {"data":""}
                 ]""";
-        List<SseEvent> events = controller.parseSseEvents(json);
+        List<SseEvent> events = SsePlayer.parseEvents(json);
         assertThat(events).isEmpty();
     }
 
@@ -136,12 +116,12 @@ class SseEventParserTest {
 
     @Test
     void nonJsonFormat_returnsEmptyList() {
-        assertThat(controller.parseSseEvents("not json")).isEmpty();
+        assertThat(SsePlayer.parseEvents("not json")).isEmpty();
     }
 
     @Test
     void jsonObject_notArray_returnsEmptyList() {
-        assertThat(controller.parseSseEvents("{\"data\":\"hello\"}")).isEmpty();
+        assertThat(SsePlayer.parseEvents("{\"data\":\"hello\"}")).isEmpty();
     }
 
     // --- delayMs negative and oversized ---
@@ -150,7 +130,7 @@ class SseEventParserTest {
     void negativeDelayMs_treatedAsZero() {
         String json = """
                 [{"data":"x","delayMs":-100}]""";
-        List<SseEvent> events = controller.parseSseEvents(json);
+        List<SseEvent> events = SsePlayer.parseEvents(json);
         assertThat(events).hasSize(1);
         assertThat(events.get(0).delayMs()).isEqualTo(0L);
     }
@@ -159,7 +139,7 @@ class SseEventParserTest {
     void oversizedDelayMs_cappedAt30000() {
         String json = """
                 [{"data":"x","delayMs":999999}]""";
-        List<SseEvent> events = controller.parseSseEvents(json);
+        List<SseEvent> events = SsePlayer.parseEvents(json);
         assertThat(events).hasSize(1);
         assertThat(events.get(0).delayMs()).isEqualTo(30000L);
     }
@@ -170,7 +150,7 @@ class SseEventParserTest {
     void parseEventWithTypeNormal() {
         String json = """
                 [{"data":"hello","type":"normal"}]""";
-        List<SseEvent> events = controller.parseSseEvents(json);
+        List<SseEvent> events = SsePlayer.parseEvents(json);
         assertThat(events).hasSize(1);
         assertThat(events.get(0).type()).isEqualTo("normal");
     }
@@ -179,7 +159,7 @@ class SseEventParserTest {
     void parseEventWithTypeError() {
         String json = """
                 [{"data":"fail","type":"error"}]""";
-        List<SseEvent> events = controller.parseSseEvents(json);
+        List<SseEvent> events = SsePlayer.parseEvents(json);
         assertThat(events).hasSize(1);
         assertThat(events.get(0).type()).isEqualTo("error");
     }
@@ -188,7 +168,7 @@ class SseEventParserTest {
     void parseEventWithTypeAbort() {
         String json = """
                 [{"data":"bye","type":"abort"}]""";
-        List<SseEvent> events = controller.parseSseEvents(json);
+        List<SseEvent> events = SsePlayer.parseEvents(json);
         assertThat(events).hasSize(1);
         assertThat(events.get(0).type()).isEqualTo("abort");
     }
@@ -197,7 +177,7 @@ class SseEventParserTest {
     void parseEventWithoutType_backwardCompatible() {
         String json = """
                 [{"event":"msg","data":"hello","id":"1","delayMs":100}]""";
-        List<SseEvent> events = controller.parseSseEvents(json);
+        List<SseEvent> events = SsePlayer.parseEvents(json);
         assertThat(events).hasSize(1);
         assertThat(events.get(0).type()).isNull();
     }
@@ -206,7 +186,7 @@ class SseEventParserTest {
     void parseEventWithInvalidType_rejectsSequence() {
         String json = """
                 [{"data":"x","type":"unknown"}]""";
-        List<SseEvent> events = controller.parseSseEvents(json);
+        List<SseEvent> events = SsePlayer.parseEvents(json);
         assertThat(events).isEmpty();
     }
 
@@ -216,7 +196,7 @@ class SseEventParserTest {
     void dataWithTemplateSyntax_preservedAsIs() {
         String json = """
                 [{"data":"{{request.path}}"}]""";
-        List<SseEvent> events = controller.parseSseEvents(json);
+        List<SseEvent> events = SsePlayer.parseEvents(json);
         assertThat(events).hasSize(1);
         assertThat(events.get(0).data()).isEqualTo("{{request.path}}");
     }
@@ -226,15 +206,13 @@ class SseEventParserTest {
     /**
      * Validates: Requirements 3.2, 3.3
      *
-     * For any list of SseEvents returned by parseSseEvents(),
+     * For any list of SseEvents returned by SsePlayer.parseEvents(),
      * every event's data field is non-null and non-empty.
      */
     @Property
     void allParsedEventsHaveNonNullNonEmptyData(
             @ForAll("sseJsonArrays") String json) {
-        UniversalMockController ctrl = new UniversalMockController(
-                null, null, null, null, null);
-        List<SseEvent> events = ctrl.parseSseEvents(json);
+        List<SseEvent> events = SsePlayer.parseEvents(json);
         for (SseEvent e : events) {
             assertThat(e.data()).isNotNull();
             assertThat(e.data()).isNotEmpty();
@@ -286,10 +264,8 @@ class SseEventParserTest {
     @Property
     void serializationRoundTripConsistency(
             @ForAll("validSseEventLists") List<SseEvent> original) throws JsonProcessingException {
-        UniversalMockController ctrl = new UniversalMockController(
-                null, null, null, null, null);
         String json = objectMapper.writeValueAsString(original);
-        List<SseEvent> parsed = ctrl.parseSseEvents(json);
+        List<SseEvent> parsed = SsePlayer.parseEvents(json);
 
         assertThat(parsed).hasSameSizeAs(original);
         for (int i = 0; i < original.size(); i++) {

@@ -11,9 +11,13 @@ import com.echo.service.MatchResult;
 import com.echo.service.RequestLogService;
 import com.echo.service.RequestLogUnavailableException;
 import com.echo.service.RuleService;
+import com.echo.service.ServeEvent;
+import com.echo.service.ServeEventDispatcher;
+import com.echo.service.ServeEventListener;
 import com.echo.util.CancellableStages;
 import com.echo.service.ScenarioService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,6 +43,8 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     protected final RuleService ruleService;
     protected final RequestLogService requestLogService;
     protected final ScenarioService scenarioService;
+    private final List<Responder<T>> responders;
+    private ServeEventDispatcher serveEvents;
 
     protected AbstractMockPipeline(ConditionMatcher conditionMatcher,
                                    RuleService ruleService,
@@ -48,6 +54,14 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
         this.ruleService = ruleService;
         this.requestLogService = requestLogService;
         this.scenarioService = scenarioService;
+        this.responders = List.of(new FaultResponder(), new ForwardResponder(), new MockResponder());
+        this.serveEvents = ServeEventDispatcher.of(requestLogService, List.of());
+    }
+
+    /** 請求紀錄之外的其他 listener（例如指標、Webhook）；請求紀錄永遠排在第一個。 */
+    @Autowired(required = false)
+    public void setServeEventListeners(List<ServeEventListener> listeners) {
+        this.serveEvents = ServeEventDispatcher.of(requestLogService, listeners);
     }
 
     // ==================== Template Method: 主流程 ====================
@@ -108,12 +122,9 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
 
             if (matchResult.isMatched()) {
                 T rule = matchResult.getMatchedRule();
-                boolean forwardMatched = (rule.getFaultType() == null || rule.getFaultType() == FaultType.NONE)
-                        && shouldForwardMatchedRule(rule, request);
+                Responder<T> responder = responderFor(rule, request);
                 request.getTrace().event("ROUTE", "ruleId", rule.getId(), "ruleVersion", rule.getVersion(),
-                        "responseId", rule.getResponseId(), "mode", rule.getFaultType() != null
-                                && rule.getFaultType() != FaultType.NONE ? "FAULT"
-                                : forwardMatched ? "FORWARD" : "MOCK",
+                        "responseId", rule.getResponseId(), "mode", responder.mode(),
                         "endpoint", request.getEndpointValue() != null ? request.getEndpointValue() : request.getPath());
                 ruleId = rule.getId();
                 delayMs = calculateDelay(
@@ -121,7 +132,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                     rule.getMaxDelayMs()
                 );
 
-                // 4a. Scenario 狀態轉移（在 buildResponse 之前）
+                // 4a. Scenario 狀態轉移（在產生回應之前）
                 ScenarioTransition scenarioTransition = advanceScenarioState(rule);
                 if (scenarioTransition != null) {
                     scenarioName = scenarioTransition.name();
@@ -129,27 +140,15 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                     scenarioNewState = scenarioTransition.toState();
                 }
 
-                FaultType faultType = rule.getFaultType() != null ? rule.getFaultType() : FaultType.NONE;
-                if (faultType != FaultType.NONE) {
-                    String responseBody = resolveResponseBody(rule.getResponseId());
-                    immediateResponse = buildResponse(rule, request, responseBody);
-                    faultTypeName = faultType.name();
-                    if (faultType == FaultType.EMPTY_RESPONSE) {
-                        immediateResponse = MockResponse.builder()
-                            .status(immediateResponse.getStatus())
-                            .body("")
-                            .matched(true)
-                            .forwarded(false)
-                            .build();
-                    }
-                } else if (forwardMatched) {
-                    responseStage = forwardMatchedRuleAsync(rule, request);
-                } else {
-                    // 4b. 解析回應內容
-                    String responseBody = resolveResponseBody(rule.getResponseId());
-
-                    // 4c. 建構回應（子類別實作，含模板渲染等）
-                    immediateResponse = buildResponse(rule, request, responseBody);
+                // 4b. 由 responder 產生回應
+                ResponsePlan plan = responder.respond(rule, request);
+                if (plan instanceof ResponsePlan.Content content) {
+                    immediateResponse = content.response();
+                } else if (plan instanceof ResponsePlan.Fault fault) {
+                    immediateResponse = fault.response();
+                    faultTypeName = fault.type().name();
+                } else if (plan instanceof ResponsePlan.Forwarded forwarded) {
+                    responseStage = forwarded.response();
                 }
             } else {
                 ruleId = null;
@@ -222,13 +221,21 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
 
         Integer loggedResponseStatus = "CONNECTION_RESET".equals(faultType)
                 ? null : response.getStatus();
-        recordLog(ruleId, request.getProtocol(), request.getMethod(), request.getPath(),
-                matchResult.isMatched(), responseTimeMs, request.getClientIp(), matchChainJson,
-                logTargetHost, response.isForwarded(), response.getForwardTarget(),
-                proxyStatus, response.getProxyError(), loggedResponseStatus,
-                matchTimeMs, request.getBody(), response.getBody(), candidates, preparedBody,
-                request.getQueryString(), request.getHeaders(), faultType,
-                scenarioName, scenarioFromState, scenarioToState, request.getTrace().id());
+        publish(ServeEvent.builder()
+                .ruleId(ruleId).protocol(request.getProtocol())
+                .method(request.getMethod()).endpoint(request.getPath())
+                .matched(matchResult.isMatched()).responseTimeMs(responseTimeMs)
+                .clientIp(request.getClientIp()).matchChain(matchChainJson).targetHost(logTargetHost)
+                .forwarded(response.isForwarded()).forwardTarget(response.getForwardTarget())
+                .proxyStatus(proxyStatus).proxyError(response.getProxyError())
+                .responseStatus(loggedResponseStatus).matchTimeMs(matchTimeMs)
+                .requestBody(request.getBody()).responseBody(response.getBody())
+                .candidates(candidates).preparedBody(preparedBody)
+                .queryString(request.getQueryString()).headers(request.getHeaders())
+                .faultType(faultType).scenarioName(scenarioName)
+                .scenarioFromState(scenarioFromState).scenarioToState(scenarioToState)
+                .diagnosticId(request.getTrace().id())
+                .build());
 
         return PipelineResult.builder()
                 .response(response)
@@ -453,86 +460,95 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
         }
     }
 
+    /** 把處理結果交給 listener（請求紀錄為 critical，失敗時往上傳）。 */
+    protected void publish(ServeEvent event) {
+        serveEvents.dispatch(event);
+    }
+
+    // ==================== Responder ====================
+
     /**
-     * 記錄請求日誌，呼叫 RequestLogService.record() 並傳入所有參數（含匹配上下文）
+     * 依序挑選適用的 responder；預設為故障注入 → 命中規則轉發 → mock。
+     * 子類別可覆寫 {@link #responders()} 加入協定特有的回應方式。
      */
-    protected void recordLog(String ruleId, Protocol protocol, String method,
-                             String endpoint, boolean matched, int responseTimeMs,
-                             String clientIp, String matchChainJson, String targetHost,
-                             Integer proxyStatus, String proxyError,
-                             Integer responseStatus, Integer matchTimeMs,
-                             String requestBody, String responseBody,
-                             List<T> candidates,
-                             ConditionMatcher.PreparedBody preparedBody,
-                             String queryString,
-                             Map<String, String> headers,
-                             String faultType,
-                             String scenarioName,
-                             String scenarioFromState,
-                             String scenarioToState) {
-        requestLogService.record(ruleId, protocol, method, endpoint,
-                matched, responseTimeMs, clientIp, matchChainJson, targetHost,
-                proxyStatus, proxyError, responseStatus, matchTimeMs,
-                requestBody, responseBody,
-                candidates, preparedBody, queryString, headers, faultType,
-                scenarioName, scenarioFromState, scenarioToState);
-    }
-
-    /** 記錄包含明確轉發狀態與安全目標資訊的請求日誌。 */
-    protected void recordLog(String ruleId, Protocol protocol, String method,
-                             String endpoint, boolean matched, int responseTimeMs,
-                             String clientIp, String matchChainJson, String targetHost,
-                             boolean forwarded, String forwardTarget,
-                             Integer proxyStatus, String proxyError,
-                             Integer responseStatus, Integer matchTimeMs,
-                             String requestBody, String responseBody,
-                             List<T> candidates,
-                             ConditionMatcher.PreparedBody preparedBody,
-                             String queryString,
-                             Map<String, String> headers,
-                             String faultType,
-                             String scenarioName,
-                             String scenarioFromState,
-                             String scenarioToState) {
-        requestLogService.record(ruleId, protocol, method, endpoint,
-                matched, responseTimeMs, clientIp, matchChainJson, targetHost,
-                forwarded, forwardTarget,
-                proxyStatus, proxyError, responseStatus, matchTimeMs,
-                requestBody, responseBody,
-                candidates, preparedBody, queryString, headers, faultType,
-                scenarioName, scenarioFromState, scenarioToState);
-    }
-
-    /** 記錄包含明確轉發狀態與安全目標資訊的請求日誌。 */
-    protected void recordLog(String ruleId, Protocol protocol, String method,
-                             String endpoint, boolean matched, int responseTimeMs,
-                             String clientIp, String matchChainJson, String targetHost,
-                             boolean forwarded, String forwardTarget,
-                             Integer proxyStatus, String proxyError,
-                             Integer responseStatus, Integer matchTimeMs,
-                             String requestBody, String responseBody,
-                             List<T> candidates,
-                             ConditionMatcher.PreparedBody preparedBody,
-                             String queryString,
-                             Map<String, String> headers,
-                             String faultType,
-                             String scenarioName,
-                             String scenarioFromState,
-                             String scenarioToState, String diagnosticId) {
-        if (diagnosticId == null) {
-            recordLog(ruleId, protocol, method, endpoint, matched, responseTimeMs, clientIp,
-                    matchChainJson, targetHost, forwarded, forwardTarget, proxyStatus, proxyError,
-                    responseStatus, matchTimeMs, requestBody, responseBody, candidates, preparedBody,
-                    queryString, headers, faultType, scenarioName, scenarioFromState, scenarioToState);
-            return;
+    private Responder<T> responderFor(T rule, MockRequest request) {
+        for (Responder<T> responder : responders()) {
+            if (responder.appliesTo(rule, request)) {
+                return responder;
+            }
         }
-        requestLogService.record(ruleId, protocol, method, endpoint,
-                matched, responseTimeMs, clientIp, matchChainJson, targetHost,
-                forwarded, forwardTarget,
-                proxyStatus, proxyError, responseStatus, matchTimeMs,
-                requestBody, responseBody,
-                candidates, preparedBody, queryString, headers, faultType,
-                scenarioName, scenarioFromState, scenarioToState, diagnosticId);
+        throw new IllegalStateException("No responder applies to rule " + rule.getId());
+    }
+
+    protected List<Responder<T>> responders() {
+        return responders;
+    }
+
+    private static boolean hasFault(BaseRule rule) {
+        return rule.getFaultType() != null && rule.getFaultType() != FaultType.NONE;
+    }
+
+    /** 故障注入：EMPTY_RESPONSE 回空 body；CONNECTION_RESET 由協定在寫回時關閉連線。 */
+    private final class FaultResponder implements Responder<T> {
+        @Override
+        public String mode() {
+            return "FAULT";
+        }
+
+        @Override
+        public boolean appliesTo(T rule, MockRequest request) {
+            return hasFault(rule);
+        }
+
+        @Override
+        public ResponsePlan respond(T rule, MockRequest request) {
+            MockResponse response = buildResponse(rule, request, resolveResponseBody(rule.getResponseId()));
+            if (rule.getFaultType() == FaultType.EMPTY_RESPONSE) {
+                response = MockResponse.builder()
+                        .status(response.getStatus())
+                        .body("")
+                        .matched(true)
+                        .forwarded(false)
+                        .build();
+            }
+            return new ResponsePlan.Fault(rule.getFaultType(), response);
+        }
+    }
+
+    /** 規則動作為轉發（見 {@link #shouldForwardMatchedRule}）。 */
+    private final class ForwardResponder implements Responder<T> {
+        @Override
+        public String mode() {
+            return "FORWARD";
+        }
+
+        @Override
+        public boolean appliesTo(T rule, MockRequest request) {
+            return shouldForwardMatchedRule(rule, request);
+        }
+
+        @Override
+        public ResponsePlan respond(T rule, MockRequest request) {
+            return new ResponsePlan.Forwarded(forwardMatchedRuleAsync(rule, request));
+        }
+    }
+
+    /** 回傳規則設定的回應內容（含協定特有的模板渲染等，見 {@link #buildResponse}）。 */
+    private final class MockResponder implements Responder<T> {
+        @Override
+        public String mode() {
+            return "MOCK";
+        }
+
+        @Override
+        public boolean appliesTo(T rule, MockRequest request) {
+            return true;
+        }
+
+        @Override
+        public ResponsePlan respond(T rule, MockRequest request) {
+            return new ResponsePlan.Content(buildResponse(rule, request, resolveResponseBody(rule.getResponseId())));
+        }
     }
 
     // ==================== 抽象方法：由子類別實作 ====================

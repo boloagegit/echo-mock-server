@@ -408,7 +408,7 @@ v1 與 v2 透過同一個 `RuleDefinition` 雙向轉換；`/rules/schema` 提供
 | 2 | `LegacyConditions` + `legacy` 節點 + 差異測試 | 無 | 完成 |
 | 3 | 以 `echo.engine.matcher=legacy\|compiled` 切換（預設 legacy），新引擎接入所有比對呼叫端；JMS 串流 XML 結果直接沿用 | 無（可切回） | 完成（預設仍為 legacy） |
 | 4 | `SelectionPolicy` 收斂 5 份選擇邏輯；`RuleIndex` 不可變快照 | 無 | 完成（見 7.2.2） |
-| 5 | `Responder`／`ResponsePlan`，SSE 播放移出控制器；`ServeEventListener` 與請求紀錄改用 `ServeEvent` | 無 | 未開始 |
+| 5 | `Responder`／`ResponsePlan`，SSE 播放移出控制器；`ServeEventListener` 與請求紀錄改用 `ServeEvent` | 無 | 完成（見 7.2.3） |
 | 6 | `ProtocolId`、`ProtocolAdapter`、`ProtocolRegistry`，移除核心以外的協定分支 | 無 | 未開始 |
 | 7 | `match_spec` 欄位、v2 文件、新 op（exists／absent／數值／in／equalToJson）、`any`／`not` | **新功能** | 未開始 |
 | 8 | UI 進階條件編輯器、`/match/parse` 端點、前端改用結構化條件 | **新功能** | 未開始 |
@@ -476,6 +476,28 @@ Caffeine 快取（`@Cacheable(sync = true)`）。這樣所有既有的清除路�
 
 **刻意不做**：背景重建、重建期間繼續用舊快照。這會失去「改完規則下一個請求就生效」的保證，
 而上述數字已足夠，因此保留同步重建。
+
+### 7.2.3 步驟 5 實作與驗證紀錄
+
+**回應產生**：pipeline 依序詢問 `Responder`（故障注入 → 規則轉發 → mock），由第一個適用的產生 `ResponsePlan`
+（`Content`／`Fault`／`Forwarded`）。延遲與 Scenario 轉移仍由 pipeline 統一處理；協定可覆寫 `responders()` 加入新的回應方式。
+`Responder` 目前放在 `com.echo.pipeline`，因為它需要 `MockRequest` 與規則 entity；等步驟 7 有了 `ResponseSpec` 再評估是否抽到核心。
+
+**SSE**：`UniversalMockController` 從 930 行縮到約 410 行，只負責把 HTTP 請求轉成 `MockRequest` 並交給 pipeline 或
+`protocol.http.sse.SseMockHandler`，以及寫回、延遲與連線重置。
+
+- `SsePlayer`：事件排程狀態機（原控制器內的 `SsePlayback`），獨立的 scheduler 與關機處理，邏輯原樣搬移。
+- `SseMockHandler`：SSE 請求流程。與原規劃不同，SSE 沒有改成 `ResponsePlan.Stream` 走一般 pipeline，因為現行 SSE 路徑有幾個
+  刻意不同的行為：沒有命中的 GET／HEAD 不轉發、SSE 規則遇到 HEAD／OPTIONS 回 405 且不寫紀錄、連線重置不套用延遲、
+  只有故障或 Scenario 時才附上匹配分析資料。併入 pipeline 會改變這些行為，留待步驟 7 加入 `sse` 回應類型時再一起處理。
+
+**請求紀錄**：`RequestLogService.record` 原本有 26 個參數，改為接收一個 `ServeEvent`（舊多載保留，轉成 `ServeEvent`）。
+pipeline 與 SSE 都透過 `ServeEventDispatcher` 發出事件：請求紀錄一定排第一個、失敗一定往上傳（HTTP 503、JMS 重送）；
+其他 `ServeEventListener` bean（未來的指標、Webhook）在後面依序呼叫，失敗只記錄、不影響回應。
+`ServeEvent` 放在 `com.echo.service` 而非核心，因為它攜帶規則 entity 與 `PreparedBody`。
+
+**驗證**：既有測試中對 `record(...)` 26 個參數的驗證全部改為檢查 `ServeEvent` 欄位，期望值不變；
+SSE 播放測試改為直接測 `SsePlayer`；另新增 `ServeEventDispatcherTest` 與 pipeline 的 `publish()` 測試。
 
 ### 7.3 風險
 

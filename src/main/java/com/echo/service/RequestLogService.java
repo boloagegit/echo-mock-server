@@ -45,7 +45,7 @@ import java.util.stream.Stream;
  */
 @Service
 @Slf4j
-public class RequestLogService {
+public class RequestLogService implements ServeEventListener {
 
     private final RequestLogRepository requestLogRepository;
     private final SystemConfigService configService;
@@ -264,6 +264,40 @@ public class RequestLogService {
                        String scenarioName,
                        String scenarioFromState,
                        String scenarioToState, String diagnosticId) {
+        record(ServeEvent.builder()
+                .ruleId(ruleId).protocol(protocol).method(method).endpoint(endpoint)
+                .matched(matched).responseTimeMs(responseTimeMs).clientIp(clientIp)
+                .matchChain(matchChain).targetHost(targetHost)
+                .forwarded(forwarded).forwardTarget(forwardTarget)
+                .proxyStatus(proxyStatus).proxyError(proxyError)
+                .responseStatus(responseStatus).matchTimeMs(matchTimeMs)
+                .requestBody(requestBody).responseBody(responseBody)
+                .candidates(candidates).preparedBody(preparedBody)
+                .queryString(queryString).headers(headers).faultType(faultType)
+                .scenarioName(scenarioName).scenarioFromState(scenarioFromState).scenarioToState(scenarioToState)
+                .diagnosticId(diagnosticId)
+                .build());
+    }
+
+    /** 請求紀錄是 critical listener：無法持久化時往上傳，HTTP 回 503、JMS 讓遞送失敗。 */
+    @Override
+    public void onServed(ServeEvent event) {
+        record(event);
+    }
+
+    @Override
+    public boolean critical() {
+        return true;
+    }
+
+    /**
+     * 記錄一筆已處理的請求。
+     * <p>
+     * 當 LogAgent 可用時，延遲建構 LogTask 並委派給 durable spool。
+     * Agent 或 spool 不可用時 fail fast，避免回覆成功卻遺失請求紀錄。
+     * 明確停用請求記錄時則在取得 Agent 或建立任何記錄資料前返回。
+     */
+    public void record(ServeEvent event) {
         if (configService.isRequestLogDisabled()) {
             return;
         }
@@ -275,25 +309,14 @@ public class RequestLogService {
             throw new RequestLogUnavailableException("Request-log agent is unavailable");
         }
         agentUnavailableWarned.set(false);
-        agent.submitDurably(() -> buildLogTask(
-                ruleId, protocol, method, endpoint, matched, responseTimeMs, clientIp,
-                matchChain, targetHost, forwarded, forwardTarget,
-                proxyStatus, proxyError, responseStatus, matchTimeMs,
-                requestBody, responseBody, candidates, preparedBody, queryString, headers,
-                faultType, scenarioName, scenarioFromState, scenarioToState, diagnosticId));
+        agent.submitDurably(() -> buildLogTask(event));
     }
 
-    private <T extends BaseRule> LogTask buildLogTask(
-            String ruleId, Protocol protocol, String method, String endpoint,
-            boolean matched, int responseTimeMs, String clientIp,
-            String matchChain, String targetHost, boolean forwarded, String forwardTarget,
-            Integer proxyStatus, String proxyError,
-            Integer responseStatus, Integer matchTimeMs, String requestBody, String responseBody,
-            List<T> candidates, ConditionMatcher.PreparedBody preparedBody,
-            String queryString, Map<String, String> headers,
-            String faultType, String scenarioName,
-            String scenarioFromState, String scenarioToState, String diagnosticId) {
-        List<CandidateSnapshot> candidateSnapshots = CandidateSnapshot.toCandidateSnapshots(candidates);
+    private LogTask buildLogTask(ServeEvent event) {
+        String requestBody = event.getRequestBody();
+        String responseBody = event.getResponseBody();
+        ConditionMatcher.PreparedBody preparedBody = event.getPreparedBody();
+        List<CandidateSnapshot> candidateSnapshots = CandidateSnapshot.toCandidateSnapshots(event.getCandidates());
         String reqBody = null;
         String resBody = null;
         int maxSize = configService.getRequestLogMaxBodySize();
@@ -307,37 +330,37 @@ public class RequestLogService {
         String analysisBody = rawAnalysisBody != null && rawAnalysisBody.length() <= maxSize
                 ? rawAnalysisBody : null;
         return LogTask.builder()
-                .diagnosticId(diagnosticId)
-                .ruleId(ruleId)
-                .protocol(protocol)
-                .method(method)
-                .endpoint(endpoint)
-                .matched(matched)
-                .responseTimeMs(responseTimeMs)
-                .matchTimeMs(matchTimeMs)
-                .clientIp(clientIp)
+                .diagnosticId(event.getDiagnosticId())
+                .ruleId(event.getRuleId())
+                .protocol(event.getProtocol())
+                .method(event.getMethod())
+                .endpoint(event.getEndpoint())
+                .matched(event.isMatched())
+                .responseTimeMs(event.getResponseTimeMs())
+                .matchTimeMs(event.getMatchTimeMs())
+                .clientIp(event.getClientIp())
                 .requestTime(LocalDateTime.now())
-                .matchChain(matchChain)
-                .targetHost(targetHost)
-                .forwarded(forwarded)
-                .forwardTarget(RequestLog.limitForwardTarget(forwardTarget))
-                .proxyStatus(proxyStatus)
+                .matchChain(event.getMatchChain())
+                .targetHost(event.getTargetHost())
+                .forwarded(event.isForwarded())
+                .forwardTarget(RequestLog.limitForwardTarget(event.getForwardTarget()))
+                .proxyStatus(event.getProxyStatus())
                 // Match the existing DB column, without changing the actual response body.
-                .proxyError(RequestLog.limitProxyError(proxyError))
-                .responseStatus(responseStatus)
+                .proxyError(RequestLog.limitProxyError(event.getProxyError()))
+                .responseStatus(event.getResponseStatus())
                 .requestBody(reqBody)
                 .responseBody(resBody)
-                .faultType(faultType)
-                .scenarioName(scenarioName)
-                .scenarioFromState(scenarioFromState)
-                .scenarioToState(scenarioToState)
+                .faultType(event.getFaultType())
+                .scenarioName(event.getScenarioName())
+                .scenarioFromState(event.getScenarioFromState())
+                .scenarioToState(event.getScenarioToState())
                 .candidates(candidateSnapshots)
                 // Never retain PreparedBody: XML PreparedBody owns a full DOM and caused
                 // queued log tasks to pin hundreds of MiB. Persist only source text and
                 // reconstruct parsed state inside the background analysis worker.
                 .analysisBody(analysisBody)
-                .queryString(queryString)
-                .headers(headers)
+                .queryString(event.getQueryString())
+                .headers(event.getHeaders())
                 .matchOutcomes(preparedBody != null
                         ? preparedBody.getMatchOutcomesSnapshot() : Map.of())
                 .build();

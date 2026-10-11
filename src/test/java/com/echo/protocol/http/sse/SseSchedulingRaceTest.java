@@ -1,4 +1,4 @@
-package com.echo.controller;
+package com.echo.protocol.http.sse;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -27,10 +27,9 @@ class SseSchedulingRaceTest {
         ScheduledFuture<?> second = mock(ScheduledFuture.class);
         AtomicReference<Runnable> successor = new AtomicReference<>();
         CountDownLatch firstReturned = new CountDownLatch(1);
-        UniversalMockController controller = new UniversalMockController(null, null, null,
-                mock(ResponseTemplateService.class), null) {
+        SsePlayer player = new SsePlayer(mock(ResponseTemplateService.class)) {
             private int calls;
-            @Override ScheduledFuture<?> scheduleSseEvent(Runnable delivery, long delayMs) {
+            @Override protected ScheduledFuture<?> scheduleEvent(Runnable delivery, long delayMs) {
                 if (calls++ == 0) {
                     // Legal scheduler interleaving: the callback runs before schedule returns.
                     delivery.run();
@@ -45,8 +44,8 @@ class SseSchedulingRaceTest {
         AtomicReference<Thread> worker = new AtomicReference<>();
         CompletableFuture<Void> playback = CompletableFuture.runAsync(() -> {
             worker.set(Thread.currentThread());
-            controller.sendSseEvents(emitter, List.of(new UniversalMockController.SseEvent(null, "fast", null, 0L, null),
-                        new UniversalMockController.SseEvent(null, "delayed", null, 500L, null)),
+            SsePlayerTestSupport.send(player, emitter, List.of(new SsePlayer.SseEvent(null, "fast", null, 0L, null),
+                        new SsePlayer.SseEvent(null, "delayed", null, 500L, null)),
                 false, null, Map.of(), "/race", "GET");
         });
         try {
@@ -62,7 +61,7 @@ class SseSchedulingRaceTest {
             verify(emitter).complete();
         } finally {
             if (timeout.get() != null) timeout.get().run();
-            controller.shutdown();
+            player.shutdown();
         }
     }
 
@@ -72,20 +71,20 @@ class SseSchedulingRaceTest {
         AtomicReference<Runnable> timeout = new AtomicReference<>();
         doAnswer(call -> { timeout.set(call.getArgument(0)); return null; }).when(emitter).onTimeout(any());
         ScheduledFuture<?> late = mock(ScheduledFuture.class);
-        UniversalMockController controller = new UniversalMockController(null, null, null, null, null) {
-            @Override ScheduledFuture<?> scheduleSseEvent(Runnable delivery, long delayMs) {
+        SsePlayer player = new SsePlayer(null) {
+            @Override protected ScheduledFuture<?> scheduleEvent(Runnable delivery, long delayMs) {
                 timeout.get().run();
                 return late;
             }
         };
         try {
-            controller.sendSseEvents(emitter,
-                    List.of(new UniversalMockController.SseEvent(null, "later", null, 500L, null)),
+            SsePlayerTestSupport.send(player, emitter,
+                    List.of(new SsePlayer.SseEvent(null, "later", null, 500L, null)),
                     false, null, Map.of(), "/race", "GET");
             verify(late).cancel(false);
             verify(emitter, never()).send(any(SseEmitter.SseEventBuilder.class));
         } finally {
-            controller.shutdown();
+            player.shutdown();
         }
     }
 }

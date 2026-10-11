@@ -1,10 +1,7 @@
-package com.echo.controller;
+package com.echo.protocol.http.sse;
 
-import com.echo.controller.UniversalMockController.SseEvent;
-import com.echo.service.HttpRuleService;
-import com.echo.service.RequestLogService;
+import com.echo.protocol.http.sse.SsePlayer.SseEvent;
 import com.echo.service.ResponseTemplateService;
-import com.echo.service.RuleService;
 import com.echo.service.SseEventsContentValidator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import net.jqwik.api.*;
@@ -32,23 +29,19 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class SseSendEventsTest {
 
-    @Mock private RuleService ruleService;
-    @Mock private HttpRuleService httpRuleService;
-    @Mock private RequestLogService requestLogService;
     @Mock private ResponseTemplateService templateService;
     @Mock private SseEmitter emitter;
 
-    private UniversalMockController controller;
+    private SsePlayer player;
 
     @BeforeEach
     void setUp() {
-        controller = new UniversalMockController(
-                ruleService, httpRuleService, requestLogService, templateService, null);
+        player = new SsePlayer(templateService);
     }
 
     @AfterEach
     void tearDown() {
-        controller.shutdown();
+        player.shutdown();
     }
 
     // --- Normal event sequence → all sent then complete() ---
@@ -60,7 +53,7 @@ class SseSendEventsTest {
                 new SseEvent("msg", "world", "2", 0L, "normal")
         );
 
-        controller.sendSseEvents(emitter, events, false, null, new HashMap<>(), "/test", "GET");
+        SsePlayerTestSupport.send(player, emitter, events, false, null, new HashMap<>(), "/test", "GET");
 
         verify(emitter, times(2)).send(any(SseEmitter.SseEventBuilder.class));
         verify(emitter).complete();
@@ -76,7 +69,7 @@ class SseSendEventsTest {
                 new SseEvent("error", "fail", "2", 0L, "error")
         );
 
-        controller.sendSseEvents(emitter, events, false, null, new HashMap<>(), "/test", "GET");
+        SsePlayerTestSupport.send(player, emitter, events, false, null, new HashMap<>(), "/test", "GET");
 
         // 2 sends: first normal event, then error event
         verify(emitter, times(2)).send(any(SseEmitter.SseEventBuilder.class));
@@ -92,7 +85,7 @@ class SseSendEventsTest {
                 new SseEvent(null, "bye", null, 0L, "abort")
         );
 
-        controller.sendSseEvents(emitter, events, false, null, new HashMap<>(), "/test", "GET");
+        SsePlayerTestSupport.send(player, emitter, events, false, null, new HashMap<>(), "/test", "GET");
 
         verify(emitter, never()).send(any(SseEmitter.SseEventBuilder.class));
         verify(emitter).completeWithError(any(RuntimeException.class));
@@ -109,7 +102,7 @@ class SseSendEventsTest {
                 new SseEvent("msg", "third", "3", 0L, null)
         );
 
-        controller.sendSseEvents(emitter, events, false, null, new HashMap<>(), "/test", "GET");
+        SsePlayerTestSupport.send(player, emitter, events, false, null, new HashMap<>(), "/test", "GET");
 
         // Only 2 sends: first normal + error event; third event never sent
         verify(emitter, times(2)).send(any(SseEmitter.SseEventBuilder.class));
@@ -125,7 +118,7 @@ class SseSendEventsTest {
                 new SseEvent("msg", "third", "3", 0L, null)
         );
 
-        controller.sendSseEvents(emitter, events, false, null, new HashMap<>(), "/test", "GET");
+        SsePlayerTestSupport.send(player, emitter, events, false, null, new HashMap<>(), "/test", "GET");
 
         // Only 1 send: first normal event; abort sends nothing, third never reached
         verify(emitter, times(1)).send(any(SseEmitter.SseEventBuilder.class));
@@ -138,17 +131,17 @@ class SseSendEventsTest {
         List<SseEvent> events = List.of(
                 new SseEvent("msg", "later", "1", 60_000L, null));
         CompletableFuture<Void> playback = CompletableFuture.runAsync(() ->
-                controller.sendSseEvents(emitter, events, false, null,
+                SsePlayerTestSupport.send(player, emitter, events, false, null,
                         new HashMap<>(), "/test", "GET"));
         ArgumentCaptor<Runnable> timeoutCallback = ArgumentCaptor.forClass(Runnable.class);
 
         verify(emitter, timeout(1_000)).onTimeout(timeoutCallback.capture());
         org.awaitility.Awaitility.await().atMost(java.time.Duration.ofSeconds(1))
-                .untilAsserted(() -> assertThat(controller.getPendingSseTaskCount()).isEqualTo(1));
+                .untilAsserted(() -> assertThat(player.getPendingTaskCount()).isEqualTo(1));
         timeoutCallback.getValue().run();
 
         playback.get(2, TimeUnit.SECONDS);
-        assertThat(controller.getPendingSseTaskCount()).isZero();
+        assertThat(player.getPendingTaskCount()).isZero();
         verify(emitter, never()).send(any(SseEmitter.SseEventBuilder.class));
     }
 
@@ -161,7 +154,7 @@ class SseSendEventsTest {
                 new SseEvent("error", "{\"code\":500}", "2", 0L, "error")
         );
 
-        controller.sendSseEvents(emitter, events, false, null, new HashMap<>(), "/test", "GET");
+        SsePlayerTestSupport.send(player, emitter, events, false, null, new HashMap<>(), "/test", "GET");
 
         // 2 sends total (normal + error), then completeWithError
         verify(emitter, times(2)).send(any(SseEmitter.SseEventBuilder.class));
@@ -184,10 +177,8 @@ class SseSendEventsTest {
         SseEventsContentValidator validator = new SseEventsContentValidator(new ObjectMapper());
         validator.validate(body); // should not throw
 
-        // Verify parseSseEvents returns non-empty list
-        UniversalMockController ctrl = new UniversalMockController(
-                null, null, null, null, null);
-        List<SseEvent> events = ctrl.parseSseEvents(body);
+        // Verify SsePlayer.parseEvents returns non-empty list
+        List<SseEvent> events = SsePlayer.parseEvents(body);
 
         assertThat(events).isNotEmpty();
     }
