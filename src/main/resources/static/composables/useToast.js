@@ -2,7 +2,7 @@
  * useToast - Toast 通知與確認對話框 Composable
  *
  * 管理 Toast 通知訊息與確認對話框（Confirm Modal）。
- * Toast 自動消失（3 秒），最多同時顯示 2 則。
+ * Toast 自動消失：成功／資訊 3 秒、錯誤 7 秒、帶動作（如「復原」）6 秒；最多同時顯示 3 則。
  * Confirm 支援 requireInput（需輸入確認）與 danger（危險操作）模式。
  *
  * @param {Function} t - 翻譯函式（來自 useI18n）
@@ -13,16 +13,31 @@ const useToast = (t) => {
 
     const toasts = ref([]);
 
+    const TOAST_TYPES = ['success', 'error', 'info'];
+    const toastDuration = (type, action) => action ? 6000 : type === 'error' ? 7000 : 3000;
+    let toastSeq = 0;
+
     /**
      * 顯示 Toast 通知
      * @param {string} msg - 訊息內容
-     * @param {string} type - 類型（'success' | 'error' | 'info'）
+     * @param {string} type - 類型（'success' | 'error' | 'info'）；其他值視為 info，'danger' 視為 error
+     * @param {{label: string, handler: Function}} [action] - 選用的動作按鈕（例如「復原」）
      */
-    const showToast = (msg, type) => {
-        const id = Date.now();
-        toasts.value.push({ id, msg, type, leaving: false });
+    const showToast = (msg, type, action = null) => {
+        const id = Date.now() + (++toastSeq);
+        const kind = type === 'danger' ? 'error' : (TOAST_TYPES.includes(type) ? type : 'info');
+        toasts.value.push({ id, msg, type: kind, action, leaving: false });
         if (toasts.value.length > 3) { toasts.value.shift(); }
-        setTimeout(() => { dismissToast(id); }, 3000);
+        setTimeout(() => { dismissToast(id); }, toastDuration(kind, action));
+        return id;
+    };
+
+    /** 執行 Toast 上的動作並立即關閉該則通知 */
+    const runToastAction = (id) => {
+        const toast = toasts.value.find(item => item.id === id);
+        if (!toast?.action || toast.leaving) { return; }
+        dismissToast(id);
+        toast.action.handler();
     };
 
     const dismissToast = (id) => {
@@ -57,5 +72,5 @@ const useToast = (t) => {
         });
     };
 
-    return { toasts, showToast, dismissToast, confirmState, showConfirm };
+    return { toasts, showToast, dismissToast, runToastAction, confirmState, showConfirm };
 };

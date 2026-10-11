@@ -3,6 +3,7 @@ package com.echo.service;
 import ch.qos.logback.classic.AsyncAppender;
 import ch.qos.logback.classic.LoggerContext;
 import com.echo.agent.LogAgent;
+import com.echo.diagnostics.TransactionDiagnostics;
 import com.echo.config.CacheConfig;
 import com.echo.config.JmsProperties;
 import com.echo.config.MonitoringProperties;
@@ -50,6 +51,10 @@ public class ResourceMonitoringService {
     private final ObjectProvider<ResponseTemplateService> templates;
     private final ObjectProvider<LogAgent> logAgent;
     private final JmsProperties jmsProperties;
+    private TransactionDiagnostics diagnostics;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setDiagnostics(TransactionDiagnostics diagnostics) { this.diagnostics = diagnostics; }
     private final String datasourceUrl;
     private final String backupPath;
     private final Instant processStartedAt = Instant.ofEpochMilli(ManagementFactory.getRuntimeMXBean().getStartTime());
@@ -229,17 +234,21 @@ public class ResourceMonitoringService {
     }
 
     protected Map<String, Object> applicationLog() {
-        if (!(LoggerFactory.getILoggerFactory() instanceof LoggerContext context)) return Map.of();
+        Map<String, Object> values = new LinkedHashMap<>();
+        if (diagnostics != null) values.putAll(diagnostics.snapshot());
+        if (!(LoggerFactory.getILoggerFactory() instanceof LoggerContext context)) return values;
         var appenders = context.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME).iteratorForAppenders();
         int examined = 0;
         while (appenders.hasNext() && examined++ < 8) {
             var appender = appenders.next();
             if (appender instanceof AsyncAppender async && "ASYNC_FILE".equals(appender.getName())) {
-                return Map.of("queueUsed", async.getNumberOfElementsInQueue(), "queueCapacity", async.getQueueSize(),
-                        "started", async.isStarted());
+                values.put("queueUsed", async.getNumberOfElementsInQueue());
+                values.put("queueCapacity", async.getQueueSize());
+                values.put("started", async.isStarted());
+                break;
             }
         }
-        return Map.of();
+        return values;
     }
 
     protected Map<String, Object> storage() {

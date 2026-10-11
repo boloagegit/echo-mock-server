@@ -84,7 +84,7 @@ const ImportModal = {
     <div ref="overlay" class="modal-overlay" v-if="show" @keydown="handleKeydown">
       <div ref="dialog" class="modal-box workspace-modal import-modal" role="dialog" aria-modal="true" aria-labelledby="importModalTitle" tabindex="-1">
         <div class="modal-header">
-          <div class="modal-heading"><span class="modal-heading-icon"><i class="bi bi-upload" aria-hidden="true"></i></span><h2 id="importModalTitle">{{t('modal.importRule')}}</h2></div>
+          <div class="modal-heading"><h2 id="importModalTitle">{{t('modal.importRule')}}</h2></div>
           <ui-button type="button" class="close-btn" @click="$emit('close')" :aria-label="t('modal.cancel')"><i class="bi bi-x-lg" aria-hidden="true"></i></ui-button>
         </div>
         <div class="modal-body import-modal-body">

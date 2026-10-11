@@ -108,6 +108,8 @@ dependencies {
     implementation 'org.webjars.npm:bootstrap-icons:1.13.1'
     // The UI uses CodeMirror 5's global API and /lib paths; 5.65.21 is the latest compatible release.
     implementation 'org.webjars.npm:codemirror:5.65.21'
+    // Bundled monospace font so endpoints and code render the same on Windows and macOS.
+    implementation 'org.webjars.npm:fontsource__jetbrains-mono:4.5.11'
 
     // Feign (compileOnly - for MockRedirectClient reference code)
     compileOnly 'io.github.openfeign:feign-core:13.13'
@@ -132,6 +134,37 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
     finalizedBy jacocoTestReport
+}
+
+// Opt-in, short real-JMS/file-output A/B measurement; never part of unit-test gates.
+tasks.register('diagnosticCost', JavaExec) {
+    dependsOn testClasses
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.echo.diagnostics.DiagnosticCostProbe'
+    args providers.gradleProperty('diagnosticOutput').getOrElse('artifacts/diagnostics-cost'),
+            providers.gradleProperty('diagnosticRequests').getOrElse('1500')
+    jvmArgs '-Xmx512m'
+}
+
+// Opt-in short real AP / HTTP / SQLite / durable-spool comparison, isolated temp data.
+tasks.register('diagnosticApplicationCost', JavaExec) {
+    dependsOn testClasses
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.echo.diagnostics.ApplicationDiagnosticCostProbe'
+    args providers.gradleProperty('diagnosticOutput').getOrElse('artifacts/diagnostics-cost'),
+            providers.gradleProperty('diagnosticRequests').getOrElse('1000')
+    jvmArgs '-Xmx512m'
+}
+
+// Opt-in Docker fixture only: never included in the application or normal test gates.
+tasks.register('dockerDiagnosticFixtureJar', Jar) {
+    dependsOn testClasses
+    archiveFileName = 'echo-diagnostic-fixture.jar'
+    from(sourceSets.test.output) {
+        include 'com/echo/diagnostics/ContainerDiagnosticFixture*.class'
+    }
 }
 
 jacocoTestReport {

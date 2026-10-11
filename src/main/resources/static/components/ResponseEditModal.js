@@ -2,7 +2,7 @@
  * ResponseEditModal - 回應編輯 Modal
  *
  * 用於建立或編輯共用回應內容，支援一般文字與 SSE 事件兩種模式。
- * CodeMirror 編輯器由父元件管理，透過 ref 傳入。
+ * 一般文字使用共用的 ui-code-viewer（可編輯），工具列與抽屜相同；格式化只改變顯示，存檔永遠是原文。
  */
 const ResponseEditModal = {
   props: {
@@ -13,15 +13,15 @@ const ResponseEditModal = {
     saving: Boolean,
     sseEvents: Array,
     ssePreview: String,
-    responseFormFormatted: Boolean,
   },
   emits: [
     'close', 'save', 'update:form', 'update:maximized',
-    'update:sseEvents', 'toggle-format',
+    'update:sseEvents', 'copy-text',
   ],
   inject: ['t'],
   data() {
     return {
+      saveShortcutKey: SAVE_SHORTCUT_KEY,
       attemptedSave: false,
       returnFocusTo: null,
       inertedElements: [],
@@ -209,6 +209,9 @@ const ResponseEditModal = {
     updateDescription(description) {
       this.$emit('update:form', { ...this.form, description });
     },
+    updateBody(body) {
+      this.$emit('update:form', { ...this.form, body });
+    },
   },
   template: /* html */`
     <ui-modal-transition>
@@ -216,7 +219,6 @@ const ResponseEditModal = {
       <div ref="dialog" class="modal-box response-modal workspace-modal response-editor-modal" :class="{maximized:maximized}" role="dialog" aria-modal="true" aria-labelledby="responseEditorTitle" @keydown="handleDialogKeydown">
         <div class="modal-header">
           <div class="modal-heading">
-            <span class="modal-heading-icon"><i class="bi" :class="editing?'bi-pencil-square':'bi-plus-circle'" aria-hidden="true"></i></span>
             <h2 id="responseEditorTitle">{{editing ? t('modal.editResponse') : t('modal.addResponse')}}</h2>
           </div>
           <div class="response-modal-actions">
@@ -235,14 +237,11 @@ const ResponseEditModal = {
           <div v-if="form.contentType==='text'" class="form-group response-text-editor">
             <div class="response-editor-toolbar">
               <label class="form-label">{{t('modal.responseContent')}}</label>
-              <ui-button type="button" class="btn btn-xs btn-secondary" @click="$emit('toggle-format')">
-                <i class="bi" :class="responseFormFormatted?'bi-code':'bi-braces'" aria-hidden="true"></i>
-                {{responseFormFormatted ? t('modal.plainText') : t('modal.format')}}
-              </ui-button>
               <span class="sub-info response-content-size">{{fmtSize(form.body?.length || 0)}}</span>
               <span v-if="(form.body?.length || 0) > 5242880" class="badge badge-warning" :title="t('modal.exceedCacheTooltip')"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> {{t('modal.exceedCacheThreshold')}}</span>
             </div>
-            <div id="responseFormEditorEl" class="edit-editor"></div>
+            <ui-code-viewer class="response-form-code" fill editable :label="t('modal.responseContent')" :placeholder="t('modal.responseBodyPlaceholder')"
+              :value="form.body || ''" @update:value="updateBody" @copy="$emit('copy-text', $event)"></ui-code-viewer>
           </div>
           <div v-else class="form-group response-sse-workspace">
             <section class="response-sse-editor-pane" aria-labelledby="sseEventsTitle">
@@ -315,9 +314,9 @@ const ResponseEditModal = {
           </div>
         </div>
         <div class="modal-footer">
-          <span class="response-save-shortcut">{{t('modal.saveShortcutHint')}}</span>
+          <span class="modal-footer-hint"><kbd>{{saveShortcutKey}}</kbd><kbd>Enter</kbd>{{t('modal.save')}}</span>
           <ui-button type="button" variant="quiet" @click="$emit('close')">{{t('modal.cancel')}}</ui-button>
-          <ui-button type="button" class="btn btn-primary" @click="requestSave" :disabled="saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-check-lg'" :spin="saving"></ui-motion-icon> {{editing ? t('modal.update') : t('modal.create')}}</ui-button>
+          <ui-button type="button" variant="primary" @click="requestSave" :disabled="saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-check-lg'" :spin="saving"></ui-motion-icon> {{editing ? t('modal.update') : t('modal.create')}}</ui-button>
         </div>
       </div>
     </div>

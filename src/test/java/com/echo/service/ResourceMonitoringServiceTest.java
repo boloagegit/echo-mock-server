@@ -15,6 +15,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 class ResourceMonitoringServiceTest {
+    @Test
+    void supplementalDiagnosticsAreAvailableOnManualSnapshotWithoutIo() {
+        try (var diagnostics = new com.echo.diagnostics.TransactionDiagnostics(
+                new com.echo.config.DiagnosticProperties(), line -> { })) {
+            diagnostics.start();
+            var monitor = service(new MonitoringProperties(), new AtomicInteger());
+            monitor.setDiagnostics(diagnostics);
+            assertThat(monitor.snapshot().sections().get("applicationLog").values())
+                    .containsEntry("diagnosticRunning", true).containsEntry("diagnosticDropped", 0L);
+        }
+    }
     @org.junit.jupiter.api.io.TempDir private Path temporary;
     @SuppressWarnings("unchecked")
     private static <T> ObjectProvider<T> emptyProvider() { return mock(ObjectProvider.class); }

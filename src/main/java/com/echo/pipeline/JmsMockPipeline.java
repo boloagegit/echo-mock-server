@@ -152,7 +152,9 @@ public class JmsMockPipeline extends AbstractMockPipeline<JmsRule> {
         log.debug("No rule matched, forwarding through the selected outbound JMS connection");
 
         return forwardedResponse(
-                targetForwarder.forwardWithMetadata(request.getBody(), null), false);
+                request.getTrace().enabled()
+                        ? targetForwarder.forwardWithMetadata(request.getBody(), null, request.getTrace())
+                        : targetForwarder.forwardWithMetadata(request.getBody(), null), false);
     }
 
     @Override
@@ -164,9 +166,11 @@ public class JmsMockPipeline extends AbstractMockPipeline<JmsRule> {
     protected MockResponse forwardMatchedRule(JmsRule rule, MockRequest request) {
         JmsForwardTargetMode mode = rule.getForwardTargetMode() == null
                 ? JmsForwardTargetMode.DEFAULT_CONNECTION : rule.getForwardTargetMode();
-        JmsTargetForwarder.ForwardResult result = targetForwarder.forwardWithMetadata(
-                request.getBody(), null, rule.getJmsTargetConnectionId(),
-                mode == JmsForwardTargetMode.DEFAULT_CONNECTION);
+        JmsTargetForwarder.ForwardResult result = request.getTrace().enabled()
+                ? targetForwarder.forwardWithMetadata(request.getBody(), null, rule.getJmsTargetConnectionId(),
+                        mode == JmsForwardTargetMode.DEFAULT_CONNECTION, request.getTrace())
+                : targetForwarder.forwardWithMetadata(request.getBody(), null, rule.getJmsTargetConnectionId(),
+                        mode == JmsForwardTargetMode.DEFAULT_CONNECTION);
         return forwardedResponse(result, true);
     }
 

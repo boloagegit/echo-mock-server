@@ -9,14 +9,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 class SparseStateResourceTest {
     @Test
     void bothRulePreviewsUseInlineConditionSummaryAndCompactEmptyBody() throws IOException {
-        for (String page : new String[]{"RulesPage", "RuleGroupRow"}) {
-            String source = text("components/" + page + ".js");
-            assertThat(source).contains("class=\"pv-section-summary\"")
-                    .contains("class=\"pv-body-empty\"")
-                    .contains("bodyCondition && !rulePreviewCache[")
-                    .contains(".tags)||{}).length")
-                    .doesNotContain("<span class=\"pv-label\"></span>");
-        }
+        // One drawer serves both views: no conditions and empty bodies get a short inline note, tags only render when present.
+        String source = text("components/RuleDetail.js");
+        assertThat(source).contains("<p v-if=\"!conditionGroups.length\" class=\"detail-empty\">{{t('rules.noCondition')}}</p>")
+                .contains("<p v-if=\"!body && shownDetail\" class=\"detail-empty\">{{t('rules.empty')}}</p>")
+                .contains("<template v-if=\"tagEntries.length\">")
+                .doesNotContain("<span class=\"pv-label\"></span>");
     }
 
     @Test
@@ -25,7 +23,9 @@ class SparseStateResourceTest {
                 .contains("class=\"cond-builder-actions\"")
                 .contains("v-if=\"!conditions.length\" class=\"sub-info\"")
                 .contains("v-if=\"form.responseId\" class=\"response-picker-heading\"")
-                .contains("v-show=\"previewResponseBody.length || previewEditing\"")
+                // The body viewer shows once the selected response has a body or is being edited.
+                .contains("v-show=\"showPreviewViewer\"")
+                .contains("(!!props.previewResponseBody?.length || props.previewEditing)")
                 .contains("$emit('add-condition')");
         assertThat(text("style.css"))
                 .contains(".rule-editor .response-preview-empty { flex: 0 0 auto; min-height: 0;")
@@ -44,9 +44,11 @@ class SparseStateResourceTest {
     void unusedResponsesKeepNeutralMetadataAndExplicitExpiryWarning() throws IOException {
         assertThat(text("style.css")).doesNotContain("tr.unused-row .sub-info { color: var(--danger)")
                 .doesNotContain("tr.unused-row td { background: rgba(var(--danger-rgb)");
+        // Unused responses stay neutral in the list; only a near expiry (≤7 days) gets a warning badge.
         assertThat(text("components/ResponsesPage.js"))
-                .contains("class=\"response-usage-state is-unused\"")
-                .contains("t('responses.orphanDaysLeft'");
+                .contains("<span v-else class=\"cell-subtle\">{{t('responses.notUsed')}}")
+                .contains("retention(r) != null && retention(r) <= 7\" tone=\"warning\"");
+        assertThat(text("components/ResponseDetail.js")).contains("t('responses.orphanDaysLeft'");
     }
 
     @Test

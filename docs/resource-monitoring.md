@@ -4,6 +4,9 @@ Resource snapshots are available to administrators in Settings and at
 `GET /api/admin/resources`. The endpoint sends `Cache-Control: no-store`.
 Settings loads once on entry, then only on explicit refresh or retry. There is
 no polling, trend history, automatic recovery, or per-request telemetry store.
+Supplemental transaction file-log counters are described in
+[Transaction file diagnostics](transaction-diagnostics.md); their switches are
+independent of resource snapshot collection and durable Request Log policy.
 Export downloads the already collected, sanitized snapshot, not another query.
 Cold entry to Settings uses an ADMIN-protected, database-independent access
 check so a stalled legacy status query does not prevent diagnostic collection.
@@ -92,8 +95,10 @@ Data & Backups, and Service Configuration. Overview shows six compact summaries
 (heap, JMS, HTTP, database waits, request-log persistence, and free storage).
 Resource Monitoring has six keyboard-operable disclosures: Memory & GC, Caches,
 JMS, HTTP, Database & Persistence, and Delay Scheduler. Together they retain all
-74 display fields across the original nine collector groups, grouped into
-current usage, lifetime counters, and limits/configuration/timestamps.
+display fields across the original nine collector groups, grouped into current
+usage, lifetime counters, and limits/configuration/timestamps. Database &
+Persistence also shows the independent supplemental diagnostic writer, queue,
+omissions and byte budgets; it does not read diagnostic file contents.
 
 The same monitoring component remains mounted when switching Settings tabs.
 Opening a disclosure or following an overview detail link does not collect

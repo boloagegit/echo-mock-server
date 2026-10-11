@@ -25,7 +25,7 @@ class RuleEditModalResourceTest {
     @Test
     void associatesMatchingFieldsAndAnnouncesMethodSelection() throws IOException {
         String component = resourceText("static/components/RuleEditModal.js");
-        for (String field : new String[]{"rule-http-path", "rule-source-host", "rule-jms-queue", "rule-jms-reply"}) {
+        for (String field : new String[]{"rule-http-path", "rule-source-host", "rule-jms-queue"}) {
             assertThat(component).contains("for=\"" + field + "\"").contains("id=\"" + field + "\"");
         }
         assertThat(component).contains("<ui-choice-group class=\"method-group\"")
@@ -67,20 +67,24 @@ class RuleEditModalResourceTest {
     }
 
     @Test
-    void keepsNewResponseEditorOutsideTheModeTransitionRoot() throws IOException {
+    void responseContentUsesTheSharedCodeViewerAndModePanelsSwapInOneFrame() throws IOException {
         String component = resourceText("static/components/RuleEditModal.js");
-        int modeTransition = component.indexOf("<Transition name=\"ui-mode-panel-motion\" mode=\"out-in\">");
-        int modeTransitionEnd = component.indexOf("</Transition>", modeTransition);
         int responseContent = component.indexOf("<div v-if=\"ruleMode==='MOCK'\" class=\"form-block response-content-block\">");
 
-        assertThat(modeTransition).isGreaterThanOrEqualTo(0);
-        assertThat(modeTransitionEnd).isGreaterThan(modeTransition);
-        assertThat(responseContent).isGreaterThan(modeTransitionEnd);
-        assertThat(component.substring(modeTransition, modeTransitionEnd))
-                .doesNotContain("response-content-block");
+        // No transition wraps the mode panels or the protocol fields: each switch is a single-frame swap.
+        assertThat(component).doesNotContain("<Transition");
+        assertThat(responseContent).isPositive();
+        // Both sources (an existing response and a new one) use the drawers' viewer, editable and filling the pane;
+        // nothing is re-created by id, so switching modes or starting an edit never shows an empty editor.
         assertThat(component.substring(responseContent))
                 .contains("class=\"response-content-mode\"")
-                .contains("id=\"ruleEditEditor\"");
+                .contains("<ui-code-viewer class=\"rule-response-code\" :class=\"{'is-warning': previewEditing}\" fill :editable=\"previewEditing\"")
+                .contains("@update:value=\"$emit('update:preview-edit-body', $event)\"")
+                .contains("<ui-code-viewer class=\"rule-response-code\" fill editable")
+                .contains("@update:value=\"form.responseBody = $event\"")
+                .doesNotContain("id=\"ruleEditEditor\"")
+                .doesNotContain("id=\"rulePreviewEditor\"")
+                .doesNotContain("toggle-edit-format");
     }
 
     @Test
@@ -154,6 +158,138 @@ class RuleEditModalResourceTest {
     }
 
     @Test
+    void speaksTheSameLanguageAsTheListsAndDrawers() throws IOException {
+        String component = resourceText("static/components/RuleEditModal.js");
+        String stylesheet = resourceText("static/style.css");
+        String console = resourceText("static/console.css");
+
+        // The header names the rule being edited, with the same method colour as the list.
+        assertThat(component)
+                .contains("<p class=\"rule-modal-context\">")
+                .contains("<span class=\"rule-method\" :data-method=\"form.protocol==='HTTP' ? (form.method || 'GET') : null\"")
+                .doesNotContain("modal-heading-icon")
+                .doesNotContain("rule-pane-heading-icon");
+        // On/off state uses switches; section headings are text only.
+        assertThat(component)
+                .contains("<ui-toggle :checked=\"form.enabled\"")
+                .contains("<ui-toggle :checked=\"form.isProtected\"")
+                .doesNotContain("class=\"rule-state-control\"")
+                .doesNotContain("<div class=\"form-block-header\"><i ");
+        // A solid accent fill is reserved for the primary button; selections are tinted.
+        assertThat(stylesheet)
+                .doesNotContain(".protocol-btn.active { background: var(--btn-primary)")
+                .doesNotContain(".rule-editor-mode-switch button.active { background: var(--btn-primary)")
+                .contains(".rule-editor .form-block-header { color: var(--text-subtle); font-size: 11px; letter-spacing: 0.08em }");
+        assertThat(console).contains(".modal-footer > .ui-button--quiet { color: var(--muted) }");
+    }
+
+    @Test
+    void methodAndPathReadAsOneRequestLineAndLabelsStayQuiet() throws IOException {
+        String component = resourceText("static/components/RuleEditModal.js");
+        int line = component.indexOf("<div class=\"rule-request-line\">");
+
+        assertThat(line).isPositive();
+        assertThat(component.indexOf("<ui-choice-group class=\"method-group\"", line)).isGreaterThan(line)
+                .isLessThan(component.indexOf("id=\"rule-http-path\"", line));
+        assertThat(resourceText("static/console.css"))
+                .contains(".rule-left { container: rule-left / inline-size }")
+                .contains("@container rule-left (max-width: 500px) {\n    .rule-request-line .method-group .method-btn { padding-inline: 6px }")
+                .contains("@container rule-left (max-width: 380px) {\n    .rule-request-line { grid-template-columns: minmax(0, 1fr) }")
+                .contains(".ui-choice-group.rule-protocol-options > .rule-protocol-option { border: 0; background: transparent; box-shadow: none }");
+        // Field labels never outweigh the values they describe.
+        assertThat(resourceText("static/style.css"))
+                .contains(".form-label { display: block; font-size: var(--font-base); font-weight: var(--font-weight-medium); color: var(--muted);")
+                .doesNotContain(".response-template-actions");
+        // Response templates are one menu in the content toolbar (they fill the body), not a row of buttons.
+        assertThat(component)
+                .contains("<ui-row-menu v-if=\"form.protocol==='HTTP'\" class=\"response-template-menu\" icon=\"bi-lightning-charge\" :label=\"t('modal.template')\" :items=\"templateMenuItems\" @select=\"$emit('apply-template', $event)\"></ui-row-menu>")
+                .doesNotContain("class=\"response-template-actions\"");
+        assertThat(component).doesNotContain("btn btn-xs btn-secondary");
+    }
+
+    @Test
+    void editorReadsAsRequestThenResponseWithSettingsAndTestOutOfTheWay() throws IOException {
+        String component = resourceText("static/components/RuleEditModal.js");
+        int header = component.indexOf("<div class=\"modal-header\">");
+        int body = component.indexOf("<div v-if=\"editorMode==='form'\" class=\"modal-body rule-editor\"");
+        int right = component.indexOf("<div class=\"rule-right\">");
+
+        // Header: the description is the editable title, followed by a one-line summary of the rule;
+        // enabled / protected sit with the window controls.
+        String headerPart = component.substring(header, body);
+        assertThat(headerPart)
+                .contains("<input id=\"ruleDescription\" v-model=\"form.description\" :placeholder=\"t('modal.ruleNamePlaceholder')\"")
+                .contains("<span class=\"rule-modal-context__result\">{{ruleModeSummary}}</span>")
+                .contains("<ui-toggle :checked=\"form.enabled\"")
+                .contains("<ui-toggle :checked=\"form.isProtected\"");
+        // Request pane: protocol in its heading, then the request line, conditions and collapsed settings.
+        String requestPart = component.substring(body, right);
+        assertThat(requestPart)
+                .contains("<strong>{{t('modal.requestPane')}}</strong>")
+                .contains("<ui-choice-group class=\"rule-protocol-options\"")
+                .contains("<details class=\"form-block rule-settings-disclosure\">")
+                .doesNotContain("rule-identity-block")
+                .doesNotContain("rule-test-block");
+        // Response pane: rule mode in its heading; SSE is a response type next to the status code.
+        assertThat(component.substring(right))
+                .contains("<strong>{{t('modal.responsePane')}}</strong>")
+                .contains(":model-value=\"!!form.sseEnabled\" :options=\"responseTypeOptions\"");
+        // Testing lives in a collapsible bar under both panes, its result beside the request.
+        assertThat(component).contains("<section v-if=\"editorMode==='form' && editing\" class=\"rule-test-bar\"");
+        assertThat(resourceText("static/console.css"))
+                .contains(".rule-test-bar .rule-test-panel > .rule-test-output { grid-column: 2; grid-row: 1 / span 4; margin: 0 }")
+                .contains(".rule-pane-heading .ui-segmented-control__description { display: none }");
+    }
+
+    @Test
+    void switchingProtocolSwapsFieldsInPlaceWithoutMovingTheRestOfTheEditor() throws IOException {
+        String component = resourceText("static/components/RuleEditModal.js");
+        String console = resourceText("static/console.css");
+
+        // The header summary is always there (a placeholder until the path / queue is set), so its height never changes.
+        assertThat(component)
+                .contains("<p class=\"rule-modal-context\">")
+                .contains("<span v-else class=\"rule-modal-context__pending\">{{form.protocol==='HTTP' ? t('modal.pathPending') : t('modal.queuePending')}}</span>");
+        // Request: HTTP and JMS fill one slot with the same rhythm (destination, then a field with one hint).
+        assertThat(component)
+                .contains("<div class=\"form-block rule-protocol-slot\" data-tour=\"match\">")
+                .contains("<div v-if=\"form.protocol==='HTTP'\" key=\"http\" class=\"rule-protocol-fields\">")
+                .contains("<div v-else key=\"jms\" class=\"rule-protocol-fields\">")
+                .contains("<input id=\"rule-jms-queue\" class=\"form-control rule-path-input\"")
+                .contains("{{t('modal.queueMatchHint')}}")
+                // Replies go to the request's JMSReplyTo: shown read-only in the input's place, never an unsaved input.
+                .contains("<p class=\"rule-readonly-value\"><code>JMSReplyTo</code><span>{{t('modal.replyQueueFromRequest')}}</span></p>")
+                .doesNotContain("v-model=\"form.replyQueue\"");
+        assertThat(console)
+                .contains(".rule-readonly-value { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; min-height: var(--control-h);");
+        // Response: JMS keeps the shape row and says what the reply is instead of dropping it.
+        assertThat(component)
+                .contains("<div v-else key=\"jms\" class=\"response-status-row response-status-row--jms\">")
+                .contains("<code class=\"response-reply-type\">TextMessage</code>");
+        // The swap is one frame: a fade-in from empty read as a blink, so the fields are not wrapped in a transition.
+        assertThat(component).doesNotContain("rule-protocol-swap");
+        assertThat(console)
+                .contains(".response-status-row { min-height: calc(var(--control-h-sm) + 2 * var(--editor-shell-padding) + 2px) }")
+                .doesNotContain(".rule-protocol-swap-enter-from");
+        for (String lang : new String[]{"zh-TW", "en"}) {
+            assertThat(resourceText("static/i18n/" + lang + ".json")).as(lang)
+                    .contains("\"pathPending\"").contains("\"queuePending\"").contains("\"queueMatchHint\"")
+                    .contains("\"jmsReplyLabel\"").contains("\"jmsReplyHint\"").contains("\"replyQueueFromRequest\"");
+        }
+        // The help describes what the listener does: reply to JMSReplyTo, or not at all.
+        assertThat(resourceText("static/i18n/zh-TW.json"))
+                .contains("\"jmsFieldReplyQueue\": \"回覆送到請求訊息指定的佇列（JMSReplyTo）；請求沒有指定時不回覆。\"");
+    }
+
+    @Test
+    void ctrlOrCmdEnterSavesAndClosesWhenTheRuleCanBeSaved() throws IOException {
+        assertThat(resourceText("static/components/RuleEditModal.js"))
+                .contains("if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && props.editorMode === 'form') {")
+                .contains("if (props.canSave && !props.saving) emit('save', true);")
+                .contains("<span v-else class=\"modal-footer-hint\"><kbd>{{saveShortcutKey}}</kbd><kbd>Enter</kbd>");
+    }
+
+    @Test
     void alignsPaneHeadingsAboveTheirPrimaryControls() throws IOException {
         String component = resourceText("static/components/RuleEditModal.js");
         String stylesheet = resourceText("static/style.css");
@@ -174,7 +310,7 @@ class RuleEditModalResourceTest {
         String component = resourceText("static/components/RuleEditModal.js");
         int existingPanel = component.indexOf("class=\"response-existing-panel\"");
         int selectedSummary = component.indexOf("class=\"response-selected-card\"", existingPanel);
-        int drawerLaunch = component.indexOf("class=\"btn btn-sm btn-secondary response-picker-change\"", existingPanel);
+        int drawerLaunch = component.indexOf("class=\"response-picker-change\"", existingPanel);
         int drawer = component.indexOf("id=\"ruleResponsePickerDrawer\"", drawerLaunch);
 
         assertThat(existingPanel).isGreaterThanOrEqualTo(0);
@@ -239,8 +375,8 @@ class RuleEditModalResourceTest {
 
         assertThat(stylesheet)
                 .contains("--control-h: 36px;")
-                .contains("--control-h: 34px; --control-h-sm: 30px;")
-                .contains("--control-h: 42px; --control-h-sm: 36px;")
+                .contains("--control-h: 32px; --control-h-sm: 28px;")
+                .contains("--control-h: 40px; --control-h-sm: 36px;")
                 .contains("--editor-section-py: 6px; --editor-field-gap: 6px;")
                 .contains("--editor-section-py: 14px; --editor-field-gap: 12px;")
                 .contains("--editor-content-min-h: 380px;")

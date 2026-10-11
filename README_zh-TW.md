@@ -185,6 +185,8 @@ docker compose down
 | `ECHO_ADMIN_USERNAME` | admin | 管理員帳號 |
 | `ECHO_ADMIN_PASSWORD` | admin | 管理員密碼 |
 | `ECHO_ENV_LABEL` | DOCKER | 環境標籤 |
+| `ECHO_UI_ACCENT` | teal | 介面主色：`teal`（青綠）或 `blue`（藍），用來區分不同部署環境（例如 SIT 青綠、UAT 藍） |
+| `ECHO_UI_EASTER_EGG` | true | 介面彩蛋（輸入 ↑↑↓↓←→←→AB 開啟小遊戲）；正式環境可設 `false` 關閉 |
 | `TZ` | Asia/Taipei | 時區 |
 
 JVM 參數在 Dockerfile 中設定（預設 `-Xms256m -Xmx512m`，OOM 時保留 heap dump 並退出），可透過 docker-compose.yml 的 `environment` 加入 `JAVA_OPTS` 覆蓋。
@@ -299,6 +301,9 @@ Echo 可作為 JMS Proxy，在開發環境攔截 JMS 訊息：
 
 系統設定分為「總覽、資源監控、轉發連線、資料與備份、服務設定」。僅進入頁面與手動重新整理／重試時更新，不定時輪詢。監控明細區分目前使用量、啟動後累計與設定上限；判讀健康度或資源未釋放前，請先參閱[資源快照的意義與限制](docs/resource-monitoring.md)。
 
+[交易診斷](docs/transaction-diagnostics.md)提供有容量限制的異常摘要與請求紀錄關聯 ID。
+設定方式、留存限制與證據判讀集中於該文件，正常請求不新增診斷檔案日誌。
+
 使用 Artemis Core client 傳送 XML 時，建議在發送端連線 URL 設定 `tcp://echo-host:61616?minLargeMessageSize=524288`。這會讓約 256KB 以內的文字訊息走一般訊息路徑，避免中型 XML 每筆建立 large-message 檔案；更大的訊息仍會落盤保護 heap。此參數必須設在**發送端**，不是 Echo 的 `application.yml`。
 
 ## 條件匹配語法
@@ -408,6 +413,9 @@ server:
 
 echo:
   env-label:                    # 環境標籤（如 DEV、SIT、UAT）
+  ui:
+    accent: teal                # 介面主色：teal 或 blue（ECHO_UI_ACCENT）
+    easter-egg: true            # 介面彩蛋小遊戲（ECHO_UI_EASTER_EGG）
   remember-me:
     key: echo-remember-me-secret  # Remember Me 加密金鑰
     validity: 180d                # Remember Me cookie 有效期
