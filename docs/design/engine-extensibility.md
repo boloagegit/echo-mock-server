@@ -406,7 +406,7 @@ v1 與 v2 透過同一個 `RuleDefinition` 雙向轉換；`/rules/schema` 提供
 |---|------|------|------|
 | 1 | ArchUnit 規則、`com.echo.core` 骨架、`MatchSpec` 模型、內建 op 與組合節點、單元測試 | 無 | 完成 |
 | 2 | `LegacyConditions` + `legacy` 節點 + 差異測試 | 無 | 完成 |
-| 3 | `BodyPlan`、`CompiledMatcher` 接入 pipeline 與 `LogAgent`，以 `echo.engine.matcher=legacy\|compiled` 切換（預設 legacy）；跑效能關卡後改預設為 compiled | 無（可切回） | 未開始 |
+| 3 | 以 `echo.engine.matcher=legacy\|compiled` 切換（預設 legacy），新引擎接入所有比對呼叫端；JMS 串流 XML 結果直接沿用 | 無（可切回） | 完成（預設仍為 legacy） |
 | 4 | `SelectionPolicy` 收斂 5 份選擇邏輯；`RuleIndex` 不可變快照 | 無 | 未開始 |
 | 5 | `Responder`／`ResponsePlan`，SSE 播放移出控制器；`ServeEventListener` 與請求紀錄改用 `ServeEvent` | 無 | 未開始 |
 | 6 | `ProtocolId`、`ProtocolAdapter`、`ProtocolRegistry`，移除核心以外的協定分支 | 無 | 未開始 |
@@ -415,6 +415,46 @@ v1 與 v2 透過同一個 `RuleDefinition` 雙向轉換；`/rules/schema` 提供
 | 9 | 移除 `echo.engine.matcher=legacy` 開關與舊實作（至少間隔一個正式版本） | 無 | 未開始 |
 
 步驟 1～6 為純重構，屬於「先讓架構可擴充，再加功能」；步驟 7 起才是使用者看得到的變更。
+
+### 7.2.1 步驟 3 實作與驗證紀錄
+
+**接入方式**：切換點放在 `ConditionMatcher` 內部（最窄的接縫），HTTP／JMS pipeline、SSE、規則測試與 `LogAgent`
+匹配鏈分析都經由它比對，因此一起切換，不需修改各呼叫端。原規劃的 `BodyPlan` 與「選擇邏輯收斂」移到步驟 4。
+
+- 條件依文字內容編譯一次並以 LRU 快取（上限 10,000）；規則修改後文字不同，自然對應新項目。
+- compiled 模式與舊版共用 `PreparedBody.matchOutcomes`，JMS 串流 XML 預先算好的結果、`LogAgent` 還原的結果都直接重用；
+  串流 body 只有在條件真的需要時才建立 DOM（與舊版 `matchXPath` 相同）。
+- `EvalContext` 新增請求內的中間結果快取，同一個 JSONPath 跨規則只評估一次（與舊版相同）。
+  這個落差是用 compiled 模式跑整套既有測試時抓到的。
+- 帶 namespace 前綴的 XML 元素改以 DOM 走訪比對 local name，取代 `//*[local-name()='X']` XPath。
+- 修正既有問題：`ConditionMatcher` 有兩個建構子且沒有 `@Autowired`，Spring 一直使用無參數建構子，
+  `echo.matcher.max-field-value-length` 從未生效；現在設定值會套用。
+
+**驗證結果**
+
+| 項目 | legacy | compiled |
+|------|--------|----------|
+| 單元＋整合測試（`./gradlew test`，CI 新增 compiled 工作） | 1,686 通過 | 1,686 通過 |
+| 端到端回歸 `test-match-scenarios.py`（HTTP、JMS、SSE、故障注入、Scenarios） | 138/138 | 138/138 |
+
+端到端效能（4 核心機器，伺服器與壓測程式同機；3 輪交替執行取中位數）：
+
+| 情境 | legacy | compiled | 比值 |
+|------|--------|----------|------|
+| RPS：簡單 JSON（無條件，作為雜訊對照） | 1,276 | 1,277 | 1.00 |
+| RPS：複雜 JSON（10 候選＋模板） | 1,383 | 1,401 | 1.01 |
+| RPS：小型 XML（~2KB＋XPath） | 1,247 | 1,237 | 0.99 |
+| RPS：大型 XML（~99KB＋XPath） | 407 | 404 | 0.99 |
+| `stress-test-1600-rules.py` 平均匹配 | 1.0 ms | 0.8 ms | 0.80 |
+| `bench-2000-jms.py` 平均匹配 | 2.6 ms | 2.6 ms | 1.00 |
+
+結論：端到端沒有可量測的差異。無條件情境（完全不經過比對引擎）各輪之間就有約 ±6% 的波動，
+吞吐量受限於同機的 Python 壓測程式；`matchTimeMs` 以毫秒為單位，也無法分辨微秒級差異。
+比對引擎本身的差異以 §4.5 的微基準為準（JSON 與一般 XML 快約 35%，SOAP 持平）。
+若要更精確地驗證 5% 關卡，需要在伺服器與壓測程式分開的環境重跑。
+
+**建議**：先在測試環境設定 `ECHO_ENGINE_MATCHER=compiled` 觀察一段時間，確認請求紀錄與匹配鏈正常後，
+再於後續版本把預設改為 compiled；步驟 9 才移除舊實作。
 
 ### 7.3 風險
 
