@@ -154,6 +154,9 @@ class SqliteStartupRecoveryTest {
                 .isEmpty();
         assertThat(SqliteRecoveryEnvironmentPostProcessor.databasePath("jdbc:h2:file:./mockdb"))
                 .isEmpty();
+        assertThat(SqliteRecoveryEnvironmentPostProcessor.databasePath(
+                "jdbc:sqlite:file:shared-test?mode=memory&cache=shared"))
+                .isEmpty();
     }
 
     private SqliteStartupRecovery recovery() {

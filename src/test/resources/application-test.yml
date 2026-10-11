@@ -1,19 +1,9 @@
+# 資料庫：沿用預設 SQLite，測試資料庫位置見 src/test/resources/config/application.properties
 spring:
-  datasource:
-    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
-
   jpa:
-    database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
       ddl-auto: create-drop
     show-sql: false
-
-  h2:
-    console:
-      enabled: false
 
 echo:
   cache:

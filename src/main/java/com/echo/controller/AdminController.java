@@ -1439,22 +1439,7 @@ public class AdminController {
                 return Optional.of(Paths.get(configuredPath));
             }
         }
-        if (url != null && url.startsWith("jdbc:h2:mem:")) {
-            return Optional.empty();
-        }
-        if (url != null && url.startsWith("jdbc:h2:file:")) {
-            String configuredPath = url.substring("jdbc:h2:file:".length());
-            int optionIndex = configuredPath.indexOf(';');
-            if (optionIndex >= 0) configuredPath = configuredPath.substring(0, optionIndex);
-            if (!configuredPath.isBlank()) {
-                return Optional.of(Paths.get(configuredPath.endsWith(".mv.db")
-                        ? configuredPath : configuredPath + ".mv.db"));
-            }
-        }
-        Path sqlite = Paths.get("./mockdb.sqlite");
-        if (Files.exists(sqlite)) return Optional.of(sqlite);
-        Path h2 = Paths.get("./mockdb.mv.db");
-        return Files.exists(h2) ? Optional.of(h2) : Optional.empty();
+        return Optional.empty();
     }
 
     private static void putDatabaseFileSize(Map<String, Object> status, Path path) {

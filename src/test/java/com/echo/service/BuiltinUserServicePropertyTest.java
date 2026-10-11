@@ -17,6 +17,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import javax.sql.DataSource;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -26,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * BuiltinUserService 屬性測試（jqwik）
  * <p>
- * 使用程式化 H2 資料庫設定，每個 @Property 方法前重建乾淨的資料庫環境。
+ * 使用程式化 SQLite 資料庫設定，每個 @Property 方法前重建乾淨的資料庫環境。
  * 每次 try 使用 uniqueName() 產生唯一帳號名稱，避免跨 try 衝突。
  * 涵蓋設計文件中的 Property 1-14。
  */
@@ -58,11 +62,15 @@ class BuiltinUserServicePropertyTest {
     void setUp() {
         counter.set(0);
 
+        try {
+            Files.createDirectories(Path.of("build", "test-db"));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
         DataSource dataSource = DataSourceBuilder.create()
-                .driverClassName("org.h2.Driver")
-                .url("jdbc:h2:mem:testdb_" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1")
-                .username("sa")
-                .password("")
+                .driverClassName("org.sqlite.JDBC")
+                .url("jdbc:sqlite:./build/test-db/builtin-user-" + UUID.randomUUID()
+                        + ".sqlite?journal_mode=WAL&busy_timeout=10000")
                 .build();
 
         HibernateJpaVendorAdapter vendorAdapter = new HibernateJpaVendorAdapter();
@@ -76,6 +84,7 @@ class BuiltinUserServicePropertyTest {
 
         Properties jpaProps = new Properties();
         jpaProps.setProperty("hibernate.hbm2ddl.auto", "create-drop");
+        jpaProps.setProperty("hibernate.dialect", "com.echo.config.EchoSqliteDialect");
         factoryBean.setJpaProperties(jpaProps);
         factoryBean.afterPropertiesSet();
 

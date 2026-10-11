@@ -51,7 +51,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 /**
  * Independent SQLite WAL used as the durable hand-off for request logs.
  *
- * <p>Producers wait only for a small group commit to this spool. The main H2/SQLite
+ * <p>Producers wait only for a small group commit to this spool. The main SQLite
  * database is updated by {@link LogAgent}, so slow queries or a temporary main DB
  * outage cannot silently discard accepted request logs.</p>
  */

@@ -11,7 +11,7 @@ import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
 import java.util.List;
 
-import static com.echo.config.DatabaseProfileValidator.DatabaseProfile.H2;
+import static com.echo.config.DatabaseProfileValidator.DatabaseProfile.SQLITE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
@@ -21,10 +21,10 @@ import static org.mockito.Mockito.when;
 class DatabaseProfileValidatorTest {
 
     @Test
-    void noDatabaseProfileUsesDefaultH2AndAllowsOtherProfiles() {
-        assertThat(DatabaseProfileValidator.selectProfile(List.of("dev", "test"))).isEqualTo(H2);
-        assertThat(DatabaseProfileValidator.selectProfile(List.of())).isEqualTo(H2);
-        assertThat(DatabaseProfileValidator.selectProfile(null)).isEqualTo(H2);
+    void noDatabaseProfileUsesDefaultSqliteAndAllowsOtherProfiles() {
+        assertThat(DatabaseProfileValidator.selectProfile(List.of("dev", "test"))).isEqualTo(SQLITE);
+        assertThat(DatabaseProfileValidator.selectProfile(List.of())).isEqualTo(SQLITE);
+        assertThat(DatabaseProfileValidator.selectProfile(null)).isEqualTo(SQLITE);
     }
 
     @Test
@@ -40,7 +40,6 @@ class DatabaseProfileValidatorTest {
 
     @ParameterizedTest
     @CsvSource({
-            "h2, jdbc:h2:file:./mockdb, H2",
             "sqlite, jdbc:sqlite:./mockdb.sqlite, SQLite",
             "postgresql, jdbc:postgresql://db:5432/echo, PostgreSQL",
             "mysql, jdbc:mysql://db:3306/echo, MySQL",
@@ -97,7 +96,7 @@ class DatabaseProfileValidatorTest {
     @Test
     void multipleDatabaseProfilesAreRejectedBeforeConnectionAttempt() throws Exception {
         MockEnvironment environment = new MockEnvironment();
-        environment.setActiveProfiles("h2", "sqlite");
+        environment.setActiveProfiles("postgresql", "sqlite");
         DataSource dataSource = mock(DataSource.class);
 
         assertThatThrownBy(() -> new DatabaseProfileValidator(environment, dataSource).run(null))

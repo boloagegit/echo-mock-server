@@ -33,7 +33,7 @@ class ResourceMonitoringServiceTest {
     private static ResourceMonitoringService service(MonitoringProperties properties, AtomicInteger jvmReads) {
         return new ResourceMonitoringService(properties, emptyProvider(), emptyProvider(), emptyProvider(),
                 emptyProvider(), emptyProvider(), emptyProvider(), emptyProvider(), emptyProvider(),
-                emptyProvider(), emptyProvider(), new JmsProperties(), "jdbc:h2:mem:test", "nonexistent-backup-dir") {
+                emptyProvider(), emptyProvider(), new JmsProperties(), "jdbc:sqlite::memory:", "nonexistent-backup-dir") {
             @Override protected Map<String, Object> jvm() {
                 jvmReads.incrementAndGet();
                 throw new IllegalStateException("credentials=private; internal-host; request-body");
@@ -87,7 +87,7 @@ class ResourceMonitoringServiceTest {
         when(sources.getIfAvailable()).thenReturn(source);
         var monitor = new ResourceMonitoringService(new MonitoringProperties(), emptyProvider(), emptyProvider(),
                 emptyProvider(), emptyProvider(), sources, emptyProvider(), emptyProvider(), emptyProvider(),
-                emptyProvider(), emptyProvider(), new JmsProperties(), "jdbc:h2:mem:test", "missing-backups");
+                emptyProvider(), emptyProvider(), new JmsProperties(), "jdbc:sqlite::memory:", "missing-backups");
         assertThat(monitor.snapshot().sections().get("database").values()).containsEntry("poolActive", 2);
         verify(source, never()).getConnection();
         verify(source, never()).getConnection(anyString(), anyString());
@@ -103,7 +103,7 @@ class ResourceMonitoringServiceTest {
         when(provider.getIfAvailable()).thenReturn(response);
         var monitor = new ResourceMonitoringService(new MonitoringProperties(), emptyProvider(), emptyProvider(),
                 emptyProvider(), emptyProvider(), emptyProvider(), emptyProvider(), emptyProvider(), provider,
-                emptyProvider(), emptyProvider(), new JmsProperties(), "jdbc:h2:mem:test", "missing-backups");
+                emptyProvider(), emptyProvider(), new JmsProperties(), "jdbc:sqlite::memory:", "missing-backups");
         var values = monitor.snapshot().sections().get("caches").values();
         assertThat(values).containsExactlyInAnyOrderEntriesOf(Map.of("body_entries", 0L, "body_maximumWeight", 100L));
         verify(response, never()).count();
@@ -150,7 +150,7 @@ class ResourceMonitoringServiceTest {
         var reads = new java.util.HashSet<String>();
         var monitor = new ResourceMonitoringService(properties, emptyProvider(), emptyProvider(), emptyProvider(),
                 emptyProvider(), emptyProvider(), emptyProvider(), emptyProvider(), emptyProvider(), emptyProvider(),
-                emptyProvider(), new JmsProperties(), "jdbc:h2:mem:test", "missing") {
+                emptyProvider(), new JmsProperties(), "jdbc:sqlite::memory:", "missing") {
             private Map<String, Object> read(String name) { reads.add(name); return Map.of("value", 0); }
             @Override protected Map<String, Object> jvm() { return read("jvm"); }
             @Override protected Map<String, Object> caches() { return read("caches"); }

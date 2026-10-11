@@ -26,27 +26,22 @@ spring:
     exclude:
       - org.springframework.boot.autoconfigure.ldap.LdapAutoConfiguration
 
-  # Database: 預設 H2 Embedded，啟用 sqlite profile 可覆蓋
-  # 切換方式: --spring.profiles.active=sqlite 或 SPRING_PROFILES_ACTIVE=sqlite
+  # Database: 預設 SQLite（WAL），資料檔位於 ./data（Docker volume 掛載點）
+  # 外部資料庫請啟用對應 profile：postgresql、mysql、mariadb、sqlserver、oracle
+  # H2 已不再支援；既有 H2 資料請以 scripts/migrate-h2-to-sqlite.py 轉換
   datasource:
-    url: jdbc:h2:file:./mockdb;AUTO_RECONNECT=TRUE;DB_CLOSE_ON_EXIT=FALSE;WRITE_DELAY=100;TRACE_LEVEL_FILE=0
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
+    url: jdbc:sqlite:./data/mockdb.sqlite?journal_mode=WAL&busy_timeout=10000&synchronous=NORMAL&foreign_keys=ON
+    driver-class-name: org.sqlite.JDBC
     hikari:
-      maximum-pool-size: 15
-      minimum-idle: 3
-      connection-timeout: 10000
-      idle-timeout: 120000
-      max-lifetime: 1800000
-
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
+      # 交易管理器會序列化寫入；連線池保留 WAL 的並行讀取能力。
+      maximum-pool-size: 3
+      minimum-idle: 1
+      connection-timeout: 15000   # 必須 > busy_timeout，避免 pool 比 SQLite 先放棄
+      idle-timeout: 600000        # 10 分鐘（SQLite in-process，不需頻繁回收）
+      max-lifetime: 0             # 不限制（SQLite 無 server 端 timeout）
 
   jpa:
-    database-platform: org.hibernate.dialect.H2Dialect
+    database-platform: com.echo.config.EchoSqliteDialect
     hibernate:
       ddl-auto: update
     show-sql: false
@@ -77,6 +72,13 @@ echo:
     retained-bytes: 52428800 # 50 MiB across owned diagnostic day files
     retention-days: 7 # maximum seven days including today, capacity may shorten history
     records-per-second: 20 # aggregate anomaly/detail output limit, omitted records counted
+  sqlite:
+    recovery:
+      # fail-fast: 保留損壞資料庫並停止啟動；restore-latest: 從最新有效備份還原
+      mode: ${ECHO_SQLITE_RECOVERY_MODE:fail-fast}
+      # 確認 runtime corruption 時退出，交由 supervisor 重啟並執行上述啟動復原
+      runtime-check-enabled: ${ECHO_SQLITE_RUNTIME_CHECK_ENABLED:true}
+      runtime-check-interval-ms: ${ECHO_SQLITE_RUNTIME_CHECK_INTERVAL_MS:30000}
   # Resource snapshots are ADMIN-only and collected only on manual refresh.
   monitoring:
     enabled: true
@@ -179,7 +181,7 @@ echo:
     rule-retention-days: 180  # 規則保留天數 (預設半年)
     response-retention-days: 180  # 回應保留天數
   backup:
-    enabled: true             # 啟用內嵌式 H2／SQLite 自動備份
+    enabled: true             # 啟用 SQLite 自動備份（外部資料庫由 DBA 負責）
     cron: "0 0 3 * * *"       # 每天凌晨 3 點執行
     path: ./backups           # 備份目錄
     retention-days: 7         # 備份保留天數

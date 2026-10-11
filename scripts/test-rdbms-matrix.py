@@ -37,7 +37,6 @@ from typing import Any, Mapping, NamedTuple, Sequence
 
 
 SUPPORTED_DATABASES = (
-    "h2",
     "sqlite",
     "postgresql",
     "mysql",
@@ -438,7 +437,7 @@ def make_parser() -> argparse.ArgumentParser:
         nargs="+",
         default=list(SUPPORTED_DATABASES),
         metavar="DB[,DB...]",
-        help="profiles to run (default: all; supports h2 sqlite postgresql mysql mariadb sqlserver oracle)",
+        help="profiles to run (default: all; supports sqlite postgresql mysql mariadb sqlserver oracle)",
     )
     parser.add_argument(
         "--skip-build",

@@ -189,7 +189,7 @@ public class RuleService {
         if (ids.size() <= MAX_IN_LIST_IDS) {
             return Set.copyOf(responseRepository.findExistingIds(ids));
         }
-        // 大量 ID 時改讀全部主鍵再求交集：H2 會逐列線性比對 IN 清單（20,000 條規則時重建快照約 2 秒），
+        // 大量 ID 時改讀全部主鍵再求交集：部分資料庫（例如 H2）會逐列線性比對 IN 清單（20,000 條規則時重建快照約 2 秒），
         // 且 SQL Server（2,100 個參數）與 Oracle（IN 清單 1,000 筆）等資料庫有上限。
         Set<Long> existing = new HashSet<>(responseRepository.findAllIds());
         existing.retainAll(ids);

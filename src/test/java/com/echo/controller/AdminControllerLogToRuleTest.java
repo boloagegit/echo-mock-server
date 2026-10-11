@@ -85,7 +85,7 @@ class AdminControllerLogToRuleTest {
         ReflectionTestUtils.setField(controller, "sessionTimeout", "30m");
         ReflectionTestUtils.setField(controller, "serverPort", 8080);
         ReflectionTestUtils.setField(controller, "jmsPort", 61616);
-        ReflectionTestUtils.setField(controller, "datasourceUrl", "jdbc:h2:mem:test");
+        ReflectionTestUtils.setField(controller, "datasourceUrl", "jdbc:sqlite::memory:");
         ReflectionTestUtils.setField(controller, "httpAlias", "HTTP");
         ReflectionTestUtils.setField(controller, "jmsAlias", "JMS");
         ReflectionTestUtils.setField(controller, "auditRetentionDays", 30);

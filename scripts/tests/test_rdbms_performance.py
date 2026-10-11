@@ -42,7 +42,7 @@ class RdbmsMatrixPerformanceTest(unittest.TestCase):
         output = io.StringIO()
         with tempfile.TemporaryDirectory() as temp_dir, contextlib.redirect_stdout(output):
             status = self.matrix.main([
-                "--databases", "h2,sqlite",
+                "--databases", "sqlite,postgresql",
                 "--performance",
                 "--performance-duration", "1",
                 "--performance-concurrency", "2",
@@ -74,7 +74,7 @@ class RdbmsMatrixPerformanceTest(unittest.TestCase):
                 mock.patch.object(self.matrix, "run_command", side_effect=fake_run_command), \
                 mock.patch.object(self.matrix, "wait_for_http") as wait_for_http:
             result = self.matrix.execute_database(
-                "h2",
+                "sqlite",
                 compose_file=PROJECT_ROOT / "docker-compose.rdbms.yml",
                 project_name="echo-rdbms-matrix-test",
                 ports=self.matrix.PortPair(18080, 17616),
@@ -116,7 +116,7 @@ class RdbmsMatrixPerformanceTest(unittest.TestCase):
                 mock.patch.object(self.matrix, "run_command", side_effect=fake_run_command), \
                 mock.patch.object(self.matrix, "wait_for_http", side_effect=fake_readiness):
             result = self.matrix.execute_database(
-                "h2",
+                "sqlite",
                 compose_file=PROJECT_ROOT / "docker-compose.rdbms.yml",
                 project_name="echo-rdbms-matrix-test",
                 ports=self.matrix.PortPair(18080, 17616),

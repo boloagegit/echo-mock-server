@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 - Anomaly-only HTTP/JMS/SSE diagnostics: zero supplemental file bytes for healthy traffic, one bounded error summary, separate 10 MiB/day / 50 MiB retained files, rate limits, expiring opt-in detail, and nullable Request Log correlation IDs
+- Optional `echo.engine.matcher=compiled` (`ECHO_ENGINE_MATCHER`) runs condition matching on the new `com.echo.core.match` engine; semantics are verified against the legacy matcher by differential tests, and `legacy` remains the default
 - Fault Injection — rules can simulate CONNECTION_RESET (close connection) or EMPTY_RESPONSE (return empty body) for HTTP and JMS
 - Faker Handlebars helpers — randomFirstName, randomLastName, randomFullName, randomEmail, randomPhoneNumber, randomCity, randomCountry, randomStreetAddress, randomInt
 - OpenAPI/Swagger import — upload spec to auto-generate mock rules with preview
@@ -23,6 +24,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - One-click maintainer release workflow with validated CalVer tags, release artifacts, checksums, generated notes, and GHCR images
 
 ### Changed
+- **Breaking:** H2 is no longer supported or bundled. SQLite is the default database (`./data/mockdb.sqlite`, inside the Docker `/app/data` volume); the `sqlite` profile keeps `./mockdb.sqlite`. Echo refuses to start with an H2 profile/URL or with unmigrated legacy `mockdb.mv.db` data; convert with `scripts/migrate-h2-to-sqlite.py`, which now runs from its own Gradle source set
+- HTTP/JMS rule candidates come from immutable per-protocol snapshots invalidated by the existing rule-cache eviction paths; one shared rule selector replaces four copies of the selection loop
+- Tests run on SQLite (one temporary database per Spring context) instead of embedded H2
 - System Settings now separates overview, resource details, forwarding targets, data/backups, and service configuration; shared target tables and six metric disclosures retain manual-refresh behavior
 - Priority field semantics reversed to higher-number-higher-priority
 - Split HTTP/JMS rule caches for better isolation
@@ -39,6 +43,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Fixed
 - SSE zero-delay callback ownership race that could cancel the following delayed event; late future registration retains timeout/disconnect cleanup
 - Request-log proxy error values are bounded to the existing 255-character column without altering transport responses
+- `echo.matcher.max-field-value-length` is now applied; Spring previously used the no-argument constructor and ignored it
+- Rule-cache rebuilds no longer send one `IN` list with every response ID (O(n²) on H2; over parameter limits on SQL Server/Oracle); with 20,000 rules the first request after a rule change dropped from 1.3 s to about 0.17 s
+- Regex timeout protection reads the clock every 256 characters instead of on every character (10k-character values: 717 µs → 74 µs)
+- The default Docker database now lives in the persisted `/app/data` volume
 - Forwarding target dialogs now place and contain keyboard focus, support Escape, and restore the launch control; Settings action menus remain within the viewport
 - JMS forwarding documentation now reflects configuration-first default selection and distinguishes it from automatic failover
 - SpotBugs mutable array warnings

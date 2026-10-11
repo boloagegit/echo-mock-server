@@ -36,7 +36,7 @@ class RequestLogBatchWriterSqliteIntegrationTest {
         registry.add("spring.datasource.url", () -> "jdbc:sqlite:" + SQLITE_PATH);
         registry.add("spring.datasource.driver-class-name", () -> "org.sqlite.JDBC");
         registry.add("spring.jpa.database-platform",
-                () -> "org.hibernate.community.dialect.SQLiteDialect");
+                () -> "com.echo.config.EchoSqliteDialect");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "create");
     }
 

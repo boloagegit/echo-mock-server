@@ -261,9 +261,6 @@ public class ResourceMonitoringService {
                 SqliteRecoveryEnvironmentPostProcessor.databasePath(datasourceUrl)
                         .ifPresent(path -> localFree(values, "dataFreeBytes", path));
             }
-        } else if (datasourceUrl.startsWith("jdbc:h2:file:")) {
-            String name = datasourceUrl.substring("jdbc:h2:file:".length()).split(";", 2)[0];
-            if (!name.startsWith("~")) localFree(values, "dataFreeBytes", Path.of(name).toAbsolutePath().getParent());
         }
         localFree(values, "backupFreeBytes", Path.of(backupPath));
         return values;

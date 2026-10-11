@@ -18,7 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/** Builds only active request-log predicates so H2/SQLite can use composite indexes. */
+/** Builds only active request-log predicates so SQLite and external databases can use composite indexes. */
 @Repository
 public class RequestLogSummaryQuery {
 

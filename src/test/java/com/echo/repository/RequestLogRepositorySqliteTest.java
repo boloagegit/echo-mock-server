@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.datasource.driver-class-name=org.sqlite.JDBC",
         "spring.datasource.hikari.maximum-pool-size=1",
         "spring.datasource.hikari.minimum-idle=1",
-        "spring.jpa.database-platform=org.hibernate.community.dialect.SQLiteDialect",
+        "spring.jpa.database-platform=com.echo.config.EchoSqliteDialect",
         "spring.jpa.hibernate.ddl-auto=create-drop"
 })
 class RequestLogRepositorySqliteTest {
