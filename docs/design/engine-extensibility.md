@@ -407,7 +407,7 @@ v1 與 v2 透過同一個 `RuleDefinition` 雙向轉換；`/rules/schema` 提供
 | 1 | ArchUnit 規則、`com.echo.core` 骨架、`MatchSpec` 模型、內建 op 與組合節點、單元測試 | 無 | 完成 |
 | 2 | `LegacyConditions` + `legacy` 節點 + 差異測試 | 無 | 完成 |
 | 3 | 以 `echo.engine.matcher=legacy\|compiled` 切換（預設 legacy），新引擎接入所有比對呼叫端；JMS 串流 XML 結果直接沿用 | 無（可切回） | 完成（預設仍為 legacy） |
-| 4 | `SelectionPolicy` 收斂 5 份選擇邏輯；`RuleIndex` 不可變快照 | 無 | 未開始 |
+| 4 | `SelectionPolicy` 收斂 5 份選擇邏輯；`RuleIndex` 不可變快照 | 無 | 完成（見 7.2.2） |
 | 5 | `Responder`／`ResponsePlan`，SSE 播放移出控制器；`ServeEventListener` 與請求紀錄改用 `ServeEvent` | 無 | 未開始 |
 | 6 | `ProtocolId`、`ProtocolAdapter`、`ProtocolRegistry`，移除核心以外的協定分支 | 無 | 未開始 |
 | 7 | `match_spec` 欄位、v2 文件、新 op（exists／absent／數值／in／equalToJson）、`any`／`not` | **新功能** | 未開始 |
@@ -455,6 +455,27 @@ v1 與 v2 透過同一個 `RuleDefinition` 雙向轉換；`/rules/schema` 提供
 
 **建議**：先在測試環境設定 `ECHO_ENGINE_MATCHER=compiled` 觀察一段時間，確認請求紀錄與匹配鏈正常後，
 再於後續版本把預設改為 compiled；步驟 9 才移除舊實作。
+
+### 7.2.2 步驟 4 實作與驗證紀錄
+
+**選擇邏輯**：`com.echo.core.engine.RuleSelector` 取代原本 4 份迴圈（HTTP／JMS 的 service 與 pipeline），
+以 `FallbackPolicy` 區分 HTTP（條件命中 → 第一個無條件規則）與 JMS（精確 queue 優先於 `*`）。
+
+**快照**：與 §5.3 原規劃不同，快照不是放在 `AtomicReference`，而是以單一項目存在既有的 `httpRules`／`jmsRules`
+Caffeine 快取（`@Cacheable(sync = true)`）。這樣所有既有的清除路徑（規則異動、Response 刪除、清理排程、
+多實例同步事件）都會自動淘汰快照，不必逐一改寫；`sync = true` 讓並行請求只重建一次。
+
+- 候選集合依 (host, method) 第一次使用時計算；規則沒提到的 host／method 共用同一個 key，
+  所以快照大小只隨規則數量成長，不會因用戶端送出任意 `X-Original-Host` 或 method 而無限增加（JMS 的 endpoint 分桶同理）。
+- compiled 模式的條件編譯結果改放在 weak-value 快取，由快照持有強參照，快照被淘汰後即可回收。
+- 重建時查詢有效 Response ID：超過 500 筆改為一次讀出所有 ID 再於記憶體取交集，
+  避免 `IN` 清單過長（H2 上為 O(n²)，SQL Server／Oracle 會超過參數上限）。
+
+**驗證**：20,000 條規則下，規則異動後的第一個請求約 0.17 秒；持續修改規則的同時壓測，p99 約 0.17 秒，
+記憶體測試沒有 heap 成長。
+
+**刻意不做**：背景重建、重建期間繼續用舊快照。這會失去「改完規則下一個請求就生效」的保證，
+而上述數字已足夠，因此保留同步重建。
 
 ### 7.3 風險
 
