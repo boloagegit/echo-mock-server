@@ -18,7 +18,20 @@
     "changePassword": "修改密碼",
     "logout": "登出",
     "login": "登入",
-    "accounts": "帳號管理"
+    "accounts": "帳號管理",
+    "manage": "管理",
+    "userMenu": "帳號與偏好設定",
+    "userMenuFor": "{name}：帳號與偏好設定",
+    "appearance": "外觀",
+    "density": "密度",
+    "language": "語言",
+    "languageZh": "繁體中文",
+    "languageEn": "English",
+    "serviceStatus": "服務狀態",
+    "serviceRunning": "執行中",
+    "serviceDisabled": "已停用",
+    "roleAdmin": "管理員",
+    "roleUser": "使用者"
   },
   "rules": {
     "title": "模擬規則",
@@ -301,7 +314,15 @@
     "fault_CONNECTION_RESET": "連線重置",
     "fault_EMPTY_RESPONSE": "空回應",
     "pvScenario": "情境",
-    "scenarioTooltip": "情境：{name}（前置狀態：{required} → 新狀態：{newState}）"
+    "scenarioTooltip": "情境：{name}（前置狀態：{required} → 新狀態：{newState}）",
+    "thMethod": "方法",
+    "dragColumn": "拖曳排序",
+    "selectedCount": "已選取 {count} 條規則",
+    "batchDone": "完成",
+    "pvSectionResponse": "回應",
+    "pvTargetHost": "來源主機",
+    "conditionCountSummary": "{count} 個條件",
+    "tagCountSummary": "{count} 個標籤"
   },
   "responses": {
     "pagination": "回應分頁",
@@ -355,7 +376,12 @@
     "createFirstResponse": "新增第一個回應",
     "totalCount": "共 {count} 筆",
     "filtering": "篩選中",
-    "clickClearFilter": "清除篩選"
+    "clickClearFilter": "清除篩選",
+    "selectedCount": "已選取 {count} 個回應",
+    "ruleUnit": "條規則",
+    "detailInfo": "回應資訊",
+    "loadFailed": "無法載入回應，請稍後再試。",
+    "sharedInfoLabel": "關於共用回應"
   },
   "stats": {
     "title": "請求記錄",
@@ -371,7 +397,7 @@
     "protocolFilter": "協定篩選",
     "resultFilter": "匹配結果篩選",
     "searchLabel": "搜尋請求記錄",
-    "searchPlaceholder": "搜尋端點、佇列、主機、下游目標或規則 ID",
+    "searchPlaceholder": "搜尋端點、佇列、主機、下游目標、規則或診斷 ID",
     "clearSearch": "清除搜尋內容",
     "activeFilters": "目前套用的篩選條件",
     "removeFilter": "移除篩選：{filter}",
@@ -409,6 +435,8 @@
     "detailForwardTarget": "下游目標",
     "detailForwarded": "轉發狀態",
     "detailClientIp": "來源 IP",
+    "diagnosticId": "診斷關聯 ID",
+    "copyDiagnosticId": "複製診斷關聯 ID，以搜尋診斷檔案",
     "detailDuration": "回應時間",
     "detailMatchTime": "匹配耗時",
     "detailOtherTime": "延遲／轉發",
@@ -456,7 +484,9 @@
     "nextPage": "下一頁",
     "lastPage": "最後一頁",
     "pageSize": "每頁顯示筆數",
-    "pageStatus": "第 {page} 頁，共 {total} 頁"
+    "pageStatus": "第 {page} 頁，共 {total} 頁",
+    "openMatchedRule": "開啟命中的規則",
+    "copyEndpoint": "複製端點"
   },
   "audit": {
     "pagination": "修訂記錄分頁",
@@ -492,7 +522,12 @@
     "emptyHint": "建立、修改或刪除規則與回應後，變更內容會顯示在這裡。",
     "totalCount": "共 {count} 筆",
     "filtering": "篩選中",
-    "clickClearFilter": "清除篩選"
+    "clickClearFilter": "清除篩選",
+    "loadFailed": "無法載入修訂記錄，請稍後再試。",
+    "emptyFilterResult": "找不到符合條件的修訂記錄",
+    "openRule": "開啟規則",
+    "openResponse": "開啟回應",
+    "changesTitle": "變更內容"
   },
   "monitoring": {
     "title": "資源監控",
@@ -507,7 +542,7 @@
     "unlimited": "無限重送",
     "failed": "取得快照失敗，請重新整理。",
     "stale": "更新失敗，以下仍是上次快照。",
-    "configHint": "由 echo.monitoring 設定各群組開關，預設開啟；修改設定檔後需重啟。",
+    "configHint": "快照開關：echo.monitoring；診斷開關：echo.diagnostics（預設只記異常）。修改設定檔後需重啟。",
     "disabledHint": "資源監控已由設定檔關閉。",
     "cumulativeHint": "累計數自本次程序啟動起計算；啟動時間：",
     "incompleteGroups": "{count} 組未完整採集",
@@ -528,7 +563,7 @@
       "cache": "容量為估算權重，不是精確 Heap。規則快取項目是查詢鍵數，不等於規則總數。",
       "jms": "處理結束不等於成功回覆，回覆送出也不代表呼叫端已收到。逾時只限制等待回應。清理失敗為 0 不等於暫時佇列存量為 0；目前未採集下游 broker 的連線或暫時佇列存量。",
       "http": "非取消處理結束包含錯誤回應。連線池容量是已建立池的容量上限合計，不是實際連線數；部分數據表示池統計未涵蓋全部，不影響程序級請求與緩衝計數。",
-      "database": "資料庫連線數不代表 HTTP／JMS 下游連線數。待寫入容量上限是磁碟佇列限制，不是預留 RAM。處理者運行不等於每筆已寫入；等待數須配合是否能消退判讀。",
+      "database": "資料庫連線數不代表下游連線數；待寫入容量上限不是預留 RAM。若診斷遭略過或輸出失敗，缺少 log 不能證明該階段未執行。處理者運行與錯誤數為 0 不保證每筆已寫入磁碟。",
       "scheduler": "等待工作包含尚未到期的正常延遲，不因等待數非零就代表故障。"
     },
     "summary": {
@@ -567,7 +602,7 @@
       "http": "HTTP 轉發",
       "database": "資料庫連線與寫入",
       "requestLog": "請求紀錄寫入",
-      "applicationLog": "應用程式日誌",
+      "applicationLog": "應用程式與診斷日誌",
       "storage": "本機儲存空間"
     },
     "notes": {
@@ -649,6 +684,21 @@
       "queueUsed": "佇列使用量",
       "queueCapacity": "佇列容量",
       "started": "Appender 已啟動",
+      "diagnosticEnabled": "交易診斷已啟用",
+      "diagnosticRunning": "診斷寫入者運行中",
+      "diagnosticDetailed": "暫時詳細追蹤中",
+      "diagnosticFileWriteAttempted": "已嘗試診斷寫檔",
+      "diagnosticFileAvailable": "最近診斷輸出可用",
+      "diagnosticQueueUsed": "待寫入診斷筆數",
+      "diagnosticQueueCapacity": "診斷佇列上限",
+      "diagnosticDropped": "略過的診斷筆數",
+      "diagnosticSinkFailures": "診斷輸出例外",
+      "diagnosticRateLimited": "輸出限速省略筆數",
+      "diagnosticBudgetDropped": "容量限制省略筆數",
+      "diagnosticTodayBytes": "今日診斷寫入量",
+      "diagnosticDailyLimitBytes": "每日診斷寫入上限",
+      "diagnosticRetainedBytes": "診斷檔案留存量",
+      "diagnosticRetainedLimitBytes": "診斷總留存上限",
       "dataFreeBytes": "資料磁碟可用空間",
       "backupFreeBytes": "備份磁碟可用空間"
     }
@@ -918,7 +968,12 @@
       "newPasswordPlaceholder": "至少 6 字元",
       "newPasswordInvalid": "請設定至少 6 個字元的新密碼。",
       "submit": "修改密碼"
-    }
+    },
+    "detailInfo": "帳號資訊",
+    "thUpdatedAt": "更新時間",
+    "mustChangePassword": "下次登入須修改密碼",
+    "resetRequested": "使用者已申請重設密碼。重設後會產生一組臨時密碼，請交給使用者。",
+    "resetRequestedAt": "使用者於 {time} 申請重設密碼。重設後會產生一組臨時密碼，請交給使用者。"
   },
   "modal": {
     "editResponse": "編輯回應內容",
@@ -1200,7 +1255,25 @@
     "scenarioName": "情境名稱",
     "requiredState": "前置狀態",
     "newState": "新狀態",
-    "scenarioStatePlaceholder": "例如 Started"
+    "scenarioStatePlaceholder": "例如 Started",
+    "saveAndCloseShortcut": "儲存並關閉",
+    "ruleNamePlaceholder": "為這條規則取個名字",
+    "conditionSummary": "{count} 個條件",
+    "requestPane": "請求",
+    "requestPaneHint": "符合這些條件時命中",
+    "responsePane": "回應",
+    "responsePaneHint": "命中後的處理",
+    "conditionAllMatch": "全部符合才命中",
+    "ruleSettings": "規則設定",
+    "responseTypeSseStream": "SSE 串流",
+    "pathPending": "尚未設定路徑",
+    "queuePending": "尚未設定佇列",
+    "queueMatchHint": "填 * 代表所有佇列；指定佇列名稱的規則會先比對。",
+    "jmsReplyLabel": "回覆訊息",
+    "jmsReplyHint": "CorrelationID 帶入請求的 MessageID",
+    "replyQueueFromRequest": "依請求訊息指定的佇列回覆",
+    "expandContent": "放大回應內容",
+    "collapseContent": "還原版面"
   },
   "confirm": {
     "discardRuleTitle": "放棄規則修改？",
@@ -1344,7 +1417,9 @@
     "openApiParseFailed": "OpenAPI 規格解析失敗",
     "scenarioResetSuccess": "情境已重置為 Started（初始）",
     "scenarioResetAllSuccess": "全部情境已重置為 Started（初始）",
-    "scenarioResetFailed": "情境重置失敗"
+    "scenarioResetFailed": "情境重置失敗",
+    "ruleEnabledNamed": "已啟用「{name}」",
+    "ruleDisabledNamed": "已停用「{name}」"
   },
   "validation": {
     "matchKeyRequired": "請輸入匹配鍵",
@@ -1466,7 +1541,8 @@
     "action": "操作：",
     "operator": "操作者：",
     "search": "搜尋：",
-    "type": "類型："
+    "type": "類型：",
+    "role": "角色："
   },
   "ssePreview": {
     "delay": "—— 延遲 {ms} ms ——",
@@ -1572,7 +1648,7 @@
     "jmsMessageFlow": "JMS 訊息流程",
     "jmsRuleFields": "JMS 規則欄位",
     "jmsFieldQueue": "監聽的佇列名稱，例如 <code>ORDER.REQUEST</code>",
-    "jmsFieldReplyQueue": "傳送回覆的佇列；留空時使用訊息的 ReplyTo。",
+    "jmsFieldReplyQueue": "回覆送到請求訊息指定的佇列（JMSReplyTo）；請求沒有指定時不回覆。",
     "jmsFieldDelay": "回應延遲毫秒數",
     "jmsCondMatch": "匹配訊息內容（JSON/XML），語法同 HTTP",
     "jmsCondNote": "JMS 僅支援內容條件，不支援查詢參數與標頭條件。",
@@ -1656,7 +1732,9 @@
     "registerPassword": "請輸入密碼",
     "registerSubmit": "建立帳號",
     "registerSuccess": "帳號已建立，現在可以登入。",
-    "registerBack": "返回登入"
+    "registerBack": "返回登入",
+    "environment": "{env} 環境",
+    "version": "版本"
   },
   "issues": {
     "title": "問題回報",
@@ -1714,7 +1792,10 @@
     "confirmResolve": "標記解決",
     "confirmResolveMsg": "確定將此問題標記為已解決？",
     "confirmDelete": "刪除問題",
-    "confirmDeleteMsg": "此操作無法復原，確定刪除？"
+    "confirmDeleteMsg": "此操作無法復原，確定刪除？",
+    "replied": "已回覆",
+    "editReply": "編輯回覆",
+    "conversation": "內容"
   },
   "common": {
     "close": "關閉",
@@ -1729,6 +1810,29 @@
     "removeFilter": "移除篩選：{filter}",
     "sortBy": "依{field}排序",
     "retry": "重試",
-    "loading": "載入中…"
+    "loading": "載入中…",
+    "previousItem": "上一筆",
+    "nextItem": "下一筆",
+    "loadFailed": "載入失敗",
+    "undo": "復原",
+    "moreActions": "更多操作",
+    "notifications": "通知",
+    "showAll": "顯示全文",
+    "showLess": "收合",
+    "showAllCount": "顯示全部（{count}）",
+    "expandBlock": "展開",
+    "collapseBlock": "收合",
+    "previewTruncated": "內容較大，僅顯示前 {shown}（共 {total}）",
+    "showFullContent": "顯示完整內容",
+    "widenDrawer": "加寬檢視",
+    "narrowDrawer": "恢復寬度"
+  },
+  "codeViewer": {
+    "search": "搜尋全文",
+    "wrap": "換行",
+    "format": "格式化",
+    "copy": "複製全部",
+    "status": "{lines} 行 · {size}",
+    "formattedReadOnly": "排版檢視（唯讀）· 關閉「格式化」即可編輯"
   }
 }

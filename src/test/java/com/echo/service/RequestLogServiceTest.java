@@ -58,6 +58,7 @@ class RequestLogServiceTest {
 
     private void persistMemoryTask(LogTask task) {
         RequestLogService.LogEntry entry = RequestLogService.LogEntry.builder()
+                .diagnosticId(task.getDiagnosticId())
                 .id(RequestLogService.nextMemoryId())
                 .ruleId(task.getRuleId())
                 .protocol(task.getProtocol())
@@ -99,6 +100,30 @@ class RequestLogServiceTest {
                 persistMemoryTask(supplier.get());
                 return null;
             }).when(logAgent).submitDurably(any());
+        }
+
+        @Test
+        void correlationSurvivesDurableHandoffAndIsSearchableWithoutExtraBodies() {
+            service.record(null, Protocol.JMS, null, "DEMO.REQUEST", true, 1, "JMS",
+                    null, null, false, null, null, null, 200, 0, null, null,
+                    List.of(), null, null, java.util.Map.of(), null, null, null, null, "process-123");
+            var filter = RequestLogService.QueryFilter.builder().endpoint("process-123").build();
+            assertThat(service.query(filter).getResults()).singleElement().satisfies(item ->
+                    assertThat(item.getLog().getDiagnosticId()).isEqualTo("process-123"));
+            assertThat(service.querySummary(filter).getResults()).singleElement().satisfies(item ->
+                    assertThat(item.getLog().getDiagnosticId()).isEqualTo("process-123"));
+        }
+
+        @Test
+        void proxyErrorFitsExistingColumnWithoutTruncatingResponseBody() {
+            when(configService.isRequestLogIncludeBody()).thenReturn(true);
+            when(configService.getRequestLogMaxBodySize()).thenReturn(1000);
+            String error = "e".repeat(300);
+            service.record(null, Protocol.HTTP, "GET", "/error", false, 1, "127.0.0.1",
+                    null, null, 502, error, 502, 0, null, error);
+            var entry = service.getMemoryBuffer().getFirst();
+            assertThat(entry.getProxyError()).hasSize(255);
+            assertThat(entry.getResponseBody()).isEqualTo(error);
         }
 
         @Test

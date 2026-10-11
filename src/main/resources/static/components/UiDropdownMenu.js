@@ -16,6 +16,11 @@ const UiDropdownMenu = {
     items: { type: Array, required: true },
     triggerLabel: { type: String, required: true },
     viewportSafe: Boolean,
+    // Row menus use a quiet compact trigger; page headers keep the secondary button.
+    triggerVariant: { type: String, default: 'secondary' },
+    triggerSize: { type: String, default: 'default' },
+    // The trigger shows ⋯ unless the menu offers one kind of action (e.g. insert a template).
+    triggerIcon: { type: String, default: 'bi-three-dots-vertical' },
   },
   emits: ['toggle', 'select', 'close'],
   setup(props, { emit }) {
@@ -83,12 +88,12 @@ const UiDropdownMenu = {
     return { triggerRef, menuRef, menuPosition, focusFirst, onKeydown, selectItem };
   },
   template: /* html */`
-    <div class="ui-dropdown-menu data-dropdown-wrapper">
-      <ui-button ref="triggerRef" type="button" variant="secondary" icon-only
+    <div class="ui-dropdown-menu data-dropdown-wrapper" @click.stop @dblclick.stop>
+      <ui-button ref="triggerRef" type="button" :variant="triggerVariant" :size="triggerSize" icon-only class="ui-dropdown-menu__trigger"
         :title="triggerLabel" :aria-label="triggerLabel"
         :aria-expanded="open ? 'true' : 'false'" aria-haspopup="menu"
         @click.stop="$emit('toggle')" @keydown.down.prevent="open ? focusFirst() : $emit('toggle')">
-        <i class="bi bi-three-dots-vertical" aria-hidden="true"></i>
+        <i class="bi" :class="triggerIcon" aria-hidden="true"></i>
       </ui-button>
       <Transition name="ui-popover-motion">
         <div v-if="open" ref="menuRef" class="data-dropdown ui-dropdown-menu__panel"
@@ -96,7 +101,8 @@ const UiDropdownMenu = {
           <template v-for="item in items" :key="item.key">
             <div v-if="item.dividerBefore" class="data-dropdown-divider" role="separator"></div>
             <ui-button type="button" variant="quiet" size="compact" class="data-dropdown-item ui-dropdown-menu__item"
-              role="menuitem" :disabled="item.disabled" :title="item.title" @click="selectItem(item.key)">
+              :class="{'is-danger': item.danger}"
+              role="menuitem" :disabled="item.disabled" :title="item.title" @click.stop="selectItem(item.key)">
               <i v-if="item.icon" class="bi" :class="item.icon" aria-hidden="true"></i>
               <span>{{item.label}}</span>
             </ui-button>

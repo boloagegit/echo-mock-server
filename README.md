@@ -205,6 +205,8 @@ Environment variables:
 | `ECHO_ADMIN_USERNAME` | admin | Admin username |
 | `ECHO_ADMIN_PASSWORD` | admin | Admin password |
 | `ECHO_ENV_LABEL` | DOCKER | Environment label |
+| `ECHO_UI_ACCENT` | teal | UI accent color: `teal` or `blue`, to tell deployments apart (e.g. SIT teal, UAT blue) |
+| `ECHO_UI_EASTER_EGG` | true | Hidden easter egg (a small game opened with ↑↑↓↓←→←→AB); set `false` to turn it off in production |
 | `TZ` | Asia/Taipei | Timezone |
 
 JVM options are set in the Dockerfile (default `-Xms256m -Xmx512m`, with a heap dump and process exit on OOM). Override by adding `JAVA_OPTS` to docker-compose.yml `environment`.
@@ -321,6 +323,9 @@ Administrators can create multiple Artemis/TIBCO profiles under **System Setting
 
 System Settings separates **Overview**, **Resource Monitoring**, **Forward Connections**, **Data & Backups**, and **Service Configuration**. Settings collects data on entry and explicit refresh/retry only, without polling. Resource details distinguish current usage, lifetime counters, and configured limits; see [resource snapshot semantics](docs/resource-monitoring.md) before interpreting them as health or leak evidence.
 
+[Transaction diagnostics](docs/transaction-diagnostics.md) adds bounded anomaly-only file summaries
+and Request Log correlation IDs. See the linked guide for configuration, quotas and evidence limits.
+
 For Artemis Core clients that send XML, configure the sender URL as `tcp://echo-host:61616?minLargeMessageSize=524288`. Text payloads up to roughly 256 KB then use the regular-message path instead of creating one large-message file per request, while larger messages still spill to disk to protect the heap. This is a **sender-side** connection setting, not an Echo `application.yml` property.
 
 ## Condition Matching Syntax
@@ -433,6 +438,9 @@ server:
 
 echo:
   env-label:                    # Environment label (e.g., DEV, SIT, UAT)
+  ui:
+    accent: teal                # UI accent: teal or blue (ECHO_UI_ACCENT)
+    easter-egg: true            # Hidden easter egg game (ECHO_UI_EASTER_EGG)
   remember-me:
     key: echo-remember-me-secret  # Remember Me encryption key
     validity: 180d                # Remember Me cookie validity

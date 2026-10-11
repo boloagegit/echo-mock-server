@@ -37,4 +37,11 @@ enum JmsForwardingRoute {
                 ? forwarder.forward(body, null, "7", false)
                 : forwarder.forward(body, null);
     }
+
+    String forward(JmsTargetForwarder forwarder, String body,
+                   com.echo.diagnostics.TransactionDiagnostics.Trace trace) {
+        return this == SELECTED
+                ? forwarder.forwardWithMetadata(body, null, "7", false, trace).body()
+                : forwarder.forwardWithMetadata(body, null, trace).body();
+    }
 }

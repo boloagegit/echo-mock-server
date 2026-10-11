@@ -140,10 +140,15 @@ test('actual app draft comparison distinguishes cleared and JSON-null declaratio
   }
 });
 
-test('actual app comparison includes JMS reply queue without changing the declarative contract', () => {
+test('actual app comparison follows the JMS queue; replies follow the request, so there is no reply-queue draft', () => {
   const h = appDraftHarness();
-  h.form.value.replyQueue = 'REPLY.ORDER';
-  assert.equal(h.guard.isDirty(), true);
+  h.form.value.matchKey = 'ORDER.V2';
+  assert.equal(h.guard.isDirty(), true, 'changing the queue is an unsaved change');
+  // Mock replies always go to the request's JMSReplyTo; the editor shows that instead of an input that was never saved.
+  const fresh = appDraftHarness();
+  fresh.form.value.replyQueue = 'REPLY.ORDER';
+  assert.equal(fresh.guard.isDirty(), false);
+  assert.ok(!source('components/RuleEditModal.js').includes('v-model="form.replyQueue"'));
 });
 
 test('complete save interval locks both editor bodies and mode controls, including before and after the API response', () => {
@@ -259,32 +264,33 @@ test('finishing every tour step also restores its entry context', () => {
   assert.equal(h.tour.tourStep.value, 0);
 });
 
-function menuPosition(trigger, bounds, width = 168, height = 76) {
-  const context = vm.createContext({ trigger, bounds, width, height,
-    shortId() {}, parseTags() {}, condTags() {}, fmtTime() {} });
-  vm.runInContext(source('components/RuleListParts.js') + '\nthis.position = ruleMenuPosition(trigger, bounds, width, height);', context);
-  return context.position;
+// Rule rows use the shared UiRowMenu, which positions through UiDropdownMenu's viewport-safe helper.
+function rowMenuPosition(trigger, viewport, menu = { width: 184, height: 150 }) {
+  const context = vm.createContext({ trigger, menu, viewport, Vue: {} });
+  vm.runInContext(source('components/UiDropdownMenu.js') + '\nthis.position = dropdownViewportPosition(trigger, menu, viewport);', context);
+  return Object.fromEntries(Object.entries(context.position).map(([k, v]) => [k, typeof v === 'string' && v.endsWith('px') ? parseFloat(v) : v]));
 }
 
-test('lower-edge menu is clamped above the table footer, including its last action', () => {
-  const bounds = { left: 233, right: 1415, top: 139, bottom: 830 };
-  const p = menuPosition({ left: 1371, top: 812, height: 32 }, bounds);
-  assert.equal(p.top, 750);
-  assert.ok(p.top + 76 <= bounds.bottom - 4);
+test('lower-edge row menu opens above its trigger, including its last action', () => {
+  const viewport = { width: 1440, height: 900 };
+  const p = rowMenuPosition({ right: 1403, top: 812, bottom: 844 }, viewport);
+  assert.equal(p.top, 658);
+  assert.ok(p.top + 150 <= viewport.height - 8);
 });
 
-test('first-row menu retains its nearby placement', () => {
-  const p = menuPosition({ left: 1371, top: 199, height: 32 }, { left: 233, right: 1415, top: 139, bottom: 830 });
-  assert.equal(p.top, 177);
-  assert.equal(p.left, 1199);
+test('first-row menu opens directly below its trigger', () => {
+  const p = rowMenuPosition({ right: 1403, top: 199, bottom: 231 }, { width: 1440, height: 900 });
+  assert.equal(p.top, 235);
+  assert.equal(p.left, 1219);
 });
 
-test('narrow and top-edge menus stay inside the available viewport', () => {
-  const bounds = { left: 24, right: 366, top: 139, bottom: 760 };
-  const p = menuPosition({ left: 112, top: 143, height: 32 }, bounds);
-  assert.ok(p.left >= bounds.left + 4);
-  assert.ok(p.left + 168 <= bounds.right - 4);
-  assert.ok(p.top >= bounds.top + 4);
+test('narrow and top-edge row menus stay inside the available viewport', () => {
+  const viewport = { width: 390, height: 844 };
+  const p = rowMenuPosition({ right: 120, top: 143, bottom: 175 }, viewport);
+  assert.ok(p.left >= 8);
+  assert.ok(p.left + 184 <= viewport.width - 8);
+  assert.ok(p.top >= 8);
+  assert.equal(source('components/UiRowMenu.js').includes('viewport-safe'), true);
 });
 
 test('narrow rule editor footer keeps its validation hint separate from actions', () => {
@@ -343,10 +349,25 @@ test('a failed save never reports clean state and retains the draft', async () =
 test('all sidebar buttons have permanent names and current-page semantics', () => {
   const sidebar = source('components/SidebarNav.js');
   const buttons = sidebar.match(/<button[^>]*class="nav-item"[^>]*>/g);
-  assert.equal(buttons.length, 14);
+  assert.equal(buttons.length, 7);
   assert.ok(buttons.every(button => button.includes(':aria-label=')));
   assert.equal(buttons.filter(button => button.includes(':aria-current=')).length, 7);
   assert.ok(!sidebar.includes("helpSeen ? $emit"));
+  // Preferences and account actions moved into the user menu; each keeps a visible, localized name.
+  const trigger = sidebar.match(/<button[^>]*class="user-trigger"[^>]*>/s)[0];
+  for (const attribute of [':aria-label=', ':aria-expanded=', 'aria-controls="sidebar-user-menu"', 'aria-haspopup="dialog"']) {
+    assert.ok(trigger.includes(attribute), attribute);
+  }
+  // Each item pairs a decorative Echo icon with its visible, localized name.
+  const menuItems = sidebar.match(/<button[^>]*class="user-menu__item[^"]*"[^>]*>\s*<ui-icon name="\w+"><\/ui-icon><span>\{\{t\('sidebar\.\w+'\)\}\}<\/span>/g);
+  assert.equal(menuItems.length, 4);
+  for (const action of ['show-help', 'change-password', 'logout', 'login']) {
+    assert.ok(sidebar.includes("runMenuAction('" + action + "')"), action);
+  }
+  for (const control of ['sidebar.appearance', 'sidebar.density', 'sidebar.language']) {
+    assert.ok(sidebar.includes(':aria-label="t(\'' + control + '\')"'), control);
+  }
+  assert.ok(sidebar.includes('@keydown.esc.prevent="closeUserMenu()"'));
 });
 
 test('condition controls and discard text are localized in both supported languages', () => {

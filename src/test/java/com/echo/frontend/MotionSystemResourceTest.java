@@ -35,13 +35,20 @@ class MotionSystemResourceTest {
                     .contains("<ui-modal-transition>")
                     .contains("</ui-modal-transition>");
         }
+        // Mock / forward / fault panels swap in one frame: an out-in transition left a blank frame between them.
         assertThat(resourceText("static/components/RuleEditModal.js"))
-                .contains("<Transition name=\"ui-mode-panel-motion\" mode=\"out-in\">");
-        for (String list : new String[]{
-                "RulesPage", "RuleGroupRow", "ResponsesPage", "AuditPage", "IssuesPage", "StatsPage"}) {
-            assertThat(resourceText("static/components/" + list + ".js"))
-                    .contains("<Transition name=\"ui-detail-row-motion\">");
-        }
+                .doesNotContain("<Transition name=\"ui-mode-panel-motion\"")
+                .doesNotContain("mode=\"out-in\"");
+        // Issues moved from an expanded row to the shared drawer as well.
+        assertThat(resourceText("static/components/IssuesPage.js")).contains("<ui-detail-drawer class=\"issue-detail-drawer\"");
+        // Rule details moved from an expanded row to the shared drawer, which animates and honours reduced motion.
+        assertThat(resourceText("static/components/UiDetailDrawer.js")).contains("<Transition name=\"ui-drawer-motion\">");
+        assertThat(resourceText("static/components/ResponsesPage.js")).contains("<response-detail");
+        assertThat(resourceText("static/components/StatsPage.js")).contains("<ui-detail-drawer class=\"log-detail-drawer\"");
+        assertThat(resourceText("static/components/AuditPage.js")).contains("<ui-detail-drawer class=\"audit-detail-drawer\"");
+        assertThat(resourceText("static/console.css"))
+                .contains(".ui-drawer-motion-enter-active,")
+                .contains("@media (prefers-reduced-motion: reduce) {\n    .ui-drawer-motion-enter-active,");
     }
 
     @Test
@@ -58,7 +65,7 @@ class MotionSystemResourceTest {
                 .contains("width: 16px;")
                 .contains("height: 16px;")
                 .contains(".ui-modal-motion-enter-active")
-                .contains(".ui-mode-panel-motion-enter-active")
+                .doesNotContain(".ui-mode-panel-motion-enter-active")
                 .contains(".ui-detail-row-motion-enter-active")
                 .contains("@media (prefers-reduced-motion: reduce)")
                 .contains("transition-duration: 0.01ms !important")

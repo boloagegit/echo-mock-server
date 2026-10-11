@@ -112,7 +112,7 @@ const ChangePasswordModal = {
     <div v-if="show" class="modal-overlay" @keydown="handleKeydown">
       <div ref="dialog" class="modal-box workspace-modal credential-modal" role="dialog" aria-modal="true" aria-labelledby="changePasswordTitle">
         <div class="modal-header">
-          <div class="modal-heading"><span class="modal-heading-icon"><i class="bi bi-shield-lock" aria-hidden="true"></i></span><h2 id="changePasswordTitle">{{t('accounts.changePassword.title')}}</h2></div>
+          <div class="modal-heading"><h2 id="changePasswordTitle">{{t('accounts.changePassword.title')}}</h2></div>
           <ui-button v-if="!required" type="button" class="close-btn" @click="$emit('close')" :aria-label="t('modal.cancel')"><i class="bi bi-x-lg" aria-hidden="true"></i></ui-button>
         </div>
         <div class="modal-body credential-modal-body">

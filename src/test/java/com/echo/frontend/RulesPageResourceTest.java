@@ -31,7 +31,9 @@ class RulesPageResourceTest {
         assertThat(component)
                 .doesNotContain("rule-drag-toggle")
                 .doesNotContain("update:ruleDragEnabled")
-                .contains("<td v-if=\"canDragRules\" class=\"drag-handle-cell\"");
+                .contains(":can-drag=\"canDragRules\"");
+        assertThat(resourceText("static/components/RuleTable.js"))
+                .contains("<td v-if=\"canDrag\" class=\"col-drag drag-handle-cell\" draggable=\"true\"");
     }
 
     @Test
@@ -47,24 +49,22 @@ class RulesPageResourceTest {
 
     @Test
     void prioritizesEditingAndKeepsSecondaryRowActionsInACompactDisclosure() throws IOException {
-        String component = resourceText("static/components/RuleListParts.js");
+        String table = resourceText("static/components/RuleTable.js");
+        String page = resourceText("static/components/RulesPage.js");
 
-        assertThat(component)
-                .contains("class=\"btn btn-sm btn-secondary rule-row-edit\"")
-                .contains("class=\"rule-row-more\"")
-                .contains("t('rules.moreActions')")
-                .contains("class=\"rule-row-more-popover\"")
-                .contains("class=\"btn btn-sm btn-icon btn-secondary rule-row-disclosure\"")
-                .contains("@click=\"$emit('toggle-rule-preview',rule)\"")
-                .contains("invoke('show-rule-history',$event)")
-                .contains("invoke('copy-rule',$event)")
-                .doesNotContain("class=\"dblclick-hint\"");
-        for (String page : new String[]{"RulesPage", "RuleGroupRow"}) {
-            assertThat(resourceText("static/components/" + page + ".js"))
-                    .contains("<rule-row-actions")
-                    .contains("<rule-list-identity")
-                    .contains("@show-rule-history=\"$emit('show-rule-history',$event)\"");
-        }
+        // Edit stays one click away; history, copy, export and delete live in the row's ⋯ menu.
+        assertThat(table)
+                .contains("@click=\"$emit('edit', r)\"")
+                .contains("<ui-row-menu :items=\"menuItems(r)\" :label=\"t('common.moreActions') + ' ' + r.matchKey\"")
+                .contains("{ key: 'history', label: t('rules.history')")
+                .contains("{ key: 'copy', label: t('rules.quickCopy')")
+                .contains("{ key: 'delete', label: t('rules.delete'), icon: 'bi-trash', danger: true")
+                .doesNotContain("dblclick-hint");
+        assertThat(page)
+                .contains("if (action === 'copy') this.$emit('copy-rule', rule);")
+                .contains("else if (action === 'history') this.$emit('show-rule-history', rule);")
+                .contains("@menu=\"handleRowMenu\"")
+                .doesNotContain("showDblClickHint");
     }
 
     @Test

@@ -1,4 +1,10 @@
-/** UiToggle - controlled 32px switch with an accessible 32px hit area. */
+/**
+ * UiToggle - controlled 32px switch with an accessible 32px hit area.
+ *
+ * Drawn from the `checked` prop (aria-checked), not from a native checkbox: a checkbox whose
+ * click is cancelled restores its old state after the event, which hid changes the parent made
+ * during the click (the editor's enabled / protected switches looked unchanged).
+ */
 const UiToggle = {
   props: {
     checked: { type: Boolean, default: false },
@@ -7,9 +13,9 @@ const UiToggle = {
   },
   emits: ['toggle'],
   template: /* html */`
-    <label class="ui-toggle" :class="{'is-disabled':disabled}" @click.stop>
-      <input type="checkbox" :checked="checked" :disabled="disabled" :aria-label="ariaLabel" @click.prevent.stop="$emit('toggle')">
+    <button type="button" role="switch" class="ui-toggle" :class="{'is-disabled':disabled}" :aria-checked="checked ? 'true' : 'false'"
+      :aria-label="ariaLabel" :disabled="disabled" @click.stop="$emit('toggle')">
       <span class="ui-toggle__track" aria-hidden="true"></span>
-    </label>
+    </button>
   `
 };

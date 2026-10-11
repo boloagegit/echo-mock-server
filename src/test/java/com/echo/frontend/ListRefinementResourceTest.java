@@ -28,7 +28,6 @@ class ListRefinementResourceTest {
                 .contains("--font-weight-medium: 500;")
                 .contains("--font-weight-semibold: 600;")
                 .contains("--font-weight-bold: 700;")
-                .contains(".workspace-row-primary {\n    min-width: 0;\n    min-height: var(--workspace-row-primary-h);\n    display: flex;\n    align-items: center;\n    line-height: 20px;")
                 .contains(".btn-sm { min-height: var(--control-h-sm);")
                 .contains(".btn-xs { min-height: var(--control-h-sm);")
                 .contains(".btn-icon { padding: 0.3rem; width: var(--control-h); height: var(--control-h);")
@@ -36,41 +35,38 @@ class ListRefinementResourceTest {
                 .contains(".btn-xs.btn-icon { width: max(32px, var(--control-h-sm)); height: max(32px, var(--control-h-sm));")
                 .contains(".workspace-pagination .pagination-controls .btn { width: max(32px, var(--control-h-sm)); height: max(32px, var(--control-h-sm)); min-height: max(32px, var(--control-h-sm));")
                 .contains(".workspace-page-size .form-control {\n    width: 76px;\n    min-height: var(--control-h-sm);")
-                .contains(".connection-actions {\n    display: flex;")
-                .contains(".connection-action-group { display: flex;")
-                .contains(".connection-action-management {\n    padding-inline-start: var(--space-md);")
                 .contains("min-height: var(--control-h-sm);")
                 .contains(".btn:disabled, .btn.disabled { opacity: 0.55;")
                 .contains(".tag-add-inline input {\n    width: 65px;\n    min-height: var(--control-h-sm);")
                 .contains(".tag-add-inline button {\n    width: max(32px, var(--control-h-sm));")
                 .contains(".tag-add-inline button:focus-visible { outline: 2px solid var(--primary);")
                 .contains(".help-tooltip {\n    position: relative;\n    width: 32px;\n    height: 32px;\n    flex: 0 0 32px;")
-                .contains(".rule-table-hint > summary { width: 32px; height: 32px;")
-                .contains(".rule-table-hint-popover > button { width: 32px; height: 32px; flex: 0 0 32px;")
-                .contains(".rule-filter-bar .btn-group .btn { height: var(--toolbar-h); min-height: var(--toolbar-h);")
                 .contains(".connection-form-modal .modal-close {\n    width: 32px;\n    height: 32px;")
                 .contains(".connection-form-modal .modal-close:focus-visible { outline: 0;")
                 .contains("th { height: 40px;")
                 .contains("transition-property: background-color, border-color, color, box-shadow, transform;")
                 .contains(".btn:active:not(:disabled) { transform: scale(0.96) }")
-                .contains(".rule-endpoint-main code { min-width: 0; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: var(--font-base); font-weight: var(--font-weight-medium) }")
+                // Legacy row, toolbar and connection-action layouts were replaced by the shared list system.
+                .doesNotContain(".workspace-row-primary {")
+                .doesNotContain(".rule-filter-bar .btn-group .btn {")
+                .doesNotContain(".connection-action-group {")
                 .doesNotContain("font-weight: 550")
                 .doesNotContain("font-weight: 650");
         assertThat(theme)
-                .contains("--primary-strong: #174b87;")
+                .contains("--primary-strong: #075e53;")
+                .contains("--primary-strong: #1b4799;")
                 .contains("--success-strong: #145f3a;")
                 .contains("--warning-strong: #684709;");
         assertThat(css)
-                .contains(".cond-tag .cond-label { background: rgba(var(--warning-rgb), 0.2); color: var(--warning-strong) }")
-                .contains(".cond-tag.query .cond-label { background: rgba(var(--primary-rgb), 0.2); color: var(--primary-strong) }")
-                .contains(".cond-tag.header .cond-label { background: rgba(var(--success-rgb), 0.2); color: var(--success-strong) }");
+                // Condition kinds are told apart by the shared cond-chip colours (see SignalConsoleListResourceTest).
+                .doesNotContain(".cond-tag .cond-label {");
 
-        int protocolStart = css.lastIndexOf(".badge-http {");
-        String protocolRule = css.substring(protocolStart, css.indexOf('}', protocolStart));
-        assertThat(protocolRule)
-                .contains("background: var(--surface-control)")
-                .contains("color: var(--text)")
-                .doesNotContain("color: var(--primary)");
+        // Protocol is shown by the method column's own colours, never the deployment accent;
+        // the old protocol badge is gone.
+        assertThat(css).doesNotContain(".badge-http {");
+        assertThat(text("console.css"))
+                .contains(".rule-method[data-protocol=\"JMS\"] { color: var(--protocol-jms) }")
+                .doesNotContain(".rule-method[data-protocol=\"JMS\"] { color: var(--primary) }");
     }
 
     @Test
@@ -97,27 +93,27 @@ class ListRefinementResourceTest {
         assertThat(contractStart).isGreaterThan(0);
         String contract = css.substring(contractStart);
         assertThat(contract)
-                .contains(".ui-button {\n    height: 36px;\n    min-height: 36px;\n    padding: 0 12px;")
+                .contains(".ui-button {\n    height: var(--control-h);\n    min-height: var(--control-h);\n    padding: 0 12px;")
                 .contains("gap: 7px;")
                 .contains("border-radius: 6px;")
                 .contains(".ui-button > i { font-size: 16px;")
-                .contains(".ui-button--compact { height: 32px; min-height: 32px;")
+                .contains(".ui-button--compact { height: var(--control-h-sm); min-height: var(--control-h-sm);")
                 .contains("border-radius: 5px")
                 .contains(".ui-button--quiet { border-color: transparent; background: transparent; color: var(--primary) }")
                 .contains(".ui-button--danger { border-color: rgba(var(--danger-rgb), 0.5); background: transparent; color: var(--danger-text) }")
                 .contains(".ui-button:disabled, .ui-button.disabled { opacity: 0.55;")
-                .contains(".card-table .col-actions .ui-button--secondary,");
+                .contains(".card-table .col-actions .ui-button--secondary {");
 
         assertThat(text("components/RuleEditModal.js"))
                 .contains("<ui-button variant=\"quiet\" :disabled=\"saving\" @click=\"$emit('close')\">{{t('modal.cancel')}}</ui-button>")
-                .contains("<ui-button class=\"btn btn-secondary\" @click=\"$emit('save',false)\"");
+                .contains("<ui-button variant=\"secondary\" @click=\"$emit('save',false)\"");
 
         Pattern directLegacyButton = Pattern.compile("<button\\b[^>]*class=\\\"(?:btn(?:\\s|\\\")|[^\\\"]+\\sbtn(?:\\s|\\\"))");
         for (String page : new String[]{
                 "AccountsPage", "AuditPage", "ChangePasswordModal", "ConfirmModal", "ImportModal",
                 "IssuesPage", "OpenApiPreviewModal", "PriorityHelpModal", "ResponseEditModal",
-                "ResponsesPage", "RuleApplyModal", "RuleEditModal", "RuleGroupRow", "RuleListParts",
-                "RulesPage", "SettingsPage", "StatsPage", "TourOverlay", "WorkspacePagination"
+                "ResponsesPage", "RuleApplyModal", "RuleEditModal", "RuleTable", "RuleDetail",
+                "RulesPage", "SettingsPage", "StatsPage", "TourOverlay", "WorkspacePagination", "UiDetailDrawer"
         }) {
             String source = text("components/" + page + ".js");
             assertThat(source).as(page).contains("<ui-button");
@@ -130,7 +126,7 @@ class ListRefinementResourceTest {
         assertThat(text("index.html"))
                 .contains("/components/UiBadge.js?v=20260909.2")
                 .contains("/components/UiStatus.js?v=20260909.1")
-                .contains("/components/UiToggle.js?v=20260909.1")
+                .contains("/components/UiToggle.js?v=20261007.15")
                 .contains("/components/UiSegmentedControl.js?v=20260912.1")
                 .contains("/components/UiToggleGroup.js?v=20260912.1")
                 .contains("/components/UiFilterChipList.js?v=20260909.3");
@@ -149,10 +145,17 @@ class ListRefinementResourceTest {
         assertThat(text("components/UiStatus.js"))
                 .contains("`ui-status--${props.tone}`")
                 .contains("ui-status__dot");
+        // The switch is drawn from its value, so a change made during the click always shows
+        // (a cancelled native checkbox restored its old look and hid the editor's enabled / protected changes).
         assertThat(text("components/UiToggle.js"))
-                .contains("class=\"ui-toggle\"")
+                .contains("<button type=\"button\" role=\"switch\" class=\"ui-toggle\"")
+                .contains(":aria-checked=\"checked ? 'true' : 'false'\"")
                 .contains(":aria-label=\"ariaLabel\"")
-                .contains("@click.prevent.stop=\"$emit('toggle')\"");
+                .contains("@click.stop=\"$emit('toggle')\"")
+                .doesNotContain("type=\"checkbox\"");
+        assertThat(text("style.css"))
+                .contains(".ui-toggle[aria-checked=\"true\"] .ui-toggle__track { border-color: var(--btn-primary); background: var(--btn-primary) }")
+                .doesNotContain(".ui-toggle input:checked");
         assertThat(text("components/UiSegmentedControl.js"))
                 .contains("class=\"ui-segmented-control\"")
                 .contains("role=\"radiogroup\"")
@@ -190,24 +193,29 @@ class ListRefinementResourceTest {
                 .doesNotContain("inset 0 -2px 0 var(--primary)")
                 .doesNotContain(".ui-toggle-group__check { color: currentColor }")
                 .doesNotContain(".ui-toggle-group__check { width: 13px; opacity: 0 }")
-                .contains(".ui-filter-chip-list { min-height: 32px; margin: 0 0 var(--space-sm);")
+                .contains(".ui-filter-chip-list { min-height: var(--control-h-sm); margin: 0 0 var(--space-sm);")
                 .doesNotContain(".filter-chips { min-height: 28px; margin: calc(var(--space-xs) * -1)")
                 .doesNotContain("margin: -0.5rem 0 0.5rem 0;")
                 .contains(".ui-filter-chip-list .ui-filter-chip .chip-remove {")
-                .contains("input.form-control:not([type=\"checkbox\"]):not([type=\"radio\"]),\nselect.form-control,\nselect.form-select { height: 36px;")
+                .contains("input.form-control:not([type=\"checkbox\"]):not([type=\"radio\"]),\nselect.form-control,\nselect.form-select { height: var(--control-h);")
                 .contains(".form-control-sm,\ninput.form-control-sm:not([type=\"checkbox\"]):not([type=\"radio\"]),")
                 .contains(".form-label { font-size: 12px;")
                 .contains(".invalid-feedback { font-size: 11px;");
 
-        for (String page : new String[]{"AccountsPage", "AuditPage", "IssuesPage", "ResponsesPage",
-                "RuleEditModal", "RuleGroupRow", "RuleListParts", "RulesPage", "SettingsPage", "StatsPage"}) {
+        for (String page : new String[]{"AccountsPage", "AuditPage", "ResponsesPage",
+                "RuleEditModal", "RuleTable", "RuleDetail", "RulesPage", "StatsPage"}) {
             assertThat(text("components/" + page + ".js"))
                     .as(page + " semantic badges")
                     .doesNotContain("<span class=\"badge")
                     .contains("<ui-badge");
         }
+        // Issue state is a dot status like rules and accounts.
+        assertThat(text("components/IssuesPage.js")).contains("<ui-status").doesNotContain("<span class=\"badge");
+        // Settings shows states (agents, JMS, LDAP) as dot statuses and needs no badges.
         assertThat(text("components/SettingsPage.js"))
                 .contains("<ui-status")
+                .doesNotContain("<span class=\"badge")
+                .doesNotContain("badge bg-")
                 .contains("<connection-targets-table")
                 .doesNotContain("status-on")
                 .doesNotContain("status-off");
@@ -219,13 +227,13 @@ class ListRefinementResourceTest {
                 .doesNotContain("status-on")
                 .doesNotContain("status-off");
         assertThat(text("components/RulesPage.js")).contains("<ui-toggle").doesNotContain("toggle-slider");
-        assertThat(text("components/RuleGroupRow.js")).contains("<ui-toggle").doesNotContain("toggle-slider");
+        assertThat(text("components/RuleTable.js")).contains("<ui-toggle ").doesNotContain("toggle-slider");
         assertThat(text("components/WorkspaceSearchField.js")).contains("<ui-button").doesNotContain("<button");
     }
 
     @Test
     void listFiltersUseSharedControlsWithCorrectSelectionSemantics() throws IOException {
-        for (String page : new String[]{"RulesPage", "ResponsesPage", "AuditPage", "StatsPage"}) {
+        for (String page : new String[]{"RulesPage", "ResponsesPage", "AuditPage", "StatsPage", "AccountsPage", "IssuesPage"}) {
             String source = text("components/" + page + ".js");
             assertThat(source).as(page + " toggle groups")
                     .contains("<ui-toggle-group")
@@ -235,12 +243,11 @@ class ListRefinementResourceTest {
                     .doesNotContain("class=\"filter-chips\"")
                     .doesNotContain("class=\"filter-chip\"");
         }
+        // Optional list filters are clearable toggles; a required "All" radio no longer exists.
         for (String page : new String[]{"AccountsPage", "IssuesPage"}) {
-            assertThat(text("components/" + page + ".js"))
-                    .as(page + " required filters")
-                    .contains("<ui-segmented-control")
-                    .contains("size=\"compact\"")
-                    .doesNotContain("<div class=\"btn-group\"");
+            assertThat(text("components/" + page + ".js")).as(page + " optional filters")
+                    .doesNotContain("filterAllRoles")
+                    .doesNotContain("t('issues.all')");
         }
         for (String locale : new String[]{"en", "zh-TW"}) {
             var common = new ObjectMapper().readTree(text("i18n/" + locale + ".json")).path("common");
@@ -276,24 +283,32 @@ class ListRefinementResourceTest {
     }
 
     @Test
-    void rulePreviewUsesTheSharedDenseInformationLayout() throws IOException {
-        String css = text("style.css");
-        for (String page : new String[]{"RulesPage", "RuleGroupRow"}) {
-            assertThat(text("components/" + page + ".js"))
-                    .as(page + " rule preview hierarchy")
-                    .contains("class=\"pv-header-context\"")
-                    .contains("shortId(rulePreviewCache[")
-                    .contains("class=\"pv-field pv-field-wide\"")
-                    .contains("class=\"pv-main\"")
-                    .contains("class=\"pv-body ui-detail-panel\"");
-        }
-        assertThat(css)
-                .contains(".pv-header-context {")
-                .contains("border-bottom: 1px solid var(--separator);")
-                .contains("grid-template-columns: minmax(280px, 0.9fr) minmax(360px, 1.35fr);")
-                .contains("@container (min-width: 960px)")
-                .contains(".pv-fields > .pv-field-wide,")
-                .contains(".pv-fields,\n    .pv-body { padding: var(--space-sm) }");
+    void ruleDetailDrawerUsesTheSharedDetailLayout() throws IOException {
+        String detail = text("components/RuleDetail.js");
+        String console = text("console.css");
+
+        assertThat(detail)
+                .contains("<ui-detail-drawer")
+                .contains("<ui-detail-section id=\"rule.conditions\"")
+                .contains("class=\"detail-grid\"")
+                .contains("t('rules.pvSectionConditions')")
+                .contains("t('rules.pvSectionResponse')")
+                .contains("t('rules.pvSectionSettings')")
+                // Searching and copying the response body happen in the shared code viewer.
+                .contains("<ui-code-viewer v-else-if=\"body\"");
+        assertThat(text("components/RulesPage.js"))
+                .contains("<rule-detail")
+                .contains(":has-prev=\"detailIndex > 0\"")
+                .doesNotContain("rulePreviewExpanded")
+                .doesNotContain("pvHighlight");
+        assertThat(console)
+                .contains(".ui-detail-drawer {")
+                .contains(".detail-grid { display: grid; grid-template-columns: 116px minmax(0, 1fr);")
+                // The drawer floats over the list (no layout push) and goes full screen on phones.
+                .doesNotContain(".main:has(.ui-detail-drawer)")
+                .contains("border-radius: var(--radius-surface);\n    background: var(--card);")
+                .contains(".ui-detail-drawer { inset: 0; width: 100vw; border: 0; border-radius: 0 }")
+                .contains("@container (max-width: 860px) {\n    .rule-table .col-cond { display: none }");
     }
 
     @Test
@@ -310,8 +325,12 @@ class ListRefinementResourceTest {
                 .contains("this.t('settings.authBearerToken')")
                 .contains("class=\"sub-info connection-queue\"")
                 .contains("class=\"connection-source-value\"");
+        // The rule drawer wraps long forward targets instead of overflowing.
+        assertThat(text("console.css"))
+                .contains(".rule-detail-forward { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px }")
+                .contains(".detail-grid dd { min-width: 0; margin: 0; color: var(--text); overflow-wrap: anywhere }");
         assertThat(css)
-                .contains(".pv-forward-target {")
+                .doesNotContain(".pv-forward-target {")
                 .contains("overflow-wrap: anywhere;")
                 .contains(".connection-queue,\n.connection-source-value {")
                 .contains(".connection-name { min-width: 0; overflow-wrap: anywhere; white-space: normal;");
@@ -327,37 +346,26 @@ class ListRefinementResourceTest {
 
     @Test
     void ruleRowsShareOneTopAlignmentSlotAcrossColumns() throws IOException {
+        // Rule rows are single-line data-table rows, so every column shares one baseline;
+        // the multi-line alignment slot of the old rule table is gone.
+        assertThat(text("components/RuleTable.js")).contains("class=\"data-table rule-table");
+        assertThat(text("console.css")).contains(".data-table td {");
         assertThat(text("style.css"))
-                .contains("--rule-row-primary-h: 32px;")
-                .contains("min-height: var(--rule-row-primary-h);")
-                .contains(".rule-list-table td.col-cond > .cond-list,")
-                .contains(".rule-list-table td.col-priority .table-metadata,")
-                .contains(".rule-list-table td.col-datetime .table-date-stack > .sub-info:first-child,")
-                .contains(".rule-list-table td.rule-row-action-column .rule-row-actions {")
-                .contains("justify-content: center;");
+                .doesNotContain("--rule-row-primary-h: 32px;")
+                .doesNotContain(".rule-list-table td.rule-row-action-column .rule-row-actions {");
     }
 
     @Test
-    void multiLineWorkspaceListsShareOnePrimaryAlignmentSlot() throws IOException {
-        String css = text("style.css");
-        assertThat(css)
-                .contains(".workspace-primary-aligned-table {")
-                .contains("--workspace-row-primary-h: 32px;")
-                .contains(".workspace-primary-aligned-table tbody > tr:not(.rule-preview-row):not(.audit-expand):not(.log-detail-row) > td {")
-                .contains("padding-block: var(--space-xs);")
-                .contains("vertical-align: top;")
-                .contains(".workspace-row-primary {")
-                .contains("min-height: var(--workspace-row-primary-h);")
-                .contains(".workspace-row-primary-end { justify-content: flex-end }");
-
-        for (String page : new String[]{"ResponsesPage", "StatsPage", "AuditPage", "IssuesPage", "AccountsPage"}) {
-            assertThat(text("components/" + page + ".js"))
-                    .as(page + " aligned list rows")
-                    .contains("workspace-primary-aligned-table")
-                    .contains("workspace-row-primary");
+    void everyListRendersTheSharedDataTableRowInsteadOfTheAlignedSlot() throws IOException {
+        // The aligned-row slot existed to line up multi-line legacy rows; every list now uses data-table rows.
+        for (String page : new String[]{"RuleTable", "ResponsesPage", "StatsPage", "AuditPage", "AccountsPage", "IssuesPage", "SettingsPage"}) {
+            assertThat(text("components/" + page + ".js")).as(page)
+                    .doesNotContain("workspace-primary-aligned-table")
+                    .doesNotContain("workspace-row-primary");
         }
-        assertThat(text("components/SettingsPage.js"))
-                .doesNotContain("workspace-primary-aligned-table");
+        for (String page : new String[]{"RuleTable", "ResponsesPage", "StatsPage", "AuditPage", "AccountsPage", "IssuesPage"}) {
+            assertThat(text("components/" + page + ".js")).as(page).contains("class=\"data-table");
+        }
     }
 
     @Test
@@ -372,16 +380,13 @@ class ListRefinementResourceTest {
                 .contains(".ui-segmented-control__check {\n    position: absolute;")
                 .contains(".ui-segmented-control--compact .ui-segmented-control__check { display: none }")
                 .contains(".ui-segmented-control--compact .ui-segmented-control__option.is-selected {")
-                .contains(".pv-header {\n        display: grid;")
-                .contains(".pv-header-actions {\n        grid-column: 1 / -1;")
-                .contains(".audit-list-table .audit-time-column,")
-                .contains(".issues-list-table .issue-disclosure-column { width: 48px }")
-                .contains("select.form-select-sm { height: 32px;")
+                // The old inline preview header (pv-*) became the shared detail drawer header.
+                .doesNotContain(".pv-header {")
+                .doesNotContain(".issues-list-table .issue-disclosure-column")
+                .contains("select.form-select-sm { height: var(--control-h-sm);")
                 .contains(".response-editor-modal .response-sse-table .form-control-sm {\n    min-height: 32px;")
                 .contains(".response-editor-modal .response-sse-table tbody tr {")
                 .contains("grid-template-areas:")
-                .contains(".detail-row-cell { padding: 0 !important }")
-                .contains(".table-row-actions {")
                 .contains(".workspace-modal[tabindex=\"-1\"]:focus-visible { outline: 0 }")
                 .contains(".rule-apply-inline > .rule-apply-body {")
                 .contains("grid-template-columns: repeat(2, minmax(0, 1fr))")
@@ -389,15 +394,15 @@ class ListRefinementResourceTest {
 
         for (String page : new String[]{
                 "AccountsPage", "AuditPage", "IssuesPage", "ResponsesPage", "RuleEditModal",
-                "RuleGroupRow", "RulesPage", "SettingsPage", "SidebarNav", "StatsPage", "ToastContainer"
+                "RuleTable", "RuleDetail", "RulesPage", "SettingsPage", "SidebarNav", "StatsPage", "ToastContainer",
+                "UiDetailDrawer", "UiRowMenu", "ResponseDetail"
         }) {
             assertThat(text("components/" + page + ".js"))
                     .as(page + " static inline styles")
                     .doesNotContain(" style=\"");
         }
         assertThat(text("components/ResponsesPage.js"))
-                .contains("variant=\"danger\" size=\"compact\" icon-only")
-                .contains("class=\"detail-row-cell\"");
+                .contains("{ key: 'delete', label: t('responses.delete'), icon: 'bi-trash', danger: true");
     }
 
     @Test
@@ -411,7 +416,7 @@ class ListRefinementResourceTest {
 
     @Test
     void everySortableTableHeaderHasKeyboardControlAndSortState() throws IOException {
-        for (String page : new String[]{"RulesPage", "ResponsesPage", "AuditPage", "AccountsPage", "IssuesPage", "StatsPage"}) {
+        for (String page : new String[]{"RuleTable", "ResponsesPage", "AuditPage", "AccountsPage", "IssuesPage", "StatsPage"}) {
             String source = text("components/" + page + ".js");
             assertThat(Pattern.compile("<th\\b[^>]*@click").matcher(source).find()).as(page).isFalse();
             assertThat(source).contains("<ui-table-sort-header").contains(":aria-sort=");
@@ -422,7 +427,7 @@ class ListRefinementResourceTest {
     void listHeadersMenusAndLoadStatesUseSharedAccessiblePrimitives() throws IOException {
         assertThat(text("index.html"))
                 .contains("/components/UiTableSortHeader.js?v=20260909.1")
-                .contains("/components/UiDropdownMenu.js?v=20261001.1")
+                .contains("/components/UiDropdownMenu.js?v=20261007.21")
                 .contains("/components/UiLoadState.js?v=20260909.1");
         assertThat(text("app.js"))
                 .contains("_app.component('ui-table-sort-header', UiTableSortHeader);")
@@ -516,110 +521,95 @@ class ListRefinementResourceTest {
     @Test
     void responseIdentityRetainsSortingAndExposesUsageAcrossBreakpoints() throws IOException {
         String source = text("components/ResponsesPage.js");
-        assertThat(source).contains("list-identity-heading")
-                .contains("toggle-response-sort', 'id'")
-                .contains("$emit('clip-copy',String(r.id))")
-                .contains("class=\"response-mobile-state\"")
-                .contains("class=\"response-mobile-state response-mobile-reference-control\"")
-                .contains("class=\"response-usage-state is-unused\"")
-                .contains("class=\"response-reference-control\"")
-                .contains("@click.stop=\"$emit('toggle-response-rules', r)\"")
-                .contains("t('responses.referenceRules')")
-                .contains("t('responses.orphanDaysLeft'")
-                .contains("responseViewportWidth: window.innerWidth")
-                .contains("this.responseViewportWidth <= 768 ? 2 : this.responseViewportWidth <= 1024 ? 3 : 7")
-                .contains(":colspan=\"responseDetailColspan\"")
-                .contains("class=\"linked-rule-primary\"")
-                .contains("class=\"linked-rule-secondary\"")
-                .contains("class=\"response-linked-rules-header\"")
-                .contains("class=\"bi bi-arrow-right linked-rule-open-icon\"")
-                .contains(":aria-label=\"[rule.protocol, rule.method, rule.matchKey, rule.description].filter(Boolean).join(' ')\"");
+        String detail = text("components/ResponseDetail.js");
+
+        assertThat(source)
+                .contains("$emit('toggle-response-sort', 'id')")
+                .contains("class=\"record-name__id\">#{{r.id}}</span>")
+                .contains("if (action === 'copy-id') this.$emit('clip-copy', String(r.id));")
+                .contains("<span v-if=\"r.usageCount\" class=\"usage-count\"><strong>{{r.usageCount}}</strong>")
+                .contains("{{t('responses.notUsed')}}");
+        assertThat(detail)
+                .contains("t('responses.orphanDaysLeft', {days: retention})")
+                .contains("class=\"rule-method\" :data-method=")
+                .contains("class=\"detail-link__path\">{{rule.matchKey}}</code>");
+        assertThat(text("console.css"))
+                .contains("@container (max-width: 1040px) { .response-table .col-created { display: none } }")
+                .contains("@container (max-width: 760px) { .response-table .col-type, .response-table .col-updated { display: none } }");
     }
 
     @Test
     void primaryWorkspaceListsUseTheSharedDenseInformationLanguage() throws IOException {
-        assertThat(text("components/RuleListParts.js"))
-                .contains("class=\"rule-responsive-meta\"")
-                .contains("class=\"btn btn-sm btn-icon btn-secondary rule-row-disclosure\"")
-                .contains("class=\"rule-row-more-popover\"")
-                .doesNotContain("invoke('toggle-rule-preview',$event)");
-        assertThat(text("components/RulesPage.js"))
+        // List and group views render the same RuleTable row: method, endpoint, flags, first condition (+N) and update time.
+        assertThat(text("components/RuleTable.js"))
                 .contains("class=\"cond-more\"")
-                .contains("class=\"cond-pill-val\"");
-        assertThat(text("components/RuleGroupRow.js"))
-                .contains("class=\"cond-more\"")
-                .contains("class=\"cond-pill-val\"");
-        assertThat(text("components/RuleListParts.js"))
-                .contains("class=\"rule-method-slot\"")
-                .contains("class=\"rule-endpoint-flags\"")
-                .contains("class=\"rule-endpoint-details\"")
-                .contains("class=\"rule-technical-meta\"")
-                .contains("class=\"list-id-copy rule-responsive-id\"")
-                .contains("class=\"rule-compact-flags\"")
-                .contains("{{fmtTime(rule.updatedAt)}}");
+                .contains("class=\"cond-chip\" :data-kind=\"condTags(r)[0].t\"")
+                .contains("class=\"rule-method\" :data-method=")
+                .contains("class=\"rule-flags\"")
+                .contains("{{fmtTime(r.updatedAt)}}")
+                .contains("<ui-row-menu");
+        assertThat(text("components/RulesPage.js")).contains("<rule-table").doesNotContain("<rule-group-row");
+        // Request logs use the shared single-line row: time, method, endpoint + description, duration, result, ⋯ menu.
         assertThat(text("components/StatsPage.js"))
-                .contains("class=\"log-request-description\"")
+                .contains("<span class=\"rule-desc\" :title=\"requestDescription(item)\">{{requestDescription(item)}}</span>")
                 .contains("forwardTargetName(item.log.forwardTarget)")
-                .contains("class=\"log-responsive-duration tabular-nums\"")
-                .contains("class=\"log-time-cell\"")
-                .contains("class=\"col-hide-md log-duration-cell\"")
-                .contains("return this.compactLogTable ? 4 : 5;")
-                .contains("class=\"col-actions col-actions-1\"")
-                .contains("<span class=\"rule-protocol\">{{item.log.protocol}}</span>")
-                .contains("class=\"badge badge-method\"")
+                .contains("class=\"col-duration cell-end cell-mono cell-subtle\">{{item.log.responseTimeMs}} ms</td>")
+                .contains("class=\"col-time cell-mono cell-subtle\"")
+                .contains("class=\"rule-method\" :data-method=\"item.log.protocol==='HTTP' ? item.log.method : null\"")
+                .contains("<ui-row-menu :items=\"logMenuItems(item)\"")
                 .contains("t('stats.createRuleFromLog')");
         assertThat(text("components/ResponsesPage.js"))
-                .contains("class=\"response-action-spacer\"")
-                .contains("class=\"response-reference-control\"");
-        assertThat(text("components/RulesPage.js"))
-                .contains("<i v-if=\"r.updatedBy\" class=\"bi bi-person\"");
+                .contains("<ui-row-menu :items=\"menuItems(r)\"")
+                .contains("class=\"usage-count\"");
+        // Column widths and responsive collapse live with the shared tables in console.css.
+        assertThat(text("console.css"))
+                .contains(".response-table .col-usage { width: 168px }")
+                .contains(".log-table .col-time { width: 132px }")
+                .contains(".log-table .col-duration { width: 92px }")
+                .contains("@container (max-width: 760px) { .response-table .col-type, .response-table .col-updated { display: none } }");
         assertThat(text("style.css"))
-                .contains("Unified high-density list language")
-                .contains(".rule-row-action-column { width: 176px }")
-                .contains("grid-template-columns: 40px 56px minmax(0, 1fr) max-content")
-                .contains(".rule-list-table .rule-endpoint-main {\n    min-height: var(--rule-row-primary-h);")
-                .contains(".response-usage-column { width: 156px }")
-                .contains("grid-template-columns: repeat(3, 32px)")
-                .contains(".log-request-primary { display: grid; grid-template-columns: 40px 56px minmax(0, 1fr);")
-                .contains(".logs-table .log-time-column { width: 104px }")
-                .contains(".logs-table .log-duration-column { width: 88px; text-align: end }")
-                .contains(".logs-table .col-actions-1 { text-align: end }")
-                .contains("grid-template-columns: max-content minmax(180px, 260px) minmax(240px, 1fr);")
-                .contains(".logs-table,\n    .logs-table thead,\n    .logs-table tbody {\n        display: block;")
-                .contains(".response-mobile-reference-control {");
+                .doesNotContain(".logs-table")
+                .doesNotContain(".response-mobile-reference-control {");
     }
 
     @Test
     void linkedRulesAndDisclosuresExposeNativeNavigationAndState() throws IOException {
-        assertThat(text("components/RuleGroupRow.js"))
-                .contains("Vue.useId()")
-                .contains(":preview-id=\"previewId\"")
-                .contains(":id=\"previewId\"")
-                .doesNotContain("'group-rule-preview-'+rule.id");
-        assertThat(text("components/ResponsesPage.js"))
-                .contains("<a v-for=\"rule in r.rules\"")
-                .contains(":aria-expanded=\"!!r.expanded\"")
-                .contains(":id=\"'response-rules-'+r.id\"")
+        // Rule details open in a labelled drawer; rows expose their selection state instead of an expanded preview row.
+        assertThat(text("components/RuleTable.js"))
+                .contains("data-detail-row tabindex=\"0\"")
+                .contains(":aria-selected=\"selectedId===r.id ? 'true' : 'false'\"")
+                .contains("@keydown=\"onRowKeydown($event, r)\"");
+        assertThat(text("components/UiDetailDrawer.js"))
+                .contains(":aria-labelledby=\"headingId\"")
+                .contains("event.key === 'Escape'");
+        // Linked rules are real buttons inside the response drawer and jump straight to the rule.
+        assertThat(text("components/ResponseDetail.js"))
+                .contains("<button type=\"button\" class=\"detail-link\" @click=\"$emit('go-to-rule', rule.id)\">")
+                .contains("t('responses.linkedRulesTitle')")
                 .contains("t('responses.noVisibleLinkedRules')");
+        // Audit rows expose selection; the change diff opens in the shared drawer with its own heading.
         assertThat(text("components/AuditPage.js"))
-                .contains(":aria-expanded=\"selectedAudit===log.id\"")
-                .contains(":id=\"'audit-detail-'+log.id\"")
+                .contains(":aria-selected=\"selectedAudit===log.id ? 'true' : 'false'\"")
+                .contains("<ui-detail-drawer class=\"audit-detail-drawer\"")
                 .contains("{{auditActionLabel(log.action)}}")
-                .contains("auditViewportWidth: window.innerWidth")
-                .contains(":colspan=\"auditDetailColspan\"");
+                .contains("t('audit.changesTitle')")
+                .doesNotContain("colspan");
         assertThat(text("composables/useAudit.js"))
                 .contains("createdBy', 'updatedBy'")
                 .contains("action: t('auditFields.action')")
                 .contains("faultType: t('auditFields.faultType')")
                 .contains("forwardTargetMode: t('auditFields.forwardTargetMode')")
                 .contains("enumLabels[key]?.[s]");
+        // Issues open in the shared drawer, so no viewport-dependent colspan is needed.
         assertThat(text("components/IssuesPage.js"))
-                .contains("issueViewportWidth: window.innerWidth")
-                .contains(":colspan=\"issueDetailColspan\"");
-        assertThat(text("components/RuleListParts.js"))
-                .contains(":aria-expanded=\"expanded\"")
-                .contains("@keydown.esc.stop.prevent")
-                .contains("@dblclick.stop");
+                .contains("<ui-detail-drawer class=\"issue-detail-drawer\"")
+                .doesNotContain("issueViewportWidth")
+                .doesNotContain("colspan");
+        // Row actions never trigger the row's own click or double-click, and the row menu closes on Escape.
+        assertThat(text("components/RuleTable.js"))
+                .contains("<td class=\"col-actions\" @click.stop @dblclick.stop>")
+                .contains("<ui-row-menu");
+        assertThat(text("components/UiDropdownMenu.js")).contains("event.key === 'Escape'");
     }
 
     @Test
@@ -639,8 +629,11 @@ class ListRefinementResourceTest {
                 .doesNotContain("<h4>");
         assertThat(text("components/StatsPage.js"))
                 .contains("<h2 class=\"ui-detail-panel-heading\" :id=\"'request-body-heading-'")
-                .contains("getInputField()?.setAttribute(")
+                .contains(":label=\"t('stats.detailRequestBody')\"")
                 .contains("role=\"img\" :aria-label=\"t('stats.matchChainStep'");
+        // The shared body viewer names its CodeMirror input after the panel it sits in.
+        assertThat(text("components/UiCodeViewer.js"))
+                .contains("this.cm.getInputField()?.setAttribute('aria-label', this.label);");
     }
 
     @Test
@@ -673,17 +666,16 @@ class ListRefinementResourceTest {
 
     @Test
     void identityKeepsProtectedAndNonDefaultSourceInformationAndFullIdCopy() throws IOException {
-        assertThat(text("components/RuleListParts.js"))
-                .contains("rule.isProtected")
-                .contains("rule.targetHost!=='default'")
-                .contains("$emit('clip-copy',rule.id)")
-                .contains("t('rules.copyId')+' '+rule.id");
-        for (String page : new String[]{"RulesPage", "RuleGroupRow"}) {
-            assertThat(text("components/" + page + ".js"))
-                    .contains("t('rules.targetPrefix')")
-                    .contains("t('rules.toggleEnabled'")
-                    .contains("rule-updated-by");
-        }
+        assertThat(text("components/RuleTable.js"))
+                .contains("r.isProtected")
+                .contains("t('rules.toggleEnabled'")
+                .contains("r.updatedBy");
+        assertThat(text("components/RuleDetail.js"))
+                .contains("view.targetHost!=='default'")
+                .contains("t('rules.pvTargetHost')")
+                .contains("$emit('clip-copy', view.id)")
+                .contains("t('rules.copyId')")
+                .contains("view.updatedBy");
     }
 
     @Test
@@ -735,7 +727,7 @@ class ListRefinementResourceTest {
     void unconditionalRulesArePresentedAsIntentionalDefaultMatches() throws IOException {
         assertThat(text("i18n/zh-TW.json")).contains("\"noCondition\": \"預設匹配\"");
         assertThat(text("i18n/en.json")).contains("\"noCondition\": \"Default match\"");
-        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261001.3");
+        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261007.20");
     }
 
     @Test
@@ -757,9 +749,10 @@ class ListRefinementResourceTest {
 
     @Test
     void generatedResponseEditorsHaveAccessibleNames() throws IOException {
-        assertThat(text("composables/useEditor.js"))
-                .contains("editors[key].getInputField().setAttribute('aria-label', t('modal.responseContent'))")
-                .contains("ta.setAttribute('aria-label', t('modal.responseContent'))");
+        // Response bodies are edited in the shared viewer, which names its input from the label it is given.
+        assertThat(text("components/UiCodeViewer.js")).contains("this.cm.getInputField()?.setAttribute('aria-label', this.label);");
+        assertThat(text("components/RuleEditModal.js")).contains(":label=\"t('modal.responseContent')\"");
+        assertThat(text("components/ResponseEditModal.js")).contains(":label=\"t('modal.responseContent')\"");
     }
 
     private static String text(String path) throws IOException {

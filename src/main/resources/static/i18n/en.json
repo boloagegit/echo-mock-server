@@ -18,7 +18,20 @@
     "changePassword": "Change Password",
     "logout": "Logout",
     "login": "Login",
-    "accounts": "Account Management"
+    "accounts": "Account Management",
+    "manage": "Manage",
+    "userMenu": "Account and preferences",
+    "userMenuFor": "Account and preferences for {name}",
+    "appearance": "Theme",
+    "density": "Density",
+    "language": "Language",
+    "languageZh": "繁體中文",
+    "languageEn": "English",
+    "serviceStatus": "Services",
+    "serviceRunning": "Running",
+    "serviceDisabled": "Disabled",
+    "roleAdmin": "Administrator",
+    "roleUser": "User"
   },
   "rules": {
     "title": "Mock Rules",
@@ -301,7 +314,15 @@
     "fault_CONNECTION_RESET": "Connection Reset",
     "fault_EMPTY_RESPONSE": "Empty Response",
     "pvScenario": "Scenario",
-    "scenarioTooltip": "Scenario: {name} (Required: {required} → New: {newState})"
+    "scenarioTooltip": "Scenario: {name} (Required: {required} → New: {newState})",
+    "thMethod": "Method",
+    "dragColumn": "Drag to reorder",
+    "selectedCount": "{count} rules selected",
+    "batchDone": "Done",
+    "pvSectionResponse": "Response",
+    "pvTargetHost": "Source host",
+    "conditionCountSummary": "{count} conditions",
+    "tagCountSummary": "{count} tags"
   },
   "responses": {
     "pagination": "Response pagination",
@@ -355,7 +376,12 @@
     "createFirstResponse": "Create Your First Response",
     "totalCount": "{count} total",
     "filtering": "Filtering",
-    "clickClearFilter": "Click to Clear Filter"
+    "clickClearFilter": "Click to Clear Filter",
+    "selectedCount": "{count} responses selected",
+    "ruleUnit": "rules",
+    "detailInfo": "Details",
+    "loadFailed": "Could not load responses. Please try again.",
+    "sharedInfoLabel": "About shared responses"
   },
   "stats": {
     "title": "Request Logs",
@@ -371,7 +397,7 @@
     "protocolFilter": "Protocol filter",
     "resultFilter": "Match result filter",
     "searchLabel": "Search request logs",
-    "searchPlaceholder": "Search endpoint, queue, host, downstream target, or rule ID",
+    "searchPlaceholder": "Search endpoint, queue, host, downstream target, rule or diagnostic ID",
     "clearSearch": "Clear search",
     "activeFilters": "Active filters",
     "removeFilter": "Remove filter: {filter}",
@@ -409,6 +435,8 @@
     "detailForwardTarget": "Downstream Target",
     "detailForwarded": "Forwarding Status",
     "detailClientIp": "Client IP",
+    "diagnosticId": "Diagnostic correlation ID",
+    "copyDiagnosticId": "Copy correlation ID to search diagnostic files",
     "detailDuration": "Duration",
     "detailMatchTime": "Match Time",
     "detailOtherTime": "Delay / Proxy",
@@ -456,7 +484,9 @@
     "nextPage": "Next page",
     "lastPage": "Last page",
     "pageSize": "Rows per page",
-    "pageStatus": "Page {page} of {total}"
+    "pageStatus": "Page {page} of {total}",
+    "openMatchedRule": "Open matched rule",
+    "copyEndpoint": "Copy endpoint"
   },
   "audit": {
     "pagination": "Audit log pagination",
@@ -492,7 +522,12 @@
     "emptyHint": "Changes appear here after rules or responses are created, edited, or deleted.",
     "totalCount": "{count} total",
     "filtering": "Filtering",
-    "clickClearFilter": "Click to Clear Filter"
+    "clickClearFilter": "Click to Clear Filter",
+    "loadFailed": "Could not load audit logs. Please try again.",
+    "emptyFilterResult": "No audit logs match these filters",
+    "openRule": "Open rule",
+    "openResponse": "Open response",
+    "changesTitle": "Changes"
   },
   "monitoring": {
     "title": "Resource monitoring",
@@ -507,7 +542,7 @@
     "unlimited": "Unlimited redelivery",
     "failed": "Snapshot failed. Please refresh.",
     "stale": "Refresh failed. Previous snapshot shown.",
-    "configHint": "Configure groups with echo.monitoring. Enabled by default; restart after changing configuration.",
+    "configHint": "Snapshots: echo.monitoring. Diagnostics: echo.diagnostics (anomalies only by default). Restart after configuration changes.",
     "disabledHint": "Resource monitoring is disabled in configuration.",
     "cumulativeHint": "Counters accumulate since this process started. Started at:",
     "incompleteGroups": "{count} incomplete groups",
@@ -528,7 +563,7 @@
       "cache": "Weights estimate capacity, not exact heap. Rule cache entries are query keys, not the total number of rules.",
       "jms": "Exits are not successful replies, and sent replies do not establish receipt. Timeouts bound only reply waiting. Zero cleanup failures do not establish zero temporary queues; downstream broker connections and queue inventory are not collected.",
       "http": "Non-cancelled completions include errors. Pool capacity aggregates limits of existing pools, not actual connections. Partial pool totals do not affect process-wide request and buffer counters.",
-      "database": "Database connections are not HTTP/JMS downstream connections. Spool capacity is a disk limit, not reserved RAM. A running consumer does not establish that every record was persisted; check whether waiting counts subside.",
+      "database": "Database connections are not downstream connections; spool limits are not reserved RAM. If diagnostics are skipped or output fails, missing logs do not establish that a stage never ran. A running writer and zero errors do not guarantee disk persistence.",
       "scheduler": "Waiting tasks include normal delays that are not yet due; a nonzero count does not establish failure."
     },
     "summary": {
@@ -567,7 +602,7 @@
       "http": "HTTP forwarding",
       "database": "Database connections and writers",
       "requestLog": "Request-log persistence",
-      "applicationLog": "Application logging",
+      "applicationLog": "Application and diagnostic logging",
       "storage": "Local storage"
     },
     "notes": {
@@ -649,6 +684,21 @@
       "queueUsed": "Queue occupancy",
       "queueCapacity": "Queue capacity",
       "started": "Appender started",
+      "diagnosticEnabled": "Transaction diagnostics enabled",
+      "diagnosticRunning": "Diagnostic writer running",
+      "diagnosticDetailed": "Temporary detailed tracing active",
+      "diagnosticFileWriteAttempted": "Diagnostic file write attempted",
+      "diagnosticFileAvailable": "Last diagnostic output available",
+      "diagnosticQueueUsed": "Pending diagnostic records",
+      "diagnosticQueueCapacity": "Diagnostic queue limit",
+      "diagnosticDropped": "Skipped diagnostic records",
+      "diagnosticSinkFailures": "Diagnostic output exceptions",
+      "diagnosticRateLimited": "Records omitted by rate limit",
+      "diagnosticBudgetDropped": "Records omitted by byte budget",
+      "diagnosticTodayBytes": "Diagnostic bytes written today",
+      "diagnosticDailyLimitBytes": "Daily diagnostic byte limit",
+      "diagnosticRetainedBytes": "Diagnostic retained bytes",
+      "diagnosticRetainedLimitBytes": "Diagnostic retention byte limit",
       "dataFreeBytes": "Data filesystem free",
       "backupFreeBytes": "Backup filesystem free"
     }
@@ -918,7 +968,12 @@
       "newPasswordPlaceholder": "At least 6 characters",
       "newPasswordInvalid": "Choose a new password with at least 6 characters.",
       "submit": "Change Password"
-    }
+    },
+    "detailInfo": "Account details",
+    "thUpdatedAt": "Updated",
+    "mustChangePassword": "Must change at next sign-in",
+    "resetRequested": "This user asked for a password reset. Resetting creates a temporary password to hand over.",
+    "resetRequestedAt": "This user asked for a password reset at {time}. Resetting creates a temporary password to hand over."
   },
   "modal": {
     "editResponse": "Edit Response",
@@ -1200,7 +1255,25 @@
     "scenarioName": "Scenario Name",
     "requiredState": "Required State",
     "newState": "New State",
-    "scenarioStatePlaceholder": "e.g., Started"
+    "scenarioStatePlaceholder": "e.g., Started",
+    "saveAndCloseShortcut": "Save and close",
+    "ruleNamePlaceholder": "Name this rule",
+    "conditionSummary": "{count} conditions",
+    "requestPane": "Request",
+    "requestPaneHint": "Matches when all of these hold",
+    "responsePane": "Response",
+    "responsePaneHint": "What happens on a match",
+    "conditionAllMatch": "All must match",
+    "ruleSettings": "Rule settings",
+    "responseTypeSseStream": "SSE stream",
+    "pathPending": "No path yet",
+    "queuePending": "No queue yet",
+    "queueMatchHint": "Use * for any queue; rules naming a specific queue are checked first.",
+    "jmsReplyLabel": "Reply message",
+    "jmsReplyHint": "CorrelationID is set to the request's MessageID",
+    "replyQueueFromRequest": "Replies go where the request asks",
+    "expandContent": "Expand response content",
+    "collapseContent": "Restore layout"
   },
   "confirm": {
     "discardRuleTitle": "Discard rule changes?",
@@ -1344,7 +1417,9 @@
     "openApiParseFailed": "Failed to parse OpenAPI spec",
     "scenarioResetSuccess": "Scenario reset to Started",
     "scenarioResetAllSuccess": "All scenarios reset to Started",
-    "scenarioResetFailed": "Failed to reset scenario"
+    "scenarioResetFailed": "Failed to reset scenario",
+    "ruleEnabledNamed": "Enabled “{name}”",
+    "ruleDisabledNamed": "Disabled “{name}”"
   },
   "validation": {
     "matchKeyRequired": "Please enter a Match Key",
@@ -1466,7 +1541,8 @@
     "action": "Action: ",
     "operator": "Operator: ",
     "search": "Search: ",
-    "type": "Type: "
+    "type": "Type: ",
+    "role": "Role: "
   },
   "ssePreview": {
     "delay": "--- Delay {ms}ms ---",
@@ -1572,7 +1648,7 @@
     "jmsMessageFlow": "JMS Message Flow",
     "jmsRuleFields": "JMS Rule Fields",
     "jmsFieldQueue": "Queue name to listen on (e.g., <code>ORDER.REQUEST</code>)",
-    "jmsFieldReplyQueue": "Queue for sending replies. Leave empty to use the message's ReplyTo.",
+    "jmsFieldReplyQueue": "Replies go to the queue the request names (JMSReplyTo); a request that names none gets no reply.",
     "jmsFieldDelay": "Response delay in milliseconds",
     "jmsCondMatch": "Match message content (JSON/XML), same syntax as HTTP",
     "jmsCondNote": "JMS only supports Body conditions. Query and Header are not supported.",
@@ -1656,7 +1732,9 @@
     "registerPassword": "Choose a password",
     "registerSubmit": "Create Account",
     "registerSuccess": "Account created! You can now log in.",
-    "registerBack": "Back to Login"
+    "registerBack": "Back to Login",
+    "environment": "{env} environment",
+    "version": "Version"
   },
   "issues": {
     "title": "Issues",
@@ -1714,7 +1792,10 @@
     "confirmResolve": "Resolve Issue",
     "confirmResolveMsg": "Mark this issue as resolved?",
     "confirmDelete": "Delete Issue",
-    "confirmDeleteMsg": "This action cannot be undone. Delete this issue?"
+    "confirmDeleteMsg": "This action cannot be undone. Delete this issue?",
+    "replied": "Replied",
+    "editReply": "Edit reply",
+    "conversation": "Conversation"
   },
   "common": {
     "close": "Close",
@@ -1729,6 +1810,29 @@
     "removeFilter": "Remove filter: {filter}",
     "sortBy": "Sort by {field}",
     "retry": "Retry",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "previousItem": "Previous item",
+    "nextItem": "Next item",
+    "loadFailed": "Failed to load",
+    "undo": "Undo",
+    "moreActions": "More actions",
+    "notifications": "Notifications",
+    "showAll": "Show full text",
+    "showLess": "Show less",
+    "showAllCount": "Show all ({count})",
+    "expandBlock": "Expand",
+    "collapseBlock": "Collapse",
+    "previewTruncated": "Large content: showing the first {shown} of {total}",
+    "showFullContent": "Show full content",
+    "widenDrawer": "Widen",
+    "narrowDrawer": "Restore width"
+  },
+  "codeViewer": {
+    "search": "Search all",
+    "wrap": "Wrap",
+    "format": "Format",
+    "copy": "Copy all",
+    "status": "{lines} lines · {size}",
+    "formattedReadOnly": "Formatted view (read-only) · turn off Format to edit"
   }
 }

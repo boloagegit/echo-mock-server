@@ -101,6 +101,8 @@ const useAudit = (deps) => {
         try {
             const r = await apiCall(buildAuditQuery(), { signal: abortController.signal }, { silent: true });
             if (requestId !== listRequestSequence) { return false; }
+            // A failed load must not masquerade as "no audit logs yet".
+            deps.loading.value.auditError = !(r && r.ok);
             if (r && r.ok) {
                 const data = await r.json();
                 if (requestId !== listRequestSequence) { return false; }

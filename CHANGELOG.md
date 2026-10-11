@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [Unreleased]
 
 ### Added
+- Anomaly-only HTTP/JMS/SSE diagnostics: zero supplemental file bytes for healthy traffic, one bounded error summary, separate 10 MiB/day / 50 MiB retained files, rate limits, expiring opt-in detail, and nullable Request Log correlation IDs
 - Fault Injection — rules can simulate CONNECTION_RESET (close connection) or EMPTY_RESPONSE (return empty body) for HTTP and JMS
 - Faker Handlebars helpers — randomFirstName, randomLastName, randomFullName, randomEmail, randomPhoneNumber, randomCity, randomCountry, randomStreetAddress, randomInt
 - OpenAPI/Swagger import — upload spec to auto-generate mock rules with preview
@@ -36,6 +37,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Spring Boot updated to 3.5.16 and the build aligned with the supported Gradle 8.14.5 line
 
 ### Fixed
+- SSE zero-delay callback ownership race that could cancel the following delayed event; late future registration retains timeout/disconnect cleanup
+- Request-log proxy error values are bounded to the existing 255-character column without altering transport responses
 - Forwarding target dialogs now place and contain keyboard focus, support Escape, and restore the launch control; Settings action menus remain within the viewport
 - JMS forwarding documentation now reflects configuration-first default selection and distinguishes it from automatic failover
 - SpotBugs mutable array warnings

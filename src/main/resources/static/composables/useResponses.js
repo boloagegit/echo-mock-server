@@ -98,6 +98,7 @@ const useResponses = (deps) => {
         try {
             const r = await apiCall(buildResponseQuery(), { signal: abortController.signal }, { errorMsg: t('toast.responseLoadFailed') });
             if (requestId !== listRequestSequence) { return false; }
+            deps.loading.value.responsesError = !(r && r.ok);
             if (r && r.ok) {
                 const data = await r.json();
                 if (requestId !== listRequestSequence) { return false; }
@@ -107,6 +108,8 @@ const useResponses = (deps) => {
                 if (responsePage.value > responseTotalPages.value) { responsePage.value = responseTotalPages.value; }
                 markLoaded();
                 Object.keys(responseRulesCache).forEach(k => delete responseRulesCache[k]);
+                responseDetailCache.value = {};
+                if (responseDetailId.value) { loadResponseDetail(responseDetailId.value); }
             }
             return !!(r && r.ok);
         } finally {
@@ -199,12 +202,43 @@ const useResponses = (deps) => {
         const r = await apiCall(`/api/admin/responses/${id}`, { method: 'DELETE' }, { errorMsg: t('toast.responseDeleteFailed') });
         if (r && r.ok) {
             const d = await r.json();
+            if (String(responseDetailId.value) === String(id)) { closeResponseDetail(); }
             showToast(d.deletedRules > 0 ? t('toast.responseDeleteWithRules', {count: d.deletedRules}) : t('toast.responseDeleteSuccess'), 'success');
             markDirty();
             loadResponseSummary(true);
             if (d.deletedRules > 0 && deps.onRulesDirty) { deps.onRulesDirty(); }
         }
     };
+
+    // --- 詳情抽屜：回應內容與引用規則 ---
+    const responseDetailId = ref(null);
+    const responseDetailCache = ref({});
+    const responseDetailLoading = ref(false);
+    const responseDetailError = ref(false);
+    const loadResponseDetail = async (id, { force = false } = {}) => {
+        if (id == null || (!force && responseDetailCache.value[id])) { return; }
+        responseDetailLoading.value = true;
+        responseDetailError.value = false;
+        const [bodyRes, rulesRes] = await Promise.all([
+            apiCall(`/api/admin/responses/${id}`, {}, { silent: true }),
+            apiCall(`/api/admin/responses/${id}/rules`, {}, { silent: true }),
+        ]);
+        if (String(responseDetailId.value) !== String(id)) { return; }
+        if (bodyRes && bodyRes.ok) {
+            const data = await bodyRes.json();
+            const rules = rulesRes && rulesRes.ok ? await rulesRes.json() : [];
+            responseDetailCache.value[id] = { ...data, rules };
+        } else {
+            responseDetailError.value = true;
+        }
+        responseDetailLoading.value = false;
+    };
+    const openResponseDetail = r => {
+        if (r?.id == null) { return; }
+        responseDetailId.value = r.id;
+        loadResponseDetail(r.id);
+    };
+    const closeResponseDetail = () => { responseDetailId.value = null; responseDetailLoading.value = false; };
 
     // --- 規則展開 ---
     const toggleResponseRules = async (r) => {
@@ -275,6 +309,7 @@ const useResponses = (deps) => {
         deps.page.value = 'responses';
         responseFilter.value = rid;
         responsePage.value = 1;
+        openResponseDetail({ id: rid });
     };
 
     // --- Dropdown ---
@@ -362,6 +397,13 @@ const useResponses = (deps) => {
         deleteAllResponses,
         toggleResponseRules,
         responseRulesCache,
+        responseDetailId,
+        responseDetailCache,
+        responseDetailLoading,
+        responseDetailError,
+        loadResponseDetail,
+        openResponseDetail,
+        closeResponseDetail,
         responseUsageFilter,
         responseContentTypeFilter,
         responseFilterChips,

@@ -14,7 +14,11 @@ spring:
   web:
     resources:
       cache:
-        period: 0  # 開發環境不快取靜態資源
+        # 瀏覽器可快取靜態資源，但每次以 Last-Modified 驗證（未變更回 304），改版後一定拿到新檔。
+        # index.html 另由 WebMvcConfig 設為不快取。
+        cachecontrol:
+          no-cache: true
+        use-last-modified: true
   application:
     name: echo
 
@@ -60,6 +64,19 @@ spring:
 
 # Echo 自訂配置
 echo:
+  # Healthy requests write no diagnostic file lines. Anomalies have bounded metadata only.
+  diagnostics:
+    enabled: ${ECHO_DIAGNOSTICS_ENABLED:true}
+    jms-enabled: true
+    http-enabled: true
+    sse-enabled: true
+    queue-capacity: 1024 # bounded to 32..4096, one daemon writer, no body/header logging
+    detailed-enabled: false # temporary troubleshooting only; auto-expires after startup
+    detailed-seconds: 300 # maximum 600; all detail still shares the byte/rate limits
+    daily-bytes: 10485760 # 10 MiB, UTF-8 bytes including newlines, retained across restarts
+    retained-bytes: 52428800 # 50 MiB across owned diagnostic day files
+    retention-days: 7 # maximum seven days including today, capacity may shorten history
+    records-per-second: 20 # aggregate anomaly/detail output limit, omitted records counted
   # Resource snapshots are ADMIN-only and collected only on manual refresh.
   monitoring:
     enabled: true
@@ -73,6 +90,9 @@ echo:
     application-log-enabled: true
     storage-enabled: true
   env-label:                    # 環境別名（如 DEV、SIT、UAT），可用環境變數 ECHO_ENV_LABEL 覆蓋
+  ui:
+    accent: ${ECHO_UI_ACCENT:teal}  # 介面主色：teal（青綠）或 blue（藍），用來區分不同部署環境；其他值視為 teal
+    easter-egg: ${ECHO_UI_EASTER_EGG:true}  # 介面彩蛋（↑↑↓↓←→←→AB 開小遊戲）；設 false 關閉
   features:
     issue-reporting-enabled: ${ECHO_ISSUE_REPORTING_ENABLED:false}      # 問題回報，預設關閉
     bulk-import-export-enabled: ${ECHO_BULK_IMPORT_EXPORT_ENABLED:false}  # 批次匯入／匯出，預設關閉

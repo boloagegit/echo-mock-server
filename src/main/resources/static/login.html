@@ -4,8 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Echo－登入</title>
-    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=20260906.2">
-    <link rel="stylesheet" href="/theme.css?v=20260909.2">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20261007.1">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=20261007.1" sizes="any">
+    <link rel="stylesheet" href="/theme.css?v=20261006.1">
+    <script src="/ui-accent.js?v=20261006.1"></script>
     <link rel="stylesheet" href="/webjars/bootstrap-icons/font/bootstrap-icons.min.css">
     <style>
         /* 登入頁專用衍生變數（基於 theme.css 共用變數） */
@@ -15,24 +17,34 @@
         body{background:var(--bg);color:var(--text);font-family:var(--font-ui);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1.5rem;position:relative;overflow:hidden}
         
         /* 登入卡片 */
-        .login-card{background:var(--card);border:1px solid var(--border);border-radius:10px;width:100%;max-width:400px;overflow:hidden;position:relative;z-index:1;box-shadow:0 24px 56px -22px var(--login-shadow)}
-        .login-header{padding:2rem 2rem 0.25rem;text-align:center;position:relative}
-        
-        .login-logo{width:52px;height:52px;display:flex;align-items:center;justify-content:center;margin:0 auto 0.875rem;position:relative}
-        .login-logo::after{content:"";position:absolute;inset:-6px;border:1px solid rgba(var(--primary-rgb),0.5);border-radius:50%;opacity:0;pointer-events:none}
-        .login-logo img{position:relative;z-index:1;width:52px;height:52px;display:block;object-fit:contain;transition:transform var(--motion-fast) var(--ease-standard)}
-        .login-logo:hover img{transform:scale(1.05) rotate(-3deg)}
+        .login-card{background:var(--card);border:1px solid var(--border);border-radius:12px;width:100%;max-width:400px;overflow:hidden;position:relative;z-index:1;box-shadow:0 24px 56px -22px var(--login-shadow)}
+        /* 沒有環境標籤時，以細主色線標示部署環境 */
+        .login-card:not(.has-env){box-shadow:inset 0 3px 0 var(--primary),0 24px 56px -22px var(--login-shadow)}
+
+        /* 環境橫條：一眼分辨 SIT / UAT 等部署環境 */
+        .login-env{display:flex;align-items:center;gap:0.5rem;padding:0.625rem 1.75rem;background:var(--primary);color:var(--on-primary);font-size:13px;font-weight:600;letter-spacing:0.02em}
+        .login-env[hidden]{display:none}
+        .login-env i{font-size:14px;line-height:1}
+
+        .login-header{padding:1.75rem 1.75rem 0;display:flex;align-items:center;gap:0.875rem;text-align:left;position:relative}
+        .login-titles{min-width:0}
+        .login-subtitle{margin-top:2px;color:var(--muted);font-size:13px}
+
+        .login-logo{width:40px;height:40px;flex:0 0 40px;display:flex;align-items:center;justify-content:center;position:relative;border-radius:11px;background:var(--brand-tile);color:var(--brand-ink);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.08),0 1px 2px rgba(0,0,0,0.24)}
+        .login-logo::after{content:"";position:absolute;inset:-4px;border:1px solid rgba(var(--muted-rgb),0.5);border-radius:14px;opacity:0;pointer-events:none}
+        .login-logo .login-mark{position:relative;z-index:1;width:24px;height:24px;display:block;transition:transform var(--motion-fast) var(--ease-standard)}
+        .login-logo:hover .login-mark{transform:scale(1.05) rotate(-3deg)}
         .login-logo:hover::after{animation:loginLogoEcho var(--motion-slow) var(--ease-standard)}
         @keyframes loginLogoEcho{from{opacity:.52;transform:scale(.76)}to{opacity:0;transform:scale(1.22)}}
         
-        .login-header h1{font-size:1.375rem;font-weight:700;letter-spacing:-0.025em;line-height:1.25;margin:0;color:var(--text)}
+        .login-header h1{font-size:1.125rem;font-weight:600;letter-spacing:-0.01em;line-height:1.3;margin:0;color:var(--text)}
         
-        .login-body{padding:1.5rem 2rem 1.75rem}
+        .login-body{padding:1.5rem 1.75rem 1.75rem}
         .form-group{margin-bottom:1.125rem}
-        .form-label{display:block;font-size:12px;line-height:1.4;font-weight:600;margin-bottom:0.25rem;color:var(--text)}
+        .form-label{display:block;font-size:12px;line-height:1.4;font-weight:500;margin-bottom:0.25rem;color:var(--muted)}
         .input-wrapper{position:relative}
         .input-wrapper i{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:16px;transition:color 0.2s}
-        .form-control{width:100%;height:36px;min-height:36px;padding:0 0.75rem 0 40px;font-size:13px;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;color:var(--text);transition:background-color 0.15s,border-color 0.15s,box-shadow 0.15s}
+        .form-control{width:100%;height:40px;min-height:40px;padding:0 0.75rem 0 40px;font-size:14px;background:var(--input-bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);transition:background-color 0.15s,border-color 0.15s,box-shadow 0.15s}
         .form-control:hover{background:var(--hover);border-color:var(--border2)}
         .form-control:focus{outline:0;border-color:var(--primary);background:var(--card);box-shadow:var(--login-focus)}
         .form-control:focus + i,.input-wrapper:focus-within i{color:var(--primary)}
@@ -43,16 +55,17 @@
         .remember-check input{width:18px;height:18px;accent-color:var(--primary);cursor:pointer}
         .remember-check label{font-size:13px;color:var(--muted);cursor:pointer}
         
-        .btn{width:100%;height:36px;min-height:36px;padding:0 12px;font-size:13px;font-weight:600;border:1px solid transparent;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:background-color 0.15s,border-color 0.15s,opacity 0.15s,box-shadow 0.15s;position:relative;font-family:inherit}
+        .btn{width:100%;height:40px;min-height:40px;padding:0 12px;font-size:14px;font-weight:600;border:1px solid transparent;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:background-color 0.15s,border-color 0.15s,opacity 0.15s,box-shadow 0.15s;position:relative;font-family:inherit}
         .btn i{font-size:16px;line-height:1}
-        .btn-primary{background:var(--btn-primary);border-color:var(--btn-primary);color:#fff;margin-top:0.5rem}
+        .btn-primary{background:var(--btn-primary);border-color:var(--btn-primary);color:var(--on-primary);margin-top:0.5rem}
         .btn-primary:hover{background:var(--btn-primary-hover);border-color:var(--btn-primary-hover);opacity:1}
         
         .alert{padding:0.75rem 0.875rem;border-radius:8px;font-size:13px;margin-bottom:1.125rem;display:flex;align-items:center;gap:0.75rem}
         .alert-danger{background:rgba(var(--danger-rgb),0.08);border:1px solid rgba(var(--danger-rgb),0.3);color:var(--danger)}
         
-        .login-footer{padding:1rem 2rem;border-top:1px solid var(--border);text-align:center;background:var(--footer-bg)}
-        .login-footer p{color:var(--muted);font-size:12px;margin:0}
+        .login-footer{display:flex;align-items:center;gap:1rem;min-height:2.75rem;padding:0.75rem 1.75rem;border-top:1px solid var(--border);background:var(--footer-bg);color:var(--muted);font-size:12px}
+        .login-footer p{margin:0}
+        .login-meta{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:Consolas,'SFMono-Regular',Menlo,monospace;font-size:11.5px}
         
         /* 忘記密碼連結 */
         .forgot-link,.forgot-back{padding:0;border:0;background:transparent;font-family:inherit;color:var(--primary);font-size:13px;text-decoration:none;cursor:pointer;transition:opacity 0.15s}
@@ -79,15 +92,21 @@
         .register-link{display:none;margin-top:0.5rem}
 
         /* 響應式 */
-        @media(max-width:480px){.login-card{border-radius:8px;margin:0 0.5rem}.login-header{padding:2rem 1.5rem 1.25rem}.login-body{padding:1.25rem 1.5rem 1.5rem}}
-        @media(prefers-reduced-motion:reduce){.login-logo img{transition-duration:.01ms}.login-logo:hover::after{animation:none}}
+        @media(max-width:480px){.login-card{border-radius:10px;margin:0 0.25rem}.login-env,.login-footer{padding-inline:1.25rem}.login-header{padding:1.5rem 1.25rem 0}.login-body{padding:1.25rem 1.25rem 1.5rem}}
+        @media(prefers-reduced-motion:reduce){.login-logo .login-mark{transition-duration:.01ms}.login-logo:hover::after{animation:none}}
     </style>
 </head>
 <body>
     <main class="login-card">
+        <div id="login-env" class="login-env" hidden>
+            <i class="bi bi-hdd-network" aria-hidden="true"></i><span id="login-env-text"></span>
+        </div>
         <div class="login-header">
-            <div class="login-logo"><img src="/favicon.ico?v=20260906.2" alt=""></div>
-            <h1>Echo Mock Server</h1>
+            <div class="login-logo"><svg class="login-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.4" aria-hidden="true"><path d="M6.5 4.5V19.5"/><path d="M6.5 4.5H18"/><path d="M6.5 12H15.5" stroke-opacity="0.78"/><path d="M6.5 19.5H14.5" stroke-opacity="0.55"/></svg></div>
+            <div class="login-titles">
+                <h1>Echo Mock Server</h1>
+                <p class="login-subtitle" data-i18n="login.subtitle">請登入以管理模擬規則</p>
+            </div>
         </div>
         
         <div class="login-body">
@@ -185,7 +204,7 @@
         </div>
         
         <div class="login-footer">
-            <p>Echo Mock Server</p>
+            <p id="login-meta" class="login-meta"></p>
         </div>
     </main>
     
@@ -202,15 +221,34 @@
                 document.getElementById('error-alert').style.display = 'flex';
             }
 
+            // Environment strip and footer metadata; copy follows the active locale.
+            var loginText = { environment: '{env} 環境', version: '版本' };
+            var serverInfo = null;
+            function renderServerInfo() {
+                if (!serverInfo) return;
+                var card = document.querySelector('.login-card');
+                var env = document.getElementById('login-env');
+                if (serverInfo.envLabel) {
+                    document.getElementById('login-env-text').textContent = loginText.environment.replace('{env}', serverInfo.envLabel);
+                    env.hidden = false;
+                    card.classList.add('has-env');
+                }
+                document.getElementById('login-meta').textContent =
+                    loginText.version + ' ' + (serverInfo.version || 'dev') + ' · ' + window.location.host;
+            }
+
             // i18n - lightweight locale swap for login page
             var stored = localStorage.getItem('echo_locale');
             var locale = stored || (navigator.language.startsWith('zh') ? 'zh-TW' : 'en');
             document.documentElement.lang = locale === 'zh-TW' ? 'zh-TW' : 'en';
             if (locale !== 'zh-TW') {
-                fetch('/i18n/' + locale + '.json?v=20260902.1').then(function(r) { return r.json(); }).then(function(msgs) {
+                fetch('/i18n/' + locale + '.json?v=20261006.3').then(function(r) { return r.json(); }).then(function(msgs) {
                     var login = msgs.login;
                     if (!login) return;
                     document.title = login.title || document.title;
+                    if (login.environment) loginText.environment = login.environment;
+                    if (login.version) loginText.version = login.version;
+                    renderServerInfo();
                     document.querySelectorAll('[data-i18n]').forEach(function(el) {
                         var key = el.getAttribute('data-i18n').split('.')[1];
                         if (login[key]) el.textContent = login[key];
@@ -277,6 +315,11 @@
 
             // --- LDAP Hint ---
             fetch('/api/admin/status', { headers: { 'Accept': 'application/json' } }).then(function(r) { return r.json(); }).then(function(data) {
+                if (window.EchoAccent) {
+                    window.EchoAccent.apply(data.uiAccent);
+                }
+                serverInfo = { envLabel: data.envLabel, version: data.version };
+                renderServerInfo();
                 if (data.ldapEnabled) {
                     document.getElementById('ldap-hint').style.display = 'block';
                 }

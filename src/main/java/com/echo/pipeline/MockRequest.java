@@ -1,6 +1,7 @@
 package com.echo.pipeline;
 
 import com.echo.entity.Protocol;
+import com.echo.diagnostics.TransactionDiagnostics.Trace;
 import com.echo.service.ConditionMatcher;
 import lombok.Builder;
 import lombok.Getter;
@@ -45,4 +46,8 @@ public class MockRequest {
 
     /** 預解析的 body */
     private final ConditionMatcher.PreparedBody preparedBody;
+
+    /** Transient explicit context, not wire headers or persistence. */
+    @Builder.Default
+    private final Trace trace = Trace.NONE;
 }

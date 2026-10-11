@@ -1,6 +1,8 @@
 package com.echo.jms;
 
 import com.echo.config.JmsProperties;
+import com.echo.diagnostics.JmsDiagnosticMetadata;
+import com.echo.diagnostics.TransactionDiagnostics.Trace;
 import com.echo.jms.target.JmsTargetFactoryProvider;
 import com.echo.service.JmsTargetConnectionService;
 import jakarta.jms.Connection;
@@ -102,9 +104,13 @@ public final class JmsTargetForwarder {
 
     /** 轉發並回傳不含認證資訊的實際目標，供 Request Log 使用。 */
     public ForwardResult forwardWithMetadata(String body, Message originalMessage) {
+        return forwardWithMetadata(body, originalMessage, Trace.NONE);
+    }
+
+    public ForwardResult forwardWithMetadata(String body, Message originalMessage, Trace trace) {
         if (metrics != null) metrics.forwardStarted();
         try {
-            return forwardDefaultWithMetadata(body, originalMessage);
+            return forwardDefaultWithMetadata(body, originalMessage, trace);
         } catch (RuntimeException e) {
             if (metrics != null) metrics.forwardFailed();
             throw e;
@@ -113,40 +119,45 @@ public final class JmsTargetForwarder {
         }
     }
 
-    private ForwardResult forwardDefaultWithMetadata(String body, Message originalMessage) {
+    private ForwardResult forwardDefaultWithMetadata(String body, Message originalMessage, Trace trace) {
         Optional<JmsTargetConnectionService.ResolvedTarget> selected = targetResolver.get();
         if (selected.isEmpty()) {
+            trace.event("FORWARD_UNAVAILABLE", "reason", "NO_DEFAULT_TARGET");
             return new ForwardResult(
                     "<error>No default JMS target connection configured</error>", null);
         }
         JmsTargetConnectionService.ResolvedTarget resolved = selected.get();
-        return new ForwardResult(forwardResolved(body, originalMessage, resolved),
+        return new ForwardResult(forwardResolved(body, originalMessage, resolved, trace),
                 describeTarget(resolved));
     }
 
     private String forwardResolved(String body, Message originalMessage,
-                                   JmsTargetConnectionService.ResolvedTarget resolved) {
+                                   JmsTargetConnectionService.ResolvedTarget resolved, Trace trace) {
         JmsProperties.Target target = resolved.target();
+        selected(trace, resolved, target);
+        trace.stage("CONNECT");
 
         try {
             if (connectionService != null) {
-                return exchangeSelected(body, originalMessage, resolved);
+                return exchangeSelected(body, originalMessage, resolved, trace);
             }
             ConnectionFactory factory = getOrCreateFactory(resolved);
             return exchange(body, originalMessage, target,
                     getConnection(factory, resolved.cacheKey()),
-                    () -> resetConnection(resolved.cacheKey()));
+                    () -> resetConnection(resolved.cacheKey()), trace);
 
         } catch (JMSException e) {
+            trace.failure("FORWARD_FAILED", e);
             if (metrics != null) metrics.forwardFailed();
             if (connectionService == null) {
                 resetConnection(resolved.cacheKey());
             }
-            log.error("Failed to forward to target JMS (connection reset): {}", e.getMessage());
+            if (!trace.enabled()) log.error("Failed to forward to target JMS (connection reset): {}", e.getMessage());
             return "<error>JMS forward error: " + e.getMessage() + "</error>";
         } catch (Exception e) {
+            trace.failure("FORWARD_FAILED", e);
             if (metrics != null) metrics.forwardFailed();
-            log.error("Failed to forward to target JMS: {}", e.getMessage());
+            if (!trace.enabled()) log.error("Failed to forward to target JMS: {}", e.getMessage());
             return "<error>JMS forward error: " + e.getMessage() + "</error>";
         }
     }
@@ -165,35 +176,52 @@ public final class JmsTargetForwarder {
     public ForwardResult forwardWithMetadata(String body, Message originalMessage,
                                              String connectionId,
                                              boolean useDefaultConnection) {
+        return forwardWithMetadata(body, originalMessage, connectionId, useDefaultConnection, Trace.NONE);
+    }
+
+    public ForwardResult forwardWithMetadata(String body, Message originalMessage,
+                                             String connectionId, boolean useDefaultConnection, Trace trace) {
         if (useDefaultConnection) {
-            return forwardWithMetadata(body, originalMessage);
+            return forwardWithMetadata(body, originalMessage, trace);
         }
         if (connectionService == null) {
+            trace.event("FORWARD_UNAVAILABLE", "reason", "NAMED_TARGET_UNAVAILABLE");
             return new ForwardResult(
                     "<error>Named JMS target connections are unavailable</error>", null);
         }
         JmsTargetConnectionService.ResolvedTarget resolved = null;
         if (metrics != null) metrics.forwardStarted();
         try {
+            trace.stage("SELECT_TARGET");
             resolved = connectionService.resolveEnabled(connectionId);
-            return new ForwardResult(exchangeSelected(body, originalMessage, resolved),
+            selected(trace, resolved, resolved.target());
+            return new ForwardResult(exchangeSelected(body, originalMessage, resolved, trace),
                     describeTarget(resolved));
         } catch (JMSException e) {
+            trace.failure("FORWARD_FAILED", e);
             if (metrics != null) metrics.forwardFailed();
-            log.error("Failed to forward to selected JMS target (connection reset): {}",
+            if (!trace.enabled()) log.error("Failed to forward to selected JMS target (connection reset): {}",
                     e.getMessage());
             return new ForwardResult(
                     "<error>JMS forward error: " + e.getMessage() + "</error>",
                     describeTarget(resolved));
         } catch (Exception e) {
+            trace.failure("FORWARD_FAILED", e);
             if (metrics != null) metrics.forwardFailed();
-            log.error("Failed to forward to selected JMS target: {}", e.getMessage());
+            if (!trace.enabled()) log.error("Failed to forward to selected JMS target: {}", e.getMessage());
             return new ForwardResult(
                     "<error>JMS forward error: " + e.getMessage() + "</error>",
                     resolved == null ? null : describeTarget(resolved));
         } finally {
             if (metrics != null) metrics.forwardExited();
         }
+    }
+
+    private static void selected(Trace trace, JmsTargetConnectionService.ResolvedTarget resolved,
+                                 JmsProperties.Target target) {
+        trace.event("FORWARD_BEGIN", "connectionRevision", resolved.cacheKey(),
+                "source", resolved.legacy() ? "CONFIG" : "DATABASE", "provider", target.getType(),
+                "queue", target.getQueue(), "timeoutMs", target.getTimeoutSeconds() * 1000L);
     }
 
     private static String describeTarget(JmsTargetConnectionService.ResolvedTarget resolved) {
@@ -300,13 +328,18 @@ public final class JmsTargetForwarder {
     }
 
     private String exchange(String body, Message originalMessage, JmsProperties.Target target,
-                            Connection connection, Runnable retireConnection) throws JMSException {
+                            Connection connection, Runnable retireConnection, Trace trace) throws JMSException {
         String targetQueue = target.getQueue();
         long timeoutMs = target.getTimeoutSeconds() * 1000L;
+        trace.stage("CREATE_SESSION");
         try (Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)) {
+            trace.stage("CREATE_QUEUE");
             Queue destQueue = session.createQueue(targetQueue);
+            trace.stage("CREATE_REPLY_QUEUE");
             TemporaryQueue replyQueue = session.createTemporaryQueue();
+            trace.stage("CREATE_PRODUCER");
             try (MessageProducer producer = session.createProducer(destQueue)) {
+                trace.stage("CREATE_MESSAGE");
                 TextMessage forwardMsg = session.createTextMessage(body);
                 forwardMsg.setJMSReplyTo(replyQueue);
                 try {
@@ -317,19 +350,34 @@ public final class JmsTargetForwarder {
                 } catch (Exception e) {
                     log.debug("Failed to set JMSCorrelationID: {}", e.getMessage());
                 }
+                trace.stage("SEND");
                 producer.send(forwardMsg);
+                JmsDiagnosticMetadata.outbound(trace, forwardMsg, replyQueue);
                 log.debug("Forwarded message to target queue: {}", targetQueue);
+                trace.stage("CREATE_CONSUMER");
                 try (MessageConsumer consumer = session.createConsumer(replyQueue)) {
+                    trace.stage("RECEIVE_REPLY");
+                    long waitStarted = System.nanoTime();
                     Message response = consumer.receive(timeoutMs);
+                    long waitMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - waitStarted);
                     if (response instanceof TextMessage textMessage) {
+                        JmsDiagnosticMetadata.reply(trace, response, waitMs);
                         log.debug("Received response from target JMS");
+                        trace.stage("READ_REPLY");
                         return textMessage.getText();
                     }
                     if (metrics != null) {
                         if (response == null) metrics.receiveTimedOut();
                         else metrics.invalidReply();
                     }
-                    log.warn("Target JMS response timeout or invalid type");
+                    if (response == null) {
+                        trace.event("REPLY_WAIT_END", "outcome", "NO_REPLY", "waitMs", waitMs,
+                                "timeoutMs", timeoutMs, "possibleConsumerClose", waitMs < timeoutMs);
+                        if (!trace.enabled()) log.warn("Target JMS receive returned no message (timeout or consumer closed)");
+                    } else {
+                        JmsDiagnosticMetadata.reply(trace, response, waitMs);
+                        if (!trace.enabled()) log.warn("Target JMS returned a non-TextMessage reply");
+                    }
                     return "<error>JMS response timeout</error>";
                 }
             } finally {
@@ -338,10 +386,11 @@ public final class JmsTargetForwarder {
                 try {
                     replyQueue.delete();
                 } catch (JMSException | RuntimeException e) {
+                    trace.failure("TEMP_QUEUE_CLEANUP_FAILED", e);
                     if (metrics != null) metrics.cleanupFailed();
                     // Preserve the downstream result/original error. Retiring the connection
                     // releases orphan destinations; selected clients wait for other active uses.
-                    log.warn("Failed to delete temporary JMS reply queue; retiring connection: {}",
+                    if (!trace.enabled()) log.warn("Failed to delete temporary JMS reply queue; retiring connection: {}",
                             e.getMessage());
                     retireConnection.run();
                 }
@@ -358,11 +407,12 @@ public final class JmsTargetForwarder {
     }
 
     private String exchangeSelected(String body, Message originalMessage,
-                                    JmsTargetConnectionService.ResolvedTarget resolved) throws Exception {
+                                    JmsTargetConnectionService.ResolvedTarget resolved, Trace trace) throws Exception {
+        trace.stage("CONNECT");
         try (TargetClientUse client = acquireSelectedClient(resolved)) {
             try {
                 return exchange(body, originalMessage, resolved.target(), client.connection(),
-                        () -> retireSelectedClient(resolved.cacheKey(), client));
+                        () -> retireSelectedClient(resolved.cacheKey(), client), trace);
             } catch (JMSException e) {
                 // Reset the actual failed client, not a newer replacement with the same cache key.
                 retireSelectedClient(resolved.cacheKey(), client);

@@ -52,7 +52,7 @@ class RequestLogRepositorySqliteTest {
         List<Object[]> rows = repository.findSummaryProjections(PageRequest.of(0, 10));
 
         assertThat(rows).hasSize(1);
-        assertThat(rows.get(0)).hasSize(23);
+        assertThat(rows.get(0)).hasSize(24);
         assertThat(Arrays.asList(rows.get(0))).doesNotContain(largeBody);
         assertThat(rows.get(0)[11]).isEqualTo(true);
         assertThat(rows.get(0)[12]).isEqualTo("safe-target | tcp://127.0.0.1:61616 | queue.out");
