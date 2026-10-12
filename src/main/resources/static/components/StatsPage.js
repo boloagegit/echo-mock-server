@@ -41,6 +41,7 @@ const StatsPage = {
   data() {
     return {
       inspectorTab: 'body',
+      rawConditionOpen: {},
     };
   },
   computed: {
@@ -87,6 +88,15 @@ const StatsPage = {
   },
   methods: {
     shortId, fmtTime, fmtSize, reasonText,
+    treeSummary(tree) {
+      const { total, passed } = MatchTree.explainCounts(tree);
+      return passed === total
+        ? this.t('stats.matchTree.summaryAllPassed', { total })
+        : this.t('stats.matchTree.summary', { total, passed });
+    },
+    toggleRawCondition(key) {
+      this.rawConditionOpen = { ...this.rawConditionOpen, [key]: !this.rawConditionOpen[key] };
+    },
     logDate(value) {
       const formatted = fmtTime(value, false);
       return formatted ? formatted.slice(5, 10) : '-';
@@ -395,8 +405,21 @@ const StatsPage = {
                 </div>
                 <div class="match-chain-evaluation">
                   <span class="match-chain-reason" :class="'reason-'+c.reason">{{reasonText(c.reason)}}</span>
-                  <code v-if="c.condition" class="match-chain-cond">{{c.condition}}</code>
-                  <div v-if="c.mismatch" class="match-chain-mismatch"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span>{{c.mismatch}}</span></div>
+                  <span v-if="c.detailTree" class="match-chain-tree-summary">{{treeSummary(c.detailTree)}}</span>
+                  <template v-else>
+                    <code v-if="c.condition" class="match-chain-cond">{{c.condition}}</code>
+                    <div v-if="c.detail && c.reason!=='match' && c.reason!=='shadowed'" class="match-chain-mismatch"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span>{{c.detail}}</span></div>
+                  </template>
+                </div>
+                <div v-if="c.detailTree" class="match-chain-tree">
+                  <match-explain-tree :tree="c.detailTree"></match-explain-tree>
+                  <template v-if="c.condition">
+                    <button type="button" class="match-chain-raw-toggle" :aria-expanded="!!rawConditionOpen[shownLogItem.log.id+':'+i]"
+                      @click="toggleRawCondition(shownLogItem.log.id+':'+i)">
+                      <i class="bi bi-code-slash" aria-hidden="true"></i>{{rawConditionOpen[shownLogItem.log.id+':'+i]?t('stats.matchTree.hideRaw'):t('stats.matchTree.showRaw')}}
+                    </button>
+                    <code v-if="rawConditionOpen[shownLogItem.log.id+':'+i]" class="match-chain-cond">{{c.condition}}</code>
+                  </template>
                 </div>
               </li>
             </ol>

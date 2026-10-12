@@ -157,3 +157,48 @@ test('equality conditions whose extra = is kept are flagged (JSONPath, query and
     MatchTree.legacy('query', 'p=1'), MatchTree.group('any', [MatchTree.legacy('header', 'X==y')])]);
   assert.deepEqual(plain(MatchTree.doubleEqualsConditions(tree)), ['$.a==b', 'X==y']);
 });
+
+// ==================== 匹配鏈的樹狀比對說明（detailTree） ====================
+
+const EXPLAINED = {
+  node: 'all', passed: false, children: [
+    { node: 'leaf', passed: true, spec: { source: 'body', selector: { jsonPath: '$.type' }, op: 'equals', value: 'vip' }, actual: '"vip"' },
+    { node: 'leaf', passed: false, spec: { source: 'header', name: 'X-Region', op: 'in', value: ['TW', 'HK'] }, actual: '"JP"' },
+    { node: 'not', passed: true, children: [{ node: 'leaf', passed: false, spec: { source: 'header', name: 'X-Test', op: 'exists' }, missing: true }] },
+    { node: 'legacy', source: 'query', passed: true, condition: 'page!=0', actual: '1' },
+  ],
+};
+
+test('explain helpers: a root ALL lists its children; counts are top-level conditions', () => {
+  const MatchTree = load();
+  assert.equal(MatchTree.explainTopLevel(EXPLAINED).length, 4);
+  assert.deepEqual(plain(MatchTree.explainCounts(EXPLAINED)), { total: 4, passed: 3 });
+  const single = { node: 'any', passed: true, children: [] };
+  assert.deepEqual(plain(MatchTree.explainTopLevel(single)), [single]);
+  assert.deepEqual(plain(MatchTree.explainCounts(null)), { total: 0, passed: 0 });
+  assert.equal(MatchTree.isExplainGroup(EXPLAINED.children[2]), true);
+  assert.equal(MatchTree.isExplainGroup(EXPLAINED.children[0]), false);
+});
+
+test('explain helpers: under NOT a failing condition is what makes the group pass', () => {
+  const MatchTree = load();
+  const testHeader = EXPLAINED.children[2].children[0];
+  assert.equal(MatchTree.explainOk(testHeader, true), true);
+  assert.equal(MatchTree.explainOk(testHeader, false), false);
+  assert.equal(MatchTree.explainOk(EXPLAINED.children[0], false), true);
+});
+
+test('explainLeaf: structured and legacy conditions split into target, op and value', () => {
+  const MatchTree = load();
+  assert.deepEqual(plain(MatchTree.explainLeaf(EXPLAINED.children[0])),
+    { source: 'body', target: '$.type', op: 'equals', value: 'vip', options: [] });
+  assert.deepEqual(plain(MatchTree.explainLeaf(EXPLAINED.children[1])),
+    { source: 'header', target: 'X-Region', op: 'in', value: '[TW, HK]', options: [] });
+  assert.equal(MatchTree.explainLeaf(EXPLAINED.children[2].children[0]).value, '');
+  assert.deepEqual(plain(MatchTree.explainLeaf(EXPLAINED.children[3])),
+    { source: 'query', target: 'page', op: 'notEquals', value: '0' });
+  assert.equal(MatchTree.explainLeaf({ node: 'leaf', passed: true, spec: { source: 'body', selector: { raw: true }, op: 'equalToJson', value: { a: 1 } } }).value, '{"a":1}');
+  assert.equal(MatchTree.explainLeaf({ node: 'leaf', passed: true, valueOmitted: true, spec: { source: 'header', name: 'X', op: 'in' } }).value, null);
+  assert.deepEqual(plain(MatchTree.explainLeaf({ node: 'leaf', passed: false, description: 'custom thing' })), { source: null, raw: 'custom thing' });
+  assert.deepEqual(plain(MatchTree.explainLeaf({ node: 'legacy', source: 'body', passed: false, condition: 'novalue' })), { source: 'body', raw: 'novalue' });
+});

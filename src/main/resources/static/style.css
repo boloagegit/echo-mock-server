@@ -2182,6 +2182,54 @@ tr.active { background: var(--hover) }
 }
 .log-inspector-trace .match-chain-list { overflow: visible; padding: 0; background: transparent }
 
+/* 匹配鏈的條件樹（MatchExplainTree） */
+.logs-workspace .match-chain-tree { grid-column: 2 / -1; display: grid; justify-items: start; gap: var(--space-xs); min-width: 0 }
+.match-chain-tree-summary { color: var(--muted); font-size: var(--font-sm) }
+.match-chain-raw-toggle {
+    display: inline-flex; align-items: center; gap: var(--space-xs); padding: 0; border: 0; background: none;
+    color: var(--primary); font-size: var(--font-sm); cursor: pointer;
+}
+.match-chain-raw-toggle:hover { text-decoration: underline }
+.mx-tree, .mx-children { margin: 0; padding: 0; list-style: none; width: 100% }
+.mx-tree { border-left: 2px solid var(--border); padding-left: var(--space-sm) }
+.mx-children { padding-left: 22px }
+.mx-node + .mx-node { margin-top: 2px }
+.mx-row {
+    display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: var(--space-sm); align-items: baseline;
+    padding: 3px var(--space-sm); border-radius: var(--radius-control); font-size: var(--font-sm); line-height: 1.5;
+}
+.mx-row.is-stuck { background: rgba(var(--danger-rgb), 0.10) }
+.mx-icon { font-size: var(--font-sm) }
+.mx-row.is-ok .mx-icon { color: var(--success) }
+.mx-row.is-stuck .mx-icon { color: var(--danger) }
+.mx-row.is-other .mx-icon { color: var(--muted) }
+.mx-group {
+    grid-column: 2 / -1; display: inline-flex; align-items: baseline; gap: var(--space-xs); justify-self: start;
+    padding: 0; border: 0; background: none; color: var(--text); font-size: inherit; text-align: left; cursor: pointer;
+}
+.mx-group-label { font-weight: 600 }
+.mx-count, .mx-chevron { color: var(--muted) }
+.mx-chevron { font-size: var(--font-xs) }
+.mx-group:hover .mx-chevron, .mx-group:focus-visible .mx-chevron { color: var(--primary) }
+.mx-cond { min-width: 0; overflow-wrap: anywhere }
+.mx-cond > * + * { margin-left: 0.4em }
+.mx-source { color: var(--muted); font-family: var(--font-mono); font-size: var(--font-xs) }
+.mx-target, .mx-value { color: var(--text); font-family: var(--font-mono); background: none; padding: 0 }
+.mx-op, .mx-muted { color: var(--muted) }
+.mx-stuck { color: var(--danger-text); font-weight: 600; white-space: nowrap }
+.mx-actual {
+    max-width: 320px; overflow: hidden; color: var(--muted); font-family: var(--font-mono); font-size: var(--font-xs);
+    text-overflow: ellipsis; white-space: nowrap;
+}
+.mx-actual-label { font-family: var(--font-ui) }
+.mx-actual.is-missing { font-style: italic }
+.mx-row.is-stuck .mx-actual { color: var(--danger-text) }
+.mx-truncated { padding: 3px var(--space-sm); color: var(--muted); font-size: var(--font-xs) }
+@media (max-width: 640px) {
+    .mx-row { grid-template-columns: 16px minmax(0, 1fr) }
+    .mx-actual { grid-column: 2; max-width: 100% }
+}
+
 .workspace-pagination.card-table-footer {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);

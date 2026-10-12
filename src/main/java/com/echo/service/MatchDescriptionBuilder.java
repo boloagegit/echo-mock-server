@@ -68,6 +68,10 @@ public class MatchDescriptionBuilder {
             if (e.isNearMiss()) {
                 sb.append(",\"nearMiss\":true");
             }
+            if (e.getDetailTree() != null) {
+                // 已是 JSON（由 MatchExplanationJson 產生），直接放入
+                sb.append(",\"detailTree\":").append(e.getDetailTree());
+            }
             sb.append("}");
         }
         sb.append("]");

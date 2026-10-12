@@ -1,10 +1,12 @@
 package com.echo.agent;
 
+import com.echo.core.match.MatchExplanation;
 import com.echo.entity.Protocol;
 import com.echo.entity.RequestLog;
 import com.echo.repository.RequestLogRepository;
 import com.echo.service.ConditionMatcher;
 import com.echo.service.MatchChainEntry;
+import com.echo.service.MatchExplanationJson;
 import com.echo.service.MatchDescriptionBuilder;
 import com.echo.service.RequestLogBatchWriter;
 import com.echo.service.RequestLogService;
@@ -463,10 +465,11 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 }
 
                 // Evaluate conditions
-                ConditionMatcher.ConditionDetail detail = conditionMatcher.matchesPreparedWithDetail(
+                MatchExplanation explanation = conditionMatcher.explainPrepared(
                         candidate.getMatchSpec(), candidate.getBodyCondition(), candidate.getQueryCondition(),
                         candidate.getHeaderCondition(), preparedBody,
                         task.getQueryString(), task.getHeaders());
+                ConditionMatcher.ConditionDetail detail = ConditionMatcher.toConditionDetail(explanation);
 
                 String detailStr = joinDetails(detail.getResults());
 
@@ -478,14 +481,14 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                                 candidate.getRuleId(), "match",
                                 candidate.getEndpoint(), candidate.getDescription(),
                                 buildConditionString(candidate),
-                                detail.score(), detailStr, false));
+                                detail.score(), detailStr, false, MatchExplanationJson.toJson(explanation)));
                     } else if (!hasShadowed) {
                         hasShadowed = true;
                         chain.add(new MatchChainEntry(
                                 candidate.getRuleId(), "shadowed",
                                 candidate.getEndpoint(), candidate.getDescription(),
                                 buildConditionString(candidate),
-                                detail.score(), detailStr, false));
+                                detail.score(), detailStr, false, MatchExplanationJson.toJson(explanation)));
                     }
                 } else if (detail.passedCount() > 0 && detail.passedCount() < detail.totalCount()) {
                     if (!hasNearMiss) {
@@ -494,7 +497,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                                 candidate.getRuleId(), "near-miss",
                                 candidate.getEndpoint(), candidate.getDescription(),
                                 buildConditionString(candidate),
-                                detail.score(), detailStr, true));
+                                detail.score(), detailStr, true, MatchExplanationJson.toJson(explanation)));
                     }
                 }
                 // mismatch (all fail) — skip, not useful to show

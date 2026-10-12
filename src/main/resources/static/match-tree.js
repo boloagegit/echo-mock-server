@@ -276,7 +276,56 @@ const MatchTree = (() => {
         if (parent) parent.children = parent.children.filter(child => child.id !== id);
     };
 
+    // ==================== 匹配鏈的樹狀比對說明（後端 MatchExplanationJson） ====================
+
+    const LEGACY_OPERATORS = { '=': 'equals', '!=': 'notEquals', '*=': 'contains', '~=': 'matches' };
+
+    const isExplainGroup = node => !!node && (node.node === 'all' || node.node === 'any' || node.node === 'not');
+
+    /** 最上層列出的節點：根節點是「全部要符合」時直接列出子節點（與規則摘要相同，預設的 ALL 不另外顯示）。 */
+    const explainTopLevel = tree => {
+        if (!tree) return [];
+        return tree.node === 'all' ? (tree.children || []) : [tree];
+    };
+
+    /** 最上層條件數與通過數。 */
+    const explainCounts = tree => {
+        const top = explainTopLevel(tree);
+        return { total: top.length, passed: top.filter(node => node.passed).length };
+    };
+
+    /** 節點對整體結果是否有幫助：在 NOT 底下，不符合才算有幫助。 */
+    const explainOk = (node, negated) => !!node.passed !== !!negated;
+
+    /**
+     * 單一條件的顯示欄位 {source, target, op, value, options}；op 是 OPS 中的名稱（由畫面翻譯）。
+     * 無法拆解時只有 {source, raw}。
+     */
+    const explainLeaf = node => {
+        if (node.node === 'legacy') {
+            const parsed = parseLegacyCondition(node.condition);
+            if (!parsed) return { source: node.source, raw: node.condition };
+            return { source: node.source, target: parsed.field, op: LEGACY_OPERATORS[parsed.operator], value: parsed.value };
+        }
+        if (!isObject(node.spec)) return { source: null, raw: node.description || '' };
+        try {
+            const item = fromSpec(node.spec).children[0];
+            const target = item.source === 'body'
+                ? (item.selectorKind === 'raw' ? '' : item.selector)
+                : item.name;
+            let value = item.valueText;
+            if (node.valueOmitted) value = null;
+            else if (NO_VALUE_OPS.includes(item.op)) value = '';
+            else if (item.op === 'in') value = '[' + item.valueText.split('\n').join(', ') + ']';
+            else if (item.op === 'equalToJson') value = JSON.stringify(node.spec.value);
+            return { source: item.source, target, op: item.op, value, options: Object.keys(item.options || {}) };
+        } catch {
+            return { source: node.spec.source || null, raw: JSON.stringify(node.spec) };
+        }
+    };
+
     return {
+        isExplainGroup, explainTopLevel, explainCounts, explainOk, explainLeaf,
         OPS, NO_VALUE_OPS, NUMERIC_OPS, SELECTOR_KINDS, OP_SYMBOLS,
         group, leaf, legacy, fromSpec, toSpec, fromLegacyStrings, toLegacyStrings, optionsFor,
         parseLegacyCondition, toSimpleRows, hasDoubleEquals, doubleEqualsConditions,

@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [Unreleased]
 
 ### Added
+- Request Log match chain shows each evaluated rule's conditions as a tree: groups (all / any / NOT) with how many of their conditions passed, every condition with the value actually received, and the conditions that made the rule fail marked; passed groups start collapsed and the raw condition text is one click away. Stored per analysed entry as a size-capped `detailTree`; older records display as before
 - The rule editor warns about equality conditions whose value starts with `=` (usually written as `==`) where the extra `=` is part of the expected value: JSONPath (`$.`), query and header conditions
 - Advanced condition editor: the rule editor switches between the existing simple rows and a tree editor for `all` / `any` groups, NOT and the new operators, validates against the server while typing, and round-trips `echo.mock/v2` documents; the rule list and detail summarize structured conditions
 - Structured match conditions (`matchSpec`): `all` / `any` / `not` groups with `exists`, `absent`, numeric `gt`/`gte`/`lt`/`lte`, `in` and `equalToJson` in addition to the existing operators, validated on save with the JSON path of any error; available through the REST API, JSON import/export and new `echo.mock/v2` documents (`spec.match`). `echo.mock/v1` is unchanged, and manifests of rules that use structured conditions are emitted as v2
@@ -49,6 +50,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Spring Boot updated to 3.5.16 and the build aligned with the supported Gradle 8.14.5 line
 
 ### Fixed
+- The Request Log match chain now shows the pass/fail details of near-miss and skipped entries recorded without a condition tree; the page read a field the server never sent
 - Opening an existing rule in the editor and saving it no longer changes or drops conditions: simple-mode condition rows, declarative documents and v1 document validation now split conditions exactly like matching does (first `=`, so `a=x!=y` is `a` equals `x!=y`), keep the leading `//` of XPath fields, and show conditions that cannot be represented as rows (for example one without an operator) unchanged in advanced mode instead of deleting them
 - SSE zero-delay callback ownership race that could cancel the following delayed event; late future registration retains timeout/disconnect cleanup
 - Request-log proxy error values are bounded to the existing 255-character column without altering transport responses

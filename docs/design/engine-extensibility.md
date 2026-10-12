@@ -280,7 +280,7 @@ local name 取代這段 XPath（以差異測試確保結果與順序相同）；
 
 - `explain()` 回傳樹狀結果：每個葉節點包含 expected、actual、passed。
 - 計分：以**根節點的直接子節點**計算 `passed/total`（舊規則就是一個扁平的 `all`，結果與現在的 `score()` 相同）。
-- `MatchChainEntry` 原有欄位與 JSON 格式不變；新增可選欄位 `detailTree`。前端只在有值時顯示。
+- `MatchChainEntry` 原有欄位與 JSON 格式不變；新增可選欄位 `detailTree`。前端只在有值時顯示。（已完成，見 7.2.10）
 
 ## 5. 引擎、協定與回應 SPI
 
@@ -723,6 +723,26 @@ JMS 的結果因此會受其他規則影響。經確認統一成串流的結果�
 結論：JMS 不再因進階條件改用 DOM，大型 XML 不論 HTTP 或 JMS 都明顯變快；其餘情境持平。
 另外一次測試中途因為磁碟空間不足（歷次壓測遺留的資料目錄），內嵌 JMS broker 暫停接收訊息，該次結果作廢重跑；
 壓測腳本已改為每次結束後刪除資料目錄。
+
+### 7.2.10 匹配鏈的條件樹（§4.6）
+
+請求紀錄「匹配鏈」原本只顯示規則與原始條件文字，進階條件是一整段 JSON，看不出哪個群組或條件沒過；
+near-miss 的逐條結果雖然有記錄（`detail`），但畫面讀的是不存在的 `mismatch` 欄位，從來沒有顯示。
+
+- **後端**：`MatchExplanation` 新增 `leaf`（結構化條件的原始節點）；`ConditionMatcher.explainPrepared` 回傳樹狀說明，
+  原本的 `matchesPreparedWithDetail` 由它攤平而來，結果不變。`LogAgent` 只為會顯示的條目（match、第一個 shadowed、
+  第一個 near-miss）以 `MatchExplanationJson` 產生 `detailTree`，因此每筆紀錄最多三棵樹。
+- **格式**：群組 `{node:"all|any|not", passed, children}`；結構化條件 `{node:"leaf", passed, spec, actual}`；
+  舊格式條件 `{node:"legacy", source, passed, condition, actual}`；取不到值為 `missing`，body 太大為 `unavailable`。
+- **大小上限**：一棵樹最多 200 個節點、約 8,000 字（超過時該群組其餘條件不列出，標 `truncated`），單一文字 300 字、`spec` 超過 1,000 字時省略期望值
+  （`valueOmitted`）。只在背景分析時產生，請求路徑與 fast path 不變；分析被略過（佇列壅塞）時也不會產生。
+- **畫面**：根節點的「全部要符合」不另外顯示，直接列出各條件（與規則摘要相同）。沒過的群組預設展開、已通過的收起；
+  造成整條規則沒過的條件標示「卡在這裡」，NOT 底下的條件以「對整體是否有幫助」著色。原始條件改為按需顯示。
+  沒有 `detailTree` 的舊紀錄照舊顯示原始條件，near-miss／skipped 另外顯示原本就有的逐條結果。
+
+**驗證**：`MatchExplanationJsonTest`（群組、實際值、缺值、舊格式、上限）、`MatchChainAnalysisTest`（只有評估過條件的條目附上樹）、
+`match-tree.test.cjs`（顯示用的拆解與 NOT 著色），以及實際啟動伺服器建立進階與舊格式規則、送出請求後以 Playwright
+檢查深色與淺色主題的畫面（無前端錯誤）。
 
 ### 7.3 風險
 

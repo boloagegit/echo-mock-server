@@ -11,12 +11,18 @@ import java.util.List;
  * @param expected 葉節點的條件描述；組合節點為 null
  * @param actual   葉節點實際取到的值摘要；組合節點為 null
  * @param children 子節點說明；葉節點為空
+ * @param leaf     結構化條件的葉節點（供畫面以原本的欄位顯示）；其他節點為 null
  */
 public record MatchExplanation(String node, boolean passed, String expected, String actual,
-                               List<MatchExplanation> children) {
+                               List<MatchExplanation> children, MatchNode.Leaf leaf) {
 
     public MatchExplanation {
         children = List.copyOf(children);
+    }
+
+    public MatchExplanation(String node, boolean passed, String expected, String actual,
+                            List<MatchExplanation> children) {
+        this(node, passed, expected, actual, children, null);
     }
 
     /** 直接子節點中符合的數量；葉節點視為一個條件。 */

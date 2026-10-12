@@ -483,8 +483,19 @@ public class ConditionMatcher {
     public ConditionDetail matchesPreparedWithDetail(String matchSpec, String bodyCondition, String queryCondition,
                                                      String headerCondition, PreparedBody prepared,
                                                      String queryString, Map<String, String> headers) {
-        return toConditionDetail(compiled(matchSpec, bodyCondition, queryCondition, headerCondition)
-                .explain(evalContext(prepared, queryString, headers)));
+        return toConditionDetail(explainPrepared(matchSpec, bodyCondition, queryCondition, headerCondition,
+                prepared, queryString, headers));
+    }
+
+    /**
+     * 樹狀的比對說明（每個群組與條件是否符合、實際取到的值），供匹配鏈顯示；
+     * 攤平成逐條結果請用 {@link #toConditionDetail(MatchExplanation)}。
+     */
+    public MatchExplanation explainPrepared(String matchSpec, String bodyCondition, String queryCondition,
+                                            String headerCondition, PreparedBody prepared,
+                                            String queryString, Map<String, String> headers) {
+        return compiled(matchSpec, bodyCondition, queryCondition, headerCondition)
+                .explain(evalContext(prepared, queryString, headers));
     }
 
     private static EvalContext evalContext(PreparedBody prepared, String queryString, Map<String, String> headers) {
@@ -496,7 +507,7 @@ public class ConditionMatcher {
      * 結構化條件則把每個條件（葉節點）攤平成一筆，type 為 {@code matchSpec}，
      * 整體是否符合仍以整棵樹（含 any／not）的結果為準。
      */
-    private static ConditionDetail toConditionDetail(MatchExplanation explanation) {
+    public static ConditionDetail toConditionDetail(MatchExplanation explanation) {
         List<ConditionResult> results = new ArrayList<>(explanation.children().size());
         addConditionResults(explanation, false, results);
         return ConditionDetail.builder()
