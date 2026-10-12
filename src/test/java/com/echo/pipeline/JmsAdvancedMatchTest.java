@@ -23,7 +23,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** JMS 規則的結構化條件：候選規則中有 matchSpec 時改為完整解析 body，並依條件選擇規則。 */
+/** JMS 規則的結構化條件：簡單 XPath 也走串流掃描（不建立 DOM），並依條件選擇規則。 */
 class JmsAdvancedMatchTest {
 
     private static final String SPEC = """
@@ -51,7 +51,7 @@ class JmsAdvancedMatchTest {
     }
 
     @Test
-    void advancedCandidateUsesFullParseAndSelectsByCondition() {
+    void advancedCandidatesWithSimpleXPathAreStreamedAndSelectByCondition() {
         when(jmsProperties.getQueue()).thenReturn("ORDER.Q");
         when(jmsRuleService.findPreparedJmsRules("ORDER.Q"))
                 .thenReturn(List.of(rule("big", SPEC, 1L), rule("default", null, 2L)));
@@ -62,7 +62,8 @@ class JmsAdvancedMatchTest {
         assertThat(respond("<Order><Amount>5</Amount><Vip/></Order>")).isEqualTo("<big/>");
         assertThat(respond("<Order><Amount>5</Amount></Order>")).isEqualTo("<default/>");
 
-        verify(conditionMatcher, never()).prepareBodyForConditions(anyString(), any());
+        // 串流掃描不會呼叫完整解析
+        verify(conditionMatcher, never()).prepareBody(anyString());
     }
 
     @Test
@@ -74,6 +75,6 @@ class JmsAdvancedMatchTest {
         when(ruleService.findResponseBodyById(1L)).thenReturn(Optional.of("<legacy/>"));
 
         assertThat(respond("<Order><Amount>5</Amount></Order>")).isEqualTo("<legacy/>");
-        verify(conditionMatcher).prepareBodyForConditions(anyString(), any());
+        verify(conditionMatcher, never()).prepareBody(anyString());
     }
 }

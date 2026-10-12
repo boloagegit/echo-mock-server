@@ -152,18 +152,19 @@ const MatchTree = (() => {
     };
 
     /**
-     * 期望值以 = 開頭的「等於」條件（通常是寫成 ==）。舊版只有 JSON body 的欄位路徑會把 == 當成 =，
-     * JSONPath、XPath、XML body、query 與 header 都會把多出的 = 當成期望值的一部分（§4.4 #3）。
+     * 期望值以 = 開頭的「等於」條件（通常是寫成 ==），而且這個 = 會被當成期望值的一部分：
+     * JSONPath（$. 開頭）、query 與 header 不會把 == 當成 =；JSON 欄位路徑與 XML 路徑會（§4.4 #3、§7.2.9）。
      */
-    const hasDoubleEquals = condition => {
+    const hasDoubleEquals = (condition, source = 'body') => {
         const parsed = parseLegacyCondition(condition);
-        return !!parsed && parsed.operator === '=' && parsed.value.startsWith('=');
+        return !!parsed && parsed.operator === '=' && parsed.value.startsWith('=')
+            && (source !== 'body' || parsed.field.startsWith('$.'));
     };
 
     /** 樹中有上述問題的舊格式片段原文。 */
     const doubleEqualsConditions = node => (node.kind === 'group'
         ? node.children.flatMap(doubleEqualsConditions)
-        : (node.kind === 'legacy' && hasDoubleEquals((node.condition || '').trim()) ? [node.condition.trim()] : []));
+        : (node.kind === 'legacy' && hasDoubleEquals((node.condition || '').trim(), node.source) ? [node.condition.trim()] : []));
 
     /** 條件列寫回字串後拆解結果不變，才算能用條件列表示（例如 "a! =b" 寫回 "a!=b" 會變成不等於）。 */
     const simpleRowOf = (type, condition) => {

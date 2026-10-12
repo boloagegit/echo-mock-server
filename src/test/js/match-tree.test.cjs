@@ -141,15 +141,19 @@ test('simple rows keep // paths and refuse conditions they cannot represent exac
   assert.deepEqual(plain(MatchTree.toSimpleRows(null, ' ; ', '')), []);
 });
 
-test('equality conditions whose value starts with = are flagged (== is not normalized except for JSON field paths)', () => {
+test('equality conditions whose extra = is kept are flagged (JSONPath, query and header)', () => {
   const MatchTree = load();
-  for (const condition of ['$.a==b', '//Status==OPEN', 'x-type==vip', 'a = =b']) {
-    assert.equal(MatchTree.hasDoubleEquals(condition), true, condition);
-  }
-  for (const condition of ['a=b', 'a!==b', 'a*==b', 'a~==b', 'a=b==c', 'hello', '=x']) {
+  assert.equal(MatchTree.hasDoubleEquals('$.a==b'), true);
+  assert.equal(MatchTree.hasDoubleEquals('x-type==vip', 'header'), true);
+  assert.equal(MatchTree.hasDoubleEquals('page==1', 'query'), true);
+  // JSON 欄位路徑與 XML 路徑會把 == 當成 =
+  for (const condition of ['//Status==OPEN', 'type==vip', 'Order/Status==OPEN', 'a = =b']) {
     assert.equal(MatchTree.hasDoubleEquals(condition), false, condition);
   }
-  const tree = MatchTree.group('all', [MatchTree.legacy('body', ' $.a==b '), MatchTree.legacy('query', 'p=1'),
-    MatchTree.group('any', [MatchTree.legacy('header', 'X==y')])]);
+  for (const condition of ['$.a=b', '$.a!==b', '$.a*==b', 'hello', '=x']) {
+    assert.equal(MatchTree.hasDoubleEquals(condition), false, condition);
+  }
+  const tree = MatchTree.group('all', [MatchTree.legacy('body', ' $.a==b '), MatchTree.legacy('body', 'Status==OPEN'),
+    MatchTree.legacy('query', 'p=1'), MatchTree.group('any', [MatchTree.legacy('header', 'X==y')])]);
   assert.deepEqual(plain(MatchTree.doubleEqualsConditions(tree)), ['$.a==b', 'X==y']);
 });

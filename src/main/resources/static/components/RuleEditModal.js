@@ -95,7 +95,7 @@ const RuleEditModal = {
         // 期望值以 = 開頭的等於條件（多半是寫成 ==），比對時多出的 = 會成為期望值的一部分
         const doubleEqualsConditions = Vue.computed(() => (props.matchMode === 'advanced'
             ? (props.matchTree ? MatchTree.doubleEqualsConditions(props.matchTree) : [])
-            : props.conditions.filter(c => c.field && MatchTree.hasDoubleEquals(c.field + (c.operator || '=') + (c.value || '')))
+            : props.conditions.filter(c => c.field && MatchTree.hasDoubleEquals(c.field + (c.operator || '=') + (c.value || ''), c.type))
                 .map(c => c.field + (c.operator || '=') + c.value)));
         // 只有舊格式片段、但條件列無法完整表示（例如沒有運算子），所以以進階模式顯示
         const legacyNotSimple = Vue.computed(() => {

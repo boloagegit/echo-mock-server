@@ -23,4 +23,12 @@ public interface ValueSourceFactory {
      * @throws IllegalArgumentException 參數不合法（例如 JSONPath 語法錯誤）
      */
     ValueExtractor create(String name, Selector selector, MatcherLimits limits);
+
+    /**
+     * 取值是否會讀請求 body。預設 true，讓自行註冊、會讀 body 的來源得到完整解析的 body；
+     * 只讀 header、query 等的來源應回傳 false，讓沒有 body 條件的規則不必解析 body。
+     */
+    default boolean readsBody() {
+        return true;
+    }
 }

@@ -32,6 +32,7 @@ final class LazyBodyView implements BodyView {
     private JsonNode json;
     private boolean xmlParsed;
     private Document xml;
+    private java.util.Map<XmlPath, java.util.List<String>> xmlValues;
 
     LazyBodyView(String raw, MatcherLimits limits) {
         this.raw = raw;
@@ -64,6 +65,18 @@ final class LazyBodyView implements BodyView {
             xml = parseXml();
         }
         return xml;
+    }
+
+    @Override
+    public java.util.List<String> xmlValues(XmlPath path) {
+        Document doc = xml();
+        if (doc == null) {
+            return null;
+        }
+        if (xmlValues == null) {
+            xmlValues = new java.util.HashMap<>();
+        }
+        return xmlValues.computeIfAbsent(path, ignored -> path.select(doc));
     }
 
     private JsonNode parseJson() {

@@ -17,10 +17,12 @@ final class CompiledNodes {
 
         private final List<CompiledMatcher> children;
         private final String cacheKey;
+        private final BodyRequirements bodyRequirements;
 
         All(List<CompiledMatcher> children, String cacheKey) {
             this.children = List.copyOf(children);
             this.cacheKey = cacheKey;
+            this.bodyRequirements = mergedRequirements(this.children);
         }
 
         @Override
@@ -46,6 +48,11 @@ final class CompiledNodes {
         }
 
         @Override
+        public BodyRequirements bodyRequirements() {
+            return bodyRequirements;
+        }
+
+        @Override
         public boolean isUnconditional() {
             return children.isEmpty();
         }
@@ -55,10 +62,12 @@ final class CompiledNodes {
 
         private final List<CompiledMatcher> children;
         private final String cacheKey;
+        private final BodyRequirements bodyRequirements;
 
         Any(List<CompiledMatcher> children, String cacheKey) {
             this.children = List.copyOf(children);
             this.cacheKey = cacheKey;
+            this.bodyRequirements = mergedRequirements(this.children);
         }
 
         @Override
@@ -81,6 +90,11 @@ final class CompiledNodes {
         @Override
         public String cacheKey() {
             return cacheKey;
+        }
+
+        @Override
+        public BodyRequirements bodyRequirements() {
+            return bodyRequirements;
         }
     }
 
@@ -109,6 +123,11 @@ final class CompiledNodes {
         public String cacheKey() {
             return cacheKey;
         }
+
+        @Override
+        public BodyRequirements bodyRequirements() {
+            return child.bodyRequirements();
+        }
     }
 
     static final class Leaf implements CompiledMatcher {
@@ -120,9 +139,14 @@ final class CompiledNodes {
         private final int maxFieldValueLength;
         private final String description;
         private final String cacheKey;
+        private final BodyRequirements bodyRequirements;
 
+        /**
+         * @param readsBody 取值器不是內建 body 取值器時，來源是否會讀 body（無法判斷需求時視為需要完整解析）
+         */
         Leaf(ValueExtractor extractor, CompiledPredicate predicate, MatchNode.Quantifier quantifier,
-             boolean resultWhenMissing, int maxFieldValueLength, String description, String cacheKey) {
+             boolean resultWhenMissing, int maxFieldValueLength, String description, String cacheKey,
+             boolean readsBody) {
             this.extractor = extractor;
             this.predicate = predicate;
             this.quantifier = quantifier;
@@ -130,6 +154,79 @@ final class CompiledNodes {
             this.maxFieldValueLength = maxFieldValueLength;
             this.description = description;
             this.cacheKey = cacheKey;
+            this.bodyRequirements = requirementsOf(extractor, readsBody);
+        }
+
+        private BodyRequirements requirementsOf(ValueExtractor extractor, boolean readsBody) {
+            if (extractor instanceof BodyExtractor body) {
+                XmlPath path = body.xmlPath();
+                if (path != null) {
+                    return BodyRequirements.streamable(new LeafStreamCheck(path));
+                }
+                return body.needsXmlDom() ? BodyRequirements.FULL : BodyRequirements.BODY_WITHOUT_XML;
+            }
+            return readsBody ? BodyRequirements.FULL : BodyRequirements.NONE;
+        }
+
+        /** 與 {@link #decide} 相同的規則，只是值由串流掃描逐一提供。 */
+        private final class LeafStreamCheck implements BodyRequirements.StreamCheck {
+
+            private final XmlPath path;
+
+            private LeafStreamCheck(XmlPath path) {
+                this.path = path;
+            }
+
+            @Override
+            public XmlPath path() {
+                return path;
+            }
+
+            @Override
+            public String cacheKey() {
+                return cacheKey;
+            }
+
+            @Override
+            public BodyRequirements.Probe newProbe() {
+                return new BodyRequirements.Probe() {
+                    private boolean anyValue;
+                    private boolean anyUsable;
+                    private Boolean decided;
+
+                    @Override
+                    public boolean offer(String value) {
+                        anyValue = true;
+                        if (value.length() > maxFieldValueLength) {
+                            return false;
+                        }
+                        anyUsable = true;
+                        boolean passed = predicate.test(Value.ofText(value));
+                        if (quantifier == MatchNode.Quantifier.ANY && passed) {
+                            decided = true;
+                        } else if (quantifier == MatchNode.Quantifier.ALL && !passed) {
+                            decided = false;
+                        }
+                        return decided != null;
+                    }
+
+                    @Override
+                    public void skipped() {
+                        anyValue = true;
+                    }
+
+                    @Override
+                    public boolean result() {
+                        if (decided != null) {
+                            return decided;
+                        }
+                        if (!anyValue) {
+                            return resultWhenMissing;
+                        }
+                        return quantifier == MatchNode.Quantifier.ALL && anyUsable;
+                    }
+                };
+            }
         }
 
         @Override
@@ -147,6 +244,11 @@ final class CompiledNodes {
         @Override
         public String cacheKey() {
             return cacheKey;
+        }
+
+        @Override
+        public BodyRequirements bodyRequirements() {
+            return bodyRequirements;
         }
 
         private boolean decide(Extracted extracted) {
@@ -199,6 +301,14 @@ final class CompiledNodes {
                     ? text.substring(0, MAX_ACTUAL_TEXT_LENGTH) + "…" : text;
             return "\"" + shown + "\"";
         }
+    }
+
+    private static BodyRequirements mergedRequirements(List<CompiledMatcher> children) {
+        List<BodyRequirements> requirements = new ArrayList<>(children.size());
+        for (CompiledMatcher child : children) {
+            requirements.add(child.bodyRequirements());
+        }
+        return BodyRequirements.merge(requirements);
     }
 
     private static List<MatchExplanation> explainAll(List<CompiledMatcher> children, EvalContext context) {

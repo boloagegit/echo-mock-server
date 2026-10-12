@@ -22,6 +22,15 @@ public interface BodyView {
     /** 解析後的 XML DOM（不分 namespace）；不是 XML 或過大時為 null。 */
     Document xml();
 
+    /**
+     * 依 {@link XmlPath} 取值（規則與串流掃描相同）；不是 XML 時為 null。
+     * 實作可在同一請求內快取，讓多個條件共用同一條路徑的結果。
+     */
+    default java.util.List<String> xmlValues(XmlPath path) {
+        Document doc = xml();
+        return doc == null ? null : path.select(doc);
+    }
+
     static BodyView of(String raw, MatcherLimits limits) {
         return new LazyBodyView(raw, limits);
     }

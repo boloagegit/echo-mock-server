@@ -119,7 +119,7 @@ class HttpMockPipelineTest {
                     .thenReturn(List.of(rule));
 
             ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
+            when(conditionMatcher.prepareBody(anyString(), anyCollection())).thenReturn(prepared);
             when(conditionMatcher.matchesPrepared(eq("name=test"), isNull(), isNull(),
                     any(), eq("page=1&size=10"), eq(Map.of("Content-Type", "application/json"))))
                     .thenReturn(true);
@@ -159,7 +159,7 @@ class HttpMockPipelineTest {
                     .thenReturn(List.of(rule));
 
             ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
+            when(conditionMatcher.prepareBody(anyString(), anyCollection())).thenReturn(prepared);
             when(conditionMatcher.matchesPrepared(eq("name=test"), isNull(), isNull(),
                     any(), eq("page=1&size=10"), eq(Map.of("Content-Type", "application/json"))))
                     .thenReturn(true);
@@ -326,7 +326,7 @@ class HttpMockPipelineTest {
                     .thenReturn(List.of(rule));
 
             ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
+            when(conditionMatcher.prepareBody(anyString(), anyCollection())).thenReturn(prepared);
             when(conditionMatcher.matchesPrepared(eq("name=test"), isNull(), isNull(),
                     any(), eq("page=1&size=10"), eq(Map.of("Content-Type", "application/json"))))
                     .thenReturn(true);

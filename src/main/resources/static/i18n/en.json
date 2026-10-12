@@ -1874,7 +1874,7 @@
     "legacyCondition": "Legacy condition",
     "legacyPlaceholder": "e.g. user.type=vip",
     "legacyNote": "Legacy conditions keep simple-mode matching (JSON / XML detected automatically)",
-    "doubleEqualsWarning": "{conditions}: the value starts with =. Only field paths on a JSON body treat == as =; for JSONPath, XPath, XML, query and header conditions the extra = becomes part of the expected value. Use a single = to match equality.",
+    "doubleEqualsWarning": "{conditions}: the value starts with =. JSONPath ($.), query and header conditions do not treat == as =, so the extra = becomes part of the expected value. Use a single = to match equality.",
     "legacyNotSimpleNote": "Some conditions of this rule cannot be shown exactly as simple rows, so they are shown here; their text and matching are unchanged.",
     "invalidJsonValue": "The expected value for \"JSON equals\" is not valid JSON",
     "switchToSimpleWarning": "These advanced conditions cannot be shown as simple condition rows; switching clears them.",

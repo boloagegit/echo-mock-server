@@ -126,7 +126,7 @@ class JmsMockPipelineTest {
                     .thenReturn(List.of(rule));
 
             ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBodyForConditions(anyString(), anyList()))
+            when(conditionMatcher.prepareBody(anyString(), anyCollection()))
                     .thenReturn(prepared);
             when(conditionMatcher.matchesPrepared(
                     eq("ServiceName=CreateOrder"), isNull(), isNull(),
@@ -340,7 +340,7 @@ class JmsMockPipelineTest {
                     .thenReturn(List.of(rule));
 
             ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBodyForConditions(anyString(), anyList()))
+            when(conditionMatcher.prepareBody(anyString(), anyCollection()))
                     .thenReturn(prepared);
             when(conditionMatcher.matchesPrepared(
                     eq("ServiceName=CreateOrder"), isNull(), isNull(),

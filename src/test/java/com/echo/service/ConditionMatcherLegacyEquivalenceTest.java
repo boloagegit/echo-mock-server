@@ -39,7 +39,7 @@ class ConditionMatcherLegacyEquivalenceTest {
     @Test
     void jmsStreamingOutcomesMatchFullDomEvaluation() {
         List<String> streamable = List.of("//Status=OPEN", "Item=5");
-        ConditionMatcher.PreparedBody streamed = matcher.prepareBodyForConditions(XML, streamable);
+        ConditionMatcher.PreparedBody streamed = prepareBodyFor(matcher, XML, streamable);
 
         for (String condition : List.of("//Status=OPEN", "Item=5", "Item=9", "//Item/@sku=S2")) {
             assertThat(matcher.matchesPrepared(condition, null, null, streamed, null, null))
@@ -108,5 +108,13 @@ class ConditionMatcherLegacyEquivalenceTest {
         context.register(ConditionMatcher.class);
         context.refresh();
         return context;
+    }
+
+    /** 以候選規則的 body 條件準備 body（與 pipeline 相同的規則）。 */
+    private static ConditionMatcher.PreparedBody prepareBodyFor(ConditionMatcher matcher, String body,
+                                                                java.util.List<String> bodyConditions) {
+        return matcher.prepareBody(body, bodyConditions.stream()
+                .map(condition -> matcher.conditions(condition, null, null))
+                .toList());
     }
 }

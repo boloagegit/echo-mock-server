@@ -98,9 +98,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
             // 2. 準備 body（若 MockRequest 已有 preparedBody 則直接使用）
             ConditionMatcher.PreparedBody preparedBody = request.getPreparedBody();
             if (preparedBody == null) {
-                preparedBody = requiresBodyParsing(candidates)
-                        ? prepareBody(request, candidates)
-                        : ConditionMatcher.PreparedBody.rawOnly(request.getBody());
+                preparedBody = prepareBodyForMatching(request, candidates);
             }
 
             // 3. 匹配規則
@@ -416,30 +414,30 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
      * JSON/XML 只在至少一條啟用候選規則真的使用 body 條件時解析。
      * 結構化條件一律視為需要 body（只有使用進階條件的規則會因此多一次解析）。
      */
-    private boolean requiresBodyParsing(List<T> candidates) {
+    /**
+     * 依候選規則條件的需求準備 body（§4.5）：沒有條件讀 body 時不解析；XML 且條件都能串流時只掃描一次、不建立 DOM；
+     * 其他情況照常解析。HTTP 與 JMS 用同一套規則。
+     */
+    public ConditionMatcher.PreparedBody prepareBodyForMatching(MockRequest request, List<T> candidates) {
+        List<ConditionMatcher.RuleConditions> conditions = null;
         for (T rule : candidates) {
             if (Boolean.FALSE.equals(rule.getEnabled())) {
                 continue;
             }
-            ConditionSet conditions = extractConditions(rule);
-            String bodyCondition = conditions.getBodyCondition();
-            if ((bodyCondition != null && !bodyCondition.isBlank()) || conditions.getMatchSpec() != null) {
-                return true;
+            ConditionSet set = extractConditions(rule);
+            String bodyCondition = set.getBodyCondition();
+            // 只有 query／header 條件的規則不讀 body，不必查詢它們的需求
+            if ((bodyCondition == null || bodyCondition.isBlank()) && set.getMatchSpec() == null) {
+                continue;
             }
+            if (conditions == null) {
+                conditions = new ArrayList<>();
+            }
+            conditions.add(conditionMatcher.conditions(set.getMatchSpec(), bodyCondition,
+                    set.getQueryCondition(), set.getHeaderCondition()));
         }
-        return false;
-    }
-
-    /**
-     * 協定可覆寫 body 準備策略；HTTP 維持既有完整解析，JMS 可依候選條件走串流路徑。
-     */
-    public ConditionMatcher.PreparedBody prepareBodyForMatching(MockRequest request, List<T> candidates) {
-        return requiresBodyParsing(candidates) ? prepareBody(request, candidates)
-                : ConditionMatcher.PreparedBody.rawOnly(request.getBody());
-    }
-
-    protected ConditionMatcher.PreparedBody prepareBody(MockRequest request, List<T> candidates) {
-        return conditionMatcher.prepareBody(request.getBody());
+        return conditions == null ? ConditionMatcher.PreparedBody.rawOnly(request.getBody())
+                : conditionMatcher.prepareBody(request.getBody(), conditions);
     }
 
     // ==================== 共用實作方法 ====================
