@@ -70,6 +70,10 @@ const RulesPage = {
   },
   mounted() {
     this.loadOrderIssues();
+    document.addEventListener('pointerdown', this.closeOrderHintOutside);
+  },
+  beforeUnmount() {
+    document.removeEventListener('pointerdown', this.closeOrderHintOutside);
   },
   computed: {
     orderIssueList() {
@@ -157,6 +161,9 @@ const RulesPage = {
     },
   },
   methods: {
+    closeOrderHintOutside(event) {
+      if (this.orderIssuesOpen && !this.$refs.orderHint?.contains(event.target)) { this.orderIssuesOpen = false; }
+    },
     async loadOrderIssues() {
       try {
         const r = await apiCall('/api/admin/rules/order-issues', {}, { silent: true });
@@ -216,6 +223,25 @@ const RulesPage = {
         <div class="page-heading">
             <h1 class="page-title">{{t('rules.title')}}</h1>
             <span class="page-count">{{ruleTotalElements}}</span>
+            <div v-if="orderIssues.count" ref="orderHint" class="rule-order-hint" @keydown.esc.stop="orderIssuesOpen = false">
+                <button type="button" class="rule-order-hint__chip" aria-haspopup="dialog" :aria-expanded="orderIssuesOpen ? 'true' : 'false'"
+                    @click="orderIssuesOpen = !orderIssuesOpen">
+                    <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>{{t('rules.order.hintChip', {count: orderIssues.count})}}
+                    <i class="bi" :class="orderIssuesOpen ? 'bi-chevron-up' : 'bi-chevron-down'" aria-hidden="true"></i>
+                </button>
+                <div v-if="orderIssuesOpen" class="rule-order-hint__panel" role="dialog" :aria-label="t('rules.order.bannerTitle', {count: orderIssues.count})">
+                    <p class="rule-order-hint__title">{{t('rules.order.bannerTitle', {count: orderIssues.count})}}</p>
+                    <p class="rule-order-hint__sub">{{t('rules.order.bannerHint')}}</p>
+                    <ul class="rule-order-hint__list">
+                        <li v-for="issue in orderIssueList" :key="issue.id">
+                            <button type="button" @click="orderIssuesOpen = false; $emit('open-rule-detail', {id: issue.id})">
+                                <span class="rule-order-hint__rule"><code>{{issue.route}}</code><b>{{issue.description || issue.id.slice(0, 8)}}</b></span>
+                                <span class="rule-order-hint__why">{{orderIssueReason(issue)}}</span>
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+            </div>
         </div>
         <div class="page-actions">
             <ui-button variant="secondary" @click="$emit('load-rules', true)" :disabled="loading.rules"><i class="bi bi-arrow-clockwise" :class="{'spin':loading.rules}" aria-hidden="true"></i>{{t('rules.refresh')}}</ui-button>
@@ -254,25 +280,6 @@ const RulesPage = {
         :clear-label="t('rules.clearAll')"
         @remove="$emit('remove-rule-chip', $event)"
         @clear="$emit('clear-rule-filters')"></ui-filter-chip-list>
-
-    <section v-if="orderIssues.count" class="rule-order-banner" role="status">
-        <div class="rule-order-banner__head">
-            <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
-            <strong>{{t('rules.order.bannerTitle', {count: orderIssues.count})}}</strong>
-            <span class="rule-order-banner__hint">{{t('rules.order.bannerHint')}}</span>
-            <button type="button" class="rule-order-banner__toggle" :aria-expanded="orderIssuesOpen ? 'true' : 'false'"
-                @click="orderIssuesOpen = !orderIssuesOpen">{{orderIssuesOpen ? t('rules.order.bannerHide') : t('rules.order.bannerShow')}}
-                <i class="bi" :class="orderIssuesOpen ? 'bi-chevron-up' : 'bi-chevron-down'" aria-hidden="true"></i></button>
-        </div>
-        <ul v-if="orderIssuesOpen" class="rule-order-banner__list">
-            <li v-for="issue in orderIssueList" :key="issue.id">
-                <button type="button" @click="$emit('open-rule-detail', {id: issue.id})">
-                    <code>{{issue.route}}</code><b>{{issue.description || issue.id.slice(0, 8)}}</b>
-                    <span>{{orderIssueReason(issue)}}</span>
-                </button>
-            </li>
-        </ul>
-    </section>
 
     <div v-if="batchSelectMode" class="batch-bar" role="region" :aria-label="t('rules.batchSelect')">
         <span class="batch-bar__count">{{t('rules.selectedCount', {count: selectedRules.length})}}</span>

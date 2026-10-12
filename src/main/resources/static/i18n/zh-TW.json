@@ -69,8 +69,7 @@
       "tooltipEarlierDefault": "前面已經有「{rule}」這條沒設條件的規則，永遠輪不到",
       "bannerTitle": "{count} 條規則永遠輪不到",
       "bannerHint": "通常是重複建立或忘了刪的舊規則",
-      "bannerShow": "查看",
-      "bannerHide": "收起"
+      "hintChip": "{count} 條輪不到"
     },
     "advancedMatch": "進階",
     "applyFieldSpecMatch": "結構化條件（all／any／not 與 exists、數值比較、in 等運算子）；與 bodyCondition、queryCondition、headerCondition 互斥，使用時文件為 echo.mock/v2",

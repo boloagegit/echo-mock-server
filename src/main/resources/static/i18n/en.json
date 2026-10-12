@@ -69,8 +69,7 @@
       "tooltipEarlierDefault": "\"{rule}\" already has no conditions and comes first; never reached",
       "bannerTitle": "{count} rules can never be reached",
       "bannerHint": "Usually duplicates or old rules that were never removed",
-      "bannerShow": "Show",
-      "bannerHide": "Hide"
+      "hintChip": "{count} never reached"
     },
     "advancedMatch": "Advanced",
     "applyFieldSpecMatch": "Structured condition (all / any / not with exists, numeric comparison, in and more); cannot be combined with bodyCondition, queryCondition or headerCondition and makes the document echo.mock/v2",

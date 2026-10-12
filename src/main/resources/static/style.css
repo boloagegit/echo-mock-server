@@ -2215,25 +2215,30 @@ button.ro-item:hover, button.ro-item:focus-visible { border-color: var(--border2
 .ro-side { display: grid; justify-items: end; gap: 4px }
 .ro-route { color: var(--muted); font-family: var(--font-mono); font-size: var(--font-xs); white-space: nowrap }
 .ro-end { display: flex; gap: 6px; align-items: baseline; color: var(--muted) }
-.rule-order-banner {
-    margin: 0 0 var(--space-sm); padding: 8px 12px; border: 1px solid rgba(var(--warning-rgb), 0.5);
-    border-radius: var(--radius-panel); background: rgba(var(--warning-rgb), 0.08); font-size: var(--font-sm);
+.rule-order-hint { position: relative; display: inline-flex; align-self: center }
+.rule-order-hint__chip {
+    display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border: 1px solid rgba(var(--warning-rgb), 0.5);
+    border-radius: 999px; background: rgba(var(--warning-rgb), 0.1); color: var(--warning-text);
+    font: inherit; font-size: var(--font-xs); font-weight: 600; cursor: pointer;
 }
-.rule-order-banner__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px }
-.rule-order-banner__head > .bi { color: var(--warning) }
-.rule-order-banner__hint { color: var(--muted) }
-.rule-order-banner__toggle {
-    display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 0; border: 0;
-    background: none; color: var(--primary); font: inherit; cursor: pointer;
+.rule-order-hint__chip:hover, .rule-order-hint__chip[aria-expanded="true"] { background: rgba(var(--warning-rgb), 0.18) }
+.rule-order-hint__chip > .bi:first-child { color: var(--warning) }
+.rule-order-hint__panel {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; width: min(440px, calc(100vw - 32px));
+    padding: 10px; border: 1px solid var(--border2); border-radius: var(--radius-panel); background: var(--surface-raised);
+    box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.5); font-size: var(--font-sm);
 }
-.rule-order-banner__list { display: grid; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none }
-.rule-order-banner__list button {
-    display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; width: 100%; padding: 4px 6px; border: 0;
-    border-radius: var(--radius-control); background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+.rule-order-hint__title { margin: 0; font-weight: 600 }
+.rule-order-hint__sub { margin: 2px 0 8px; color: var(--muted); font-size: var(--font-xs) }
+.rule-order-hint__list { display: grid; gap: 2px; max-height: 320px; margin: 0; padding: 0; overflow: auto; list-style: none }
+.rule-order-hint__list button {
+    display: grid; gap: 2px; width: 100%; padding: 6px 8px; border: 0; border-radius: var(--radius-control);
+    background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer;
 }
-.rule-order-banner__list button:hover, .rule-order-banner__list button:focus-visible { background: var(--surface-neutral-soft) }
-.rule-order-banner__list code { color: var(--muted); background: none; padding: 0 }
-.rule-order-banner__list span { color: var(--muted); font-size: var(--font-xs) }
+.rule-order-hint__list button:hover, .rule-order-hint__list button:focus-visible { background: var(--surface-neutral-soft) }
+.rule-order-hint__rule { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px }
+.rule-order-hint__rule code { color: var(--muted); background: none; padding: 0; font-size: var(--font-xs) }
+.rule-order-hint__why { color: var(--muted); font-size: var(--font-xs) }
 
 /* 請求處理流程（RequestFlowView）：抽屜窄時由上而下，加寬後由左而右 */
 .log-inspector-flow { overflow: auto }
