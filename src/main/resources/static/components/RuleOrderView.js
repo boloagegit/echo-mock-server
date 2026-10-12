@@ -12,7 +12,7 @@ const RuleOrderView = {
   emits: ['open-rule'],
   inject: ['t'],
   data() {
-    return { order: null, loading: false, failed: false };
+    return { order: null, loading: false, failed: false, expanded: {} };
   },
   computed: {
     numbered() {
@@ -30,11 +30,26 @@ const RuleOrderView = {
     },
     defaultNumber() { return this.numbered.find(entry => entry.usedAsDefault)?.number || null; },
     self() { return this.numbered.find(entry => entry.self) || null; },
+    /** 一定要顯示的項目：這條規則、擋住它的規則、預設回應。 */
+    keepIds() {
+      return [this.self?.id, this.self?.issue?.byRuleId, this.numbered.find(entry => entry.usedAsDefault)?.id]
+        .filter(Boolean);
+    },
+    stages() {
+      return [
+        { key: 'conditional', entries: this.conditionalEntries },
+        { key: 'fallback', entries: this.fallbackEntries },
+      ].map(stage => ({
+        ...stage,
+        shown: this.expanded[stage.key] ? stage.entries
+          : RuleOrder.visibleEntries(stage.entries, this.keepIds, this.self?.id),
+      }));
+    },
     scope() { return this.self ? this.route(this.self) : ''; },
     jms() { return this.order?.protocol === 'JMS'; }
   },
   watch: {
-    ruleId: { immediate: true, handler() { this.load(); } },
+    ruleId: { immediate: true, handler() { this.expanded = {}; this.load(); } },
     version() { this.load(); }
   },
   methods: {
@@ -109,14 +124,17 @@ const RuleOrderView = {
         <p v-if="order.wildcard" class="ro-note"><i class="bi bi-info-circle" aria-hidden="true"></i>{{t('rules.order.wildcardNote')}}</p>
         <p v-if="self && !self.enabled" class="ro-note"><i class="bi bi-pause-circle" aria-hidden="true"></i>{{t('rules.order.selfDisabled')}}</p>
 
-        <template v-for="stage in [{key: 'conditional', entries: conditionalEntries}, {key: 'fallback', entries: fallbackEntries}]" :key="stage.key">
+        <template v-for="stage in stages" :key="stage.key">
           <div v-if="stage.entries.length" class="ro-stage">
             <span class="ro-stage-n" aria-hidden="true">{{stage.key==='conditional' ? 1 : 2}}</span>
             <span>{{t('rules.order.stage_' + stage.key)}}</span><span class="ro-muted">{{t('rules.order.stageNote_' + stage.key)}}</span>
           </div>
           <ol v-if="stage.entries.length" class="ro-list">
-            <li v-for="entry in stage.entries" :key="entry.id">
-              <component :is="entry.self ? 'div' : 'button'" :type="entry.self ? null : 'button'" class="ro-item"
+            <li v-for="(entry, i) in stage.shown" :key="entry.id || 'gap-' + i">
+              <button v-if="entry.gap" type="button" class="ro-gap" @click="expanded = {...expanded, [stage.key]: true}">
+                <i class="bi bi-three-dots" aria-hidden="true"></i>{{t('rules.order.showHidden', {count: entry.gap, total: stage.entries.length})}}
+              </button>
+              <component v-else :is="entry.self ? 'div' : 'button'" :type="entry.self ? null : 'button'" class="ro-item"
                 :class="{'is-self': entry.self, 'is-issue': entry.issue, 'is-default': entry.usedAsDefault, 'is-off': !entry.enabled}"
                 :title="entry.self ? null : t('rules.order.openRule')" @click="open(entry)">
                 <span class="ro-n tabular-nums">{{entry.number}}</span>

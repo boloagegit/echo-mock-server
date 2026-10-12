@@ -225,6 +225,25 @@ class RuleOrderServiceTest {
     }
 
     @Test
+    void manyRulesOnOnePathAreCheckedByConditionContent() {
+        List<HttpRule> rules = new java.util.ArrayList<>();
+        for (int i = 0; i < 2_000; i++) {
+            HttpRule rule = http(String.format("r%04d", i), "POST", "/orders", 0, null);
+            // 欄位順序交替，內容相同的條件仍要視為相同
+            rule.setMatchSpec(i % 2 == 0
+                    ? "{\"source\":\"body\",\"selector\":{\"jsonPath\":\"$.t\"},\"op\":\"equals\",\"value\":\"v" + (i % 500) + "\"}"
+                    : "{\"value\":\"v" + (i % 500) + "\",\"op\":\"equals\",\"selector\":{\"jsonPath\":\"$.t\"},\"source\":\"body\"}");
+            rule.setCreatedAt(T0.plusSeconds(i));
+            rules.add(rule);
+        }
+        RuleOrderService service = service(rules, List.of(), null);
+
+        // 500 種條件各保留最新的一條，其餘 1,500 條輪不到
+        assertThat(service.issues().count()).isEqualTo(1_500);
+        assertThat(service.orderFor("r1000").orElseThrow().entries()).hasSize(2_000);
+    }
+
+    @Test
     void issuesAreReusedUntilTheRulesChange() {
         RuleOrderService service = service(http("a", "GET", "/a", 1, null), http("b", "GET", "/a", 0, null));
         RuleOrderService.IssuesView first = service.issues();

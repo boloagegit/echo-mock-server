@@ -5,12 +5,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 
 /**
  * 找出「一定輪不到」的規則，並列出一條規則的判斷順序。規則挑選見 {@code RuleSelector}：
@@ -22,11 +22,17 @@ import java.util.Objects;
  *   <li>R 與 E 都沒有條件：E 一定先被當成預設規則（{@link #EARLIER_DEFAULT}）。</li>
  * </ul>
  * 條件寫法不同但意思重疊的情況不判斷。
+ * <p>
+ * 規則多時的效能：每條規則的條件只轉成一次比對用的文字（{@link Route#conditionKey}），規則依路徑（或 queue）與條件分組，
+ * 判斷一條規則時只看可能涵蓋它、而且條件相同（或同樣沒有條件）的那一組，並在遇到排在它之後的規則時停止。
  */
 final class RuleOrderAnalyzer {
 
     static final String DUPLICATE_CONDITIONS = "duplicateConditions";
     static final String EARLIER_DEFAULT = "earlierDefault";
+
+    /** 沒有條件的規則共用的分組（條件文字不會是這個值）。 */
+    private static final String NO_CONDITIONS = "\u0000none";
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -36,7 +42,7 @@ final class RuleOrderAnalyzer {
     /** 協定特有的部分：排序、適用範圍與條件。 */
     interface Route<R extends BaseRule> {
 
-        /** 與實際比對相同的候選順序。 */
+        /** 與實際比對相同的候選順序（不含排序條件相同時的先後，見 {@link Index}）。 */
         Comparator<R> order();
 
         /** {@code broader} 是否一定是 {@code narrower} 所有請求的候選規則。 */
@@ -50,50 +56,99 @@ final class RuleOrderAnalyzer {
 
         boolean conditional(R rule);
 
-        /** 兩條規則的條件文字是否完全相同（不判斷寫法不同但意思相同）。 */
-        boolean sameConditions(R a, R b);
+        /** 條件的比對用文字：兩條規則的條件完全相同（不判斷寫法不同但意思相同）時文字相同。只對有條件的規則呼叫。 */
+        String conditionKey(R rule);
 
-        /** 可能適用於 {@code rule} 請求的規則（用來縮小比較範圍，必須包含所有 covers 的規則）。 */
-        Collection<R> candidatesFor(R rule);
+        /** 規則所在的分組（HTTP 路徑、JMS queue）。 */
+        String group(R rule);
+
+        /** 可能涵蓋 {@code rule} 的規則所在的分組，包含它自己的分組。 */
+        List<String> coveringGroups(R rule);
     }
 
     /** 規則被判定輪不到的原因與擋住它的規則。 */
     record Issue<R>(String type, R by) {
     }
 
-    /** {@code rule} 輪不到時回傳原因（擋住它的是最前面的那條），否則回傳 null。 */
-    static <R extends BaseRule> Issue<R> issueOf(R rule, Route<R> route) {
-        boolean conditional = route.conditional(rule);
-        Issue<R> found = null;
-        for (R earlier : route.candidatesFor(rule)) {
-            if (Objects.equals(earlier.getId(), rule.getId()) || gated(earlier)
-                    || route.order().compare(earlier, rule) >= 0 || !route.covers(earlier, rule)) {
-                continue;
-            }
-            String type = null;
-            if (conditional && route.conditional(earlier) && route.sameConditions(earlier, rule)) {
-                type = DUPLICATE_CONDITIONS;
-            } else if (!conditional && !route.conditional(earlier)) {
-                type = EARLIER_DEFAULT;
-            }
-            if (type != null && (found == null || route.order().compare(earlier, found.by()) < 0)) {
-                found = new Issue<>(type, earlier);
-            }
-        }
-        return found;
-    }
+    /** 一組啟用中規則的索引：實際檢查的先後、依分組與條件分好的規則。建立一次，可重複查詢。 */
+    static final class Index<R extends BaseRule> {
 
-    /** 判斷 {@code rule} 時會一起考慮的規則（含它自己與只適用部分請求的規則），依實際檢查順序排列。 */
-    static <R extends BaseRule> List<R> orderFor(R rule, Collection<R> active, Route<R> route) {
-        List<R> ordered = new ArrayList<>();
-        ordered.add(rule);
-        for (R other : route.candidatesFor(rule)) {
-            if (!Objects.equals(other.getId(), rule.getId()) && route.overlaps(other, rule)) {
-                ordered.add(other);
+        private final Route<R> route;
+        private final Map<String, Integer> position = new HashMap<>();
+        /** 分組 → 條件文字 → 規則（依檢查先後）。 */
+        private final Map<String, Map<String, List<R>>> byGroupAndCondition = new HashMap<>();
+        /** 分組 → 規則（依檢查先後）。 */
+        private final Map<String, List<R>> byGroup = new HashMap<>();
+        private final Comparator<R> ranked;
+
+        Index(List<R> active, Route<R> route) {
+            this.route = route;
+            List<R> sorted = new ArrayList<>(active);
+            // 與實際比對相同：穩定排序，排序條件相同時維持規則來源的順序
+            sorted.sort(route.order());
+            for (int i = 0; i < sorted.size(); i++) {
+                R rule = sorted.get(i);
+                position.putIfAbsent(rule.getId(), i);
+                String group = route.group(rule);
+                byGroup.computeIfAbsent(group, key -> new ArrayList<>()).add(rule);
+                byGroupAndCondition.computeIfAbsent(group, key -> new HashMap<>())
+                        .computeIfAbsent(keyOf(rule), key -> new ArrayList<>()).add(rule);
             }
+            this.ranked = route.order().thenComparingInt(this::positionOf);
         }
-        ordered.sort(route.order());
-        return ordered;
+
+        /** {@code rule} 輪不到時回傳原因（擋住它的是最前面的那條），否則回傳 null。 */
+        Issue<R> issueOf(R rule) {
+            int rulePosition = positionOf(rule);
+            String key = keyOf(rule);
+            R earliest = null;
+            for (String group : route.coveringGroups(rule)) {
+                List<R> sameConditions = byGroupAndCondition.getOrDefault(group, Map.of()).get(key);
+                if (sameConditions == null) {
+                    continue;
+                }
+                for (R earlier : sameConditions) {
+                    int earlierPosition = positionOf(earlier);
+                    if (earlierPosition >= rulePosition) {
+                        break;
+                    }
+                    if (!gated(earlier) && route.covers(earlier, rule)) {
+                        if (earliest == null || earlierPosition < positionOf(earliest)) {
+                            earliest = earlier;
+                        }
+                        break;
+                    }
+                }
+            }
+            if (earliest == null) {
+                return null;
+            }
+            return new Issue<>(route.conditional(rule) ? DUPLICATE_CONDITIONS : EARLIER_DEFAULT, earliest);
+        }
+
+        /** 判斷 {@code rule} 時會一起考慮的規則（含它自己與只適用部分請求的規則），依實際檢查順序排列。 */
+        List<R> orderFor(R rule) {
+            List<R> ordered = new ArrayList<>();
+            ordered.add(rule);
+            for (String group : route.coveringGroups(rule)) {
+                for (R other : byGroup.getOrDefault(group, List.of())) {
+                    if (!Objects.equals(other.getId(), rule.getId()) && route.overlaps(other, rule)) {
+                        ordered.add(other);
+                    }
+                }
+            }
+            ordered.sort(ranked);
+            return ordered;
+        }
+
+        /** 不在索引中的規則（例如已停用）排在排序條件相同的規則之後。 */
+        private int positionOf(R rule) {
+            return position.getOrDefault(rule.getId(), Integer.MAX_VALUE);
+        }
+
+        private String keyOf(R rule) {
+            return route.conditional(rule) ? route.conditionKey(rule) : NO_CONDITIONS;
+        }
     }
 
     /** 需要情境狀態符合才會被檢查的規則（狀態不符時直接略過，所以不能確定它會擋住後面的規則）。 */
@@ -101,41 +156,44 @@ final class RuleOrderAnalyzer {
         return notBlank(rule.getScenarioName()) && notBlank(rule.getRequiredScenarioState());
     }
 
-    /** 結構化條件以 JSON 內容比較（欄位順序不同視為相同），舊格式條件以去除前後空白的文字比較。 */
-    static boolean sameMatchSpec(String a, String b) {
-        if (a == null || b == null) {
-            return a == null && b == null;
-        }
+    /** 結構化條件的比對用文字：JSON 物件的欄位依名稱排序（欄位順序不同視為相同）；不是合法 JSON 時用原文。 */
+    static String matchSpecKey(String matchSpec) {
         try {
-            JsonNode left = MAPPER.readTree(a);
-            JsonNode right = MAPPER.readTree(b);
-            return left.equals(right);
+            return "spec:" + canonical(MAPPER.readTree(matchSpec));
         } catch (Exception e) {
-            return a.trim().equals(b.trim());
+            return "spec-text:" + matchSpec.trim();
         }
     }
 
-    static boolean sameText(String a, String b) {
-        return Objects.equals(normalize(a), normalize(b));
+    /** 舊格式條件的比對用文字：每個欄位去除前後空白，空白視為沒有條件。 */
+    static String legacyKey(String... conditions) {
+        StringBuilder key = new StringBuilder("legacy");
+        for (String condition : conditions) {
+            key.append('\u0001').append(condition == null || condition.isBlank() ? "" : condition.trim());
+        }
+        return key.toString();
     }
 
-    /**
-     * 實際比對以穩定排序排列候選規則，排序條件相同時維持規則來源的順序；這裡以同樣方式決定先後，
-     * 不在 {@code active} 中的規則（例如已停用）排在相同條件的規則之後。
-     */
-    static <R extends BaseRule> Comparator<R> ranked(List<R> active, Comparator<R> order) {
-        Map<String, Integer> rank = new HashMap<>(active.size() * 2);
-        for (int i = 0; i < active.size(); i++) {
-            rank.putIfAbsent(active.get(i).getId(), i);
+    private static String canonical(JsonNode node) {
+        if (node.isObject()) {
+            Map<String, String> fields = new TreeMap<>();
+            for (Map.Entry<String, JsonNode> field : node.properties()) {
+                fields.put(field.getKey(), canonical(field.getValue()));
+            }
+            StringBuilder text = new StringBuilder("{");
+            fields.forEach((name, value) -> text.append(MAPPER.getNodeFactory().textNode(name)).append(':')
+                    .append(value).append(','));
+            return text.append('}').toString();
         }
-        return order.thenComparingInt(rule -> rank.getOrDefault(rule.getId(), Integer.MAX_VALUE));
+        if (node.isArray()) {
+            StringBuilder text = new StringBuilder("[");
+            node.forEach(item -> text.append(canonical(item)).append(','));
+            return text.append(']').toString();
+        }
+        return node.toString();
     }
 
     static boolean notBlank(String value) {
         return value != null && !value.isBlank();
-    }
-
-    private static String normalize(String value) {
-        return value == null || value.isBlank() ? null : value.trim();
     }
 }

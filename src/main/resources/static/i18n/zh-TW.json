@@ -50,6 +50,8 @@
       "noConditions": "沒設條件",
       "priority": "優先順序 {n}",
       "partial": "只在部分請求時檢查（{route}）",
+      "showHidden": "顯示其餘 {count} 條（共 {total} 條）",
+      "hintMore": "還有 {count} 條沒列出；規則列表中都有「輪不到」標記，可用搜尋找到它們。",
       "gated": "情境 {name} = {state} 時才檢查",
       "disabled": "已停用，不會檢查",
       "thisRule": "← 這條規則",

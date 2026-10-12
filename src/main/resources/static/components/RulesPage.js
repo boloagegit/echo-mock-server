@@ -77,7 +77,10 @@ const RulesPage = {
   },
   computed: {
     orderIssueList() {
-      return Object.entries(this.orderIssues.issues || {}).map(([id, issue]) => ({ id, ...issue }));
+      // 依路徑、再依說明排列（數字依大小），每次顯示的順序一致
+      return Object.entries(this.orderIssues.issues || {}).map(([id, issue]) => ({ id, ...issue }))
+        .sort((a, b) => (a.route || '').localeCompare(b.route || '')
+          || (a.description || a.id).localeCompare(b.description || b.id, undefined, { numeric: true }));
     },
     hasRuleFilters() {
       return Boolean(this.ruleFilter.keyword || this.ruleFilter.protocol || this.ruleFilter.enabled
@@ -233,13 +236,14 @@ const RulesPage = {
                     <p class="rule-order-hint__title">{{t('rules.order.bannerTitle', {count: orderIssues.count})}}</p>
                     <p class="rule-order-hint__sub">{{t('rules.order.bannerHint')}}</p>
                     <ul class="rule-order-hint__list">
-                        <li v-for="issue in orderIssueList" :key="issue.id">
+                        <li v-for="issue in orderIssueList.slice(0, 50)" :key="issue.id">
                             <button type="button" @click="orderIssuesOpen = false; $emit('open-rule-detail', {id: issue.id})">
                                 <span class="rule-order-hint__rule"><code>{{issue.route}}</code><b>{{issue.description || issue.id.slice(0, 8)}}</b></span>
                                 <span class="rule-order-hint__why">{{orderIssueReason(issue)}}</span>
                             </button>
                         </li>
                     </ul>
+                    <p v-if="orderIssueList.length > 50" class="rule-order-hint__sub">{{t('rules.order.hintMore', {count: orderIssueList.length - 50})}}</p>
                 </div>
             </div>
         </div>

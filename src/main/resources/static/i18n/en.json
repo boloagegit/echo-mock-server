@@ -50,6 +50,8 @@
       "noConditions": "No conditions",
       "priority": "priority {n}",
       "partial": "Only checked for some of these requests ({route})",
+      "showHidden": "Show {count} more ({total} in total)",
+      "hintMore": "{count} more not listed; every one is badged in the rule list and can be found by searching.",
       "gated": "Only checked when scenario {name} = {state}",
       "disabled": "Disabled; never checked",
       "thisRule": "← this rule",

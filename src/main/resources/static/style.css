@@ -2215,6 +2215,11 @@ button.ro-item:hover, button.ro-item:focus-visible { border-color: var(--border2
 .ro-side { display: grid; justify-items: end; gap: 4px }
 .ro-route { color: var(--muted); font-family: var(--font-mono); font-size: var(--font-xs); white-space: nowrap }
 .ro-end { display: flex; gap: 6px; align-items: baseline; color: var(--muted) }
+.ro-gap {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px dashed var(--border2);
+    border-radius: var(--radius-panel); background: none; color: var(--primary); font: inherit; font-size: var(--font-xs); cursor: pointer;
+}
+.ro-gap:hover, .ro-gap:focus-visible { background: var(--surface-neutral-soft) }
 .rule-order-hint { position: relative; display: inline-flex; align-self: center }
 .rule-order-hint__chip {
     display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border: 1px solid rgba(var(--warning-rgb), 0.5);

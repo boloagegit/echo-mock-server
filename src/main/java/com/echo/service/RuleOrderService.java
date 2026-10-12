@@ -7,15 +7,11 @@ import com.echo.entity.JmsRule;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -34,6 +30,9 @@ public class RuleOrderService {
     private final JmsRuleService jmsRuleService;
     private final Optional<JmsProperties> jmsProperties;
     private final AtomicReference<CachedIssues> cachedIssues = new AtomicReference<>();
+    /** 索引依規則來源物件重用（來源在規則異動、快取清除後才會換成新的物件）。 */
+    private final AtomicReference<HttpSource> cachedHttp = new AtomicReference<>();
+    private final AtomicReference<JmsSource> cachedJms = new AtomicReference<>();
 
     public RuleOrderService(HttpRuleService httpRuleService, JmsRuleService jmsRuleService,
                             Optional<JmsProperties> jmsProperties) {
@@ -84,14 +83,14 @@ public class RuleOrderService {
         }
         Map<String, IssueView> issues = new LinkedHashMap<>();
         for (HttpRule rule : http.active) {
-            RuleOrderAnalyzer.Issue<HttpRule> issue = RuleOrderAnalyzer.issueOf(rule, http.route);
+            RuleOrderAnalyzer.Issue<HttpRule> issue = http.index.issueOf(rule);
             if (issue != null) {
                 issues.put(rule.getId(), view(issue, rule, (rule.getMethod() != null ? rule.getMethod() : "*")
                         + " " + rule.getMatchKey()));
             }
         }
         for (JmsRule rule : jms.active) {
-            RuleOrderAnalyzer.Issue<JmsRule> issue = RuleOrderAnalyzer.issueOf(rule, jms.route);
+            RuleOrderAnalyzer.Issue<JmsRule> issue = jms.index.issueOf(rule);
             if (issue != null) {
                 issues.put(rule.getId(), view(issue, rule, "JMS " + rule.getQueueName()));
             }
@@ -106,17 +105,17 @@ public class RuleOrderService {
         Optional<HttpRule> httpRule = find(http.active, ruleId).or(() -> httpRuleService.findHttpRuleById(ruleId));
         if (httpRule.isPresent()) {
             HttpRule rule = httpRule.get();
-            return Optional.of(view(rule, "HTTP", "*".equals(rule.getMatchKey()), http.active, http.route));
+            return Optional.of(view(rule, "HTTP", "*".equals(rule.getMatchKey()), http.index, http.route));
         }
         JmsSource jms = jmsSource();
         return find(jms.all, ruleId).map(rule ->
-                view(rule, "JMS", "*".equals(rule.getQueueName()), jms.active, jms.route));
+                view(rule, "JMS", "*".equals(rule.getQueueName()), jms.index, jms.route));
     }
 
-    private <R extends BaseRule> RuleOrderView view(R rule, String protocol, boolean wildcard, List<R> active,
-                                                    RuleOrderAnalyzer.Route<R> route) {
+    private <R extends BaseRule> RuleOrderView view(R rule, String protocol, boolean wildcard,
+                                                    RuleOrderAnalyzer.Index<R> index, RuleOrderAnalyzer.Route<R> route) {
         Map<String, IssueView> issues = issues().issues();
-        List<R> ordered = RuleOrderAnalyzer.orderFor(rule, active, route);
+        List<R> ordered = index.orderFor(rule);
         List<Entry> entries = new ArrayList<>(ordered.size());
         boolean defaultFound = false;
         for (R entry : ordered) {
@@ -164,11 +163,12 @@ public class RuleOrderService {
 
     // ==================== 規則來源 ====================
 
-    private record HttpSource(Object origin, List<HttpRule> active, RuleOrderAnalyzer.Route<HttpRule> route) {
+    private record HttpSource(Object origin, List<HttpRule> active, RuleOrderAnalyzer.Route<HttpRule> route,
+                              RuleOrderAnalyzer.Index<HttpRule> index) {
     }
 
     private record JmsSource(Object origin, List<JmsRule> all, List<JmsRule> active,
-                             RuleOrderAnalyzer.Route<JmsRule> route) {
+                             RuleOrderAnalyzer.Route<JmsRule> route, RuleOrderAnalyzer.Index<JmsRule> index) {
     }
 
     private record CachedIssues(Object httpSource, Object jmsSource, IssuesView view) {
@@ -176,38 +176,37 @@ public class RuleOrderService {
 
     private HttpSource httpSource() {
         HttpRuleSnapshot snapshot = httpRuleService.httpRuleSnapshot();
+        HttpSource cached = cachedHttp.get();
+        if (cached != null && cached.origin == snapshot) {
+            return cached;
+        }
         List<HttpRule> active = snapshot.rules();
-        return new HttpSource(snapshot, active, new HttpRoute(active));
+        HttpRoute route = new HttpRoute();
+        HttpSource source = new HttpSource(snapshot, active, route, new RuleOrderAnalyzer.Index<>(active, route));
+        cachedHttp.set(source);
+        return source;
     }
 
     private JmsSource jmsSource() {
         List<JmsRule> all = jmsRuleService.findAllJmsRulesCached();
+        JmsSource cached = cachedJms.get();
+        if (cached != null && cached.origin == all) {
+            return cached;
+        }
         List<JmsRule> active = all.stream().filter(rule -> !Boolean.FALSE.equals(rule.getEnabled())).toList();
         String endpointField = jmsProperties.map(JmsProperties::getEndpointField).orElse(null);
-        return new JmsSource(all, all, active, new JmsRoute(active, endpointField));
+        JmsRoute route = new JmsRoute(endpointField);
+        JmsSource source = new JmsSource(all, all, active, route, new RuleOrderAnalyzer.Index<>(active, route));
+        cachedJms.set(source);
+        return source;
     }
 
     /** HTTP：host、method 與路徑都要涵蓋；路徑 {@code *} 涵蓋所有路徑，{@code /x/*} 涵蓋以 {@code /x/} 開頭的路徑。 */
     static final class HttpRoute implements RuleOrderAnalyzer.Route<HttpRule> {
 
-        private final Map<String, List<HttpRule>> byPath = new HashMap<>();
-        private final Set<String> prefixPaths = new LinkedHashSet<>();
-        private final Comparator<HttpRule> order;
-
-        HttpRoute(List<HttpRule> rules) {
-            this.order = RuleOrderAnalyzer.ranked(rules, HttpRuleService.HTTP_RULE_ORDER);
-            for (HttpRule rule : rules) {
-                String path = rule.getMatchKey();
-                byPath.computeIfAbsent(path, key -> new ArrayList<>()).add(rule);
-                if (path != null && path.endsWith("/*")) {
-                    prefixPaths.add(path);
-                }
-            }
-        }
-
         @Override
         public Comparator<HttpRule> order() {
-            return order;
+            return HttpRuleService.HTTP_RULE_ORDER;
         }
 
         @Override
@@ -233,27 +232,33 @@ public class RuleOrderService {
         }
 
         @Override
-        public boolean sameConditions(HttpRule a, HttpRule b) {
-            if (a.getMatchSpec() != null || b.getMatchSpec() != null) {
-                return RuleOrderAnalyzer.sameMatchSpec(a.getMatchSpec(), b.getMatchSpec());
-            }
-            return RuleOrderAnalyzer.sameText(a.getBodyCondition(), b.getBodyCondition())
-                    && RuleOrderAnalyzer.sameText(a.getQueryCondition(), b.getQueryCondition())
-                    && RuleOrderAnalyzer.sameText(a.getHeaderCondition(), b.getHeaderCondition());
+        public String conditionKey(HttpRule rule) {
+            return rule.getMatchSpec() != null ? RuleOrderAnalyzer.matchSpecKey(rule.getMatchSpec())
+                    : RuleOrderAnalyzer.legacyKey(rule.getBodyCondition(), rule.getQueryCondition(),
+                            rule.getHeaderCondition());
         }
 
         @Override
-        public Collection<HttpRule> candidatesFor(HttpRule rule) {
-            List<HttpRule> candidates = new ArrayList<>(byPath.getOrDefault(rule.getMatchKey(), List.of()));
-            for (String prefix : prefixPaths) {
-                if (!prefix.equals(rule.getMatchKey()) && pathCovers(prefix, rule.getMatchKey())) {
-                    candidates.addAll(byPath.get(prefix));
+        public String group(HttpRule rule) {
+            return String.valueOf(rule.getMatchKey());
+        }
+
+        /** 路徑本身、每一層上層的 {@code /x/*}，以及 {@code *}。 */
+        @Override
+        public List<String> coveringGroups(HttpRule rule) {
+            String path = String.valueOf(rule.getMatchKey());
+            List<String> groups = new ArrayList<>();
+            groups.add(path);
+            if (!"*".equals(path)) {
+                for (int i = path.indexOf('/'); i >= 0; i = path.indexOf('/', i + 1)) {
+                    String prefix = path.substring(0, i + 1) + "*";
+                    if (!prefix.equals(path)) {
+                        groups.add(prefix);
+                    }
                 }
+                groups.add("*");
             }
-            if (!"*".equals(rule.getMatchKey())) {
-                candidates.addAll(byPath.getOrDefault("*", List.of()));
-            }
-            return candidates;
+            return groups;
         }
 
         static boolean hostCovers(String broader, String narrower) {
@@ -291,21 +296,15 @@ public class RuleOrderService {
     /** JMS：queue 相同或 {@code *}；依 endpoint 欄位分桶時，較早的規則不能限定成別的 endpoint 值。 */
     static final class JmsRoute implements RuleOrderAnalyzer.Route<JmsRule> {
 
-        private final Map<String, List<JmsRule>> byQueue = new HashMap<>();
         private final String endpointField;
-        private final Comparator<JmsRule> order;
 
-        JmsRoute(List<JmsRule> rules, String endpointField) {
+        JmsRoute(String endpointField) {
             this.endpointField = endpointField;
-            this.order = RuleOrderAnalyzer.ranked(rules, JmsRuleService.JMS_RULE_ORDER);
-            for (JmsRule rule : rules) {
-                byQueue.computeIfAbsent(rule.getQueueName(), key -> new ArrayList<>()).add(rule);
-            }
         }
 
         @Override
         public Comparator<JmsRule> order() {
-            return order;
+            return JmsRuleService.JMS_RULE_ORDER;
         }
 
         @Override
@@ -341,20 +340,20 @@ public class RuleOrderService {
         }
 
         @Override
-        public boolean sameConditions(JmsRule a, JmsRule b) {
-            if (a.getMatchSpec() != null || b.getMatchSpec() != null) {
-                return RuleOrderAnalyzer.sameMatchSpec(a.getMatchSpec(), b.getMatchSpec());
-            }
-            return RuleOrderAnalyzer.sameText(a.getBodyCondition(), b.getBodyCondition());
+        public String conditionKey(JmsRule rule) {
+            return rule.getMatchSpec() != null ? RuleOrderAnalyzer.matchSpecKey(rule.getMatchSpec())
+                    : RuleOrderAnalyzer.legacyKey(rule.getBodyCondition());
         }
 
         @Override
-        public Collection<JmsRule> candidatesFor(JmsRule rule) {
-            List<JmsRule> candidates = new ArrayList<>(byQueue.getOrDefault(rule.getQueueName(), List.of()));
-            if (!"*".equals(rule.getQueueName())) {
-                candidates.addAll(byQueue.getOrDefault("*", List.of()));
-            }
-            return candidates;
+        public String group(JmsRule rule) {
+            return String.valueOf(rule.getQueueName());
+        }
+
+        @Override
+        public List<String> coveringGroups(JmsRule rule) {
+            String queue = String.valueOf(rule.getQueueName());
+            return "*".equals(queue) ? List.of(queue) : List.of(queue, "*");
         }
     }
 }
