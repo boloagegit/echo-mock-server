@@ -117,6 +117,56 @@ class LogAgentDurablePersistenceTest {
         awaitSpoolEmpty();
     }
 
+    @Test
+    void rowRejectedByTheDatabaseIsSkippedWithoutBlockingTheOthers() throws Exception {
+        when(batchWriter.findCheckpoint(anyString())).thenReturn(0L);
+        List<String> persisted = new java.util.concurrent.CopyOnWriteArrayList<>();
+        CountDownLatch done = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            List<RequestLog> logs = invocation.getArgument(2);
+            if (logs.stream().anyMatch(log -> "/rejected".equals(log.getEndpoint()))) {
+                throw new org.springframework.dao.DataIntegrityViolationException("value too long");
+            }
+            logs.forEach(log -> persisted.add(log.getEndpoint()));
+            if (persisted.contains("/after")) {
+                done.countDown();
+            }
+            return null;
+        }).when(batchWriter).persist(anyString(), anyLong(), anyList(), eq(1_000));
+        spool.append(task("rule-1", "/before"));
+        spool.append(task("rule-2", "/rejected"));
+        spool.append(task("rule-3", "/after"));
+        startAgent();
+
+        assertThat(done.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(persisted).containsExactly("/before", "/after");
+        awaitSpoolEmpty();
+        assertThat(agent.getStats().getDroppedCount()).isEqualTo(1);
+    }
+
+    @Test
+    void unavailableDatabaseNeverSkipsRows() throws Exception {
+        when(batchWriter.findCheckpoint(anyString())).thenReturn(0L);
+        AtomicInteger attempts = new AtomicInteger();
+        CountDownLatch delivered = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            if (attempts.incrementAndGet() <= 2) {
+                throw new org.springframework.dao.DataAccessResourceFailureException("database is locked");
+            }
+            List<RequestLog> logs = invocation.getArgument(2);
+            if (logs.size() == 1) {
+                delivered.countDown();
+            }
+            return null;
+        }).when(batchWriter).persist(anyString(), anyLong(), anyList(), eq(1_000));
+        startAgent();
+
+        agent.submitDurably(() -> task("rule-1", "/kept"));
+
+        assertThat(delivered.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(agent.getStats().getDroppedCount()).isZero();
+    }
+
     private void startAgent() {
         agent = new LogAgent(mock(RequestLogRepository.class), configService,
                 mock(ConditionMatcher.class), mock(RequestLogService.class),

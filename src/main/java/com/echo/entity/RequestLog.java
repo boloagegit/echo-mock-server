@@ -149,24 +149,59 @@ public class RequestLog {
         if (this.requestTime == null) {
             this.requestTime = LocalDateTime.now();
         }
-        this.forwardTarget = limitForwardTarget(this.forwardTarget);
+        fitColumns();
     }
 
     @PreUpdate
     public void onUpdate() {
-        this.forwardTarget = limitForwardTarget(this.forwardTarget);
+        fitColumns();
+    }
+
+    /**
+     * 讓值符合欄位：截短有長度上限的欄位，並移除 NUL 字元。這些值多半直接來自請求（網址、方法、Host header），
+     * SQLite 不檢查長度，但 PostgreSQL、MySQL、SQL Server、Oracle 會拒絕過長的值（PostgreSQL 也拒絕 NUL），
+     * 一筆被拒絕就會讓整批紀錄寫不進去。
+     */
+    void fitColumns() {
+        diagnosticId = fit(diagnosticId, 36);
+        ruleId = fit(ruleId, 36);
+        method = fit(method, 10);
+        endpoint = fit(endpoint, 500);
+        clientIp = fit(clientIp, 50);
+        targetHost = fit(targetHost, 255);
+        forwardTarget = fit(forwardTarget, MAX_FORWARD_TARGET_LENGTH);
+        proxyError = fit(proxyError, 255);
+        faultType = fit(faultType, 20);
+        scenarioName = fit(scenarioName, 100);
+        scenarioFromState = fit(scenarioFromState, 100);
+        scenarioToState = fit(scenarioToState, 100);
+        matchChain = withoutNul(matchChain);
+        requestBody = withoutNul(requestBody);
+        responseBody = withoutNul(responseBody);
+        scenarioSkipped = withoutNul(scenarioSkipped);
+    }
+
+    /** 移除 NUL 後截到 {@code max} 個字元，不切開 surrogate pair。 */
+    static String fit(String value, int max) {
+        String clean = withoutNul(value);
+        if (clean == null || clean.length() <= max) {
+            return clean;
+        }
+        int end = Character.isHighSurrogate(clean.charAt(max - 1)) ? max - 1 : max;
+        return clean.substring(0, end);
+    }
+
+    static String withoutNul(String value) {
+        return value == null || value.indexOf('\0') < 0 ? value : value.replace("\0", "");
     }
 
     /** 保護日誌寫入，避免合法但過長的下游描述使整批寫入回滾。 */
     public static String limitForwardTarget(String value) {
-        if (value == null || value.length() <= MAX_FORWARD_TARGET_LENGTH) {
-            return value;
-        }
-        return value.substring(0, MAX_FORWARD_TARGET_LENGTH);
+        return fit(value, MAX_FORWARD_TARGET_LENGTH);
     }
 
     /** Existing proxy_error column, including replay of older durable spool records. */
     public static String limitProxyError(String value) {
-        return value == null || value.length() <= 255 ? value : value.substring(0, 255);
+        return fit(value, 255);
     }
 }

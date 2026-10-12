@@ -223,6 +223,11 @@ public abstract class AbstractBatchAgent<T> implements EchoAgent {
         processedCount.addAndGet(itemCount);
     }
 
+    /** Allows a durable subclass consumer to report items it had to discard. */
+    protected final void recordRejected(String reason) {
+        recordDropped(reason);
+    }
+
     private void recordDropped(String reason) {
         long total = droppedCount.incrementAndGet();
         droppedSinceLastWarning.incrementAndGet();

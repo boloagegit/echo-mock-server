@@ -19,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -306,6 +307,50 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     }
 
     /**
+     * 逐筆寫入一批紀錄：被資料庫拒絕的那筆只推進進度、不寫入（記一筆警告並計入 dropped），
+     * 其他錯誤（例如資料庫無法連線）照常拋出，由外層等待後重試，不會跳過任何紀錄。
+     */
+    private void persistOneByOne(List<RequestLogSpool.SpoolEntry> batch, boolean detailedAnalysis) {
+        int maxRecords = configService.getRequestLogMaxRecords();
+        for (RequestLogSpool.SpoolEntry entry : batch) {
+            try {
+                durableBatchWriter.persist(durableSpool.getSpoolId(), entry.sequence(),
+                        List.of(toEntity(entry.task(), detailedAnalysis)), maxRecords);
+            } catch (RuntimeException e) {
+                if (!isRejectedData(e)) {
+                    throw e;
+                }
+                durableBatchWriter.persist(durableSpool.getSpoolId(), entry.sequence(), List.of(), maxRecords);
+                log.warn("Request log at spool sequence {} was rejected by the database and skipped: {}",
+                        entry.sequence(), rootMessage(e));
+                recordRejected("rejected by the database");
+            }
+        }
+    }
+
+    /** 資料本身不被接受（長度、NUL、NOT NULL 等限制），重試也不會成功。 */
+    public static boolean isRejectedData(Throwable error) {
+        for (Throwable t = error; t != null; t = t.getCause() == t ? null : t.getCause()) {
+            if (t instanceof DataIntegrityViolationException
+                    || t instanceof org.hibernate.exception.DataException
+                    || t instanceof org.hibernate.exception.ConstraintViolationException
+                    || t instanceof java.sql.SQLDataException
+                    || t instanceof java.sql.SQLIntegrityConstraintViolationException) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String rootMessage(Throwable error) {
+        Throwable root = error;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        return root.getMessage();
+    }
+
+    /**
      * Replays ordered spool rows. Main-DB commit and checkpoint are atomic; spool
      * cleanup happens only afterwards and is therefore safe to retry after a crash.
      */
@@ -341,8 +386,16 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                         .map(entry -> toEntity(entry.task(), detailedAnalysis))
                         .toList();
                 long lastSequence = batch.get(batch.size() - 1).sequence();
-                durableBatchWriter.persist(durableSpool.getSpoolId(), lastSequence,
-                        entities, configService.getRequestLogMaxRecords());
+                try {
+                    durableBatchWriter.persist(durableSpool.getSpoolId(), lastSequence,
+                            entities, configService.getRequestLogMaxRecords());
+                } catch (RuntimeException e) {
+                    if (!isRejectedData(e)) {
+                        throw e;
+                    }
+                    // 資料本身被資料庫拒絕（不是連不上）：逐筆重寫，只跳過被拒絕的那筆，其餘照常寫入
+                    persistOneByOne(batch, detailedAnalysis);
+                }
                 checkpoint = lastSequence;
                 if (checkpoint - lastCleanedCheckpoint >= DURABLE_CLEANUP_INTERVAL) {
                     durableSpool.deleteThrough(checkpoint);
@@ -363,6 +416,8 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 durableConsumerRunning.set(false);
                 break;
             } catch (Exception e) {
+                // 從資料庫重新讀取已確認的進度（逐筆重寫可能已前進一部分）
+                checkpoint = null;
                 log.warn("Durable request-log persistence paused; data remains in spool: {}",
                         e.getMessage());
                 try {
