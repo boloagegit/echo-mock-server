@@ -541,6 +541,40 @@ public class RequestLogSpool {
         }
     }
 
+    /**
+     * 保留最新 {@code keep} 筆時可以略過的最後一個序號：由新到舊數第 {@code keep + 1} 筆的序號；
+     * 筆數不超過 {@code keep} 時回傳 0。
+     */
+    public long sequenceBeforeNewest(int keep) {
+        String sql = "SELECT sequence_id FROM request_log_spool ORDER BY sequence_id DESC LIMIT 1 OFFSET ?";
+        try (Connection connection = openConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, Math.max(0, keep));
+            try (ResultSet row = statement.executeQuery()) {
+                return row.next() ? row.getLong(1) : 0;
+            }
+        } catch (SQLException e) {
+            throw new RequestLogUnavailableException(
+                    "Cannot inspect request-log spool: " + e.getMessage(), e);
+        }
+    }
+
+    /** 序號在 {@code afterExclusive}（不含）到 {@code throughInclusive}（含）之間的筆數。 */
+    public long countBetween(long afterExclusive, long throughInclusive) {
+        String sql = "SELECT COUNT(*) FROM request_log_spool WHERE sequence_id > ? AND sequence_id <= ?";
+        try (Connection connection = openConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, afterExclusive);
+            statement.setLong(2, throughInclusive);
+            try (ResultSet row = statement.executeQuery()) {
+                return row.next() ? row.getLong(1) : 0;
+            }
+        } catch (SQLException e) {
+            throw new RequestLogUnavailableException(
+                    "Cannot inspect request-log spool: " + e.getMessage(), e);
+        }
+    }
+
     public void deleteThrough(long sequence) {
         if (sequence <= 0) {
             return;

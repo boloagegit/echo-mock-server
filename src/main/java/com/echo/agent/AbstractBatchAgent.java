@@ -228,6 +228,11 @@ public abstract class AbstractBatchAgent<T> implements EchoAgent {
         recordDropped(reason);
     }
 
+    /** Counts items a durable consumer skipped on purpose (already logged by the caller). */
+    protected final void recordSkipped(long itemCount) {
+        droppedCount.addAndGet(itemCount);
+    }
+
     private void recordDropped(String reason) {
         long total = droppedCount.incrementAndGet();
         droppedSinceLastWarning.incrementAndGet();

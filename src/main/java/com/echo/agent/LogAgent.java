@@ -54,6 +54,13 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
 
     private static final String AGENT_NAME = "log-agent";
     private static final long DURABLE_CLEANUP_INTERVAL = 1_000;
+    /** 檢查待寫入量是否超過保留上限的間隔。 */
+    private static final long BACKLOG_CHECK_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(1);
+    private static final long SKIP_WARNING_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(30);
+    // 以下只由 durable consumer 執行緒使用
+    private long nextBacklogCheckNanos = System.nanoTime();
+    private long skippedSinceWarning;
+    private long lastSkipWarningNanos;
 
     private final RequestLogRepository requestLogRepository;
     private final SystemConfigService configService;
@@ -307,6 +314,38 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     }
 
     /**
+     * 主資料庫只保留最新 max-records 筆。待寫入的紀錄超過這個數量時，較舊的那些寫入後也會立刻被保留上限刪掉，
+     * 所以直接跳過：在同一個交易中推進進度（不寫入資料列），再從 spool 刪除並釋放空間。
+     * 這樣請求量長時間超過寫入速度時，待寫入的量維持在 max-records 左右，不會塞滿 spool 而卡住請求；
+     * 留下的仍是最新的紀錄。跳過的筆數計入 dropped 並記一筆警告。
+     *
+     * @return 跳過後的進度；沒有跳過時回傳原本的進度
+     */
+    private long skipBacklogBeyondRetention(long checkpoint) {
+        int maxRecords = configService.getRequestLogMaxRecords();
+        long cutoff = durableSpool.sequenceBeforeNewest(maxRecords);
+        if (cutoff <= checkpoint) {
+            return checkpoint;
+        }
+        long skipped = durableSpool.countBetween(checkpoint, cutoff);
+        durableBatchWriter.persist(durableSpool.getSpoolId(), cutoff, List.of(), maxRecords);
+        durableSpool.deleteThrough(cutoff);
+        if (skipped > 0) {
+            recordSkipped(skipped);
+            skippedSinceWarning += skipped;
+            long now = System.nanoTime();
+            // 持續過載時每秒都會跳過；警告最多每 30 秒彙總一次
+            if (lastSkipWarningNanos == 0 || now - lastSkipWarningNanos >= SKIP_WARNING_INTERVAL_NANOS) {
+                log.warn("Request logs arrive faster than they can be saved; skipped {} older entries that the "
+                        + "{}-record limit would delete anyway", skippedSinceWarning, maxRecords);
+                skippedSinceWarning = 0;
+                lastSkipWarningNanos = now;
+            }
+        }
+        return cutoff;
+    }
+
+    /**
      * 逐筆寫入一批紀錄：被資料庫拒絕的那筆只推進進度、不寫入（記一筆警告並計入 dropped），
      * 其他錯誤（例如資料庫無法連線）照常拋出，由外層等待後重試，不會跳過任何紀錄。
      */
@@ -363,6 +402,15 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                     checkpoint = durableBatchWriter.findCheckpoint(durableSpool.getSpoolId());
                     durableSpool.deleteThrough(checkpoint);
                     lastCleanedCheckpoint = checkpoint;
+                }
+                long now = System.nanoTime();
+                if (now - nextBacklogCheckNanos >= 0) {
+                    nextBacklogCheckNanos = now + BACKLOG_CHECK_INTERVAL_NANOS;
+                    long skippedThrough = skipBacklogBeyondRetention(checkpoint);
+                    if (skippedThrough > checkpoint) {
+                        checkpoint = skippedThrough;
+                        lastCleanedCheckpoint = skippedThrough;
+                    }
                 }
 
                 List<RequestLogSpool.SpoolEntry> fetched =

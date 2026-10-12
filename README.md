@@ -153,6 +153,8 @@ The application backup feature is for local SQLite files. External database prof
 
 Request-log durability has a separate boundary: every Echo instance writes its local request-log spool to a SQLite file, including when the main database is external. Keep that file on a writable persistent volume, use one spool file per instance, and do not treat it as a shared database or cross-instance queue. The spool is not a substitute for the external database's backup policy.
 
+Request logs are saved to the main database at up to `ECHO_AGENT_LOG_MAX_WRITE_RATE_PER_SECOND` (default 1,000) per second. When traffic stays above that rate, entries waiting in the spool beyond `echo.request-log.max-records` are skipped instead of queued: the record limit would delete them right after saving anyway, so the newest records are kept and mock requests are not slowed down by a full spool. Skipped entries are counted as dropped in the log agent status, with a warning at most every 30 seconds.
+
 For a core matcher/response throughput benchmark, start Echo with
 `ECHO_REQUEST_LOG_ENABLED=false`. This bypasses request-log object creation,
 background processing, database writes, and the local spool while leaving mock

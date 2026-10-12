@@ -167,6 +167,92 @@ class LogAgentDurablePersistenceTest {
         assertThat(agent.getStats().getDroppedCount()).isZero();
     }
 
+    @Test
+    void backlogBeyondTheRecordLimitSkipsOnlyEntriesRetentionWouldDelete() throws Exception {
+        when(configService.getRequestLogMaxRecords()).thenReturn(5);
+        when(batchWriter.findCheckpoint(anyString())).thenReturn(0L);
+        List<String> persisted = new java.util.concurrent.CopyOnWriteArrayList<>();
+        List<Long> emptyCheckpoints = new java.util.concurrent.CopyOnWriteArrayList<>();
+        CountDownLatch done = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            List<RequestLog> logs = invocation.getArgument(2);
+            if (logs.isEmpty()) {
+                emptyCheckpoints.add(invocation.getArgument(1));
+            }
+            logs.forEach(log -> persisted.add(log.getEndpoint()));
+            if (persisted.contains("/12")) {
+                done.countDown();
+            }
+            return null;
+        }).when(batchWriter).persist(anyString(), anyLong(), anyList(), eq(5));
+        for (int i = 1; i <= 12; i++) {
+            spool.append(task("rule-" + i, "/" + i));
+        }
+        long seventh = spool.readAfter(0, 100).get(6).sequence();
+        startAgent();
+
+        assertThat(done.await(5, TimeUnit.SECONDS)).isTrue();
+        // 主資料庫只留最新 5 筆：較舊的 7 筆直接跳過，進度在同一個交易中推進
+        assertThat(persisted).containsExactly("/8", "/9", "/10", "/11", "/12");
+        assertThat(emptyCheckpoints).containsExactly(seventh);
+        awaitSpoolEmpty();
+        assertThat(agent.getStats().getDroppedCount()).isEqualTo(7);
+    }
+
+    @Test
+    void backlogWithinTheRecordLimitSkipsNothing() throws Exception {
+        when(batchWriter.findCheckpoint(anyString())).thenReturn(0L);
+        List<String> persisted = new java.util.concurrent.CopyOnWriteArrayList<>();
+        CountDownLatch done = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            List<RequestLog> logs = invocation.getArgument(2);
+            logs.forEach(log -> persisted.add(log.getEndpoint()));
+            if (persisted.size() == 12) {
+                done.countDown();
+            }
+            return null;
+        }).when(batchWriter).persist(anyString(), anyLong(), anyList(), eq(1_000));
+        for (int i = 1; i <= 12; i++) {
+            spool.append(task("rule-" + i, "/" + i));
+        }
+        startAgent();
+
+        assertThat(done.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(persisted).hasSize(12).startsWith("/1", "/2").endsWith("/12");
+        assertThat(agent.getStats().getDroppedCount()).isZero();
+    }
+
+    @Test
+    void failedSkipFallsBackToNormalWritingWithoutLosingEntries() throws Exception {
+        when(configService.getRequestLogMaxRecords()).thenReturn(3);
+        when(batchWriter.findCheckpoint(anyString())).thenReturn(0L);
+        AtomicInteger skipAttempts = new AtomicInteger();
+        List<String> persisted = new java.util.concurrent.CopyOnWriteArrayList<>();
+        CountDownLatch done = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            List<RequestLog> logs = invocation.getArgument(2);
+            if (logs.isEmpty() && skipAttempts.incrementAndGet() == 1) {
+                throw new org.springframework.dao.DataAccessResourceFailureException("database is locked");
+            }
+            logs.forEach(log -> persisted.add(log.getEndpoint()));
+            if (persisted.contains("/6")) {
+                done.countDown();
+            }
+            return null;
+        }).when(batchWriter).persist(anyString(), anyLong(), anyList(), eq(3));
+        for (int i = 1; i <= 6; i++) {
+            spool.append(task("rule-" + i, "/" + i));
+        }
+        startAgent();
+
+        assertThat(done.await(10, TimeUnit.SECONDS)).isTrue();
+        awaitSpoolEmpty();
+        // 推進進度失敗時不刪除任何紀錄，改為照常寫入：每筆不是寫入就是被計入跳過，不會遺失也不會重複
+        assertThat(skipAttempts.get()).isGreaterThanOrEqualTo(1);
+        assertThat(persisted).doesNotHaveDuplicates().endsWith("/4", "/5", "/6");
+        assertThat(persisted.size() + agent.getStats().getDroppedCount()).isEqualTo(6);
+    }
+
     private void startAgent() {
         agent = new LogAgent(mock(RequestLogRepository.class), configService,
                 mock(ConditionMatcher.class), mock(RequestLogService.class),
