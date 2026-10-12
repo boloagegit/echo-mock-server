@@ -250,11 +250,13 @@ public interface CompiledMatcher {
 |---|------|------|
 | 1 | 前端 `useRuleForm.js` 依 `!=`、`*=`、`~=`、`=` 的順序找運算子（任意位置）；後端看**第一個** `=`。`a=x!=y` 在前端解析成 field `a=x`、op `!=`，後端則是 field `a`、value `x!=y` | 以後端為準。**已處理**（見 7.2.8）：前後端共用同一套拆解規則（`LegacyConditions.parts`／`MatchTree.parseLegacyCondition`，以共用案例檔測試） |
 | 2 | 前端儲存時會濾掉 value 為空的條件（`c.field && c.value`），所以 `field=` 無法透過表單儲存 | 新模型以 `exists`／`equals ""` 明確表達；舊表單行為維持不變 |
-| 3 | `$.a==b` 在 JSONPath 分支不會替換 `==`，實際比對的是 value `"=b"` | 保留舊行為（相容），在條件驗證時提出警告。**已處理**：編輯畫面在簡易與進階模式都提示期望值以 `=` 開頭的等於條件（只有 JSON body 的欄位路徑會把 `==` 當成 `=`，JSONPath、XPath、XML、query、header 都不會） |
+| 3 | `$.a==b` 在 JSONPath 分支不會替換 `==`，實際比對的是 value `"=b"` | 保留舊行為（相容），在條件驗證時提出警告。**已處理**：編輯畫面在簡易與進階模式都提示期望值以 `=` 開頭的等於條件。JSON 欄位路徑與 XML 路徑會把 `==` 當成 `=`（XML 於 7.2.9 統一），JSONPath、query、header 不會 |
 | 4 | JSONPath 欄位不存在時 `!=` 為 false，點路徑則為 true | 保留舊行為；新模型以 `onMissing` 明確表達 |
 | 5 | 期望值只有一個 `"`（例如 `a="`）時，舊版去引號會丟出 `StringIndexOutOfBoundsException`：query／header 條件會讓請求回 500，body 條件則視為不符合 | **刻意修正**：新引擎把單一 `"` 當成字面值比對。這是相容層唯一與舊版不同的地方 |
 
 ### 4.5 Body 解析規劃（`BodyPlan`）
+
+> **已實作**（見 7.2.9）：以 `BodyRequirements` 實作，名稱與下文略有不同。
 
 保留目前的效能特性（只在有 body 條件時解析、JMS 大型 XML 走串流）：
 
@@ -667,6 +669,60 @@ schema 改讀 v2（v1 的超集合），`spec.match` 與舊版條件同時出現
 **驗證**：共用案例（18 個，含 `a=x!=y`、`$.a==b`、`a! =b`、沒有運算子等）前後端結果相同；以修改前（步驟 8）與修改後的 jar
 實際操作「打開舊規則、不修改直接儲存」：修改前 `//Order/Status=OPEN;a=x!=y` 存成 `Order/Status=OPEN;a=x!=y`、`hello` 被刪除；
 修改後兩條規則的條件都原樣保留，`hello` 以進階模式顯示並有提示，瀏覽器主控台沒有錯誤。
+
+### 7.2.9 Body 解析規劃與 XML 語意統一（§4.5）
+
+**做了什麼**：
+
+- 編譯後的條件提供 `BodyRequirements`：不讀 body、只需要原文或 JSON、可串流的 XML 簡單路徑（`XmlPath`）、需要 DOM。
+  `All`／`Any`／`Not` 合併子節點的需求；外部註冊的取值來源預設視為需要完整解析（`ValueSourceFactory.readsBody()`）。
+- `ConditionMatcher.prepareBody(body, 候選規則條件)` 是 HTTP 與 JMS 共用的決策：沒有條件讀 body 時不解析；
+  XML 且沒有條件需要 DOM 時以 `XmlStreamScan` 掃描一次，把可串流條件的結果預先填入結果暫存（不建立 DOM，
+  所有結果確定後提前結束）；其他情況照常解析一次給所有規則共用。串流無法處理（例如 namespace 前綴未宣告）時改用一般解析，
+  不再直接當成純文字。
+- 串流掃描搬進核心，舊版條件與進階條件的簡單 XPath 都用它；原本 `ConditionMatcher` 以字串判斷能否串流的程式移除
+  （約 300 行）。JMS 不再因為候選規則中有進階條件就整批改用 DOM；HTTP 的 XML body 也會串流。
+
+**XML 語意統一**：實作前比對發現，同一個條件在 JMS 串流與完整解析（HTTP，或 JMS 有任何無法串流的候選規則時）結果不同，
+JMS 的結果因此會受其他規則影響。經確認統一成串流的結果：
+
+| 情況 | 串流（原 JMS） | 完整解析（原 HTTP） | 統一後 |
+|------|------|------|------|
+| 相對路徑 `Order/Status=OPEN` | 結尾符合 | 永遠不符合 | 結尾符合 |
+| 同時有 `<ns:Item>` 與 `<Item>`，條件 `Item=5` | 兩者都看 | 只看 `<Item>` | 兩者都看（local name） |
+| `Status==OPEN` | 期望值 `OPEN` | 期望值 `=OPEN` | 期望值 `OPEN` |
+
+`XmlPath` 是簡單路徑的唯一定義，DOM 查找（`XmlPath.select`）與串流掃描用同一套規則；進階條件的簡單 `xpath` selector
+也照此規則（不分 namespace 前綴），含 predicate、函式、萬用字元或帶前綴名稱的路徑照常交給 XPath。
+`LegacyConditionOracle` 以 `[B1]` 標示這兩項刻意調整。
+
+**驗證**：`XmlStreamScanEquivalenceTest`（400 組隨機 XML：namespace 前綴、屬性、巢狀、CDATA、實體、註解、空白，
+搭配隨機路徑與舊版／進階條件，串流結果必須等於 DOM 結果，並含過長值的略過規則）、`ConditionMatcherBodyPlanTest`
+（不解析／串流／DOM／退回一般解析／JSON／匹配鏈說明一致）、差異測試與整套測試。
+
+**效能**（`main`（c3d4825）與本步驟交替執行兩輪；4 核心，伺服器與壓測程式同機；JMS 為 2,000 條規則、40 則訊息、
+取第 11～40 則 `matchTimeMs` 平均）：
+
+| 情境 | `main` 第 1／2 輪 | 本步驟 第 1／2 輪 |
+|------|------|------|
+| JMS 舊版條件 `//ServiceName;//CustId`，約 1 KB | 6.0／5.9 ms | 8.5\*／5.5 ms |
+| 同上，訊息補到約 100 KB | 92.2／100.6 ms | 9.9／6.6 ms |
+| JMS 進階條件（簡單 XPath），約 1 KB | 106.5／108.9 ms | 8.5／6.1 ms |
+| 同上，約 100 KB | 1,407／1,406 ms | 9.8／5.8 ms |
+| HTTP RPS：簡單 JSON | 1,085／1,184 | 1,120／1,160 |
+| HTTP RPS：複雜 JSON | 1,268／1,263 | 1,232／1,235 |
+| HTTP RPS：小型 XML | 1,175／1,185 | 1,374／1,356 |
+| HTTP RPS：大型 XML（~99 KB） | 429／360 | 812／725 |
+| 端到端回歸 `test-match-scenarios.py` | — | 138/138 |
+
+\* 第 1 輪的本步驟版本尚未快取合併後的需求：2,000 條規則每則訊息要重新查詢與合併條件需求（約 0.7 ms），
+小訊息因此慢約 2.5 ms。JMS 的候選清單取自規則快照、在快照存在期間是同一個物件，改為依清單物件快取合併結果
+（weak key，快照淘汰後一併回收；HTTP 候選清單每次依 path 篩選，不快取）後，第 2 輪與另外四次交替的小訊息測試
+（`main` 0.73／0.87 ms、本步驟 0.73／0.87 ms）都已無差異。
+
+結論：JMS 不再因進階條件改用 DOM，大型 XML 不論 HTTP 或 JMS 都明顯變快；其餘情境持平。
+另外一次測試中途因為磁碟空間不足（歷次壓測遺留的資料目錄），內嵌 JMS broker 暫停接收訊息，該次結果作廢重跑；
+壓測腳本已改為每次結束後刪除資料目錄。
 
 ### 7.3 風險
 
