@@ -45,6 +45,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Spring Boot updated to 3.5.16 and the build aligned with the supported Gradle 8.14.5 line
 
 ### Fixed
+- Opening an existing rule in the editor and saving it no longer changes or drops conditions: simple-mode condition rows, declarative documents and v1 document validation now split conditions exactly like matching does (first `=`, so `a=x!=y` is `a` equals `x!=y`), keep the leading `//` of XPath fields, and show conditions that cannot be represented as rows (for example one without an operator) unchanged in advanced mode instead of deleting them
 - SSE zero-delay callback ownership race that could cancel the following delayed event; late future registration retains timeout/disconnect cleanup
 - Request-log proxy error values are bounded to the existing 255-character column without altering transport responses
 - `echo.matcher.max-field-value-length` is now applied; Spring previously used the no-argument constructor and ignored it

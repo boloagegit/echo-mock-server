@@ -1874,6 +1874,7 @@
     "legacyCondition": "Legacy condition",
     "legacyPlaceholder": "e.g. user.type=vip",
     "legacyNote": "Legacy conditions keep simple-mode matching (JSON / XML detected automatically)",
+    "legacyNotSimpleNote": "Some conditions of this rule cannot be shown exactly as simple rows, so they are shown here; their text and matching are unchanged.",
     "invalidJsonValue": "The expected value for \"JSON equals\" is not valid JSON",
     "switchToSimpleWarning": "These advanced conditions cannot be shown as simple condition rows; switching clears them.",
     "switchToSimpleConfirm": "Clear and switch",

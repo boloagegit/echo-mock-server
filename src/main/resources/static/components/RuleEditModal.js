@@ -92,6 +92,12 @@ const RuleEditModal = {
             ? MatchTree.count(props.matchTree) : props.conditions.length));
         const hasLegacyConditions = Vue.computed(() => props.matchMode === 'advanced' && props.matchTree
             && MatchTree.hasLegacy(props.matchTree));
+        // 只有舊格式片段、但條件列無法完整表示（例如沒有運算子），所以以進階模式顯示
+        const legacyNotSimple = Vue.computed(() => {
+            if (!hasLegacyConditions.value) return false;
+            const strings = MatchTree.toLegacyStrings(props.matchTree);
+            return !!strings && !MatchTree.toSimpleRows(strings.bodyCondition, strings.queryCondition, strings.headerCondition);
+        });
         const matchModeOptions = Vue.computed(() => [
             { value: 'simple', label: t('match.modeSimple') },
             { value: 'advanced', label: t('match.modeAdvanced') },
@@ -575,7 +581,7 @@ const RuleEditModal = {
             if (previousFocus instanceof HTMLElement && document.contains(previousFocus)) previousFocus.focus();
         });
         return {
-            conditionTotal, matchModeOptions, hasLegacyConditions,
+            conditionTotal, matchModeOptions, hasLegacyConditions, legacyNotSimple,
             dialogRef, responsePickerLaunch, responsePickerInput, responsePickerActiveIndex, contentExpanded, responsePickerResults, showPreviewViewer, editResponseLabel, templateMenuItems,
             responseOptionId, openResponsePicker, closeResponsePicker, toggleResponsePicker, selectResponse,
             onResponsePickerKeydown, onResponseSearchInput, clearResponseSearch, onDialogKeydown, saveShortcutKey,
@@ -703,7 +709,7 @@ const RuleEditModal = {
                         </div>
                         <div v-if="matchMode === 'advanced' && matchTree" class="match-builder">
                             <div v-if="matchError" class="match-error" role="alert"><i class="bi bi-exclamation-circle" aria-hidden="true"></i> {{matchError}}</div>
-                            <p v-if="hasLegacyConditions" class="match-legacy-hint"><i class="bi bi-info-circle" aria-hidden="true"></i> {{t('match.legacyNote')}}</p>
+                            <p v-if="hasLegacyConditions" class="match-legacy-hint"><i class="bi bi-info-circle" aria-hidden="true"></i> {{t(legacyNotSimple ? 'match.legacyNotSimpleNote' : 'match.legacyNote')}}</p>
                             <match-tree-node :node="matchTree" :sources="matchSources" root></match-tree-node>
                             <div v-if="showBodyConditionWarning" class="cond-warning"><i class="bi bi-info-circle"></i> {{t('modal.bodyConditionWarning', {method: form.method})}}</div>
                         </div>

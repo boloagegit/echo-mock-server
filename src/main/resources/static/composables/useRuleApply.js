@@ -174,29 +174,12 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         .map(condition => condition.field + (condition.operator || '=') + condition.value)
         .join(';') || null;
 
-    const deserializeConditions = spec => {
-        const result = [];
-        const append = (serialized, type) => {
-            if (!serialized) { return; }
-            serialized.split(';').filter(Boolean).forEach(condition => {
-                for (const operator of ['!=', '*=', '~=', '=']) {
-                    const index = condition.indexOf(operator);
-                    if (index > 0) {
-                        result.push({
-                            type,
-                            field: condition.substring(0, index).trim(),
-                            operator,
-                            value: condition.substring(index + operator.length).trim()
-                        });
-                        break;
-                    }
-                }
-            });
-        };
-        append(spec.bodyCondition, 'body');
-        append(spec.queryCondition, 'query');
-        append(spec.headerCondition, 'header');
-        return result;
+    /** 文件的舊版條件轉成條件列（拆解規則與後端相同）；無法完整表示時回傳 null，改以進階模式的舊格式片段顯示。 */
+    const deserializeConditions = spec => MatchTree.toSimpleRows(spec.bodyCondition, spec.queryCondition, spec.headerCondition);
+
+    /** 只由舊格式片段組成的進階條件寫回三個舊欄位（與後端儲存時相同），文件維持 v1。 */
+    const legacyStringsOf = matchSpec => {
+        try { return MatchTree.toLegacyStrings(MatchTree.fromSpec(matchSpec)); } catch { return null; }
     };
 
     const createDocumentFromForm = ({ form, conditions, editing, responseBody, matchSpec = null }) => {
@@ -247,7 +230,12 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         });
         if (spec.tags && Object.keys(spec.tags).length === 0) { delete spec.tags; }
         if (spec.responseHeaders && Object.keys(spec.responseHeaders).length === 0) { delete spec.responseHeaders; }
-        if (matchSpec) {
+        const legacyStrings = matchSpec ? legacyStringsOf(matchSpec) : null;
+        if (legacyStrings) {
+            ['bodyCondition', 'queryCondition', 'headerCondition'].forEach(key => {
+                if (legacyStrings[key] && (http || key === 'bodyCondition')) { spec[key] = legacyStrings[key]; } else { delete spec[key]; }
+            });
+        } else if (matchSpec) {
             // 結構化條件取代三個舊版條件欄位（兩者互斥）
             delete spec.bodyCondition;
             delete spec.queryCondition;
@@ -255,7 +243,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
             spec.match = matchSpec;
         }
         return {
-            apiVersion: matchSpec ? API_V2 : API_V1,
+            apiVersion: spec.match ? API_V2 : API_V1,
             kind: 'Rule',
             metadata: metadataId ? { id: metadataId, resourceVersion: metadataVersion } : {},
             spec
@@ -313,8 +301,10 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
                 queryCondition: spec.queryCondition || '',
                 headerCondition: spec.headerCondition || ''
             },
-            conditions: deserializeConditions(spec),
-            matchSpec: spec.match && typeof spec.match === 'object' ? spec.match : null,
+            conditions: deserializeConditions(spec) || [],
+            matchSpec: spec.match && typeof spec.match === 'object' ? spec.match
+                : (deserializeConditions(spec) ? null : MatchTree.toSpec(MatchTree.fromLegacyStrings(
+                    spec.bodyCondition, spec.queryCondition, spec.headerCondition), true)),
             sseEvents: spec.sseEnabled && documentBody
                 ? deserializeSseEvents(documentBody)
                 : [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }],
@@ -423,21 +413,14 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
     const validateConditionValue = (errors, path, value) => {
         if (typeof value !== 'string' || !value.trim()) { return; }
         for (const raw of value.split(';')) {
-            const condition = raw.trim();
-            const operator = ['!=', '*=', '~=', '='].find(candidate => condition.includes(candidate));
-            if (!operator) {
+            // 與後端相同的拆解規則（第一個 =），例如 a=x!=y 是欄位 a、值 x!=y
+            const parsed = MatchTree.parseLegacyCondition(raw.trim());
+            if (!parsed || !parsed.field || !parsed.value) {
                 issue(errors, 'CONDITION_FORMAT', path);
                 return;
             }
-            const index = condition.indexOf(operator);
-            const field = condition.slice(0, index).trim();
-            const expected = condition.slice(index + operator.length).trim();
-            if (!field || !expected) {
-                issue(errors, 'CONDITION_FORMAT', path);
-                return;
-            }
-            if (operator === '~=') {
-                try { new RegExp(expected); }
+            if (parsed.operator === '~=') {
+                try { new RegExp(parsed.value); }
                 catch {
                     issue(errors, 'INVALID_REGEX', path);
                     return;

@@ -137,6 +137,45 @@ const MatchTree = (() => {
         return group('all', children);
     };
 
+    /**
+     * 拆解單一舊版條件，規則與後端比對時相同（{@code LegacyConditions.parts}）：看第一個 =，
+     * 它前一個字元是 ~、*、! 時分別是 ~=、*=、!=，否則是 =。例如 a=x!=y 是欄位 a、值 x!=y。
+     * 沒有 =，或 = 在第一個字元時回傳 null。
+     */
+    const parseLegacyCondition = condition => {
+        const text = String(condition ?? '');
+        const eq = text.indexOf('=');
+        if (eq <= 0) return null;
+        const previous = text.charAt(eq - 1);
+        const operator = previous === '~' || previous === '*' || previous === '!' ? previous + '=' : '=';
+        return { field: text.substring(0, eq - operator.length + 1).trim(), operator, value: text.substring(eq + 1).trim() };
+    };
+
+    /** 條件列寫回字串後拆解結果不變，才算能用條件列表示（例如 "a! =b" 寫回 "a!=b" 會變成不等於）。 */
+    const simpleRowOf = (type, condition) => {
+        const parsed = parseLegacyCondition(condition);
+        if (!parsed || !parsed.field || !parsed.value) return null;
+        const again = parseLegacyCondition(parsed.field + parsed.operator + parsed.value);
+        if (!again || again.field !== parsed.field || again.operator !== parsed.operator || again.value !== parsed.value) return null;
+        return { type, ...parsed };
+    };
+
+    /**
+     * 舊版三個字串轉成簡易模式的條件列（欄位原樣保留，包括 // 開頭的 XPath）。
+     * 任何片段無法用條件列完整表示時回傳 null，呼叫端改用進階模式顯示，避免儲存時遺失或改變條件。
+     */
+    const toSimpleRows = (bodyCondition, queryCondition, headerCondition) => {
+        const rows = [];
+        for (const [type, text] of [['body', bodyCondition], ['query', queryCondition], ['header', headerCondition]]) {
+            for (const part of (text || '').split(';').map(item => item.trim()).filter(item => item)) {
+                const row = simpleRowOf(type, part);
+                if (!row) return null;
+                rows.push(row);
+            }
+        }
+        return rows;
+    };
+
     /** 若樹只是「全部符合」的舊版片段，回傳三個舊版字串；否則回傳 null（無法切回簡易模式而不遺失條件）。 */
     const toLegacyStrings = tree => {
         if (tree.kind !== 'group' || tree.op !== 'all' || tree.negate) return null;
@@ -225,6 +264,7 @@ const MatchTree = (() => {
     return {
         OPS, NO_VALUE_OPS, NUMERIC_OPS, SELECTOR_KINDS, OP_SYMBOLS,
         group, leaf, legacy, fromSpec, toSpec, fromLegacyStrings, toLegacyStrings, optionsFor,
+        parseLegacyCondition, toSimpleRows,
         count, countSpec, describe, describeLines, summarizeSpec, hasConditions, hasLegacy, usesBody, findParent, remove,
     };
 })();

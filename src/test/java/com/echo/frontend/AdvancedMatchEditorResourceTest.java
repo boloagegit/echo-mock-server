@@ -44,9 +44,16 @@ class AdvancedMatchEditorResourceTest {
         String form = resourceText("static/composables/useRuleForm.js");
         // 進階規則改用簡易模式且沒有條件時要明確清除；否則後端會保留原本的進階條件
         assertThat(form).contains("payload.matchSpec = hadAdvanced && noLegacy ? { all: [] } : null;")
-                .contains("if (!strings) { matchSwitchPending.value = true; return; }")
+                .contains("if (!strings || !MatchTree.toSimpleRows(strings.bodyCondition, strings.queryCondition, strings.headerCondition)) {")
                 .contains("'/api/admin/rules/match/validate'")
                 .contains("'/api/admin/rules/match/parse'");
+        // 條件列與後端用同一套拆解規則；無法完整表示的舊版條件改以進階模式原樣顯示，不會在儲存時遺失
+        assertThat(form).contains("const rows = MatchTree.toSimpleRows(r.bodyCondition, r.queryCondition, r.headerCondition);")
+                .contains("if (r && MatchTree.toSimpleRows(r.bodyCondition, r.queryCondition, r.headerCondition) === null) {")
+                .doesNotContain("for (const op of ['!=', '*=', '~=', '='])");
+        assertThat(resourceText("static/composables/useRuleApply.js"))
+                .contains("MatchTree.parseLegacyCondition(raw.trim())")
+                .doesNotContain("['!=', '*=', '~=', '=']");
         String app = resourceText("static/app.js");
         assertThat(app).contains("matchSpec: currentMatchSpec(),")
                 .contains("applyMatchDraft(draft.matchSpec, draft.conditions);");
@@ -56,7 +63,9 @@ class AdvancedMatchEditorResourceTest {
     void declarativeDocumentsBecomeV2OnlyWhenTheyCarryMatch() throws IOException {
         String apply = resourceText("static/composables/useRuleApply.js");
         assertThat(apply).contains("document.spec.match != null ? API_V2 : API_V1")
-                .contains("apiVersion: matchSpec ? API_V2 : API_V1,")
+                .contains("apiVersion: spec.match ? API_V2 : API_V1,")
+                // 只有舊格式片段的進階條件寫回舊欄位，文件維持 v1
+                .contains("const legacyStrings = matchSpec ? legacyStringsOf(matchSpec) : null;")
                 .contains("issue(errors, 'MATCH_CONFLICT', 'spec.match');")
                 .contains("'/api/admin/rules/schema?apiVersion=' + encodeURIComponent(API_V2)");
     }
@@ -82,6 +91,7 @@ class AdvancedMatchEditorResourceTest {
                 "gt", "gte", "lt", "lte", "in", "equalToJson")) {
             assertThat(zhKeys).contains("op." + op);
         }
+        assertThat(zh.path("match").path("legacyNotSimpleNote").asText()).isNotBlank();
         for (String key : List.of("advancedMatch", "applyFieldSpecMatch", "applyValidationMatchConflict",
                 "applyValidationMatch")) {
             assertThat(zh.path("rules").path(key).asText()).isNotBlank();

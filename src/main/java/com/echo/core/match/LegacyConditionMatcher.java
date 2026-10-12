@@ -507,17 +507,14 @@ final class LegacyConditionMatcher implements CompiledMatcher {
         }
 
         static Parsed of(String condition, MatcherLimits limits) {
-            int eqIdx = condition.indexOf('=');
-            if (eqIdx <= 0) {
-                return new Parsed(condition, "", Op.EQUAL, limits);
-            }
-            String value = condition.substring(eqIdx + 1).trim();
-            return switch (condition.charAt(eqIdx - 1)) {
-                case '~' -> new Parsed(condition.substring(0, eqIdx - 1).trim(), value, Op.MATCHES, limits);
-                case '*' -> new Parsed(condition.substring(0, eqIdx - 1).trim(), value, Op.CONTAINS, limits);
-                case '!' -> new Parsed(condition.substring(0, eqIdx - 1).trim(), value, Op.NOT_EQUAL, limits);
-                default -> new Parsed(condition.substring(0, eqIdx).trim(), value, Op.EQUAL, limits);
-            };
+            return LegacyConditions.parts(condition)
+                    .map(parts -> new Parsed(parts.field(), parts.value(), switch (parts.operator()) {
+                        case "~=" -> Op.MATCHES;
+                        case "*=" -> Op.CONTAINS;
+                        case "!=" -> Op.NOT_EQUAL;
+                        default -> Op.EQUAL;
+                    }, limits))
+                    .orElseGet(() -> new Parsed(condition, "", Op.EQUAL, limits));
         }
 
         boolean test(String actual) {

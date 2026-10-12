@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.echo.protocol.jms.JmsProtocolHandler;
 import com.echo.protocol.http.HttpProtocolHandler;
+import com.echo.core.match.LegacyConditions;
 import com.echo.core.match.InvalidMatchSpecException;
 import com.echo.dto.RuleApplyDocument;
 import com.echo.dto.RuleApplySchema;
@@ -407,23 +408,17 @@ public class RuleApplyContractService {
             return;
         }
         for (String rawCondition : value.split(";", -1)) {
-            String condition = rawCondition.trim();
-            String operator = List.of("!=", "*=", "~=", "=").stream()
-                    .filter(condition::contains)
-                    .findFirst()
+            // 與比對時相同的拆解規則（第一個 =），例如 a=x!=y 是欄位 a、值 x!=y
+            LegacyConditions.Parts parts = LegacyConditions.parts(rawCondition.trim())
+                    .filter(candidate -> !candidate.field().isEmpty() && !candidate.value().isEmpty())
                     .orElse(null);
-            if (operator == null) {
+            if (parts == null) {
                 fail("CONDITION_FORMAT", path, path + " contains an invalid condition");
+                continue;
             }
-            int index = condition.indexOf(operator);
-            String field = condition.substring(0, index).trim();
-            String expected = condition.substring(index + operator.length()).trim();
-            if (field.isEmpty() || expected.isEmpty()) {
-                fail("CONDITION_FORMAT", path, path + " contains an invalid condition");
-            }
-            if ("~=".equals(operator)) {
+            if ("~=".equals(parts.operator())) {
                 try {
-                    Pattern.compile(expected);
+                    Pattern.compile(parts.value());
                 } catch (PatternSyntaxException e) {
                     fail("INVALID_REGEX", path, path + " contains an invalid regular expression");
                 }

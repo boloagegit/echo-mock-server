@@ -14,6 +14,27 @@ class LegacyConditionsTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    /** 與前端 match-tree.js 共用的案例（src/test/js/match-tree.test.cjs 讀同一個檔案）。 */
+    @Test
+    void splitsConditionsLikeTheSharedFixture() throws Exception {
+        JsonNode fixture;
+        try (var input = LegacyConditionsTest.class.getResourceAsStream("/fixtures/legacy-condition-parts.json")) {
+            fixture = MAPPER.readTree(input);
+        }
+        assertThat(fixture.path("cases").size()).isGreaterThan(10);
+        for (JsonNode testCase : fixture.path("cases")) {
+            String condition = testCase.path("condition").asText();
+            JsonNode expected = testCase.path("parts");
+            if (expected.isNull()) {
+                assertThat(LegacyConditions.parts(condition)).as(condition).isEmpty();
+            } else {
+                assertThat(LegacyConditions.parts(condition)).as(condition).contains(new LegacyConditions.Parts(
+                        expected.path("field").asText(), expected.path("operator").asText(),
+                        expected.path("value").asText()));
+            }
+        }
+    }
+
     @Test
     void splitsFragmentsInLegacyEvaluationOrder() {
         MatchNode.All node = LegacyConditions.toMatchNode(" a=1 ;; b=2 ", "q=1", "X-Type=vip; ");

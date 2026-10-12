@@ -77,6 +77,12 @@ const useRuleForm = (deps) => {
                 return;
             } catch { /* 格式錯誤時以空的進階條件開啟，儲存時由後端回報 */ }
         }
+        // 條件列無法完整表示的舊版條件（例如沒有運算子）以進階模式的舊格式片段原樣顯示，儲存時不會遺失或改變
+        if (r && MatchTree.toSimpleRows(r.bodyCondition, r.queryCondition, r.headerCondition) === null) {
+            matchTree.value = MatchTree.fromLegacyStrings(r.bodyCondition, r.queryCondition, r.headerCondition);
+            matchMode.value = 'advanced';
+            return;
+        }
         matchTree.value = MatchTree.group('all', []);
         matchMode.value = 'simple';
     };
@@ -105,7 +111,10 @@ const useRuleForm = (deps) => {
             return;
         }
         const strings = MatchTree.toLegacyStrings(matchTree.value);
-        if (!strings) { matchSwitchPending.value = true; return; }
+        if (!strings || !MatchTree.toSimpleRows(strings.bodyCondition, strings.queryCondition, strings.headerCondition)) {
+            matchSwitchPending.value = true;
+            return;
+        }
         conditions.value = [];
         parseConditions(strings);
         matchMode.value = 'simple';
@@ -458,9 +467,8 @@ const useRuleForm = (deps) => {
         const queryConds = conditions.value.filter(c => c.type === 'query' && c.field && c.value);
         const headerConds = conditions.value.filter(c => c.type === 'header' && c.field && c.value);
 
-        // 判斷 body 格式：從原始 bodyCondition 偵測是否為 XPath (// 或 / 開頭)
-        const rawBodyCond = editing.value?.bodyCondition || '';
-        const isXml = rawBodyCond.startsWith('//') || rawBodyCond.startsWith('/');
+        // 判斷 body 格式：條件欄位是 XPath（/ 開頭）時產生 XML
+        const isXml = bodyConds.some(c => c.field.startsWith('/'));
 
         // 產生 Body
         if (bodyConds.length) {
@@ -492,7 +500,7 @@ const useRuleForm = (deps) => {
                 const obj = {};
                 for (const c of bodyConds) {
                     const val = resolveValue(c);
-                    const parts = c.field.split('.');
+                    const parts = c.field.replace(/^\$\./, '').split('.');
                     let cur = obj;
                     for (let i = 0; i < parts.length - 1; i++) {
                         const p = parts[i];
@@ -672,32 +680,10 @@ const useRuleForm = (deps) => {
         responseDropdownOpen.value = false;
     };
 
+    /** 舊版條件字串轉成條件列，拆解規則與後端相同（見 MatchTree.parseLegacyCondition）；無法完整表示時不加入，由 resetMatchState 改用進階模式。 */
     const parseConditions = r => {
-        const parseWithOp = (str) => {
-            for (const op of ['!=', '*=', '~=', '=']) {
-                const idx = str.indexOf(op);
-                if (idx > 0) {
-                    return { field: str.substring(0, idx).trim(), operator: op, value: str.substring(idx + op.length).trim() };
-                }
-            }
-            return null;
-        };
-        if (r.bodyCondition) r.bodyCondition.split(';').forEach(c => {
-            const parsed = parseWithOp(c);
-            if (parsed) {
-                let f = parsed.field;
-                if (f.startsWith('//')) f = f.substring(2);
-                conditions.value.push({ type: 'body', field: f, operator: parsed.operator, value: parsed.value });
-            }
-        });
-        if (r.queryCondition) r.queryCondition.split(';').forEach(c => {
-            const parsed = parseWithOp(c);
-            if (parsed) conditions.value.push({ type: 'query', field: parsed.field, operator: parsed.operator, value: parsed.value });
-        });
-        if (r.headerCondition) r.headerCondition.split(';').forEach(c => {
-            const parsed = parseWithOp(c);
-            if (parsed) conditions.value.push({ type: 'header', field: parsed.field, operator: parsed.operator, value: parsed.value });
-        });
+        const rows = MatchTree.toSimpleRows(r.bodyCondition, r.queryCondition, r.headerCondition);
+        if (rows) conditions.value.push(...rows);
     };
 
     const openCreate = async () => {

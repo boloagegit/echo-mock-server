@@ -28,6 +28,34 @@ public final class LegacyConditions {
     }
 
     /**
+     * 單一舊版條件的欄位、運算子與期望值（皆已去除前後空白）。
+     *
+     * @param operator {@code =}、{@code !=}、{@code *=} 或 {@code ~=}
+     */
+    public record Parts(String field, String operator, String value) {
+    }
+
+    /**
+     * 以比對時相同的規則拆解單一條件：看<strong>第一個</strong> {@code =}，它前一個字元是 {@code ~}、{@code *}、
+     * {@code !} 時分別是 {@code ~=}、{@code *=}、{@code !=}，否則是 {@code =}。例如 {@code a=x!=y} 是欄位
+     * {@code a}、運算子 {@code =}、值 {@code x!=y}。前端條件列與 v1 文件檢查都依這個規則（見 {@code match-tree.js}）。
+     *
+     * @return 沒有 {@code =}，或 {@code =} 在第一個字元時回傳 empty（比對時整段被當成欄位）
+     */
+    public static Optional<Parts> parts(String condition) {
+        int eqIdx = condition.indexOf('=');
+        if (eqIdx <= 0) {
+            return Optional.empty();
+        }
+        String value = condition.substring(eqIdx + 1).trim();
+        char previous = condition.charAt(eqIdx - 1);
+        if (previous == '~' || previous == '*' || previous == '!') {
+            return Optional.of(new Parts(condition.substring(0, eqIdx - 1).trim(), previous + "=", value));
+        }
+        return Optional.of(new Parts(condition.substring(0, eqIdx).trim(), "=", value));
+    }
+
+    /**
      * 把舊版條件字串轉成 {@code all[legacy...]}，片段順序與舊版評估順序相同（body → query → header）。
      * 三個欄位都沒有條件時回傳空的 {@code all}，也就是無條件（fallback）規則。
      */

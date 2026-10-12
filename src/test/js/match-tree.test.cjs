@@ -112,3 +112,31 @@ test('usesBody, hasConditions and remove walk nested groups', () => {
   assert.equal(tree.children[1].children.length, 1);
   assert.equal(MatchTree.findParent(tree, tree.children[1].children[0].id), tree.children[1]);
 });
+
+// 與後端 LegacyConditionsTest 共用同一份案例，確保前端拆解條件的方式與比對時相同
+const FIXTURE = JSON.parse(fs.readFileSync(
+  path.resolve(__dirname, '../resources/fixtures/legacy-condition-parts.json'), 'utf8'));
+
+test('legacy conditions split exactly like the backend (shared fixture)', () => {
+  const MatchTree = load();
+  assert.ok(FIXTURE.cases.length > 10);
+  for (const { condition, parts } of FIXTURE.cases) {
+    assert.deepEqual(plain(MatchTree.parseLegacyCondition(condition)), parts, condition);
+  }
+});
+
+test('simple rows keep // paths and refuse conditions they cannot represent exactly', () => {
+  const MatchTree = load();
+  for (const { condition, simpleRow } of FIXTURE.cases) {
+    assert.equal(MatchTree.toSimpleRows(condition, null, null) !== null, simpleRow, condition);
+  }
+  assert.deepEqual(plain(MatchTree.toSimpleRows('//Order/Status=OPEN; a=x!=y', 'page!=2', 'X-Type~=v.*')), [
+    { type: 'body', field: '//Order/Status', operator: '=', value: 'OPEN' },
+    { type: 'body', field: 'a', operator: '=', value: 'x!=y' },
+    { type: 'query', field: 'page', operator: '!=', value: '2' },
+    { type: 'header', field: 'X-Type', operator: '~=', value: 'v.*' },
+  ]);
+  // 一個片段無法表示就整組交給進階模式，不能只丟掉那一個
+  assert.equal(MatchTree.toSimpleRows('a=1;hello', null, null), null);
+  assert.deepEqual(plain(MatchTree.toSimpleRows(null, ' ; ', '')), []);
+});

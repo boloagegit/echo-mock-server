@@ -1874,6 +1874,7 @@
     "legacyCondition": "舊格式條件",
     "legacyPlaceholder": "例如 user.type=vip",
     "legacyNote": "舊格式條件沿用簡易模式的比對方式（JSON／XML 自動判斷）",
+    "legacyNotSimpleNote": "這條規則有條件無法用簡易模式的條件列完整表示，因此以進階模式顯示；條件內容與比對方式都不變。",
     "invalidJsonValue": "「JSON 相同」的期望值不是合法的 JSON",
     "switchToSimpleWarning": "目前的進階條件無法轉成簡易模式的條件列，切換會清除這些條件。",
     "switchToSimpleConfirm": "清除並切換",
