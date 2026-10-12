@@ -896,8 +896,13 @@ const useRuleForm = (deps) => {
             if (r && r.ok) {
                 const saved = await r.json();
                 savedSuccessfully = true;
-                showToast(editing.value ? t('toast.ruleSaveSuccess') : t('toast.ruleCreateSuccess'), 'success');
-                warnIfNeverReached(saved);
+                // 有判斷順序的問題時只顯示一則提醒（已包含「已儲存」），否則顯示一般的成功訊息
+                const savedMessage = editing.value ? t('toast.ruleSaveSuccess') : t('toast.ruleCreateSuccess');
+                neverReachedWarning(saved).then(warning => {
+                    if (!warning) { showToast(savedMessage, 'success'); return; }
+                    showToast({ title: warning.title, detail: warning.detail }, 'warning',
+                        openRuleOrder ? { label: t('rules.order.viewOrder'), handler: () => openRuleOrder(warning.ruleId) } : null);
+                });
                 rulesMarkDirty();
                 delete rulePreviewCache.value[saved.id];
                 if (ruleDetailId?.value === saved.id) { loadRuleDetail(saved.id, { force: true }); }
@@ -925,30 +930,33 @@ const useRuleForm = (deps) => {
     };
 
     /**
-     * 儲存後檢查判斷順序：這條規則永遠輪不到，或它讓其他規則永遠輪不到時提醒（不影響儲存）。
+     * 儲存後檢查判斷順序：這條規則永遠輪不到，或它讓其他規則永遠輪不到時，回傳要顯示的提醒（{title, detail, ruleId}）；
+     * 沒有問題或檢查失敗時回傳 null（只是提醒，不影響儲存）。
      */
-    const warnIfNeverReached = async saved => {
+    const neverReachedWarning = async saved => {
         try {
             const r = await apiCall('/api/admin/rules/order-issues', {}, { silent: true });
-            if (!r || !r.ok) { return; }
+            if (!r || !r.ok) { return null; }
             const issues = (await r.json()).issues || {};
-            const name = issue => issue.byDescription || (issue.byRuleId || '').slice(0, 8);
-            const view = id => (openRuleOrder ? { label: t('rules.order.viewOrder'), handler: () => openRuleOrder(id) } : null);
             const own = issues[saved.id];
             if (own) {
-                const key = own.type === 'duplicateConditions' ? 'rules.order.savedDuplicate' : 'rules.order.savedEarlierDefault';
-                showToast(t(key, { rule: name(own) }), 'warning', view(saved.id));
-                return;
+                const rule = own.byDescription || (own.byRuleId || '').slice(0, 8);
+                return {
+                    title: t('rules.order.savedNeverTitle'),
+                    detail: t(own.type === 'duplicateConditions' ? 'rules.order.savedDuplicate' : 'rules.order.savedEarlierDefault', { rule }),
+                    ruleId: saved.id,
+                };
             }
             const blocked = Object.entries(issues).filter(([, issue]) => issue.byRuleId === saved.id);
-            if (blocked.length) {
-                const [firstId, first] = blocked[0];
-                const rule = first.description || firstId.slice(0, 8);
-                const message = blocked.length === 1 ? t('rules.order.savedBlocksOther', { rule })
-                    : t('rules.order.savedBlocksOthers', { rule, count: blocked.length });
-                showToast(message, 'warning', view(firstId));
-            }
-        } catch { /* 只是提醒，失敗時不顯示 */ }
+            if (!blocked.length) { return null; }
+            const [firstId, first] = blocked[0];
+            const rule = first.description || firstId.slice(0, 8);
+            return blocked.length === 1
+                ? { title: t('rules.order.savedBlocksTitle'), detail: t('rules.order.savedBlocksOther', { rule }), ruleId: firstId }
+                : { title: t('rules.order.savedBlocksManyTitle', { count: blocked.length }), detail: t('rules.order.savedBlocksOthers', { rule }), ruleId: firstId };
+        } catch {
+            return null;
+        }
     };
 
     // --- 回應預覽編輯 ---

@@ -1882,6 +1882,20 @@ textarea.form-control { min-height: 80px; font-family: var(--font-mono); font-si
 .toast.error .toast-progress { background: var(--danger) }
 .toast.info .toast-progress { background: var(--primary) }
 .toast.warning .toast-progress { background: var(--warning) }
+/* 有標題的通知（例如儲存規則後的提醒）：標題、說明、動作按鈕上下排列，左側以顏色標示種類 */
+.toast-wrap .toast.is-rich { align-items: flex-start; gap: 0.65rem; padding: 0.75rem 0.875rem 0.85rem 1rem }
+.toast.is-rich::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--primary) }
+.toast.is-rich.warning { background: color-mix(in srgb, var(--card) 92%, var(--warning)) }
+.toast.is-rich.warning::before { background: var(--warning) }
+.toast.is-rich.error::before { background: var(--danger) }
+.toast.is-rich.success::before { background: var(--success) }
+.toast.is-rich .toast-icon { margin-top: 0.15rem; font-size: 1.05rem }
+.toast-body { display: grid; flex: 1; gap: 0.2rem; min-width: 0 }
+.toast-title { font-weight: 600; line-height: 1.4 }
+.toast.is-rich .toast-msg { color: var(--muted); font-size: var(--font-sm); line-height: 1.5 }
+.toast.is-rich .toast-action.ui-button { justify-self: start; gap: 0.35rem; margin: 0.4rem 0 0 }
+.toast.is-rich .toast-close { margin-top: -0.1rem }
+.toast.warning .toast-progress { animation-duration: 9s }
 @keyframes toastProgress { from { width: 100% } to { width: 0% } }
 
 /* Card Table (scrollable table inside card) */
