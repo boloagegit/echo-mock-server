@@ -28,6 +28,8 @@ public class CandidateSnapshot {
     private final String bodyCondition;
     private final String queryCondition;
     private final String headerCondition;
+    /** 結構化條件 JSON；有值時以它為準 */
+    private final String matchSpec;
     private final int priority;
 
     /**
@@ -42,6 +44,7 @@ public class CandidateSnapshot {
                 .bodyCondition(rule.getBodyCondition())
                 .queryCondition(rule.getQueryCondition())
                 .headerCondition(rule.getHeaderCondition())
+                .matchSpec(rule.getMatchSpec())
                 .priority(rule.getPriority())
                 .build();
     }
@@ -60,6 +63,7 @@ public class CandidateSnapshot {
                 .bodyCondition(rule.getBodyCondition())
                 .queryCondition(null)
                 .headerCondition(null)
+                .matchSpec(rule.getMatchSpec())
                 .priority(rule.getPriority())
                 .build();
     }

@@ -1,5 +1,11 @@
 package com.echo.controller;
 
+import com.echo.core.match.MatchSpecCodec;
+import com.echo.core.match.LegacyConditions;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.echo.service.MatchSpecs;
+import com.echo.protocol.ProtocolDescriptor;
+import com.echo.core.match.InvalidMatchSpecException;
 import com.echo.agent.AgentRegistry;
 import com.echo.dto.AgentStatusDto;
 import com.echo.dto.RuleApplyDocument;
@@ -558,9 +564,53 @@ public class AdminController {
     }
 
     /** Returns the machine-readable contract used by the declarative editor and server validator. */
+    /** 結構化條件編輯器使用的請求：協定，加上舊版三個條件字串或 matchSpec。 */
+    public record MatchRequest(Protocol protocol, String bodyCondition, String queryCondition,
+                               String headerCondition, JsonNode matchSpec) {
+    }
+
+    /** 把舊版條件字串轉成只含舊版片段的結構化條件（切法與比對時相同），供編輯器切換到進階模式。 */
+    @PostMapping("/rules/match/parse")
+    public Map<String, Object> parseMatch(@RequestBody MatchRequest request) {
+        validateProtocolEnabled(request.protocol());
+        return Map.of("matchSpec", MatchSpecCodec.toJson(LegacyConditions.toMatchNode(
+                request.bodyCondition(), request.queryCondition(), request.headerCondition())));
+    }
+
+    /**
+     * 以與儲存時相同的規則檢查結構化條件，不寫入任何資料，供編輯器即時提示。
+     * 檢查本身一律回 200：{@code valid=false} 時附錯誤訊息與 JSON 路徑；{@code valid=true} 時回傳正規化結果
+     * （可用舊版字串表達時 {@code advanced=false} 並附上三個字串）。
+     */
+    @PostMapping("/rules/match/validate")
+    public ResponseEntity<Map<String, Object>> validateMatch(@RequestBody MatchRequest request) {
+        validateProtocolEnabled(request.protocol());
+        ProtocolDescriptor protocol = protocolHandlerRegistry.descriptor(request.protocol())
+                .orElseThrow(() -> new IllegalArgumentException("Unknown protocol: " + request.protocol()));
+        MatchSpecs.Normalized normalized;
+        try {
+            normalized = MatchSpecs.normalize(request.matchSpec(), protocol.matchSources());
+        } catch (InvalidMatchSpecException e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("valid", false);
+            error.put("error", e.getMessage());
+            error.put("path", e.path());
+            return ResponseEntity.ok(error);
+        }
+        Map<String, Object> result = new HashMap<>();
+        result.put("valid", true);
+        result.put("advanced", normalized.advanced());
+        result.put("matchSpec", normalized.advanced() ? MatchSpecs.read(normalized.matchSpec()).orElse(null) : null);
+        result.put("bodyCondition", normalized.bodyCondition());
+        result.put("queryCondition", normalized.queryCondition());
+        result.put("headerCondition", normalized.headerCondition());
+        result.put("conditionCount", MatchSpecs.conditionCount(request.matchSpec()));
+        return ResponseEntity.ok(result);
+    }
+
     @GetMapping("/rules/schema")
-    public RuleApplySchema getRuleApplySchema() {
-        return ruleApplyContractService.schema();
+    public RuleApplySchema getRuleApplySchema(@RequestParam(required = false) String apiVersion) {
+        return ruleApplyContractService.schema(apiVersion);
     }
 
     /** Creates a rule from a complete declarative JSON document. */
@@ -688,8 +738,7 @@ public class AdminController {
                 }
             }
             if (imported > 0) {
-                evictCacheByProtocol(Protocol.HTTP);
-                evictCacheByProtocol(Protocol.JMS);
+                protocolHandlerRegistry.descriptors().forEach(protocol -> evictCache(protocol.rulesCacheName()));
                 cacheInvalidationService.ifPresent(CacheInvalidationService::publishInvalidation);
             }
             return ResponseEntity.ok(Map.of("imported", imported, "total", parsedRules.size()));
@@ -1224,9 +1273,11 @@ public class AdminController {
 
     /** 根據協定清除對應的規則快取 */
     private void evictCacheByProtocol(Protocol protocol) {
-        String cacheName = (protocol == Protocol.JMS)
-                ? CacheConfig.JMS_RULES_CACHE
-                : CacheConfig.HTTP_RULES_CACHE;
+        protocolHandlerRegistry.descriptor(protocol)
+                .ifPresent(descriptor -> evictCache(descriptor.rulesCacheName()));
+    }
+
+    private void evictCache(String cacheName) {
         var cache = cacheManager.getCache(cacheName);
         if (cache != null) {
             cache.clear();
@@ -1326,6 +1377,7 @@ public class AdminController {
 
     private SaveResult saveRule(RuleDto dto) {
         validateRuleFields(dto);
+        applyMatchSpec(dto);
         Response response;
         boolean faulting = dto.getFaultType() != null
                 && !dto.getFaultType().isBlank()
@@ -1403,6 +1455,50 @@ public class AdminController {
         return new SaveResult(saved, handler.toDto(saved, response, false));
     }
 
+    /**
+     * 檢查並正規化結構化條件（見 {@link MatchSpecs}）。
+     * <p>
+     * 規則以整筆取代的方式儲存，而舊版 UI、Excel 與 v1 文件不認得 {@code matchSpec}：沒有送出結構化條件、
+     * 也沒有任何舊版條件時，保留既有規則的結構化條件，避免編輯其他欄位時把進階條件清掉。
+     * 要清除進階條件請明確送出 {@code {"all": []}}。
+     */
+    private void applyMatchSpec(RuleDto dto) {
+        JsonNode spec = dto.getMatchSpec();
+        boolean hasSpec = spec != null && !spec.isNull() && !spec.isMissingNode();
+        boolean hasLegacy = notBlank(dto.getBodyCondition()) || notBlank(dto.getQueryCondition())
+                || notBlank(dto.getHeaderCondition());
+        if (!hasSpec) {
+            dto.setMatchSpec(null);
+            if (!hasLegacy && dto.getId() != null) {
+                protocolHandlerRegistry.findById(dto.getId())
+                        .map(BaseRule::getMatchSpec)
+                        .flatMap(MatchSpecs::read)
+                        .ifPresent(dto::setMatchSpec);
+            }
+            return;
+        }
+        if (hasLegacy) {
+            throw new IllegalArgumentException(
+                    "matchSpec cannot be combined with bodyCondition, queryCondition or headerCondition");
+        }
+        ProtocolDescriptor protocol = protocolHandlerRegistry.descriptor(dto.getProtocol())
+                .orElseThrow(() -> new IllegalArgumentException("Unknown protocol: " + dto.getProtocol()));
+        MatchSpecs.Normalized normalized;
+        try {
+            normalized = MatchSpecs.normalize(spec, protocol.matchSources());
+        } catch (InvalidMatchSpecException e) {
+            throw new IllegalArgumentException("Invalid matchSpec: " + e.getMessage(), e);
+        }
+        dto.setBodyCondition(normalized.bodyCondition());
+        dto.setQueryCondition(normalized.queryCondition());
+        dto.setHeaderCondition(normalized.headerCondition());
+        dto.setMatchSpec(normalized.advanced() ? MatchSpecs.read(normalized.matchSpec()).orElseThrow() : null);
+    }
+
+    private static boolean notBlank(String value) {
+        return value != null && !value.isBlank();
+    }
+
     private void validateSseRule(RuleDto dto, String body) {
         if (dto.getProtocol() != Protocol.HTTP || !Boolean.TRUE.equals(dto.getSseEnabled())) return;
         com.echo.service.SseRuleSettings.validateMethod(dto.getMethod());
@@ -1439,22 +1535,7 @@ public class AdminController {
                 return Optional.of(Paths.get(configuredPath));
             }
         }
-        if (url != null && url.startsWith("jdbc:h2:mem:")) {
-            return Optional.empty();
-        }
-        if (url != null && url.startsWith("jdbc:h2:file:")) {
-            String configuredPath = url.substring("jdbc:h2:file:".length());
-            int optionIndex = configuredPath.indexOf(';');
-            if (optionIndex >= 0) configuredPath = configuredPath.substring(0, optionIndex);
-            if (!configuredPath.isBlank()) {
-                return Optional.of(Paths.get(configuredPath.endsWith(".mv.db")
-                        ? configuredPath : configuredPath + ".mv.db"));
-            }
-        }
-        Path sqlite = Paths.get("./mockdb.sqlite");
-        if (Files.exists(sqlite)) return Optional.of(sqlite);
-        Path h2 = Paths.get("./mockdb.mv.db");
-        return Files.exists(h2) ? Optional.of(h2) : Optional.empty();
+        return Optional.empty();
     }
 
     private static void putDatabaseFileSize(Map<String, Object> status, Path path) {

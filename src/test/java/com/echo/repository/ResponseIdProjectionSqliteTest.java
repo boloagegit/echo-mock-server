@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.datasource.driver-class-name=org.sqlite.JDBC",
         "spring.datasource.hikari.maximum-pool-size=1",
         "spring.datasource.hikari.minimum-idle=1",
-        "spring.jpa.database-platform=org.hibernate.community.dialect.SQLiteDialect",
+        "spring.jpa.database-platform=com.echo.config.EchoSqliteDialect",
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.jpa.properties.hibernate.generate_statistics=true"
 })
@@ -52,6 +52,24 @@ class ResponseIdProjectionSqliteTest {
         List<Long> ids = repository.findExistingIds(Set.of(first.getId(), second.getId(), 999L));
 
         assertThat(ids).containsExactlyInAnyOrder(first.getId(), second.getId());
+        assertThat(statistics.getQueryExecutionCount()).isEqualTo(1);
+        assertThat(statistics.getEntityLoadCount()).isZero();
+    }
+
+    @Test
+    void findAllIds_shouldUseOneQueryAndLoadNoEntitiesOrLobsOnSqlite() {
+        String largeBody = "資料".repeat(1024 * 1024);
+        Response first = repository.save(Response.builder().description("first").body(largeBody).build());
+        Response second = repository.save(Response.builder().description("second").body(largeBody).build());
+        repository.flush();
+        entityManager.clear();
+
+        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        statistics.clear();
+
+        List<Long> ids = repository.findAllIds();
+
+        assertThat(ids).contains(first.getId(), second.getId());
         assertThat(statistics.getQueryExecutionCount()).isEqualTo(1);
         assertThat(statistics.getEntityLoadCount()).isZero();
     }

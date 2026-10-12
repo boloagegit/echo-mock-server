@@ -13,9 +13,6 @@ spring:
       idle-timeout: ${ECHO_DB_IDLE_TIMEOUT_MS:600000}
       max-lifetime: ${ECHO_DB_MAX_LIFETIME_MS:1800000}
       keepalive-time: ${ECHO_DB_KEEPALIVE_TIME_MS:300000}
-  h2:
-    console:
-      enabled: false
   jpa:
     database-platform: org.hibernate.dialect.OracleDialect
     hibernate:

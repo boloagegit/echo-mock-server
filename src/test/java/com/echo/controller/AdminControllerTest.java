@@ -106,7 +106,7 @@ class AdminControllerTest {
         ReflectionTestUtils.setField(controller, "sessionTimeout", "180d");
         ReflectionTestUtils.setField(controller, "serverPort", 8080);
         ReflectionTestUtils.setField(controller, "jmsPort", 61616);
-        ReflectionTestUtils.setField(controller, "datasourceUrl", "jdbc:h2:mem:test");
+        ReflectionTestUtils.setField(controller, "datasourceUrl", "jdbc:sqlite::memory:");
         ReflectionTestUtils.setField(controller, "httpAlias", "HTTP");
         ReflectionTestUtils.setField(controller, "jmsAlias", "JMS");
         ReflectionTestUtils.setField(controller, "bulkImportExportEnabled", true);
@@ -213,8 +213,7 @@ class AdminControllerTest {
     void databaseFilePath_shouldFollowConfiguredDatabase() {
         assertThat(AdminController.databaseFilePath("jdbc:sqlite:./data/mock.sqlite?busy_timeout=5000"))
                 .contains(java.nio.file.Paths.get("./data/mock.sqlite"));
-        assertThat(AdminController.databaseFilePath("jdbc:h2:file:./data/mockdb;AUTO_SERVER=TRUE"))
-                .contains(java.nio.file.Paths.get("./data/mockdb.mv.db"));
+        assertThat(AdminController.databaseFilePath("jdbc:postgresql://db:5432/echo")).isEmpty();
         assertThat(AdminController.databaseFilePath("jdbc:sqlite::memory:")).isEmpty();
     }
 

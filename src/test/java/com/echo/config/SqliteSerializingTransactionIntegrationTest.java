@@ -54,7 +54,7 @@ class SqliteSerializingTransactionIntegrationTest {
         registry.add("spring.datasource.driver-class-name", () -> "org.sqlite.JDBC");
         registry.add("spring.datasource.hikari.maximum-pool-size", () -> "3");
         registry.add("spring.jpa.database-platform",
-                () -> "org.hibernate.community.dialect.SQLiteDialect");
+                () -> "com.echo.config.EchoSqliteDialect");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "create");
     }
 

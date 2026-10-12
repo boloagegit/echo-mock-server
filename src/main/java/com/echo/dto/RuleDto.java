@@ -1,6 +1,8 @@
 package com.echo.dto;
 
 import com.echo.entity.Protocol;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -28,6 +30,14 @@ public class RuleDto {
     private String bodyCondition;
     private String queryCondition;
     private String headerCondition;
+    /**
+     * 結構化條件（JSON 物件）。有值時以它為準，舊版三個條件欄位必須為空；
+     * 可用舊版字串表達的條件在儲存時會轉成舊欄位。要清除進階條件請送 {@code {"all": []}}。
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private JsonNode matchSpec;
+    /** 唯讀：此規則使用結構化條件（舊版 UI 無法編輯其條件）。 */
+    private Boolean advancedMatch;
     private Integer priority;
     private String description;
     private Boolean enabled;

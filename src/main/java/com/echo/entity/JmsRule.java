@@ -84,7 +84,7 @@ public class JmsRule extends BaseRule {
      */
     @Transient
     public String getCondition() {
-        return getBodyCondition();
+        return getMatchSpec() != null ? getMatchSpec() : getBodyCondition();
     }
 
     /**

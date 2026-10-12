@@ -464,7 +464,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
 
                 // Evaluate conditions
                 ConditionMatcher.ConditionDetail detail = conditionMatcher.matchesPreparedWithDetail(
-                        candidate.getBodyCondition(), candidate.getQueryCondition(),
+                        candidate.getMatchSpec(), candidate.getBodyCondition(), candidate.getQueryCondition(),
                         candidate.getHeaderCondition(), preparedBody,
                         task.getQueryString(), task.getHeaders());
 
@@ -511,7 +511,8 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
      * 判斷候選規則是否有任何條件（body/query/header）。
      */
     private boolean hasAnyCondition(CandidateSnapshot candidate) {
-        return isNotBlank(candidate.getBodyCondition())
+        return isNotBlank(candidate.getMatchSpec())
+                || isNotBlank(candidate.getBodyCondition())
                 || isNotBlank(candidate.getQueryCondition())
                 || isNotBlank(candidate.getHeaderCondition());
     }
@@ -521,6 +522,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
      */
     private String buildConditionString(CandidateSnapshot candidate) {
         StringBuilder sb = new StringBuilder();
+        appendCondition(sb, "match", candidate.getMatchSpec());
         appendCondition(sb, "body", candidate.getBodyCondition());
         appendCondition(sb, "query", candidate.getQueryCondition());
         appendCondition(sb, "header", candidate.getHeaderCondition());

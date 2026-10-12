@@ -28,14 +28,14 @@ An enterprise-grade dual-protocol mock server supporting HTTP and JMS, designed 
 - **Rule Protection** – Mark rules as protected to prevent automatic cleanup
 - **Rule Extension** – Extend retention period for rules/responses to avoid scheduled cleanup
 - **Orphan Cleanup** – Detect and remove orphan responses not used by any rule
-- **Auto Backup** – Scheduled H2/SQLite backup, shutdown backup, and manual trigger
+- **Auto Backup** – Scheduled SQLite backup, shutdown backup, and manual trigger
 - **Stateful Scenarios** – Optional WireMock-style state machines for multi-step workflows (disabled by default)
 - **Fault Injection** – Choose Fault Injection as a rule mode to simulate connection resets and empty responses for resilience testing
 - **OpenAPI Import** – Optional preview/import of OpenAPI 3.x or Swagger 2.x JSON/YAML specifications (disabled by default)
 - **Faker Data** – Built-in name, email, phone, address, and integer template helpers
 - **Rule Testing** – Test rule matching directly from the admin UI
 - **Static Analysis** – SpotBugs code analysis
-- **Database Profiles** – H2, SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle profiles
+- **Database Profiles** – SQLite (default), PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle profiles
 - **Intranet Friendly** – Frontend uses WebJars, no CDN required
 - **Environment Identification** – Protocol aliases and environment labels for easy multi-environment deployment
 
@@ -66,11 +66,11 @@ Copy the built JAR beside the script as `echo.jar`, or set `ECHO_JAR_PATH`, then
 pass normal Spring arguments:
 
 ```bash
-./start-echo.sh --spring.profiles.active=sqlite
+./start-echo.sh
 ```
 
-`SQLITE_TMPDIR` can override the default temporary path. This setting is harmless
-when Echo runs with H2 and does not change the configured database profile.
+`SQLITE_TMPDIR` can override the default temporary path. This setting does not
+change the configured database profile.
 
 On a Windows development machine, run the equivalent commands in PowerShell:
 
@@ -87,8 +87,8 @@ The supported profiles are:
 
 | Profile | Database | Current Docker smoke-test target |
 |---------|----------|----------------------------------|
-| `h2` (or no database profile) | H2 file database | H2 2.x resolved by the build |
-| `sqlite` | SQLite WAL file | SQLite 3.x via the Xerial JDBC driver |
+| no database profile (default) | SQLite WAL file `./data/mockdb.sqlite` | SQLite 3.x via the Xerial JDBC driver |
+| `sqlite` | SQLite WAL file `./mockdb.sqlite` (path kept for existing deployments) | SQLite 3.x via the Xerial JDBC driver |
 | `postgresql` | PostgreSQL | PostgreSQL 17 |
 | `mysql` | MySQL | MySQL 8.4 |
 | `mariadb` | MariaDB | MariaDB 11.8 |
@@ -97,9 +97,22 @@ The supported profiles are:
 
 The listed versions are reproducible Docker smoke-test baselines, not a promise that every older or newer vendor release is certified. The Hibernate version used by Echo supports Oracle Database 19c or newer; older Oracle releases are not covered.
 
-Use exactly one database profile for each process. `dev` and `test` are non-database profiles and may be combined with one database profile. If no database profile is active, H2 is selected. Startup rejects multiple database profiles and rejects a JDBC URL whose vendor does not match the selected profile.
+Use exactly one database profile for each process. `dev` and `test` are non-database profiles and may be combined with one database profile. If no database profile is active, SQLite is selected and the database file is `./data/mockdb.sqlite` (the Docker volume mount point). Startup rejects multiple database profiles and rejects a JDBC URL whose vendor does not match the selected profile.
 
-Every supported path is currently documented and tested as starting with a new empty database. The profiles use Hibernate `ddl-auto=update` for convenience; this is not a general migration system and does not automatically move existing data between H2, SQLite, or an external database. The existing H2-to-SQLite utility is a separate, SQLite-specific offline tool, not a general multi-database converter. Review its table and version compatibility, take an independent backup, and validate the result before using it. For an existing production database, use a DBA/platform-controlled, versioned migration and then set `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`.
+Every supported path is currently documented and tested as starting with a new empty database. The profiles use Hibernate `ddl-auto=update` for convenience; this is not a general migration system and does not automatically move existing data between SQLite and an external database. The H2-to-SQLite utility (see [Migrating from H2](#migrating-from-h2)) is a separate, SQLite-specific offline tool, not a general multi-database converter. Review its table and version compatibility, take an independent backup, and validate the result before using it. For an existing production database, use a DBA/platform-controlled, versioned migration and then set `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`.
+
+### Migrating from H2
+
+H2 is no longer supported and is not bundled in `echo-server.jar`. Echo refuses to start with the `h2` profile or a `jdbc:h2:` URL, and it also refuses to start when the legacy H2 data file `mockdb.mv.db` is present in the working directory but the SQLite database has not been created yet, so an upgrade never silently starts with an empty database.
+
+Convert existing data while Echo is stopped:
+
+```bash
+python3 scripts/migrate-h2-to-sqlite.py --h2-path ./mockdb
+./gradlew bootRun   # SQLite is the default; the migrated file is ./data/mockdb.sqlite
+```
+
+The script never modifies the H2 files, verifies row counts and per-table digests, smoke-tests Echo against the staged database, and only then publishes `./data/mockdb.sqlite`. Keep the original H2 files until the new deployment has run stably. Docker users: the previous H2 default stored data at `/app/mockdb`, outside the `/app/data` volume; copy it out of the container before recreating it. To deliberately start with an empty database despite a leftover `mockdb.mv.db`, set `ECHO_DATABASE_IGNORELEGACYH2=true`.
 
 #### Standard environment variables
 
@@ -114,7 +127,7 @@ SPRING_JPA_HIBERNATE_DDL_AUTO=validate \
 
 | Variable | Purpose |
 |----------|---------|
-| `SPRING_PROFILES_ACTIVE` | Select exactly one database profile (`h2`, `sqlite`, `postgresql`, `mysql`, `mariadb`, `sqlserver`, or `oracle`), optionally with `dev`/`test` |
+| `SPRING_PROFILES_ACTIVE` | Select exactly one database profile (`sqlite`, `postgresql`, `mysql`, `mariadb`, `sqlserver`, or `oracle`), optionally with `dev`/`test` |
 | `SPRING_DATASOURCE_URL` | Override the profile's JDBC URL |
 | `SPRING_DATASOURCE_USERNAME` | External database username |
 | `SPRING_DATASOURCE_PASSWORD` | External database password; inject it through the deployment secret mechanism |
@@ -136,7 +149,7 @@ writer metrics, and validation boundaries.
 
 #### Backup and request-log spool boundaries
 
-The application backup feature is for local H2/SQLite files. External database profiles disable it; PostgreSQL, MySQL/MariaDB, SQL Server, and Oracle backups, point-in-time recovery, retention, and restore drills are owned by the DBA or platform backup service.
+The application backup feature is for local SQLite files. External database profiles disable it; PostgreSQL, MySQL/MariaDB, SQL Server, and Oracle backups, point-in-time recovery, retention, and restore drills are owned by the DBA or platform backup service.
 
 Request-log durability has a separate boundary: every Echo instance writes its local request-log spool to a SQLite file, including when the main database is external. Keep that file on a writable persistent volume, use one spool file per instance, and do not treat it as a shared database or cross-instance queue. The spool is not a substitute for the external database's backup policy.
 
@@ -169,7 +182,7 @@ The disposable RDBMS Compose file exercises one database profile at a time, incl
 python3 scripts/test-rdbms-matrix.py --databases postgresql
 ```
 
-Replace `postgresql` with one of `h2`, `sqlite`, `mysql`, `mariadb`, `sqlserver`, or `oracle`. The script can accept several names and runs them sequentially, but each individual Compose run still has only one active database profile. Results are written under `artifacts/rdbms-matrix/<run>/`, including `matrix-result.json`.
+Replace `postgresql` with one of `sqlite`, `mysql`, `mariadb`, `sqlserver`, or `oracle`. The script can accept several names and runs them sequentially, but each individual Compose run still has only one active database profile. Results are written under `artifacts/rdbms-matrix/<run>/`, including `matrix-result.json`.
 
 For a manual smoke test:
 
@@ -236,7 +249,7 @@ permissions are unchanged.
 | Admin UI | http://localhost:8080/ | Mock rule management |
 | Login Page | http://localhost:8080/login.html | User login |
 | Mock Endpoint | http://localhost:8080/mock/** | Intercept HTTP requests |
-| Database | — | H2 is the default; select exactly one database profile for SQLite or an external database |
+| Database | — | SQLite (`./data/mockdb.sqlite`) is the default; select exactly one database profile for an external database |
 
 ## Rule Matching Priority
 
@@ -369,6 +382,39 @@ Multiple conditions separated by `;` must all match (AND logic):
 | `Header*=value` | Contains | `Content-Type*=json` |
 | `Header~=regex` | Regex match | `Authorization~=Bearer.*` |
 
+### Advanced Conditions (`matchSpec`)
+
+When `;`-joined AND conditions are not enough, a rule can carry a structured condition tree in
+`matchSpec` (REST API, JSON import/export, or `echo.mock/v2` documents as `spec.match`). It supports
+`all` / `any` / `not` groups and these operators: `equals`, `notEquals`, `contains`, `matches`,
+`exists`, `absent`, `gt` / `gte` / `lt` / `lte` (numeric), `in`, and `equalToJson`.
+
+```json
+{
+  "protocol": "HTTP", "matchKey": "/orders", "method": "POST", "responseBody": "{\"tier\":\"gold\"}",
+  "matchSpec": {"all": [
+    {"source": "header", "name": "X-Tenant", "op": "equals", "value": "acme"},
+    {"any": [
+      {"source": "body", "selector": {"jsonPath": "$.amount"}, "op": "gte", "value": 1000},
+      {"source": "query", "name": "vip", "op": "exists"}
+    ]},
+    {"not": {"source": "body", "selector": {"jsonPath": "$.status"}, "op": "equals", "value": "CANCELLED"}}
+  ]}
+}
+```
+
+- Sources: HTTP rules use `body`, `query` and `header`; JMS rules use `body` (selectors `jsonPath`, `xpath`, `field`, `raw`).
+- Invalid trees are rejected on save with the JSON path of the problem (for example `$.all[1].any[0].op`).
+  Limits: 64 KiB, 16 levels, 256 nodes, 1,000 `in` values.
+- `matchSpec` and `bodyCondition` / `queryCondition` / `headerCondition` are mutually exclusive. A tree that is only
+  an `all` of `{"legacy": {"source": ..., "condition": ...}}` fragments is stored as the legacy fields.
+- In the rule editor, switch the condition block from **Simple** to **Advanced** to build groups, NOT and the new
+  operators; existing simple conditions become legacy fragments that keep their exact matching. Switching back is
+  instant when only legacy fragments remain, otherwise the editor asks before clearing the advanced conditions.
+  The editor checks the tree against the server while you type and points at the failing node.
+- A request that omits both `matchSpec` and legacy conditions keeps a rule's structured conditions (so older clients
+  cannot erase them by accident); send `{"all": []}` to clear them.
+
 ## Stateful Scenarios
 
 Rules can participate in a named state machine using `scenarioName`, match only in
@@ -491,7 +537,7 @@ echo:
     rule-retention-days: 180    # Rule retention days
     response-retention-days: 180 # Response retention days
   backup:
-    enabled: true               # Local-file backup for H2/SQLite only
+    enabled: true               # Local-file backup for SQLite only
     cron: "0 0 3 * * *"         # Daily at 3 AM
     path: ./backups             # Backup directory
     retention-days: 7           # Backup retention days
@@ -505,7 +551,7 @@ echo:
     user-pattern: uid={0},ou=users
 ```
 
-The backup settings above apply only to local H2/SQLite files. External database profiles set application backup to false; use the DBA or platform backup service for those databases.
+The backup settings above apply only to local SQLite files. External database profiles set application backup to false; use the DBA or platform backup service for those databases.
 
 ## Authentication
 
@@ -859,7 +905,7 @@ python3 scripts/test-match-scenarios.py
 |----------|-----------|
 | Framework | Spring Boot 3.5.16 |
 | Web Server | Undertow |
-| Database | H2, SQLite WAL, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle profiles |
+| Database | SQLite WAL (default), PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle profiles |
 | Cache | Caffeine |
 | Messaging | Artemis (Embedded) |
 | Security | Spring Security |

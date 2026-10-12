@@ -1,8 +1,9 @@
 package com.echo.service;
 
-import com.echo.config.CacheConfig;
 import com.echo.entity.CacheEvent;
 import com.echo.entity.Protocol;
+import com.echo.protocol.ProtocolDescriptor;
+import com.echo.protocol.ProtocolHandlerRegistry;
 import com.echo.repository.CacheEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,12 +29,14 @@ import java.util.Set;
 @Slf4j
 public class CacheInvalidationService {
 
-    private static final String EVENT_HTTP = "HTTP_RULE_CHANGED";
-    private static final String EVENT_JMS = "JMS_RULE_CHANGED";
     private static final String EVENT_ALL = "RULE_CHANGED";
+    /** 協定事件為「協定名稱 + 此字尾」，見 {@link ProtocolDescriptor#cacheEventType(Protocol)}。 */
+    private static final String PROTOCOL_EVENT_SUFFIX = "_RULE_CHANGED";
 
     private final CacheEventRepository eventRepository;
     private final CacheManager cacheManager;
+    /** 各協定的事件類型與規則快取名稱由其 {@link ProtocolDescriptor} 提供。 */
+    private final ProtocolHandlerRegistry protocols;
 
     private volatile LocalDateTime lastChecked = LocalDateTime.now();
 
@@ -44,8 +47,7 @@ public class CacheInvalidationService {
 
     /** 發布協定級別 cache 失效事件 */
     public void publishInvalidation(Protocol protocol) {
-        String eventType = (protocol == Protocol.JMS) ? EVENT_JMS : EVENT_HTTP;
-        eventRepository.save(new CacheEvent(eventType));
+        eventRepository.save(new CacheEvent(ProtocolDescriptor.cacheEventType(protocol)));
     }
 
     /** 定期檢查是否有新事件 */
@@ -54,16 +56,9 @@ public class CacheInvalidationService {
         List<CacheEvent> events = eventRepository.findByTimestampAfter(lastChecked);
         if (!events.isEmpty()) {
             Set<String> cachesToClear = new HashSet<>();
+            List<ProtocolDescriptor> enabled = protocols.descriptors();
             for (CacheEvent event : events) {
-                switch (event.getEventType()) {
-                    case EVENT_HTTP -> cachesToClear.add(CacheConfig.HTTP_RULES_CACHE);
-                    case EVENT_JMS -> cachesToClear.add(CacheConfig.JMS_RULES_CACHE);
-                    default -> {
-                        // RULE_CHANGED 或其他 → 清除全部
-                        cachesToClear.add(CacheConfig.HTTP_RULES_CACHE);
-                        cachesToClear.add(CacheConfig.JMS_RULES_CACHE);
-                    }
-                }
+                cachesToClear.addAll(cachesFor(event.getEventType(), enabled));
             }
             for (String cacheName : cachesToClear) {
                 var cache = cacheManager.getCache(cacheName);
@@ -74,6 +69,34 @@ public class CacheInvalidationService {
             log.debug("Cache invalidated: caches={}, events={}", cachesToClear, events.size());
             lastChecked = LocalDateTime.now();
         }
+    }
+
+    /**
+     * 協定事件只清除該協定的規則快取（本實例未啟用該協定時不需清除）；
+     * {@code RULE_CHANGED} 或無法辨識的事件清除所有已啟用協定的規則快取。
+     */
+    private static Set<String> cachesFor(String eventType, List<ProtocolDescriptor> enabled) {
+        for (ProtocolDescriptor protocol : enabled) {
+            if (protocol.cacheEventType().equals(eventType)) {
+                return Set.of(protocol.rulesCacheName());
+            }
+        }
+        if (eventType != null && !EVENT_ALL.equals(eventType) && eventType.endsWith(PROTOCOL_EVENT_SUFFIX)
+                && isProtocolName(eventType.substring(0, eventType.length() - PROTOCOL_EVENT_SUFFIX.length()))) {
+            return Set.of();
+        }
+        Set<String> all = new HashSet<>();
+        enabled.forEach(protocol -> all.add(protocol.rulesCacheName()));
+        return all;
+    }
+
+    private static boolean isProtocolName(String name) {
+        for (Protocol protocol : Protocol.values()) {
+            if (protocol.name().equals(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 每小時清理舊事件 */

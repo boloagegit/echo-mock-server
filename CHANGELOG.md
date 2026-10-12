@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [Unreleased]
 
 ### Added
+- The rule editor warns about equality conditions whose value starts with `=` (usually written as `==`): only field paths on a JSON body treat `==` as `=`; for JSONPath, XPath, XML, query and header conditions the extra `=` is part of the expected value
+- Advanced condition editor: the rule editor switches between the existing simple rows and a tree editor for `all` / `any` groups, NOT and the new operators, validates against the server while typing, and round-trips `echo.mock/v2` documents; the rule list and detail summarize structured conditions
+- Structured match conditions (`matchSpec`): `all` / `any` / `not` groups with `exists`, `absent`, numeric `gt`/`gte`/`lt`/`lte`, `in` and `equalToJson` in addition to the existing operators, validated on save with the JSON path of any error; available through the REST API, JSON import/export and new `echo.mock/v2` documents (`spec.match`). `echo.mock/v1` is unchanged, and manifests of rules that use structured conditions are emitted as v2
 - Anomaly-only HTTP/JMS/SSE diagnostics: zero supplemental file bytes for healthy traffic, one bounded error summary, separate 10 MiB/day / 50 MiB retained files, rate limits, expiring opt-in detail, and nullable Request Log correlation IDs
 - Fault Injection — rules can simulate CONNECTION_RESET (close connection) or EMPTY_RESPONSE (return empty body) for HTTP and JMS
 - Faker Handlebars helpers — randomFirstName, randomLastName, randomFullName, randomEmail, randomPhoneNumber, randomCity, randomCountry, randomStreetAddress, randomInt
@@ -23,6 +26,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - One-click maintainer release workflow with validated CalVer tags, release artifacts, checksums, generated notes, and GHCR images
 
 ### Changed
+- Condition matching runs on the new `com.echo.core.match` engine. Existing string conditions (`bodyCondition`, `queryCondition`, `headerCondition`) keep their exact semantics and match-chain details through a compatibility layer verified by differential tests against the original implementation; stored rules need no changes. The one intentional difference: an expected value consisting of a single `"` is compared literally instead of failing the request with HTTP 500
+- **Breaking:** H2 is no longer supported or bundled. SQLite is the default database (`./data/mockdb.sqlite`, inside the Docker `/app/data` volume); the `sqlite` profile keeps `./mockdb.sqlite`. Echo refuses to start with an H2 profile/URL or with unmigrated legacy `mockdb.mv.db` data; convert with `scripts/migrate-h2-to-sqlite.py`, which now runs from its own Gradle source set
+- HTTP/JMS rule candidates come from immutable per-protocol snapshots invalidated by the existing rule-cache eviction paths; one shared rule selector replaces four copies of the selection loop
+- Request handling is split into pluggable pieces without behaviour changes: responders (fault, forward, mock) produce the response plan, SSE playback lives in `protocol.http.sse` instead of the HTTP controller, and request logging receives a single `ServeEvent` through `ServeEventListener` (additional listeners cannot affect the response; request-log failures still return 503 or redeliver JMS)
+- Rule list queries and multi-instance cache invalidation read per-protocol descriptors from the protocol registry instead of hard-coded HTTP/JMS branches; cache event names are unchanged
+- Tests run on SQLite (one temporary database per Spring context) instead of embedded H2
+- The test suite runs test classes in parallel JVM forks (half the CPU cores; `-PtestForks=1` for one JVM) and no longer waits on BCrypt at production strength, a 30 s JMS reply timeout or a 40 s SSE sequence: `./gradlew test` drops from about 330 s to about 190 s with the same 1,836 tests. Integration-test cleanup now fails the test when deleting data fails instead of leaving it to later tests
 - System Settings now separates overview, resource details, forwarding targets, data/backups, and service configuration; shared target tables and six metric disclosures retain manual-refresh behavior
 - Priority field semantics reversed to higher-number-higher-priority
 - Split HTTP/JMS rule caches for better isolation
@@ -37,8 +47,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Spring Boot updated to 3.5.16 and the build aligned with the supported Gradle 8.14.5 line
 
 ### Fixed
+- Opening an existing rule in the editor and saving it no longer changes or drops conditions: simple-mode condition rows, declarative documents and v1 document validation now split conditions exactly like matching does (first `=`, so `a=x!=y` is `a` equals `x!=y`), keep the leading `//` of XPath fields, and show conditions that cannot be represented as rows (for example one without an operator) unchanged in advanced mode instead of deleting them
 - SSE zero-delay callback ownership race that could cancel the following delayed event; late future registration retains timeout/disconnect cleanup
 - Request-log proxy error values are bounded to the existing 255-character column without altering transport responses
+- `echo.matcher.max-field-value-length` is now applied; Spring previously used the no-argument constructor and ignored it
+- Rule-cache rebuilds no longer send one `IN` list with every response ID (O(n²) on H2; over parameter limits on SQL Server/Oracle); with 20,000 rules the first request after a rule change dropped from 1.3 s to about 0.17 s
+- Regex timeout protection reads the clock every 256 characters instead of on every character (10k-character values: 717 µs → 74 µs)
+- The default Docker database now lives in the persisted `/app/data` volume
 - Forwarding target dialogs now place and contain keyboard focus, support Escape, and restore the launch control; Settings action menus remain within the viewport
 - JMS forwarding documentation now reflects configuration-first default selection and distinguishes it from automatic failover
 - SpotBugs mutable array warnings

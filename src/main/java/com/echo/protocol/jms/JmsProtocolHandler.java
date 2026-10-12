@@ -1,5 +1,6 @@
 package com.echo.protocol.jms;
 
+import com.echo.config.CacheConfig;
 import com.echo.dto.RuleDto;
 import com.echo.entity.BaseRule;
 import com.echo.entity.FaultType;
@@ -10,7 +11,9 @@ import com.echo.entity.Protocol;
 import com.echo.entity.Response;
 import com.echo.jms.JmsConnectionManager;
 import com.echo.protocol.AbstractProtocolHandler;
+import com.echo.protocol.ProtocolDescriptor;
 import com.echo.repository.JmsRuleRepository;
+import com.echo.service.MatchSpecs;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jms.core.JmsTemplate;
@@ -21,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * JMS 協定處理器
@@ -39,9 +43,19 @@ public class JmsProtocolHandler extends AbstractProtocolHandler {
         this.jmsConnectionManager = Optional.ofNullable(jmsConnectionManager);
     }
 
+    public static final ProtocolDescriptor DESCRIPTOR = new ProtocolDescriptor(
+            Protocol.JMS, JmsRule.class, CacheConfig.JMS_RULES_CACHE, List.of(
+            "id", "queueName", "description", "tags", "bodyCondition", "matchSpec"),
+            JmsRuleAction.MOCK, JmsRuleAction.FORWARD, Set.of("body"));
+
     @Override
     public Protocol getProtocol() {
         return Protocol.JMS;
+    }
+
+    @Override
+    public ProtocolDescriptor descriptor() {
+        return DESCRIPTOR;
     }
 
     @Override
@@ -53,6 +67,8 @@ public class JmsProtocolHandler extends AbstractProtocolHandler {
                 .protocol(Protocol.JMS)
                 .matchKey(r.getQueueName())
                 .bodyCondition(r.getBodyCondition())
+                .matchSpec(MatchSpecs.read(r.getMatchSpec()).orElse(null))
+                .advancedMatch(r.getMatchSpec() != null)
                 .priority(r.getPriority())
                 .description(r.getDescription())
                 .enabled(r.getEnabled())
@@ -88,6 +104,7 @@ public class JmsProtocolHandler extends AbstractProtocolHandler {
                 .version(dto.getVersion())
                 .queueName(dto.getMatchKey())
                 .bodyCondition(dto.getBodyCondition())
+                .matchSpec(MatchSpecs.toStored(dto.getMatchSpec()))
                 .priority(dto.getPriority() != null ? dto.getPriority() : 0)
                 .description(dto.getDescription() != null && !dto.getDescription().isBlank() ? dto.getDescription() : generateRuleDescription(dto))
                 .enabled(dto.getEnabled() != null ? dto.getEnabled() : true)
@@ -234,7 +251,7 @@ public class JmsProtocolHandler extends AbstractProtocolHandler {
     private String generateRuleDescription(RuleDto dto) {
         StringBuilder sb = new StringBuilder();
         sb.append("JMS ").append(dto.getMatchKey() != null ? dto.getMatchKey() : "QUEUE");
-        int condCount = 0;
+        int condCount = MatchSpecs.conditionCount(dto.getMatchSpec());
         if (dto.getBodyCondition() != null && !dto.getBodyCondition().isBlank()) {
             condCount += dto.getBodyCondition().split(";").length;
         }

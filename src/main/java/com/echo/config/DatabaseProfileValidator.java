@@ -23,7 +23,7 @@ import java.util.Set;
  * <p>The check intentionally uses JDBC metadata rather than configuration
  * properties. This means a standard {@code SPRING_DATASOURCE_URL} override is
  * checked against the selected profile as well. A missing database profile is
- * treated as the application's default H2 configuration.</p>
+ * treated as the application's default SQLite configuration.</p>
  *
  * <p>No connection details are included in validation messages. Connection
  * failures are converted to a generic startup failure without retaining the
@@ -54,7 +54,7 @@ public final class DatabaseProfileValidator implements ApplicationRunner {
      * {@code dev} and {@code test} are deliberately ignored.
      *
      * @param activeProfiles Spring's active profiles
-     * @return the sole database profile, or H2 when none is active
+     * @return the sole database profile, or SQLite when none is active
      * @throws DatabaseProfileValidationException when more than one database
      *                                            profile is active
      */
@@ -70,7 +70,7 @@ public final class DatabaseProfileValidator implements ApplicationRunner {
             throw new DatabaseProfileValidationException(
                     "Only one database profile may be active at a time.");
         }
-        return selected.isEmpty() ? DatabaseProfile.H2 : selected.iterator().next();
+        return selected.isEmpty() ? DatabaseProfile.SQLITE : selected.iterator().next();
     }
 
     /**
@@ -107,7 +107,6 @@ public final class DatabaseProfileValidator implements ApplicationRunner {
 
     /** Supported database profile names and their JDBC metadata fingerprints. */
     public enum DatabaseProfile {
-        H2("h2", "jdbc:h2:"),
         SQLITE("sqlite", "jdbc:sqlite:"),
         POSTGRESQL("postgresql", "jdbc:postgresql:"),
         MYSQL("mysql", "jdbc:mysql:"),
@@ -138,7 +137,6 @@ public final class DatabaseProfileValidator implements ApplicationRunner {
             }
             String normalized = productName.toLowerCase(Locale.ROOT);
             return switch (this) {
-                case H2 -> normalized.contains("h2");
                 case SQLITE -> normalized.contains("sqlite");
                 case POSTGRESQL -> normalized.contains("postgres");
                 case MYSQL -> normalized.contains("mysql") && !normalized.contains("maria");

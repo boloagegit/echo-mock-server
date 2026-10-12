@@ -51,6 +51,8 @@ const RuleDetail = {
       return condTagsGrouped(this.view);
     },
     conditionCount() {
+      // 進階條件的摘要含群組標題（ALL／ANY），條件數以樹中的條件為準
+      if (hasMatchSpec(this.view)) return condCount(this.view);
       return this.conditionGroups.reduce((sum, group) => sum + group.items.length, 0);
     },
     /** Many conditions show the first few; the rest are one click away. */
@@ -116,6 +118,7 @@ const RuleDetail = {
       return code < 400 ? 'success' : code < 500 ? 'warning' : 'danger';
     },
     conditionTitle(type) {
+      if (type === 'advanced') return this.t('rules.advancedMatch');
       return this.t(type === 'body' ? 'rules.pvBodyCondition' : type === 'query' ? 'rules.pvQueryCondition' : 'rules.pvHeaderCondition');
     },
   },
@@ -142,7 +145,11 @@ const RuleDetail = {
         <dl v-else class="detail-grid">
           <template v-for="group in visibleConditionGroups" :key="group.type">
             <dt>{{conditionTitle(group.type)}}</dt>
-            <dd class="detail-chips">
+            <dd v-if="group.type==='advanced'" class="match-summary">
+              <code v-for="(item, i) in group.items" :key="'advanced'+i" class="match-summary__line"
+                :style="{paddingInlineStart: (item.depth * 16) + 'px'}">{{item.v}}</code>
+            </dd>
+            <dd v-else class="detail-chips">
               <button v-for="(item, i) in group.items" :key="group.type+i" type="button" class="cond-chip is-copyable" :data-kind="group.type"
                 :title="t('rules.clickToCopy')" @click="$emit('clip-copy', item.v.trim())"><code>{{item.v.trim()}}</code></button>
             </dd>

@@ -2,6 +2,7 @@ package com.echo.service;
 
 import com.echo.config.CacheConfig;
 import com.echo.config.JmsProperties;
+import com.echo.core.engine.RuleSelector;
 import com.echo.entity.JmsRule;
 import com.echo.entity.Protocol;
 import com.echo.protocol.jms.JmsProtocolHandler;
@@ -15,7 +16,6 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -74,74 +74,32 @@ public class JmsRuleService {
         return requireJmsHandler().findAllRules();
     }
 
-    @Cacheable(cacheNames = CacheConfig.JMS_RULES_CACHE, key = "'jms-prepared:' + #queueName")
+    /** 該 queue 的候選規則（已排序），取自目前的規則快照。 */
     public List<JmsRule> findPreparedJmsRules(String queueName) {
         if (!isJmsEnabled()) {
             return Collections.emptyList();
         }
-        log.debug("Cache miss - preparing JMS rules: queue={}", queueName);
-        List<JmsRule> rules = requireJmsHandler().findWithFallback(queueName);
-        return prepareJmsRules(rules);
+        return proxy().jmsQueueSnapshot(queueName).rules();
     }
 
-    @Cacheable(cacheNames = CacheConfig.JMS_RULES_CACHE,
-               key = "'jms-bucketed:' + #queueName + ':' + (#endpointValue != null ? #endpointValue : '_all_')")
+    /** 依 endpoint 值分桶後的候選規則，取自目前的規則快照；結果與原本逐一比對條件字串相同。 */
     public List<JmsRule> findBucketedJmsRules(String queueName, String endpointValue) {
         if (!isJmsEnabled()) {
             return Collections.emptyList();
         }
-        List<JmsRule> allRules = proxy().findPreparedJmsRules(queueName);
-        if (endpointValue == null || endpointValue.isBlank()) {
-            return allRules;
-        }
-
-        String endpointField = jmsProperties.map(JmsProperties::getEndpointField).orElse(null);
-        if (endpointField == null || endpointField.isBlank()) {
-            return allRules;
-        }
-
-        log.debug("Cache miss - bucketing JMS rules: queue={}, endpointValue={}", queueName, endpointValue);
-
-        List<JmsRule> bucketed = new ArrayList<>();
-        for (JmsRule rule : allRules) {
-            String cond = rule.getBodyCondition();
-            if (cond == null || cond.isBlank()) {
-                bucketed.add(rule);
-            } else if (bodyConditionMatchesEndpoint(cond, endpointField, endpointValue)) {
-                bucketed.add(rule);
-            }
-        }
-        return List.copyOf(bucketed);
+        return proxy().jmsQueueSnapshot(queueName).bucket(endpointValue);
     }
 
-    private boolean bodyConditionMatchesEndpoint(String bodyCondition, String endpointField, String endpointValue) {
-        for (String part : bodyCondition.split(";")) {
-            String trimmed = part.trim();
-            if (trimmed.isEmpty()) {
-                continue;
-            }
-            String normalized = trimmed.startsWith("//") ? trimmed.substring(2) : trimmed;
-            int eqIdx = normalized.indexOf('=');
-            if (eqIdx <= 0) {
-                continue;
-            }
-            char prev = normalized.charAt(eqIdx - 1);
-            String field;
-            if (prev == '!' || prev == '*' || prev == '~') {
-                field = normalized.substring(0, eqIdx - 1).trim();
-            } else {
-                field = normalized.substring(0, eqIdx).trim();
-            }
-            String value = normalized.substring(eqIdx + 1).trim();
-            if (value.startsWith("\"") && value.endsWith("\"")) {
-                value = value.substring(1, value.length() - 1);
-            }
-
-            if (field.equalsIgnoreCase(endpointField)) {
-                return value.equals(endpointValue);
-            }
-        }
-        return true;
+    /**
+     * 某一 queue 的 JMS 規則快照。存放在 {@code jmsRules} 快取（queue 名稱來自設定檔，數量有限），
+     * 任何規則或 Response 異動清除快取時一併淘汰；{@code sync = true} 讓並行訊息只建立一次。
+     */
+    @Cacheable(cacheNames = CacheConfig.JMS_RULES_CACHE, key = "'jms-snapshot:' + #queueName", sync = true)
+    public JmsQueueSnapshot jmsQueueSnapshot(String queueName) {
+        log.debug("Building JMS rule snapshot: queue={}", queueName);
+        List<JmsRule> rules = isJmsEnabled() ? requireJmsHandler().findWithFallback(queueName) : List.of();
+        String endpointField = jmsProperties.map(JmsProperties::getEndpointField).orElse(null);
+        return new JmsQueueSnapshot(prepareJmsRules(rules), endpointField, conditionMatcher);
     }
 
     private List<JmsRule> prepareJmsRules(List<JmsRule> rules) {
@@ -183,45 +141,38 @@ public class JmsRuleService {
 
     private MatchResult<JmsRule> matchJmsRules(List<JmsRule> rules, String body,
                                                 ConditionMatcher.PreparedBody preparedBody) {
-        JmsRule matched = null;
-        JmsRule noConditionRule = null;
-        JmsRule wildcardRule = null;
         ConditionMatcher.PreparedBody prepared = (preparedBody != null)
                 ? preparedBody : conditionMatcher.prepareBody(body);
-
-        for (JmsRule rule : rules) {
-            if (Boolean.FALSE.equals(rule.getEnabled())) {
-                continue;
-            }
-            boolean isWildcard = "*".equals(rule.getQueueName());
-            boolean hasCondition = rule.getBodyCondition() != null && !rule.getBodyCondition().isBlank();
-
-            if (hasCondition) {
-                if (conditionMatcher.matchesPrepared(
-                        rule.getBodyCondition(), null, null, prepared, null, null)) {
-                    matched = rule;
-                    break;
-                }
-            } else if (isWildcard) {
-                if (wildcardRule == null) {
-                    wildcardRule = rule;
-                }
-            } else {
-                if (noConditionRule == null) {
-                    noConditionRule = rule;
-                }
-            }
-        }
-
-        if (matched == null) {
-            matched = noConditionRule != null ? noConditionRule : wildcardRule;
-        }
+        JmsRule matched = RuleSelector.select(rules, RuleSelector.FallbackPolicy.EXACT_BEFORE_WILDCARD,
+                JMS_RULE_TRAITS, rule -> true,
+                rule -> rule.getMatchSpec() != null
+                        ? conditionMatcher.matchesPrepared(rule.getMatchSpec(), null, null, null, prepared, null, null)
+                        : conditionMatcher.matchesPrepared(rule.getBodyCondition(), null, null, prepared, null, null))
+                .selected();
 
         List<MatchChainEntry> chain = matched != null
                 ? List.of(MatchChainEntry.fromJms(matched, "match"))
                 : List.of();
         return new MatchResult<>(matched, chain);
     }
+
+    private static final RuleSelector.Traits<JmsRule> JMS_RULE_TRAITS = new RuleSelector.Traits<>() {
+        @Override
+        public boolean enabled(JmsRule rule) {
+            return !Boolean.FALSE.equals(rule.getEnabled());
+        }
+
+        @Override
+        public boolean unconditional(JmsRule rule) {
+            return rule.getMatchSpec() == null
+                    && (rule.getBodyCondition() == null || rule.getBodyCondition().isBlank());
+        }
+
+        @Override
+        public boolean wildcard(JmsRule rule) {
+            return "*".equals(rule.getQueueName());
+        }
+    };
 
     public List<JmsRule> findAllJmsRules() {
         if (!isJmsEnabled()) {

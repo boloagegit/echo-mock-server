@@ -77,7 +77,7 @@ public class RequestLog {
     @Column(length = 255)
     private String targetHost;
 
-    /** 是否實際嘗試轉發；nullable 讓既有 H2/SQLite schema 可安全新增欄位。 */
+    /** 是否實際嘗試轉發；nullable 讓既有 schema 可安全新增欄位。 */
     @Builder.Default
     private Boolean forwarded = false;
 

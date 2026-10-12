@@ -24,14 +24,14 @@
 - **規則保護** - 標記規則為受保護，防止被自動清除
 - **規則展延** - 延長規則/回應的保留期限，避免被定時清除
 - **孤兒清理** - 偵測並清除未被任何規則使用的孤兒回應
-- **自動備份** - H2/SQLite 資料庫排程備份、關機備份、手動觸發備份
+- **自動備份** - SQLite 資料庫排程備份、關機備份、手動觸發備份
 - **狀態機場景** - 選用的 WireMock 風格狀態機，可模擬多步驟流程（預設關閉）
 - **故障注入** - 在規則模式選擇故障注入，模擬連線重置與空回應進行韌性測試
 - **OpenAPI 匯入** - 選用的 OpenAPI 3.x／Swagger 2.x JSON/YAML 預覽與匯入（預設關閉）
 - **假資料產生** - 內建姓名、Email、電話、地址與整數模板 helper
 - **規則測試** - 在管理介面直接測試規則匹配結果
 - **靜態分析** - SpotBugs 靜態程式碼分析
-- **資料庫 Profile** - 支援 H2、SQLite、PostgreSQL、MySQL、MariaDB、SQL Server 與 Oracle
+- **資料庫 Profile** - 支援 SQLite（預設）、PostgreSQL、MySQL、MariaDB、SQL Server 與 Oracle
 - **內網友善** - 前端使用 WebJars，無需 CDN
 - **環境識別** - 協定別名、環境標籤，多環境部署一目了然
 
@@ -61,11 +61,11 @@ SQLite 暫存目錄可寫，並套用僅限當前使用者的檔案權限。將�
 複製到腳本旁並命名為 `echo.jar`，或設定 `ECHO_JAR_PATH`，之後照常傳入 Spring 參數：
 
 ```bash
-./start-echo.sh --spring.profiles.active=sqlite
+./start-echo.sh
 ```
 
-可用 `SQLITE_TMPDIR` 覆寫預設暫存路徑。使用 H2 時這個設定不會改變資料庫
-profile，也不影響既有啟動方式。
+可用 `SQLITE_TMPDIR` 覆寫預設暫存路徑。這個設定不會改變資料庫 profile，
+也不影響既有啟動方式。
 
 Windows 開發機請在 PowerShell 使用：
 
@@ -82,8 +82,8 @@ java -jar (Get-ChildItem build\libs\echo-server-*.jar | Select-Object -First 1).
 
 | Profile | 資料庫 | 目前 Docker 實測基準 |
 |---------|--------|----------------------|
-| `h2`（或未指定資料庫 profile） | H2 檔案資料庫 | 建置解析的 H2 2.x |
-| `sqlite` | SQLite WAL 檔案 | Xerial JDBC 驅動的 SQLite 3.x |
+| 未指定資料庫 profile（預設） | SQLite WAL 檔案 `./data/mockdb.sqlite` | Xerial JDBC 驅動的 SQLite 3.x |
+| `sqlite` | SQLite WAL 檔案 `./mockdb.sqlite`（沿用既有部署的位置） | Xerial JDBC 驅動的 SQLite 3.x |
 | `postgresql` | PostgreSQL | PostgreSQL 17 |
 | `mysql` | MySQL | MySQL 8.4 |
 | `mariadb` | MariaDB | MariaDB 11.8 |
@@ -92,9 +92,22 @@ java -jar (Get-ChildItem build\libs\echo-server-*.jar | Select-Object -First 1).
 
 表列版本是可重現的 Docker smoke test 基準，不代表每個更舊或更新的廠商版本都已認證。Echo 使用的 Hibernate 版本支援 Oracle Database 19c 以上；更舊的 Oracle 版本不在支援範圍內。
 
-每個程序只能啟用一個資料庫 profile。`dev` 與 `test` 是非資料庫 profile，可與一個資料庫 profile 一起使用。若未啟用任何資料庫 profile，系統會選擇 H2。啟動時會拒絕多個資料庫 profile，也會拒絕 JDBC URL 廠商與所選 profile 不一致的設定。
+每個程序只能啟用一個資料庫 profile。`dev` 與 `test` 是非資料庫 profile，可與一個資料庫 profile 一起使用。若未啟用任何資料庫 profile，系統會使用 SQLite，資料檔為 `./data/mockdb.sqlite`（即 Docker volume 掛載點）。啟動時會拒絕多個資料庫 profile，也會拒絕 JDBC URL 廠商與所選 profile 不一致的設定。
 
-目前各 profile 的文件與實測路徑都以「新建空資料庫」啟動為準。Profile 使用 Hibernate `ddl-auto=update` 方便建立結構；這不是通用遷移系統，也不會自動把 H2、SQLite 或外部資料庫之間的既有資料搬移。現有 H2-to-SQLite 工具是獨立的 SQLite 專用離線工具，不是通用的多資料庫轉換器；使用前應檢查資料表與版本相容性、另行備份並驗證結果。既有正式資料庫請由 DBA／平台以具版本控管的遷移方式處理，再設定 `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`。
+目前各 profile 的文件與實測路徑都以「新建空資料庫」啟動為準。Profile 使用 Hibernate `ddl-auto=update` 方便建立結構；這不是通用遷移系統，也不會自動在 SQLite 與外部資料庫之間搬移既有資料。H2-to-SQLite 工具（見[從 H2 遷移](#從-h2-遷移)）是獨立的 SQLite 專用離線工具，不是通用的多資料庫轉換器；使用前應檢查資料表與版本相容性、另行備份並驗證結果。既有正式資料庫請由 DBA／平台以具版本控管的遷移方式處理，再設定 `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`。
+
+### 從 H2 遷移
+
+H2 已不再支援，也不會打包在 `echo-server.jar` 中。使用 `h2` profile 或 `jdbc:h2:` URL 時 Echo 會拒絕啟動；工作目錄中仍有舊 H2 資料檔 `mockdb.mv.db`、但 SQLite 資料庫尚未建立時也會拒絕啟動，避免升級後以空資料庫啟動、看起來像規則全部消失。
+
+請在 Echo 停止時轉換既有資料：
+
+```bash
+python3 scripts/migrate-h2-to-sqlite.py --h2-path ./mockdb
+./gradlew bootRun   # SQLite 已是預設；轉換後的檔案為 ./data/mockdb.sqlite
+```
+
+腳本不會修改 H2 檔案，會比對每張表的筆數與 digest，並以 staging 資料庫實際啟動 Echo 做 smoke test，全部通過後才發布 `./data/mockdb.sqlite`。新環境穩定運行前請保留原 H2 檔案。Docker 使用者注意：舊版預設的 H2 資料位於 `/app/mockdb`，不在 `/app/data` volume 內，重建容器前請先把它複製出來。確定要在殘留 `mockdb.mv.db` 的情況下以空資料庫啟動時，可設定 `ECHO_DATABASE_IGNORELEGACYH2=true`。
 
 #### 標準環境變數
 
@@ -109,7 +122,7 @@ SPRING_JPA_HIBERNATE_DDL_AUTO=validate \
 
 | 變數 | 用途 |
 |------|------|
-| `SPRING_PROFILES_ACTIVE` | 選擇一個資料庫 profile（`h2`、`sqlite`、`postgresql`、`mysql`、`mariadb`、`sqlserver` 或 `oracle`），可另外加 `dev`／`test` |
+| `SPRING_PROFILES_ACTIVE` | 選擇一個資料庫 profile（`sqlite`、`postgresql`、`mysql`、`mariadb`、`sqlserver` 或 `oracle`），可另外加 `dev`／`test` |
 | `SPRING_DATASOURCE_URL` | 覆寫 profile 的 JDBC URL |
 | `SPRING_DATASOURCE_USERNAME` | 外部資料庫使用者名稱 |
 | `SPRING_DATASOURCE_PASSWORD` | 外部資料庫密碼；請透過部署平台的 secret 機制注入 |
@@ -123,7 +136,7 @@ SPRING_JPA_HIBERNATE_DDL_AUTO=validate \
 
 #### 備份與 request-log spool 邊界
 
-應用程式備份功能只處理本機 H2／SQLite 檔案；外部資料庫 profile 會關閉此功能。PostgreSQL、MySQL／MariaDB、SQL Server 與 Oracle 的備份、PITR、保留政策及還原演練由 DBA 或平台備份服務負責。
+應用程式備份功能只處理本機 SQLite 檔案；外部資料庫 profile 會關閉此功能。PostgreSQL、MySQL／MariaDB、SQL Server 與 Oracle 的備份、PITR、保留政策及還原演練由 DBA 或平台備份服務負責。
 
 即使主資料庫是外部資料庫，request-log 的耐久化仍會先寫入每個 Echo 實例自己的本機 SQLite spool。請將 spool 放在可寫入且具持久性的 volume，每個實例使用不同檔案；它不是共用資料庫，也不是跨實例 queue，不能取代外部資料庫的備份政策。
 
@@ -149,7 +162,7 @@ python3 scripts/stress-test-rps.py http://localhost:8080 10 20 \
 python3 scripts/test-rdbms-matrix.py --databases postgresql
 ```
 
-將 `postgresql` 替換為 `h2`、`sqlite`、`mysql`、`mariadb`、`sqlserver` 或 `oracle`。腳本可接受多個名稱並依序執行，但每一次 Compose 執行仍只啟用一個資料庫 profile。結果會寫在 `artifacts/rdbms-matrix/<run>/`，包括 `matrix-result.json`。
+將 `postgresql` 替換為 `sqlite`、`mysql`、`mariadb`、`sqlserver` 或 `oracle`。腳本可接受多個名稱並依序執行，但每一次 Compose 執行仍只啟用一個資料庫 profile。結果會寫在 `artifacts/rdbms-matrix/<run>/`，包括 `matrix-result.json`。
 
 手動 smoke test：
 
@@ -214,7 +227,7 @@ JVM 參數在 Dockerfile 中設定（預設 `-Xms256m -Xmx512m`，OOM 時保留 
 | 管理介面 | http://localhost:8080/ | Mock 規則管理 |
 | 登入頁面 | http://localhost:8080/login.html | 使用者登入 |
 | Mock 端點 | http://localhost:8080/mock/** | 攔截 HTTP 請求 |
-| 資料庫 | — | 預設使用 H2；SQLite 或外部資料庫請選擇唯一的資料庫 profile |
+| 資料庫 | — | 預設使用 SQLite（`./data/mockdb.sqlite`）；外部資料庫請選擇唯一的資料庫 profile |
 
 ## 規則匹配優先順序
 
@@ -347,6 +360,34 @@ Echo 可作為 JMS Proxy，在開發環境攔截 JMS 訊息：
 | `Header*=value` | 包含 | `Content-Type*=json` |
 | `Header~=regex` | 正則匹配 | `Authorization~=Bearer.*` |
 
+### 進階條件（`matchSpec`）
+
+`;` 串接的「而且」條件不夠用時，規則可以在 `matchSpec` 寫結構化條件（REST API、JSON 匯入匯出，
+或 `echo.mock/v2` 文件的 `spec.match`）。支援 `all`／`any`／`not` 組合，以及運算子：`equals`、`notEquals`、
+`contains`、`matches`、`exists`、`absent`、`gt`／`gte`／`lt`／`lte`（數值）、`in`、`equalToJson`。
+
+```json
+{
+  "protocol": "HTTP", "matchKey": "/orders", "method": "POST", "responseBody": "{\"tier\":\"gold\"}",
+  "matchSpec": {"all": [
+    {"source": "header", "name": "X-Tenant", "op": "equals", "value": "acme"},
+    {"any": [
+      {"source": "body", "selector": {"jsonPath": "$.amount"}, "op": "gte", "value": 1000},
+      {"source": "query", "name": "vip", "op": "exists"}
+    ]},
+    {"not": {"source": "body", "selector": {"jsonPath": "$.status"}, "op": "equals", "value": "CANCELLED"}}
+  ]}
+}
+```
+
+- 取值來源：HTTP 規則可用 `body`、`query`、`header`；JMS 規則可用 `body`（selector：`jsonPath`、`xpath`、`field`、`raw`）。
+- 條件不合法時，儲存就會被拒絕並指出位置（例如 `$.all[1].any[0].op`）。上限：64 KiB、16 層、256 個節點、`in` 最多 1,000 個值。
+- `matchSpec` 與 `bodyCondition`／`queryCondition`／`headerCondition` 互斥；只由 `{"legacy": {"source": ..., "condition": ...}}`
+  片段組成的 `all` 會存成舊欄位。
+- 規則編輯畫面的條件區可以從「簡易」切到「進階」，用群組、NOT 與新運算子組合條件；原本的簡易條件會變成舊格式片段，
+  比對方式完全不變。只剩舊格式片段時可以直接切回簡易模式，否則會先確認是否清除進階條件。編輯時會即時向後端檢查，並指出出錯的位置。
+- 請求中沒有 `matchSpec` 也沒有舊版條件時會保留規則原本的結構化條件（避免舊的呼叫端誤刪）；要清除請送 `{"all": []}`。
+
 ## 狀態機場景（Stateful Scenarios）
 
 規則可透過 `scenarioName` 加入指定狀態機，只在 `requiredScenarioState`
@@ -466,7 +507,7 @@ echo:
     rule-retention-days: 180    # 規則保留天數
     response-retention-days: 180 # 回應保留天數
   backup:
-    enabled: true               # 僅對本機 H2/SQLite 啟用檔案備份
+    enabled: true               # 僅對本機 SQLite 啟用檔案備份
     cron: "0 0 3 * * *"         # 每天凌晨 3 點執行
     path: ./backups             # 備份目錄
     retention-days: 7           # 備份保留天數
@@ -480,7 +521,7 @@ echo:
     user-pattern: uid={0},ou=users
 ```
 
-上面的備份設定只適用於本機 H2／SQLite 檔案。外部資料庫 profile 會將應用程式備份關閉，請使用 DBA 或平台備份服務。
+上面的備份設定只適用於本機 SQLite 檔案。外部資料庫 profile 會將應用程式備份關閉，請使用 DBA 或平台備份服務。
 
 ## 使用者認證
 
@@ -804,7 +845,7 @@ python3 scripts/test-match-scenarios.py
 |------|------|
 | Framework | Spring Boot 3.5.16 |
 | Web Server | Undertow |
-| Database | H2、SQLite WAL、PostgreSQL、MySQL、MariaDB、SQL Server 與 Oracle profile |
+| Database | SQLite WAL（預設）、PostgreSQL、MySQL、MariaDB、SQL Server 與 Oracle profile |
 | Cache | Caffeine |
 | Messaging | Artemis (Embedded) |
 | Security | Spring Security |

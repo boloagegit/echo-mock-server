@@ -1,5 +1,11 @@
 package com.echo.service;
 
+import java.util.ArrayList;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.echo.protocol.jms.JmsProtocolHandler;
+import com.echo.protocol.http.HttpProtocolHandler;
+import com.echo.core.match.LegacyConditions;
+import com.echo.core.match.InvalidMatchSpecException;
 import com.echo.dto.RuleApplyDocument;
 import com.echo.dto.RuleApplySchema;
 import com.echo.entity.Protocol;
@@ -82,6 +88,7 @@ public class RuleApplyContractService {
             ));
 
     private final RuleApplySchema exposedSchema;
+    private final RuleApplySchema exposedSchemaV2;
 
     public RuleApplyContractService(
             @Value("${echo.features.scenarios-enabled:false}") boolean scenariosEnabled) {
@@ -90,17 +97,50 @@ public class RuleApplyContractService {
                 : new RuleApplySchema(schema.apiVersion(), schema.kind(), schema.fields().stream()
                         .filter(field -> !SCENARIO_FIELDS.contains(field.path()))
                         .toList());
+        exposedSchemaV2 = toV2(exposedSchema);
     }
 
     public RuleApplySchema schema() {
         return exposedSchema;
     }
 
+    /** 依 apiVersion 回傳 schema；未指定時為 v1。 */
+    public RuleApplySchema schema(String apiVersion) {
+        if (apiVersion == null || apiVersion.isBlank() || RuleApplyDocument.API_VERSION.equals(apiVersion)) {
+            return exposedSchema;
+        }
+        if (RuleApplyDocument.API_VERSION_V2.equals(apiVersion)) {
+            return exposedSchemaV2;
+        }
+        throw new IllegalArgumentException("Unsupported apiVersion: " + apiVersion);
+    }
+
+    /** v2 = v1 的所有欄位 + {@code spec.match}，放在舊版條件欄位之後。 */
+    private static RuleApplySchema toV2(RuleApplySchema v1) {
+        List<RuleApplySchema.Field> fields = new ArrayList<>();
+        for (RuleApplySchema.Field field : v1.fields()) {
+            if ("apiVersion".equals(field.path())) {
+                fields.add(field("apiVersion", "string", List.of(RuleApplyDocument.API_VERSION_V2),
+                        null, null, 32, null, null, null, "ALWAYS", null, true));
+                continue;
+            }
+            fields.add(field);
+            if ("spec.headerCondition".equals(field.path())) {
+                fields.add(field("spec.match", "object", null, null, null, null, null, null, null,
+                        null, null, false));
+            }
+        }
+        return new RuleApplySchema(RuleApplyDocument.API_VERSION_V2, v1.kind(), fields);
+    }
+
     public void validate(RuleApplyDocument document) {
         if (document == null) {
             fail("DOCUMENT_REQUIRED", "$", "Apply document is required");
         }
-        requireExact("apiVersion", document.getApiVersion(), RuleApplyDocument.API_VERSION);
+        boolean v2 = RuleApplyDocument.API_VERSION_V2.equals(document.getApiVersion());
+        if (!v2) {
+            requireExact("apiVersion", document.getApiVersion(), RuleApplyDocument.API_VERSION);
+        }
         requireExact("kind", document.getKind(), RuleApplyDocument.KIND);
         rejectUnknownFields("document", document.getUnknownFields());
 
@@ -112,6 +152,7 @@ public class RuleApplyContractService {
             fail("REQUIRED", "spec", "spec is required");
         }
         rejectUnknownFields("spec", spec.getUnknownFields());
+        validateMatch(spec, v2);
         validateCommonSpec(spec);
         if (spec.getProtocol() == Protocol.HTTP) {
             validateHttpSpec(spec);
@@ -335,28 +376,49 @@ public class RuleApplyContractService {
         return !"NONE".equals(normalized(spec.getFaultType(), "NONE"));
     }
 
+    /**
+     * v1 沒有 {@code spec.match}（維持原本的未知欄位錯誤）；v2 的 {@code spec.match} 與舊版條件互斥，
+     * 並以與儲存時相同的規則檢查（運算子、來源、大小上限）。
+     */
+    private void validateMatch(RuleApplyDocument.Spec spec, boolean v2) {
+        JsonNode match = spec.getMatch();
+        if (match == null || match.isNull()) {
+            return;
+        }
+        if (!v2) {
+            fail("UNKNOWN_FIELD", "spec.match", "Unknown spec field: match", Map.of("field", "match"));
+        }
+        if (hasText(spec.getBodyCondition()) || hasText(spec.getQueryCondition())
+                || hasText(spec.getHeaderCondition())) {
+            fail("MATCH_CONFLICT", "spec.match",
+                    "spec.match cannot be combined with bodyCondition, queryCondition or headerCondition");
+        }
+        Set<String> sources = spec.getProtocol() == Protocol.JMS
+                ? JmsProtocolHandler.DESCRIPTOR.matchSources()
+                : HttpProtocolHandler.DESCRIPTOR.matchSources();
+        try {
+            MatchSpecs.normalize(match, sources);
+        } catch (InvalidMatchSpecException e) {
+            fail("INVALID_MATCH", "spec.match" + e.path().substring(1), "spec.match" + e.getMessage().substring(1));
+        }
+    }
+
     private void validateCondition(String path, String value) {
         if (!hasText(value)) {
             return;
         }
         for (String rawCondition : value.split(";", -1)) {
-            String condition = rawCondition.trim();
-            String operator = List.of("!=", "*=", "~=", "=").stream()
-                    .filter(condition::contains)
-                    .findFirst()
+            // 與比對時相同的拆解規則（第一個 =），例如 a=x!=y 是欄位 a、值 x!=y
+            LegacyConditions.Parts parts = LegacyConditions.parts(rawCondition.trim())
+                    .filter(candidate -> !candidate.field().isEmpty() && !candidate.value().isEmpty())
                     .orElse(null);
-            if (operator == null) {
+            if (parts == null) {
                 fail("CONDITION_FORMAT", path, path + " contains an invalid condition");
+                continue;
             }
-            int index = condition.indexOf(operator);
-            String field = condition.substring(0, index).trim();
-            String expected = condition.substring(index + operator.length()).trim();
-            if (field.isEmpty() || expected.isEmpty()) {
-                fail("CONDITION_FORMAT", path, path + " contains an invalid condition");
-            }
-            if ("~=".equals(operator)) {
+            if ("~=".equals(parts.operator())) {
                 try {
-                    Pattern.compile(expected);
+                    Pattern.compile(parts.value());
                 } catch (PatternSyntaxException e) {
                     fail("INVALID_REGEX", path, path + " contains an invalid regular expression");
                 }

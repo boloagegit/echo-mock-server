@@ -21,4 +21,7 @@ public class ConditionSet {
 
     /** Header 匹配條件（僅 HTTP） */
     private final String headerCondition;
+
+    /** 結構化條件 JSON；有值時以它為準，舊版三個條件為 null */
+    private final String matchSpec;
 }

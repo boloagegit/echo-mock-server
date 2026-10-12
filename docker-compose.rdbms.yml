@@ -27,23 +27,10 @@ x-echo-common: &echo-common
   restart: unless-stopped
 
 services:
-  echo-h2:
-    <<: *echo-common
-    profiles: ["h2"]
-    environment:
-      <<: *echo-environment
-      SPRING_PROFILES_ACTIVE: h2
-      SPRING_DATASOURCE_URL: jdbc:h2:file:/app/data/mockdb;AUTO_RECONNECT=TRUE;DB_CLOSE_ON_EXIT=FALSE;WRITE_DELAY=100;TRACE_LEVEL_FILE=0
-    volumes:
-      - echo-h2-data:/app/data
-
+  # 預設資料庫：不指定 profile 與 URL，驗證 application.yml 的預設值（/app/data/mockdb.sqlite）
   echo-sqlite:
     <<: *echo-common
     profiles: ["sqlite"]
-    environment:
-      <<: *echo-environment
-      SPRING_PROFILES_ACTIVE: sqlite
-      SPRING_DATASOURCE_URL: jdbc:sqlite:/app/data/mockdb.sqlite?journal_mode=WAL&busy_timeout=10000&synchronous=NORMAL&foreign_keys=ON
     volumes:
       - echo-sqlite-data:/app/data
 
@@ -221,7 +208,6 @@ services:
       - oracle-data:/opt/oracle/oradata
 
 volumes:
-  echo-h2-data:
   echo-sqlite-data:
   echo-postgresql-data:
   echo-mysql-data:

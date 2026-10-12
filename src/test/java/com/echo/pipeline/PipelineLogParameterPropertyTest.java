@@ -1,5 +1,7 @@
 package com.echo.pipeline;
 
+import com.echo.service.ServeEvent;
+import com.echo.service.ServeEventCaptor;
 import com.echo.entity.HttpRule;
 import com.echo.entity.Protocol;
 import com.echo.service.ConditionMatcher;
@@ -191,7 +193,7 @@ class PipelineLogParameterPropertyTest {
     /**
      * Feature: protocol-pipeline-refactor, Property 5: Pipeline 日誌參數完整性
      * <p>
-     * 對任意 pipeline 執行情境，驗證 recordLog() 傳入 RequestLogService.record() 時：
+     * 對任意 pipeline 執行情境，驗證 pipeline 交給請求紀錄的 ServeEvent 時：
      * matched=true → ruleId 非 null；matched=false → ruleId 為 null。
      *
      * <b>Validates: Requirements 6.5</b>
@@ -220,40 +222,12 @@ class PipelineLogParameterPropertyTest {
 
         pipeline.execute(request);
 
-        // Capture the arguments passed to record()
-        ArgumentCaptor<String> ruleIdCaptor = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<Boolean> matchedCaptor = ArgumentCaptor.forClass(Boolean.class);
+        // 取得交給請求紀錄的事件
 
-        verify(mockLogService).record(
-                ruleIdCaptor.capture(),    // ruleId
-                any(Protocol.class),       // protocol
-                any(),                     // method
-                any(),                     // endpoint
-                matchedCaptor.capture(),   // matched
-                anyInt(),                  // responseTimeMs
-                any(),                     // clientIp
-                any(),                     // matchChain
-                any(),                     // targetHost
-                anyBoolean(),              // forwarded
-                any(),                     // forwardTarget
-                any(),                     // proxyStatus
-                any(),                     // proxyError
-                any(),                     // responseStatus
-                any(),                     // matchTimeMs
-                any(),                     // requestBody
-                any(),                     // responseBody
-                anyList(),                 // candidates
-                any(),                     // preparedBody
-                any(),                     // queryString
-                any(),                     // headers
-                any(),                     // faultType
-                any(),                     // scenarioName
-                any(),                     // scenarioFromState
-                any()                      // scenarioToState
-        );
+        ServeEvent served = ServeEventCaptor.single(mockLogService);
 
-        boolean matched = matchedCaptor.getValue();
-        String ruleId = ruleIdCaptor.getValue();
+        boolean matched = served.isMatched();
+        String ruleId = served.getRuleId();
 
         if (matched) {
             assertThat(ruleId)
@@ -269,7 +243,7 @@ class PipelineLogParameterPropertyTest {
     /**
      * Feature: protocol-pipeline-refactor, Property 5: Pipeline 日誌參數完整性
      * <p>
-     * 對任意 pipeline 執行情境，驗證 recordLog() 傳入的 protocol 與請求的 protocol 一致。
+     * 對任意 pipeline 執行情境，驗證 pipeline 交給請求紀錄的事件中的 protocol 與請求的 protocol 一致。
      *
      * <b>Validates: Requirements 6.5</b>
      */
@@ -297,37 +271,10 @@ class PipelineLogParameterPropertyTest {
 
         pipeline.execute(request);
 
-        ArgumentCaptor<Protocol> protocolCaptor = ArgumentCaptor.forClass(Protocol.class);
 
-        verify(mockLogService).record(
-                any(),                     // ruleId
-                protocolCaptor.capture(),  // protocol
-                any(),                     // method
-                any(),                     // endpoint
-                anyBoolean(),              // matched
-                anyInt(),                  // responseTimeMs
-                any(),                     // clientIp
-                any(),                     // matchChain
-                any(),                     // targetHost
-                anyBoolean(),              // forwarded
-                any(),                     // forwardTarget
-                any(),                     // proxyStatus
-                any(),                     // proxyError
-                any(),                     // responseStatus
-                any(),                     // matchTimeMs
-                any(),                     // requestBody
-                any(),                     // responseBody
-                anyList(),                 // candidates
-                any(),                     // preparedBody
-                any(),                     // queryString
-                any(),                     // headers
-                any(),                     // faultType
-                any(),                     // scenarioName
-                any(),                     // scenarioFromState
-                any()                      // scenarioToState
-        );
+        ServeEvent served = ServeEventCaptor.single(mockLogService);
 
-        assertThat(protocolCaptor.getValue())
+        assertThat(served.getProtocol())
                 .as("Logged protocol must match request protocol (scenario=%s)", scenario)
                 .isEqualTo(protocol);
     }
@@ -335,7 +282,7 @@ class PipelineLogParameterPropertyTest {
     /**
      * Feature: protocol-pipeline-refactor, Property 5: Pipeline 日誌參數完整性
      * <p>
-     * 對任意 pipeline 執行情境，驗證 recordLog() 傳入的 endpoint 與請求的 path 一致。
+     * 對任意 pipeline 執行情境，驗證 pipeline 交給請求紀錄的事件中的 endpoint 與請求的 path 一致。
      *
      * <b>Validates: Requirements 6.5</b>
      */
@@ -363,37 +310,10 @@ class PipelineLogParameterPropertyTest {
 
         pipeline.execute(request);
 
-        ArgumentCaptor<String> endpointCaptor = ArgumentCaptor.forClass(String.class);
 
-        verify(mockLogService).record(
-                any(),                     // ruleId
-                any(Protocol.class),       // protocol
-                any(),                     // method
-                endpointCaptor.capture(),  // endpoint
-                anyBoolean(),              // matched
-                anyInt(),                  // responseTimeMs
-                any(),                     // clientIp
-                any(),                     // matchChain
-                any(),                     // targetHost
-                anyBoolean(),              // forwarded
-                any(),                     // forwardTarget
-                any(),                     // proxyStatus
-                any(),                     // proxyError
-                any(),                     // responseStatus
-                any(),                     // matchTimeMs
-                any(),                     // requestBody
-                any(),                     // responseBody
-                anyList(),                 // candidates
-                any(),                     // preparedBody
-                any(),                     // queryString
-                any(),                     // headers
-                any(),                     // faultType
-                any(),                     // scenarioName
-                any(),                     // scenarioFromState
-                any()                      // scenarioToState
-        );
+        ServeEvent served = ServeEventCaptor.single(mockLogService);
 
-        assertThat(endpointCaptor.getValue())
+        assertThat(served.getEndpoint())
                 .as("Logged endpoint must match request path (scenario=%s)", scenario)
                 .isEqualTo(path);
     }
@@ -430,41 +350,11 @@ class PipelineLogParameterPropertyTest {
 
         pipeline.execute(request);
 
-        ArgumentCaptor<String> ruleIdCaptor = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<Protocol> protocolCaptor = ArgumentCaptor.forClass(Protocol.class);
-        ArgumentCaptor<String> endpointCaptor = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<Boolean> matchedCaptor = ArgumentCaptor.forClass(Boolean.class);
 
-        verify(mockLogService).record(
-                ruleIdCaptor.capture(),    // ruleId
-                protocolCaptor.capture(),  // protocol
-                any(),                     // method
-                endpointCaptor.capture(),  // endpoint
-                matchedCaptor.capture(),   // matched
-                anyInt(),                  // responseTimeMs
-                any(),                     // clientIp
-                any(),                     // matchChain
-                any(),                     // targetHost
-                anyBoolean(),              // forwarded
-                any(),                     // forwardTarget
-                any(),                     // proxyStatus
-                any(),                     // proxyError
-                any(),                     // responseStatus
-                any(),                     // matchTimeMs
-                any(),                     // requestBody
-                any(),                     // responseBody
-                anyList(),                 // candidates
-                any(),                     // preparedBody
-                any(),                     // queryString
-                any(),                     // headers
-                any(),                     // faultType
-                any(),                     // scenarioName
-                any(),                     // scenarioFromState
-                any()                      // scenarioToState
-        );
+        ServeEvent served = ServeEventCaptor.single(mockLogService);
 
-        boolean matched = matchedCaptor.getValue();
-        String ruleId = ruleIdCaptor.getValue();
+        boolean matched = served.isMatched();
+        String ruleId = served.getRuleId();
 
         // ruleId consistency
         if (matched) {
@@ -478,12 +368,12 @@ class PipelineLogParameterPropertyTest {
         }
 
         // protocol consistency
-        assertThat(protocolCaptor.getValue())
+        assertThat(served.getProtocol())
                 .as("protocol must match request")
                 .isEqualTo(protocol);
 
         // endpoint consistency
-        assertThat(endpointCaptor.getValue())
+        assertThat(served.getEndpoint())
                 .as("endpoint must match request path")
                 .isEqualTo(path);
     }
