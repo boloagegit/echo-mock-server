@@ -158,6 +158,10 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
     finalizedBy jacocoTestReport
+    // 測試類別分到多個 JVM 平行執行（各自的 Spring context；資料庫檔名與連接埠都是隨機的，不會互相干擾）。
+    // 用一半的核心：Spring context 啟動很吃 CPU，全部核心反而互相拖慢。-PtestForks=1 可改回單一 JVM。
+    maxParallelForks = providers.gradleProperty('testForks').map { it as int }
+            .getOrElse(Math.max(1, Runtime.runtime.availableProcessors().intdiv(2)))
 }
 
 // Opt-in, short real-JMS/file-output A/B measurement; never part of unit-test gates.

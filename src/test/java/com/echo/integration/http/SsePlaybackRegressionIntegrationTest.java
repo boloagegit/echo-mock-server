@@ -81,15 +81,16 @@ class SsePlaybackRegressionIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void legalTwentyPlusTwentySecondSequenceCompletesBeyondOldTimeout() throws Exception {
-        save(rule("/long", "[{\"data\":\"first\",\"delayMs\":20000},{\"data\":\"second\",\"delayMs\":20000}]"));
+    void legalSixteenPlusSixteenSecondSequenceCompletesBeyondOldTimeout() throws Exception {
+        // 舊版固定 30 秒逾時（f7311bd 之前）；兩個 16 秒事件共 32 秒，足以證明串流撐過舊逾時
+        save(rule("/long", "[{\"data\":\"first\",\"delayMs\":16000},{\"data\":\"second\",\"delayMs\":16000}]"));
         long start = System.nanoTime();
         var response = client.send(request("/long").GET().build(), HttpResponse.BodyHandlers.ofInputStream());
         try (var reader = reader(response)) {
             assertThat(event(reader)).contains("data:first");
-            assertThat(Duration.ofNanos(System.nanoTime() - start).toMillis()).isGreaterThanOrEqualTo(19_500);
+            assertThat(Duration.ofNanos(System.nanoTime() - start).toMillis()).isGreaterThanOrEqualTo(15_500);
             assertThat(event(reader)).contains("data:second");
-            assertThat(Duration.ofNanos(System.nanoTime() - start).toMillis()).isGreaterThanOrEqualTo(39_500);
+            assertThat(Duration.ofNanos(System.nanoTime() - start).toMillis()).isGreaterThanOrEqualTo(31_500);
             assertThat(event(reader)).isNull();
         }
     }

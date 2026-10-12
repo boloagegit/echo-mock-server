@@ -40,7 +40,8 @@ class BuiltinUserServicePropertyTest {
     private BuiltinUserRepository repository;
     private EntityManagerFactory emf;
     private TransactionTemplate txTemplate;
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    // 最低強度（4）：雜湊格式與驗證行為相同，每次雜湊從約 80 ms 降到 1 ms 左右；正式程式維持預設強度
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder(4);
     private final AtomicInteger counter = new AtomicInteger(0);
 
     /** Generate a unique username by appending a counter to the base name. */
@@ -97,7 +98,7 @@ class BuiltinUserServicePropertyTest {
         JpaRepositoryFactory repoFactory = new JpaRepositoryFactory(sharedEm);
         repository = repoFactory.getRepository(BuiltinUserRepository.class);
 
-        service = new BuiltinUserService(repository);
+        service = new BuiltinUserService(repository, passwordEncoder);
     }
 
     @AfterProperty

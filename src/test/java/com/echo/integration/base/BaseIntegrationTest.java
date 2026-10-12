@@ -1,5 +1,7 @@
 package com.echo.integration.base;
 
+import org.springframework.http.HttpMethod;
+import java.util.List;
 import com.echo.dto.RuleDto;
 import com.echo.entity.Protocol;
 import com.echo.entity.Response;
@@ -49,9 +51,14 @@ public abstract class BaseIntegrationTest {
     @AfterEach
     void cleanupTestData() {
         TestRestTemplate admin = adminClient();
-        admin.delete(ADMIN_API_BASE + "/rules/all");
-        admin.delete(ADMIN_API_BASE + "/responses/all");
-        admin.delete(ADMIN_API_BASE + "/audit/all");
+        // TestRestTemplate.delete 會吞掉錯誤；清理失敗時資料會留給下一個共用同一個 Spring context 的測試，
+        // 因此檢查狀態碼，讓問題出現在造成它的測試上
+        for (String path : List.of("/rules/all", "/responses/all", "/audit/all")) {
+            ResponseEntity<String> response = admin.exchange(ADMIN_API_BASE + path, HttpMethod.DELETE, null, String.class);
+            assertThat(response.getStatusCode().is2xxSuccessful())
+                    .as("cleanup DELETE %s returned %s: %s", path, response.getStatusCode(), response.getBody())
+                    .isTrue();
+        }
         // 清除規則快取，避免 JMS 等非同步處理使用到已刪除的規則
         cacheManager.getCacheNames().forEach(name -> {
             var cache = cacheManager.getCache(name);
