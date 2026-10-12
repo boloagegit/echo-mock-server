@@ -86,8 +86,11 @@ public class SecurityConfig {
                 .requestMatchers("/api/account/change-password").authenticated()
                 // 批次操作僅 ADMIN (必須在 permitAll 之前)
                 .requestMatchers("/api/admin/rules/export", "/api/admin/rules/import-batch", "/api/admin/rules/import-excel", "/api/admin/rules/batch", "/api/admin/rules/batch/*", "/api/admin/rules/tag/*/*/*", "/api/admin/rules/all", "/api/admin/responses/all", "/api/admin/responses/export", "/api/admin/audit/all", "/api/admin/setup").hasRole("ADMIN")
+                // 一次取回全部規則／全部回應內容需要登入：資料量隨規則與回應增加，未登入的大量呼叫可能耗盡記憶體。
+                // 畫面使用的是下方開放的分頁與摘要 API
+                .requestMatchers(HttpMethod.GET, "/api/admin/rules", "/api/admin/responses").authenticated()
                 // 唯讀 API 開放
-                .requestMatchers(HttpMethod.GET, "/", "/index.html", "/api/admin/status", "/api/admin/rules", "/api/admin/rules/*", "/api/admin/rules/import-template", "/api/admin/rules/*/audit", "/api/admin/rules/*/order", "/api/admin/audit", "/api/admin/responses", "/api/admin/responses/*", "/api/admin/responses/*/rules", "/api/admin/responses/summary").permitAll()
+                .requestMatchers(HttpMethod.GET, "/", "/index.html", "/api/admin/status", "/api/admin/rules/*", "/api/admin/rules/import-template", "/api/admin/rules/*/audit", "/api/admin/rules/*/order", "/api/admin/audit", "/api/admin/responses/*", "/api/admin/responses/*/rules", "/api/admin/responses/summary").permitAll()
                 // 其他需登入 (POST/PUT/DELETE)
                 .anyRequest().authenticated()
             )

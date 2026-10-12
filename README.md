@@ -591,7 +591,7 @@ ADMIN can manage built-in accounts via the admin UI:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | /api/admin/rules | List all rules |
+| GET | /api/admin/rules | List all rules in one response (authenticated; the UI uses `/rules/page`) |
 | GET | /api/admin/rules/page | Bounded rule page; supports protocol/enabled/isProtected/mode/expiring/keyword/page/size/sort/direction |
 | GET | /api/admin/rules/groups | Rule group counts with the same filters |
 | GET | /api/admin/rules/group | Bounded content for one rule group with the same filters |
@@ -627,7 +627,7 @@ Rule responses include durable `createdBy` and `updatedBy` metadata. Existing ro
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | /api/admin/responses | List responses (supports keyword search) |
+| GET | /api/admin/responses | List responses with their bodies (authenticated; supports keyword search; the UI uses `/responses/summary`) |
 | GET | /api/admin/responses/summary | Response summary (with usage count) |
 | GET | /api/admin/responses/{id} | Get response |
 | GET | /api/admin/responses/{id}/rules | Rules using this response |

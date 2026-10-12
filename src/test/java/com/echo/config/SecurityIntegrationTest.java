@@ -369,9 +369,29 @@ class SecurityIntegrationTest {
     }
 
     @Test
-    void listRules_shouldReturn200_whenNotAuthenticated() throws Exception {
-        when(protocolHandlerRegistry.findAllRules()).thenReturn(List.of());
+    void fullListsRequireLogin_whilePagedViewsStayOpen() throws Exception {
         mockMvc.perform(get("/api/admin/rules").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/admin/responses").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+
+        when(ruleQueryService.query(any())).thenReturn(new RuleQueryService.RuleQueryResult(List.of(), 0, 20, 0, 0));
+        mockMvc.perform(get("/api/admin/rules/page").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+        when(responseService.findSummaryPage(any(), any(), any(), anyInt(), anyInt(), any(), any()))
+                .thenReturn(null);
+        mockMvc.perform(get("/api/admin/responses/summary").param("page", "0").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void fullListsReturn200_whenAuthenticated() throws Exception {
+        when(protocolHandlerRegistry.findAllRules()).thenReturn(List.of());
+        when(responseService.search(isNull())).thenReturn(List.of());
+        mockMvc.perform(get("/api/admin/rules").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/admin/responses").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
     }
 
