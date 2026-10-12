@@ -412,13 +412,14 @@ public class AdminController {
             @RequestParam(required = false) Boolean isProtected,
             @RequestParam(required = false) RuleQueryService.RuleMode mode,
             @RequestParam(required = false) Boolean expiring,
+            @RequestParam(required = false) Boolean unreachable,
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false, name = "sort") String sortField,
             @RequestParam(required = false) String direction) {
         var result = ruleQueryService.query(new RuleQueryService.RuleQuery(
-                protocol, enabled, isProtected, keyword, page, size, sortField, direction, mode, expiring));
+                protocol, enabled, isProtected, keyword, page, size, sortField, direction, mode, expiring, unreachable));
         List<RuleDto> rules = result.rules().stream()
                 .map(rule -> protocolHandlerRegistry.toDto(rule, null))
                 .toList();
@@ -429,7 +430,7 @@ public class AdminController {
     ResponseEntity<RulePageDto> queryRules(Protocol protocol, Boolean enabled, Boolean isProtected,
                                            String keyword, int page, int size,
                                            String sortField, String direction) {
-        return queryRules(protocol, enabled, isProtected, null, null, keyword,
+        return queryRules(protocol, enabled, isProtected, null, null, null, keyword,
                 page, size, sortField, direction);
     }
 
@@ -440,16 +441,17 @@ public class AdminController {
             @RequestParam(required = false) Boolean isProtected,
             @RequestParam(required = false) RuleQueryService.RuleMode mode,
             @RequestParam(required = false) Boolean expiring,
+            @RequestParam(required = false) Boolean unreachable,
             @RequestParam(required = false) String keyword) {
         var result = ruleQueryService.queryGroupSummary(new RuleQueryService.RuleQuery(
-                protocol, enabled, isProtected, keyword, 0, 20, null, null, mode, expiring));
+                protocol, enabled, isProtected, keyword, 0, 20, null, null, mode, expiring, unreachable));
         return ResponseEntity.ok(new RuleGroupSummaryDto(
                 result.tagKeys(), result.counts(), result.totalElements()));
     }
 
     ResponseEntity<RuleGroupSummaryDto> queryRuleGroups(Protocol protocol, Boolean enabled,
                                                         Boolean isProtected, String keyword) {
-        return queryRuleGroups(protocol, enabled, isProtected, null, null, keyword);
+        return queryRuleGroups(protocol, enabled, isProtected, null, null, null, keyword);
     }
 
     @GetMapping("/rules/group")
@@ -461,13 +463,14 @@ public class AdminController {
             @RequestParam(required = false) Boolean isProtected,
             @RequestParam(required = false) RuleQueryService.RuleMode mode,
             @RequestParam(required = false) Boolean expiring,
+            @RequestParam(required = false) Boolean unreachable,
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "20") int limit,
             @RequestParam(required = false, name = "sort") String sortField,
             @RequestParam(required = false) String direction) {
         int effectiveLimit = Math.max(1, limit);
         var result = ruleQueryService.queryGroup(new RuleQueryService.RuleQuery(
-                protocol, enabled, isProtected, keyword, 0, effectiveLimit, sortField, direction, mode, expiring),
+                protocol, enabled, isProtected, keyword, 0, effectiveLimit, sortField, direction, mode, expiring, unreachable),
                 key, value, effectiveLimit);
         List<RuleDto> rules = result.rules().stream()
                 .map(rule -> protocolHandlerRegistry.toDto(rule, null))
@@ -481,7 +484,7 @@ public class AdminController {
     ResponseEntity<RulePageDto> queryRuleGroup(String key, String value, Protocol protocol,
                                                Boolean enabled, Boolean isProtected, String keyword,
                                                int limit, String sortField, String direction) {
-        return queryRuleGroup(key, value, protocol, enabled, isProtected, null, null,
+        return queryRuleGroup(key, value, protocol, enabled, isProtected, null, null, null,
                 keyword, limit, sortField, direction);
     }
 

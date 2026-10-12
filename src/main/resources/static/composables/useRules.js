@@ -33,7 +33,7 @@ const useRules = (deps) => {
     // --- 狀態 ---
     const rules = ref([]);
     const savedRuleSort = JSON.parse(localStorage.getItem('ruleSort') || 'null');
-    const ruleFilter = ref({ protocol: '', enabled: '', isProtected: '', mode: '', expiring: '', keyword: '' });
+    const ruleFilter = ref({ protocol: '', enabled: '', isProtected: '', mode: '', expiring: '', unreachable: '', keyword: '' });
     const ruleSort = ref(savedRuleSort || { field: 'updatedAt', asc: false });
     const rulePage = ref(1);
     const rulePageSize = ref(20);
@@ -119,6 +119,7 @@ const useRules = (deps) => {
         if (ruleFilter.value.isProtected !== '') { params.set('isProtected', ruleFilter.value.isProtected); }
         if (ruleFilter.value.mode) { params.set('mode', ruleFilter.value.mode); }
         if (ruleFilter.value.expiring !== '') { params.set('expiring', ruleFilter.value.expiring); }
+        if (ruleFilter.value.unreachable) { params.set('unreachable', ruleFilter.value.unreachable); }
         const keyword = (ruleFilter.value.keyword || '').trim();
         if (keyword) { params.set('keyword', keyword); }
         return '/api/admin/rules/page?' + params.toString();
@@ -131,6 +132,7 @@ const useRules = (deps) => {
         if (ruleFilter.value.isProtected !== '') { params.set('isProtected', ruleFilter.value.isProtected); }
         if (ruleFilter.value.mode) { params.set('mode', ruleFilter.value.mode); }
         if (ruleFilter.value.expiring !== '') { params.set('expiring', ruleFilter.value.expiring); }
+        if (ruleFilter.value.unreachable) { params.set('unreachable', ruleFilter.value.unreachable); }
         const keyword = (ruleFilter.value.keyword || '').trim();
         if (keyword) { params.set('keyword', keyword); }
         return '/api/admin/rules/groups?' + params.toString();
@@ -149,6 +151,7 @@ const useRules = (deps) => {
         if (ruleFilter.value.isProtected !== '') { params.set('isProtected', ruleFilter.value.isProtected); }
         if (ruleFilter.value.mode) { params.set('mode', ruleFilter.value.mode); }
         if (ruleFilter.value.expiring !== '') { params.set('expiring', ruleFilter.value.expiring); }
+        if (ruleFilter.value.unreachable) { params.set('unreachable', ruleFilter.value.unreachable); }
         const keyword = (ruleFilter.value.keyword || '').trim();
         if (keyword) { params.set('keyword', keyword); }
         return '/api/admin/rules/group?' + params.toString();
@@ -592,11 +595,12 @@ const useRules = (deps) => {
         if (ruleFilter.value.isProtected) chips.push({ key: 'isProtected', label: t('filterChips.protection') + (ruleFilter.value.isProtected === 'true' ? t('rules.filterProtected') : t('rules.filterUnprotected')) });
         if (ruleFilter.value.mode) chips.push({ key: 'mode', label: t('filterChips.mode') + t('rules.mode_' + ruleFilter.value.mode) });
         if (ruleFilter.value.expiring) chips.push({ key: 'expiring', label: t('rules.filterExpiring') });
+        if (ruleFilter.value.unreachable) chips.push({ key: 'unreachable', label: t('rules.order.filterLabel') });
         if (ruleFilter.value.keyword) chips.push({ key: 'keyword', label: t('filterChips.keyword') + ruleFilter.value.keyword });
         return chips;
     });
     const removeRuleChip = key => { ruleFilter.value[key] = ''; };
-    const clearRuleFilters = () => { ruleFilter.value = { protocol: '', enabled: '', isProtected: '', mode: '', expiring: '', keyword: '' }; };
+    const clearRuleFilters = () => { ruleFilter.value = { protocol: '', enabled: '', isProtected: '', mode: '', expiring: '', unreachable: '', keyword: '' }; };
 
     // --- 其他 ---
     const showPriorityHelp = ref(false);

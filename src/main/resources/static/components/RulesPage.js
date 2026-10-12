@@ -62,7 +62,7 @@ const RulesPage = {
     'show-more-group', 'show-all-group',
   ],
   data() {
-    return { orderIssues: { count: 0, issues: {} }, orderIssuesOpen: false };
+    return { orderIssues: { count: 0, issues: {} } };
   },
   watch: {
     // 規則清單重新載入完成時（含新增、修改、刪除後）一併更新輪不到的規則
@@ -70,21 +70,11 @@ const RulesPage = {
   },
   mounted() {
     this.loadOrderIssues();
-    document.addEventListener('pointerdown', this.closeOrderHintOutside);
-  },
-  beforeUnmount() {
-    document.removeEventListener('pointerdown', this.closeOrderHintOutside);
   },
   computed: {
-    orderIssueList() {
-      // 依路徑、再依說明排列（數字依大小），每次顯示的順序一致
-      return Object.entries(this.orderIssues.issues || {}).map(([id, issue]) => ({ id, ...issue }))
-        .sort((a, b) => (a.route || '').localeCompare(b.route || '')
-          || (a.description || a.id).localeCompare(b.description || b.id, undefined, { numeric: true }));
-    },
     hasRuleFilters() {
       return Boolean(this.ruleFilter.keyword || this.ruleFilter.protocol || this.ruleFilter.enabled
-        || this.ruleFilter.isProtected || this.ruleFilter.mode || this.ruleFilter.expiring);
+        || this.ruleFilter.isProtected || this.ruleFilter.mode || this.ruleFilter.expiring || this.ruleFilter.unreachable);
     },
     protocolFilterOptions() {
       return [
@@ -106,6 +96,14 @@ const RulesPage = {
     },
     modeFilterOptions() {
       return ['MOCK', 'FORWARD', 'FAULT'].map(value => ({ value, label: this.t('rules.mode_' + value) }));
+    },
+    unreachableFilterOptions() {
+      return [{
+        value: 'true',
+        label: this.orderIssues.count ? this.t('rules.order.filterLabelCount', { count: this.orderIssues.count }) : this.t('rules.order.filterLabel'),
+        icon: 'bi-exclamation-triangle',
+        title: this.t('rules.order.filterHint'),
+      }];
     },
     expiringFilterOptions() {
       return [{
@@ -164,25 +162,17 @@ const RulesPage = {
     },
   },
   methods: {
-    closeOrderHintOutside(event) {
-      if (this.orderIssuesOpen && !this.$refs.orderHint?.contains(event.target)) { this.orderIssuesOpen = false; }
-    },
     async loadOrderIssues() {
       try {
         const r = await apiCall('/api/admin/rules/order-issues', {}, { silent: true });
         if (r && r.ok) { this.orderIssues = await r.json(); }
       } catch { /* 只是提示，載入失敗時不顯示 */ }
     },
-    orderIssueReason(issue) {
-      const rule = issue.byDescription || (issue.byRuleId || '').slice(0, 8);
-      return issue.type === 'duplicateConditions'
-        ? this.t('rules.order.tooltipDuplicate', { rule }) : this.t('rules.order.tooltipEarlierDefault', { rule });
-    },
     setFilter(key, value) {
       this.$emit('update:ruleFilter', { ...this.ruleFilter, [key]: value });
     },
     clearFilters() {
-      this.$emit('update:ruleFilter', { protocol: '', enabled: '', isProtected: '', mode: '', expiring: '', keyword: '' });
+      this.$emit('update:ruleFilter', { protocol: '', enabled: '', isProtected: '', mode: '', expiring: '', unreachable: '', keyword: '' });
     },
     handleDataMenuAction(action) {
       if (action === 'export') { this.$emit('export-rules'); }
@@ -226,26 +216,6 @@ const RulesPage = {
         <div class="page-heading">
             <h1 class="page-title">{{t('rules.title')}}</h1>
             <span class="page-count">{{ruleTotalElements}}</span>
-            <div v-if="orderIssues.count" ref="orderHint" class="rule-order-hint" @keydown.esc.stop="orderIssuesOpen = false">
-                <button type="button" class="rule-order-hint__chip" aria-haspopup="dialog" :aria-expanded="orderIssuesOpen ? 'true' : 'false'"
-                    @click="orderIssuesOpen = !orderIssuesOpen">
-                    <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>{{t('rules.order.hintChip', {count: orderIssues.count})}}
-                    <i class="bi" :class="orderIssuesOpen ? 'bi-chevron-up' : 'bi-chevron-down'" aria-hidden="true"></i>
-                </button>
-                <div v-if="orderIssuesOpen" class="rule-order-hint__panel" role="dialog" :aria-label="t('rules.order.bannerTitle', {count: orderIssues.count})">
-                    <p class="rule-order-hint__title">{{t('rules.order.bannerTitle', {count: orderIssues.count})}}</p>
-                    <p class="rule-order-hint__sub">{{t('rules.order.bannerHint')}}</p>
-                    <ul class="rule-order-hint__list">
-                        <li v-for="issue in orderIssueList.slice(0, 50)" :key="issue.id">
-                            <button type="button" @click="orderIssuesOpen = false; $emit('open-rule-detail', {id: issue.id})">
-                                <span class="rule-order-hint__rule"><code>{{issue.route}}</code><b>{{issue.description || issue.id.slice(0, 8)}}</b></span>
-                                <span class="rule-order-hint__why">{{orderIssueReason(issue)}}</span>
-                            </button>
-                        </li>
-                    </ul>
-                    <p v-if="orderIssueList.length > 50" class="rule-order-hint__sub">{{t('rules.order.hintMore', {count: orderIssueList.length - 50})}}</p>
-                </div>
-            </div>
         </div>
         <div class="page-actions">
             <ui-button variant="secondary" @click="$emit('load-rules', true)" :disabled="loading.rules"><i class="bi bi-arrow-clockwise" :class="{'spin':loading.rules}" aria-hidden="true"></i>{{t('rules.refresh')}}</ui-button>
@@ -274,6 +244,7 @@ const RulesPage = {
         <ui-toggle-group :model-value="ruleFilter.isProtected" :options="protectionFilterOptions" :aria-label="t('rules.protectionFilter')" @update:model-value="setFilter('isProtected', $event)"></ui-toggle-group>
         <ui-toggle-group :model-value="ruleFilter.mode" :options="modeFilterOptions" :aria-label="t('rules.filterMode')" @update:model-value="setFilter('mode', $event)"></ui-toggle-group>
         <ui-toggle-group :model-value="ruleFilter.expiring" :options="expiringFilterOptions" :aria-label="t('rules.filterExpiring')" @update:model-value="setFilter('expiring', $event)"></ui-toggle-group>
+        <ui-toggle-group :model-value="ruleFilter.unreachable" :options="unreachableFilterOptions" :aria-label="t('rules.order.filterLabel')" @update:model-value="setFilter('unreachable', $event)"></ui-toggle-group>
         <div class="list-toolbar__end">
             <ui-segmented-control :model-value="ruleViewMode" :options="viewModeOptions"
                 name="ruleViewMode" size="compact" :aria-label="t('rules.viewMode')"

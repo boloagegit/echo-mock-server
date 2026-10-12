@@ -51,7 +51,9 @@
       "priority": "priority {n}",
       "partial": "Only checked for some of these requests ({route})",
       "showHidden": "Show {count} more ({total} in total)",
-      "hintMore": "{count} more not listed; every one is badged in the rule list and can be found by searching.",
+      "filterLabel": "Never reached",
+      "filterLabelCount": "Never reached {count}",
+      "filterHint": "Only rules that can never be reached: same conditions as an earlier rule, or an earlier rule without conditions",
       "gated": "Only checked when scenario {name} = {state}",
       "disabled": "Disabled; never checked",
       "thisRule": "← this rule",
@@ -68,10 +70,7 @@
       "endJms": "None → forward to the JMS connection, or an error message when no connection is enabled",
       "limitNote": "Only rules that can never be reached are marked: same conditions as an earlier rule, or after another rule without conditions. Conditions written differently but overlapping are not judged.",
       "tooltipDuplicate": "Same conditions as \"{rule}\"; never reached",
-      "tooltipEarlierDefault": "\"{rule}\" already has no conditions and comes first; never reached",
-      "bannerTitle": "{count} rules can never be reached",
-      "bannerHint": "Usually duplicates or old rules that were never removed",
-      "hintChip": "{count} never reached"
+      "tooltipEarlierDefault": "\"{rule}\" already has no conditions and comes first; never reached"
     },
     "advancedMatch": "Advanced",
     "applyFieldSpecMatch": "Structured condition (all / any / not with exists, numeric comparison, in and more); cannot be combined with bodyCondition, queryCondition or headerCondition and makes the document echo.mock/v2",

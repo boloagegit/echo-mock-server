@@ -34,6 +34,13 @@ class RuleOrderIntegrationTest extends BaseIntegrationTest {
                 .containsEntry("type", "duplicateConditions").containsEntry("byRuleId", vip.getId())
                 .containsEntry("route", "POST /api/order-check");
 
+        // 規則列表的「輪不到」篩選只回傳這些規則
+        ResponseEntity<Map> filtered = adminClient().getForEntity("/api/admin/rules/page?unreachable=true", Map.class);
+        assertThat(filtered.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat((List<Map<String, Object>>) filtered.getBody().get("results"))
+                .extracting(rule -> rule.get("id")).containsExactly(copy.getId());
+        assertThat(filtered.getBody().get("totalElements")).isEqualTo(1);
+
         ResponseEntity<Map> order = restTemplate.getForEntity(
                 "/api/admin/rules/" + fallback.getId() + "/order", Map.class);
         assertThat(order.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -49,6 +56,8 @@ class RuleOrderIntegrationTest extends BaseIntegrationTest {
         Map<String, Object> after = (Map<String, Object>) restTemplate
                 .getForEntity("/api/admin/rules/order-issues", Map.class).getBody().get("issues");
         assertThat(after).isEmpty();
+        assertThat((List<?>) adminClient().getForEntity("/api/admin/rules/page?unreachable=true", Map.class)
+                .getBody().get("results")).isEmpty();
 
         assertThat(restTemplate.getForEntity("/api/admin/rules/missing-rule/order", Map.class).getStatusCode())
                 .isEqualTo(HttpStatus.NOT_FOUND);

@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -44,6 +45,8 @@ public class RuleQueryService {
     private final EntityManager entityManager;
     /** 已啟用的協定；每個協定的規則 entity 與搜尋欄位由其 {@link ProtocolDescriptor} 提供。 */
     private final ProtocolHandlerRegistry protocols;
+    /** 「輪不到」篩選用；只有查詢資料的測試設定沒有這個 bean。 */
+    private final Optional<RuleOrderService> ruleOrder;
 
     @Value("${echo.cleanup.rule-retention-days:180}")
     private int ruleRetentionDays;
@@ -57,12 +60,13 @@ public class RuleQueryService {
         List<String> keywords = tokenize(query.keyword());
         LocalDateTime expiringCutoff = Boolean.TRUE.equals(query.expiring())
                 ? LocalDateTime.now().minusDays(Math.max(0, ruleRetentionDays - 7L)) : null;
+        Set<String> onlyIds = onlyIds(query);
 
         Map<ProtocolDescriptor, Long> counts = new LinkedHashMap<>();
         long totalElements = 0;
         for (ProtocolDescriptor protocol : protocolsFor(query.protocol())) {
             long protocolCount = count(protocol.ruleType(), query.enabled(), query.isProtected(), query.mode(),
-                    expiringCutoff, keywords, protocol.searchFields());
+                    expiringCutoff, onlyIds, keywords, protocol.searchFields());
             counts.put(protocol, protocolCount);
             totalElements += protocolCount;
         }
@@ -78,7 +82,7 @@ public class RuleQueryService {
                 ProtocolDescriptor protocol = entry.getKey();
                 int limit = Math.toIntExact(Math.min(entry.getValue(), prefixSize));
                 candidates.addAll(fetch(protocol.ruleType(), query.enabled(), query.isProtected(), query.mode(),
-                        expiringCutoff, keywords,
+                        expiringCutoff, onlyIds, keywords,
                         protocol.searchFields(), sortField, ascending, limit));
             }
         }
@@ -141,10 +145,11 @@ public class RuleQueryService {
         List<String> keywords = tokenize(query.keyword());
         LocalDateTime expiringCutoff = Boolean.TRUE.equals(query.expiring())
                 ? LocalDateTime.now().minusDays(Math.max(0, ruleRetentionDays - 7L)) : null;
+        Set<String> onlyIds = onlyIds(query);
         List<TagRow> rows = new ArrayList<>();
         for (ProtocolDescriptor protocol : protocolsFor(query.protocol())) {
             rows.addAll(findTagRows(protocol.ruleType(), protocol.id(), query.enabled(), query.isProtected(),
-                    query.mode(), expiringCutoff,
+                    query.mode(), expiringCutoff, onlyIds,
                     keywords, protocol.searchFields()));
         }
         return rows;
@@ -167,14 +172,14 @@ public class RuleQueryService {
     private <T extends BaseRule> List<TagRow> findTagRows(Class<T> entityType, Protocol protocol,
                                                            Boolean enabled, Boolean isProtected,
                                                            RuleMode mode, LocalDateTime expiringCutoff,
-                                                           List<String> keywords,
+                                                           Set<String> onlyIds, List<String> keywords,
                                                            List<String> searchFields) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Object[]> criteria = cb.createQuery(Object[].class);
         Root<T> root = criteria.from(entityType);
         criteria.multiselect(root.get("id"), root.get("tags"));
         criteria.where(predicates(cb, root, entityType, enabled, isProtected, mode,
-                expiringCutoff, keywords, searchFields));
+                expiringCutoff, onlyIds, keywords, searchFields));
         return entityManager.createQuery(criteria).getResultList().stream()
                 .map(row -> new TagRow((String) row[0], (String) row[1], protocol))
                 .toList();
@@ -203,28 +208,28 @@ public class RuleQueryService {
 
     private <T extends BaseRule> long count(Class<T> entityType, Boolean enabled,
                                              Boolean isProtected, RuleMode mode,
-                                             LocalDateTime expiringCutoff, List<String> keywords,
-                                             List<String> searchFields) {
+                                             LocalDateTime expiringCutoff, Set<String> onlyIds,
+                                             List<String> keywords, List<String> searchFields) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Long> criteria = cb.createQuery(Long.class);
         Root<T> root = criteria.from(entityType);
         criteria.select(cb.count(root));
         criteria.where(predicates(cb, root, entityType, enabled, isProtected, mode,
-                expiringCutoff, keywords, searchFields));
+                expiringCutoff, onlyIds, keywords, searchFields));
         return entityManager.createQuery(criteria).getSingleResult();
     }
 
     private <T extends BaseRule> List<T> fetch(Class<T> entityType, Boolean enabled,
                                                 Boolean isProtected, RuleMode mode,
-                                                LocalDateTime expiringCutoff, List<String> keywords,
-                                                List<String> searchFields, String sortField,
-                                                boolean ascending, int limit) {
+                                                LocalDateTime expiringCutoff, Set<String> onlyIds,
+                                                List<String> keywords, List<String> searchFields,
+                                                String sortField, boolean ascending, int limit) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<T> criteria = cb.createQuery(entityType);
         Root<T> root = criteria.from(entityType);
         criteria.select(root);
         criteria.where(predicates(cb, root, entityType, enabled, isProtected, mode,
-                expiringCutoff, keywords, searchFields));
+                expiringCutoff, onlyIds, keywords, searchFields));
         List<Order> order = ascending
                 ? List.of(cb.asc(root.get(sortField)), cb.asc(root.get("id")))
                 : List.of(cb.desc(root.get(sortField)), cb.desc(root.get("id")));
@@ -236,9 +241,12 @@ public class RuleQueryService {
 
     private Predicate[] predicates(CriteriaBuilder cb, Root<?> root, Class<?> entityType,
                                    Boolean enabled, Boolean isProtected, RuleMode mode,
-                                   LocalDateTime expiringCutoff, List<String> keywords,
-                                   List<String> searchFields) {
+                                   LocalDateTime expiringCutoff, Set<String> onlyIds,
+                                   List<String> keywords, List<String> searchFields) {
         List<Predicate> result = new ArrayList<>();
+        if (onlyIds != null) {
+            result.add(idIn(cb, root, onlyIds));
+        }
         if (enabled != null) {
             result.add(enabled ? cb.isTrue(root.get("enabled")) : cb.isFalse(root.get("enabled")));
         }
@@ -281,6 +289,27 @@ public class RuleQueryService {
         return result.toArray(Predicate[]::new);
     }
 
+    /** 「輪不到」篩選時只看這些規則；沒有篩選時為 null。 */
+    private Set<String> onlyIds(RuleQuery query) {
+        if (!Boolean.TRUE.equals(query.unreachable())) {
+            return null;
+        }
+        return ruleOrder.map(order -> order.issues().issues().keySet()).orElse(Set.of());
+    }
+
+    /** id 在集合中；分段組成多個 IN，避免部分資料庫單一 IN 清單的數量上限。 */
+    private static Predicate idIn(CriteriaBuilder cb, Root<?> root, Set<String> ids) {
+        if (ids.isEmpty()) {
+            return cb.disjunction();
+        }
+        List<String> all = List.copyOf(ids);
+        List<Predicate> chunks = new ArrayList<>();
+        for (int from = 0; from < all.size(); from += ID_QUERY_CHUNK_SIZE) {
+            chunks.add(root.get("id").in(all.subList(from, Math.min(from + ID_QUERY_CHUNK_SIZE, all.size()))));
+        }
+        return cb.or(chunks.toArray(Predicate[]::new));
+    }
+
     private Comparator<BaseRule> ruleComparator(String sortField, boolean ascending) {
         Comparator<BaseRule> comparator = switch (sortField) {
             case "createdAt" -> Comparator.comparing(BaseRule::getCreatedAt,
@@ -299,7 +328,8 @@ public class RuleQueryService {
     }
 
     private String normalizeSortField(String field) {
-        return ALLOWED_SORT_FIELDS.contains(field) ? field : "updatedAt";
+        // Set.of(...).contains(null) 會丟出例外；沒有指定排序（API 直接呼叫）時用預設值
+        return field != null && ALLOWED_SORT_FIELDS.contains(field) ? field : "updatedAt";
     }
 
     private List<String> tokenize(String keyword) {
@@ -349,13 +379,20 @@ public class RuleQueryService {
 
     public enum RuleMode { MOCK, FORWARD, FAULT }
 
+    /** @param unreachable 只看一定輪不到的規則（見 {@link RuleOrderService}） */
     public record RuleQuery(Protocol protocol, Boolean enabled, Boolean isProtected,
                             String keyword, int page, int size, String sortField,
-                            String direction, RuleMode mode, Boolean expiring) {
+                            String direction, RuleMode mode, Boolean expiring, Boolean unreachable) {
+        public RuleQuery(Protocol protocol, Boolean enabled, Boolean isProtected,
+                         String keyword, int page, int size, String sortField,
+                         String direction, RuleMode mode, Boolean expiring) {
+            this(protocol, enabled, isProtected, keyword, page, size, sortField, direction, mode, expiring, null);
+        }
+
         public RuleQuery(Protocol protocol, Boolean enabled, Boolean isProtected,
                          String keyword, int page, int size, String sortField,
                          String direction) {
-            this(protocol, enabled, isProtected, keyword, page, size, sortField, direction, null, null);
+            this(protocol, enabled, isProtected, keyword, page, size, sortField, direction, null, null, null);
         }
     }
 
