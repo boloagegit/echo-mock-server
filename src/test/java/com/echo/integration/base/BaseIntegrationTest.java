@@ -59,6 +59,9 @@ public abstract class BaseIntegrationTest {
                     .as("cleanup DELETE %s returned %s: %s", path, response.getStatusCode(), response.getBody())
                     .isTrue();
         }
+        // 清理後確認真的沒有規則；若之後又出現，代表有背景工作或其他測試在同一個 context 建立規則
+        ResponseEntity<String> remaining = admin.getForEntity(ADMIN_API_BASE + "/rules", String.class);
+        assertThat(remaining.getBody()).as("rules left after cleanup").isEqualTo("[]");
         // 清除規則快取，避免 JMS 等非同步處理使用到已刪除的規則
         cacheManager.getCacheNames().forEach(name -> {
             var cache = cacheManager.getCache(name);
