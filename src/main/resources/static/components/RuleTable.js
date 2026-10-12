@@ -19,11 +19,18 @@ const RuleTable = {
     selectedRules: { type: Array, default: () => [] },
     canDrag: Boolean,
     dragRowClass: { type: Function, default: () => '' },
+    // 一定輪不到的規則（id → 原因），見 RuleOrderService
+    orderIssues: { type: Object, default: () => ({}) },
   },
   emits: ['select', 'edit', 'toggle-enabled', 'menu', 'toggle-selection', 'toggle-select-all', 'sort',
     'drag-start', 'drag-over', 'drag-leave', 'drop', 'drag-end'],
   methods: {
     shortId, fmtTime, daysLeft, condTags, condTooltip,
+    orderIssueReason(issue) {
+      const rule = issue.byDescription || (issue.byRuleId || '').slice(0, 8);
+      return issue.type === 'duplicateConditions'
+        ? this.t('rules.order.tooltipDuplicate', { rule }) : this.t('rules.order.tooltipEarlierDefault', { rule });
+    },
     methodLabel(rule) {
       return rule.protocol === 'JMS' ? 'JMS' : (rule.method || 'GET');
     },
@@ -102,6 +109,7 @@ const RuleTable = {
                 <i v-if="r.isProtected" class="bi bi-shield-fill-check rule-flag-protected" :title="t('rules.isProtected')" role="img" :aria-label="t('rules.isProtected')"></i>
                 <ui-badge v-if="r.sseEnabled" tone="neutral">SSE</ui-badge>
                 <ui-badge v-if="r.action==='FORWARD'" tone="neutral">{{t('rules.forward')}}</ui-badge>
+                <ui-badge v-if="orderIssues[r.id]" tone="warning" :title="orderIssueReason(orderIssues[r.id])"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>{{t('rules.order.neverBadge')}}</ui-badge>
                 <ui-badge v-if="r.faultType && r.faultType!=='NONE'" tone="warning" :title="t('rules.fault_'+r.faultType)">{{t('rules.faultInjection')}}</ui-badge>
                 <ui-badge v-if="retentionDays(r) != null && retentionDays(r) <= 7" tone="warning">{{t('rules.daysLeft', {days: retentionDays(r)})}}</ui-badge>
               </span>

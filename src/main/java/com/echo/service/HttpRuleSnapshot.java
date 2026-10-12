@@ -78,6 +78,11 @@ final class HttpRuleSnapshot {
         return rules.size();
     }
 
+    /** 快照中的所有規則（啟用中且 Response 有效），依 id 排序。 */
+    List<HttpRule> rules() {
+        return rules;
+    }
+
     /** 已計算的候選集合數（供測試確認不會隨任意輸入成長）。 */
     int candidateSetCount() {
         return candidates.size();

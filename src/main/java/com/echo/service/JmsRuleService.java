@@ -110,13 +110,16 @@ public class JmsRuleService {
                 .map(JmsRule::getResponseId).filter(id -> id != null).collect(Collectors.toSet()));
         return rules.stream()
                 .filter(r -> r.getResponseId() == null || validResponseIds.contains(r.getResponseId()))
-                .sorted(Comparator
-                        .comparing((JmsRule r) -> "*".equals(r.getQueueName()) ? 1 : 0)
-                        .thenComparing(Comparator.<JmsRule, Integer>comparing(
-                                r -> r.getPriority() != null ? r.getPriority() : Integer.MIN_VALUE).reversed())
-                        .thenComparing(JmsRule::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .sorted(JMS_RULE_ORDER)
                 .toList();
     }
+
+    /** 候選規則優先順序：非萬用 queue → priority 高 → 建立時間新。 */
+    static final Comparator<JmsRule> JMS_RULE_ORDER = Comparator
+            .comparing((JmsRule r) -> "*".equals(r.getQueueName()) ? 1 : 0)
+            .thenComparing(Comparator.<JmsRule, Integer>comparing(
+                    r -> r.getPriority() != null ? r.getPriority() : Integer.MIN_VALUE).reversed())
+            .thenComparing(JmsRule::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder()));
 
     public MatchResult<JmsRule> findMatchingJmsRuleWithCandidates(String queueName, String body, String endpointValue) {
         return findMatchingJmsRuleWithCandidates(queueName, body, endpointValue, null);

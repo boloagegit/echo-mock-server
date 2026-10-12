@@ -61,7 +61,20 @@ const RulesPage = {
     'toggle-data-dropdown', 'toggle-tag-group', 'toggle-tag-subgroup',
     'show-more-group', 'show-all-group',
   ],
+  data() {
+    return { orderIssues: { count: 0, issues: {} }, orderIssuesOpen: false };
+  },
+  watch: {
+    // 規則清單重新載入完成時（含新增、修改、刪除後）一併更新輪不到的規則
+    'loading.rules'(busy) { if (!busy) { this.loadOrderIssues(); } }
+  },
+  mounted() {
+    this.loadOrderIssues();
+  },
   computed: {
+    orderIssueList() {
+      return Object.entries(this.orderIssues.issues || {}).map(([id, issue]) => ({ id, ...issue }));
+    },
     hasRuleFilters() {
       return Boolean(this.ruleFilter.keyword || this.ruleFilter.protocol || this.ruleFilter.enabled
         || this.ruleFilter.isProtected || this.ruleFilter.mode || this.ruleFilter.expiring);
@@ -144,6 +157,17 @@ const RulesPage = {
     },
   },
   methods: {
+    async loadOrderIssues() {
+      try {
+        const r = await apiCall('/api/admin/rules/order-issues', {}, { silent: true });
+        if (r && r.ok) { this.orderIssues = await r.json(); }
+      } catch { /* 只是提示，載入失敗時不顯示 */ }
+    },
+    orderIssueReason(issue) {
+      const rule = issue.byDescription || (issue.byRuleId || '').slice(0, 8);
+      return issue.type === 'duplicateConditions'
+        ? this.t('rules.order.tooltipDuplicate', { rule }) : this.t('rules.order.tooltipEarlierDefault', { rule });
+    },
     setFilter(key, value) {
       this.$emit('update:ruleFilter', { ...this.ruleFilter, [key]: value });
     },
@@ -231,6 +255,25 @@ const RulesPage = {
         @remove="$emit('remove-rule-chip', $event)"
         @clear="$emit('clear-rule-filters')"></ui-filter-chip-list>
 
+    <section v-if="orderIssues.count" class="rule-order-banner" role="status">
+        <div class="rule-order-banner__head">
+            <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+            <strong>{{t('rules.order.bannerTitle', {count: orderIssues.count})}}</strong>
+            <span class="rule-order-banner__hint">{{t('rules.order.bannerHint')}}</span>
+            <button type="button" class="rule-order-banner__toggle" :aria-expanded="orderIssuesOpen ? 'true' : 'false'"
+                @click="orderIssuesOpen = !orderIssuesOpen">{{orderIssuesOpen ? t('rules.order.bannerHide') : t('rules.order.bannerShow')}}
+                <i class="bi" :class="orderIssuesOpen ? 'bi-chevron-up' : 'bi-chevron-down'" aria-hidden="true"></i></button>
+        </div>
+        <ul v-if="orderIssuesOpen" class="rule-order-banner__list">
+            <li v-for="issue in orderIssueList" :key="issue.id">
+                <button type="button" @click="$emit('open-rule-detail', {id: issue.id})">
+                    <code>{{issue.route}}</code><b>{{issue.description || issue.id.slice(0, 8)}}</b>
+                    <span>{{orderIssueReason(issue)}}</span>
+                </button>
+            </li>
+        </ul>
+    </section>
+
     <div v-if="batchSelectMode" class="batch-bar" role="region" :aria-label="t('rules.batchSelect')">
         <span class="batch-bar__count">{{t('rules.selectedCount', {count: selectedRules.length})}}</span>
         <ui-button variant="secondary" size="compact" :disabled="!selectedRules.length" @click="$emit('batch-protect', true)"><i class="bi bi-shield-check" aria-hidden="true"></i>{{t('rules.protect')}}</ui-button>
@@ -249,7 +292,7 @@ const RulesPage = {
                 <div v-if="loading.rules && !rules.length" class="list-skeleton" role="status" :aria-label="t('common.loading')">
                     <div v-for="i in 8" :key="'sk-rule-'+i" class="list-skeleton__row"><span class="sk sk-w-38"></span><span class="sk sk-w-40p"></span><span class="sk sk-w-15p"></span></div>
                 </div>
-                <rule-table v-else-if="pagedRules.length" :rules="pagedRules" :selected-id="ruleDetailId"
+                <rule-table v-else-if="pagedRules.length" :rules="pagedRules" :selected-id="ruleDetailId" :order-issues="orderIssues.issues"
                     :is-logged-in="isLoggedIn" :status="status" :http-label="httpLabel" :jms-label="jmsLabel"
                     sortable :rule-sort="ruleSort" :batch-select-mode="batchSelectMode" :selected-rules="selectedRules"
                     :can-drag="canDragRules" :drag-row-class="dragRowClass"
@@ -295,7 +338,7 @@ const RulesPage = {
                 <template v-if="expandedTagGroups.includes(section.key)">
                     <template v-if="!section.isTag">
                         <div v-if="groupLoading['_untagged']" class="rule-group__state loading-reveal" role="status"><i class="bi bi-arrow-clockwise spin" aria-hidden="true"></i>{{t('rules.loading')}}</div>
-                        <rule-table v-if="groupRules('_untagged').length" :rules="groupRules('_untagged')" :selected-id="ruleDetailId"
+                        <rule-table v-if="groupRules('_untagged').length" :rules="groupRules('_untagged')" :selected-id="ruleDetailId" :order-issues="orderIssues.issues"
                             :is-logged-in="isLoggedIn" :status="status" :http-label="httpLabel" :jms-label="jmsLabel"
                             @select="selectRule" @edit="$emit('open-edit', $event)" @toggle-enabled="$emit('toggle-enabled', $event)" @menu="handleRowMenu"></rule-table>
                         <div v-if="(groupCounts['_untagged'] || 0) > (rulesByTagGroup['_untagged']?.length || 0)" class="rule-group__more">
@@ -313,7 +356,7 @@ const RulesPage = {
                             </button>
                             <template v-if="expandedTagSubgroups.includes(sub.id)">
                                 <div v-if="groupLoading[sub.id]" class="rule-group__state loading-reveal" role="status"><i class="bi bi-arrow-clockwise spin" aria-hidden="true"></i>{{t('rules.loading')}}</div>
-                                <rule-table v-if="subgroupRules(sub.id).length" :rules="subgroupRules(sub.id)" :selected-id="ruleDetailId"
+                                <rule-table v-if="subgroupRules(sub.id).length" :rules="subgroupRules(sub.id)" :selected-id="ruleDetailId" :order-issues="orderIssues.issues"
                                     :is-logged-in="isLoggedIn" :status="status" :http-label="httpLabel" :jms-label="jmsLabel"
                                     @select="selectRule" @edit="$emit('open-edit', $event)" @toggle-enabled="$emit('toggle-enabled', $event)" @menu="handleRowMenu"></rule-table>
                                 <div v-if="sub.count > (rulesByTag[sub.id]?.length || 0)" class="rule-group__more">
@@ -334,7 +377,8 @@ const RulesPage = {
         :has-prev="detailIndex > 0" :has-next="detailIndex >= 0 && detailIndex < navRules.length - 1"
         @close="$emit('close-rule-detail')" @prev="stepDetail(-1)" @next="stepDetail(1)"
         @retry="$emit('load-rule-detail', ruleDetailId)"
-        @edit="$emit('open-edit', $event)" @menu="handleRowMenu" @clip-copy="$emit('clip-copy', $event)"></rule-detail>
+        @edit="$emit('open-edit', $event)" @menu="handleRowMenu" @clip-copy="$emit('clip-copy', $event)"
+        @open-rule="$emit('open-rule-detail', {id: $event})"></rule-detail>
 </div>
 `
 };
