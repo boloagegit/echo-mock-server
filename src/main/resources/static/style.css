@@ -4602,3 +4602,85 @@ select.form-select-sm { height: var(--control-h-sm); min-height: var(--control-h
     white-space: nowrap;
 }
 
+
+/* Traffic overview（請求紀錄頁上方的流量概況） */
+.traffic {
+    --traffic-mocked: rgba(var(--primary-rgb), 0.72);
+    --traffic-forwarded: #7f93b8;
+    --traffic-unmatched: var(--warning);
+    --traffic-forwardFailed: var(--danger);
+    container-type: inline-size;
+    overflow: visible;
+    padding: var(--space-md) var(--space-lg);
+    margin-bottom: var(--space-md);
+    font-size: var(--font-sm);
+    color: var(--text);
+}
+:root[data-theme="light"] .traffic { --traffic-forwarded: #8093b9 }
+.traffic.is-collapsed { padding-block: var(--space-sm) }
+.traffic-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm) var(--space-md); min-height: 30px }
+.traffic-title { margin: 0; font-size: 14px; font-weight: var(--font-weight-semibold); color: var(--text) }
+.traffic-actions { display: inline-flex; gap: 2px; margin-inline-start: auto }
+.traffic-muted { color: var(--muted); font-size: var(--font-xs) }
+.traffic-inline { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; align-items: baseline }
+.traffic-inline div { display: flex; flex-direction: row-reverse; gap: 4px; align-items: baseline }
+.traffic-inline dt { font-weight: 400; color: var(--muted); font-size: var(--font-xs) }
+.traffic-inline dd { margin: 0; font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums }
+.traffic-body { margin-top: var(--space-sm) }
+.traffic-state { margin: var(--space-sm) 0 }
+.traffic-skeleton { height: 58px; border-radius: 4px; background: var(--hover); animation: skeleton-pulse 1.5s ease-in-out infinite }
+.traffic-skeleton.is-tall { height: 250px }
+.traffic-metrics { display: flex; flex-wrap: wrap; gap: var(--space-sm) 28px; margin: 0 0 var(--space-md) }
+.traffic-metrics div { display: flex; flex-direction: column-reverse }
+.traffic-metrics dt { font-weight: 400; color: var(--muted); font-size: var(--font-xs) }
+.traffic-metrics dd { margin: 0; font-size: 20px; font-weight: var(--font-weight-semibold); line-height: 1.25; font-variant-numeric: tabular-nums }
+.traffic-metrics small { font-size: var(--font-xs); color: var(--muted); font-weight: 500; margin-inline-start: 2px }
+.traffic-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-lg) }
+.is-expanded .traffic-main { grid-template-columns: minmax(0, 1fr) minmax(220px, 300px) }
+@container (max-width: 760px) { .is-expanded .traffic-main { grid-template-columns: minmax(0, 1fr) } }
+.traffic-plot { position: relative; height: 58px }
+.traffic-plot.has-axis { height: 180px; margin-inline-start: 34px }
+.traffic-grid span { position: absolute; left: 0; right: 0; border-top: 1px solid var(--separator); pointer-events: none }
+.traffic-grid em { position: absolute; right: calc(100% + 6px); transform: translateY(-50%); font-style: normal; font-size: 11px; color: var(--text-subtle); font-variant-numeric: tabular-nums }
+.traffic-bars { position: absolute; inset: 0; display: flex; align-items: stretch; border-bottom: 1px solid var(--separator) }
+.traffic-bar { flex: 1 1 0; min-width: 0; display: flex; align-items: flex-end; padding: 0 1px; border: 0; background: none; cursor: pointer; border-radius: 3px 3px 0 0 }
+.traffic-bar:hover, .traffic-bar.is-hover { background: rgba(var(--muted-rgb), 0.1) }
+.traffic-bar.is-selected { background: rgba(var(--primary-rgb), 0.14) }
+.traffic-bar:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px }
+.traffic-bar.is-missing { cursor: default; background-image: repeating-linear-gradient(135deg, rgba(var(--muted-rgb), 0.12) 0 4px, transparent 4px 8px) }
+.traffic-stack { display: flex; flex-direction: column-reverse; width: 100%; height: 100%; justify-content: flex-start }
+.traffic-seg { display: block; width: 100%; flex: none; min-height: 1px }
+.traffic-seg:last-child { border-radius: 2px 2px 0 0 }
+.traffic-seg.is-mocked, .traffic-key.is-mocked { background: var(--traffic-mocked) }
+.traffic-seg.is-forwarded, .traffic-key.is-forwarded { background: var(--traffic-forwarded) }
+.traffic-seg.is-unmatched, .traffic-key.is-unmatched { background: var(--traffic-unmatched) }
+.traffic-seg.is-forwardFailed, .traffic-key.is-forwardFailed { background: var(--traffic-forwardFailed) }
+.traffic-axis { position: relative; display: flex; height: 16px; font-size: 11px; color: var(--text-subtle); font-variant-numeric: tabular-nums }
+.traffic-axis.has-axis { margin-inline-start: 34px; height: 18px; padding-top: 2px }
+.traffic-axis span { flex: 1 1 0; min-width: 0; overflow: visible; white-space: nowrap }
+.traffic-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 4px; color: var(--muted); font-size: var(--font-xs) }
+.traffic-key { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-inline-end: 6px; vertical-align: 0 }
+.traffic-tip {
+    position: absolute; bottom: calc(100% + 6px); z-index: 5; width: max-content; min-width: 190px; max-width: 260px;
+    display: grid; gap: 1px; padding: 8px 11px; font-size: var(--font-xs); line-height: 1.6;
+    background: var(--surface-raised); border: 1px solid var(--border2); border-radius: var(--radius-block);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22); pointer-events: none; color: var(--text);
+}
+.traffic-plot:not(.has-axis) .traffic-tip { bottom: auto; top: calc(100% + 22px) }
+.traffic-plot.has-axis .traffic-tip { bottom: auto; top: 0 }
+.traffic-tip.is-center { transform: translateX(-50%) }
+.traffic-tip.is-start { transform: translateX(-12px) }
+.traffic-tip.is-end { transform: translateX(calc(-100% + 12px)) }
+.traffic-tip b { font-weight: 600; font-size: var(--font-sm) }
+.traffic-tip-row { display: flex; justify-content: space-between; gap: 16px; font-variant-numeric: tabular-nums }
+.traffic-tip-hint { margin-top: 3px; padding-top: 4px; border-top: 1px solid var(--separator); color: var(--muted) }
+.traffic-side h3 { margin: 0 0 6px; font-size: var(--font-sm); font-weight: 600 }
+.traffic-top { list-style: none; margin: 0; padding: 0 }
+.traffic-top li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding: 6px 0; border-bottom: 1px solid var(--separator) }
+.traffic-top li:last-child { border-bottom: 0 }
+.traffic-top code { font-size: var(--font-xs); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.traffic-count { color: var(--muted); font-size: var(--font-xs); text-align: end }
+.traffic-top .detail-inline-action { grid-column: 1 / -1; justify-self: start }
+.traffic-hint { margin: 6px 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; color: var(--muted); font-size: var(--font-xs) }
+.traffic-hint code { color: var(--text); font-size: var(--font-xs); max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+@media (prefers-reduced-motion: reduce) { .traffic-skeleton { animation: none } }

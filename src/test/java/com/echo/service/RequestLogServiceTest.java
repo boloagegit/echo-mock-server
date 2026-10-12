@@ -166,6 +166,23 @@ class RequestLogServiceTest {
         }
 
         @Test
+        void querySummary_shouldLimitToTheTimeRange() {
+            java.time.LocalDateTime start = java.time.LocalDateTime.of(2026, 10, 12, 14, 0);
+            long id = 1;
+            for (java.time.LocalDateTime time : List.of(start.minusSeconds(1), start, start.plusMinutes(29),
+                    start.plusMinutes(30))) {
+                service.getMemoryBuffer().add(RequestLogService.LogEntry.builder().id(id++).protocol(Protocol.HTTP)
+                        .endpoint("/" + time.toLocalTime()).matched(true).requestTime(time).build());
+            }
+
+            var result = service.querySummary(RequestLogService.QueryFilter.builder()
+                    .from(start).to(start.plusMinutes(30)).sortDirection("asc").build());
+
+            assertThat(result.getResults()).extracting(item -> item.getLog().getEndpoint())
+                    .containsExactly("/14:00", "/14:29");
+        }
+
+        @Test
         void querySummary_shouldPaginateAndSortInMemory() {
             service.record("uuid-1", Protocol.HTTP, "GET", "/50", true, 50, "127.0.0.1", null, null, null, null, null, null);
             service.record("uuid-1", Protocol.HTTP, "GET", "/10", true, 10, "127.0.0.1", null, null, null, null, null, null);
@@ -429,7 +446,7 @@ class RequestLogServiceTest {
                     "EMPTY_RESPONSE", "order-flow", "Started", "Paid",
                     false, false, false };
             when(requestLogRepository.findSummaryPage(isNull(), eq(Protocol.HTTP), eq(true), eq("/api"),
-                    eq(10L), any(Pageable.class)))
+                    eq(10L), isNull(), isNull(), any(Pageable.class)))
                     .thenReturn(new PageImpl<>(Collections.singletonList(row),
                             org.springframework.data.domain.PageRequest.of(1, 2), 5));
 
@@ -451,7 +468,7 @@ class RequestLogServiceTest {
             assertThat(result.getTotalElements()).isEqualTo(5);
             assertThat(result.getTotalPages()).isEqualTo(3);
             verify(requestLogRepository).findSummaryPage(isNull(), eq(Protocol.HTTP), eq(true), eq("/api"),
-                    eq(10L), argThat(pageable -> pageable.getPageNumber() == 1
+                    eq(10L), isNull(), isNull(), argThat(pageable -> pageable.getPageNumber() == 1
                             && pageable.getPageSize() == 2
                             && pageable.getSort().getOrderFor("responseTimeMs").getDirection() == Sort.Direction.ASC));
             verify(requestLogRepository, never()).findSummaryProjections(any());

@@ -451,7 +451,7 @@ public class RequestLogService implements ServeEventListener {
                 RequestLogSummaryQuery.Result resultPage = summaryQuery.query(
                         new RequestLogSummaryQuery.Filter(
                                 filter.getRuleId(), filter.getProtocol(), filter.getMatched(),
-                                endpoint, filter.getAfterId()),
+                                endpoint, filter.getAfterId(), filter.getFrom(), filter.getTo()),
                         pageNumber, pageSize, sortField,
                         sortDirection == Sort.Direction.ASC);
                 entries = resultPage.rows().stream().map(this::toSummaryFromRow).toList();
@@ -460,7 +460,8 @@ public class RequestLogService implements ServeEventListener {
             } else {
                 Page<Object[]> resultPage = requestLogRepository.findSummaryPage(
                         filter.getRuleId(), filter.getProtocol(), filter.getMatched(), endpoint,
-                        filter.getAfterId(), PageRequest.of(pageNumber, pageSize, pageSort));
+                        filter.getAfterId(), filter.getFrom(), filter.getTo(),
+                        PageRequest.of(pageNumber, pageSize, pageSort));
                 entries = resultPage.getContent().stream().map(this::toSummaryFromProjection).toList();
                 totalElements = resultPage.getTotalElements();
                 totalPages = resultPage.getTotalPages();
@@ -513,6 +514,12 @@ public class RequestLogService implements ServeEventListener {
         }
         if (filter.getAfterId() != null) {
             stream = stream.filter(e -> e.getId() != null && e.getId() > filter.getAfterId());
+        }
+        if (filter.getFrom() != null) {
+            stream = stream.filter(e -> e.getRequestTime() != null && !e.getRequestTime().isBefore(filter.getFrom()));
+        }
+        if (filter.getTo() != null) {
+            stream = stream.filter(e -> e.getRequestTime() != null && e.getRequestTime().isBefore(filter.getTo()));
         }
         return stream;
     }
@@ -835,6 +842,10 @@ public class RequestLogService implements ServeEventListener {
         private String sortField;
         private String sortDirection;
         private Long afterId;
+        /** 請求時間下限（含）。 */
+        private LocalDateTime from;
+        /** 請求時間上限（不含）。 */
+        private LocalDateTime to;
     }
 
     @Getter @Builder

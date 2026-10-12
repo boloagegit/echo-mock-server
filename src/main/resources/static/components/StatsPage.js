@@ -46,7 +46,7 @@ const StatsPage = {
   },
   computed: {
     hasLogFilters() {
-      return Boolean(this.logFilter.protocol || this.logFilter.matched || this.logFilter.endpoint);
+      return Boolean(this.logFilter.protocol || this.logFilter.matched || this.logFilter.endpoint || this.logFilter.from);
     },
     selectedLogItem() {
       return this.pagedLogs.find(item => !!this.logDetailExpanded[item.log.id]) || null;
@@ -88,6 +88,15 @@ const StatsPage = {
     },
   },
   methods: {
+    /** 重新整理列表與流量概況。 */
+    refreshAll() {
+      this.$emit('load-logs', true);
+      this.$refs.traffic?.load();
+    },
+    /** 流量概況的「看這些請求」：只列出這段時間內這個網址沒比對到的請求。 */
+    showUnmatched({ protocol, endpoint, from, to }) {
+      this.$emit('update:logFilter', { ...this.logFilter, protocol, matched: 'false', endpoint, from, to });
+    },
     shortId, fmtTime, fmtSize, reasonText,
     treeSummary(tree) {
       const { total, passed } = MatchTree.explainCounts(tree);
@@ -187,11 +196,15 @@ const StatsPage = {
           </button>
         </div>
         <div class="page-actions">
-          <ui-button type="button" variant="secondary" @click="$emit('load-logs', true)" :disabled="loading.logs">
+          <ui-button type="button" variant="secondary" @click="refreshAll" :disabled="loading.logs">
             <i class="bi bi-arrow-clockwise" :class="{'spin':loading.logs}" aria-hidden="true"></i>{{t('stats.refresh')}}
           </ui-button>
         </div>
       </div>
+
+      <traffic-overview ref="traffic" :http-label="httpLabel" :jms-label="jmsLabel" :selected-from="logFilter.from || ''" :selected-to="logFilter.to || ''"
+        @select-time="$emit('update:logFilter', {...logFilter, from: $event.from, to: $event.to})"
+        @show-unmatched="showUnmatched"></traffic-overview>
 
       <div class="list-toolbar">
         <workspace-search-field shortcut="/"

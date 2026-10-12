@@ -19,7 +19,9 @@ import java.time.LocalDateTime;
     @Index(name = "idx_log_rule_time_id", columnList = "ruleId,requestTime,id"),
     @Index(name = "idx_log_protocol_matched_time_id", columnList = "protocol,matched,requestTime,id"),
     @Index(name = "idx_log_endpoint_time_id", columnList = "endpoint,requestTime,id"),
-    @Index(name = "idx_log_response_time_id", columnList = "responseTimeMs,id")
+    @Index(name = "idx_log_response_time_id", columnList = "responseTimeMs,id"),
+    // 流量概況只讀這幾個欄位：查詢只掃描索引，不讀排在後面的 body 與比對過程
+    @Index(name = RequestLog.TRAFFIC_INDEX, columnList = "requestTime,matched,forwarded,proxyError,responseTimeMs")
 })
 @Getter
 @Setter
@@ -29,6 +31,9 @@ import java.time.LocalDateTime;
 public class RequestLog {
 
     public static final int MAX_FORWARD_TARGET_LENGTH = 1000;
+
+    /** 流量概況使用的涵蓋索引。 */
+    public static final String TRAFFIC_INDEX = "idx_log_traffic";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

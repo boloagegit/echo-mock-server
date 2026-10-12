@@ -14,6 +14,7 @@ import jakarta.persistence.criteria.Root;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -86,6 +87,12 @@ public class RequestLogSummaryQuery {
         if (filter.afterId() != null) {
             predicates.add(builder.greaterThan(log.get("id"), filter.afterId()));
         }
+        if (filter.from() != null) {
+            predicates.add(builder.greaterThanOrEqualTo(log.get("requestTime"), filter.from()));
+        }
+        if (filter.to() != null) {
+            predicates.add(builder.lessThan(log.get("requestTime"), filter.to()));
+        }
         return predicates.toArray(Predicate[]::new);
     }
 
@@ -108,8 +115,12 @@ public class RequestLogSummaryQuery {
                 row.get(20, Boolean.class), row.get(21, Boolean.class), row.get(22, Boolean.class), row.get(23, String.class));
     }
 
+    /** {@code from} 含、{@code to} 不含；null 表示不限。 */
     public record Filter(String ruleId, Protocol protocol, Boolean matched,
-                         String keyword, Long afterId) {
+                         String keyword, Long afterId, LocalDateTime from, LocalDateTime to) {
+        public Filter(String ruleId, Protocol protocol, Boolean matched, String keyword, Long afterId) {
+            this(ruleId, protocol, matched, keyword, afterId, null, null);
+        }
     }
 
     public record SummaryRow(

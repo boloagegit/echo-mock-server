@@ -3,6 +3,7 @@ package com.echo.controller;
 import com.echo.dto.RuleDto;
 import com.echo.entity.Protocol;
 import com.echo.service.RequestLogService;
+import com.echo.service.RequestLogTrafficService;
 import com.echo.service.RequestLogService.LogEntry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -28,7 +30,7 @@ class RequestLogControllerLogToRuleTest {
 
     @BeforeEach
     void setUp() {
-        controller = new RequestLogController(requestLogService);
+        controller = new RequestLogController(requestLogService, mock(RequestLogTrafficService.class));
     }
 
     @Test

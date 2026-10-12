@@ -126,6 +126,9 @@ class SecurityIntegrationTest {
     @SuppressWarnings("UnusedVariable") // required for Spring context
     private com.echo.service.ScenarioService scenarioService;
 
+    @MockitoBean
+    private com.echo.service.RequestLogTrafficService requestLogTrafficService;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
@@ -168,6 +171,42 @@ class SecurityIntegrationTest {
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/admin/logs/1/detail").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/admin/logs/traffic").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void requestLogTraffic_shouldUseTheRequestedRangeAndRejectUnknownRanges() throws Exception {
+        when(requestLogTrafficService.traffic(com.echo.service.RequestLogTrafficService.Range.HOUR))
+                .thenReturn(new com.echo.service.RequestLogTrafficService.Traffic("1h",
+                        java.time.LocalDateTime.of(2026, 10, 12, 13, 2), java.time.LocalDateTime.of(2026, 10, 12, 14, 2),
+                        2, List.of(), new com.echo.service.RequestLogTrafficService.Totals(0, 0, 0, 0, 0),
+                        new com.echo.service.RequestLogTrafficService.ResponseTime(null, null), List.of(),
+                        null, false, 10000, java.time.LocalDateTime.of(2026, 10, 12, 14, 1)));
+
+        mockMvc.perform(get("/api/admin/logs/traffic").param("range", "1h").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"from\":\"2026-10-12T13:02:00\"")));
+        mockMvc.perform(get("/api/admin/logs/traffic").param("range", "30d").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void requestLogs_shouldPassTheTimeRangeFilter() throws Exception {
+        when(requestLogService.querySummary(any())).thenReturn(
+                RequestLogService.SummaryQueryResult.builder()
+                        .results(List.of()).page(0).size(20).totalElements(0)
+                        .totalPages(0).build());
+
+        mockMvc.perform(get("/api/admin/logs").param("from", "2026-10-12T14:00:00")
+                        .param("to", "2026-10-12T14:30:00").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        org.mockito.Mockito.verify(requestLogService).querySummary(org.mockito.ArgumentMatchers.argThat(f ->
+                java.time.LocalDateTime.of(2026, 10, 12, 14, 0).equals(f.getFrom())
+                        && java.time.LocalDateTime.of(2026, 10, 12, 14, 30).equals(f.getTo())));
     }
 
     @Test

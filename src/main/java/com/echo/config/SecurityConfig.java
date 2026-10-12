@@ -73,6 +73,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET,
                         "/api/admin/logs",
                         "/api/admin/logs/summary",
+                        "/api/admin/logs/traffic",
                         "/api/admin/logs/*/detail").authenticated()
                 .requestMatchers("/api/admin/jms-target-connections/**").hasRole("ADMIN")
                 .requestMatchers("/api/admin/http-target-connections/**").hasRole("ADMIN")

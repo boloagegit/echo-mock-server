@@ -95,7 +95,9 @@ public interface RequestLogRepository extends JpaRepository<RequestLog, Long> {
                    "OR LOWER(r.forwardTarget) LIKE LOWER(CONCAT('%', :endpoint, '%')) " +
                    "OR LOWER(r.diagnosticId) LIKE LOWER(CONCAT('%', :endpoint, '%')) " +
                    "OR LOWER(r.ruleId) LIKE LOWER(CONCAT('%', :endpoint, '%'))) AND " +
-                   "(:afterId IS NULL OR r.id > :afterId)",
+                   "(:afterId IS NULL OR r.id > :afterId) AND " +
+                   "(:fromTime IS NULL OR r.requestTime >= :fromTime) AND " +
+                   "(:toTime IS NULL OR r.requestTime < :toTime)",
            countQuery = "SELECT COUNT(r) FROM RequestLog r WHERE " +
                         "(:ruleId IS NULL OR r.ruleId = :ruleId) AND " +
                         "(:protocol IS NULL OR r.protocol = :protocol) AND " +
@@ -105,11 +107,21 @@ public interface RequestLogRepository extends JpaRepository<RequestLog, Long> {
                         "OR LOWER(r.forwardTarget) LIKE LOWER(CONCAT('%', :endpoint, '%')) " +
                         "OR LOWER(r.diagnosticId) LIKE LOWER(CONCAT('%', :endpoint, '%')) " +
                    "OR LOWER(r.ruleId) LIKE LOWER(CONCAT('%', :endpoint, '%'))) AND " +
-                        "(:afterId IS NULL OR r.id > :afterId)")
+                        "(:afterId IS NULL OR r.id > :afterId) AND " +
+                        "(:fromTime IS NULL OR r.requestTime >= :fromTime) AND " +
+                        "(:toTime IS NULL OR r.requestTime < :toTime)")
     Page<Object[]> findSummaryPage(@Param("ruleId") String ruleId,
                                    @Param("protocol") Protocol protocol,
                                    @Param("matched") Boolean matched,
                                    @Param("endpoint") String endpoint,
                                    @Param("afterId") Long afterId,
+                                   @Param("fromTime") LocalDateTime fromTime,
+                                   @Param("toTime") LocalDateTime toTime,
                                    Pageable pageable);
+
+    /** 不限時間範圍的摘要分頁查詢。 */
+    default Page<Object[]> findSummaryPage(String ruleId, Protocol protocol, Boolean matched, String endpoint,
+                                           Long afterId, Pageable pageable) {
+        return findSummaryPage(ruleId, protocol, matched, endpoint, afterId, null, null, pageable);
+    }
 }

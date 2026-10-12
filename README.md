@@ -647,8 +647,9 @@ Rule responses include durable `createdBy` and `updatedBy` metadata. Existing ro
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | /api/admin/logs | Request logs (authenticated; filter by ruleId/protocol/matched/endpoint; page/size/sort/direction; afterId for incremental refresh) |
+| GET | /api/admin/logs | Request logs (authenticated; filter by ruleId/protocol/matched/endpoint; from/to request time (local `YYYY-MM-DDTHH:mm:ss`, from inclusive, to exclusive); page/size/sort/direction; afterId for incremental refresh) |
 | GET | /api/admin/logs/summary | Request log summary (authenticated) |
+| GET | /api/admin/logs/traffic | Traffic overview of the retained request logs (authenticated; `range=1h\|24h\|7d`): per-bar counts of mock responses, forwards, unmatched requests and failed forwards, estimated response times and the most often unmatched requests. Counted in the database and shared for 5 seconds, so concurrent viewers trigger one computation |
 | DELETE | /api/admin/logs/all | Delete all request logs (ADMIN) |
 | GET | /api/admin/rules/{id}/audit | Audit logs for a rule |
 | GET | /api/admin/audit | All audit logs |

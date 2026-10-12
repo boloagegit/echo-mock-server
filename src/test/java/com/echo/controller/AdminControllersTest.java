@@ -12,6 +12,7 @@ import com.echo.service.RuleEditService;
 import com.echo.service.RuleService;
 import com.echo.service.RuleQueryService;
 import com.echo.service.RequestLogService;
+import com.echo.service.RequestLogTrafficService;
 import com.echo.service.RuleAuditService;
 import com.echo.service.IssueReportService;
 import org.junit.jupiter.api.BeforeEach;
@@ -122,7 +123,7 @@ class AdminControllersTest {
         importExport = new ImportExportController(protocolHandlerRegistry, ruleEditService, responseService,
                 Optional.of(ruleAuditService), excelImportService, openApiImportService);
         ReflectionTestUtils.setField(importExport, "bulkImportExportEnabled", true);
-        logs = new RequestLogController(requestLogService);
+        logs = new RequestLogController(requestLogService, mock(RequestLogTrafficService.class));
         audit = new AuditController(Optional.of(ruleAuditService));
         scenarios = new ScenarioController(scenarioService);
         ReflectionTestUtils.setField(scenarios, "scenariosEnabled", true);

@@ -24,7 +24,7 @@ const useStats = (deps) => {
     // --- 狀態 ---
     const logs = ref([]);
     const logSummary = ref({});
-    const logFilter = ref({ protocol: '', matched: '', endpoint: '' });
+    const logFilter = ref({ protocol: '', matched: '', endpoint: '', from: '', to: '' });
 
     const savedLogSort = JSON.parse(localStorage.getItem('logSort') || 'null');
     const logSort = ref(savedLogSort || { field: 'requestTime', asc: false });
@@ -100,6 +100,9 @@ const useStats = (deps) => {
         if (logFilter.value.matched) { params.set('matched', logFilter.value.matched); }
         const endpoint = (logFilter.value.endpoint || '').trim();
         if (endpoint) { params.set('endpoint', endpoint); }
+        // 時間範圍（流量概況點選的格子），伺服器本地時間字串原樣送回
+        if (logFilter.value.from) { params.set('from', logFilter.value.from); }
+        if (logFilter.value.to) { params.set('to', logFilter.value.to); }
         return '/api/admin/logs?' + params.toString();
     };
 
@@ -242,15 +245,24 @@ const useStats = (deps) => {
         if (logFilter.value.endpoint) {
             chips.push({ key: 'endpoint', label: t('filterChips.keyword') + logFilter.value.endpoint });
         }
+        if (logFilter.value.from || logFilter.value.to) {
+            const from = logFilter.value.from, to = logFilter.value.to;
+            const withDay = from.substring(0, 10) !== to.substring(0, 10) || to.substring(11, 16) === '00:00';
+            chips.push({ key: 'time', label: t('filterChips.time') + TrafficChart.rangeText(from, to, withDay) });
+        }
         return chips;
     });
 
     const removeLogChip = (key) => {
-        logFilter.value[key] = '';
+        if (key === 'time') {
+            logFilter.value = { ...logFilter.value, from: '', to: '' };
+        } else {
+            logFilter.value[key] = '';
+        }
     };
 
     const clearLogFilters = () => {
-        logFilter.value = { protocol: '', matched: '', endpoint: '' };
+        logFilter.value = { protocol: '', matched: '', endpoint: '', from: '', to: '' };
     };
 
     // --- 清理函式（供 onUnmounted 呼叫） ---

@@ -97,6 +97,8 @@ const useRouter = (deps) => {
             if (logFilter.value.protocol) params.set('protocol', logFilter.value.protocol);
             if (logFilter.value.matched) params.set('matched', logFilter.value.matched);
             if (logFilter.value.endpoint) params.set('endpoint', logFilter.value.endpoint);
+            if (logFilter.value.from) params.set('from', logFilter.value.from);
+            if (logFilter.value.to) params.set('to', logFilter.value.to);
         } else if (page.value === 'audit') {
             if (auditFilter.value.action) params.set('action', auditFilter.value.action);
             if (auditFilter.value.operator) params.set('operator', auditFilter.value.operator);
@@ -136,6 +138,12 @@ const useRouter = (deps) => {
             logFilter.value.protocol = params.get('protocol') || '';
             logFilter.value.matched = params.get('matched') || '';
             logFilter.value.endpoint = params.get('endpoint') || '';
+            // 時間範圍兩端都要是完整的本地時間，否則忽略
+            const localTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
+            const from = params.get('from') || '', to = params.get('to') || '';
+            const validRange = localTime.test(from) && localTime.test(to);
+            logFilter.value.from = validRange ? from : '';
+            logFilter.value.to = validRange ? to : '';
         } else if (page.value === 'audit') {
             auditFilter.value.action = params.get('action') || '';
             auditFilter.value.operator = params.get('operator') || '';
