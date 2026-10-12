@@ -13,8 +13,9 @@ const useToast = (t) => {
 
     const toasts = ref([]);
 
-    const TOAST_TYPES = ['success', 'error', 'info'];
-    const toastDuration = (type, action) => action ? 6000 : type === 'error' ? 7000 : 3000;
+    const TOAST_TYPES = ['success', 'error', 'info', 'warning'];
+    // 提醒（warning）通常要讀完一句說明，停留久一點
+    const toastDuration = (type, action) => type === 'warning' ? 9000 : action ? 6000 : type === 'error' ? 7000 : 3000;
     let toastSeq = 0;
 
     /**

@@ -1872,6 +1872,7 @@ textarea.form-control { min-height: 80px; font-family: var(--font-mono); font-si
 .toast.success .toast-icon { color: var(--success) }
 .toast.error .toast-icon { color: var(--danger) }
 .toast.info .toast-icon { color: var(--primary) }
+.toast.warning .toast-icon { color: var(--warning) }
 .toast.leaving { animation: toastOut var(--motion-base) var(--ease-exit) forwards }
 @keyframes toastIn { from { transform: translateY(-6px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
 @keyframes toastOut { from { transform: translateY(0); opacity: 1 } to { transform: translateY(-4px); opacity: 0 } }
@@ -1880,6 +1881,7 @@ textarea.form-control { min-height: 80px; font-family: var(--font-mono); font-si
 .toast.success .toast-progress { background: var(--success) }
 .toast.error .toast-progress { background: var(--danger) }
 .toast.info .toast-progress { background: var(--primary) }
+.toast.warning .toast-progress { background: var(--warning) }
 @keyframes toastProgress { from { width: 100% } to { width: 0% } }
 
 /* Card Table (scrollable table inside card) */

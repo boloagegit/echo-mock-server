@@ -32,7 +32,7 @@
 const useRuleForm = (deps) => {
     const { ref, computed, watch } = Vue;
     const { showToast, showConfirm, t, requireLogin, login,
-            loadRules, rulePreviewCache, ruleDetailId, loadRuleDetail, rulesMarkDirty,
+            loadRules, rulePreviewCache, ruleDetailId, loadRuleDetail, rulesMarkDirty, openRuleOrder,
             responsesMarkDirty, responseSseEvents } = deps;
 
     // --- 工具函式 ---
@@ -897,6 +897,7 @@ const useRuleForm = (deps) => {
                 const saved = await r.json();
                 savedSuccessfully = true;
                 showToast(editing.value ? t('toast.ruleSaveSuccess') : t('toast.ruleCreateSuccess'), 'success');
+                warnIfNeverReached(saved);
                 rulesMarkDirty();
                 delete rulePreviewCache.value[saved.id];
                 if (ruleDetailId?.value === saved.id) { loadRuleDetail(saved.id, { force: true }); }
@@ -921,6 +922,33 @@ const useRuleForm = (deps) => {
         } catch (e) { showToast(t('toast.ruleSaveFailed'), 'error'); }
         saving.value = false;
         return savedSuccessfully;
+    };
+
+    /**
+     * 儲存後檢查判斷順序：這條規則永遠輪不到，或它讓其他規則永遠輪不到時提醒（不影響儲存）。
+     */
+    const warnIfNeverReached = async saved => {
+        try {
+            const r = await apiCall('/api/admin/rules/order-issues', {}, { silent: true });
+            if (!r || !r.ok) { return; }
+            const issues = (await r.json()).issues || {};
+            const name = issue => issue.byDescription || (issue.byRuleId || '').slice(0, 8);
+            const view = id => (openRuleOrder ? { label: t('rules.order.viewOrder'), handler: () => openRuleOrder(id) } : null);
+            const own = issues[saved.id];
+            if (own) {
+                const key = own.type === 'duplicateConditions' ? 'rules.order.savedDuplicate' : 'rules.order.savedEarlierDefault';
+                showToast(t(key, { rule: name(own) }), 'warning', view(saved.id));
+                return;
+            }
+            const blocked = Object.entries(issues).filter(([, issue]) => issue.byRuleId === saved.id);
+            if (blocked.length) {
+                const [firstId, first] = blocked[0];
+                const rule = first.description || firstId.slice(0, 8);
+                const message = blocked.length === 1 ? t('rules.order.savedBlocksOther', { rule })
+                    : t('rules.order.savedBlocksOthers', { rule, count: blocked.length });
+                showToast(message, 'warning', view(firstId));
+            }
+        } catch { /* 只是提醒，失敗時不顯示 */ }
     };
 
     // --- 回應預覽編輯 ---
