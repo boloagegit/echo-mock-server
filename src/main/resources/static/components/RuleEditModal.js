@@ -92,6 +92,11 @@ const RuleEditModal = {
             ? MatchTree.count(props.matchTree) : props.conditions.length));
         const hasLegacyConditions = Vue.computed(() => props.matchMode === 'advanced' && props.matchTree
             && MatchTree.hasLegacy(props.matchTree));
+        // 期望值以 = 開頭的等於條件（多半是寫成 ==），比對時多出的 = 會成為期望值的一部分
+        const doubleEqualsConditions = Vue.computed(() => (props.matchMode === 'advanced'
+            ? (props.matchTree ? MatchTree.doubleEqualsConditions(props.matchTree) : [])
+            : props.conditions.filter(c => c.field && MatchTree.hasDoubleEquals(c.field + (c.operator || '=') + (c.value || '')))
+                .map(c => c.field + (c.operator || '=') + c.value)));
         // 只有舊格式片段、但條件列無法完整表示（例如沒有運算子），所以以進階模式顯示
         const legacyNotSimple = Vue.computed(() => {
             if (!hasLegacyConditions.value) return false;
@@ -581,7 +586,7 @@ const RuleEditModal = {
             if (previousFocus instanceof HTMLElement && document.contains(previousFocus)) previousFocus.focus();
         });
         return {
-            conditionTotal, matchModeOptions, hasLegacyConditions, legacyNotSimple,
+            conditionTotal, matchModeOptions, hasLegacyConditions, legacyNotSimple, doubleEqualsConditions,
             dialogRef, responsePickerLaunch, responsePickerInput, responsePickerActiveIndex, contentExpanded, responsePickerResults, showPreviewViewer, editResponseLabel, templateMenuItems,
             responseOptionId, openResponsePicker, closeResponsePicker, toggleResponsePicker, selectResponse,
             onResponsePickerKeydown, onResponseSearchInput, clearResponseSearch, onDialogKeydown, saveShortcutKey,
@@ -711,6 +716,7 @@ const RuleEditModal = {
                             <div v-if="matchError" class="match-error" role="alert"><i class="bi bi-exclamation-circle" aria-hidden="true"></i> {{matchError}}</div>
                             <p v-if="hasLegacyConditions" class="match-legacy-hint"><i class="bi bi-info-circle" aria-hidden="true"></i> {{t(legacyNotSimple ? 'match.legacyNotSimpleNote' : 'match.legacyNote')}}</p>
                             <match-tree-node :node="matchTree" :sources="matchSources" root></match-tree-node>
+                            <div v-if="doubleEqualsConditions.length" class="cond-warning" role="status"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> {{t('match.doubleEqualsWarning', {conditions: doubleEqualsConditions.join(', ')})}}</div>
                             <div v-if="showBodyConditionWarning" class="cond-warning"><i class="bi bi-info-circle"></i> {{t('modal.bodyConditionWarning', {method: form.method})}}</div>
                         </div>
                         <div v-else class="cond-builder">
@@ -734,6 +740,7 @@ const RuleEditModal = {
                                 <span v-if="!conditions.length" class="sub-info">{{t('rules.noCondition')}}</span>
                                 <button type="button" class="cond-add" @click="$emit('add-condition')"><i class="bi bi-plus"></i> {{t('modal.addCondition')}}</button>
                             </div>
+                            <div v-if="doubleEqualsConditions.length" class="cond-warning" role="status"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> {{t('match.doubleEqualsWarning', {conditions: doubleEqualsConditions.join(', ')})}}</div>
                             <div v-if="showBodyConditionWarning" class="cond-warning"><i class="bi bi-info-circle"></i> {{t('modal.bodyConditionWarning', {method: form.method})}}</div>
                         </div>
                     </div>

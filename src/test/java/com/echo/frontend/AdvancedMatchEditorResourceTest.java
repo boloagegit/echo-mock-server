@@ -39,7 +39,10 @@ class AdvancedMatchEditorResourceTest {
         assertThat(modal).contains("'set-match-mode', 'confirm-match-simple', 'cancel-match-simple'")
                 .contains("<match-tree-node :node=\"matchTree\" :sources=\"matchSources\" root>")
                 .contains("v-if=\"matchSwitchPending\" class=\"match-switch-confirm\" role=\"alert\"")
-                .contains("v-if=\"matchError\" class=\"match-error\" role=\"alert\"");
+                .contains("v-if=\"matchError\" class=\"match-error\" role=\"alert\"")
+                // == 的提醒在簡易與進階模式都會出現
+                .contains("? (props.matchTree ? MatchTree.doubleEqualsConditions(props.matchTree) : [])")
+                .contains("MatchTree.hasDoubleEquals(c.field + (c.operator || '=') + (c.value || ''))");
 
         String form = resourceText("static/composables/useRuleForm.js");
         // 進階規則改用簡易模式且沒有條件時要明確清除；否則後端會保留原本的進階條件
@@ -92,6 +95,8 @@ class AdvancedMatchEditorResourceTest {
             assertThat(zhKeys).contains("op." + op);
         }
         assertThat(zh.path("match").path("legacyNotSimpleNote").asText()).isNotBlank();
+        assertThat(zh.path("match").path("doubleEqualsWarning").asText()).contains("{conditions}");
+        assertThat(en.path("match").path("doubleEqualsWarning").asText()).contains("{conditions}");
         for (String key : List.of("advancedMatch", "applyFieldSpecMatch", "applyValidationMatchConflict",
                 "applyValidationMatch")) {
             assertThat(zh.path("rules").path(key).asText()).isNotBlank();

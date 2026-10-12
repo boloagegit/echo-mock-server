@@ -140,3 +140,16 @@ test('simple rows keep // paths and refuse conditions they cannot represent exac
   assert.equal(MatchTree.toSimpleRows('a=1;hello', null, null), null);
   assert.deepEqual(plain(MatchTree.toSimpleRows(null, ' ; ', '')), []);
 });
+
+test('equality conditions whose value starts with = are flagged (== is not normalized except for JSON field paths)', () => {
+  const MatchTree = load();
+  for (const condition of ['$.a==b', '//Status==OPEN', 'x-type==vip', 'a = =b']) {
+    assert.equal(MatchTree.hasDoubleEquals(condition), true, condition);
+  }
+  for (const condition of ['a=b', 'a!==b', 'a*==b', 'a~==b', 'a=b==c', 'hello', '=x']) {
+    assert.equal(MatchTree.hasDoubleEquals(condition), false, condition);
+  }
+  const tree = MatchTree.group('all', [MatchTree.legacy('body', ' $.a==b '), MatchTree.legacy('query', 'p=1'),
+    MatchTree.group('any', [MatchTree.legacy('header', 'X==y')])]);
+  assert.deepEqual(plain(MatchTree.doubleEqualsConditions(tree)), ['$.a==b', 'X==y']);
+});

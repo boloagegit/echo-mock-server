@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [Unreleased]
 
 ### Added
+- The rule editor warns about equality conditions whose value starts with `=` (usually written as `==`): only field paths on a JSON body treat `==` as `=`; for JSONPath, XPath, XML, query and header conditions the extra `=` is part of the expected value
 - Advanced condition editor: the rule editor switches between the existing simple rows and a tree editor for `all` / `any` groups, NOT and the new operators, validates against the server while typing, and round-trips `echo.mock/v2` documents; the rule list and detail summarize structured conditions
 - Structured match conditions (`matchSpec`): `all` / `any` / `not` groups with `exists`, `absent`, numeric `gt`/`gte`/`lt`/`lte`, `in` and `equalToJson` in addition to the existing operators, validated on save with the JSON path of any error; available through the REST API, JSON import/export and new `echo.mock/v2` documents (`spec.match`). `echo.mock/v1` is unchanged, and manifests of rules that use structured conditions are emitted as v2
 - Anomaly-only HTTP/JMS/SSE diagnostics: zero supplemental file bytes for healthy traffic, one bounded error summary, separate 10 MiB/day / 50 MiB retained files, rate limits, expiring opt-in detail, and nullable Request Log correlation IDs
