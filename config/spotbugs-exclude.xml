@@ -41,6 +41,11 @@
         <Bug pattern="EI_EXPOSE_REP"/>
         <Class name="~com\.echo\.service\.ConditionMatcher\$PreparedBody"/>
     </Match>
+    <!-- 儲存規則的結果：把剛寫入的 entity 交給呼叫端寫稽核紀錄，不需要複製 -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+        <Class name="com.echo.service.RuleEditService$Saved"/>
+    </Match>
 
     <!-- compiled 模式的 PreparedBody 轉接：直接提供已解析的 DOM 與呼叫端的 header map（不複製），介面約定為唯讀 -->
     <Match>

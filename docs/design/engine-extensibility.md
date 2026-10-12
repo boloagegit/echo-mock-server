@@ -302,7 +302,7 @@ public interface ProtocolAdapter {
 }
 ```
 
-`RuleApplyContractService`、`RuleQueryService`、`CacheInvalidationService`、`AdminController` 中依協定的分支，改為查詢 `ProtocolRegistry` 與 `ProtocolDescriptor`。例如合約 schema 的 `PROTOCOLS` 改為 `registry.ids()`；HTTP 專屬欄位改由 `descriptor.routeSchema()` 提供。
+`RuleApplyContractService`、`RuleQueryService`、`CacheInvalidationService`、`AdminController`（之後拆成數個 controller 與 `RuleEditService`）中依協定的分支，改為查詢 `ProtocolRegistry` 與 `ProtocolDescriptor`。例如合約 schema 的 `PROTOCOLS` 改為 `registry.ids()`；HTTP 專屬欄位改由 `descriptor.routeSchema()` 提供。
 
 ### 5.2 RuleIndex 與快取
 
@@ -510,7 +510,7 @@ SSE 播放測試改為直接測 `SsePlayer`；另新增 `ServeEventDispatcherTes
 - `RuleQueryService`：規則清單查詢、分組查詢逐一查詢已啟用協定（原本以 `echo.jms.enabled` 判斷，與 handler 是否存在同義）。
 - `CacheInvalidationService`：事件名稱與要清除的快取由描述提供；事件字串（`HTTP_RULE_CHANGED`、`JMS_RULE_CHANGED`、
   `RULE_CHANGED`）不變，舊版與新版實例可以混合運作。本實例未啟用的協定事件不清除任何快取。
-- `AdminController`：Excel 匯入與規則異動後的快取清除。
+- `AdminController`（現為 `RuleEditService`）：Excel 匯入與規則異動後的快取清除。
 
 ArchUnit 新增規則：`RuleQueryService` 與 `CacheInvalidationService` 不得引用 `HttpRule`／`JmsRule` 等協定類別
 （已用刻意加入的依賴確認規則會失敗）；`ProtocolDescriptorContractTest` 檢查每個描述的搜尋欄位、action 型別與快取名稱。
@@ -520,8 +520,8 @@ ArchUnit 新增規則：`RuleQueryService` 與 `CacheInvalidationService` 不得
 - `Protocol` enum 換成 `ProtocolId`：enum 存在 entity、DTO、API 與前端，換掉的成本高，而目前只有兩個協定。
 - 核心層的 `ProtocolAdapter`（`RouteCodec`、`RuleIndex`、`ResponseWriter`）：目前執行期的協定差異已集中在
   `HttpMockPipeline`／`JmsMockPipeline` 與 `SseMockHandler`，等 `RuleDefinition`／`ResponseSpec` 出現後再抽成核心介面。
-- 仍保留的協定分支：`RuleApplyContractService` 的 v1 文件驗證、`AdminController` 的「從請求紀錄建立規則」
-  與故障／轉發欄位正規化、SSE 規則驗證。這些都依附在現行 DTO 欄位上，會在步驟 7 的 v2 文件與 `ResponseSpec` 一起改寫。
+- 仍保留的協定分支：`RuleApplyContractService` 的 v1 文件驗證、`AdminController` 的「從請求紀錄建立規則」（現為 `RequestLogController`）
+  與故障／轉發欄位正規化、SSE 規則驗證（現為 `RuleEditService`）。這些都依附在現行 DTO 欄位上，會在步驟 7 的 v2 文件與 `ResponseSpec` 一起改寫。
 
 ### 7.2.5 步驟 7 實作與驗證紀錄
 

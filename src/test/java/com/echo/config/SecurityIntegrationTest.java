@@ -1,6 +1,14 @@
 package com.echo.config;
 
-import com.echo.controller.AdminController;
+import com.echo.controller.AuditController;
+import com.echo.controller.ImportExportController;
+import com.echo.controller.RequestLogController;
+import com.echo.controller.ResponseController;
+import com.echo.controller.RuleApplyController;
+import com.echo.controller.RuleController;
+import com.echo.controller.RuleStateController;
+import com.echo.controller.ScenarioController;
+import com.echo.controller.SystemController;
 import com.echo.dto.RuleDto;
 import com.echo.entity.HttpRule;
 import com.echo.entity.Protocol;
@@ -14,6 +22,7 @@ import com.echo.service.IssueReportService;
 import com.echo.service.RuleApplyMapper;
 import com.echo.service.RuleApplyContractService;
 import com.echo.service.RuleApplyPersistenceSynchronizer;
+import com.echo.service.RuleEditService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,8 +48,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(AdminController.class)
-@Import({SecurityConfig.class, LdapConfig.class, RuleApplyContractService.class})
+@WebMvcTest({SystemController.class, RuleController.class, RuleApplyController.class, RuleStateController.class,
+        ImportExportController.class, ResponseController.class, RequestLogController.class, AuditController.class,
+        ScenarioController.class})
+@Import({SecurityConfig.class, LdapConfig.class, RuleApplyContractService.class, RuleEditService.class})
 @TestPropertySource(properties = "echo.features.bulk-import-export-enabled=true")
 class SecurityIntegrationTest {
 

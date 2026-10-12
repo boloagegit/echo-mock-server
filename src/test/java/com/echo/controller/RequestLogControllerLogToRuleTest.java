@@ -4,10 +4,6 @@ import com.echo.dto.RuleDto;
 import com.echo.entity.Protocol;
 import com.echo.service.RequestLogService;
 import com.echo.service.RequestLogService.LogEntry;
-import com.echo.service.IssueReportService;
-import com.echo.service.RuleApplyMapper;
-import com.echo.service.RuleApplyPersistenceSynchronizer;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,7 +11,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -24,80 +19,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class AdminControllerLogToRuleTest {
-
-    @Mock
-    private com.echo.service.RuleService ruleService;
-
-    @Mock
-    private com.echo.service.RuleQueryService ruleQueryService;
-
-    @Mock
-    private com.echo.protocol.ProtocolHandlerRegistry protocolHandlerRegistry;
-
-    @Mock
-    private com.echo.service.ResponseService responseService;
+class RequestLogControllerLogToRuleTest {
 
     @Mock
     private RequestLogService requestLogService;
 
-    @Mock
-    private com.echo.service.ExcelImportService excelImportService;
-
-    @Mock
-    private com.echo.service.ResponseContentValidatorRegistry responseContentValidatorRegistry;
-
-    @Mock
-    private com.echo.repository.BuiltinUserRepository builtinUserRepository;
-
-    @Mock
-    private com.echo.agent.AgentRegistry agentRegistry;
-
-    @Mock
-    private org.springframework.cache.CacheManager cacheManager;
-
-    @Mock
-    private IssueReportService issueReportService;
-
-    @Mock
-    private com.echo.service.OpenApiImportService openApiImportService;
-
-    @Mock
-    private com.echo.service.ScenarioService scenarioService;
-
-    private AdminController controller;
+    private RequestLogController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new AdminController(
-                ruleService, ruleQueryService, protocolHandlerRegistry, responseService,
-                Optional.empty(), Optional.empty(), requestLogService,
-                Optional.empty(), Optional.empty(),
-                Optional.empty(), excelImportService, openApiImportService, Optional.empty(),
-                responseContentValidatorRegistry, builtinUserRepository,
-                agentRegistry, cacheManager, issueReportService, Optional.empty(), Optional.empty(),
-                new RuleApplyMapper(new ObjectMapper()),
-                org.mockito.Mockito.mock(RuleApplyPersistenceSynchronizer.class),
-                new com.echo.service.RuleApplyContractService(true), scenarioService
-        );
-        ReflectionTestUtils.setField(controller, "ldapEnabled", false);
-        ReflectionTestUtils.setField(controller, "ldapUrl", "");
-        ReflectionTestUtils.setField(controller, "sessionTimeout", "30m");
-        ReflectionTestUtils.setField(controller, "serverPort", 8080);
-        ReflectionTestUtils.setField(controller, "jmsPort", 61616);
-        ReflectionTestUtils.setField(controller, "datasourceUrl", "jdbc:sqlite::memory:");
-        ReflectionTestUtils.setField(controller, "httpAlias", "HTTP");
-        ReflectionTestUtils.setField(controller, "jmsAlias", "JMS");
-        ReflectionTestUtils.setField(controller, "auditRetentionDays", 30);
-        ReflectionTestUtils.setField(controller, "cleanupRetentionDays", 180);
-        ReflectionTestUtils.setField(controller, "envLabel", "");
-        ReflectionTestUtils.setField(controller, "responseRetentionDays", 180);
-        ReflectionTestUtils.setField(controller, "statsMaxRecords", 10000);
-        ReflectionTestUtils.setField(controller, "backupEnabled", false);
-        ReflectionTestUtils.setField(controller, "backupCron", "0 0 3 * * *");
-        ReflectionTestUtils.setField(controller, "backupPath", "./backups");
-        ReflectionTestUtils.setField(controller, "backupRetentionDays", 7);
-        ReflectionTestUtils.setField(controller, "selfRegistrationEnabled", false);
+        controller = new RequestLogController(requestLogService);
     }
 
     @Test

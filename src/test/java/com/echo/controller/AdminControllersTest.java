@@ -8,14 +8,12 @@ import com.echo.entity.ResponseContentType;
 import com.echo.entity.RuleAuditLog;
 import com.echo.service.ResponseContentValidatorRegistry;
 import com.echo.service.ResponseContentValidator;
-import com.echo.service.RuleApplyMapper;
-import com.echo.service.RuleApplyPersistenceSynchronizer;
+import com.echo.service.RuleEditService;
 import com.echo.service.RuleService;
 import com.echo.service.RuleQueryService;
 import com.echo.service.RequestLogService;
 import com.echo.service.RuleAuditService;
 import com.echo.service.IssueReportService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,8 +42,9 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
+/** 管理後台 API（/api/admin）各 controller 與共用規則儲存的單元測試。 */
 @ExtendWith(MockitoExtension.class)
-class AdminControllerTest {
+class AdminControllersTest {
 
     @Mock
     private RuleService ruleService;
@@ -89,29 +88,44 @@ class AdminControllerTest {
     @Mock
     private com.echo.service.ScenarioService scenarioService;
 
-    private AdminController controller;
+    private RuleEditService ruleEditService;
+    private SystemController system;
+    private RuleController rules;
+    private RuleStateController ruleState;
+    private ImportExportController importExport;
+    private RequestLogController logs;
+    private AuditController audit;
+    private ScenarioController scenarios;
 
     @BeforeEach
     void setUp() {
-        controller = new AdminController(ruleService, ruleQueryService, protocolHandlerRegistry, responseService,
-                Optional.empty(), Optional.empty(),
-                requestLogService, Optional.of(ruleAuditService), Optional.empty(), Optional.empty(),
-                excelImportService, openApiImportService, Optional.empty(), responseContentValidatorRegistry,
-                builtinUserRepository, agentRegistry, cacheManager, issueReportService, Optional.empty(),
-                Optional.empty(), new RuleApplyMapper(new ObjectMapper()),
-                mock(RuleApplyPersistenceSynchronizer.class),
-                new com.echo.service.RuleApplyContractService(true), scenarioService);
-        ReflectionTestUtils.setField(controller, "ldapEnabled", false);
-        ReflectionTestUtils.setField(controller, "ldapUrl", "");
-        ReflectionTestUtils.setField(controller, "sessionTimeout", "180d");
-        ReflectionTestUtils.setField(controller, "serverPort", 8080);
-        ReflectionTestUtils.setField(controller, "jmsPort", 61616);
-        ReflectionTestUtils.setField(controller, "datasourceUrl", "jdbc:sqlite::memory:");
-        ReflectionTestUtils.setField(controller, "httpAlias", "HTTP");
-        ReflectionTestUtils.setField(controller, "jmsAlias", "JMS");
-        ReflectionTestUtils.setField(controller, "bulkImportExportEnabled", true);
-        ReflectionTestUtils.setField(controller, "scenariosEnabled", true);
-        ReflectionTestUtils.setField(controller, "ruleDragSortEnabled", true);
+        ruleEditService = new RuleEditService(protocolHandlerRegistry, responseService,
+                responseContentValidatorRegistry, cacheManager, Optional.empty(), Optional.empty(), Optional.empty());
+        ReflectionTestUtils.setField(ruleEditService, "scenariosEnabled", true);
+        system = new SystemController(protocolHandlerRegistry, responseService, Optional.empty(), Optional.empty(),
+                requestLogService, Optional.empty(), Optional.empty(), builtinUserRepository, agentRegistry,
+                cacheManager, issueReportService);
+        ReflectionTestUtils.setField(system, "ldapEnabled", false);
+        ReflectionTestUtils.setField(system, "ldapUrl", "");
+        ReflectionTestUtils.setField(system, "sessionTimeout", "180d");
+        ReflectionTestUtils.setField(system, "serverPort", 8080);
+        ReflectionTestUtils.setField(system, "jmsPort", 61616);
+        ReflectionTestUtils.setField(system, "datasourceUrl", "jdbc:sqlite::memory:");
+        ReflectionTestUtils.setField(system, "httpAlias", "HTTP");
+        ReflectionTestUtils.setField(system, "jmsAlias", "JMS");
+        ReflectionTestUtils.setField(system, "bulkImportExportEnabled", true);
+        ReflectionTestUtils.setField(system, "scenariosEnabled", true);
+        ReflectionTestUtils.setField(system, "ruleDragSortEnabled", true);
+        rules = new RuleController(ruleQueryService, protocolHandlerRegistry, ruleEditService,
+                Optional.of(ruleAuditService), Optional.empty());
+        ruleState = new RuleStateController(ruleService, ruleEditService);
+        importExport = new ImportExportController(protocolHandlerRegistry, ruleEditService, responseService,
+                Optional.of(ruleAuditService), excelImportService, openApiImportService);
+        ReflectionTestUtils.setField(importExport, "bulkImportExportEnabled", true);
+        logs = new RequestLogController(requestLogService);
+        audit = new AuditController(Optional.of(ruleAuditService));
+        scenarios = new ScenarioController(scenarioService);
+        ReflectionTestUtils.setField(scenarios, "scenariosEnabled", true);
         // 預設 HTTP 啟用，JMS 停用
         lenient().when(protocolHandlerRegistry.isEnabled(Protocol.HTTP)).thenReturn(true);
         lenient().when(protocolHandlerRegistry.isEnabled(Protocol.JMS)).thenReturn(false);
@@ -119,7 +133,7 @@ class AdminControllerTest {
 
     @Test
     void getStatus_shouldReturnSystemInfo() {
-        var response = controller.getStatus(null);
+        var response = system.getStatus(null);
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).containsKey("serverPort");
@@ -132,25 +146,25 @@ class AdminControllerTest {
 
     @Test
     void getStatus_shouldExposeConfiguredUiAccent() {
-        ReflectionTestUtils.setField(controller, "uiAccent", "blue");
+        ReflectionTestUtils.setField(system, "uiAccent", "blue");
 
-        assertThat(controller.getStatus(null).getBody().get("uiAccent")).isEqualTo("blue");
+        assertThat(system.getStatus(null).getBody().get("uiAccent")).isEqualTo("blue");
     }
 
     @Test
     void getStatus_shouldExposeEasterEggSwitch() {
-        ReflectionTestUtils.setField(controller, "uiEasterEgg", true);
-        assertThat(controller.getStatus(null).getBody().get("uiEasterEgg")).isEqualTo(true);
+        ReflectionTestUtils.setField(system, "uiEasterEgg", true);
+        assertThat(system.getStatus(null).getBody().get("uiEasterEgg")).isEqualTo(true);
 
-        ReflectionTestUtils.setField(controller, "uiEasterEgg", false);
-        assertThat(controller.getStatus(null).getBody().get("uiEasterEgg")).isEqualTo(false);
+        ReflectionTestUtils.setField(system, "uiEasterEgg", false);
+        assertThat(system.getStatus(null).getBody().get("uiEasterEgg")).isEqualTo(false);
     }
 
     @Test
     void getStatus_shouldFallBackToTealForMissingUiAccent() {
-        ReflectionTestUtils.setField(controller, "uiAccent", null);
+        ReflectionTestUtils.setField(system, "uiAccent", null);
 
-        assertThat(controller.getStatus(null).getBody().get("uiAccent")).isEqualTo("teal");
+        assertThat(system.getStatus(null).getBody().get("uiAccent")).isEqualTo("teal");
     }
 
     @ParameterizedTest
@@ -165,56 +179,56 @@ class AdminControllerTest {
             "blue;color:red, teal"
     })
     void resolveUiAccent_shouldNormalizeOrFallBackToTeal(String configured, String expected) {
-        assertThat(AdminController.resolveUiAccent(configured)).isEqualTo(expected);
+        assertThat(SystemController.resolveUiAccent(configured)).isEqualTo(expected);
     }
 
     @Test
     void getStatus_shouldExposeEnabledIssueReportingFeature() {
-        ReflectionTestUtils.setField(controller, "issueReportingEnabled", true);
+        ReflectionTestUtils.setField(system, "issueReportingEnabled", true);
 
-        assertThat(controller.getStatus(null).getBody().get("issueReportingEnabled")).isEqualTo(true);
+        assertThat(system.getStatus(null).getBody().get("issueReportingEnabled")).isEqualTo(true);
     }
 
     @Test
     void getStatus_shouldExposeDisabledRuleDragSortFeature() {
-        ReflectionTestUtils.setField(controller, "ruleDragSortEnabled", false);
+        ReflectionTestUtils.setField(system, "ruleDragSortEnabled", false);
 
-        var response = controller.getStatus(null);
+        var response = system.getStatus(null);
 
         assertThat(response.getBody().get("ruleDragSortEnabled")).isEqualTo(false);
     }
 
     @Test
     void scenarios_shouldBeUnavailableWhenFeatureIsDisabled() {
-        ReflectionTestUtils.setField(controller, "scenariosEnabled", false);
+        ReflectionTestUtils.setField(scenarios, "scenariosEnabled", false);
 
-        assertThat(controller.listScenarios().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(controller.resetScenario("checkout").getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(controller.resetAllScenarios().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(scenarios.listScenarios().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(scenarios.resetScenario("checkout").getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(scenarios.resetAllScenarios().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         verifyNoInteractions(scenarioService);
     }
 
     @Test
     void bulkImportExport_shouldBeUnavailableWhenFeatureIsDisabled() {
-        ReflectionTestUtils.setField(controller, "bulkImportExportEnabled", false);
+        ReflectionTestUtils.setField(importExport, "bulkImportExportEnabled", false);
 
-        assertThat(controller.exportAllRules().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(controller.importRules(List.of()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(controller.previewOpenApiImport(new MockMultipartFile(
+        assertThat(importExport.exportAllRules().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(importExport.importRules(List.of()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(importExport.previewOpenApiImport(new MockMultipartFile(
                 "file", "api.yaml", "application/yaml", "openapi: 3.0.0".getBytes()))
                 .getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(controller.confirmOpenApiImport(List.of()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(controller.exportAllResponses().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(controller.importResponses(List.of()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(importExport.confirmOpenApiImport(List.of()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(importExport.exportAllResponses().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(importExport.importResponses(List.of()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         verifyNoInteractions(responseService);
     }
 
     @Test
     void databaseFilePath_shouldFollowConfiguredDatabase() {
-        assertThat(AdminController.databaseFilePath("jdbc:sqlite:./data/mock.sqlite?busy_timeout=5000"))
+        assertThat(SystemController.databaseFilePath("jdbc:sqlite:./data/mock.sqlite?busy_timeout=5000"))
                 .contains(java.nio.file.Paths.get("./data/mock.sqlite"));
-        assertThat(AdminController.databaseFilePath("jdbc:postgresql://db:5432/echo")).isEmpty();
-        assertThat(AdminController.databaseFilePath("jdbc:sqlite::memory:")).isEmpty();
+        assertThat(SystemController.databaseFilePath("jdbc:postgresql://db:5432/echo")).isEmpty();
+        assertThat(SystemController.databaseFilePath("jdbc:sqlite::memory:")).isEmpty();
     }
 
     @Test
@@ -225,7 +239,7 @@ class AdminControllerTest {
         when(jmsHandler.count()).thenReturn(2L);
         when(protocolHandlerRegistry.getAllHandlers()).thenReturn(List.of(httpHandler, jmsHandler));
 
-        var response = controller.getStatus(null);
+        var response = system.getStatus(null);
 
         assertThat(response.getBody().get("ruleCount")).isEqualTo(5L);
         verify(protocolHandlerRegistry, never()).findAllRules();
@@ -235,7 +249,7 @@ class AdminControllerTest {
     void getStatus_shouldShowLoggedInUser() {
         var user = new User("admin", "pass", List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
         
-        var response = controller.getStatus(user);
+        var response = system.getStatus(user);
         
         assertThat(response.getBody().get("isLoggedIn")).isEqualTo(true);
         assertThat(response.getBody().get("isAdmin")).isEqualTo(true);
@@ -255,7 +269,7 @@ class AdminControllerTest {
         when(cacheManager.getCache(CacheConfig.HTTP_RULES_CACHE))
                 .thenReturn(new CaffeineCache(CacheConfig.HTTP_RULES_CACHE, nativeCache));
 
-        var response = controller.getStatus(null);
+        var response = system.getStatus(null);
         Map<String, Object> caches = (Map<String, Object>) response.getBody().get("ruleCaches");
         Map<String, Object> http = (Map<String, Object>) caches.get(CacheConfig.HTTP_RULES_CACHE);
 
@@ -270,7 +284,7 @@ class AdminControllerTest {
         when(protocolHandlerRegistry.toDto(any(), isNull()))
                 .thenReturn(RuleDto.builder().build());
         
-        var response = controller.listRules();
+        var response = rules.listRules();
         
         assertThat(response.getBody()).hasSize(2);
         verify(protocolHandlerRegistry, times(2)).toDto(any(), isNull());
@@ -285,7 +299,7 @@ class AdminControllerTest {
         when(protocolHandlerRegistry.toDto(rule, null))
                 .thenReturn(RuleDto.builder().id("rule-1").protocol(Protocol.HTTP).build());
 
-        var response = controller.queryRules(Protocol.HTTP, true, false,
+        var response = rules.queryRules(Protocol.HTTP, true, false,
                 "orders", 1, 20, "priority", "asc");
 
         assertThat(response.getBody().results()).extracting(RuleDto::getId).containsExactly("rule-1");
@@ -301,7 +315,7 @@ class AdminControllerTest {
                         Map.of("env", List.of("prod")),
                         Map.of("_untagged", 2L, "env=prod", 3L), 5));
 
-        var response = controller.queryRuleGroups(Protocol.HTTP, true, false, "orders");
+        var response = rules.queryRuleGroups(Protocol.HTTP, true, false, "orders");
 
         assertThat(response.getBody().tagKeys()).containsEntry("env", List.of("prod"));
         assertThat(response.getBody().counts()).containsEntry("env=prod", 3L);
@@ -316,7 +330,7 @@ class AdminControllerTest {
         when(protocolHandlerRegistry.toDto(rule, null))
                 .thenReturn(RuleDto.builder().id("group-rule").protocol(Protocol.HTTP).build());
 
-        var response = controller.queryRuleGroup("env", "prod", Protocol.HTTP,
+        var response = rules.queryRuleGroup("env", "prod", Protocol.HTTP,
                 null, null, null, 20, "priority", "desc");
 
         assertThat(response.getBody().results()).extracting(RuleDto::getId)
@@ -330,7 +344,7 @@ class AdminControllerTest {
         doReturn(Optional.of(rule)).when(protocolHandlerRegistry).findById(any(String.class));
         when(protocolHandlerRegistry.toDto(any(), any(), anyBoolean())).thenReturn(RuleDto.builder().build());
         
-        var response = controller.getRule("uuid-1");
+        var response = rules.getRule("uuid-1");
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
@@ -339,7 +353,7 @@ class AdminControllerTest {
     void getRule_shouldReturn404_whenNotExists() {
         when(protocolHandlerRegistry.findById(any(String.class))).thenReturn(Optional.empty());
         
-        var response = controller.getRule("uuid-1");
+        var response = rules.getRule("uuid-1");
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -355,14 +369,14 @@ class AdminControllerTest {
         when(handler.save(any())).thenReturn(savedRule);
         when(handler.toDto(any(), any(), anyBoolean())).thenReturn(RuleDto.builder().matchKey("/test").build());
         
-        var response = controller.createRule(rule);
+        var response = rules.createRule(rule);
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
     }
 
     @Test
     void createRule_shouldRejectScenarioFieldsWhenFeatureIsDisabled() {
-        ReflectionTestUtils.setField(controller, "scenariosEnabled", false);
+        ReflectionTestUtils.setField(ruleEditService, "scenariosEnabled", false);
         RuleDto rule = RuleDto.builder()
                 .protocol(Protocol.HTTP)
                 .matchKey("/checkout")
@@ -370,7 +384,7 @@ class AdminControllerTest {
                 .requiredScenarioState("Started")
                 .build();
 
-        assertThatThrownBy(() -> controller.createRule(rule))
+        assertThatThrownBy(() -> rules.createRule(rule))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("SCENARIOS_DISABLED");
     }
@@ -394,7 +408,7 @@ class AdminControllerTest {
         when(handler.save(savedRule)).thenReturn(savedRule);
         when(handler.toDto(savedRule, null, false)).thenReturn(rule);
 
-        var response = controller.createRule(rule);
+        var response = rules.createRule(rule);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         verify(responseService, never()).save(any());
@@ -404,7 +418,7 @@ class AdminControllerTest {
     void createRule_shouldRejectJmsRule_whenJmsDisabled() {
         RuleDto rule = RuleDto.builder().protocol(Protocol.JMS).matchKey("QUEUE").build();
         
-        assertThatThrownBy(() -> controller.createRule(rule))
+        assertThatThrownBy(() -> rules.createRule(rule))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("JMS is not enabled");
     }
@@ -422,14 +436,14 @@ class AdminControllerTest {
         when(handler.save(any())).thenReturn(savedRule);
         when(handler.toDto(any(), any(), anyBoolean())).thenReturn(RuleDto.builder().matchKey("/updated").build());
         
-        var response = controller.updateRule("uuid-1", updated);
+        var response = rules.updateRule("uuid-1", updated);
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
     @Test
     void updateRule_shouldPreserveUnchangedLegacyScenarioWhenFeatureIsDisabled() {
-        ReflectionTestUtils.setField(controller, "scenariosEnabled", false);
+        ReflectionTestUtils.setField(ruleEditService, "scenariosEnabled", false);
         HttpRule existing = HttpRule.builder()
                 .id("uuid-1").version(0L).responseId(1L)
                 .scenarioName("checkout").requiredScenarioState("Started").newScenarioState("Paid")
@@ -447,12 +461,12 @@ class AdminControllerTest {
         when(handler.save(any())).thenReturn(savedRule);
         when(handler.toDto(any(), any(), anyBoolean())).thenReturn(updated);
 
-        assertThat(controller.updateRule("uuid-1", updated).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(rules.updateRule("uuid-1", updated).getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
     @Test
     void updateRule_shouldRejectLegacyScenarioChangesWhenFeatureIsDisabled() {
-        ReflectionTestUtils.setField(controller, "scenariosEnabled", false);
+        ReflectionTestUtils.setField(ruleEditService, "scenariosEnabled", false);
         HttpRule existing = HttpRule.builder()
                 .id("uuid-1").version(0L)
                 .scenarioName("checkout").requiredScenarioState("Started").newScenarioState("Paid")
@@ -463,7 +477,7 @@ class AdminControllerTest {
                 .build();
         doReturn(Optional.of(existing)).when(protocolHandlerRegistry).findById("uuid-1");
 
-        assertThatThrownBy(() -> controller.updateRule("uuid-1", updated))
+        assertThatThrownBy(() -> rules.updateRule("uuid-1", updated))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("SCENARIOS_DISABLED");
     }
@@ -472,7 +486,7 @@ class AdminControllerTest {
     void updateRule_shouldReturn404_whenNotExists() {
         when(protocolHandlerRegistry.findById(any(String.class))).thenReturn(Optional.empty());
         
-        var response = controller.updateRule("uuid-1", RuleDto.builder().protocol(Protocol.HTTP).build());
+        var response = rules.updateRule("uuid-1", RuleDto.builder().protocol(Protocol.HTTP).build());
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -484,7 +498,7 @@ class AdminControllerTest {
         var handler = mock(com.echo.protocol.ProtocolHandler.class);
         when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
         
-        var response = controller.deleteRule("uuid-1");
+        var response = rules.deleteRule("uuid-1");
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
         verify(handler).deleteById(any(String.class));
@@ -494,7 +508,7 @@ class AdminControllerTest {
     void deleteRule_shouldReturn404_whenNotExists() {
         when(protocolHandlerRegistry.findById(any(String.class))).thenReturn(Optional.empty());
         
-        var response = controller.deleteRule("uuid-1");
+        var response = rules.deleteRule("uuid-1");
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -504,7 +518,7 @@ class AdminControllerTest {
         when(requestLogService.querySummary(any())).thenReturn(
                 RequestLogService.SummaryQueryResult.builder().results(List.of()).build());
         
-        var response = controller.queryLogs(null, null, null, null);
+        var response = logs.queryLogs(null, null, null, null);
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody().getResults()).isEmpty();
@@ -515,7 +529,7 @@ class AdminControllerTest {
         when(requestLogService.querySummary(any())).thenReturn(
                 RequestLogService.SummaryQueryResult.builder().results(List.of()).build());
         
-        controller.queryLogs("uuid-1", "HTTP", true, "/api");
+        logs.queryLogs("uuid-1", "HTTP", true, "/api");
         
         verify(requestLogService).querySummary(argThat(f -> 
                 f.getRuleId().equals("uuid-1") && 
@@ -529,7 +543,7 @@ class AdminControllerTest {
         when(requestLogService.querySummary(any())).thenReturn(
                 RequestLogService.SummaryQueryResult.builder().results(List.of()).build());
 
-        controller.queryLogs(null, "HTTP", false, "payment", 2, 50, null,
+        logs.queryLogs(null, "HTTP", false, "payment", 2, 50, null,
                 "responseTimeMs", "asc", 99L);
 
         verify(requestLogService).querySummary(argThat(f ->
@@ -548,7 +562,7 @@ class AdminControllerTest {
         when(requestLogService.querySummary(any())).thenReturn(
                 RequestLogService.SummaryQueryResult.builder().results(List.of()).build());
 
-        controller.queryLogs(null, null, null, null, null, null, 100,
+        logs.queryLogs(null, null, null, null, null, null, 100,
                 null, null, null);
 
         verify(requestLogService).querySummary(argThat(f -> f.getSize() == 100));
@@ -559,7 +573,7 @@ class AdminControllerTest {
         when(requestLogService.getSummary()).thenReturn(
                 RequestLogService.Summary.builder().totalRequests(100).matchedRequests(90).matchRate(90.0).build());
         
-        var response = controller.getLogSummary();
+        var response = logs.getLogSummary();
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody().getTotalRequests()).isEqualTo(100);
@@ -569,7 +583,7 @@ class AdminControllerTest {
     void deleteAllLogs_shouldReturnDeletedCount() {
         when(requestLogService.deleteAll()).thenReturn(42L);
 
-        var response = controller.deleteAllLogs();
+        var response = logs.deleteAllLogs();
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody().get("deleted")).isEqualTo(42L);
@@ -580,7 +594,7 @@ class AdminControllerTest {
     void getRuleAuditLogs_shouldReturnLogs() {
         when(ruleAuditService.getAuditLogs(eq("uuid-1"), eq(50))).thenReturn(List.of(new RuleAuditLog()));
         
-        var response = controller.getRuleAuditLogs("uuid-1", 50);
+        var response = audit.getRuleAuditLogs("uuid-1", 50);
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).hasSize(1);
@@ -590,7 +604,7 @@ class AdminControllerTest {
     void getAllAuditLogs_shouldReturnLogs() {
         when(ruleAuditService.getAllAuditLogs(eq(1000))).thenReturn(List.of(new RuleAuditLog()));
         
-        var response = controller.getAllAuditLogs(1000);
+        var response = audit.getAllAuditLogs(1000);
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
@@ -601,7 +615,7 @@ class AdminControllerTest {
                 .results(List.of()).page(0).size(20).totalElements(0).totalPages(0).build();
         when(ruleAuditService.queryAuditSummary(any())).thenReturn(result);
 
-        var response = controller.queryAuditLogs("UPDATE", "admin", "uuid", 0, 20,
+        var response = audit.queryAuditLogs("UPDATE", "admin", "uuid", 0, 20,
                 "timestamp", "desc");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -614,15 +628,15 @@ class AdminControllerTest {
         when(ruleAuditService.getAuditDetail(7L)).thenReturn(detail);
         when(ruleAuditService.getAuditDetail(8L)).thenReturn(null);
 
-        assertThat(controller.getAuditLogDetail(7L).getBody()).isSameAs(detail);
-        assertThat(controller.getAuditLogDetail(8L).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(audit.getAuditLogDetail(7L).getBody()).isSameAs(detail);
+        assertThat(audit.getAuditLogDetail(8L).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     @Test
     void exportAllRules_shouldReturnAllRules() {
         when(protocolHandlerRegistry.findAllRules()).thenReturn(List.of(new HttpRule(), new HttpRule()));
         
-        var response = controller.exportAllRules();
+        var response = importExport.exportAllRules();
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).hasSize(2);
@@ -642,7 +656,7 @@ class AdminControllerTest {
             RuleDto.builder().protocol(Protocol.HTTP).matchKey("/b").build()
         );
         
-        var response = controller.importRules(rules);
+        var response = importExport.importRules(rules);
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((java.util.Map<String, Object>) response.getBody()).get("imported")).isEqualTo(2);
@@ -663,7 +677,7 @@ class AdminControllerTest {
             RuleDto.builder().protocol(Protocol.JMS).matchKey("QUEUE").build()
         );
         
-        var response = controller.importRules(rules);
+        var response = importExport.importRules(rules);
         
         assertThat(((java.util.Map<String, Object>) response.getBody()).get("imported")).isEqualTo(1);
         verify(handler, times(1)).save(any());
@@ -679,7 +693,7 @@ class AdminControllerTest {
         var handler = mock(com.echo.protocol.ProtocolHandler.class);
         when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
         
-        var response = controller.deleteRules(List.of("uuid-1", "uuid-2"));
+        var response = rules.deleteRules(List.of("uuid-1", "uuid-2"));
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((java.util.Map<String, Object>) response.getBody()).get("deleted")).isEqualTo(2);
@@ -695,7 +709,7 @@ class AdminControllerTest {
         when(httpHandler.deleteAll()).thenReturn(2);
         when(jmsHandler.deleteAll()).thenReturn(1);
         
-        var response = controller.deleteAllRules();
+        var response = rules.deleteAllRules();
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((java.util.Map<String, Object>) response.getBody()).get("deleted")).isEqualTo(3);
@@ -708,7 +722,7 @@ class AdminControllerTest {
         when(protocolHandlerRegistry.toDto(any(), any(), anyBoolean())).thenReturn(RuleDto.builder().id("uuid-1").protocol(Protocol.HTTP).build());
         when(ruleService.updateEnabled(anyList(), anyBoolean())).thenReturn(1);
 
-        var response = controller.enableRule("uuid-1");
+        var response = ruleState.enableRule("uuid-1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
@@ -719,7 +733,7 @@ class AdminControllerTest {
         when(ruleService.findIdsByTag("env", "prod")).thenReturn(List.of("uuid-1", "uuid-2"));
         when(ruleService.updateEnabled(anyList(), anyBoolean())).thenReturn(2);
 
-        var response = controller.enableByTag("env", "prod");
+        var response = ruleState.enableByTag("env", "prod");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((java.util.Map<String, Object>) response.getBody()).get("updated")).isEqualTo(2);
@@ -749,7 +763,7 @@ class AdminControllerTest {
         when(handler.save(any())).thenReturn(savedRule);
         when(handler.toDto(any(), any(), anyBoolean())).thenReturn(RuleDto.builder().matchKey("/api/sse").build());
 
-        var response = controller.createRule(dto);
+        var response = rules.createRule(dto);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         verify(mockValidator).validate(validSseBody);
@@ -767,12 +781,12 @@ class AdminControllerTest {
                 .responseBody(invalidSseBody)
                 .build();
 
-        var errorResponse = controller.handleIllegalArgument(
+        var errorResponse = new AdminExceptionHandler().handleIllegalArgument(
                 new IllegalArgumentException("SSE 回應內容必須為 JSON 陣列格式"));
         assertThat(errorResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(errorResponse.getBody().get("error")).contains("SSE 回應內容必須為 JSON 陣列格式");
 
-        assertThatThrownBy(() -> controller.createRule(dto))
+        assertThatThrownBy(() -> rules.createRule(dto))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("SSE 回應內容必須為 JSON 陣列格式");
     }
@@ -798,7 +812,7 @@ class AdminControllerTest {
         when(handler.save(any())).thenReturn(savedRule);
         when(handler.toDto(any(), any(), anyBoolean())).thenReturn(RuleDto.builder().matchKey("/api/plain").build());
 
-        var response = controller.createRule(dto);
+        var response = rules.createRule(dto);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         verify(textValidator).validate("plain text response");
@@ -826,7 +840,7 @@ class AdminControllerTest {
         when(handler.save(any())).thenReturn(savedRule);
         when(handler.toDto(any(), any(), anyBoolean())).thenReturn(RuleDto.builder().matchKey("/api/existing-resp").build());
 
-        var response = controller.createRule(dto);
+        var response = rules.createRule(dto);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         verify(responseContentValidatorRegistry, never()).getValidator(any());
