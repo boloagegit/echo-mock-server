@@ -55,6 +55,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Request logs require authentication because details can include request data and downstream topology
 - Spring Boot updated to 3.5.16 and the build aligned with the supported Gradle 8.14.5 line
 
+### Removed
+- Drag-and-drop priority ordering in the rule list (`ECHO_RULE_DRAG_SORT_ENABLED` / `echo.features.rule-drag-sort-enabled`, off by default) was removed. It sent only the new priority to the full-rule update API, which rejected it, so reordering never saved. Set priorities in the rule editor; the status API no longer returns `ruleDragSortEnabled`
+
 ### Fixed
 - On external databases (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle) a single request with an over-long path, method, `X-Original-Host` or scenario value, or a NUL character in a body, no longer stops request logging: such values are shortened to the column size (NUL removed) before saving, and if the database still rejects a row, that one row is skipped with a warning and counted as dropped while the rest of the batch is saved. Before, the whole batch was retried forever and logs piled up in the spool until requests were refused. Database outages are still retried without skipping anything. SQLite was not affected
 - Saving a rule in the editor no longer silently overwrites a change someone else made while it was open: `PUT /api/admin/rules/{id}` with an outdated `version` returns 409 `OPTIMISTIC_LOCK_CONFLICT` (with `currentVersion`), and the editor asks whether to load the latest version or keep the unsaved changes. The editor now always opens the latest rule, and enable/disable, protect and extend also advance the version so a form opened before them cannot undo them. Callers that send no `version` keep the previous behavior

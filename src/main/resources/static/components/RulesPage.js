@@ -29,7 +29,6 @@ const RulesPage = {
     rulePreviewLoading: Object,
     rulePreviewError: Object,
     rulePreviewCache: Object,
-    canDragRules: Boolean,
     showDataDropdown: Boolean,
     bulkImportExportEnabled: Boolean,
     expandedTagGroups: Array,
@@ -41,8 +40,7 @@ const RulesPage = {
     groupLoading: Object,
     filteredRules: Array,
     getGroupLimit: Function,
-    ruleSortIcon: Function,
-    dragRowClass: Function
+    ruleSortIcon: Function
   },
   emits: [
     'load-rules', 'open-create', 'toggle-batch-select',
@@ -57,7 +55,6 @@ const RulesPage = {
     'open-rule-detail', 'close-rule-detail', 'load-rule-detail',
     'go-to-responses',
     'clip-copy', 'extend-rule',
-    'drag-start', 'drag-over', 'drag-leave', 'drop', 'drag-end',
     'toggle-data-dropdown', 'toggle-tag-group', 'toggle-tag-subgroup',
     'show-more-group', 'show-all-group',
   ],
@@ -277,12 +274,9 @@ const RulesPage = {
                 <rule-table v-else-if="pagedRules.length" :rules="pagedRules" :selected-id="ruleDetailId" :order-issues="orderIssues.issues"
                     :is-logged-in="isLoggedIn" :status="status" :http-label="httpLabel" :jms-label="jmsLabel"
                     sortable :rule-sort="ruleSort" :batch-select-mode="batchSelectMode" :selected-rules="selectedRules"
-                    :can-drag="canDragRules" :drag-row-class="dragRowClass"
                     @select="selectRule" @edit="$emit('open-edit', $event)" @toggle-enabled="$emit('toggle-enabled', $event)"
                     @menu="handleRowMenu" @toggle-selection="toggleSelection" @toggle-select-all="$emit('toggle-select-all', $event)"
-                    @sort="$emit('toggle-rule-sort', $event)"
-                    @drag-start="(e, r) => $emit('drag-start', e, r)" @drag-over="(e, r) => $emit('drag-over', e, r)"
-                    @drag-leave="(e, r) => $emit('drag-leave', e, r)" @drop="$emit('drop', $event)" @drag-end="$emit('drag-end')"></rule-table>
+                    @sort="$emit('toggle-rule-sort', $event)"></rule-table>
                 <ui-load-state v-else kind="empty" has-action
                     :icon="hasRuleFilters?'bi-search':'bi-inbox'"
                     :title="hasRuleFilters?t('rules.emptyFilterResult'):t('rules.emptyNoRules')">

@@ -116,7 +116,6 @@ class AdminControllersTest {
         ReflectionTestUtils.setField(system, "jmsAlias", "JMS");
         ReflectionTestUtils.setField(system, "bulkImportExportEnabled", true);
         ReflectionTestUtils.setField(system, "scenariosEnabled", true);
-        ReflectionTestUtils.setField(system, "ruleDragSortEnabled", true);
         rules = new RuleController(ruleQueryService, protocolHandlerRegistry, ruleEditService,
                 Optional.of(ruleAuditService), Optional.empty());
         ruleState = new RuleStateController(ruleService, ruleEditService);
@@ -141,7 +140,7 @@ class AdminControllersTest {
         assertThat(response.getBody().get("isLoggedIn")).isEqualTo(false);
         assertThat(response.getBody().get("bulkImportExportEnabled")).isEqualTo(true);
         assertThat(response.getBody().get("scenariosEnabled")).isEqualTo(true);
-        assertThat(response.getBody().get("ruleDragSortEnabled")).isEqualTo(true);
+        assertThat(response.getBody()).doesNotContainKey("ruleDragSortEnabled");
         assertThat(response.getBody().get("issueReportingEnabled")).isEqualTo(false);
     }
 
@@ -188,15 +187,6 @@ class AdminControllersTest {
         ReflectionTestUtils.setField(system, "issueReportingEnabled", true);
 
         assertThat(system.getStatus(null).getBody().get("issueReportingEnabled")).isEqualTo(true);
-    }
-
-    @Test
-    void getStatus_shouldExposeDisabledRuleDragSortFeature() {
-        ReflectionTestUtils.setField(system, "ruleDragSortEnabled", false);
-
-        var response = system.getStatus(null);
-
-        assertThat(response.getBody().get("ruleDragSortEnabled")).isEqualTo(false);
     }
 
     @Test

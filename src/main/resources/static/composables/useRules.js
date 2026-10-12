@@ -15,12 +15,11 @@
  * @param {import('vue').Ref} deps.page - 當前頁面（來自 app.js）
  * @param {import('vue').Ref} deps.httpLabel - HTTP 協定標籤
  * @param {import('vue').Ref} deps.jmsLabel - JMS 協定標籤
- * @param {import('vue').Ref} deps.ruleDragSortEnabled - 部署端是否啟用拖曳排序
  * @returns {Object} 規則管理相關的狀態與方法
  */
 const useRules = (deps) => {
     const { ref, computed, watch } = Vue;
-    const { showToast, showConfirm, t, requireLogin, login, isLoggedIn, loading, httpLabel, jmsLabel, ruleDragSortEnabled } = deps;
+    const { showToast, showConfirm, t, requireLogin, login, isLoggedIn, loading, httpLabel, jmsLabel } = deps;
 
     // --- 資料快取機制 ---
     const dataLastLoaded = { rules: 0 };
@@ -495,98 +494,6 @@ const useRules = (deps) => {
     const closeRuleDetail = () => { ruleDetailId.value = null; };
 
 
-    // --- 拖曳排序 ---
-    const dragState = ref({ dragging: false, dragId: null, overId: null, overPos: null });
-    const ruleDragAvailable = computed(() => ruleDragSortEnabled?.value === true
-        && isLoggedIn.value && !batchSelectMode.value && ruleViewMode.value === 'list');
-    const canDragRules = computed(() => ruleDragAvailable.value
-        && ruleSort.value.field === 'priority' && !ruleSort.value.asc);
-
-    const onDragStart = (e, rule) => {
-        if (!canDragRules.value) return;
-        dragState.value = { dragging: true, dragId: rule.id, overId: null, overPos: null };
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', rule.id);
-        e.target.closest('tr').classList.add('drag-source');
-    };
-    const onDragOver = (e, rule) => {
-        if (!dragState.value.dragging || rule.id === dragState.value.dragId) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        const rect = e.target.closest('tr').getBoundingClientRect();
-        const mid = rect.top + rect.height / 2;
-        dragState.value.overId = rule.id;
-        dragState.value.overPos = e.clientY < mid ? 'before' : 'after';
-    };
-    const onDragLeave = (e, rule) => {
-        if (dragState.value.overId === rule.id) {
-            const tr = e.target.closest('tr');
-            if (tr && !tr.contains(e.relatedTarget)) {
-                dragState.value.overId = null;
-                dragState.value.overPos = null;
-            }
-        }
-    };
-    const onDrop = async (e) => {
-        e.preventDefault();
-        const { dragId, overId, overPos } = dragState.value;
-        if (!dragId || !overId || dragId === overId) { resetDrag(); return; }
-        const list = pagedRules.value;
-        const dragIdx = list.findIndex(r => r.id === dragId);
-        const overIdx = list.findIndex(r => r.id === overId);
-        if (dragIdx < 0 || overIdx < 0) { resetDrag(); return; }
-        let insertIdx = overPos === 'before' ? overIdx : overIdx + 1;
-        if (dragIdx < insertIdx) { insertIdx--; }
-        if (insertIdx === dragIdx) { resetDrag(); return; }
-        const ordered = list.map(r => r.id);
-        ordered.splice(dragIdx, 1);
-        ordered.splice(insertIdx, 0, dragId);
-        const maxPri = Math.max(...list.map(r => r.priority ?? 0));
-        const updates = [];
-        ordered.forEach((id, i) => {
-            const newPri = maxPri - i;
-            const rule = list.find(r => r.id === id);
-            if (rule && (rule.priority ?? 0) !== newPri) {
-                updates.push({ id, priority: newPri, version: rule.version });
-            }
-        });
-        resetDrag();
-        if (!updates.length) return;
-        showToast(t('toast.updatingSort'), 'success');
-        let failed = 0;
-        for (const u of updates) {
-            const r = await apiCall(`/api/admin/rules/${u.id}`, { method: 'PUT', body: JSON.stringify({ priority: u.priority, version: u.version }) }, { silent: true });
-            if (!r || !r.ok) { failed++; }
-        }
-        if (failed) { showToast(t('toast.sortUpdateFailed', {count: failed}), 'error'); }
-        else { showToast(t('toast.sortUpdated'), 'success'); }
-        markDirty();
-        await loadRules(true);
-    };
-    const onDragEnd = () => { resetDrag(); };
-    const resetDrag = () => {
-        document.querySelectorAll('.drag-source').forEach(el => el.classList.remove('drag-source'));
-        dragState.value = { dragging: false, dragId: null, overId: null, overPos: null };
-    };
-    const dragRowClass = (rule) => {
-        if (!dragState.value.dragging) return '';
-        if (rule.id === dragState.value.dragId) return 'drag-source';
-        if (rule.id === dragState.value.overId) return dragState.value.overPos === 'before' ? 'drag-over-before' : 'drag-over-after';
-        return '';
-    };
-
-    watch(ruleDragSortEnabled, enabled => {
-        if (!enabled) {
-            resetDrag();
-            return;
-        }
-        ruleSort.value = { field: 'priority', asc: false };
-        localStorage.setItem('ruleSort', JSON.stringify(ruleSort.value));
-        rulePage.value = 1;
-    });
-    watch(ruleDragAvailable, available => { if (!available) resetDrag(); });
-    watch(ruleSort, () => resetDrag(), { deep: true });
-
     // --- Filter chips ---
     const ruleFilterChips = computed(() => {
         const chips = [];
@@ -713,15 +620,6 @@ const useRules = (deps) => {
         loadRuleDetail,
         openRuleDetail,
         closeRuleDetail,
-        // 拖曳排序
-        dragState,
-        canDragRules,
-        onDragStart,
-        onDragOver,
-        onDragLeave,
-        onDrop,
-        onDragEnd,
-        dragRowClass,
         // Filter chips
         ruleFilterChips,
         removeRuleChip,

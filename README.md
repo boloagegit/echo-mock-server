@@ -234,7 +234,6 @@ The following user-facing features are intentionally disabled by default and can
 | `ECHO_ISSUE_REPORTING_ENABLED` | `false` | Shows the issue-reporting page and enables its APIs; existing reports are retained |
 | `ECHO_BULK_IMPORT_EXPORT_ENABLED` | `false` | Shows and enables bulk import/export operations |
 | `ECHO_SCENARIOS_ENABLED` | `false` | Enables stateful Scenario rules and Scenario administration |
-| `ECHO_RULE_DRAG_SORT_ENABLED` | `false` | Enables drag-and-drop priority ordering in the rule list |
 
 Issue reporting can also be enabled with `echo.features.issue-reporting-enabled: true`
 in the deployment configuration. Restart Echo to apply the setting. When disabled,

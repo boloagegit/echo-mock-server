@@ -118,9 +118,6 @@ public class SystemController {
     @Value("${echo.features.scenarios-enabled:false}")
     private boolean scenariosEnabled;
 
-    @Value("${echo.features.rule-drag-sort-enabled:false}")
-    private boolean ruleDragSortEnabled;
-
     @Value("${echo.features.issue-reporting-enabled:false}")
     private boolean issueReportingEnabled;
 
@@ -165,7 +162,6 @@ public class SystemController {
         status.put("selfRegistrationEnabled", selfRegistrationEnabled);
         status.put("bulkImportExportEnabled", bulkImportExportEnabled);
         status.put("scenariosEnabled", scenariosEnabled);
-        status.put("ruleDragSortEnabled", ruleDragSortEnabled);
         status.put("issueReportingEnabled", issueReportingEnabled);
         status.put("ldapUrl", ldapUrl);
         status.put("httpAlias", httpAlias);

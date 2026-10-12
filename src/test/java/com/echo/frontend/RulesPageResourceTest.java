@@ -15,36 +15,17 @@ class RulesPageResourceTest {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Test
-    void gatesDragSortingWithTheDeploymentFeatureFlag() throws IOException {
-        String composable = resourceText("static/composables/useRules.js");
-
-        assertThat(composable)
-                .contains("ruleDragSortEnabled?.value === true")
-                .contains("watch(ruleDragSortEnabled, enabled =>")
-                .contains("ruleSort.value = { field: 'priority', asc: false }");
-    }
-
-    @Test
-    void removesTheUserToggleAndOnlyShowsHandlesWhenTheFeatureIsAvailable() throws IOException {
-        String component = resourceText("static/components/RulesPage.js");
-
-        assertThat(component)
-                .doesNotContain("rule-drag-toggle")
-                .doesNotContain("update:ruleDragEnabled")
-                .contains(":can-drag=\"canDragRules\"");
-        assertThat(resourceText("static/components/RuleTable.js"))
-                .contains("<td v-if=\"canDrag\" class=\"col-drag drag-handle-cell\" draggable=\"true\"");
-    }
-
-    @Test
-    void localizesTheDragHandleLabelWithoutExposingAUserToggle() throws IOException {
-        JsonNode zh = OBJECT_MAPPER.readTree(resourceText("static/i18n/zh-TW.json")).path("rules");
-        JsonNode en = OBJECT_MAPPER.readTree(resourceText("static/i18n/en.json")).path("rules");
-
-        assertThat(zh.path("dragRule").asText()).isNotBlank();
-        assertThat(en.path("dragRule").asText()).isNotBlank();
-        assertThat(zh.has("dragSort")).isFalse();
-        assertThat(en.has("dragSort")).isFalse();
+    void dragSortingWasRemoved() throws IOException {
+        // 拖曳排序已移除：它只送出優先順序，整筆更新 API 一律拒絕，從未能正常運作。優先順序在編輯畫面設定。
+        for (String file : new String[] {"static/composables/useRules.js", "static/components/RulesPage.js",
+                "static/components/RuleTable.js", "static/app.js", "static/index.html"}) {
+            assertThat(resourceText(file)).doesNotContainIgnoringCase("drag");
+        }
+        JsonNode zh = OBJECT_MAPPER.readTree(resourceText("static/i18n/zh-TW.json"));
+        JsonNode en = OBJECT_MAPPER.readTree(resourceText("static/i18n/en.json"));
+        assertThat(zh.path("rules").has("dragRule")).isFalse();
+        assertThat(en.path("toast").has("sortUpdated")).isFalse();
+        assertThat(resourceText("application.yml")).doesNotContain("rule-drag-sort-enabled");
     }
 
     @Test

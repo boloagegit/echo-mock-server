@@ -17,13 +17,10 @@ const RuleTable = {
     ruleSort: { type: Object, default: () => ({}) },
     batchSelectMode: Boolean,
     selectedRules: { type: Array, default: () => [] },
-    canDrag: Boolean,
-    dragRowClass: { type: Function, default: () => '' },
     // 一定輪不到的規則（id → 原因），見 RuleOrderService
     orderIssues: { type: Object, default: () => ({}) },
   },
-  emits: ['select', 'edit', 'toggle-enabled', 'menu', 'toggle-selection', 'toggle-select-all', 'sort',
-    'drag-start', 'drag-over', 'drag-leave', 'drop', 'drag-end'],
+  emits: ['select', 'edit', 'toggle-enabled', 'menu', 'toggle-selection', 'toggle-select-all', 'sort'],
   methods: {
     shortId, fmtTime, daysLeft, condTags, condTooltip,
     orderIssueReason(issue) {
@@ -66,7 +63,6 @@ const RuleTable = {
   template: /* html */`
     <table class="data-table rule-table">
       <thead><tr>
-        <th v-if="canDrag" class="col-drag"><span class="visually-hidden">{{t('rules.dragColumn')}}</span></th>
         <th v-if="batchSelectMode" class="col-select">
           <input type="checkbox" :checked="selectedRules.length===rules.length && rules.length>0" :aria-label="t('rules.selectAll')" @change="$emit('toggle-select-all', $event)">
         </th>
@@ -86,14 +82,11 @@ const RuleTable = {
       </tr></thead>
       <tbody>
         <tr v-for="r in rules" :key="r.id" data-detail-row tabindex="0"
-          :class="[{'is-selected': selectedId===r.id, 'is-disabled': r.enabled===false, 'is-checked': batchSelectMode && selectedRules.includes(r.id)}, dragRowClass(r)]"
+          :class="{'is-selected': selectedId===r.id, 'is-disabled': r.enabled===false, 'is-checked': batchSelectMode && selectedRules.includes(r.id)}"
           :aria-selected="selectedId===r.id ? 'true' : 'false'"
           @click="batchSelectMode ? $emit('toggle-selection', r.id) : $emit('select', r)"
           @dblclick="!batchSelectMode && isLoggedIn && $emit('edit', r)"
-          @keydown="onRowKeydown($event, r)"
-          @dragover="(e) => $emit('drag-over', e, r)" @dragleave="(e) => $emit('drag-leave', e, r)" @drop="$emit('drop', $event)">
-          <td v-if="canDrag" class="col-drag drag-handle-cell" draggable="true" :title="t('rules.dragRule', {id:shortId(r.id)})"
-            @click.stop @dragstart="(e) => $emit('drag-start', e, r)" @dragend="$emit('drag-end')"><i class="bi bi-grip-vertical" aria-hidden="true"></i></td>
+          @keydown="onRowKeydown($event, r)">
           <td v-if="batchSelectMode" class="col-select" @click.stop>
             <input type="checkbox" :checked="selectedRules.includes(r.id)" :aria-label="t('rules.selectRule', {id:shortId(r.id)})" @change="$emit('toggle-selection', r.id)">
           </td>

@@ -3231,33 +3231,6 @@ select.is-invalid {
     to { opacity: 1; transform: translateY(0) }
 }
 
-/* 拖拽排序 */
-.drag-handle-cell {
-    cursor: grab;
-    color: var(--muted);
-    text-align: center;
-    padding: 0.5rem 0.3rem !important;
-    width: 28px;
-    user-select: none;
-}
-.drag-handle-cell:hover {
-    color: var(--primary);
-}
-.drag-handle-cell:active {
-    cursor: grabbing;
-}
-tr.drag-source {
-    opacity: 0.4;
-}
-tr.drag-over-before td {
-    box-shadow: none;
-    background: var(--surface-primary-strong);
-}
-tr.drag-over-after td {
-    box-shadow: none;
-    background: var(--surface-primary-strong);
-}
-
 /* ===== SSE 表格編輯器 ===== */
 .rule-sse-editor { display: flex; flex-direction: column; gap: var(--space-md); min-height: 0; overflow: auto }
 .rule-sse-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md) }
