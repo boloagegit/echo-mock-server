@@ -34,6 +34,12 @@
     "roleUser": "User"
   },
   "rules": {
+    "conflict": {
+      "title": "This rule was just changed by someone else",
+      "message": "Someone changed this rule while you were editing it, so your changes were not saved. Loading the latest version discards your current changes; you can keep them for now and note what you want to change first.",
+      "reload": "Load latest version",
+      "keep": "Keep my changes"
+    },
     "order": {
       "title": "Checking order",
       "loading": "Loading the checking order…",

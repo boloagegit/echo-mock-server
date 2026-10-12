@@ -187,6 +187,13 @@ public class RuleController {
         ruleEditService.validateScenarioFields(dto);
         return protocolHandlerRegistry.findById(id)
                 .map(existing -> {
+                    // 送來的版本與目前不同，表示編輯期間規則已被改過：拒絕，避免把別人的修改蓋掉。
+                    // 沒送版本的呼叫端（舊腳本）維持以目前版本更新。
+                    if (dto.getVersion() != null && !dto.getVersion().equals(existing.getVersion())) {
+                        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                                "error", "OPTIMISTIC_LOCK_CONFLICT",
+                                "currentVersion", existing.getVersion()));
+                    }
                     dto.setId(id);
                     dto.setVersion(existing.getVersion());
                     dto.setCreatedAt(existing.getCreatedAt()); // 保留建立時間

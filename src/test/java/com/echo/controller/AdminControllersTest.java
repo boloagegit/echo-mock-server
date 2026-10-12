@@ -484,6 +484,20 @@ class AdminControllersTest {
     }
 
     @Test
+    void updateRule_shouldRejectAStaleVersionWithoutSaving() {
+        HttpRule existing = HttpRule.builder().id("uuid-1").version(3L).responseId(1L).build();
+        RuleDto stale = RuleDto.builder().protocol(Protocol.HTTP).matchKey("/updated").responseId(1L).version(2L).build();
+        doReturn(Optional.of(existing)).when(protocolHandlerRegistry).findById("uuid-1");
+
+        var response = rules.updateRule("uuid-1", stale);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).isEqualTo(Map.of("error", "OPTIMISTIC_LOCK_CONFLICT", "currentVersion", 3L));
+        verify(protocolHandlerRegistry, never()).getHandler(any());
+        verify(responseService, never()).save(any());
+    }
+
+    @Test
     void updateRule_shouldReturn404_whenNotExists() {
         when(protocolHandlerRegistry.findById(any(String.class))).thenReturn(Optional.empty());
         

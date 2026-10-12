@@ -175,11 +175,23 @@ const _app = createApp({
             ...readRuleDraft(), declarative: null,
             pendingTag: { key: '', value: '' }, pendingHeader: { key: '', value: '' }
         });
+        /** 編輯期間規則被別人改過：詢問要載入最新版本，或保留自己的修改（表單不動）。 */
+        const resolveRuleSaveConflict = async ruleId => {
+            const reload = await showConfirm({
+                title: t('rules.conflict.title'), message: t('rules.conflict.message'),
+                confirmText: t('rules.conflict.reload'), cancelText: t('rules.conflict.keep')
+            });
+            if (!reload) return;
+            discardRuleDraft();
+            await openRuleEditor(() => openEditForm({ id: ruleId }));
+        };
         const saveRule = async andClose => {
             if (ruleSaveInFlight.value) return;
             ruleSaveInFlight.value = true;
             try {
-                if (!await saveRuleForm(andClose)) return;
+                const saved = await saveRuleForm(andClose);
+                if (saved && saved.conflict) { await resolveRuleSaveConflict(saved.conflict); return; }
+                if (!saved) return;
                 if (showModal.value) {
                     await Vue.nextTick();
                     markRuleDraftSaved();

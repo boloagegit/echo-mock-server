@@ -55,6 +55,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Spring Boot updated to 3.5.16 and the build aligned with the supported Gradle 8.14.5 line
 
 ### Fixed
+- Saving a rule in the editor no longer silently overwrites a change someone else made while it was open: `PUT /api/admin/rules/{id}` with an outdated `version` returns 409 `OPTIMISTIC_LOCK_CONFLICT` (with `currentVersion`), and the editor asks whether to load the latest version or keep the unsaved changes. The editor now always opens the latest rule, and enable/disable, protect and extend also advance the version so a form opened before them cannot undo them. Callers that send no `version` keep the previous behavior
 - `GET /api/admin/rules/page` (and the group endpoints) no longer fail with HTTP 500 when called without a `sort` parameter
 - The Request Log match chain now shows the pass/fail details of near-miss and skipped entries recorded without a condition tree; the page read a field the server never sent
 - Opening an existing rule in the editor and saving it no longer changes or drops conditions: simple-mode condition rows, declarative documents and v1 document validation now split conditions exactly like matching does (first `=`, so `a=x!=y` is `a` equals `x!=y`), keep the leading `//` of XPath fields, and show conditions that cannot be represented as rows (for example one without an operator) unchanged in advanced mode instead of deleting them

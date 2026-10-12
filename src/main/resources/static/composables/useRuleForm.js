@@ -759,10 +759,9 @@ const useRuleForm = (deps) => {
         catchAllConfirmed.value = false;
         showCatchAllWarning.value = false;
         resetResponsePreview();
-        if (!r.responseId) {
-            const res = await apiCall(`/api/admin/rules/${r.id}`, {}, { silent: true });
-            if (res && res.ok) { const full = await res.json(); r = full; }
-        }
+        // 一律讀取最新內容與版本：列表上的資料可能已過時，用舊內容存檔會蓋掉別人的修改
+        const res = await apiCall(`/api/admin/rules/${r.id}`, {}, { silent: true });
+        if (res && res.ok) { r = await res.json(); }
         form.value = { ...r, action: r.action || 'MOCK', forwardTargetMode: r.forwardTargetMode || (r.protocol === 'JMS' ? 'DEFAULT_CONNECTION' : 'ORIGINAL_HOST'), responseMode: r.responseId ? 'existing' : 'new' };
         conditions.value = [];
         sseEvents.value = (r.sseEnabled && r.responseBody) ? deserializeSseEvents(r.responseBody) : [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }];
@@ -890,9 +889,11 @@ const useRuleForm = (deps) => {
         else { payload.responseId = null; }
         delete payload.responseMode;
         let savedSuccessfully = false;
+        let saveConflict = null;
         try {
             const url = editing.value ? `/api/admin/rules/${editing.value.id}` : '/api/admin/rules';
-            const r = await apiCall(url, { method: editing.value ? 'PUT' : 'POST', body: JSON.stringify(payload) }, { errorMsg: t('toast.ruleSaveFailed') });
+            const r = await apiCall(url, { method: editing.value ? 'PUT' : 'POST', body: JSON.stringify(payload) },
+                { errorMsg: t('toast.ruleSaveFailed'), quietStatuses: [409] });
             if (r && r.ok) {
                 const saved = await r.json();
                 savedSuccessfully = true;
@@ -923,9 +924,12 @@ const useRuleForm = (deps) => {
                     loadRules(true);
                 }
             }
+            else if (r && r.status === 409 && editing.value) { saveConflict = editing.value.id; }
             else if (r && (r.status === 401 || r.status === 403)) { login(); }
         } catch (e) { showToast(t('toast.ruleSaveFailed'), 'error'); }
         saving.value = false;
+        // 編輯期間規則被別人改過：表單保持原樣，由使用者決定載入最新版本或保留自己的修改
+        if (saveConflict) { return { conflict: saveConflict }; }
         return savedSuccessfully;
     };
 
