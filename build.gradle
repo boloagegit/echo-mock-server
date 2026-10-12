@@ -158,11 +158,6 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
     finalizedBy jacocoTestReport
-    // ./gradlew test -PechoEngineMatcher=compiled：整套測試改用新的條件比對引擎
-    def engineMatcher = providers.gradleProperty('echoEngineMatcher').orNull
-    if (engineMatcher) {
-        systemProperty 'echo.engine.matcher', engineMatcher
-    }
 }
 
 // Opt-in, short real-JMS/file-output A/B measurement; never part of unit-test gates.

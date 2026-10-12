@@ -1,14 +1,12 @@
 package com.echo.service;
 
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 結構化條件在兩種引擎模式下都由新引擎評估，並能產生匹配鏈說明。 */
+/** 結構化條件的評估與匹配鏈說明。 */
 class ConditionMatcherMatchSpecTest {
 
     private static final String SPEC = """
@@ -26,10 +24,9 @@ class ConditionMatcherMatchSpecTest {
         return matcher.matchesPrepared(SPEC, null, null, null, matcher.prepareBody(body), query, headers);
     }
 
-    @ParameterizedTest
-    @EnumSource(ConditionMatcher.EngineMode.class)
-    void evaluatesAnyAllNotAndNewOperatorsInBothEngineModes(ConditionMatcher.EngineMode mode) {
-        ConditionMatcher matcher = new ConditionMatcher(2 * 1024 * 1024, mode);
+    @Test
+    void evaluatesAnyAllNotAndNewOperators() {
+        ConditionMatcher matcher = new ConditionMatcher();
         Map<String, String> acme = Map.of("X-Tenant", "ACME");
 
         assertThat(matches(matcher, "{\"amount\":1500,\"status\":\"NEW\"}", null, acme)).isTrue();
@@ -41,7 +38,7 @@ class ConditionMatcherMatchSpecTest {
 
     @Test
     void legacyFieldsAreIgnoredWhenMatchSpecIsPresent() {
-        ConditionMatcher matcher = new ConditionMatcher(2 * 1024 * 1024, ConditionMatcher.EngineMode.LEGACY);
+        ConditionMatcher matcher = new ConditionMatcher();
         // 舊欄位寫的條件不成立，但以 matchSpec 為準
         assertThat(matcher.matchesPrepared(SPEC, "amount=1", null, null,
                 matcher.prepareBody("{\"amount\":1500}"), null, Map.of("X-Tenant", "acme"))).isTrue();
@@ -49,16 +46,15 @@ class ConditionMatcherMatchSpecTest {
 
     @Test
     void blankMatchSpecFallsBackToLegacyConditions() {
-        ConditionMatcher matcher = new ConditionMatcher(2 * 1024 * 1024, ConditionMatcher.EngineMode.LEGACY);
+        ConditionMatcher matcher = new ConditionMatcher();
         ConditionMatcher.PreparedBody body = matcher.prepareBody("{\"a\":\"1\"}");
         assertThat(matcher.matchesPrepared(" ", "a=1", null, null, body, null, Map.of())).isTrue();
         assertThat(matcher.matchesPrepared(null, "a=2", null, null, body, null, Map.of())).isFalse();
     }
 
-    @ParameterizedTest
-    @EnumSource(ConditionMatcher.EngineMode.class)
-    void corruptStoredSpecNeverMatchesInsteadOfFailingRequests(ConditionMatcher.EngineMode mode) {
-        ConditionMatcher matcher = new ConditionMatcher(2 * 1024 * 1024, mode);
+    @Test
+    void corruptStoredSpecNeverMatchesInsteadOfFailingRequests() {
+        ConditionMatcher matcher = new ConditionMatcher();
         ConditionMatcher.PreparedBody body = matcher.prepareBody("{}");
 
         assertThat(matcher.matchesPrepared("{not json", null, null, null, body, null, Map.of())).isFalse();
@@ -70,7 +66,7 @@ class ConditionMatcherMatchSpecTest {
 
     @Test
     void detailFlattensConditionsAndReportsNegatedOnesByTheirContribution() {
-        ConditionMatcher matcher = new ConditionMatcher(2 * 1024 * 1024, ConditionMatcher.EngineMode.LEGACY);
+        ConditionMatcher matcher = new ConditionMatcher();
         ConditionMatcher.ConditionDetail detail = matcher.matchesPreparedWithDetail(SPEC, null, null, null,
                 matcher.prepareBody("{\"amount\":10,\"status\":\"CANCELLED\"}"), null, Map.of("X-Tenant", "acme"));
 
@@ -88,8 +84,8 @@ class ConditionMatcherMatchSpecTest {
 
     @Test
     void legacyConditionDetailIsUnchanged() {
-        ConditionMatcher legacy = new ConditionMatcher(2 * 1024 * 1024, ConditionMatcher.EngineMode.LEGACY);
-        ConditionMatcher compiled = new ConditionMatcher(2 * 1024 * 1024, ConditionMatcher.EngineMode.COMPILED);
+        LegacyConditionOracle legacy = new LegacyConditionOracle();
+        ConditionMatcher compiled = new ConditionMatcher();
         String body = "{\"user\":{\"type\":\"normal\"}}";
 
         ConditionMatcher.ConditionDetail expected = legacy.matchesPreparedWithDetail(

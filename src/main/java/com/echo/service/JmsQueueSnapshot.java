@@ -25,7 +25,7 @@ final class JmsQueueSnapshot {
     private final Set<String> mentionedValues;
     private final List<JmsRule> unmentioned;
     private final Map<String, List<JmsRule>> buckets = new ConcurrentHashMap<>();
-    /** 只用來保持強參照，讓 compiled 模式的條件編譯結果與快照同生命週期。 */
+    /** 只用來保持強參照，讓條件編譯結果與快照同生命週期。 */
     @SuppressWarnings({"unused", "FieldCanBeLocal"})
     private final List<ConditionMatcher.RuleConditions> pinnedConditions;
 

@@ -1,6 +1,7 @@
 package com.echo.core.match;
 
 import com.echo.service.ConditionMatcher;
+import com.echo.service.LegacyConditionOracle;
 import net.jqwik.api.Arbitraries;
 import net.jqwik.api.Arbitrary;
 import net.jqwik.api.Combinators;
@@ -22,7 +23,7 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 差異測試：舊版 {@link ConditionMatcher} 是標準答案，新引擎的舊語法相容層必須在
+ * 差異測試：舊版比對的原始實作（{@link LegacyConditionOracle}）是標準答案，新引擎的舊語法相容層必須在
  * 是否符合、每個條件的說明文字、分數與暫存 key 上都完全一致。
  * <p>
  * 唯一刻意的差異是期望值只有一個 {@code "} 時舊版會丟出例外，產生器不產生這種值
@@ -216,14 +217,14 @@ class LegacyDifferentialTest {
     }
 
     private static void assertEquivalent(Case c, int maxFieldValueLength) {
-        ConditionMatcher oracle = new ConditionMatcher(maxFieldValueLength);
+        LegacyConditionOracle oracle = new LegacyConditionOracle(maxFieldValueLength);
         MatcherCompiler compiler = new MatcherCompiler(MatcherRegistry.defaults(),
                 MatcherLimits.DEFAULT.withMaxFieldValueLength(maxFieldValueLength));
         Map<String, String> headers = new LinkedHashMap<>(c.headers());
 
         boolean expectedMatch = oracle.matchesPrepared(c.bodyCondition(), c.queryCondition(), c.headerCondition(),
                 oracle.prepareBody(c.requestBody()), c.queryString(), headers);
-        ConditionMatcher.PreparedBody detailBody = oracle.prepareBody(c.requestBody());
+        LegacyConditionOracle.PreparedBody detailBody = oracle.prepareBody(c.requestBody());
         ConditionMatcher.ConditionDetail expectedDetail = oracle.matchesPreparedWithDetail(
                 c.bodyCondition(), c.queryCondition(), c.headerCondition(), detailBody, c.queryString(), headers);
 

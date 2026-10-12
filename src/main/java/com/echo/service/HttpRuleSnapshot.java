@@ -29,7 +29,7 @@ final class HttpRuleSnapshot {
     /** 規則中出現過的 method 原始字串（去重）；通常只有少數幾個。 */
     private final List<String> methods;
     private final Comparator<HttpRule> order;
-    /** 只用來保持強參照，讓 compiled 模式的條件編譯結果與快照同生命週期。 */
+    /** 只用來保持強參照，讓條件編譯結果與快照同生命週期。 */
     @SuppressWarnings({"unused", "FieldCanBeLocal"})
     private final List<ConditionMatcher.RuleConditions> pinnedConditions;
     private final Map<Key, List<HttpRule>> candidates = new ConcurrentHashMap<>();

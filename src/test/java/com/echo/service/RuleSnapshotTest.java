@@ -220,7 +220,7 @@ class RuleSnapshotTest {
 
     @Test
     void conditionRegistryReleasesConditionsWhenSnapshotIsGone() throws Exception {
-        ConditionMatcher matcher = new ConditionMatcher(2 * 1024 * 1024, ConditionMatcher.EngineMode.COMPILED);
+        ConditionMatcher matcher = new ConditionMatcher(2 * 1024 * 1024);
         WeakReference<ConditionMatcher.RuleConditions> released = pinAndDrop(matcher);
 
         for (int i = 0; i < 20 && released.get() != null; i++) {
@@ -233,7 +233,7 @@ class RuleSnapshotTest {
 
     @Test
     void conditionRegistryKeepsConditionsWhileSnapshotIsAlive() throws Exception {
-        ConditionMatcher matcher = new ConditionMatcher(2 * 1024 * 1024, ConditionMatcher.EngineMode.COMPILED);
+        ConditionMatcher matcher = new ConditionMatcher(2 * 1024 * 1024);
         HttpRule rule = http(null, "GET", "/a", 0, 0);
         rule.setBodyCondition("user.type=vip");
         HttpRuleSnapshot snapshot = new HttpRuleSnapshot(List.of(rule), HttpRuleService.HTTP_RULE_ORDER, matcher);

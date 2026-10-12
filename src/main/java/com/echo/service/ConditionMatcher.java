@@ -16,11 +16,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.jayway.jsonpath.Configuration;
-import com.jayway.jsonpath.JsonPath;
-import com.jayway.jsonpath.PathNotFoundException;
-import com.jayway.jsonpath.spi.json.JacksonJsonNodeJsonProvider;
-import com.jayway.jsonpath.spi.mapper.JacksonMappingProvider;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -28,7 +23,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.w3c.dom.Document;
-import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
@@ -37,10 +31,6 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamReader;
-import javax.xml.xpath.XPath;
-import javax.xml.xpath.XPathConstants;
-import javax.xml.xpath.XPathExpression;
-import javax.xml.xpath.XPathFactory;
 import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.io.StringReader;
@@ -54,8 +44,8 @@ import java.util.Optional;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.StringJoiner;
 import java.util.concurrent.TimeUnit;
-import java.util.function.BooleanSupplier;
 import java.util.regex.Pattern;
 
 /**
@@ -78,12 +68,15 @@ import java.util.regex.Pattern;
  *   <li>{@code ?param} - Query 參數</li>
  *   <li>{@code field.nested} - JSON 欄位路徑</li>
  * </ul>
+ *
+ * 條件一律由 {@code com.echo.core.match} 引擎評估：舊版字串條件經 {@link LegacyConditions} 轉成相容節點，
+ * 結構化條件（{@code matchSpec}）直接編譯。這個類別負責請求層的工作：body 預先解析、JMS 串流 XML 預先計算、
+ * 條件編譯結果的共用，以及把引擎的說明轉成匹配鏈格式。
  */
 @Service
 @Slf4j
 public class ConditionMatcher {
 
-    private static final int MAX_XML_SIZE = 10 * 1024 * 1024; // 10MB
     private static final int MAX_JSON_SIZE = 10 * 1024 * 1024; // 10MB
     private static final int MAX_REGEX_INPUT_LENGTH = 10000;
     private static final int MAX_REGEX_PATTERN_LENGTH = 200;
@@ -94,8 +87,6 @@ public class ConditionMatcher {
     /** 單一欄位值長度上限，超過則跳過比對（防止 base64 等大值拖慢匹配） */
     private final int maxFieldValueLength;
 
-    /** 條件比對引擎；見 {@link EngineMode}。 */
-    private final EngineMode engineMode;
     private final MatcherCompiler compiler;
     /**
      * 條件字串 → {@link RuleConditions}，以弱參照保存：規則快照（{@code HttpRuleSnapshot}／{@code JmsQueueSnapshot}）
@@ -111,68 +102,18 @@ public class ConditionMatcher {
         this(DEFAULT_MAX_FIELD_VALUE_LENGTH);
     }
 
-    /** 供測試及非 Spring 環境使用；引擎模式取自系統屬性 {@code echo.engine.matcher}，預設 legacy。 */
-    public ConditionMatcher(int maxFieldValueLength) {
-        this(maxFieldValueLength, EngineMode.fromSystemProperty());
-    }
-
     @Autowired
-    public ConditionMatcher(
-            @Value("${echo.matcher.max-field-value-length:2097152}") int maxFieldValueLength,
-            @Value("${echo.engine.matcher:legacy}") String engineMode) {
-        this(maxFieldValueLength, EngineMode.parse(engineMode));
-    }
-
-    public ConditionMatcher(int maxFieldValueLength, EngineMode engineMode) {
+    public ConditionMatcher(@Value("${echo.matcher.max-field-value-length:2097152}") int maxFieldValueLength) {
         this.maxFieldValueLength = maxFieldValueLength;
-        this.engineMode = engineMode;
         this.compiler = new MatcherCompiler(MatcherRegistry.defaults(),
                 MatcherLimits.DEFAULT.withMaxFieldValueLength(maxFieldValueLength));
-        if (engineMode == EngineMode.COMPILED) {
-            log.info("Condition matcher engine: compiled (com.echo.core.match)");
-        }
-    }
-
-    public EngineMode getEngineMode() {
-        return engineMode;
-    }
-
-    /**
-     * 條件比對引擎。
-     * <ul>
-     *   <li>{@code legacy}：原本的實作（預設）</li>
-     *   <li>{@code compiled}：{@code com.echo.core.match} 新引擎；條件在第一次使用時編譯並快取，
-     *       語意與 legacy 相同（由差異測試保證），出問題時改回 legacy 重啟即可</li>
-     * </ul>
-     */
-    public enum EngineMode {
-        LEGACY, COMPILED;
-
-        static final String PROPERTY = "echo.engine.matcher";
-
-        public static EngineMode parse(String value) {
-            if (value == null || value.isBlank()) {
-                return LEGACY;
-            }
-            for (EngineMode mode : values()) {
-                if (mode.name().equalsIgnoreCase(value.trim())) {
-                    return mode;
-                }
-            }
-            throw new IllegalArgumentException(
-                    PROPERTY + " must be 'legacy' or 'compiled' but was '" + value + "'");
-        }
-
-        static EngineMode fromSystemProperty() {
-            return parse(System.getProperty(PROPERTY));
-        }
     }
 
     private record ConditionKey(String matchSpec, String body, String query, String header) {
     }
 
     /**
-     * 一組規則條件（結構化條件，或舊版三個欄位）。第一次比對時才編譯，之後重用；legacy 模式的舊版條件不編譯。
+     * 一組規則條件（結構化條件，或舊版三個欄位）。第一次比對時才編譯，之後重用。
      * 呼叫端（規則快照）持有此物件，就能讓編譯結果在快照的生命週期內保留。
      */
     public static final class RuleConditions {
@@ -239,22 +180,8 @@ public class ConditionMatcher {
     }
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final Configuration jsonPathConfiguration = Configuration.builder()
-            .jsonProvider(new JacksonJsonNodeJsonProvider(objectMapper))
-            .mappingProvider(new JacksonMappingProvider(objectMapper))
-            .build();
     private final Cache<String, Pattern> patternCache = Caffeine.newBuilder()
             .maximumSize(500)
-            .expireAfterAccess(1, TimeUnit.HOURS)
-            .build();
-
-    private final Cache<String, JsonPath> jsonPathCache = Caffeine.newBuilder()
-            .maximumSize(1000)
-            .expireAfterAccess(1, TimeUnit.HOURS)
-            .build();
-
-    private final Cache<String, XPathExpression> xpathExprCache = Caffeine.newBuilder()
-            .maximumSize(1000)
             .expireAfterAccess(1, TimeUnit.HOURS)
             .build();
 
@@ -273,10 +200,6 @@ public class ConditionMatcher {
         }
     });
 
-    private static final ThreadLocal<XPath> XPATH = ThreadLocal.withInitial(() ->
-        XPathFactory.newInstance().newXPath()
-    );
-
     private static final ThreadLocal<XMLInputFactory> XML_INPUT_FACTORY = ThreadLocal.withInitial(() -> {
         XMLInputFactory factory = XMLInputFactory.newFactory();
         factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
@@ -288,45 +211,8 @@ public class ConditionMatcher {
     @PreDestroy
     public void cleanup() {
         DOC_BUILDER.remove();
-        XPATH.remove();
         XML_INPUT_FACTORY.remove();
         patternCache.invalidateAll();
-        jsonPathCache.invalidateAll();
-        xpathExprCache.invalidateAll();
-    }
-
-    private NodeList evaluateXPath(String xpathExpr, Document doc) throws javax.xml.xpath.XPathExpressionException {
-        XPathExpression compiled = xpathExprCache.getIfPresent(xpathExpr);
-        if (compiled == null) {
-            XPath xPath = XPATH.get();
-            xPath.reset();
-            compiled = xPath.compile(xpathExpr);
-            xpathExprCache.put(xpathExpr, compiled);
-        }
-        return (NodeList) compiled.evaluate(doc, XPathConstants.NODESET);
-    }
-
-    private static String extractSimpleElementName(String field) {
-        String name = field.startsWith("//") ? field.substring(2) : field;
-        if (name.isEmpty() || name.contains("/") || name.contains("@") ||
-            name.contains("[") || name.contains("(") || name.contains(":")) {
-            return null;
-        }
-        return name;
-    }
-
-    private NodeList findXmlNodes(String field, Document doc) throws javax.xml.xpath.XPathExpressionException {
-        String simpleName = extractSimpleElementName(field);
-        if (simpleName != null) {
-            NodeList nodes = doc.getElementsByTagName(simpleName);
-            if (nodes.getLength() > 0) {
-                return nodes;
-            }
-        }
-        String xpath = field.startsWith("/")
-                ? convertToNamespaceAgnosticXPath(field)
-                : "//*[local-name()='" + field + "']";
-        return evaluateXPath(xpath, doc);
     }
 
     // ==================== Prepared Body ====================
@@ -343,9 +229,7 @@ public class ConditionMatcher {
         private final JsonNode jsonNode;
         private final BodyType type;
         private final Map<String, Boolean> matchOutcomes = new HashMap<>();
-        private final Map<String, JsonPathResult> jsonPathResults = new HashMap<>();
-        private final Map<String, String> xmlActualValues = new HashMap<>();
-        /** 新引擎（compiled 模式）專用的狀態，見 {@link #evalContext(String, Map)}。 */
+        /** 比對引擎的評估狀態，見 {@link #evalContext(String, Map)}。 */
         private EvalContext compiledContext;
         private String contextQueryString;
         private Map<String, String> contextHeaders;
@@ -354,22 +238,10 @@ public class ConditionMatcher {
         enum BodyType { XML, JSON, PLAIN, EMPTY, TOO_LARGE }
 
         private PreparedBody(String raw, Document xmlDoc, JsonNode jsonNode, BodyType type) {
-            this(raw, xmlDoc, jsonNode, type, null, null);
-        }
-
-        private PreparedBody(String raw, Document xmlDoc, JsonNode jsonNode, BodyType type,
-                             Map<String, Boolean> outcomes,
-                             Map<String, String> actualValues) {
             this.raw = raw;
             this.xmlDoc = xmlDoc;
             this.jsonNode = jsonNode;
             this.type = type;
-            if (outcomes != null) {
-                this.matchOutcomes.putAll(outcomes);
-            }
-            if (actualValues != null) {
-                this.xmlActualValues.putAll(actualValues);
-            }
         }
 
         public static PreparedBody empty() {
@@ -391,11 +263,10 @@ public class ConditionMatcher {
             return new PreparedBody(raw, null, null, BodyType.PLAIN);
         }
 
-        private static PreparedBody streamingXml(
-                String raw, Map<String, Boolean> outcomes,
-                Map<String, String> actualValues) {
-            return new PreparedBody(raw, null, null, BodyType.XML,
-                    outcomes, actualValues);
+        private static PreparedBody streamingXml(String raw, Map<String, Boolean> outcomes) {
+            PreparedBody prepared = new PreparedBody(raw, null, null, BodyType.XML);
+            prepared.matchOutcomes.putAll(outcomes);
+            return prepared;
         }
 
         /** 取得已解析的 XML Document，若非 XML 則為 null */
@@ -418,43 +289,20 @@ public class ConditionMatcher {
             return Map.copyOf(matchOutcomes);
         }
 
-        private boolean cachedMatch(String key, BooleanSupplier matcher) {
-            Boolean cached = matchOutcomes.get(key);
-            if (cached != null) {
-                return cached;
-            }
-            boolean result = matcher.getAsBoolean();
-            matchOutcomes.put(key, result);
-            return result;
-        }
-
         private void restoreMatchOutcomes(Map<String, Boolean> outcomes) {
             if (outcomes != null && !outcomes.isEmpty()) {
                 matchOutcomes.putAll(outcomes);
             }
         }
 
-        private String xmlActualValue(String field) {
-            return xmlActualValues.get(field);
-        }
-
-        private boolean hasXmlActualValue(String field) {
-            return xmlActualValues.containsKey(field);
-        }
-
-        private JsonPathResult cachedJsonPath(
-                String path, java.util.function.Supplier<JsonPathResult> reader) {
-            return jsonPathResults.computeIfAbsent(path, ignored -> reader.get());
-        }
-
-        /** 本請求已評估的 JSONPath 數量；compiled 模式的結果保存在新引擎的評估狀態中。 */
+        /** 本請求已評估的 JSONPath 數量（保存在比對引擎的評估狀態中）。 */
         int cachedJsonPathCount() {
-            return jsonPathResults.size() + (compiledContext == null ? 0 : compiledContext.cachedValueCount());
+            return compiledContext == null ? 0 : compiledContext.cachedValueCount();
         }
 
         /**
-         * 新引擎的評估狀態。同一請求內 query／header 不變，因此重用同一個 context；
-         * 結果暫存直接共用 {@link #matchOutcomes}，與舊版及串流 XML 預先算好的結果互通。
+         * 比對引擎的評估狀態。同一請求內 query／header 不變，因此重用同一個 context；
+         * 結果暫存直接共用 {@link #matchOutcomes}，JMS 串流 XML 預先算好的結果與背景分析還原的結果都直接重用。
          */
         @SuppressWarnings("ReferenceEquality") // 同一請求傳入的是同一個 headers 物件，比對身分即可
         private EvalContext evalContext(String queryString, Map<String, String> headers) {
@@ -468,7 +316,7 @@ public class ConditionMatcher {
             return compiledContext;
         }
 
-        /** 把已解析的內容提供給新引擎，不重新解析。 */
+        /** 把已解析的內容提供給比對引擎，不重新解析。 */
         private final class PreparedBodyView implements BodyView {
 
             @Override
@@ -486,7 +334,7 @@ public class ConditionMatcher {
                 return jsonNode;
             }
 
-            /** JMS 串流 XML 沒有 DOM；與舊版 matchXPath 相同，真的需要時才解析。 */
+            /** JMS 串流 XML 沒有 DOM；真的需要（例如串流無法處理的條件或匹配鏈說明）時才解析。 */
             @Override
             public Document xml() {
                 if (xmlDoc != null) {
@@ -522,16 +370,6 @@ public class ConditionMatcher {
             return builder.parse(new InputSource(new StringReader(xml)));
         } catch (SAXException | IOException e) {
             return null;
-        }
-    }
-
-    private record JsonPathResult(boolean found, String value) {
-        private static JsonPathResult missing() {
-            return new JsonPathResult(false, null);
-        }
-
-        private static JsonPathResult found(String value) {
-            return new JsonPathResult(true, value);
         }
     }
 
@@ -594,17 +432,13 @@ public class ConditionMatcher {
         }
         try {
             Map<String, Boolean> outcomes = new HashMap<>();
-            Map<String, String> actualValues = new HashMap<>();
             if (!streamStates.isEmpty()) {
                 evaluateStreamingXml(trimmed, streamStates);
                 for (StreamConditionState state : streamStates) {
                     outcomes.put("body:" + state.condition, state.matched);
-                    if (state.firstActual != null) {
-                        actualValues.putIfAbsent(state.parsed.field(), state.firstActual);
-                    }
                 }
             }
-            return PreparedBody.streamingXml(trimmed, outcomes, actualValues);
+            return PreparedBody.streamingXml(trimmed, outcomes);
         } catch (Exception e) {
             log.warn("Failed to prepare body: {}", e.getMessage());
             return new PreparedBody(trimmed, null, null, PreparedBody.BodyType.PLAIN);
@@ -718,9 +552,6 @@ public class ConditionMatcher {
         if (actual.length() > maxFieldValueLength) {
             return false;
         }
-        if (state.firstActual == null) {
-            state.firstActual = actual;
-        }
         if (!state.matched && matchValue(state.parsed, actual)) {
             state.matched = true;
             return true;
@@ -742,7 +573,6 @@ public class ConditionMatcher {
         private final ParsedCondition parsed;
         private final StreamXmlSelector selector;
         private boolean matched;
-        private String firstActual;
 
         private StreamConditionState(
                 String condition, ParsedCondition parsed, StreamXmlSelector selector) {
@@ -871,44 +701,14 @@ public class ConditionMatcher {
     }
 
     /**
-     * 同 {@link #matchesPrepared(String, String, String, PreparedBody, String, Map)}，另外支援結構化條件。
-     * 有 {@code matchSpec} 時以它為準，並且一律使用新引擎（舊引擎無法評估 any／not 與新運算子）。
+     * 同 {@link #matchesPrepared(String, String, String, PreparedBody, String, Map)}，另外支援結構化條件；
+     * 有 {@code matchSpec} 時以它為準，忽略舊版三個欄位。
      */
     public boolean matchesPrepared(String matchSpec, String bodyCondition, String queryCondition,
                                    String headerCondition, PreparedBody prepared, String queryString,
                                    Map<String, String> headers) {
-        if (engineMode == EngineMode.COMPILED || hasMatchSpec(matchSpec)) {
-            return compiled(matchSpec, bodyCondition, queryCondition, headerCondition)
-                    .matches(evalContext(prepared, queryString, headers));
-        }
-        if (bodyCondition != null && !bodyCondition.isBlank()) {
-            for (String c : bodyCondition.split(";")) {
-                String trimmed = c.trim();
-                if (!trimmed.isEmpty() && !cachedMatch(prepared, "body:" + trimmed,
-                        () -> matchBodyPrepared(trimmed, prepared))) {
-                    return false;
-                }
-            }
-        }
-        if (queryCondition != null && !queryCondition.isBlank()) {
-            for (String c : queryCondition.split(";")) {
-                String trimmed = c.trim();
-                if (!trimmed.isEmpty() && !cachedMatch(prepared, "query:" + trimmed,
-                        () -> matchQueryParam(trimmed, queryString))) {
-                    return false;
-                }
-            }
-        }
-        if (headerCondition != null && !headerCondition.isBlank()) {
-            for (String c : headerCondition.split(";")) {
-                String trimmed = c.trim();
-                if (!trimmed.isEmpty() && !cachedMatch(prepared, "header:" + trimmed,
-                        () -> matchHeader(trimmed, headers))) {
-                    return false;
-                }
-            }
-        }
-        return true;
+        return compiled(matchSpec, bodyCondition, queryCondition, headerCondition)
+                .matches(evalContext(prepared, queryString, headers));
     }
 
     /**
@@ -922,36 +722,12 @@ public class ConditionMatcher {
                 prepared, queryString, headers);
     }
 
-    /** 同上，另外支援結構化條件；有 {@code matchSpec} 時以它為準並使用新引擎。 */
+    /** 同上，另外支援結構化條件；有 {@code matchSpec} 時以它為準。 */
     public ConditionDetail matchesPreparedWithDetail(String matchSpec, String bodyCondition, String queryCondition,
                                                      String headerCondition, PreparedBody prepared,
                                                      String queryString, Map<String, String> headers) {
-        if (engineMode == EngineMode.COMPILED || hasMatchSpec(matchSpec)) {
-            return toConditionDetail(compiled(matchSpec, bodyCondition, queryCondition, headerCondition)
-                    .explain(evalContext(prepared, queryString, headers)));
-        }
-        List<ConditionResult> results = new ArrayList<>();
-
-        evaluateConditions(bodyCondition, "bodyCondition", results,
-                c -> cachedMatch(prepared, "body:" + c, () -> matchBodyPrepared(c, prepared)),
-                c -> buildBodyDetail(c, prepared),
-                c -> "bodyCondition PASS (" + c + ")");
-
-        evaluateConditions(queryCondition, "queryCondition", results,
-                c -> cachedMatch(prepared, "query:" + c, () -> matchQueryParam(c, queryString)),
-                c -> buildQueryDetail(c, queryString),
-                c -> "queryCondition PASS (" + c + ")");
-
-        evaluateConditions(headerCondition, "headerCondition", results,
-                c -> cachedMatch(prepared, "header:" + c, () -> matchHeader(c, headers)),
-                c -> buildHeaderDetail(c, headers),
-                c -> "headerCondition PASS (" + c + ")");
-
-        boolean overallMatch = results.stream().allMatch(ConditionResult::isPassed);
-        return ConditionDetail.builder()
-                .overallMatch(overallMatch)
-                .results(results)
-                .build();
+        return toConditionDetail(compiled(matchSpec, bodyCondition, queryCondition, headerCondition)
+                .explain(evalContext(prepared, queryString, headers)));
     }
 
     private static EvalContext evalContext(PreparedBody prepared, String queryString, Map<String, String> headers) {
@@ -959,7 +735,8 @@ public class ConditionMatcher {
     }
 
     /**
-     * 舊版條件的說明與舊版完全相同；結構化條件則把每個條件（葉節點）攤平成一筆，type 為 {@code matchSpec}，
+     * 舊版條件的說明文字與原本的實作完全相同（見測試的 LegacyConditionOracle）；
+     * 結構化條件則把每個條件（葉節點）攤平成一筆，type 為 {@code matchSpec}，
      * 整體是否符合仍以整棵樹（含 any／not）的結果為準。
      */
     private static ConditionDetail toConditionDetail(MatchExplanation explanation) {
@@ -1012,159 +789,6 @@ public class ConditionMatcher {
     /** 結構化條件在匹配鏈中的類型名稱。 */
     public static final String MATCH_SPEC_TYPE = "matchSpec";
 
-    private boolean cachedMatch(PreparedBody prepared, String key, BooleanSupplier matcher) {
-        return prepared == null ? matcher.getAsBoolean() : prepared.cachedMatch(key, matcher);
-    }
-
-    /**
-     * 拆分條件字串並逐一評估，將結果加入 results 列表。
-     */
-    private void evaluateConditions(String conditionStr, String type, List<ConditionResult> results,
-                                    java.util.function.Predicate<String> matcher,
-                                    java.util.function.Function<String, String> failDetailBuilder,
-                                    java.util.function.Function<String, String> passDetailBuilder) {
-        if (conditionStr == null || conditionStr.isBlank()) {
-            return;
-        }
-        for (String c : conditionStr.split(";")) {
-            String trimmed = c.trim();
-            if (!trimmed.isEmpty()) {
-                boolean passed = matcher.test(trimmed);
-                String detail = passed ? passDetailBuilder.apply(trimmed) : failDetailBuilder.apply(trimmed);
-                results.add(ConditionResult.builder()
-                        .type(type)
-                        .condition(trimmed)
-                        .passed(passed)
-                        .detail(detail)
-                        .build());
-            }
-        }
-    }
-
-    // ==================== Detail Building Helpers ====================
-
-    private String buildBodyDetail(String condition, PreparedBody prepared) {
-        var parsed = parseCondition(condition.replace("==", "="));
-        String actual = extractBodyActualValue(condition, parsed, prepared);
-        return "bodyCondition FAIL (expected " + condition + ", actual " + parsed.field() + "=" + actual + ")";
-    }
-
-    private String extractBodyActualValue(String condition, ParsedCondition parsed, PreparedBody prepared) {
-        if (prepared.type == PreparedBody.BodyType.EMPTY || prepared.type == PreparedBody.BodyType.TOO_LARGE) {
-            return "null";
-        }
-        try {
-            if (condition.startsWith("$.")) {
-                return extractJsonPathActual(parsed.field(), prepared);
-            }
-            if (condition.startsWith("//")) {
-                if (prepared.xmlDoc != null) {
-                    return extractXmlActual(parsed.field(), prepared.xmlDoc);
-                }
-                if (prepared.hasXmlActualValue(parsed.field())) {
-                    return prepared.xmlActualValue(parsed.field());
-                }
-                return "not found";
-            }
-            if (prepared.jsonNode != null) {
-                return extractJsonActual(parsed.field(), prepared.jsonNode);
-            }
-            if (prepared.xmlDoc != null) {
-                return extractXmlActual(parsed.field(), prepared.xmlDoc);
-            }
-            if (prepared.type == PreparedBody.BodyType.XML
-                    && prepared.hasXmlActualValue(parsed.field())) {
-                return prepared.xmlActualValue(parsed.field());
-            }
-        } catch (Exception e) {
-            // fall through
-        }
-        return "not found";
-    }
-
-    private String extractJsonActual(String fieldPath, JsonNode root) {
-        String path = fieldPath.startsWith("body.") ? fieldPath.substring(5) : fieldPath;
-        JsonNode node = root;
-        for (String field : path.split("\\.")) {
-            if (node == null) {
-                return "not found";
-            }
-            if (field.contains("[")) {
-                int bs = field.indexOf('[');
-                int be = field.indexOf(']');
-                node = node.get(field.substring(0, bs));
-                if (node == null || !node.isArray()) {
-                    return "not found";
-                }
-                node = node.get(Integer.parseInt(field.substring(bs + 1, be)));
-            } else {
-                node = node.get(field);
-            }
-        }
-        if (node == null) {
-            return "null";
-        }
-        return node.isTextual() ? node.asText() : node.toString();
-    }
-
-    private String extractJsonPathActual(String jsonPath, PreparedBody prepared) {
-        JsonPathResult result = readJsonPath(prepared, jsonPath);
-        if (!result.found()) {
-            return "not found";
-        }
-        return result.value() != null ? result.value() : "null";
-    }
-
-    private String extractXmlActual(String field, Document doc) {
-        try {
-            NodeList nodes = findXmlNodes(field, doc);
-            if (nodes.getLength() > 0) {
-                return nodes.item(0).getTextContent().trim();
-            }
-        } catch (Exception e) {
-            // fall through
-        }
-        return "not found";
-    }
-
-    private String buildQueryDetail(String condition, String queryString) {
-        var parsed = parseCondition(condition);
-        String actual = extractQueryActual(parsed.field(), queryString);
-        return "queryCondition FAIL (expected " + condition + ", actual " + parsed.field() + "=" + actual + ")";
-    }
-
-    private String extractQueryActual(String field, String queryString) {
-        if (queryString == null || queryString.isBlank()) {
-            return "null";
-        }
-        String[] params = queryString.split("&");
-        for (String param : params) {
-            int idx = param.indexOf('=');
-            if (idx > 0 && field.equals(param.substring(0, idx))) {
-                return param.substring(idx + 1);
-            }
-        }
-        return "not found";
-    }
-
-    private String buildHeaderDetail(String condition, Map<String, String> headers) {
-        var parsed = parseCondition(condition);
-        String actual = extractHeaderActual(parsed.field(), headers);
-        return "headerCondition FAIL (expected " + condition + ", actual " + parsed.field() + "=" + actual + ")";
-    }
-
-    private String extractHeaderActual(String field, Map<String, String> headers) {
-        if (headers == null || headers.isEmpty()) {
-            return "null";
-        }
-        for (Map.Entry<String, String> e : headers.entrySet()) {
-            if (e.getKey().equalsIgnoreCase(field)) {
-                return e.getValue();
-            }
-        }
-        return "not found";
-    }
-
     /**
      * 簡易匹配（自動解析 body）
      */
@@ -1178,215 +802,26 @@ public class ConditionMatcher {
         return matches(bodyCondition, queryCondition, null, body, queryString, null);
     }
 
+    /** 單一條件字串：{@code ?} 開頭的是 query 條件，其餘是 body 條件。 */
     public boolean matches(String condition, String body, String queryString) {
         if (condition == null || condition.isBlank()) {
             return true;
         }
-        String[] conditions = condition.split(";");
-        for (String cond : conditions) {
+        StringJoiner bodyConditions = new StringJoiner(";");
+        StringJoiner queryConditions = new StringJoiner(";");
+        for (String cond : condition.split(";")) {
             String c = cond.trim();
-            if (c.isEmpty()) {
-                continue;
-            }
             if (c.startsWith("?")) {
-                if (!matchQueryParam(c.substring(1), queryString)) {
-                    return false;
-                }
-            } else {
-                PreparedBody prepared = prepareBody(body);
-                if (!matchBodyPrepared(c, prepared)) {
-                    return false;
-                }
+                queryConditions.add(c.substring(1));
+            } else if (!c.isEmpty()) {
+                bodyConditions.add(c);
             }
         }
-        return true;
+        return matches(bodyConditions.toString(), queryConditions.toString(), body, queryString);
     }
 
     public boolean matches(String condition, String body) {
         return matches(condition, body, null);
-    }
-
-    // ==================== Private Matching Methods ====================
-
-    private boolean matchHeader(String condition, Map<String, String> headers) {
-        if (headers == null || headers.isEmpty()) {
-            return false;
-        }
-        var parsed = parseCondition(condition);
-        String actualValue = headers.entrySet().stream()
-            .filter(e -> e.getKey().equalsIgnoreCase(parsed.field))
-            .map(Map.Entry::getValue)
-            .findFirst()
-            .orElse(null);
-        return matchValue(parsed, actualValue);
-    }
-
-    private boolean matchQueryParam(String condition, String queryString) {
-        var parsed = parseCondition(condition);
-        if (queryString == null || queryString.isBlank()) {
-            return matchValue(parsed, null);
-        }
-        String[] params = queryString.split("&");
-        for (String param : params) {
-            int idx = param.indexOf('=');
-            if (idx > 0 && parsed.field.equals(param.substring(0, idx))) {
-                return matchValue(parsed, param.substring(idx + 1));
-            }
-        }
-        return matchValue(parsed, null);
-    }
-
-    private boolean matchBodyPrepared(String condition, PreparedBody prepared) {
-        if (prepared.type == PreparedBody.BodyType.EMPTY || prepared.type == PreparedBody.BodyType.TOO_LARGE) {
-            return false;
-        }
-        if (condition.startsWith("$.")) {
-            return matchJsonPath(condition, prepared);
-        }
-        if (condition.startsWith("//")) {
-            if (prepared.xmlDoc != null) {
-                return matchXmlNodesPrepared(condition, prepared.xmlDoc);
-            }
-            return matchXPath(condition, prepared);
-        }
-        if (prepared.jsonNode != null) {
-            return matchJsonPrepared(condition, prepared.jsonNode);
-        }
-        if (prepared.xmlDoc != null) {
-            return matchXmlNodesPrepared(condition, prepared.xmlDoc);
-        }
-        if (prepared.type == PreparedBody.BodyType.XML) {
-            return matchXPath(condition, prepared);
-        }
-        return prepared.raw != null && prepared.raw.contains(condition);
-    }
-
-    private boolean matchXmlNodesPrepared(String condition, Document doc) {
-        var parsed = parseCondition(condition);
-        try {
-            NodeList nodes = findXmlNodes(parsed.field(), doc);
-            for (int i = 0; i < nodes.getLength(); i++) {
-                String text = nodes.item(i).getTextContent().trim();
-                if (text.length() > maxFieldValueLength) {
-                    log.debug("Skipping XML/XPath match: node value too large ({} chars), condition: {}", text.length(), condition);
-                    continue;
-                }
-                if (matchValue(parsed, text)) {
-                    return true;
-                }
-            }
-            return false;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private boolean matchJsonPrepared(String condition, JsonNode root) {
-        var parsed = parseCondition(condition.replace("==", "="));
-        try {
-            String path = parsed.field().startsWith("body.") ? parsed.field().substring(5) : parsed.field();
-            JsonNode node = root;
-            for (String field : path.split("\\.")) {
-                if (node == null) {
-                    return parsed.op() == Op.NOT_EQUAL;
-                }
-                if (field.contains("[")) {
-                    int bs = field.indexOf('['), be = field.indexOf(']');
-                    node = node.get(field.substring(0, bs));
-                    if (node == null || !node.isArray()) {
-                        return parsed.op() == Op.NOT_EQUAL;
-                    }
-                    node = node.get(Integer.parseInt(field.substring(bs + 1, be)));
-                } else {
-                    node = node.get(field);
-                }
-            }
-            if (node == null) {
-                return parsed.op() == Op.NOT_EQUAL;
-            }
-            String actual = node.isTextual() ? node.asText() : node.toString();
-            if (actual.length() > maxFieldValueLength) {
-                log.debug("Skipping match: field value too large ({} chars), condition: {}", actual.length(), condition);
-                return false;
-            }
-            return matchValue(parsed, actual);
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private boolean matchJsonPath(String condition, PreparedBody prepared) {
-        try {
-            var parsed = parseCondition(condition);
-            JsonPathResult result = readJsonPath(prepared, parsed.field);
-            if (!result.found()) {
-                return false;
-            }
-            String actual = result.value();
-            if (actual != null && actual.length() > maxFieldValueLength) {
-                log.debug("Skipping JsonPath match: value too large ({} chars), condition: {}", actual.length(), condition);
-                return false;
-            }
-            return matchValue(parsed, actual);
-        } catch (PathNotFoundException e) {
-            return false;
-        } catch (Exception e) {
-            log.warn("JsonPath match failed: {}", e.getMessage());
-            return false;
-        }
-    }
-
-    private JsonPathResult readJsonPath(PreparedBody prepared, String path) {
-        if (prepared == null || prepared.jsonNode == null) {
-            return JsonPathResult.missing();
-        }
-        return prepared.cachedJsonPath(path, () -> evaluateJsonPath(prepared.jsonNode, path));
-    }
-
-    private JsonPathResult evaluateJsonPath(JsonNode jsonNode, String path) {
-        try {
-            JsonPath compiled = jsonPathCache.get(path, JsonPath::compile);
-            Object value = compiled.read(jsonNode, jsonPathConfiguration);
-            if (value instanceof JsonNode node) {
-                if (node.isNull()) {
-                    return JsonPathResult.found(null);
-                }
-                return JsonPathResult.found(node.isTextual() ? node.asText() : node.toString());
-            }
-            return JsonPathResult.found(value != null ? value.toString() : null);
-        } catch (PathNotFoundException e) {
-            return JsonPathResult.missing();
-        } catch (Exception e) {
-            log.warn("JsonPath evaluation failed: {}", e.getMessage());
-            return JsonPathResult.missing();
-        }
-    }
-
-    private boolean matchXPath(String condition, PreparedBody prepared) {
-        String body = prepared.raw;
-        if (body == null) {
-            return false;
-        }
-        if (body.length() > MAX_XML_SIZE) {
-            log.warn("XML too large for processing: {} bytes", body.length());
-            return false;
-        }
-        try {
-            var parsed = parseCondition(condition);
-            DocumentBuilder builder = DOC_BUILDER.get();
-            builder.reset();
-            Document doc = builder.parse(new InputSource(new StringReader(body)));
-            NodeList nodes = findXmlNodes(parsed.field, doc);
-            for (int i = 0; i < nodes.getLength(); i++) {
-                if (matchValue(parsed, nodes.item(i).getTextContent().trim())) {
-                    return true;
-                }
-            }
-            return false;
-        } catch (Exception e) {
-            log.warn("XPath match failed: {}", e.getMessage());
-            return false;
-        }
     }
 
     // ==================== Condition Parsing ====================
@@ -1465,51 +900,6 @@ public class ConditionMatcher {
     }
 
     // ==================== XPath Utilities ====================
-
-    private String convertToNamespaceAgnosticXPath(String xpath) {
-        if (xpath == null || xpath.trim().isEmpty()) {
-            return xpath;
-        }
-        if (xpath.contains("local-name()")) {
-            return xpath;
-        }
-        if (xpath.contains("@") || xpath.contains("(") || xpath.contains("[")) {
-            return xpath;
-        }
-        if (xpath.startsWith("//")) {
-            String path = xpath.substring(2);
-            String[] parts = path.split("/");
-            StringBuilder result = new StringBuilder("//*[local-name()='").append(escapeXmlAttribute(parts[0])).append("']");
-            for (int i = 1; i < parts.length; i++) {
-                if (!parts[i].isEmpty()) {
-                    result.append("/*[local-name()='").append(escapeXmlAttribute(parts[i])).append("']");
-                }
-            }
-            return result.toString();
-        }
-        if (xpath.startsWith("/")) {
-            String[] parts = xpath.substring(1).split("/");
-            StringBuilder result = new StringBuilder();
-            for (String part : parts) {
-                if (!part.isEmpty()) {
-                    result.append("/*[local-name()='").append(escapeXmlAttribute(part)).append("']");
-                }
-            }
-            return result.toString();
-        }
-        return xpath;
-    }
-
-    private String escapeXmlAttribute(String str) {
-        if (str == null) {
-            return null;
-        }
-        return str.replace("&", "&amp;")
-                  .replace("<", "&lt;")
-                  .replace(">", "&gt;")
-                  .replace("\"", "&quot;")
-                  .replace("'", "&apos;");
-    }
 
     private enum Op { EQUAL, NOT_EQUAL, CONTAINS, MATCHES }
     private record ParsedCondition(String field, String value, Op op) {}

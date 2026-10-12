@@ -406,13 +406,13 @@ v1 與 v2 透過同一個 `RuleDefinition` 雙向轉換；`/rules/schema` 提供
 |---|------|------|------|
 | 1 | ArchUnit 規則、`com.echo.core` 骨架、`MatchSpec` 模型、內建 op 與組合節點、單元測試 | 無 | 完成 |
 | 2 | `LegacyConditions` + `legacy` 節點 + 差異測試 | 無 | 完成 |
-| 3 | 以 `echo.engine.matcher=legacy\|compiled` 切換（預設 legacy），新引擎接入所有比對呼叫端；JMS 串流 XML 結果直接沿用 | 無（可切回） | 完成（預設仍為 legacy） |
+| 3 | 以 `echo.engine.matcher=legacy\|compiled` 切換（預設 legacy），新引擎接入所有比對呼叫端；JMS 串流 XML 結果直接沿用 | 無（可切回） | 完成（開關已於步驟 9 移除） |
 | 4 | `SelectionPolicy` 收斂 5 份選擇邏輯；`RuleIndex` 不可變快照 | 無 | 完成（見 7.2.2） |
 | 5 | `Responder`／`ResponsePlan`，SSE 播放移出控制器；`ServeEventListener` 與請求紀錄改用 `ServeEvent` | 無 | 完成（見 7.2.3） |
 | 6 | `ProtocolId`、`ProtocolAdapter`、`ProtocolRegistry`，移除核心以外的協定分支 | 無 | 部分完成（見 7.2.4） |
 | 7 | `match_spec` 欄位、v2 文件、新 op（exists／absent／數值／in／equalToJson）、`any`／`not` | **新功能** | 完成（見 7.2.5；UI 為步驟 8） |
 | 8 | UI 進階條件編輯器、`/match/parse` 端點、前端改用結構化條件 | **新功能** | 完成（見 7.2.6） |
-| 9 | 移除 `echo.engine.matcher=legacy` 開關與舊實作（至少間隔一個正式版本） | 無 | 未開始 |
+| 9 | 移除 `echo.engine.matcher=legacy` 開關與舊實作（至少間隔一個正式版本） | 無 | 完成（提前於同一 PR，見 7.2.7） |
 
 步驟 1～6 為純重構，屬於「先讓架構可擴充，再加功能」；步驟 7 起才是使用者看得到的變更。
 
@@ -536,7 +536,7 @@ ArchUnit 新增規則：`RuleQueryService` 與 `CacheInvalidationService` 不得
 因此請求中沒有 `matchSpec`、也沒有任何舊版條件時，保留既有規則的 `matchSpec`；要清除請送 `{"all": []}`。
 `matchSpec` 與舊版條件同時出現時拒絕（400），不猜使用者的意圖。
 
-**比對**：有 `matchSpec` 的規則一律用新引擎（不受 `echo.engine.matcher` 影響）；舊規則的呼叫路徑完全不變。
+**比對**：有 `matchSpec` 的規則一律用新引擎（不受 `echo.engine.matcher` 影響）；舊規則的呼叫路徑完全不變（開關後來於步驟 9 移除）。
 已儲存的條件若無法編譯（例如資料庫被直接修改），該規則視為永遠不符合並記錄警告，不讓每個請求都失敗。
 候選規則中有 `matchSpec` 時一律先解析 body；JMS 只在這種情況改用完整解析，其餘維持串流 XML。
 匹配鏈分析把結構化條件攤平成逐筆結果（type 為 `matchSpec`），`not` 底下的條件以「對整體的貢獻」呈現 PASS／FAIL。
@@ -599,11 +599,28 @@ schema 改讀 v2（v1 的超集合），`spec.match` 與舊版條件同時出現
 即時錯誤出現與消失、切回簡易的確認與取消、宣告式 v2 往返、儲存後後端內容（新條件存在、數字型別保留），
 瀏覽器主控台沒有錯誤。
 
+### 7.2.7 步驟 9 實作與驗證紀錄
+
+**為什麼提前**：原規劃在開關上線後至少間隔一個正式版本才移除。實際上開關只存在於這個尚未合併的分支，
+從未出現在任何正式版本，沒有部署依賴它；兩種模式在步驟 3 起每一步都以完整測試、端到端情境與壓測對照過。
+提前移除可以避免把「之後一定要刪」的雙引擎程式碼與 CI 工作帶進 main。
+
+**做了什麼**：
+
+- `ConditionMatcher` 只保留新引擎：刪除 `EngineMode`、舊版逐條比對與匹配鏈說明的實作（1,552 → 937 行）。
+  保留的是請求層的工作：body 預先解析、JMS 串流 XML 預先計算（結果寫入同一份暫存，引擎直接沿用）、條件編譯與共用。
+- 舊實作搬到測試程式 `LegacyConditionOracle`（逐行凍結，只去掉串流 XML 與新引擎相關部分），作為差異測試的標準答案；
+  `LegacyDifferentialTest`、`ConditionMatcherLegacyEquivalenceTest` 與它比對結果、說明文字、分數與暫存 key。
+- 移除 `echo.engine.matcher`／`ECHO_ENGINE_MATCHER` 設定、Gradle 的 `-PechoEngineMatcher` 與 CI 的 `test-compiled-matcher` 工作。
+
+**相容性**：資料庫與 API 不變；舊版字串條件由 `LegacyConditionMatcher` 以相同語意評估，已儲存的規則不需轉換。
+唯一刻意的差異沿用步驟 2：期望值只有一個 `"` 時，舊版丟出例外（HTTP 500），新引擎視為字面值比對。
+
 ### 7.3 風險
 
 | 風險 | 緩解 |
 |------|------|
-| 語意漂移（尤其是 §2.2 的執行期派送與缺漏欄位行為） | `legacy` 節點原樣搬移演算法，加上差異測試；功能開關可立即切回 |
+| 語意漂移（尤其是 §2.2 的執行期派送與缺漏欄位行為） | `legacy` 節點原樣搬移演算法，加上差異測試（舊實作保留為測試標準答案）；功能開關已於步驟 9 移除 |
 | 樹狀評估造成額外配置、降低吞吐量 | fast path 只回傳布林；葉節點與 predicate 預先編譯；效能關卡把關 |
 | JMS 串流 XML 的記憶體特性改變 | `XML_STREAM` 需求由 selector 宣告，維持「全部可串流才串流」的條件；`JmsMessageMemoryBudget` 不變 |
 | 多實例快取一致性 | 沿用 `CacheInvalidationService` 事件，只把「清除 Caffeine」換成「重建快照」 |
