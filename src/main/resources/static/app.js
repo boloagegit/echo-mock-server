@@ -676,6 +676,7 @@ _app.component('audit-page', AuditPage);
 _app.component('issues-page', IssuesPage);
 _app.component('match-explain-node', MatchExplainNode);
 _app.component('match-explain-tree', MatchExplainTree);
+_app.component('request-flow-view', RequestFlowView);
 _app.component('stats-page', StatsPage);
 _app.component('response-edit-modal', ResponseEditModal);
 _app.component('change-password-modal', ChangePasswordModal);

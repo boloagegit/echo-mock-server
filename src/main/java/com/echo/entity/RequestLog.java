@@ -116,6 +116,22 @@ public class RequestLog {
     @Column(length = 100)
     private String scenarioToState;
 
+    /** 參與比對的候選規則數（處理流程圖用）；舊紀錄為 null。 */
+    private Integer candidateCount;
+
+    /** 命中的是沒有條件的預設規則；沒有命中或舊紀錄為 null。 */
+    private Boolean matchedByFallback;
+
+    /** 規則設定的模擬延遲（毫秒），不含在 responseTimeMs 內；SSE 為第一個事件前的延遲。 */
+    private Integer delayMs;
+
+    /** SSE 串流的事件數；不是 SSE 時為 null。 */
+    private Integer sseEventCount;
+
+    /** 因情境狀態不符而略過的規則（匹配鏈格式的 JSON）。 */
+    @Column(length = Length.LONG32)
+    private String scenarioSkipped;
+
     @Column(nullable = false)
     private LocalDateTime requestTime;
 

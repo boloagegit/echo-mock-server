@@ -354,6 +354,11 @@ public class RequestLogService implements ServeEventListener {
                 .scenarioName(event.getScenarioName())
                 .scenarioFromState(event.getScenarioFromState())
                 .scenarioToState(event.getScenarioToState())
+                .candidateCount(event.getCandidateCount())
+                .matchedByFallback(event.getMatchedByFallback())
+                .delayMs(event.getDelayMs())
+                .sseEventCount(event.getSseEventCount())
+                .scenarioSkipped(event.getScenarioSkipped())
                 .candidates(candidateSnapshots)
                 // Never retain PreparedBody: XML PreparedBody owns a full DOM and caused
                 // queued log tasks to pin hundreds of MiB. Persist only source text and
@@ -616,6 +621,11 @@ public class RequestLogService implements ServeEventListener {
                 .scenarioName(log.getScenarioName())
                 .scenarioFromState(log.getScenarioFromState())
                 .scenarioToState(log.getScenarioToState())
+                .candidateCount(log.getCandidateCount())
+                .matchedByFallback(log.getMatchedByFallback())
+                .delayMs(log.getDelayMs())
+                .sseEventCount(log.getSseEventCount())
+                .scenarioSkipped(log.getScenarioSkipped())
                 .build();
     }
 
@@ -732,6 +742,11 @@ public class RequestLogService implements ServeEventListener {
         private String scenarioName;
         private String scenarioFromState;
         private String scenarioToState;
+        private Integer candidateCount;
+        private Boolean matchedByFallback;
+        private Integer delayMs;
+        private Integer sseEventCount;
+        private String scenarioSkipped;
         private String requestBody;
         private String responseBody;
     }

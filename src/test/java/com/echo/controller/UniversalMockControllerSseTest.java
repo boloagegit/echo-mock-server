@@ -115,6 +115,9 @@ class UniversalMockControllerSseTest {
         assertThat(served.getScenarioName()).isEqualTo("checkout");
         assertThat(served.getScenarioFromState()).isEqualTo("Started");
         assertThat(served.getScenarioToState()).isEqualTo("Paid");
+        assertThat(served.getCandidateCount()).isEqualTo(1);
+        assertThat(served.getSseEventCount()).isEqualTo(1);
+        assertThat(served.getDelayMs()).isZero();
         scenarioController.shutdown();
     }
 

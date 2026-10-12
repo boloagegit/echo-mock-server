@@ -744,6 +744,26 @@ near-miss 的逐條結果雖然有記錄（`detail`），但畫面讀的是不�
 `match-tree.test.cjs`（顯示用的拆解與 NOT 著色），以及實際啟動伺服器建立進階與舊格式規則、送出請求後以 Playwright
 檢查深色與淺色主題的畫面（無前端錯誤）。
 
+### 7.2.11 請求處理流程圖
+
+請求紀錄新增「處理流程」分頁（預設開啟），把一筆請求實際走過的路畫成步驟：收到請求 → 比對規則 → 模擬回應／SSE 串流／轉發
+（沒走的一邊淡化）或找不到規則 → 回給呼叫端，並以時間條拆成比對、產生回應或等待轉發對象、模擬延遲三段。
+
+- **路線**（依 `AbstractMockPipeline` 與 `SseMockHandler` 的實際順序）：條件命中、改用沒有條件的規則（JMS 先指定佇列再萬用）、
+  情境狀態不符而略過；命中後為模擬回應、SSE、故障注入（連線中斷／空回應）或規則設定的轉發；沒命中時依預設轉發設定、
+  `X-Original-Host` 轉發，或回 404（JMS 回錯誤訊息）。轉發再分為正常、對方回錯誤狀態、連不上或逾時。
+- **新增紀錄欄位**（皆可為空，舊紀錄顯示為未知）：`candidateCount`、`matchedByFallback`（`RuleSelector.Selection.conditionMatched`
+  的反面）、`delayMs`（規則的模擬延遲；HTTP 與 JMS 都在寫入紀錄之後才等待，因此不含在 `responseTimeMs` 內）、
+  `sseEventCount`、`scenarioSkipped`（匹配鏈格式，最多 20 筆）。經 `ServeEvent` → `LogTask` → spool → `RequestLog`／
+  `LogEntry`，只在詳細資料 API 回傳，列表查詢不變。spool 記錄改為不寫入空欄位。
+- **畫面**：`request-flow.js` 為純函式（Node 測試涵蓋 7 條路線與時間條），`RequestFlowView` 負責呈現；抽屜一般寬度時由上而下，
+  加寬到 820px 以上改為由左而右（container query）。「看匹配鏈」直接切到匹配鏈分頁。
+
+**驗證**：`AbstractMockPipelineTest`（候選數、延遲、備選、情境略過）、`UniversalMockControllerSseTest`（SSE 事件數）、
+`RequestLogSpoolTest`（新欄位經 spool 重啟後保留）、`RequestLogIntegrationTest`（詳細資料 API 回傳新欄位）、
+`request-flow.test.cjs`，以及實際啟動伺服器送出 7 種請求（含延遲與情境、情境略過、連線中斷、SSE、萬用規則、轉發失敗、
+規則轉發），以 Playwright 截圖檢查一般與加寬抽屜（無前端錯誤）。
+
 ### 7.3 風險
 
 | 風險 | 緩解 |

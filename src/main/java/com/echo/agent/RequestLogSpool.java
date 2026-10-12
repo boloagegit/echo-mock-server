@@ -2,6 +2,7 @@ package com.echo.agent;
 
 import com.echo.entity.Protocol;
 import com.echo.service.RequestLogUnavailableException;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -353,6 +354,7 @@ public class RequestLogSpool {
         characters = addStringLength(characters, task.getScenarioName());
         characters = addStringLength(characters, task.getScenarioFromState());
         characters = addStringLength(characters, task.getScenarioToState());
+        characters = addStringLength(characters, task.getScenarioSkipped());
         characters = addStringLength(characters, task.getAnalysisBody());
         characters = addStringLength(characters, task.getQueryString());
         for (CandidateSnapshot candidate : task.getCandidates()) {
@@ -1347,6 +1349,8 @@ public class RequestLogSpool {
         }
     }
 
+    /** 空欄位不寫入（讀回時為 null），每筆紀錄少佔約百位元組；舊格式的紀錄照常讀取。 */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     private record SpoolTask(
             String ruleId, Protocol protocol, String method, String endpoint, boolean matched,
             int responseTimeMs, Integer matchTimeMs, String clientIp, LocalDateTime requestTime,
@@ -1354,6 +1358,8 @@ public class RequestLogSpool {
             Integer proxyStatus, String proxyError,
             Integer responseStatus, String requestBody, String responseBody,
             String faultType, String scenarioName, String scenarioFromState, String scenarioToState,
+            Integer candidateCount, Boolean matchedByFallback, Integer delayMs, Integer sseEventCount,
+            String scenarioSkipped,
             List<CandidateRecord> candidates, String analysisBody, String queryString,
             Map<String, String> headers, Map<String, Boolean> matchOutcomes,
             boolean analysisUsesRequestBody, String diagnosticId) {
@@ -1367,6 +1373,7 @@ public class RequestLogSpool {
                     task.isForwarded(), task.getForwardTarget(), task.getProxyStatus(),
                     task.getProxyError(), task.getResponseStatus(), task.getRequestBody(), task.getResponseBody(),
                     task.getFaultType(), task.getScenarioName(), task.getScenarioFromState(), task.getScenarioToState(),
+                    task.getCandidateCount(), task.getMatchedByFallback(), task.getDelayMs(), task.getSseEventCount(), task.getScenarioSkipped(),
                     null, analysisUsesRequestBody ? null : task.getAnalysisBody(),
                     task.getQueryString(), task.getHeaders(), task.getMatchOutcomes(),
                     analysisUsesRequestBody, task.getDiagnosticId());
@@ -1385,6 +1392,8 @@ public class RequestLogSpool {
                     .requestBody(requestBody).responseBody(responseBody)
                     .faultType(faultType).scenarioName(scenarioName)
                     .scenarioFromState(scenarioFromState).scenarioToState(scenarioToState)
+                    .candidateCount(candidateCount).matchedByFallback(matchedByFallback).delayMs(delayMs).sseEventCount(sseEventCount)
+                    .scenarioSkipped(scenarioSkipped)
                     .candidates(restoredCandidates == null ? List.of() : restoredCandidates.stream()
                             .map(CandidateRecord::toCandidate).toList())
                     .analysisBody(analysisUsesRequestBody ? requestBody : analysisBody)

@@ -594,6 +594,11 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 .scenarioName(task.getScenarioName())
                 .scenarioFromState(task.getScenarioFromState())
                 .scenarioToState(task.getScenarioToState())
+                .candidateCount(task.getCandidateCount())
+                .matchedByFallback(task.getMatchedByFallback())
+                .delayMs(task.getDelayMs())
+                .sseEventCount(task.getSseEventCount())
+                .scenarioSkipped(task.getScenarioSkipped())
                 .build();
     }
 
@@ -626,6 +631,11 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 .scenarioName(task.getScenarioName())
                 .scenarioFromState(task.getScenarioFromState())
                 .scenarioToState(task.getScenarioToState())
+                .candidateCount(task.getCandidateCount())
+                .matchedByFallback(task.getMatchedByFallback())
+                .delayMs(task.getDelayMs())
+                .sseEventCount(task.getSseEventCount())
+                .scenarioSkipped(task.getScenarioSkipped())
                 .build();
     }
 }

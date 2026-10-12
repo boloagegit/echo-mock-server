@@ -97,8 +97,10 @@ public class SseMockHandler {
         log.debug("SSE request: host={}, path={}, method={}", request.getTargetHost(), path, method);
 
         MatchResult<HttpRule> matchResult;
+        Integer candidateCount = null;
         if (httpMockPipeline != null) {
             List<HttpRule> candidates = httpRuleService.findPreparedHttpRules(request.getTargetHost(), path, method);
+            candidateCount = candidates.size();
             matchResult = httpMockPipeline.matchRule(candidates,
                     body == null ? ConditionMatcher.PreparedBody.rawOnly(null)
                             : httpMockPipeline.prepareBodyForMatching(MockRequest.builder().body(body).build(), candidates),
@@ -110,6 +112,7 @@ public class SseMockHandler {
         }
         long matchTime = System.currentTimeMillis() - startTime;
         String matchChainJson = MatchDescriptionBuilder.toMatchChainJson(matchResult.getMatchChain(), matchResult.isMatched());
+        String scenarioSkipped = MatchDescriptionBuilder.toScenarioSkippedJson(matchResult.getMatchChain());
 
         if (!matchResult.isMatched()) {
             if (httpMockPipeline != null && !"GET".equals(method) && !"HEAD".equals(method)) {
@@ -121,6 +124,7 @@ public class SseMockHandler {
                     .protocol(Protocol.HTTP).method(method).endpoint(path).matched(false)
                     .responseTimeMs((int) responseTime).clientIp(request.getClientIp())
                     .matchChain(matchChainJson).responseStatus(404).matchTimeMs((int) matchTime)
+                    .candidateCount(candidateCount).scenarioSkipped(scenarioSkipped)
                     .requestBody(body).diagnosticId(trace.id()).build());
             trace.end("UNMATCHED");
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -146,7 +150,8 @@ public class SseMockHandler {
         AbstractMockPipeline.ScenarioTransition scenarioTransition = httpMockPipeline != null
                 ? httpMockPipeline.advanceScenarioState(rule)
                 : null;
-        Served served = new Served(request, rule, startTime, matchTime, matchChainJson, scenarioTransition);
+        Served served = new Served(request, rule, startTime, matchTime, matchChainJson, scenarioTransition,
+                candidateCount, scenarioSkipped, matchResult.isByFallback());
 
         FaultType faultType = rule.getFaultType() != null ? rule.getFaultType() : FaultType.NONE;
         if (faultType == FaultType.CONNECTION_RESET) {
@@ -208,7 +213,8 @@ public class SseMockHandler {
             trace.end("INVALID_SETTINGS");
             return ResponseEntity.internalServerError().contentType(MediaType.TEXT_PLAIN).body(error.getMessage());
         }
-        served.record(faultType, configuredStatus, responseBody);
+        served.record(faultType, configuredStatus, responseBody,
+                configuredStatus == 200 ? events.size() : null, configuredStatus == 200 ? initialDelay : null);
         if (configuredStatus != 200) {
             trace.end("NON_SSE_RESULT_READY_NOT_DELIVERY_CONFIRMATION");
             return ResponseEntity.status(configuredStatus).headers(headers).body(responseBody);
@@ -275,19 +281,35 @@ public class SseMockHandler {
         private final long matchTime;
         private final String matchChainJson;
         private final AbstractMockPipeline.ScenarioTransition scenarioTransition;
+        private final Integer candidateCount;
+        private final String scenarioSkipped;
+        private final boolean byFallback;
 
         private Served(MockRequest request, HttpRule rule, long startTime, long matchTime,
-                       String matchChainJson, AbstractMockPipeline.ScenarioTransition scenarioTransition) {
+                       String matchChainJson, AbstractMockPipeline.ScenarioTransition scenarioTransition,
+                       Integer candidateCount, String scenarioSkipped, boolean byFallback) {
             this.request = request;
             this.rule = rule;
             this.startTime = startTime;
             this.matchTime = matchTime;
             this.matchChainJson = matchChainJson;
             this.scenarioTransition = scenarioTransition;
+            this.candidateCount = candidateCount;
+            this.scenarioSkipped = scenarioSkipped;
+            this.byFallback = byFallback;
         }
 
         /** 故障或 Scenario 轉移時才附上匹配分析所需的規則、query 與 headers（與既有紀錄內容相同）。 */
         void record(FaultType faultType, Integer responseStatus, String responseBody) {
+            record(faultType, responseStatus, responseBody, null, null);
+        }
+
+        /**
+         * @param sseEventCount 開始播放的 SSE 事件數；沒有播放時為 null
+         * @param delayMs       第一個事件前的延遲；沒有播放時為 null
+         */
+        void record(FaultType faultType, Integer responseStatus, String responseBody,
+                    Integer sseEventCount, Long delayMs) {
             boolean annotated = faultType != FaultType.NONE || scenarioTransition != null;
             serveEvents.dispatch(ServeEvent.builder()
                     .ruleId(rule.getId()).protocol(Protocol.HTTP)
@@ -305,6 +327,10 @@ public class SseMockHandler {
                     .scenarioName(scenarioTransition != null ? scenarioTransition.name() : null)
                     .scenarioFromState(scenarioTransition != null ? scenarioTransition.fromState() : null)
                     .scenarioToState(scenarioTransition != null ? scenarioTransition.toState() : null)
+                    .candidateCount(candidateCount).scenarioSkipped(scenarioSkipped)
+                    .matchedByFallback(byFallback)
+                    .sseEventCount(sseEventCount)
+                    .delayMs(delayMs != null ? (int) Math.min(delayMs, Integer.MAX_VALUE) : null)
                     .diagnosticId(request.getTrace().id())
                     .build());
         }

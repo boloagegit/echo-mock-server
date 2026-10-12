@@ -235,6 +235,10 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                 .queryString(request.getQueryString()).headers(request.getHeaders())
                 .faultType(faultType).scenarioName(scenarioName)
                 .scenarioFromState(scenarioFromState).scenarioToState(scenarioToState)
+                .candidateCount(candidates != null ? candidates.size() : null)
+                .matchedByFallback(matchResult.isMatched() ? matchResult.isByFallback() : null)
+                .delayMs(matchResult.isMatched() ? (int) Math.min(delayMs, Integer.MAX_VALUE) : null)
+                .scenarioSkipped(MatchDescriptionBuilder.toScenarioSkippedJson(matchResult.getMatchChain()))
                 .diagnosticId(request.getTrace().id())
                 .build());
 
@@ -348,7 +352,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
         if (matched != null) {
             chain.add(createMatchChainEntry(matched, "match"));
         }
-        return new MatchResult<>(matched, chain);
+        return new MatchResult<>(matched, chain, matched != null && !selection.conditionMatched());
     }
 
     /** 沒有條件成立時如何挑選無條件規則；JMS 覆寫為非萬用優先。 */
@@ -389,7 +393,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
             return true;
         }
         chain.add(new MatchChainEntry(
-                rule.getId(), "scenario_state_mismatch",
+                rule.getId(), MatchDescriptionBuilder.SCENARIO_STATE_MISMATCH,
                 null, rule.getDescription(), null,
                 null,
                 "scenario: " + rule.getScenarioName()

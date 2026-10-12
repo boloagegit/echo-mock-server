@@ -63,7 +63,10 @@ class RequestLogSpoolTest {
         spool.start();
         String firstSpoolId = spool.getSpoolId();
 
-        spool.append(task("rule-1", "/orders/1"));
+        spool.append(taskBuilder("rule-1", "/orders/1")
+                .candidateCount(3).matchedByFallback(true).delayMs(250).sseEventCount(4)
+                .scenarioSkipped("[{\"ruleId\":\"r9\",\"reason\":\"scenario_state_mismatch\"}]")
+                .build());
         assertThat(spool.pendingBytes()).isPositive();
         assertThat(spool.pendingItems()).isEqualTo(1);
         spool.stop();
@@ -84,6 +87,11 @@ class RequestLogSpoolTest {
         assertThat(restored.getScenarioName()).isEqualTo("order-flow");
         assertThat(restored.getScenarioFromState()).isEqualTo("Started");
         assertThat(restored.getScenarioToState()).isEqualTo("Paid");
+        assertThat(restored.getCandidateCount()).isEqualTo(3);
+        assertThat(restored.getMatchedByFallback()).isTrue();
+        assertThat(restored.getDelayMs()).isEqualTo(250);
+        assertThat(restored.getSseEventCount()).isEqualTo(4);
+        assertThat(restored.getScenarioSkipped()).contains("r9");
         assertThat(restored.isForwarded()).isTrue();
         assertThat(restored.getForwardTarget())
                 .isEqualTo("Primary | https://downstream.example");
@@ -650,6 +658,10 @@ class RequestLogSpoolTest {
     }
 
     private LogTask task(String ruleId, String endpoint) {
+        return taskBuilder(ruleId, endpoint).build();
+    }
+
+    private LogTask.LogTaskBuilder taskBuilder(String ruleId, String endpoint) {
         CandidateSnapshot candidate = CandidateSnapshot.builder()
                 .ruleId(ruleId)
                 .endpoint(endpoint)
@@ -683,8 +695,7 @@ class RequestLogSpoolTest {
                 .analysisBody("{\"id\":1}")
                 .queryString("trace=1")
                 .headers(Map.of("X-Test", "value"))
-                .matchOutcomes(Map.of("body:id=1", true))
-                .build();
+                .matchOutcomes(Map.of("body:id=1", true));
     }
 
     private LogTask taskWithCandidateCondition(String ruleId, String condition) {

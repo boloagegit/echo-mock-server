@@ -64,6 +64,29 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    @DisplayName("處理流程圖的資料（候選規則數、模擬延遲）存進紀錄並由詳細資料回傳")
+    @SuppressWarnings("unchecked")
+    void flowDetailsAreStoredAndReturnedWithTheDetail() {
+        createHttpRule("/api/log-flow", "GET", "{\"ok\":true}", "flow.test");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Original-Host", "flow.test");
+        restTemplate.exchange("/mock/api/log-flow", HttpMethod.GET, new HttpEntity<>(headers), String.class);
+
+        List<Map<String, Object>> logs = queryLogs("protocol=HTTP&endpoint=/api/log-flow");
+        assertThat(logs).isNotEmpty();
+        Object id = getLogEntry(logs.get(0)).get("id");
+        ResponseEntity<Map> detail = adminClient().getForEntity("/api/admin/logs/" + id + "/detail", Map.class);
+        assertThat(detail.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<String, Object> body = detail.getBody();
+        assertThat(body.get("candidateCount")).isEqualTo(1);
+        assertThat(body.get("matchedByFallback")).isEqualTo(true);
+        assertThat(body.get("delayMs")).isEqualTo(0);
+        assertThat(body.get("sseEventCount")).isNull();
+        assertThat(body.get("scenarioSkipped")).isNull();
+    }
+
+    @Test
     @DisplayName("10.2b HTTP Mock 無匹配 → 日誌 matched=false")
     void httpMockUnmatched_logsMatchedFalse() {
         HttpHeaders headers = new HttpHeaders();

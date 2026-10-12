@@ -2182,6 +2182,70 @@ tr.active { background: var(--hover) }
 }
 .log-inspector-trace .match-chain-list { overflow: visible; padding: 0; background: transparent }
 
+/* 請求處理流程（RequestFlowView）：抽屜窄時由上而下，加寬後由左而右 */
+.log-inspector-flow { overflow: auto }
+.rf { container-type: inline-size; display: grid; gap: var(--space-md) }
+.rf-steps { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; margin: 0; padding: 0; list-style: none }
+.rf-step { position: relative; min-width: 0 }
+.rf-step + .rf-step::before {
+    content: ""; position: absolute; left: 50%; top: -18px; width: 0; height: 14px;
+    border-left: 2px solid var(--border2); transform: translateX(-1px);
+}
+.rf-step + .rf-step::after {
+    content: ""; position: absolute; left: 50%; top: -6px; transform: translateX(-5px);
+    border: 5px solid transparent; border-top-color: var(--border2); border-bottom-width: 0;
+}
+.rf-fork { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-sm) }
+.rf-fork.is-single { grid-template-columns: minmax(0, 1fr) }
+.rf-card {
+    display: grid; gap: 2px; align-content: start; min-width: 0; height: 100%; padding: 10px 12px;
+    border: 1px solid var(--border2); border-radius: var(--radius-panel); background: var(--surface-raised);
+    font-size: var(--font-sm); line-height: 1.55; overflow-wrap: anywhere;
+}
+.rf-title { display: flex; align-items: center; gap: 7px; margin: 0 0 2px; font-size: var(--font-base); font-weight: 600 }
+.rf-card.is-ok { border-color: rgba(var(--success-rgb), 0.55) }
+.rf-card.is-ok .rf-title > .bi { color: var(--success) }
+.rf-card.is-warn { border-color: rgba(var(--warning-rgb), 0.65) }
+.rf-card.is-warn .rf-title > .bi { color: var(--warning) }
+.rf-card.is-bad { border-color: rgba(var(--danger-rgb), 0.75); background: rgba(var(--danger-rgb), 0.08) }
+.rf-card.is-bad .rf-title > .bi { color: var(--danger) }
+.rf-card.is-off { border-style: dashed; background: transparent; opacity: 0.45 }
+.rf-card code { color: var(--text); font-size: var(--font-xs); background: none; padding: 0 }
+.rf-strong { font-weight: 600 }
+.rf-muted { color: var(--muted); font-size: var(--font-xs) }
+.rf-url { display: block; color: var(--muted) !important }
+.rf-error { color: var(--danger-text); font-size: var(--font-xs) }
+.rf-pill { display: inline-flex; align-items: center; gap: 3px; padding: 0 7px; border-radius: 9px; font-size: var(--font-xs); background: var(--surface-control) }
+.rf-pill.is-ok { background: rgba(var(--success-rgb), 0.16); color: var(--success) }
+.rf-pill.is-warn { background: rgba(var(--warning-rgb), 0.16); color: var(--warning-text) }
+.rf-pill.is-bad { background: rgba(var(--danger-rgb), 0.16); color: var(--danger-text) }
+.rf-skipped { margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--border2) }
+.rf-skipped-head { display: flex; align-items: center; gap: 5px; font-size: var(--font-xs) }
+.rf-skipped-row code { margin-right: 4px }
+.rf-link {
+    justify-self: start; display: inline-flex; align-items: center; gap: 2px; margin-top: 2px; padding: 0; border: 0;
+    background: none; color: var(--primary); font-size: var(--font-xs); cursor: pointer;
+}
+.rf-link:hover { text-decoration: underline }
+.rf-time { font-size: var(--font-xs); color: var(--muted) }
+.rf-time-title { margin-bottom: 6px }
+.rf-bar { display: flex; height: 10px; overflow: hidden; border-radius: 5px; background: var(--surface-control) }
+.rf-bar-part, .rf-swatch { background: var(--muted); opacity: 0.6 }
+.rf-bar-part.is-match, .rf-swatch.is-match { background: var(--primary); opacity: 1 }
+.rf-bar-part.is-delay, .rf-swatch.is-delay { background: var(--warning); opacity: 0.85 }
+.rf-bar-part.is-bad, .rf-swatch.is-bad { background: var(--danger); opacity: 0.8 }
+.rf-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0 0; padding: 0; list-style: none }
+.rf-legend li { display: inline-flex; align-items: center; gap: 5px }
+.rf-swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px }
+.rf-note { margin-top: 4px }
+@container (min-width: 820px) {
+    .rf-steps { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) minmax(0, 1.3fr) minmax(0, 0.9fr); gap: 28px; align-items: center }
+    .rf-step + .rf-step::before { left: -22px; top: 50%; width: 14px; height: 0; border-left: 0; border-top: 2px solid var(--border2); transform: translateY(-1px) }
+    .rf-step + .rf-step::after { left: -9px; top: 50%; transform: translateY(-5px); border: 5px solid transparent; border-left-color: var(--border2); border-right-width: 0 }
+    .rf-fork { grid-template-columns: minmax(0, 1fr) }
+    .rf-received .rf-card, .rf-match .rf-card, .rf-reply .rf-card { height: auto }
+}
+
 /* 匹配鏈的條件樹（MatchExplainTree） */
 .logs-workspace .match-chain-tree { grid-column: 2 / -1; display: grid; justify-items: start; gap: var(--space-xs); min-width: 0 }
 .match-chain-tree-summary { color: var(--muted); font-size: var(--font-sm) }

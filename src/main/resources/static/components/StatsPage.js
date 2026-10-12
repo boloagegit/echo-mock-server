@@ -40,7 +40,7 @@ const StatsPage = {
   })],
   data() {
     return {
-      inspectorTab: 'body',
+      inspectorTab: 'flow',
       rawConditionOpen: {},
     };
   },
@@ -60,6 +60,7 @@ const StatsPage = {
     inspectorTabs() {
       const id = this.shownLogItem?.log?.id || 'none';
       return [
+        { value: 'flow', label: this.t('stats.flow.tab'), icon: 'bi-signpost-2', id: 'log-tab-flow-' + id, panelId: 'log-inspector-flow-' + id },
         { value: 'body', label: this.t('stats.inspectorBodyTab'), icon: 'bi-braces', id: 'log-tab-body-' + id, panelId: 'log-inspector-body-' + id },
         { value: 'overview', label: this.t('stats.inspectorOverviewTab'), icon: 'bi-list-ul', id: 'log-tab-overview-' + id, panelId: 'log-inspector-overview-' + id },
         { value: 'trace', label: this.t('stats.matchChainTitle'), icon: 'bi-diagram-3', count: this.shownLogItem?.matchChainData?.length || null,
@@ -82,7 +83,7 @@ const StatsPage = {
   watch: {
     selectedLogItem(item) {
       if (this.inspectorTab === 'trace' && !item?.matchChainData?.length) {
-        this.inspectorTab = 'body';
+        this.inspectorTab = 'flow';
       }
     },
   },
@@ -325,6 +326,12 @@ const StatsPage = {
           <div v-else-if="shownLogItem._detailError" class="log-inspector-loading log-inspector-error" role="alert">
             <i class="bi bi-cloud-slash" aria-hidden="true"></i><span>{{t('stats.detailLoadFailed')}}</span>
             <ui-button type="button" variant="secondary" size="compact" @click="$emit('toggle-log-detail', shownLogItem)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</ui-button>
+          </div>
+
+          <div v-else-if="inspectorTab==='flow'" class="log-inspector-content log-inspector-flow ui-detail-panel" role="tabpanel"
+            :id="'log-inspector-flow-'+shownLogItem.log.id" :aria-labelledby="'log-tab-flow-'+shownLogItem.log.id">
+            <request-flow-view :item="shownLogItem" :rule-description="shownLogItem.rule?.description || ''"
+              @show-trace="inspectorTab='trace'"></request-flow-view>
           </div>
 
           <div v-else-if="inspectorTab==='body'" class="log-inspector-content log-inspector-body-grid"

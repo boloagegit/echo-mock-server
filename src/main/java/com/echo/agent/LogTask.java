@@ -50,6 +50,13 @@ public class LogTask {
     private final String scenarioFromState;
     private final String scenarioToState;
 
+    // --- 處理流程資訊 ---
+    private final Integer candidateCount;
+    private final Boolean matchedByFallback;
+    private final Integer delayMs;
+    private final Integer sseEventCount;
+    private final String scenarioSkipped;
+
     // --- 匹配分析上下文 ---
     private final List<CandidateSnapshot> candidates;
     private final String analysisBody;
@@ -81,6 +88,11 @@ public class LogTask {
             String scenarioName,
             String scenarioFromState,
             String scenarioToState,
+            Integer candidateCount,
+            Boolean matchedByFallback,
+            Integer delayMs,
+            Integer sseEventCount,
+            String scenarioSkipped,
             List<CandidateSnapshot> candidates,
             String analysisBody,
             String queryString,
@@ -110,6 +122,11 @@ public class LogTask {
         this.scenarioName = scenarioName;
         this.scenarioFromState = scenarioFromState;
         this.scenarioToState = scenarioToState;
+        this.candidateCount = candidateCount;
+        this.matchedByFallback = matchedByFallback;
+        this.delayMs = delayMs;
+        this.sseEventCount = sseEventCount;
+        this.scenarioSkipped = scenarioSkipped;
         this.candidates = candidates != null ? List.copyOf(candidates) : List.of();
         this.analysisBody = analysisBody;
         this.queryString = queryString;
