@@ -117,6 +117,8 @@ function appDraftHarness() {
     newTag: Vue.ref({ key: '', value: '' }), newHeader: Vue.ref({ key: '', value: '' }),
     previewEditing: Vue.ref(false), previewEditBody: Vue.ref(''), previewResponseBody: Vue.ref(''),
     ruleApplyText: Vue.ref(''), ruleApplyDraftBaseline: Vue.ref(''),
+    // 簡易模式（沒有進階條件）；進階條件的草稿比較見 match-tree.test.cjs
+    currentMatchSpec: () => null,
   });
   vm.runInContext(source('composables/useRuleApply.js') + '\nconst { createDocumentFromForm } = useRuleApply(deps);', context);
   vm.runInContext(source('composables/useDiscardGuard.js'), context);
@@ -196,6 +198,7 @@ test('pending schema mode switch never resumes into a busy, closed, or different
       ruleDraftGuard: { isDirty: () => dirty },
       loadRuleApplySchema: () => new Promise(resolve => { resolveSchema = resolve; }),
       form: Vue.ref({}), conditions: Vue.ref([]), editing: Vue.ref(null), currentRuleResponseBody: () => '',
+      currentMatchSpec: () => null, applyMatchDraft() {},
       createDocumentFromForm: () => ({ spec: { matchKey: '' } }),
       ruleApplyText: Vue.ref(''), ruleApplyFormSource: Vue.ref(''), ruleApplyDraftBaseline: Vue.ref(''),
       setRuleApplyDocument: () => { context.ruleApplyText.value = '{"spec":{}}'; },
@@ -317,6 +320,9 @@ function formHarness(ok) {
         : { id: 'saved-rule', version: 1, responseId: 5 } };
     },
   });
+  // 與 index.html 相同：useRuleForm 需要 match-tree.js 與 utils.js 的 debounce
+  vm.runInContext(source('match-tree.js') + '\nthis.MatchTree = MatchTree;', context);
+  context.debounce = fn => Object.assign((...args) => fn(...args), { cancel() {} });
   vm.runInContext(source('composables/useRuleForm.js') + '\nthis.form = useRuleForm(deps);', context);
   return { form: context.form, calls };
 }

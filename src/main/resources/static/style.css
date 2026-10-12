@@ -2941,6 +2941,45 @@ select.is-invalid {
 .pv-body-empty { padding: var(--space-sm) 0; color: var(--muted); font-size: var(--font-md) }
 .settings-inline-note { margin: var(--space-sm) 0; color: var(--muted); font-size: var(--font-sm); line-height: 1.5; overflow-wrap: anywhere }
 .cond-builder-actions { display: flex; align-items: center; gap: var(--space-sm) }
+/* 進階條件（matchSpec）樹狀編輯器：群組以左側線條表示層級，條件兩列排版以適應較窄的編輯欄 */
+.match-mode-switch { flex: none }
+.match-builder { display: flex; flex-direction: column; gap: 0.4rem }
+.match-group { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0 }
+.match-group:not(.is-root) { padding: 0.45rem 0.5rem 0.5rem 0.6rem; border-inline-start: 2px solid rgba(var(--primary-rgb), 0.45); border-radius: 0 var(--radius-control) var(--radius-control) 0; background: rgba(var(--primary-rgb), 0.04) }
+.match-group.is-negated:not(.is-root) { border-inline-start-color: var(--danger) }
+.match-group__head { display: flex; align-items: center; gap: 0.4rem; min-width: 0 }
+.match-group__op { width: auto; flex: none; padding: 0.3rem 0.5rem; font-size: var(--font-sm) }
+.match-group__hint { min-width: 0; overflow: hidden; color: var(--muted); font-size: var(--font-xs); text-overflow: ellipsis; white-space: nowrap }
+.match-group__body { display: flex; flex-direction: column; gap: 0.4rem }
+.match-group__empty { margin: 0 }
+.match-group__actions { display: flex; gap: var(--space-sm) }
+.match-group__actions .cond-add { flex: 1 }
+.match-leaf { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.4rem; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-raised) }
+.match-leaf.is-negated { border-color: rgba(var(--danger-rgb, 220, 53, 69), 0.55) }
+.match-leaf__row { display: flex; align-items: center; gap: 0.4rem; min-width: 0 }
+.match-leaf .form-control { padding: 0.3rem 0.5rem; font-size: var(--font-sm) }
+.match-leaf__source { width: 84px; flex: none }
+.match-leaf__selector-kind { width: 104px; flex: none }
+.match-leaf__op { width: 132px; flex: none }
+.match-leaf__wide { flex: 1; min-width: 0 }
+.match-leaf__value { min-height: 2.2rem; font-family: var(--font-mono); resize: vertical }
+.match-leaf__options { display: flex; flex-wrap: wrap; gap: 0.75rem; padding-inline-start: 2px; font-size: var(--font-sm) }
+.match-option { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--text-subtle); cursor: pointer }
+.match-leaf__legacy { font-family: var(--font-mono) }
+.match-legacy-hint { display: flex; align-items: center; gap: 0.35rem; margin: 0; color: var(--muted); font-size: var(--font-xs) }
+.match-not { flex: none; padding: 0.15rem 0.4rem; border: 1px solid var(--border); border-radius: 4px; background: none; color: var(--muted); font-family: var(--font-mono); font-size: 11px; font-weight: var(--font-weight-semibold); cursor: pointer }
+.match-not:hover { border-color: var(--danger); color: var(--danger) }
+.match-not.is-on { border-color: var(--danger); background: rgba(var(--danger-rgb, 220, 53, 69), 0.12); color: var(--danger) }
+.match-not:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px }
+.match-error { padding: 0.35rem 0.5rem; border-radius: 4px; background: rgba(var(--danger-rgb, 220, 53, 69), 0.1); color: var(--danger); font-size: var(--font-sm); overflow-wrap: anywhere }
+.match-switch-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; padding: 0.45rem 0.6rem; border-radius: 4px; background: rgba(var(--warning-rgb), 0.12); color: var(--text); font-size: var(--font-sm) }
+.match-switch-confirm > i { color: var(--warning) }
+.match-switch-confirm > span { flex: 1; min-width: 12rem }
+@media (max-width: 640px) {
+    .match-leaf__row { flex-wrap: wrap }
+    .match-leaf__wide { flex-basis: 100% }
+    .match-group__hint { display: none }
+}
 .cond-builder-actions .cond-add { flex: 1 }
 .cond-builder-actions.is-empty { justify-content: space-between }
 .cond-builder-actions.is-empty .cond-add { flex: 0 0 auto; width: auto; padding-inline: var(--space-sm) }

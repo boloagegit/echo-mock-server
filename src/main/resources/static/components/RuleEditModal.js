@@ -10,6 +10,12 @@ const RuleEditModal = {
         editorMode: { type: String, default: 'form' },
         form: Object,
         conditions: Array,
+        // 進階條件（matchSpec）：見 match-tree.js 與 MatchTreeEditor.js
+        matchMode: { type: String, default: 'simple' },
+        matchTree: Object,
+        matchError: String,
+        matchSwitchPending: Boolean,
+        matchSources: { type: Array, default: () => ['body', 'query', 'header'] },
         formErrors: Object,
         canSave: Boolean,
         saving: Boolean,
@@ -55,6 +61,7 @@ const RuleEditModal = {
         'close', 'save', 'update:maximized', 'update:catch-all-confirmed',
         'set-protocol', 'on-response-mode-change',
         'add-condition', 'remove-condition',
+        'set-match-mode', 'confirm-match-simple', 'cancel-match-simple',
         'add-tag', 'remove-tag', 'add-header', 'remove-header',
         'update:test-expanded', 'run-test', 'stop-sse-test', 'generate-test-data',
         'add-sse-event', 'remove-sse-event',
@@ -80,6 +87,15 @@ const RuleEditModal = {
         const responsePickerActiveIndex = ref(-1);
         // The response content can take over the whole editor body for long bodies; Esc returns.
         const contentExpanded = ref(false);
+        // 條件數：簡易模式為條件列，進階模式為樹中的條件（葉節點與舊版片段）
+        const conditionTotal = Vue.computed(() => (props.matchMode === 'advanced' && props.matchTree
+            ? MatchTree.count(props.matchTree) : props.conditions.length));
+        const hasLegacyConditions = Vue.computed(() => props.matchMode === 'advanced' && props.matchTree
+            && MatchTree.hasLegacy(props.matchTree));
+        const matchModeOptions = Vue.computed(() => [
+            { value: 'simple', label: t('match.modeSimple') },
+            { value: 'advanced', label: t('match.modeAdvanced') },
+        ]);
         const templateMenuItems = Vue.computed(() => [
             { key: 'json', label: 'JSON', icon: 'bi-braces' },
             { key: 'xml', label: 'XML', icon: 'bi-code-slash' },
@@ -559,6 +575,7 @@ const RuleEditModal = {
             if (previousFocus instanceof HTMLElement && document.contains(previousFocus)) previousFocus.focus();
         });
         return {
+            conditionTotal, matchModeOptions, hasLegacyConditions,
             dialogRef, responsePickerLaunch, responsePickerInput, responsePickerActiveIndex, contentExpanded, responsePickerResults, showPreviewViewer, editResponseLabel, templateMenuItems,
             responseOptionId, openResponsePicker, closeResponsePicker, toggleResponsePicker, selectResponse,
             onResponsePickerKeydown, onResponseSearchInput, clearResponseSearch, onDialogKeydown, saveShortcutKey,
@@ -593,7 +610,7 @@ const RuleEditModal = {
                             <span class="rule-method" :data-method="form.protocol==='HTTP' ? (form.method || 'GET') : null" :data-protocol="form.protocol">{{form.protocol==='HTTP' ? (form.method || 'GET') : 'JMS'}}</span>
                             <code v-if="form.matchKey">{{form.matchKey}}</code>
                             <span v-else class="rule-modal-context__pending">{{form.protocol==='HTTP' ? t('modal.pathPending') : t('modal.queuePending')}}</span>
-                            <span v-if="conditions.length" class="rule-modal-context__chip">{{t('modal.conditionSummary', {count: conditions.length})}}</span>
+                            <span v-if="conditionTotal" class="rule-modal-context__chip">{{t('modal.conditionSummary', {count: conditionTotal})}}</span>
                             <i class="bi bi-arrow-right" aria-hidden="true"></i>
                             <span class="rule-modal-context__result">{{ruleModeSummary}}</span>
                         </p>
@@ -672,10 +689,25 @@ const RuleEditModal = {
                     <!-- 條件匹配 -->
                     <div class="form-block" data-tour="conditions">
                         <div class="form-block-header">
-                            {{t('modal.conditionMatch')}}<span class="form-block-hint">{{t('modal.conditionAllMatch')}}</span>
-                            <ui-badge v-if="conditions.length" class="badge badge-muted ms-auto">{{conditions.length}}</ui-badge>
+                            {{t('modal.conditionMatch')}}<span class="form-block-hint">{{matchMode === 'advanced' ? t('match.advancedHint') : t('modal.conditionAllMatch')}}</span>
+                            <ui-badge v-if="conditionTotal" class="badge badge-muted">{{conditionTotal}}</ui-badge>
+                            <ui-segmented-control class="ms-auto match-mode-switch" :model-value="matchMode" name="matchMode" size="compact"
+                                :options="matchModeOptions" :aria-label="t('match.modeLabel')"
+                                @update:model-value="$emit('set-match-mode', $event)"></ui-segmented-control>
                         </div>
-                        <div class="cond-builder">
+                        <div v-if="matchSwitchPending" class="match-switch-confirm" role="alert">
+                            <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+                            <span>{{t('match.switchToSimpleWarning')}}</span>
+                            <ui-button type="button" variant="danger" size="compact" @click="$emit('confirm-match-simple')">{{t('match.switchToSimpleConfirm')}}</ui-button>
+                            <ui-button type="button" variant="secondary" size="compact" @click="$emit('cancel-match-simple')">{{t('confirm.cancel')}}</ui-button>
+                        </div>
+                        <div v-if="matchMode === 'advanced' && matchTree" class="match-builder">
+                            <div v-if="matchError" class="match-error" role="alert"><i class="bi bi-exclamation-circle" aria-hidden="true"></i> {{matchError}}</div>
+                            <p v-if="hasLegacyConditions" class="match-legacy-hint"><i class="bi bi-info-circle" aria-hidden="true"></i> {{t('match.legacyNote')}}</p>
+                            <match-tree-node :node="matchTree" :sources="matchSources" root></match-tree-node>
+                            <div v-if="showBodyConditionWarning" class="cond-warning"><i class="bi bi-info-circle"></i> {{t('modal.bodyConditionWarning', {method: form.method})}}</div>
+                        </div>
+                        <div v-else class="cond-builder">
                             <div v-for="(c,i) in conditions" :key="i" class="cond-row">
                                 <select v-if="form.protocol==='HTTP'" class="form-control cond-type" v-model="c.type" :aria-label="t('modal.conditionTypeLabel',{index:i+1})">
                                     <option value="body">{{t('modal.condFieldBody')}}</option>
@@ -1230,7 +1262,7 @@ const RuleEditModal = {
                                     </template>
                                 </div>
                                 <span v-if="form.targetHost" class="rule-test-host"><i class="bi bi-arrow-right" aria-hidden="true"></i>{{form.targetHost}}</span>
-                                <span v-if="conditions.length" class="rule-test-condition-count">{{t('modal.testConditionCount', {count:conditions.length})}}</span>
+                                <span v-if="conditionTotal" class="rule-test-condition-count">{{t('modal.testConditionCount', {count:conditionTotal})}}</span>
                             </div>
                             <div class="rule-test-fields">
                                 <template v-if="form.protocol==='HTTP'">

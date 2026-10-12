@@ -105,7 +105,8 @@ public final class BuiltinSources {
         try {
             path = JsonPath.compile(expression);
         } catch (InvalidPathException e) {
-            throw new IllegalArgumentException("Invalid JSONPath: " + e.getMessage(), e);
+            // Jayway 的訊息常是內部例外（例如 StringIndexOutOfBoundsException），對使用者沒有幫助
+            throw new IllegalArgumentException("Invalid JSONPath: " + expression, e);
         }
         boolean definite = path.isDefinite();
         return request -> {

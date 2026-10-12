@@ -193,6 +193,35 @@ class AdvancedMatchIntegrationTest extends BaseIntegrationTest {
         assertThat(fieldPaths(v2)).contains("spec.match", "spec.bodyCondition");
     }
 
+    @Test
+    @DisplayName("編輯器 API：舊版字串轉成舊版片段；即時檢查回傳正規化結果或帶路徑的錯誤（一律 200）")
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void editorParseAndValidateEndpoints() throws Exception {
+        Map parsed = adminClient().postForEntity("/api/admin/rules/match/parse", Map.of(
+                "protocol", "HTTP", "bodyCondition", "a=1; b!=2 ;", "queryCondition", "q=1"), Map.class).getBody();
+        assertThat((JsonNode) MAPPER.valueToTree(parsed.get("matchSpec"))).isEqualTo(json("""
+                {"all": [{"legacy": {"source": "body", "condition": "a=1"}},
+                         {"legacy": {"source": "body", "condition": "b!=2"}},
+                         {"legacy": {"source": "query", "condition": "q=1"}}]}"""));
+
+        ResponseEntity<Map> advanced = adminClient().postForEntity("/api/admin/rules/match/validate",
+                Map.of("protocol", "HTTP", "matchSpec", json(SPEC)), Map.class);
+        assertThat(advanced.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(advanced.getBody()).containsEntry("valid", true).containsEntry("advanced", true)
+                .containsEntry("conditionCount", 4);
+
+        Map legacy = adminClient().postForEntity("/api/admin/rules/match/validate", Map.of("protocol", "HTTP",
+                "matchSpec", json("{\"all\":[{\"legacy\":{\"source\":\"query\",\"condition\":\"a=1\"}}]}")), Map.class).getBody();
+        assertThat(legacy).containsEntry("valid", true).containsEntry("advanced", false)
+                .containsEntry("queryCondition", "a=1");
+
+        ResponseEntity<Map> invalid = adminClient().postForEntity("/api/admin/rules/match/validate",
+                Map.of("protocol", "JMS", "matchSpec", json(SPEC)), Map.class);
+        assertThat(invalid.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(invalid.getBody()).containsEntry("valid", false).containsEntry("path", "$.all[0].source");
+        assertThat((String) invalid.getBody().get("error")).contains("source 'header' is not available");
+    }
+
     @SuppressWarnings("unchecked")
     private static java.util.List<Object> fieldPaths(Map<?, ?> schema) {
         return ((java.util.List<Map<String, Object>>) schema.get("fields")).stream()

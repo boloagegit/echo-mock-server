@@ -409,8 +409,12 @@ When `;`-joined AND conditions are not enough, a rule can carry a structured con
   Limits: 64 KiB, 16 levels, 256 nodes, 1,000 `in` values.
 - `matchSpec` and `bodyCondition` / `queryCondition` / `headerCondition` are mutually exclusive. A tree that is only
   an `all` of `{"legacy": {"source": ..., "condition": ...}}` fragments is stored as the legacy fields.
-- The rule editor does not edit structured conditions yet. Saving such a rule from the editor (or with a
-  request that omits both `matchSpec` and legacy conditions) keeps its conditions; send `{"all": []}` to clear them.
+- In the rule editor, switch the condition block from **Simple** to **Advanced** to build groups, NOT and the new
+  operators; existing simple conditions become legacy fragments that keep their exact matching. Switching back is
+  instant when only legacy fragments remain, otherwise the editor asks before clearing the advanced conditions.
+  The editor checks the tree against the server while you type and points at the failing node.
+- A request that omits both `matchSpec` and legacy conditions keeps a rule's structured conditions (so older clients
+  cannot erase them by accident); send `{"all": []}` to clear them.
 - Rules with `matchSpec` always use the compiled engine, whatever `ECHO_ENGINE_MATCHER` is set to.
 
 ## Stateful Scenarios

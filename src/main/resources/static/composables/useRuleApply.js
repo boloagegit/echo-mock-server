@@ -11,6 +11,12 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
     const ruleApplySchemaError = Vue.ref('');
     const ruleApplyIdentity = Vue.ref(null);
     const ruleApplyValidationVisible = Vue.ref(false);
+    // 文件有 spec.match（結構化條件）時為 echo.mock/v2，否則維持 v1；由內容決定，不需要使用者修改
+    const API_V1 = 'echo.mock/v1';
+    const API_V2 = 'echo.mock/v2';
+    const ruleApplyApiVersion = Vue.ref(API_V1);
+    const apiVersionFor = document => (document?.spec && typeof document.spec === 'object'
+        && document.spec.match != null ? API_V2 : API_V1);
 
     const templates = {
         HTTP_MOCK: {
@@ -86,7 +92,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
     const templateText = template => JSON.stringify(templates[template] || templates.HTTP_MOCK, null, 2);
 
     const ruleApplySystemFields = Vue.computed(() => ({
-        apiVersion: ruleApplySchema.value?.apiVersion || 'echo.mock/v1',
+        apiVersion: ruleApplyApiVersion.value,
         kind: ruleApplySchema.value?.kind || 'Rule',
         id: ruleApplyIdentity.value?.id || null,
         resourceVersion: ruleApplyIdentity.value?.version ?? null
@@ -113,7 +119,8 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
                 changed = true;
             }
         };
-        setValue(document, 'apiVersion', ruleApplySystemFields.value.apiVersion);
+        ruleApplyApiVersion.value = apiVersionFor(document);
+        setValue(document, 'apiVersion', ruleApplyApiVersion.value);
         setValue(document, 'kind', ruleApplySystemFields.value.kind);
         if (!document.metadata || typeof document.metadata !== 'object' || Array.isArray(document.metadata)) {
             document.metadata = {};
@@ -192,7 +199,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         return result;
     };
 
-    const createDocumentFromForm = ({ form, conditions, editing, responseBody }) => {
+    const createDocumentFromForm = ({ form, conditions, editing, responseBody, matchSpec = null }) => {
         const http = form.protocol === 'HTTP';
         const faulting = form.faultType && form.faultType !== 'NONE';
         const action = faulting ? 'MOCK' : (form.action || 'MOCK');
@@ -240,8 +247,15 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         });
         if (spec.tags && Object.keys(spec.tags).length === 0) { delete spec.tags; }
         if (spec.responseHeaders && Object.keys(spec.responseHeaders).length === 0) { delete spec.responseHeaders; }
+        if (matchSpec) {
+            // 結構化條件取代三個舊版條件欄位（兩者互斥）
+            delete spec.bodyCondition;
+            delete spec.queryCondition;
+            delete spec.headerCondition;
+            spec.match = matchSpec;
+        }
         return {
-            apiVersion: 'echo.mock/v1',
+            apiVersion: matchSpec ? API_V2 : API_V1,
             kind: 'Rule',
             metadata: metadataId ? { id: metadataId, resourceVersion: metadataVersion } : {},
             spec
@@ -249,7 +263,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
     };
 
     const createFormDraftFromDocument = (document, { currentForm = {}, existingResponseBody = '', existingResponseLoaded = false } = {}) => {
-        if (!document || document.apiVersion !== 'echo.mock/v1' || document.kind !== 'Rule' || !document.spec) {
+        if (!document || ![API_V1, API_V2].includes(document.apiVersion) || document.kind !== 'Rule' || !document.spec) {
             throw new Error('INVALID_RULE_DOCUMENT');
         }
         const spec = document.spec;
@@ -300,6 +314,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
                 headerCondition: spec.headerCondition || ''
             },
             conditions: deserializeConditions(spec),
+            matchSpec: spec.match && typeof spec.match === 'object' ? spec.match : null,
             sseEvents: spec.sseEnabled && documentBody
                 ? deserializeSseEvents(documentBody)
                 : [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }],
@@ -364,7 +379,9 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
             VERSION_REQUIRES_ID: 'rules.applyVersionRequiresId',
             SYSTEM_FIELD_READ_ONLY: 'rules.applyValidationSystemFieldReadOnly',
             SYSTEM_FIELD_REQUIRED: 'rules.applyValidationSystemFieldRequired',
-            RESOURCE_ID_MISMATCH: 'rules.applyValidationResourceIdMismatch'
+            RESOURCE_ID_MISMATCH: 'rules.applyValidationResourceIdMismatch',
+            MATCH_CONFLICT: 'rules.applyValidationMatchConflict',
+            INVALID_MATCH: 'rules.applyValidationMatch'
         };
         return t(keys[error.code] || 'rules.applyValidationFailed', params);
     };
@@ -445,7 +462,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         }
 
         validateUnknownFields(errors, document);
-        if (document.apiVersion !== ruleApplySystemFields.value.apiVersion) {
+        if (document.apiVersion !== apiVersionFor(document)) {
             issue(errors, 'SYSTEM_FIELD_READ_ONLY', 'apiVersion');
         }
         if (document.kind !== ruleApplySystemFields.value.kind) {
@@ -558,6 +575,9 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         ['bodyCondition', 'queryCondition', 'headerCondition'].forEach(name => {
             validateConditionValue(errors, 'spec.' + name, spec[name]);
         });
+        if (spec.match != null && ['bodyCondition', 'queryCondition', 'headerCondition'].some(name => spec[name])) {
+            issue(errors, 'MATCH_CONFLICT', 'spec.match');
+        }
         if (spec.targetHost && /[\r\n]/.test(spec.targetHost)) {
             issue(errors, 'LINE_BREAK', 'spec.targetHost');
         }
@@ -598,7 +618,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         if (ruleApplySchema.value) { return true; }
         ruleApplyLoading.value = true;
         ruleApplySchemaError.value = '';
-        const response = await apiCall('/api/admin/rules/schema', {}, { silent: true });
+        const response = await apiCall('/api/admin/rules/schema?apiVersion=' + encodeURIComponent(API_V2), {}, { silent: true });
         ruleApplyLoading.value = false;
         if (!response?.ok) {
             ruleApplySchemaError.value = t('rules.applySchemaLoadFailed');

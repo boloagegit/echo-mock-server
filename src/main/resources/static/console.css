@@ -412,6 +412,9 @@
 .cond-chip[data-kind="body"] { --cond-color: var(--warning) }
 .cond-chip[data-kind="query"] { --cond-color: var(--method-post) }
 .cond-chip[data-kind="header"] { --cond-color: var(--success) }
+.cond-chip[data-kind="advanced"] { --cond-color: var(--primary) }
+.match-summary { display: flex; flex-direction: column; gap: 2px; min-width: 0 }
+.match-summary__line { display: block; color: var(--text); font-family: var(--font-mono); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere }
 .cond-chip__label { flex: none; padding: 1px 6px; border-radius: 4px; background: color-mix(in srgb, var(--cond-color, var(--muted)) 18%, transparent); color: var(--cond-color, var(--muted)); font-size: 11px; font-weight: var(--font-weight-semibold) }
 .cond-chip code { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: inherit; font-family: var(--font-mono); font-size: 12px }
 .cond-chip.is-copyable { padding-inline-start: 8px; cursor: copy }

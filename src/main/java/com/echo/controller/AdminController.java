@@ -1,5 +1,7 @@
 package com.echo.controller;
 
+import com.echo.core.match.MatchSpecCodec;
+import com.echo.core.match.LegacyConditions;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.echo.service.MatchSpecs;
 import com.echo.protocol.ProtocolDescriptor;
@@ -562,6 +564,50 @@ public class AdminController {
     }
 
     /** Returns the machine-readable contract used by the declarative editor and server validator. */
+    /** 結構化條件編輯器使用的請求：協定，加上舊版三個條件字串或 matchSpec。 */
+    public record MatchRequest(Protocol protocol, String bodyCondition, String queryCondition,
+                               String headerCondition, JsonNode matchSpec) {
+    }
+
+    /** 把舊版條件字串轉成只含舊版片段的結構化條件（切法與比對時相同），供編輯器切換到進階模式。 */
+    @PostMapping("/rules/match/parse")
+    public Map<String, Object> parseMatch(@RequestBody MatchRequest request) {
+        validateProtocolEnabled(request.protocol());
+        return Map.of("matchSpec", MatchSpecCodec.toJson(LegacyConditions.toMatchNode(
+                request.bodyCondition(), request.queryCondition(), request.headerCondition())));
+    }
+
+    /**
+     * 以與儲存時相同的規則檢查結構化條件，不寫入任何資料，供編輯器即時提示。
+     * 檢查本身一律回 200：{@code valid=false} 時附錯誤訊息與 JSON 路徑；{@code valid=true} 時回傳正規化結果
+     * （可用舊版字串表達時 {@code advanced=false} 並附上三個字串）。
+     */
+    @PostMapping("/rules/match/validate")
+    public ResponseEntity<Map<String, Object>> validateMatch(@RequestBody MatchRequest request) {
+        validateProtocolEnabled(request.protocol());
+        ProtocolDescriptor protocol = protocolHandlerRegistry.descriptor(request.protocol())
+                .orElseThrow(() -> new IllegalArgumentException("Unknown protocol: " + request.protocol()));
+        MatchSpecs.Normalized normalized;
+        try {
+            normalized = MatchSpecs.normalize(request.matchSpec(), protocol.matchSources());
+        } catch (InvalidMatchSpecException e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("valid", false);
+            error.put("error", e.getMessage());
+            error.put("path", e.path());
+            return ResponseEntity.ok(error);
+        }
+        Map<String, Object> result = new HashMap<>();
+        result.put("valid", true);
+        result.put("advanced", normalized.advanced());
+        result.put("matchSpec", normalized.advanced() ? MatchSpecs.read(normalized.matchSpec()).orElse(null) : null);
+        result.put("bodyCondition", normalized.bodyCondition());
+        result.put("queryCondition", normalized.queryCondition());
+        result.put("headerCondition", normalized.headerCondition());
+        result.put("conditionCount", MatchSpecs.conditionCount(request.matchSpec()));
+        return ResponseEntity.ok(result);
+    }
+
     @GetMapping("/rules/schema")
     public RuleApplySchema getRuleApplySchema(@RequestParam(required = false) String apiVersion) {
         return ruleApplyContractService.schema(apiVersion);

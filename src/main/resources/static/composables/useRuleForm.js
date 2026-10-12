@@ -58,6 +58,97 @@ const useRuleForm = (deps) => {
     const conditionsExpanded = ref(true);
     const formErrors = ref({});
 
+    // --- 進階條件（matchSpec）---
+    // simple：原本的條件列（存成三個舊欄位）；advanced：樹狀條件（存成 matchSpec），見 match-tree.js
+    const matchMode = ref('simple');
+    const matchTree = ref(MatchTree.group('all', []));
+    const matchError = ref('');
+    // 進階條件無法轉回條件列時，切回簡易模式前先在畫面上確認
+    const matchSwitchPending = ref(false);
+    const matchSources = computed(() => (form.value.protocol === 'JMS' ? ['body'] : ['body', 'query', 'header']));
+    const hasMatchSpecObject = r => !!(r && r.matchSpec && typeof r.matchSpec === 'object');
+    const resetMatchState = (r = null) => {
+        matchError.value = '';
+        matchSwitchPending.value = false;
+        if (hasMatchSpecObject(r)) {
+            try {
+                matchTree.value = MatchTree.fromSpec(r.matchSpec);
+                matchMode.value = 'advanced';
+                return;
+            } catch { /* 格式錯誤時以空的進階條件開啟，儲存時由後端回報 */ }
+        }
+        matchTree.value = MatchTree.group('all', []);
+        matchMode.value = 'simple';
+    };
+    const serializeSimpleConditions = () => {
+        const join = type => conditions.value.filter(c => c.type === type && c.field && c.value).map(c => c.field + (c.operator || '=') + c.value).join(';') || null;
+        return { bodyCondition: join('body'), queryCondition: join('query'), headerCondition: join('header') };
+    };
+    /** 目前畫面上的進階條件；不是儲存時（例如切換到宣告式編輯）用寬鬆轉換，不讓條件消失。 */
+    const currentMatchSpec = ({ lenient = true } = {}) => (matchMode.value === 'advanced'
+        ? MatchTree.toSpec(matchTree.value, lenient) : null);
+    const setMatchMode = async mode => {
+        if (mode === matchMode.value) { matchSwitchPending.value = false; return; }
+        if (mode === 'advanced') {
+            const strings = serializeSimpleConditions();
+            let tree = MatchTree.fromLegacyStrings(strings.bodyCondition, strings.queryCondition, strings.headerCondition);
+            // 由後端切分，與比對時完全相同；失敗時用本地相同規則的結果
+            const response = await apiCall('/api/admin/rules/match/parse', {
+                method: 'POST', body: JSON.stringify({ protocol: form.value.protocol, ...strings })
+            }, { silent: true });
+            if (response && response.ok) {
+                try { tree = MatchTree.fromSpec((await response.json()).matchSpec); } catch { /* keep local */ }
+            }
+            matchTree.value = tree;
+            matchMode.value = 'advanced';
+            matchSwitchPending.value = false;
+            return;
+        }
+        const strings = MatchTree.toLegacyStrings(matchTree.value);
+        if (!strings) { matchSwitchPending.value = true; return; }
+        conditions.value = [];
+        parseConditions(strings);
+        matchMode.value = 'simple';
+        matchError.value = '';
+    };
+    /** 確認後切回簡易模式：進階條件清空（儲存時明確送出清除）。 */
+    const confirmSimpleMatchMode = () => {
+        conditions.value = [];
+        matchTree.value = MatchTree.group('all', []);
+        matchMode.value = 'simple';
+        matchSwitchPending.value = false;
+        matchError.value = '';
+    };
+    const cancelSimpleMatchMode = () => { matchSwitchPending.value = false; };
+    /** 套用宣告式文件轉回表單時的條件。 */
+    const applyMatchDraft = (spec, draftConditions) => {
+        if (spec && typeof spec === 'object') {
+            resetMatchState({ matchSpec: spec });
+            conditions.value = [];
+        } else {
+            resetMatchState(null);
+            conditions.value = draftConditions || [];
+        }
+    };
+    // 編輯時以與儲存相同的規則即時檢查（不寫入資料），錯誤訊息帶 JSON 路徑
+    let matchValidationSeq = 0;
+    const validateMatchNow = async () => {
+        if (matchMode.value !== 'advanced' || !showModal.value) { matchError.value = ''; return; }
+        let spec;
+        try { spec = MatchTree.toSpec(matchTree.value); }
+        catch { matchError.value = t('match.invalidJsonValue'); return; }
+        const seq = ++matchValidationSeq;
+        const response = await apiCall('/api/admin/rules/match/validate', {
+            method: 'POST', body: JSON.stringify({ protocol: form.value.protocol, matchSpec: spec })
+        }, { silent: true });
+        if (seq !== matchValidationSeq || !response || !response.ok) return;
+        try {
+            const result = await response.json();
+            if (seq === matchValidationSeq) matchError.value = result.valid === false ? (result.error || '') : '';
+        } catch { /* 檢查失敗時不顯示錯誤，儲存時仍由後端把關 */ }
+    };
+    const validateMatchDebounced = debounce(validateMatchNow, 400);
+
     // --- Modal 最大化 ---
     const ruleModalMaximized = ref(false);
     const responseModalMaximized = ref(false);
@@ -175,6 +266,7 @@ const useRuleForm = (deps) => {
     const isCatchAll = computed(() => {
         const key = (form.value.matchKey || '').trim();
         if (!key || /^\/?\*{1,3}\/?$/.test(key) || key === '/**') {
+            if (matchMode.value === 'advanced') return !MatchTree.hasConditions(matchTree.value);
             return !conditions.value.some(c => c.field && c.value);
         }
         return false;
@@ -184,6 +276,7 @@ const useRuleForm = (deps) => {
     const showBodyConditionWarning = computed(() => {
         if (form.value.protocol !== 'HTTP') { return false; }
         if (!NO_BODY_METHODS.includes(form.value.method)) { return false; }
+        if (matchMode.value === 'advanced') return MatchTree.usesBody(matchTree.value);
         return conditions.value.some(c => c.type === 'body' && c.field && c.value);
     });
 
@@ -561,6 +654,7 @@ const useRuleForm = (deps) => {
         if (p === 'JMS') form.value.sseEnabled = false;
         loadTargetConnectionsForProtocol();
         conditions.value = [];
+        resetMatchState(null);
         localStorage.setItem('lastProtocol', p);
     };
 
@@ -613,6 +707,7 @@ const useRuleForm = (deps) => {
         form.value = resetForm();
         form.value.matchKey = form.value.protocol === 'JMS' ? '*' : '';
         conditions.value = [];
+        resetMatchState(null);
         sseEvents.value = [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }];
         formErrors.value = {};
         catchAllConfirmed.value = false;
@@ -631,6 +726,7 @@ const useRuleForm = (deps) => {
         showCatchAllWarning.value = false;
         sseEvents.value = (r.sseEnabled && r.responseBody) ? deserializeSseEvents(r.responseBody) : [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }];
         parseConditions(r);
+        resetMatchState(r);
         loadTargetConnectionsForProtocol();
         showModal.value = true;
     };
@@ -657,6 +753,7 @@ const useRuleForm = (deps) => {
             faultType: 'NONE'
         };
         conditions.value = [];
+        resetMatchState(null);
         sseEvents.value = [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }];
         formErrors.value = {};
         catchAllConfirmed.value = false;
@@ -684,6 +781,7 @@ const useRuleForm = (deps) => {
         conditions.value = [];
         sseEvents.value = (r.sseEnabled && r.responseBody) ? deserializeSseEvents(r.responseBody) : [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }];
         parseConditions(r);
+        resetMatchState(r);
         if (form.value.responseMode === 'existing') loadResponsePicker(0);
         loadTargetConnectionsForProtocol();
         showModal.value = true;
@@ -705,6 +803,7 @@ const useRuleForm = (deps) => {
         editing.value = null;
         form.value = resetForm();
         conditions.value = [];
+        resetMatchState(null);
         sseEvents.value = [];
         formErrors.value = {};
         newTag.value = { key: '', value: '' };
@@ -742,13 +841,22 @@ const useRuleForm = (deps) => {
             showCatchAllWarning.value = true;
             return;
         }
+        let matchSpec = null;
+        if (matchMode.value === 'advanced') {
+            try { matchSpec = MatchTree.toSpec(matchTree.value); }
+            catch {
+                matchError.value = t('match.invalidJsonValue');
+                showToast(t('match.invalidJsonValue'), 'error');
+                return;
+            }
+        }
         saving.value = true;
-        const bodyConds = conditions.value.filter(c => c.type === 'body' && c.field && c.value).map(c => c.field + (c.operator || '=') + c.value).join(';');
-        const queryConds = conditions.value.filter(c => c.type === 'query' && c.field && c.value).map(c => c.field + (c.operator || '=') + c.value).join(';');
-        const headerConds = conditions.value.filter(c => c.type === 'header' && c.field && c.value).map(c => c.field + (c.operator || '=') + c.value).join(';');
-        form.value.bodyCondition = bodyConds || null;
-        form.value.queryCondition = queryConds || null;
-        form.value.headerCondition = headerConds || null;
+        const simple = matchMode.value === 'advanced'
+            ? { bodyCondition: null, queryCondition: null, headerCondition: null }
+            : serializeSimpleConditions();
+        form.value.bodyCondition = simple.bodyCondition;
+        form.value.queryCondition = simple.queryCondition;
+        form.value.headerCondition = simple.headerCondition;
         // 使用現有 Response 時：若正在編輯回應內容，先自動儲存
         const faulting = form.value.faultType && form.value.faultType !== 'NONE';
         if (!faulting && form.value.action !== 'FORWARD' && form.value.responseMode === 'existing' && form.value.responseId && previewEditing.value && previewEditBody.value !== previewResponseBody.value) {
@@ -760,6 +868,15 @@ const useRuleForm = (deps) => {
             responsesMarkDirty();
         }
         const payload = { ...form.value };
+        delete payload.advancedMatch;
+        if (matchSpec) {
+            payload.matchSpec = matchSpec;
+        } else {
+            // 規則原本使用進階條件、而現在沒有任何條件時要明確清除；未送 matchSpec 時後端會保留原本的進階條件
+            const hadAdvanced = hasMatchSpecObject(editing.value);
+            const noLegacy = !simple.bodyCondition && !simple.queryCondition && !simple.headerCondition;
+            payload.matchSpec = hadAdvanced && noLegacy ? { all: [] } : null;
+        }
         if (faulting) {
             payload.action = 'MOCK';
             payload.responseBody = null;
@@ -800,6 +917,12 @@ const useRuleForm = (deps) => {
                 if (andClose) { closeModal(); loadRules(true); }
                 else {
                     editing.value = saved;
+                    // 後端會把只用到舊語法的進階條件轉回條件列，畫面跟著儲存結果
+                    form.value.matchSpec = saved.matchSpec ?? null;
+                    form.value.advancedMatch = saved.advancedMatch;
+                    conditions.value = [];
+                    parseConditions(saved);
+                    resetMatchState(saved);
                     form.value.id = saved.id;
                     form.value.version = saved.version;
                     form.value.responseId = saved.responseId;
@@ -904,6 +1027,11 @@ const useRuleForm = (deps) => {
 
     // --- Watchers ---
     const setupFormWatchers = () => {
+        watch([matchTree, matchMode, () => form.value.protocol], () => {
+            if (matchMode.value === 'advanced') validateMatchDebounced();
+            else { validateMatchDebounced.cancel(); matchError.value = ''; }
+        }, { deep: true });
+
         watch(isCatchAll, val => {
             if (!val) { showCatchAllWarning.value = false; catchAllConfirmed.value = false; }
         });
@@ -955,6 +1083,9 @@ const useRuleForm = (deps) => {
     return {
         // 表單狀態
         showModal, editing, form, conditions, conditionsExpanded, formErrors, saving,
+        // 進階條件
+        matchMode, matchTree, matchError, matchSwitchPending, matchSources,
+        setMatchMode, confirmSimpleMatchMode, cancelSimpleMatchMode, currentMatchSpec, applyMatchDraft,
         httpTargetConnections, loadHttpTargetConnections,
         jmsTargetConnections, loadJmsTargetConnections,
         // 驗證

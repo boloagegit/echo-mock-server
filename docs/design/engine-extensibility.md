@@ -411,7 +411,7 @@ v1 與 v2 透過同一個 `RuleDefinition` 雙向轉換；`/rules/schema` 提供
 | 5 | `Responder`／`ResponsePlan`，SSE 播放移出控制器；`ServeEventListener` 與請求紀錄改用 `ServeEvent` | 無 | 完成（見 7.2.3） |
 | 6 | `ProtocolId`、`ProtocolAdapter`、`ProtocolRegistry`，移除核心以外的協定分支 | 無 | 部分完成（見 7.2.4） |
 | 7 | `match_spec` 欄位、v2 文件、新 op（exists／absent／數值／in／equalToJson）、`any`／`not` | **新功能** | 完成（見 7.2.5；UI 為步驟 8） |
-| 8 | UI 進階條件編輯器、`/match/parse` 端點、前端改用結構化條件 | **新功能** | 未開始 |
+| 8 | UI 進階條件編輯器、`/match/parse` 端點、前端改用結構化條件 | **新功能** | 完成（見 7.2.6） |
 | 9 | 移除 `echo.engine.matcher=legacy` 開關與舊實作（至少間隔一個正式版本） | 無 | 未開始 |
 
 步驟 1～6 為純重構，屬於「先讓架構可擴充，再加功能」；步驟 7 起才是使用者看得到的變更。
@@ -569,6 +569,35 @@ ArchUnit 新增規則：`RuleQueryService` 與 `CacheInvalidationService` 不得
 
 記憶體：200 條結構化條件規則，每輪全部改成新條件（強迫重新編譯與快照重建）並送請求，共 8 輪；
 每輪兩次 Full GC 後 heap 為 95、95、94、96、94、94、94、88 MiB，沒有成長，舊的編譯結果會隨快照淘汰而回收。
+
+### 7.2.6 步驟 8 實作與驗證紀錄
+
+**編輯器**：條件區新增「簡易／進階」切換。簡易模式就是原本的條件列，操作與欄位順序不變；進階模式是遞迴的樹狀編輯器
+（`MatchTreeEditor.js`），群組可選「全部符合／任一符合」，每個節點可切換 NOT，條件可選取值來源（依協定：HTTP 為
+body／query／header，JMS 只有 body）、body 取值方式（JSONPath、XPath、欄位路徑、整個 body）、運算子與選項。
+樹與後端 JSON 的轉換集中在 `match-tree.js`（純函式，Node 測試覆蓋）：未修改的期望值沿用原本的 JSON 型別
+（數字 1000 不會被存成字串），`not` 以節點上的旗標表示。
+
+**切換規則**：簡易 → 進階時，條件列交由後端 `POST /rules/match/parse` 轉成舊格式片段（與比對時的切法相同），
+比對方式不變。進階 → 簡易只在樹完全由舊格式片段組成時直接切換；否則在畫面上先確認，確認後清除進階條件，
+儲存時明確送出 `{"all": []}`（不送 `matchSpec` 時後端會保留原本的進階條件）。
+
+**即時檢查**：編輯時以 `POST /rules/match/validate` 檢查（與儲存相同的規則、不寫入資料），一律回 200，
+不合法時附錯誤與 JSON 路徑，顯示在條件區最上方。JSONPath 錯誤訊息不再帶出 Jayway 的內部例外文字。
+
+**宣告式文件**：文件有 `spec.match` 時自動為 `echo.mock/v2`，否則維持 v1，使用者不需要修改版本欄位；
+schema 改讀 v2（v1 的超集合），`spec.match` 與舊版條件同時出現時在前端即提示。表單與文件互相切換時保留條件
+（切換不是儲存，`equalToJson` 的 JSON 尚未寫完時以原文字保留）。
+
+**顯示**：規則清單以「進階」標籤與一行摘要顯示，提示文字為多行縮排的樹；詳情以縮排的條件列表顯示，條件數以樹中的條件為準。
+
+**原規劃的差異**：簡易模式的條件列仍沿用前端原本的解析（含 `//` 前綴處理），只有切換到進階模式時才交給後端切分；
+把簡易模式也改成後端解析會改變現有編輯行為，留待之後與 §4.4 #1 一起處理。
+
+**驗證**：`match-tree.test.cjs`（轉換與摘要）、`AdvancedMatchEditorResourceTest`（載入順序、接線、多語系）、
+`AdvancedMatchIntegrationTest`（parse／validate 端點），以及實際啟動伺服器以 Playwright 操作：舊規則轉進階再轉回、
+即時錯誤出現與消失、切回簡易的確認與取消、宣告式 v2 往返、儲存後後端內容（新條件存在、數字型別保留），
+瀏覽器主控台沒有錯誤。
 
 ### 7.3 風險
 
