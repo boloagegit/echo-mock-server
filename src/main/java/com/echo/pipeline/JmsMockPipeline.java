@@ -61,6 +61,12 @@ public class JmsMockPipeline extends AbstractMockPipeline<JmsRule> {
         return jmsRuleService.findPreparedJmsRules(queueName);
     }
 
+    /** JMS 的候選清單取自規則快照（queue 與分桶清單），快照存在期間是同一個物件。 */
+    @Override
+    protected boolean candidateListsAreStable() {
+        return true;
+    }
+
     /**
      * JMS 特有的三層 fallback：
      * <ol>

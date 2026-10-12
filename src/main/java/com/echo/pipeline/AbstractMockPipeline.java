@@ -1,6 +1,7 @@
 package com.echo.pipeline;
 
 import com.echo.core.engine.RuleSelector;
+import com.echo.core.match.BodyRequirements;
 import com.echo.entity.BaseRule;
 import com.echo.entity.FaultType;
 import com.echo.entity.Protocol;
@@ -16,6 +17,8 @@ import com.echo.service.ServeEventDispatcher;
 import com.echo.service.ServeEventListener;
 import com.echo.util.CancellableStages;
 import com.echo.service.ScenarioService;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -411,14 +414,51 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     }
 
     /**
-     * JSON/XML 只在至少一條啟用候選規則真的使用 body 條件時解析。
-     * 結構化條件一律視為需要 body（只有使用進階條件的規則會因此多一次解析）。
-     */
-    /**
      * 依候選規則條件的需求準備 body（§4.5）：沒有條件讀 body 時不解析；XML 且條件都能串流時只掃描一次、不建立 DOM；
      * 其他情況照常解析。HTTP 與 JMS 用同一套規則。
      */
     public ConditionMatcher.PreparedBody prepareBodyForMatching(MockRequest request, List<T> candidates) {
+        if (candidateListsAreStable()) {
+            // 合併 2,000 條規則的需求約 0.7 ms；候選清單來自規則快照、物件固定，因此依物件快取
+            return conditionMatcher.prepareBody(request.getBody(),
+                    bodyRequirementsByCandidates.get(candidates, this::bodyRequirementsOf));
+        }
+        return prepareBody(request.getBody(), candidates);
+    }
+
+    /**
+     * 候選清單是否來自規則快照、在快照存在期間是同一個物件（JMS 的 queue 與分桶清單）。
+     * 是的話合併後的 body 需求依清單物件快取；HTTP 的候選清單依 path 每次重新篩選，不快取。
+     */
+    protected boolean candidateListsAreStable() {
+        return false;
+    }
+
+    /** 以清單物件本身為 key（weakKeys 用 identity 比較），快照淘汰後隨清單一起回收。 */
+    private final Cache<List<?>, BodyRequirements> bodyRequirementsByCandidates =
+            Caffeine.newBuilder().weakKeys().build();
+
+    private BodyRequirements bodyRequirementsOf(List<?> candidates) {
+        List<BodyRequirements> requirements = new ArrayList<>();
+        for (ConditionMatcher.RuleConditions conditions : bodyConditionsOf(castCandidates(candidates))) {
+            requirements.add(conditions.bodyRequirements());
+        }
+        return BodyRequirements.merge(requirements);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<T> castCandidates(List<?> candidates) {
+        return (List<T>) candidates;
+    }
+
+    private ConditionMatcher.PreparedBody prepareBody(String body, List<T> candidates) {
+        List<ConditionMatcher.RuleConditions> conditions = bodyConditionsOf(candidates);
+        return conditions.isEmpty() ? ConditionMatcher.PreparedBody.rawOnly(body)
+                : conditionMatcher.prepareBody(body, conditions);
+    }
+
+    /** 會讀 body 的啟用規則條件；只有 query／header 條件的規則不必查詢需求。 */
+    private List<ConditionMatcher.RuleConditions> bodyConditionsOf(List<T> candidates) {
         List<ConditionMatcher.RuleConditions> conditions = null;
         for (T rule : candidates) {
             if (Boolean.FALSE.equals(rule.getEnabled())) {
@@ -436,8 +476,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
             conditions.add(conditionMatcher.conditions(set.getMatchSpec(), bodyCondition,
                     set.getQueryCondition(), set.getHeaderCondition()));
         }
-        return conditions == null ? ConditionMatcher.PreparedBody.rawOnly(request.getBody())
-                : conditionMatcher.prepareBody(request.getBody(), conditions);
+        return conditions == null ? List.of() : conditions;
     }
 
     // ==================== 共用實作方法 ====================
