@@ -91,13 +91,53 @@ public final class BuiltinSources {
     // ==================== body ====================
 
     private static ValueExtractor body(Selector selector) {
+        // 簡單路徑（例如 //Order/Status）以 local name 比對，DOM 與串流掃描結果相同；其他 XPath 交給 XPath 引擎
+        XmlPath xmlPath = selector.kind() == Selector.Kind.XPATH
+                ? XmlPath.parse(selector.expression()).orElse(null) : null;
         ValueExtractor extractor = switch (selector.kind()) {
             case RAW -> request -> single(request.body().raw());
             case JSON_PATH -> jsonPath(selector.expression());
-            case XPATH -> xpath(selector.expression());
+            case XPATH -> xmlPath != null ? simpleXmlPath(selector.expression(), xmlPath) : xpath(selector.expression());
             case FIELD -> field(selector.expression());
         };
-        return request -> request.body().tooLarge() ? Extracted.unavailable() : extractor.extract(request);
+        boolean needsXmlDom = selector.kind() == Selector.Kind.XPATH && xmlPath == null;
+        return new BodyExtractor() {
+            @Override
+            public Extracted extract(RequestView request) {
+                return request.body().tooLarge() ? Extracted.unavailable() : extractor.extract(request);
+            }
+
+            @Override
+            public XmlPath xmlPath() {
+                return xmlPath;
+            }
+
+            @Override
+            public boolean needsXmlDom() {
+                return needsXmlDom;
+            }
+        };
+    }
+
+    private static ValueExtractor simpleXmlPath(String expression, XmlPath path) {
+        validateXPath(expression);
+        return request -> {
+            List<String> texts = request.body().xmlValues(path);
+            if (texts == null) {
+                return Extracted.missing();
+            }
+            List<Value> values = new ArrayList<>(texts.size());
+            texts.forEach(text -> values.add(Value.ofText(text)));
+            return Extracted.of(values);
+        };
+    }
+
+    private static void validateXPath(String expression) {
+        try {
+            XPATH.get().compile(expression);
+        } catch (XPathExpressionException e) {
+            throw new IllegalArgumentException("Invalid XPath: " + expression, e);
+        }
     }
 
     private static ValueExtractor jsonPath(String expression) {
@@ -132,11 +172,7 @@ public final class BuiltinSources {
     }
 
     private static ValueExtractor xpath(String expression) {
-        try {
-            XPATH.get().compile(expression);
-        } catch (XPathExpressionException e) {
-            throw new IllegalArgumentException("Invalid XPath: " + expression, e);
-        }
+        validateXPath(expression);
         return request -> {
             Document doc = request.body().xml();
             if (doc == null) {
@@ -224,6 +260,11 @@ public final class BuiltinSources {
         @Override
         public ValueExtractor create(String name, Selector selector, MatcherLimits limits) {
             return creator.create(name, selector, limits);
+        }
+
+        @Override
+        public boolean readsBody() {
+            return "body".equals(source);
         }
     }
 }

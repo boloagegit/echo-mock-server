@@ -61,21 +61,10 @@ public class JmsMockPipeline extends AbstractMockPipeline<JmsRule> {
         return jmsRuleService.findPreparedJmsRules(queueName);
     }
 
+    /** JMS 的候選清單取自規則快照（queue 與分桶清單），快照存在期間是同一個物件。 */
     @Override
-    protected ConditionMatcher.PreparedBody prepareBody(
-            MockRequest request, List<JmsRule> candidates) {
-        // 串流 XML 只支援舊版條件；有結構化條件的候選規則時改為完整解析
-        boolean advanced = candidates.stream()
-                .anyMatch(rule -> !Boolean.FALSE.equals(rule.getEnabled()) && rule.getMatchSpec() != null);
-        if (advanced) {
-            return conditionMatcher.prepareBody(request.getBody());
-        }
-        List<String> bodyConditions = candidates.stream()
-                .filter(rule -> !Boolean.FALSE.equals(rule.getEnabled()))
-                .map(JmsRule::getBodyCondition)
-                .filter(condition -> condition != null && !condition.isBlank())
-                .toList();
-        return conditionMatcher.prepareBodyForConditions(request.getBody(), bodyConditions);
+    protected boolean candidateListsAreStable() {
+        return true;
     }
 
     /**

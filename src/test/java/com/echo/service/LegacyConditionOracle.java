@@ -39,6 +39,14 @@ import java.util.regex.Pattern;
  * <p>
  * 內容凍結自移除 {@code echo.engine.matcher=legacy} 前的 {@link ConditionMatcher}（只去掉 JMS 串流 XML
  * 與新引擎相關的部分），不要為了讓測試通過而修改；正式程式一律使用新引擎。
+ * <p>
+ * 唯一的例外是刻意的語意調整，以 {@code [B1]} 標示（設計文件 §7.2.9）：XML body 的條件原本在 JMS 串流掃描與完整解析
+ * 之間結果不同，統一成串流掃描的結果——
+ * <ol>
+ *   <li>簡單路徑（例如 {@code Item}、{@code Order/Status}、{@code //Item/@sku}）一律以 local name 比對，
+ *       不再先找完全相同的帶前綴名稱；相對路徑是「路徑結尾符合」；</li>
+ *   <li>XML 元素條件把 {@code ==} 當成 {@code =}。</li>
+ * </ol>
  */
 public final class LegacyConditionOracle {
 
@@ -123,6 +131,10 @@ public final class LegacyConditionOracle {
     }
 
     private NodeList findXmlNodes(String field, Document doc) throws javax.xml.xpath.XPathExpressionException {
+        NodeList simplePath = b1SimplePathNodes(field, doc);
+        if (simplePath != null) {
+            return simplePath;
+        }
         String simpleName = extractSimpleElementName(field);
         if (simpleName != null) {
             NodeList nodes = doc.getElementsByTagName(simpleName);
@@ -487,7 +499,7 @@ public final class LegacyConditionOracle {
     }
 
     private boolean matchXmlNodesPrepared(String condition, Document doc) {
-        var parsed = parseCondition(condition);
+        var parsed = parseCondition(condition.replace("==", "=")); // [B1] 2. XML 元素條件把 == 當成 =
         try {
             NodeList nodes = findXmlNodes(parsed.field(), doc);
             for (int i = 0; i < nodes.getLength(); i++) {
@@ -739,4 +751,81 @@ public final class LegacyConditionOracle {
     private enum Op { EQUAL, NOT_EQUAL, CONTAINS, MATCHES }
     private record ParsedCondition(String field, String value, Op op) {}
 
+
+    // ==================== [B1] 1. 簡單路徑以 local name 比對（與正式程式分開實作） ====================
+
+    /** 簡單路徑的節點（元素或屬性），依文件順序；不是簡單路徑時回傳 null，維持原本的查找方式。 */
+    private static NodeList b1SimplePathNodes(String field, Document doc) {
+        String path = field.trim();
+        if (path.endsWith("/text()")) {
+            path = path.substring(0, path.length() - "/text()".length());
+        }
+        if (path.isEmpty() || path.startsWith("$.") || path.matches(".*[\\[\\]()*|:\\s].*")) {
+            return null;
+        }
+        boolean absolute = path.startsWith("/") && !path.startsWith("//");
+        path = path.startsWith("//") ? path.substring(2) : path.startsWith("/") ? path.substring(1) : path;
+        String[] parts = path.split("/", -1);
+        List<String> names = new ArrayList<>();
+        String attribute = null;
+        for (int i = 0; i < parts.length; i++) {
+            String part = parts[i];
+            if (part.isEmpty() || part.equals(".") || part.equals("..")) {
+                return null;
+            }
+            if (part.startsWith("@")) {
+                if (i != parts.length - 1 || part.length() == 1) {
+                    return null;
+                }
+                attribute = part.substring(1);
+            } else {
+                names.add(part);
+            }
+        }
+        if (names.isEmpty()) {
+            return null;
+        }
+        List<org.w3c.dom.Node> found = new ArrayList<>();
+        NodeList all = doc.getElementsByTagName("*");
+        for (int i = 0; i < all.getLength(); i++) {
+            org.w3c.dom.Node element = all.item(i);
+            List<String> chain = new ArrayList<>();
+            for (org.w3c.dom.Node n = element; n instanceof org.w3c.dom.Element; n = n.getParentNode()) {
+                chain.add(0, b1LocalName(n.getNodeName()));
+            }
+            boolean matches = absolute ? chain.equals(names)
+                    : chain.size() >= names.size() && chain.subList(chain.size() - names.size(), chain.size()).equals(names);
+            if (!matches) {
+                continue;
+            }
+            if (attribute == null) {
+                found.add(element);
+                continue;
+            }
+            org.w3c.dom.NamedNodeMap attributes = element.getAttributes();
+            for (int a = 0; a < attributes.getLength(); a++) {
+                String name = attributes.item(a).getNodeName();
+                if (!name.equals("xmlns") && !name.startsWith("xmlns:") && attribute.equals(b1LocalName(name))) {
+                    found.add(attributes.item(a));
+                    break;
+                }
+            }
+        }
+        return new NodeList() {
+            @Override
+            public org.w3c.dom.Node item(int index) {
+                return index >= 0 && index < found.size() ? found.get(index) : null;
+            }
+
+            @Override
+            public int getLength() {
+                return found.size();
+            }
+        };
+    }
+
+    private static String b1LocalName(String qualifiedName) {
+        int colon = qualifiedName.indexOf(':');
+        return colon < 0 ? qualifiedName : qualifiedName.substring(colon + 1);
+    }
 }

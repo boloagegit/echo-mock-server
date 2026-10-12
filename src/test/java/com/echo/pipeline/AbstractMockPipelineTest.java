@@ -174,7 +174,7 @@ class AbstractMockPipelineTest {
                     .status(200).body("OK").matched(true).forwarded(false).build();
 
             ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
+            when(conditionMatcher.prepareBody(anyString(), anyCollection())).thenReturn(prepared);
             when(conditionMatcher.matchesPrepared(anyString(), isNull(), isNull(),
                     any(), isNull(), isNull())).thenReturn(true);
             when(ruleService.findResponseBodyById(1L)).thenReturn(Optional.of("response body"));
@@ -418,7 +418,7 @@ class AbstractMockPipelineTest {
                     .status(200).body("resp").matched(true).forwarded(false).build();
 
             ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
+            when(conditionMatcher.prepareBody(anyString(), anyCollection())).thenReturn(prepared);
             when(conditionMatcher.matchesPrepared(anyString(), isNull(), isNull(),
                     any(), isNull(), isNull())).thenReturn(true);
             when(ruleService.findResponseBodyById(5L)).thenReturn(Optional.of("resp body"));
@@ -450,7 +450,7 @@ class AbstractMockPipelineTest {
             assertThat(result.getDelayMs()).isEqualTo(0);
             assertThat(result.getMatchTimeMs()).isGreaterThanOrEqualTo(0);
             assertThat(result.getResponseTimeMs()).isGreaterThanOrEqualTo(0);
-            verify(conditionMatcher, never()).prepareBody(anyString());
+            verify(conditionMatcher, never()).prepareBody(anyString(), anyCollection());
         }
     }
 

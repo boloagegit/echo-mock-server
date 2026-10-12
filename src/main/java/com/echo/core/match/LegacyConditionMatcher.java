@@ -38,10 +38,16 @@ final class LegacyConditionMatcher implements CompiledMatcher {
     private final String condition;
     private final String cacheKey;
     private final MatcherLimits limits;
-    /** 比對用的解析結果；JSON 點路徑會先把 {@code ==} 換成 {@code =}，其他分支不換。 */
+    /**
+     * 比對用的解析結果。JSON 點路徑與 XML 元素路徑會先把 {@code ==} 換成 {@code =}（XML 與串流掃描一致，見 §7.2.9）；
+     * JSONPath、query、header 不換。
+     */
     private final Parsed parsed;
     private final Parsed parsedWithoutDoubleEquals;
     private final JsonPath jsonPath;
+    /** XML body 時的簡單路徑（可串流）；無法以簡單路徑表示時為 null，改用 XPath。 */
+    private final XmlPath xmlPath;
+    private final BodyRequirements bodyRequirements;
 
     LegacyConditionMatcher(MatchNode.LegacySource source, String condition, MatcherLimits limits) {
         this.source = source;
@@ -52,6 +58,59 @@ final class LegacyConditionMatcher implements CompiledMatcher {
         this.parsedWithoutDoubleEquals = Parsed.of(condition.replace("==", "="), limits);
         this.jsonPath = source == MatchNode.LegacySource.BODY && condition.startsWith("$.")
                 ? compileJsonPath(parsed.field) : null;
+        this.xmlPath = source == MatchNode.LegacySource.BODY && jsonPath == null && !condition.startsWith("$.")
+                ? XmlPath.parse(parsedWithoutDoubleEquals.field).orElse(null) : null;
+        this.bodyRequirements = requirements();
+    }
+
+    private BodyRequirements requirements() {
+        if (source != MatchNode.LegacySource.BODY) {
+            return BodyRequirements.NONE;
+        }
+        if (condition.startsWith("$.")) {
+            return BodyRequirements.BODY_WITHOUT_XML;
+        }
+        // 相同條件只在 XML body 時用到 XML；JSON body 時走 JSON 點路徑
+        return xmlPath != null ? BodyRequirements.streamable(new LegacyStreamCheck()) : BodyRequirements.FULL;
+    }
+
+    @Override
+    public BodyRequirements bodyRequirements() {
+        return bodyRequirements;
+    }
+
+    /** 與 {@link #matchXmlNodes} 相同：任一個（未超過長度上限的）值符合即成立。 */
+    private final class LegacyStreamCheck implements BodyRequirements.StreamCheck {
+
+        @Override
+        public XmlPath path() {
+            return xmlPath;
+        }
+
+        @Override
+        public String cacheKey() {
+            return cacheKey;
+        }
+
+        @Override
+        public BodyRequirements.Probe newProbe() {
+            return new BodyRequirements.Probe() {
+                private boolean matched;
+
+                @Override
+                public boolean offer(String value) {
+                    if (value.length() <= limits.maxFieldValueLength() && parsedWithoutDoubleEquals.test(value)) {
+                        matched = true;
+                    }
+                    return matched;
+                }
+
+                @Override
+                public boolean result() {
+                    return matched;
+                }
+            };
+        }
     }
 
     @Override
@@ -117,21 +176,22 @@ final class LegacyConditionMatcher implements CompiledMatcher {
 
     private boolean matchBody(EvalContext context) {
         BodyView body = context.request().body();
+        // JSONPath 只看 JSON：先處理，避免為了判斷 body 型別而解析 XML（串流掃描過的 body 沒有 DOM）
+        if (condition.startsWith("$.")) {
+            return !BodyType.emptyOrTooLarge(body) && matchJsonPath(context);
+        }
         BodyType type = BodyType.of(body);
         if (type == BodyType.EMPTY || type == BodyType.TOO_LARGE) {
             return false;
         }
-        if (condition.startsWith("$.")) {
-            return matchJsonPath(context);
-        }
         if (condition.startsWith("//")) {
-            return type == BodyType.XML && matchXmlNodes(context, parsed, body.xml());
+            return type == BodyType.XML && matchXmlNodes(context, parsedWithoutDoubleEquals, body);
         }
         if (type == BodyType.JSON) {
             return matchJsonField(body.json());
         }
         if (type == BodyType.XML) {
-            return matchXmlNodes(context, parsed, body.xml());
+            return matchXmlNodes(context, parsedWithoutDoubleEquals, body);
         }
         return body.raw().trim().contains(condition);
     }
@@ -205,14 +265,13 @@ final class LegacyConditionMatcher implements CompiledMatcher {
         }
     }
 
-    private boolean matchXmlNodes(EvalContext context, Parsed cond, Document doc) {
-        if (doc == null) {
-            return false;
-        }
+    private boolean matchXmlNodes(EvalContext context, Parsed cond, BodyView body) {
         try {
-            NodeList nodes = xmlNodes(context, cond.field, doc);
-            for (int i = 0; i < nodes.getLength(); i++) {
-                String text = nodes.item(i).getTextContent().trim();
+            List<String> values = xmlValues(context, cond.field, body);
+            if (values == null) {
+                return false;
+            }
+            for (String text : values) {
                 if (text.length() > limits.maxFieldValueLength()) {
                     continue;
                 }
@@ -252,13 +311,13 @@ final class LegacyConditionMatcher implements CompiledMatcher {
                 return result.value != null ? result.value : "null";
             }
             if (condition.startsWith("//")) {
-                return type == BodyType.XML ? xmlActual(context, described.field, body.xml()) : "not found";
+                return type == BodyType.XML ? xmlActual(context, described.field, body) : "not found";
             }
             if (type == BodyType.JSON) {
                 return jsonFieldActual(described.field, body.json());
             }
             if (type == BodyType.XML) {
-                return xmlActual(context, described.field, body.xml());
+                return xmlActual(context, described.field, body);
             }
         } catch (RuntimeException e) {
             // 與舊版相同：取值失敗時顯示 not found
@@ -290,11 +349,11 @@ final class LegacyConditionMatcher implements CompiledMatcher {
         return node.isTextual() ? node.asText() : node.toString();
     }
 
-    private static String xmlActual(EvalContext context, String field, Document doc) {
+    private String xmlActual(EvalContext context, String field, BodyView body) {
         try {
-            NodeList nodes = xmlNodes(context, field, doc);
-            if (nodes.getLength() > 0) {
-                return nodes.item(0).getTextContent().trim();
+            List<String> values = xmlValues(context, field, body);
+            if (values != null && !values.isEmpty()) {
+                return values.get(0);
             }
         } catch (XPathExpressionException | RuntimeException e) {
             // 與舊版相同：取值失敗時顯示 not found
@@ -330,22 +389,39 @@ final class LegacyConditionMatcher implements CompiledMatcher {
     // ==================== XML lookup ====================
 
     /**
-     * 同一請求內相同欄位只查找一次（例如 30 條規則都檢查 {@code CustomerId}），結果跨條件共用。
+     * XML body 中欄位的值（去除前後空白、依文件順序）；不是 XML 時為 null。
+     * 簡單路徑（{@link XmlPath}）以 local name 比對，與串流掃描相同，結果由 body 在同一請求內快取共用；
+     * 其他寫法（含 predicate、函式、帶前綴名稱等）照舊用 XPath，同一請求內相同欄位只查找一次。
      * 查找失敗也會保存，之後以同樣的例外回報，讓呼叫端維持舊版的處理方式。
      */
-    private static NodeList xmlNodes(EvalContext context, String field, Document doc)
+    private List<String> xmlValues(EvalContext context, String field, BodyView body)
             throws XPathExpressionException {
+        if (xmlPath != null) {
+            return body.xmlValues(xmlPath);
+        }
+        Document doc = body.xml();
+        if (doc == null) {
+            return null;
+        }
         XmlLookup lookup = context.cachedValue(new XmlLookupKey(field), () -> {
             try {
-                return new XmlLookup(findXmlNodes(field, doc));
+                return new XmlLookup(texts(findXmlNodes(field, doc)));
             } catch (XPathExpressionException | RuntimeException e) {
                 return XmlLookup.FAILED;
             }
         });
-        if (lookup.nodes() == null) {
+        if (lookup.values() == null) {
             throw new XPathExpressionException("XML lookup failed for " + field);
         }
-        return lookup.nodes();
+        return lookup.values();
+    }
+
+    private static List<String> texts(NodeList nodes) {
+        List<String> texts = new ArrayList<>(nodes.getLength());
+        for (int i = 0; i < nodes.getLength(); i++) {
+            texts.add(nodes.item(i).getTextContent().trim());
+        }
+        return texts;
     }
 
     private static NodeList findXmlNodes(String field, Document doc) throws XPathExpressionException {
@@ -578,8 +654,8 @@ final class LegacyConditionMatcher implements CompiledMatcher {
     private record XmlLookupKey(String field) {
     }
 
-    /** {@code nodes} 為 null 表示查找失敗（XPath 語法錯誤等）。 */
-    private record XmlLookup(NodeList nodes) {
+    /** {@code values} 為 null 表示查找失敗（XPath 語法錯誤等）。 */
+    private record XmlLookup(List<String> values) {
         static final XmlLookup FAILED = new XmlLookup(null);
     }
 
@@ -590,6 +666,10 @@ final class LegacyConditionMatcher implements CompiledMatcher {
     /** 對應舊版 {@code PreparedBody.BodyType}。 */
     private enum BodyType {
         EMPTY, TOO_LARGE, JSON, XML, PLAIN;
+
+        static boolean emptyOrTooLarge(BodyView body) {
+            return body.raw() == null || body.raw().isBlank() || body.tooLarge();
+        }
 
         static BodyType of(BodyView body) {
             String raw = body.raw();

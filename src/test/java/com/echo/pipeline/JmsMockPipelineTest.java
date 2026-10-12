@@ -8,6 +8,7 @@ import com.echo.entity.JmsForwardTargetMode;
 import com.echo.entity.JmsRuleAction;
 import com.echo.entity.Protocol;
 import com.echo.jms.JmsTargetForwarder;
+import com.echo.core.match.BodyRequirements;
 import com.echo.service.ConditionMatcher;
 import com.echo.service.JmsRuleService;
 import com.echo.service.RequestLogService;
@@ -40,6 +41,9 @@ class JmsMockPipelineTest {
 
     @Mock
     private ConditionMatcher conditionMatcher;
+
+    /** 規則條件的 body 需求由真的 ConditionMatcher 編譯（mock 不會回傳可用的條件物件）。 */
+    private static final ConditionMatcher REAL_MATCHER = new ConditionMatcher();
 
     @Mock
     private RuleService ruleService;
@@ -126,7 +130,10 @@ class JmsMockPipelineTest {
                     .thenReturn(List.of(rule));
 
             ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBodyForConditions(anyString(), anyList()))
+            when(conditionMatcher.conditions(any(), any(), any(), any()))
+                    .thenAnswer(call -> REAL_MATCHER.conditions(call.getArgument(0), call.getArgument(1),
+                            call.getArgument(2), call.getArgument(3)));
+            when(conditionMatcher.prepareBody(anyString(), any(BodyRequirements.class)))
                     .thenReturn(prepared);
             when(conditionMatcher.matchesPrepared(
                     eq("ServiceName=CreateOrder"), isNull(), isNull(),
@@ -340,7 +347,10 @@ class JmsMockPipelineTest {
                     .thenReturn(List.of(rule));
 
             ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBodyForConditions(anyString(), anyList()))
+            when(conditionMatcher.conditions(any(), any(), any(), any()))
+                    .thenAnswer(call -> REAL_MATCHER.conditions(call.getArgument(0), call.getArgument(1),
+                            call.getArgument(2), call.getArgument(3)));
+            when(conditionMatcher.prepareBody(anyString(), any(BodyRequirements.class)))
                     .thenReturn(prepared);
             when(conditionMatcher.matchesPrepared(
                     eq("ServiceName=CreateOrder"), isNull(), isNull(),

@@ -296,7 +296,7 @@ class ConditionMatcherExtendedTest {
         String xml = "<root><header><ServiceName>PerfService</ServiceName>"
                 + "<Marker>TARGET</Marker></header><items><item sku=\"A001\">first</item>"
                 + "<item sku=\"B002\">second</item></items></root>";
-        PreparedBody prepared = matcher.prepareBodyForConditions(xml, List.of(
+        PreparedBody prepared = prepareBodyFor(matcher, xml, List.of(
                 "ServiceName=PerfService;//header/Marker*=ARG;"
                         + "/root/items/item/@sku=A001;//item~=first|second"));
 
@@ -314,7 +314,7 @@ class ConditionMatcherExtendedTest {
     void jmsStreamingXml_largePayload_shouldNotCreateDom() {
         String xml = "<root><ServiceName>PerfService</ServiceName><payload>"
                 + "x".repeat(1024 * 1024) + "</payload></root>";
-        PreparedBody prepared = matcher.prepareBodyForConditions(
+        PreparedBody prepared = prepareBodyFor(matcher, 
                 xml, List.of("//ServiceName=PerfService"));
 
         assertThat(matcher.matchesPrepared("//ServiceName=PerfService", null, null,
@@ -325,7 +325,7 @@ class ConditionMatcherExtendedTest {
     void jmsComplexXpath_shouldBuildOneReusableDom() {
         String xml = "<root><item>first</item><item>second</item></root>";
 
-        PreparedBody prepared = matcher.prepareBodyForConditions(
+        PreparedBody prepared = prepareBodyFor(matcher, 
                 xml, List.of("//item[1]=first"));
 
         assertThat(matcher.matchesPrepared("//item[1]=first", null, null,
@@ -337,7 +337,7 @@ class ConditionMatcherExtendedTest {
     void jmsStreamingXml_shouldPreserveNamespaceCdataAndMissingFieldSemantics() {
         String xml = "<ns:root xmlns:ns='urn:test'><ns:item id='A1'><![CDATA[ OPEN ]]></ns:item>"
                 + "<ns:item id='A2'>CLOSED</ns:item></ns:root>";
-        PreparedBody prepared = matcher.prepareBodyForConditions(xml, List.of(
+        PreparedBody prepared = prepareBodyFor(matcher, xml, List.of(
                 "//item=OPEN;/root/item/@id=A2;//item!=CLOSED;//missing!=anything"));
 
         assertThat(matcher.matchesPrepared("//item=OPEN", null, null,
@@ -354,10 +354,18 @@ class ConditionMatcherExtendedTest {
     void jmsStreamingXml_shouldRejectDtdAndExternalEntities() {
         String xml = "<!DOCTYPE root [<!ENTITY xxe SYSTEM 'file:///etc/passwd'>]>"
                 + "<root><ServiceName>&xxe;</ServiceName></root>";
-        PreparedBody prepared = matcher.prepareBodyForConditions(
+        PreparedBody prepared = prepareBodyFor(matcher, 
                 xml, List.of("//ServiceName=secret"));
 
         assertThat(matcher.matchesPrepared("//ServiceName=secret", null, null,
                 prepared, null, null)).isFalse();
+    }
+
+    /** 以候選規則的 body 條件準備 body（與 pipeline 相同的規則）。 */
+    private static ConditionMatcher.PreparedBody prepareBodyFor(ConditionMatcher matcher, String body,
+                                                                java.util.List<String> bodyConditions) {
+        return matcher.prepareBody(body, bodyConditions.stream()
+                .map(condition -> matcher.conditions(condition, null, null))
+                .toList());
     }
 }

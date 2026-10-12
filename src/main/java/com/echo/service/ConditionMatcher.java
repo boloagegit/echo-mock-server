@@ -1,5 +1,10 @@
 package com.echo.service;
 
+import java.util.Collection;
+import javax.xml.stream.XMLStreamException;
+import com.echo.core.match.XmlStreamScan;
+import com.echo.core.match.XmlPath;
+import com.echo.core.match.BodyRequirements;
 import com.echo.core.match.BodyView;
 import com.echo.core.match.CompiledMatcher;
 import com.echo.core.match.EvalContext;
@@ -10,7 +15,6 @@ import com.echo.core.match.MatcherCompiler;
 import com.echo.core.match.MatcherLimits;
 import com.echo.core.match.MatcherRegistry;
 import com.echo.core.match.RequestView;
-import com.echo.core.util.InterruptibleCharSequence;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,25 +32,16 @@ import org.xml.sax.SAXException;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.stream.XMLInputFactory;
-import javax.xml.stream.XMLStreamConstants;
-import javax.xml.stream.XMLStreamReader;
 import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.io.StringReader;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.StringJoiner;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Pattern;
 
 /**
  * 條件匹配服務
@@ -78,9 +73,6 @@ import java.util.regex.Pattern;
 public class ConditionMatcher {
 
     private static final int MAX_JSON_SIZE = 10 * 1024 * 1024; // 10MB
-    private static final int MAX_REGEX_INPUT_LENGTH = 10000;
-    private static final int MAX_REGEX_PATTERN_LENGTH = 200;
-    private static final long REGEX_TIMEOUT_MS = 1000;
 
     private static final int DEFAULT_MAX_FIELD_VALUE_LENGTH = 2 * 1024 * 1024;
 
@@ -125,6 +117,11 @@ public class ConditionMatcher {
         private RuleConditions(ConditionKey key, MatcherCompiler compiler) {
             this.key = key;
             this.compiler = compiler;
+        }
+
+        /** 這組條件對 body 的需求（見 {@link BodyRequirements}）。 */
+        public BodyRequirements bodyRequirements() {
+            return compiled().bodyRequirements();
         }
 
         private CompiledMatcher compiled() {
@@ -180,10 +177,6 @@ public class ConditionMatcher {
     }
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final Cache<String, Pattern> patternCache = Caffeine.newBuilder()
-            .maximumSize(500)
-            .expireAfterAccess(1, TimeUnit.HOURS)
-            .build();
 
     private static final ThreadLocal<DocumentBuilder> DOC_BUILDER = ThreadLocal.withInitial(() -> {
         try {
@@ -200,19 +193,9 @@ public class ConditionMatcher {
         }
     });
 
-    private static final ThreadLocal<XMLInputFactory> XML_INPUT_FACTORY = ThreadLocal.withInitial(() -> {
-        XMLInputFactory factory = XMLInputFactory.newFactory();
-        factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
-        factory.setProperty("javax.xml.stream.isSupportingExternalEntities", false);
-        factory.setProperty(XMLInputFactory.IS_REPLACING_ENTITY_REFERENCES, false);
-        return factory;
-    });
-
     @PreDestroy
     public void cleanup() {
         DOC_BUILDER.remove();
-        XML_INPUT_FACTORY.remove();
-        patternCache.invalidateAll();
     }
 
     // ==================== Prepared Body ====================
@@ -234,6 +217,8 @@ public class ConditionMatcher {
         private String contextQueryString;
         private Map<String, String> contextHeaders;
         private Document lazyXmlDoc;
+        private boolean lazyXmlParsed;
+        private Map<XmlPath, List<String>> xmlValues;
 
         enum BodyType { XML, JSON, PLAIN, EMPTY, TOO_LARGE }
 
@@ -334,16 +319,30 @@ public class ConditionMatcher {
                 return jsonNode;
             }
 
-            /** JMS 串流 XML 沒有 DOM；真的需要（例如串流無法處理的條件或匹配鏈說明）時才解析。 */
+            /** 串流掃描過的 XML 沒有 DOM；真的需要（例如匹配鏈說明）時才解析，失敗也只試一次。 */
             @Override
             public Document xml() {
                 if (xmlDoc != null) {
                     return xmlDoc;
                 }
-                if (type == BodyType.XML && lazyXmlDoc == null && raw != null) {
+                if (type == BodyType.XML && !lazyXmlParsed && raw != null) {
+                    lazyXmlParsed = true;
                     lazyXmlDoc = parseXmlQuietly(raw);
                 }
                 return lazyXmlDoc;
+            }
+
+            /** 同一請求內相同路徑只查找一次，多條規則共用。 */
+            @Override
+            public List<String> xmlValues(XmlPath path) {
+                Document doc = xml();
+                if (doc == null) {
+                    return null;
+                }
+                if (xmlValues == null) {
+                    xmlValues = new HashMap<>();
+                }
+                return xmlValues.computeIfAbsent(path, ignored -> path.select(doc));
             }
         }
     }
@@ -403,13 +402,22 @@ public class ConditionMatcher {
     }
 
     /**
-     * JMS XML 快速路徑：依候選規則一次串流掃描 XML，直接快取每個條件結果。
-     * <p>
-     * 一般 element、相對/絕對路徑與末端 attribute 不建立 DOM；只有含 XPath
-     * predicate/function 等複雜語法的條件，才建立一次由所有候選規則共用的 DOM。
+     * 依候選規則條件的需求準備 body（§4.5）：沒有條件讀 body 時不解析；XML body 且沒有條件需要 DOM 時，
+     * 以串流掃描一次算出所有可串流條件的結果，不建立 DOM；其他情況照常解析，所有規則共用。
      */
-    public PreparedBody prepareBodyForConditions(
-            String body, List<String> bodyConditions) {
+    public PreparedBody prepareBody(String body, Collection<RuleConditions> candidates) {
+        List<BodyRequirements> requirements = new ArrayList<>(candidates.size());
+        for (RuleConditions conditions : candidates) {
+            requirements.add(conditions.bodyRequirements());
+        }
+        return prepareBody(body, BodyRequirements.merge(requirements));
+    }
+
+    /** 同上，需求已合併。 */
+    public PreparedBody prepareBody(String body, BodyRequirements requirements) {
+        if (!requirements.usesBody()) {
+            return PreparedBody.rawOnly(body);
+        }
         if (body == null || body.isBlank()) {
             return PreparedBody.empty();
         }
@@ -417,267 +425,16 @@ public class ConditionMatcher {
             log.warn("Body too large for prepare: {} bytes", body.length());
             return PreparedBody.tooLarge();
         }
-
         String trimmed = body.trim();
-        if (!trimmed.startsWith("<")) {
-            return prepareBody(body);
-        }
-
-        StreamingConditionPlan streamPlan = streamingConditions(bodyConditions);
-        List<StreamConditionState> streamStates = streamPlan.states();
-        if (!streamPlan.allStreamable()) {
-            // 只要有一個複雜 XPath，就建立一次 DOM 給所有規則共用。
-            // 監聽器外層的訊息記憶體額度仍會覆蓋這個 DOM 的生命週期。
+        if (!trimmed.startsWith("<") || requirements.needsXmlDom()) {
             return prepareBody(body);
         }
         try {
-            Map<String, Boolean> outcomes = new HashMap<>();
-            if (!streamStates.isEmpty()) {
-                evaluateStreamingXml(trimmed, streamStates);
-                for (StreamConditionState state : streamStates) {
-                    outcomes.put("body:" + state.condition, state.matched);
-                }
-            }
-            return PreparedBody.streamingXml(trimmed, outcomes);
-        } catch (Exception e) {
-            log.warn("Failed to prepare body: {}", e.getMessage());
-            return new PreparedBody(trimmed, null, null, PreparedBody.BodyType.PLAIN);
-        }
-    }
-
-    private StreamingConditionPlan streamingConditions(List<String> bodyConditions) {
-        if (bodyConditions == null || bodyConditions.isEmpty()) {
-            return new StreamingConditionPlan(List.of(), true);
-        }
-        Set<String> uniqueConditions = new LinkedHashSet<>();
-        for (String bodyCondition : bodyConditions) {
-            if (bodyCondition == null || bodyCondition.isBlank()) {
-                continue;
-            }
-            for (String condition : bodyCondition.split(";")) {
-                String trimmed = condition.trim();
-                if (!trimmed.isEmpty()) {
-                    uniqueConditions.add(trimmed);
-                }
-            }
-        }
-
-        List<StreamConditionState> states = new ArrayList<>();
-        boolean allStreamable = true;
-        for (String condition : uniqueConditions) {
-            ParsedCondition parsed = parseCondition(condition.replace("==", "="));
-            StreamXmlSelector selector = StreamXmlSelector.parse(parsed.field());
-            if (selector != null) {
-                states.add(new StreamConditionState(condition, parsed, selector));
-            } else {
-                allStreamable = false;
-            }
-        }
-        return new StreamingConditionPlan(states, allStreamable);
-    }
-
-    private record StreamingConditionPlan(
-            List<StreamConditionState> states, boolean allStreamable) {
-    }
-
-    private void evaluateStreamingXml(String body, List<StreamConditionState> states) throws Exception {
-        XMLStreamReader reader = XML_INPUT_FACTORY.get()
-                .createXMLStreamReader(new StringReader(body));
-        List<String> path = new ArrayList<>();
-        Deque<StreamCapture> captures = new ArrayDeque<>();
-        int unmatchedConditions = states.size();
-        try {
-            while (reader.hasNext()) {
-                int event = reader.next();
-                if (event == XMLStreamConstants.START_ELEMENT) {
-                    path.add(reader.getLocalName());
-                    List<StreamConditionState> elementStates = new ArrayList<>();
-                    for (StreamConditionState state : states) {
-                        if (!state.selector.matchesElementPath(path)) {
-                            continue;
-                        }
-                        if (state.selector.attributeName != null) {
-                            String attribute = attributeValue(reader, state.selector.attributeName);
-                            if (attribute != null) {
-                                if (evaluateStreamValue(state, attribute.trim())) {
-                                    unmatchedConditions--;
-                                }
-                            }
-                        } else {
-                            elementStates.add(state);
-                        }
-                    }
-                    if (!elementStates.isEmpty()) {
-                        captures.addLast(new StreamCapture(path.size(), elementStates));
-                    }
-                    if (unmatchedConditions == 0) {
-                        return;
-                    }
-                } else if (event == XMLStreamConstants.CHARACTERS
-                        || event == XMLStreamConstants.CDATA) {
-                    for (StreamCapture capture : captures) {
-                        capture.append(reader.getTextCharacters(), reader.getTextStart(),
-                                reader.getTextLength(), maxFieldValueLength);
-                    }
-                } else if (event == XMLStreamConstants.END_ELEMENT) {
-                    int depth = path.size();
-                    var iterator = captures.descendingIterator();
-                    while (iterator.hasNext()) {
-                        StreamCapture capture = iterator.next();
-                        if (capture.depth != depth) {
-                            continue;
-                        }
-                        iterator.remove();
-                        if (!capture.tooLarge) {
-                            String actual = capture.value.toString().trim();
-                            for (StreamConditionState state : capture.states) {
-                                if (evaluateStreamValue(state, actual)) {
-                                    unmatchedConditions--;
-                                }
-                            }
-                        }
-                    }
-                    path.remove(path.size() - 1);
-                    if (unmatchedConditions == 0) {
-                        return;
-                    }
-                }
-            }
-        } finally {
-            reader.close();
-        }
-    }
-
-    private boolean evaluateStreamValue(StreamConditionState state, String actual) {
-        if (actual.length() > maxFieldValueLength) {
-            return false;
-        }
-        if (!state.matched && matchValue(state.parsed, actual)) {
-            state.matched = true;
-            return true;
-        }
-        return false;
-    }
-
-    private static String attributeValue(XMLStreamReader reader, String localName) {
-        for (int i = 0; i < reader.getAttributeCount(); i++) {
-            if (localName.equals(reader.getAttributeLocalName(i))) {
-                return reader.getAttributeValue(i);
-            }
-        }
-        return null;
-    }
-
-    private static final class StreamConditionState {
-        private final String condition;
-        private final ParsedCondition parsed;
-        private final StreamXmlSelector selector;
-        private boolean matched;
-
-        private StreamConditionState(
-                String condition, ParsedCondition parsed, StreamXmlSelector selector) {
-            this.condition = condition;
-            this.parsed = parsed;
-            this.selector = selector;
-        }
-    }
-
-    private static final class StreamCapture {
-        private final int depth;
-        private final List<StreamConditionState> states;
-        private StringBuilder value = new StringBuilder();
-        private boolean tooLarge;
-
-        private StreamCapture(int depth, List<StreamConditionState> states) {
-            this.depth = depth;
-            this.states = states;
-        }
-
-        private void append(char[] chars, int start, int length, int maximumLength) {
-            if (tooLarge) {
-                return;
-            }
-            if (value.length() > maximumLength - length) {
-                tooLarge = true;
-                value = null;
-                return;
-            }
-            value.append(chars, start, length);
-        }
-    }
-
-    private static final class StreamXmlSelector {
-        private final List<String> elements;
-        private final boolean absolute;
-        private final String attributeName;
-
-        private StreamXmlSelector(List<String> elements, boolean absolute, String attributeName) {
-            this.elements = elements;
-            this.absolute = absolute;
-            this.attributeName = attributeName;
-        }
-
-        private static StreamXmlSelector parse(String field) {
-            if (field == null || field.isBlank() || field.startsWith("$.")) {
-                return null;
-            }
-            String path = field.trim();
-            if (path.endsWith("/text()")) {
-                path = path.substring(0, path.length() - "/text()".length());
-            }
-            if (path.contains("[") || path.contains("]") || path.contains("(")
-                    || path.contains(")") || path.contains("*") || path.contains("|")) {
-                return null;
-            }
-
-            boolean absolute = path.startsWith("/") && !path.startsWith("//");
-            if (path.startsWith("//")) {
-                path = path.substring(2);
-            } else if (path.startsWith("/")) {
-                path = path.substring(1);
-            }
-            if (path.isEmpty()) {
-                return null;
-            }
-
-            String[] parts = path.split("/");
-            List<String> elements = new ArrayList<>();
-            String attribute = null;
-            for (int i = 0; i < parts.length; i++) {
-                String part = parts[i];
-                if (part.isEmpty() || ".".equals(part) || "..".equals(part)
-                        || part.contains(":")) {
-                    return null;
-                }
-                if (part.startsWith("@")) {
-                    if (i != parts.length - 1 || part.length() == 1) {
-                        return null;
-                    }
-                    attribute = part.substring(1);
-                } else {
-                    if (attribute != null) {
-                        return null;
-                    }
-                    elements.add(part);
-                }
-            }
-            return elements.isEmpty() ? null : new StreamXmlSelector(elements, absolute, attribute);
-        }
-
-        private boolean matchesElementPath(List<String> currentPath) {
-            if (absolute) {
-                return currentPath.equals(elements);
-            }
-            if (currentPath.size() < elements.size()) {
-                return false;
-            }
-            int offset = currentPath.size() - elements.size();
-            for (int i = 0; i < elements.size(); i++) {
-                if (!elements.get(i).equals(currentPath.get(offset + i))) {
-                    return false;
-                }
-            }
-            return true;
+            return PreparedBody.streamingXml(trimmed,
+                    XmlStreamScan.evaluate(trimmed, requirements, maxFieldValueLength));
+        } catch (XMLStreamException | RuntimeException e) {
+            // 串流無法處理（不是合法 XML、namespace 前綴未宣告等）：改用一般解析，由它判斷是 XML 還是純文字
+            return prepareBody(body);
         }
     }
 
@@ -823,86 +580,6 @@ public class ConditionMatcher {
     public boolean matches(String condition, String body) {
         return matches(condition, body, null);
     }
-
-    // ==================== Condition Parsing ====================
-
-    private ParsedCondition parseCondition(String condition) {
-        int eqIdx = condition.indexOf('=');
-        if (eqIdx <= 0) {
-            return new ParsedCondition(condition, "", Op.EQUAL);
-        }
-        char prev = condition.charAt(eqIdx - 1);
-        if (prev == '~') {
-            return new ParsedCondition(
-                condition.substring(0, eqIdx - 1).trim(),
-                condition.substring(eqIdx + 1).trim(), Op.MATCHES);
-        }
-        if (prev == '*') {
-            return new ParsedCondition(
-                condition.substring(0, eqIdx - 1).trim(),
-                condition.substring(eqIdx + 1).trim(), Op.CONTAINS);
-        }
-        if (prev == '!') {
-            return new ParsedCondition(
-                condition.substring(0, eqIdx - 1).trim(),
-                condition.substring(eqIdx + 1).trim(), Op.NOT_EQUAL);
-        }
-        return new ParsedCondition(
-            condition.substring(0, eqIdx).trim(),
-            condition.substring(eqIdx + 1).trim(), Op.EQUAL);
-    }
-
-    private boolean matchValue(ParsedCondition cond, String actual) {
-        if (actual == null) {
-            return cond.op == Op.NOT_EQUAL;
-        }
-        String expected = cond.value;
-        if (expected.startsWith("\"") && expected.endsWith("\"")) {
-            expected = expected.substring(1, expected.length() - 1);
-        }
-        return switch (cond.op) {
-            case EQUAL -> expected.equals(actual);
-            case NOT_EQUAL -> !expected.equals(actual);
-            case CONTAINS -> actual.contains(expected);
-            case MATCHES -> safeRegexMatch(expected, actual);
-        };
-    }
-
-    private boolean safeRegexMatch(String pattern, String input) {
-        if (pattern.length() > MAX_REGEX_PATTERN_LENGTH) {
-            log.warn("Regex pattern too long: {} chars (max {})", pattern.length(), MAX_REGEX_PATTERN_LENGTH);
-            return false;
-        }
-        if (input.length() > MAX_REGEX_INPUT_LENGTH) {
-            log.warn("Input too long for regex match: {} chars", input.length());
-            return false;
-        }
-        try {
-            Pattern compiledPattern = patternCache.getIfPresent(pattern);
-            if (compiledPattern == null) {
-                try {
-                    compiledPattern = Pattern.compile(pattern);
-                    patternCache.put(pattern, compiledPattern);
-                } catch (Exception e) {
-                    log.warn("Invalid regex pattern: {}", pattern);
-                    return false;
-                }
-            }
-            CharSequence wrapped = new InterruptibleCharSequence(input, REGEX_TIMEOUT_MS);
-            return compiledPattern.matcher(wrapped).matches();
-        } catch (InterruptibleCharSequence.RegexTimeoutException e) {
-            log.warn("Regex match timed out: pattern={}", pattern);
-            return false;
-        } catch (Exception e) {
-            log.warn("Regex match failed: {}", e.getMessage());
-            return false;
-        }
-    }
-
-    // ==================== XPath Utilities ====================
-
-    private enum Op { EQUAL, NOT_EQUAL, CONTAINS, MATCHES }
-    private record ParsedCondition(String field, String value, Op op) {}
 
     // ==================== Structured Match Result Classes ====================
 

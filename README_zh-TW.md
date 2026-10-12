@@ -343,6 +343,10 @@ Echo 可作為 JMS Proxy，在開發環境攔截 JMS 訊息：
 | `element=value` | 簡單元素 (自動轉 `//element`) |
 | `//CustomerId=K123` | XPath 任意位置 |
 | `/root/order/id=123` | XPath 絕對路徑 |
+| `order/id=123` | 相對路徑：父元素是 `order` 的任何 `id` |
+| `//item/@sku=A1` | 屬性值 |
+
+這類簡單路徑以元素與屬性的 **local name** 比對，所以 `CustomerId` 也會符合 `<ns:CustomerId>`；`==` 視為 `=`。HTTP 與 JMS、以及進階條件的 `xpath` selector 都用同一套規則；條件都是簡單路徑時，XML body 只串流掃描一次、不建立 DOM。含 predicate、函式、萬用字元或帶前綴名稱的路徑（例如 `//item[1]`、`//ns:item`）照常使用 XPath。
 
 ### 多條件
 

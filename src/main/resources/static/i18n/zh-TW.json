@@ -1874,7 +1874,7 @@
     "legacyCondition": "舊格式條件",
     "legacyPlaceholder": "例如 user.type=vip",
     "legacyNote": "舊格式條件沿用簡易模式的比對方式（JSON／XML 自動判斷）",
-    "doubleEqualsWarning": "{conditions}：等號後面又是 =。只有 JSON body 的欄位路徑會把 == 當成 =，JSONPath、XPath、XML、Query 與 Header 會把多出的 = 當成期望值的一部分。要比對「等於」請只用一個 =。",
+    "doubleEqualsWarning": "{conditions}：等號後面又是 =。JSONPath（$. 開頭）、Query 與 Header 條件不會把 == 當成 =，多出的 = 會成為期望值的一部分。要比對「等於」請只用一個 =。",
     "legacyNotSimpleNote": "這條規則有條件無法用簡易模式的條件列完整表示，因此以進階模式顯示；條件內容與比對方式都不變。",
     "invalidJsonValue": "「JSON 相同」的期望值不是合法的 JSON",
     "switchToSimpleWarning": "目前的進階條件無法轉成簡易模式的條件列，切換會清除這些條件。",

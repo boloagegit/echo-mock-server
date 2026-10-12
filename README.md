@@ -365,6 +365,10 @@ For Artemis Core clients that send XML, configure the sender URL as `tcp://echo-
 | `element=value` | Simple element (auto-converts to `//element`) |
 | `//CustomerId=K123` | XPath anywhere |
 | `/root/order/id=123` | XPath absolute path |
+| `order/id=123` | Relative path: any `id` whose parent is `order` |
+| `//item/@sku=A1` | Attribute value |
+
+Simple paths like these match element and attribute **local names**, so `CustomerId` also matches `<ns:CustomerId>`; `==` is treated as `=`. The same rules apply to HTTP and JMS and to `xpath` selectors in advanced conditions, and XML bodies whose conditions only use simple paths are scanned once without building a DOM. Paths with predicates, functions, wildcards or prefixed names (for example `//item[1]`, `//ns:item`) use XPath.
 
 ### Multiple Conditions
 

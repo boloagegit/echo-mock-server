@@ -42,7 +42,7 @@ class AdvancedMatchEditorResourceTest {
                 .contains("v-if=\"matchError\" class=\"match-error\" role=\"alert\"")
                 // == 的提醒在簡易與進階模式都會出現
                 .contains("? (props.matchTree ? MatchTree.doubleEqualsConditions(props.matchTree) : [])")
-                .contains("MatchTree.hasDoubleEquals(c.field + (c.operator || '=') + (c.value || ''))");
+                .contains("MatchTree.hasDoubleEquals(c.field + (c.operator || '=') + (c.value || ''), c.type)");
 
         String form = resourceText("static/composables/useRuleForm.js");
         // 進階規則改用簡易模式且沒有條件時要明確清除；否則後端會保留原本的進階條件
