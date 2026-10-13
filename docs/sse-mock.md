@@ -73,6 +73,15 @@ that never read previously stopped it completely (no event for 32 s, and the
 stalled connections were never closed); it now keeps its 100 ms rhythm, and
 260 such clients pause it for at most the 30-second timeout.
 
+Known limits of the stalled-write timeout: it measures how long one write has
+been in progress, not whether bytes are still moving, so a client that keeps
+reading but needs longer than the timeout for one event (for example 64 KB
+events at 1 KB/s) is also closed; raise the setting for such clients. After a
+stalled connection is closed, its request objects (about 50 KB each) stay in
+memory until the stream's own timeout: the sequence duration plus 30 seconds,
+or 24 hours for looping rules. Before this change the same objects and a
+playback thread were held for as long as the client stayed connected.
+
 Completion, timeout, error, failed writes and shutdown cancel/remove
 outstanding playback tasks. A disconnected peer may only be detected by the
 container or next write; without a callback, a delayed stream can retain its

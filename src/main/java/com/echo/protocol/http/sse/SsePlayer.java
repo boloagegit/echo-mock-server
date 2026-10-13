@@ -107,7 +107,7 @@ public class SsePlayer {
     }
 
     private static ExecutorService createWriter() {
-        ThreadPoolExecutor executor = new ThreadPoolExecutor(0, MAX_WRITERS, 60, TimeUnit.SECONDS,
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(SCHEDULER_POOL_SIZE, MAX_WRITERS, 60, TimeUnit.SECONDS,
                 new SynchronousQueue<>(), r -> {
                     Thread t = new Thread(r, "sse-writer");
                     t.setDaemon(true);
@@ -235,6 +235,8 @@ public class SsePlayer {
         private final Runnable closeConnection;
         /** 目前寫入開始的時間；0 表示沒有寫入進行中。 */
         private volatile long writeStartedNanos;
+        /** 看門狗關閉了連線；之後寫入失敗是預期的，不記成客戶端斷線。 */
+        private volatile boolean closedAsStalled;
         private int index;
 
         private Playback(SseEmitter emitter, List<SseEvent> events, boolean loopEnabled,
@@ -320,24 +322,23 @@ public class SsePlayer {
 
         private void closeIfStalled(long now) {
             long started = writeStartedNanos;
-            if (started == 0 || now - started < stalledWriteTimeoutNanos || stopped.get()) return;
-            log.warn("SSE client has not read data for {} ms; closing the connection",
-                    TimeUnit.NANOSECONDS.toMillis(now - started));
-            stop("SSE_CLIENT_STALLED");
-            close();
-        }
-
-        /** 關閉底層連線，讓卡住的寫入以 IOException 結束。 */
-        private void close() {
-            try {
-                if (closeConnection != null) {
+            if (started == 0 || now - started < stalledWriteTimeoutNanos) return;
+            // 寫入剛好在此時完成並結束串流時，這裡搶不到停止權，不能再關閉已經完成的連線
+            if (!stopped.compareAndSet(false, true)) return;
+            closedAsStalled = true;
+            long waitedMs = TimeUnit.NANOSECONDS.toMillis(now - started);
+            if (closeConnection == null) {
+                // 不在看門狗呼叫 emitter：它會等卡住的寫入釋放同一把鎖，讓整個看門狗停擺
+                log.warn("SSE write has not finished for {} ms; stream stopped (connection cannot be closed)", waitedMs);
+            } else {
+                log.warn("SSE write has not finished for {} ms; closing the connection", waitedMs);
+                try {
                     closeConnection.run();
-                } else {
-                    emitter.completeWithError(new IOException("SSE client stalled"));
+                } catch (RuntimeException error) {
+                    log.warn("Failed to close stalled SSE connection: {}", error.getMessage());
                 }
-            } catch (RuntimeException error) {
-                log.warn("Failed to close stalled SSE connection: {}", error.getMessage());
             }
+            finishStop("SSE_CLIENT_STALLED");
         }
 
         private void deliver(SseEvent event) {
@@ -365,7 +366,7 @@ public class SsePlayer {
                     }
                 }
             } catch (IOException error) {
-                if (!stopped.get()) log.warn("SSE client disconnected: {}", error.getMessage());
+                if (!closedAsStalled) log.warn("SSE client disconnected: {}", error.getMessage());
                 stop("SSE_DISCONNECTED");
             } catch (Exception error) {
                 fail(error, "SSE event send error");
@@ -419,6 +420,10 @@ public class SsePlayer {
 
         private void stop(String outcome) {
             if (!stopped.compareAndSet(false, true)) return;
+            finishStop(outcome);
+        }
+
+        private void finishStop(String outcome) {
             cancelPending();
             playbacks.remove(this);
             finishTrace(outcome);

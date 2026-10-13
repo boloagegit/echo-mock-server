@@ -6,7 +6,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -33,15 +32,14 @@ class SseStalledClientTest {
         SsePlayer player = new SsePlayer(null, SsePlayer.DEFAULT_STALLED_WRITE_TIMEOUT_MS);
         CountDownLatch release = new CountDownLatch(1);
         CountDownLatch blocked = new CountDownLatch(12);
-        List<CompletableFuture<Void>> stalled = new ArrayList<>();
         try {
             // 比原本 8 條排程執行緒更多的卡住寫入
             for (int i = 0; i < 12; i++) {
                 SseEmitter emitter = mock(SseEmitter.class);
                 doAnswer(call -> { blocked.countDown(); release.await(10, TimeUnit.SECONDS); return null; })
                         .when(emitter).send(any(SseEmitter.SseEventBuilder.class));
-                stalled.add(player.play(emitter, List.of(new SsePlayer.SseEvent(null, "big", null, 0L, null)),
-                        false, REQUEST, 0, Trace.NONE));
+                var unused = player.play(emitter, List.of(new SsePlayer.SseEvent(null, "big", null, 0L, null)),
+                        false, REQUEST, 0, Trace.NONE);
             }
             assertThat(blocked.await(5, TimeUnit.SECONDS)).isTrue();
 
@@ -80,7 +78,7 @@ class SseStalledClientTest {
 
             done.get(5, TimeUnit.SECONDS);
             assertThat(closed.getCount()).isZero();
-            assertThat(Duration.ofNanos(System.nanoTime() - start)).isGreaterThanOrEqualTo(Duration.ofMillis(1_000));
+            assertThat(Duration.ofNanos(System.nanoTime() - start)).isGreaterThanOrEqualTo(Duration.ofSeconds(1));
             verify(emitter, never()).complete();
         } finally {
             player.shutdown();
@@ -144,7 +142,7 @@ class SseStalledClientTest {
             long start = System.nanoTime();
             player.play(emitter, List.of(new SsePlayer.SseEvent(null, "x", null, 0L, null)),
                     false, REQUEST, 0, Trace.NONE, closed::countDown).get(5, TimeUnit.SECONDS);
-            assertThat(Duration.ofNanos(System.nanoTime() - start)).isGreaterThanOrEqualTo(Duration.ofMillis(1_000));
+            assertThat(Duration.ofNanos(System.nanoTime() - start)).isGreaterThanOrEqualTo(Duration.ofSeconds(1));
         } finally {
             player.shutdown();
         }
@@ -159,6 +157,35 @@ class SseStalledClientTest {
                 return true;
             });
         } finally {
+            player.shutdown();
+        }
+    }
+
+    @Test
+    void streamWithoutCloseCallbackIsStoppedWithoutBlockingTheWatchdog() throws Exception {
+        SsePlayer player = new SsePlayer(null, 1_000);
+        CountDownLatch releaseFirst = new CountDownLatch(1);
+        SseEmitter withoutCallback = mock(SseEmitter.class);
+        doAnswer(call -> { releaseFirst.await(10, TimeUnit.SECONDS); return null; })
+                .when(withoutCallback).send(any(SseEmitter.SseEventBuilder.class));
+        CountDownLatch closed = new CountDownLatch(1);
+        SseEmitter withCallback = mock(SseEmitter.class);
+        doAnswer(call -> {
+            if (!closed.await(10, TimeUnit.SECONDS)) throw new AssertionError("connection was not closed");
+            throw new IOException("connection closed");
+        }).when(withCallback).send(any(SseEmitter.SseEventBuilder.class));
+        try {
+            CompletableFuture<Void> first = player.play(withoutCallback,
+                    List.of(new SsePlayer.SseEvent(null, "x", null, 0L, null)), true, REQUEST, 0, Trace.NONE);
+            CompletableFuture<Void> second = player.play(withCallback,
+                    List.of(new SsePlayer.SseEvent(null, "y", null, 0L, null)), true, REQUEST, 0, Trace.NONE, closed::countDown);
+
+            first.get(5, TimeUnit.SECONDS);
+            second.get(5, TimeUnit.SECONDS);
+            assertThat(closed.getCount()).isZero();
+            verify(withoutCallback, never()).completeWithError(any());
+        } finally {
+            releaseFirst.countDown();
             player.shutdown();
         }
     }
