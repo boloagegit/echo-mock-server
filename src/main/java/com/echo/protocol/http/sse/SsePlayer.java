@@ -12,7 +12,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -81,7 +80,11 @@ public class SsePlayer {
 
     /** 模板渲染所需的請求資訊。 */
     public record RequestContext(String queryString, Map<String, String> headers,
-                                 String path, String method, String body) {}
+                                 String path, String method, String body) {
+        ResponseTemplateService.TemplateContext templateContext() {
+            return ResponseTemplateService.TemplateContext.of(path, method, queryString, headers, body);
+        }
+    }
 
     /** Invalid persisted sequences fail as a whole using the same contract as rule saves. */
     public static List<SseEvent> parseEvents(String json) {
@@ -120,8 +123,7 @@ public class SsePlayer {
         private final SseEmitter emitter;
         private final List<SseEvent> events;
         private final boolean loopEnabled;
-        private final Map<String, String> queryParams;
-        private final RequestContext request;
+        private final ResponseTemplateService.TemplateContext templateContext;
         private final AtomicBoolean stopped = new AtomicBoolean();
         private final AtomicReference<PendingTask> scheduled = new AtomicReference<>();
         private long initialDelay;
@@ -135,8 +137,7 @@ public class SsePlayer {
             this.emitter = emitter;
             this.events = events;
             this.loopEnabled = loopEnabled;
-            this.request = request;
-            this.queryParams = parseQueryString(request.queryString());
+            this.templateContext = request.templateContext();
             this.initialDelay = initialDelay;
             this.trace = trace;
         }
@@ -206,11 +207,8 @@ public class SsePlayer {
         }
 
         private String render(String data) {
-            if (!templateService.hasTemplate(data)) return data;
-            var context = new ResponseTemplateService.TemplateContext(
-                    request.path(), request.method(), queryParams, request.headers(), request.body());
             try {
-                return templateService.render(data, context);
+                return ResponseTemplateService.renderIfTemplate(templateService, data, () -> templateContext);
             } catch (Exception error) {
                 log.warn("SSE template rendering failed, using raw data: {}", error.getMessage());
                 return data;
@@ -274,20 +272,6 @@ public class SsePlayer {
 
     private static String wireData(String data) {
         return data.replace("\r\n", "\n").replace('\r', '\n');
-    }
-
-    static Map<String, String> parseQueryString(String queryString) {
-        Map<String, String> params = new HashMap<>();
-        if (queryString == null || queryString.isEmpty()) {
-            return params;
-        }
-        for (String pair : queryString.split("&")) {
-            int idx = pair.indexOf('=');
-            if (idx > 0) {
-                params.put(pair.substring(0, idx), pair.substring(idx + 1));
-            }
-        }
-        return params;
     }
 
     private static final class PendingTask {

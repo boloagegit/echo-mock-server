@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -52,8 +53,8 @@ class HttpMockPipelineTest {
     @Mock
     private HttpRuleService httpRuleService;
 
-    @Mock
-    private ResponseTemplateService templateService;
+    @Spy
+    private ResponseTemplateService templateService = new ResponseTemplateService();
 
     @Mock
     private RestTemplate restTemplate;
@@ -67,7 +68,8 @@ class HttpMockPipelineTest {
     void setUp() {
         pipeline = new HttpMockPipeline(
                 conditionMatcher, ruleService, requestLogService,
-                httpRuleService, templateService, restTemplate, null, scenarioService);
+                httpRuleService, restTemplate, null, scenarioService);
+        pipeline.setTemplateService(templateService);
     }
 
     // ==================== Helpers ====================
@@ -124,9 +126,6 @@ class HttpMockPipelineTest {
                     any(), eq("page=1&size=10"), eq(Map.of("Content-Type", "application/json"))))
                     .thenReturn(true);
             when(ruleService.findResponseBodyById(10L)).thenReturn(Optional.of(templateBody));
-            when(templateService.hasTemplate(templateBody)).thenReturn(true);
-            when(templateService.render(eq(templateBody), any(ResponseTemplateService.TemplateContext.class)))
-                    .thenReturn(renderedBody);
 
             PipelineResult result = pipeline.execute(defaultRequest());
 
@@ -164,7 +163,6 @@ class HttpMockPipelineTest {
                     any(), eq("page=1&size=10"), eq(Map.of("Content-Type", "application/json"))))
                     .thenReturn(true);
             when(ruleService.findResponseBodyById(20L)).thenReturn(Optional.of(plainBody));
-            when(templateService.hasTemplate(plainBody)).thenReturn(false);
 
             PipelineResult result = pipeline.execute(defaultRequest());
 
@@ -331,7 +329,6 @@ class HttpMockPipelineTest {
                     any(), eq("page=1&size=10"), eq(Map.of("Content-Type", "application/json"))))
                     .thenReturn(true);
             when(ruleService.findResponseBodyById(30L)).thenReturn(Optional.of("log body"));
-            when(templateService.hasTemplate("log body")).thenReturn(false);
 
             pipeline.execute(defaultRequest());
 

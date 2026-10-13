@@ -235,12 +235,7 @@ public class SseMockHandler {
                 ? ruleService.findResponseBodyById(rule.getResponseId()).orElse("")
                 : "";
 
-        if (templateService.hasTemplate(responseBody)) {
-            var templateContext = new ResponseTemplateService.TemplateContext(
-                    request.getPath(), request.getMethod(), SsePlayer.parseQueryString(request.getQueryString()),
-                    request.getHeaders(), request.getBody());
-            responseBody = templateService.render(responseBody, templateContext);
-        }
+        responseBody = ResponseTemplateService.renderIfTemplate(templateService, responseBody, request::templateContext);
 
         served.record(FaultType.NONE, status, responseBody);
 

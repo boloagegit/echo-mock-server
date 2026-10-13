@@ -30,7 +30,7 @@ class HttpShouldForwardPropertyTest {
      * 最小化的 HttpMockPipeline，只測試 shouldForward()，不需要真正的依賴。
      */
     private final HttpMockPipeline pipeline = new HttpMockPipeline(
-            new StubConditionMatcher(), null, null, null, null, null, null);
+            new StubConditionMatcher(), null, null, null, null, null);
 
     // ==================== Stub ConditionMatcher ====================
 

@@ -759,6 +759,21 @@ Comparison operators: `eq`, `ne`, `gt`, `lt`, `contains`, `matches`
 {{xPath request.body '//name/text()'}}
 ```
 
+### HTTP and JMS
+
+Templates work the same way for every protocol: HTTP responses, SSE events and JMS replies. Content without `{{` is returned unchanged at no extra cost.
+
+| Variable | HTTP | JMS |
+|----------|------|-----|
+| `request.body` | Request body | Message text |
+| `request.headers.xxx` | Request header | `JMSMessageID`, `JMSCorrelationID`, `JMSType`, `JMSDestination` (the listening queue) and the message's own properties |
+| `request.path` | Request path | Queue, plus the endpoint field value when present (`ECHO.REQUEST \| Order`) |
+| `request.method`, `request.query.xxx` | Method, query parameter | Empty |
+
+```handlebars
+<reply><orderId>{{xPath request.body '//orderId/text()'}}</orderId><ref>{{request.headers.JMSCorrelationID}}</ref></reply>
+```
+
 ## Multi-Instance Deployment
 
 Database mode supports multi-instance deployment with DB-based cache invalidation.

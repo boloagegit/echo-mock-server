@@ -116,11 +116,34 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
         assertThat(request("<req/>").body()).isEqualTo("<reply>again</reply>");
     }
 
+    @Test
+    @DisplayName("外部 ESB 模式也套用共用模板，可取得 correlation ID 與自訂屬性")
+    void templateUsesCorrelationIdAndPropertiesFromEsbMessage() throws Exception {
+        createJmsRule(QUEUE, "<reply><corr>{{request.headers.JMSCorrelationID}}</corr>"
+                + "<branch>{{request.headers.branch}}</branch><amount>{{jsonPath request.body '$.amount'}}</amount></reply>");
+        waitUntilReceiving();
+
+        Reply reply = request("{\"amount\":42}", message -> {
+            message.setJMSCorrelationID("TXN-7");
+            message.setStringProperty("branch", "TPE");
+        });
+
+        assertThat(reply.body()).isEqualTo("<reply><corr>TXN-7</corr><branch>TPE</branch><amount>42</amount></reply>");
+    }
+
     private record Reply(String requestId, String correlationId, String body) {
+    }
+
+    private interface MessageCustomizer {
+        void customize(TextMessage message) throws Exception;
     }
 
     /** 模擬公司系統：送一則帶 JMSReplyTo 的請求到 ESB，等回覆。 */
     private static Reply request(String body) throws Exception {
+        return request(body, message -> { });
+    }
+
+    private static Reply request(String body, MessageCustomizer customizer) throws Exception {
         ActiveMQConnectionFactory factory = new ActiveMQConnectionFactory(esbUrl());
         try (factory; Connection connection = factory.createConnection()) {
             connection.start();
@@ -130,6 +153,7 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
             MessageProducer producer = session.createProducer(queue);
             TextMessage message = session.createTextMessage(body);
             message.setJMSReplyTo(replyTo);
+            customizer.customize(message);
             producer.send(message);
             MessageConsumer consumer = session.createConsumer(replyTo);
             Message reply = consumer.receive(15_000);

@@ -707,6 +707,21 @@ WireMock 風格的 Handlebars 模板引擎，在回應內容中使用 `{{...}}` 
 {{xPath request.body '//name/text()'}}
 ```
 
+### HTTP 與 JMS
+
+各協定共用同一套模板：HTTP 回應、SSE 事件與 JMS 回覆都能使用。內容沒有 `{{` 時原樣回傳，不增加任何成本。
+
+| 變數 | HTTP | JMS |
+|------|------|-----|
+| `request.body` | 請求內容 | 訊息內容 |
+| `request.headers.xxx` | 請求標頭 | `JMSMessageID`、`JMSCorrelationID`、`JMSType`、`JMSDestination`（監聽的 queue）與訊息上的自訂屬性 |
+| `request.path` | 請求路徑 | queue，有端點欄位值時一併附上（`ECHO.REQUEST \| Order`） |
+| `request.method`、`request.query.xxx` | 方法、query 參數 | 空值 |
+
+```handlebars
+<reply><orderId>{{xPath request.body '//orderId/text()'}}</orderId><ref>{{request.headers.JMSCorrelationID}}</ref></reply>
+```
+
 ## 多實例部署
 
 Database 模式支援多實例部署，透過 DB 同步 cache 失效事件。

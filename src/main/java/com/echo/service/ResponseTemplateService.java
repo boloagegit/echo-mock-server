@@ -27,6 +27,7 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 /**
  * Response Template Service - WireMock 風格的回應模板引擎
@@ -495,7 +496,21 @@ public class ResponseTemplateService {
     }
 
     /**
-     * 模板上下文
+     * 各協定共用的渲染入口：只在內容含模板語法時才建立上下文並渲染；沒有 <code>{{</code> 時原樣回傳，
+     * 不做任何額外工作。新增協定時只要提供 {@link TemplateContext}，不需要另外支援模板。
+     * 經由 {@link #hasTemplate} 與 {@link #render} 實作，service 為 null 時不渲染。
+     */
+    public static String renderIfTemplate(ResponseTemplateService service, String templateStr,
+                                          Supplier<TemplateContext> context) {
+        if (service == null || !service.hasTemplate(templateStr)) {
+            return templateStr;
+        }
+        return service.render(templateStr, context.get());
+    }
+
+    /**
+     * 模板上下文：{@code request.path / method / query / headers / body}。
+     * 各協定把自己的請求轉成這五項（JMS 的訊息 ID、correlation ID 與屬性放在 headers）。
      */
     public record TemplateContext(
             String path,
@@ -503,5 +518,25 @@ public class ResponseTemplateService {
             Map<String, String> query,
             Map<String, String> headers,
             String body
-    ) {}
+    ) {
+        /** 由原始 query string 建立；query 只在需要渲染時才解析。 */
+        public static TemplateContext of(String path, String method, String queryString,
+                                         Map<String, String> headers, String body) {
+            return new TemplateContext(path, method, parseQuery(queryString), headers, body);
+        }
+
+        static Map<String, String> parseQuery(String queryString) {
+            Map<String, String> params = new HashMap<>();
+            if (queryString == null || queryString.isEmpty()) {
+                return params;
+            }
+            for (String pair : queryString.split("&")) {
+                int idx = pair.indexOf('=');
+                if (idx > 0) {
+                    params.put(pair.substring(0, idx), pair.substring(idx + 1));
+                }
+            }
+            return params;
+        }
+    }
 }

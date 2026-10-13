@@ -5,7 +5,6 @@ import com.echo.service.ConditionMatcher;
 import com.echo.service.HttpOutboundForwarder;
 import com.echo.service.HttpRuleService;
 import com.echo.service.RequestLogService;
-import com.echo.service.ResponseTemplateService;
 import com.echo.service.RuleService;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestTemplate;
@@ -126,7 +125,7 @@ class HttpNoMatchForwardingTest {
         when(matcher.prepareBody(org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn(ConditionMatcher.PreparedBody.empty());
         return new HttpMockPipeline(matcher, ruleService, logService, httpRuleService,
-                mock(ResponseTemplateService.class), restTemplate, forwarder);
+                restTemplate, forwarder);
     }
 
     private static MockRequest request(String targetHost) {

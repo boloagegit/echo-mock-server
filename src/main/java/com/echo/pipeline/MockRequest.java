@@ -3,6 +3,7 @@ package com.echo.pipeline;
 import com.echo.entity.Protocol;
 import com.echo.diagnostics.TransactionDiagnostics.Trace;
 import com.echo.service.ConditionMatcher;
+import com.echo.service.ResponseTemplateService;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -38,7 +39,7 @@ public class MockRequest {
     /** HTTP X-Original-Host 或 JMS target server */
     private final String targetHost;
 
-    /** HTTP headers，JMS 為 null */
+    /** HTTP headers；JMS 為訊息標頭與屬性（JMSMessageID、JMSCorrelationID、自訂屬性等） */
     private final Map<String, String> headers;
 
     /** JMS endpoint-field 值，HTTP 為 null */
@@ -50,4 +51,9 @@ public class MockRequest {
     /** Transient explicit context, not wire headers or persistence. */
     @Builder.Default
     private final Trace trace = Trace.NONE;
+
+    /** 回應模板使用的請求資料；各協定共用，見 {@link ResponseTemplateService#renderIfTemplate}。 */
+    public ResponseTemplateService.TemplateContext templateContext() {
+        return ResponseTemplateService.TemplateContext.of(path, method, queryString, headers, body);
+    }
 }

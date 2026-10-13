@@ -792,4 +792,30 @@ class ResponseTemplateServiceTest {
         assertTrue(result.contains("\"email\":"));
         assertTrue(result.contains("\"phone\":"));
     }
+
+    @Test
+    @DisplayName("renderIfTemplate：沒有模板語法時不建立上下文、原樣回傳")
+    void renderIfTemplateSkipsContextWithoutTemplate() {
+        java.util.concurrent.atomic.AtomicInteger built = new java.util.concurrent.atomic.AtomicInteger();
+
+        String result = ResponseTemplateService.renderIfTemplate(templateService, "{\"plain\":true}", () -> {
+            built.incrementAndGet();
+            return buildContext("/x", "GET", null, null, null);
+        });
+
+        assertEquals("{\"plain\":true}", result);
+        assertEquals(0, built.get());
+        assertNull(ResponseTemplateService.renderIfTemplate(templateService, null, () -> null));
+        assertEquals("{{x}}", ResponseTemplateService.renderIfTemplate(null, "{{x}}", () -> null));
+    }
+
+    @Test
+    @DisplayName("TemplateContext.of 由原始 query string 建立 query")
+    void templateContextParsesQueryString() {
+        var context = ResponseTemplateService.TemplateContext.of("/p", "GET", "a=1&b=x&flag", Map.of("h", "v"), "body");
+
+        assertEquals("1|x|v|body", templateService.render(
+                "{{request.query.a}}|{{request.query.b}}|{{request.headers.h}}|{{request.body}}", context));
+        assertEquals(Map.of("a", "1", "b", "x"), context.query());
+    }
 }
