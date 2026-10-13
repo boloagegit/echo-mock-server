@@ -143,6 +143,10 @@ test('bulk paste: text/event-stream copied from a real stream', () => {
   assert.equal(S.parseBulk('\r\nevent: x\r\ndata: y\r\n\r\n').events[0].data, 'y');
   assert.equal(S.parseBulk('just some text').error.key, 'sseEditor.bulkUnreadable');
   assert.equal(S.parseBulk('data:\n\n').error.key, 'sseEditor.bulkNoData');
+  // 與伺服器相同：ID 不可含 NUL；開頭的 BOM（從檔案複製時常見）不影響解析
+  assert.equal(S.parseBulk('[{"data":"a","id":"x\\u0000"}]').error.key, 'sseEditor.bulkBadId');
+  assert.equal(S.parseBulk('\uFEFF[{"data":"a"}]').events.length, 1);
+  assert.equal(S.parseBulk('\uFEFFdata: a\n\n').events[0].data, 'a');
 });
 
 test('wiring: load order, registration, rule editor usage and every text key in both languages', () => {

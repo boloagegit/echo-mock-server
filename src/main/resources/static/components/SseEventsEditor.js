@@ -49,9 +49,9 @@ const SseEventsEditor = {
       const openRaw = Vue.toRaw(this.openRaw);
       const list = [];
       this.events.forEach((event, index) => {
-        if (this.searching && !SseEvents.matches(event, this.query)) return;
         const raw = Vue.toRaw(event);
         const info = this.describe(raw, event.data);
+        if (this.searching && !this.rowMatches(info, event)) return;
         const row = rows[index];
         list.push({ event, raw, index, key: index, ...info, atMs: row.atMs, state: row.state,
           open: raw === openRaw, delayMs: Number.isFinite(event.delayMs) ? event.delayMs : 0,
@@ -111,9 +111,14 @@ const SseEventsEditor = {
     describe(raw, data) {
       const cached = this.rowCache.get(raw);
       if (cached && cached.data === data) return cached.info;
-      const info = { previewText: SseEvents.previewLine(data), sizeLabel: SseEvents.formatBytes(SseEvents.byteLength(data)) };
+      const info = { previewText: SseEvents.previewLine(data), sizeLabel: SseEvents.formatBytes(SseEvents.byteLength(data)),
+        lowerData: String(data ?? '').toLowerCase() };
       this.rowCache.set(raw, { data, info });
       return info;
+    },
+    rowMatches(info, event) {
+      const needle = this.query.trim().toLowerCase();
+      return info.lowerData.includes(needle) || SseEvents.matches({ data: '', event: event.event, id: event.id }, needle);
     },
     timeLabel(ms) { return ms == null ? '' : SseEvents.formatDuration(ms, this.t); },
     /**
@@ -135,6 +140,7 @@ const SseEventsEditor = {
       return event.event || 'message';
     },
     toggle(row) {
+      if (!row.open && !this.units.has(row.raw)) this.units.set(row.raw, this.unitOf(row.event));
       this.openRaw = row.open ? null : row.raw;
       if (!row.open) this.$nextTick(() => this.focusData(row.index));
     },
@@ -174,11 +180,20 @@ const SseEventsEditor = {
       if (this.drafts.has(raw)) return this.drafts.get(raw);
       return Number.isFinite(event.delayMs) ? SseEvents.toUnit(event.delayMs, this.unitOf(event)) : '';
     },
+    /**
+     * 打字時單位固定、輸入框保留原樣：不會因為打到 1000 就跳成「1 秒」，也不會把 "1." 改寫掉。
+     * 離開輸入框時才換回存好的值。
+     */
     onDelayInput(event, value) {
       const raw = Vue.toRaw(event);
-      const ms = SseEvents.fromUnit(value, this.unitOf(event));
-      if (ms != null && SseEvents.delayValid(ms)) { this.drafts.delete(raw); event.delayMs = ms; }
-      else { this.drafts.set(raw, value); event.delayMs = ms == null ? NaN : ms; }
+      if (!this.units.has(raw)) this.units.set(raw, this.unitOf(event));
+      const ms = SseEvents.fromUnit(value, this.units.get(raw));
+      this.drafts.set(raw, value);
+      event.delayMs = ms == null ? NaN : ms;
+    },
+    onDelayBlur(event) {
+      const raw = Vue.toRaw(event);
+      if (SseEvents.delayValid(event.delayMs)) this.drafts.delete(raw);
     },
     setUnit(event, unit) {
       const raw = Vue.toRaw(event);
@@ -217,6 +232,14 @@ const SseEventsEditor = {
     },
     openEventFocus(row) { this.openFocus({ kind: 'event', raw: row.raw }); },
     openBulk() {
+      const invalid = this.events.findIndex(event => !SseEvents.delayValid(event.delayMs));
+      if (invalid >= 0) {
+        // 先修正延遲：否則整串編輯會把無效的延遲寫成 null，再套用就默默變成 0
+        this.openRaw = Vue.toRaw(this.events[invalid]);
+        this.query = '';
+        this.$nextTick(() => this.$el?.querySelector('.sse-ev.is-open .sse-ed-delay-input')?.focus());
+        return;
+      }
       this.bulkText = serializeSseEvents(this.events);
       this.bulkError = '';
       this.openFocus({ kind: 'bulk' });
@@ -234,6 +257,13 @@ const SseEventsEditor = {
       this.$emit('replace', result.events);
     },
     onFocusKeydown(event) {
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && this.focus?.kind === 'bulk') {
+        // 不讓外層的「儲存並關閉」在套用前存檔（貼上的事件會遺失）
+        event.preventDefault();
+        event.stopPropagation();
+        this.applyBulk();
+        return;
+      }
       if (event.key !== 'Escape') return;
       event.preventDefault();
       event.stopPropagation();
@@ -248,6 +278,8 @@ const SseEventsEditor = {
       if (item) event.dataTransfer.setDragImage(item, 16, 16);
     },
     onDrop(event, row) {
+      // 只處理拖曳把手；拖曳文字（例如在事件資料裡）照瀏覽器原本的行為
+      if (this.dragIndex == null) return;
       event.preventDefault();
       const from = this.dragIndex;
       this.dragIndex = null;
@@ -298,14 +330,14 @@ const SseEventsEditor = {
           <li v-for="(row, position) in rows" :key="row.key" class="sse-ev"
               :class="['is-' + row.state, 'type-' + (row.event.type || 'normal'), {'is-open': row.open, 'is-dragging': dragIndex === row.index}]"
               v-memo="memoKey(row)"
-              @dragover.prevent @drop="onDrop($event, row)">
+              @dragover="dragIndex != null && $event.preventDefault()" @drop="onDrop($event, row)">
             <span class="sse-ev-time" :title="row.state === 'skipped' ? t('sseEditor.skippedHelp') : ''">
               <span class="sse-ev-at">{{row.state === 'skipped' ? t('sseEditor.notSent') : timeLabel(row.atMs)}}</span>
               <span v-if="row.open && row.state !== 'skipped'" class="sse-ev-gap">+{{timeLabel(row.delayMs)}}</span>
             </span>
             <span class="sse-ev-dot" aria-hidden="true"></span>
             <div v-if="!row.open" class="sse-ev-line">
-              <span class="sse-ev-grip" draggable="true" :title="t('sseEditor.dragToReorder')" @dragstart="onDragStart($event, row)"><i class="bi bi-grip-vertical" aria-hidden="true"></i></span>
+              <span class="sse-ev-grip" draggable="true" :title="t('sseEditor.dragToReorder')" @dragstart="onDragStart($event, row)" @dragend="dragIndex = null"><i class="bi bi-grip-vertical" aria-hidden="true"></i></span>
               <button type="button" class="sse-ev-summary" data-sse-row-target @click="toggle(row)" @keydown="onRowKeydown"
                   :aria-label="t('sseEditor.openEvent', {index: row.index + 1})">
                 <span class="sse-ev-index">{{row.index + 1}}</span>
@@ -318,7 +350,7 @@ const SseEventsEditor = {
             </div>
             <div v-else class="sse-ev-card" @keydown="onCardKeydown($event, position)">
               <div class="sse-ev-fields">
-                <span class="sse-ev-grip" draggable="true" :title="t('sseEditor.dragToReorder')" @dragstart="onDragStart($event, row)"><i class="bi bi-grip-vertical" aria-hidden="true"></i></span>
+                <span class="sse-ev-grip" draggable="true" :title="t('sseEditor.dragToReorder')" @dragstart="onDragStart($event, row)" @dragend="dragIndex = null"><i class="bi bi-grip-vertical" aria-hidden="true"></i></span>
                 <span class="sse-ev-index">{{row.index + 1}}</span>
                 <select class="form-select form-select-sm sse-ev-type" v-model="row.event.type" :title="typeHelp(row.event.type)" :aria-label="t('modal.sseFieldLabel', {index: row.index + 1, field: t('modal.sseEventType')})">
                   <option value="normal">{{t('modal.sseTypeNormal')}}</option>
@@ -328,7 +360,7 @@ const SseEventsEditor = {
                 <input class="form-control form-control-sm sse-ev-event" v-if="row.event.type === 'normal'" v-model="row.event.event" :placeholder="t('sseEditor.namePlaceholder')" :aria-label="t('modal.sseFieldLabel', {index: row.index + 1, field: t('modal.sseEventName')})">
                 <span v-else class="sse-ev-fixed" :title="typeHelp(row.event.type)">{{nameLabel(row.event)}}</span>
                 <span class="sse-ev-delay-field" :class="{'is-invalid': row.delayInvalid}">
-                  <input type="number" min="0" step="any" class="form-control form-control-sm sse-ed-delay-input" :value="delayInput(row.event)" @input="onDelayInput(row.event, $event.target.value)" :aria-invalid="row.delayInvalid ? 'true' : 'false'" :aria-label="t('modal.sseFieldLabel', {index: row.index + 1, field: t('modal.sseEventDelay')})">
+                  <input type="number" min="0" step="any" class="form-control form-control-sm sse-ed-delay-input" :value="delayInput(row.event)" @input="onDelayInput(row.event, $event.target.value)" @blur="onDelayBlur(row.event)" :aria-invalid="row.delayInvalid ? 'true' : 'false'" :aria-label="t('modal.sseFieldLabel', {index: row.index + 1, field: t('modal.sseEventDelay')})">
                   <ui-segmented-control size="compact" :name="'sse-unit-' + row.index" :aria-label="t('sseEditor.unit')" :options="unitOptions" :model-value="unitOf(row.event)" @update:model-value="setUnit(row.event, $event)"></ui-segmented-control>
                 </span>
                 <span class="sse-ev-card-actions">

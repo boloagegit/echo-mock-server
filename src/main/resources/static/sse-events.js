@@ -107,6 +107,7 @@ const SseEvents = (() => {
     for (let i = 0; i < events.length; i++) {
       if (!events[i].data) return fail('sseEditor.bulkNoData', { index: i + 1 });
       if (/[\r\n]/.test(events[i].event) || /[\r\n]/.test(events[i].id)) return fail('sseEditor.bulkMultiline', { index: i + 1 });
+      if (events[i].id.includes('\0')) return fail('sseEditor.bulkBadId', { index: i + 1 });
     }
     return { events };
   };
@@ -123,9 +124,10 @@ const SseEvents = (() => {
   };
   /** 「整串貼上」：開頭是 [ 當 JSON 事件陣列，否則當 text/event-stream 原文（event: / data: / id:）。 */
   const parseBulk = text => {
-    const source = String(text ?? '');
+    // 開頭的 BOM（從檔案複製時常見）先拿掉，JSON 與串流原文都一樣
+    const source = String(text ?? '').replace(/^\uFEFF/, '');
     if (!source.trim()) return fail('sseEditor.bulkEmpty');
-    return source.trimStart().startsWith('[') ? fromJson(source) : fromStream(source.replace(/^﻿/, ''));
+    return source.trimStart().startsWith('[') ? fromJson(source) : fromStream(source);
   };
 
   /** 實際送出的串流原文（含延遲、錯誤／中止與循環的說明行），只在使用者打開「原始內容」時才產生。 */

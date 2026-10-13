@@ -1763,6 +1763,7 @@
     "bulkEmpty": "There are no events.",
     "bulkNoData": "Event {index} has no data.",
     "bulkMultiline": "The name or ID of event {index} cannot contain line breaks.",
+    "bulkBadId": "The ID of event {index} contains a NUL character, which is not allowed.",
     "bulkUnreadable": "This content could not be read. Paste a JSON array of events or stream text containing data: lines."
   },
   "help": {

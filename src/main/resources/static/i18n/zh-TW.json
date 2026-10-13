@@ -1763,6 +1763,7 @@
     "bulkEmpty": "沒有任何事件。",
     "bulkNoData": "第 {index} 個事件沒有資料。",
     "bulkMultiline": "第 {index} 個事件的名稱或 ID 不可換行。",
+    "bulkBadId": "第 {index} 個事件的 ID 含有不允許的字元（NUL）。",
     "bulkUnreadable": "看不懂這段內容。請貼上 JSON 事件陣列，或含有 data: 的串流原文。"
   },
   "help": {
