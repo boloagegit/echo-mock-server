@@ -127,11 +127,16 @@ const ResponseEditModal = {
         first.focus();
       }
     },
-    requestSave() {
+    async requestSave() {
       this.attemptedSave = true;
-      if (this.form.contentType === 'sse' && (!this.sseEvents.length || this.firstInvalidSse >= 0)) {
-        this.$refs.sseEditor?.reveal(this.firstInvalidSse);
-        return;
+      if (this.form.contentType === 'sse') {
+        // 「整串貼上」還開著：先套用（看不懂就不存），等套用後的事件傳回來再檢查
+        if (this.$refs.sseEditor && !this.$refs.sseEditor.commitPending()) return;
+        await this.$nextTick();
+        if (!this.sseEvents.length || this.firstInvalidSse >= 0) {
+          this.$refs.sseEditor?.reveal(this.firstInvalidSse);
+          return;
+        }
       }
       this.$emit('save');
     },

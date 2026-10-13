@@ -34,6 +34,7 @@ const SseEventsEditor = {
       focus: null,
       focusOwnsExpansion: false,
       bulkText: '',
+      bulkOriginal: '',
       bulkError: '',
       rawOpen: false,
       dragIndex: null,
@@ -274,6 +275,7 @@ const SseEventsEditor = {
         return;
       }
       this.bulkText = serializeSseEvents(this.events);
+      this.bulkOriginal = this.bulkText;
       this.bulkError = '';
       this.openFocus({ kind: 'bulk' });
     },
@@ -294,10 +296,23 @@ const SseEventsEditor = {
       });
     },
     applyBulk() {
+      // 沒有改過就只是關掉，不換成新的事件物件
+      if (this.bulkText === this.bulkOriginal) { this.closeFocus(); return true; }
       const result = SseEvents.parseBulk(this.bulkText);
-      if (result.error) { this.bulkError = this.t(result.error.key, result.error.params); return; }
+      if (result.error) { this.bulkError = this.t(result.error.key, result.error.params); return false; }
       this.closeFocus();
       this.$emit('replace', result.events);
+      return true;
+    },
+    /**
+     * 外層存檔前呼叫：「整串貼上」還開著時先套用，否則會存到舊的事件、貼上的內容在關閉視窗時不見。
+     * 內容看不懂時留在原處顯示錯誤並回 false（不要存檔）。
+     */
+    commitPending() {
+      if (this.focus?.kind !== 'bulk') return true;
+      if (this.applyBulk()) return true;
+      this.$nextTick(() => this.$refs.focusCode?.cm?.focus());
+      return false;
     },
     onFocusKeydown(event) {
       if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && this.focus?.kind === 'bulk') {

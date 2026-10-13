@@ -158,7 +158,7 @@ test('wiring: load order, registration, rule editor usage and every text key in 
   assert.ok(at('/components/SseEventsEditor.js') < at('/components/RuleEditModal.js'));
   assert.ok(read('app.js').includes("_app.component('sse-events-editor', SseEventsEditor);"));
   const modal = read('components/RuleEditModal.js');
-  assert.ok(modal.includes('<sse-events-editor v-if="form.sseEnabled && form.protocol===\'HTTP\'" class="sse-editor-wrap rule-sse-editor"'));
+  assert.ok(modal.includes('<sse-events-editor v-if="form.sseEnabled && form.protocol===\'HTTP\'" ref="sseEditor" class="sse-editor-wrap rule-sse-editor"'));
   assert.ok(!modal.includes('rule-sse-table'), 'the old event table is gone');
   const sources = read('components/SseEventsEditor.js') + read('sse-events.js');
   const keys = [...new Set([...sources.matchAll(/'((?:sseEditor|modal)\.[A-Za-z]+)'/g)].map(m => m[1]))];
@@ -247,7 +247,7 @@ test('responses page: SSE responses use the same event editor, without loop or i
   assert.ok(!read('components/RuleEditModal.js').includes(':loopable='));
 });
 
-test('responses page: saving SSE with an unfinished event opens that event instead of saving', () => {
+test('responses page: saving SSE with an unfinished event opens that event instead of saving', async () => {
   const read = file => fs.readFileSync(path.join(root, file), 'utf8');
   const S = load();
   const context = { SseEvents: S, SAVE_SHORTCUT_KEY: 'Ctrl', fmtSize() {}, document: {} };
@@ -257,28 +257,34 @@ test('responses page: saving SSE with an unfinished event opens that event inste
     const emitted = [];
     const revealed = [];
     const self = { form: { contentType }, sseEvents: events, attemptedSave: false, t: (key, p) => `${key}:${JSON.stringify(p || {})}`,
-      $emit: (...args) => emitted.push(args), $refs: { sseEditor: { reveal: index => revealed.push(index) } } };
+      $emit: (...args) => emitted.push(args), $nextTick: () => Promise.resolve(), pending: true,
+      $refs: { sseEditor: { reveal: index => revealed.push(index), commitPending: () => self.pending } } };
     Object.defineProperty(self, 'firstInvalidSse', { get: () => computed.firstInvalidSse.call(self) });
     Object.defineProperty(self, 'sseError', { get: () => computed.sseError.call(self) });
     return { self, emitted, revealed };
   };
   const good = { event: '', data: 'a', id: '', delayMs: 0, type: 'normal' };
   const ok = make([good, { ...good, delayMs: 600000 }]);
-  methods.requestSave.call(ok.self);
+  await methods.requestSave.call(ok.self);
   assert.deepEqual(ok.emitted, [['save']]);
   assert.equal(ok.self.sseError, '');
   const noData = make([good, { ...good, data: '' }, { ...good, delayMs: NaN }]);
   assert.equal(noData.self.sseError, '', 'no message before the first save attempt');
-  methods.requestSave.call(noData.self);
+  await methods.requestSave.call(noData.self);
   assert.deepEqual(noData.emitted, []);
   assert.deepEqual(noData.revealed, [1]);
   assert.equal(noData.self.sseError, 'sseEditor.fixBeforeSave:{"index":2}');
   const badDelay = make([{ ...good, delayMs: 1.5 }]);
-  methods.requestSave.call(badDelay.self);
+  await methods.requestSave.call(badDelay.self);
   assert.deepEqual(badDelay.revealed, [0]);
+  // 「整串貼上」的內容看不懂（commitPending 回 false）：不存檔
+  const unreadable = make([good]);
+  unreadable.self.pending = false;
+  await methods.requestSave.call(unreadable.self);
+  assert.deepEqual(unreadable.emitted, []);
   // 一般文字回應不受 SSE 事件影響
   const text = make([{ ...good, data: '' }], 'text');
-  methods.requestSave.call(text.self);
+  await methods.requestSave.call(text.self);
   assert.deepEqual(text.emitted, [['save']]);
   // 新增與刪除改同一個陣列（與規則編輯器相同）：編輯器才會展開新事件，刪除時保留搜尋。最後一個事件不能刪
   const list = [good];
@@ -311,4 +317,45 @@ test('event editor: reveal clears the search, leaves the zoomed view and opens t
   assert.deepEqual(focused, [1]);
   methods.reveal.call(self, 9);
   assert.equal(self.openRaw, events[1], 'an index past the end changes nothing');
+});
+
+test('event editor: saving while "paste or edit all" is open applies it first, or blocks the save', () => {
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+  const S = load();
+  const context = { SseEvents: S, Vue: { toRaw: value => value }, serializeSseEvents: JSON.stringify };
+  vm.runInNewContext(read('components/SseEventsEditor.js') + '\nthis.SseEventsEditor = SseEventsEditor;', context);
+  const { methods } = context.SseEventsEditor;
+  const make = (bulkText, bulkOriginal = '[]') => {
+    const emitted = [];
+    const self = { focus: { kind: 'bulk' }, bulkText, bulkOriginal, bulkError: '', $refs: {}, t: key => key,
+      $emit: (...args) => emitted.push(args), $nextTick: fn => fn(), closeFocus() { this.focus = null; } };
+    self.applyBulk = methods.applyBulk.bind(self);
+    return { self, emitted };
+  };
+  // 沒有開著：直接可以存
+  const idle = make('x');
+  idle.self.focus = null;
+  assert.equal(methods.commitPending.call(idle.self), true);
+  assert.deepEqual(idle.emitted, []);
+  // 改過且看得懂：先套用再存
+  const edited = make('[{"data":"new","delayMs":5}]');
+  assert.equal(methods.commitPending.call(edited.self), true);
+  assert.equal(edited.self.focus, null);
+  assert.deepEqual(plain(edited.emitted), plain([['replace', [{ event: '', data: 'new', id: '', delayMs: 5, type: 'normal' }]]]));
+  // 沒改過：只是關掉，不換成新的事件物件
+  const untouched = make('[1]', '[1]');
+  assert.equal(methods.commitPending.call(untouched.self), true);
+  assert.deepEqual(untouched.emitted, []);
+  // 看不懂：留在原處顯示錯誤，不存
+  const broken = make('[{"data":');
+  assert.equal(methods.commitPending.call(broken.self), false);
+  assert.equal(broken.self.focus.kind, 'bulk');
+  assert.equal(broken.self.bulkError, 'sseEditor.bulkJsonError');
+  assert.deepEqual(broken.emitted, []);
+  // 規則編輯器的兩個存檔按鈕也先經過 commitPending
+  const modal = read('components/RuleEditModal.js');
+  assert.ok(modal.includes('if (sseEditor.value && !sseEditor.value.commitPending()) return;'));
+  assert.ok(modal.includes('@click="requestSave(false)"') && modal.includes('@click="requestSave(true)"'));
+  assert.ok(!modal.includes("@click=\"$emit('save',"));
+  assert.ok(modal.includes('ref="sseEditor" class="sse-editor-wrap rule-sse-editor"'));
 });

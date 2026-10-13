@@ -81,6 +81,7 @@ const RuleEditModal = {
         const { ref } = Vue;
         const t = Vue.inject('t');
         const dialogRef = ref(null);
+        const sseEditor = ref(null);
         const responsePickerLaunch = ref(null);
         const responsePickerInput = ref(null);
         const responsePickerActiveIndex = ref(-1);
@@ -210,6 +211,12 @@ const RuleEditModal = {
             });
         };
         const saveShortcutKey = SAVE_SHORTCUT_KEY;
+        /** 存檔按鈕：SSE「整串貼上」還開著時先套用（看不懂就不存），等套用後的事件與可否存檔更新後再存。 */
+        const requestSave = async close => {
+            if (sseEditor.value && !sseEditor.value.commitPending()) return;
+            await Vue.nextTick();
+            if (props.canSave && !props.saving) emit('save', close);
+        };
         const onDialogKeydown = event => {
             if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && props.editorMode === 'form') {
                 event.preventDefault();
@@ -568,7 +575,7 @@ const RuleEditModal = {
             conditionTotal, matchModeOptions, hasLegacyConditions, legacyNotSimple, doubleEqualsConditions,
             dialogRef, responsePickerLaunch, responsePickerInput, responsePickerActiveIndex, contentExpanded, responsePickerResults, showPreviewViewer, editResponseLabel, templateMenuItems,
             responseOptionId, openResponsePicker, closeResponsePicker, toggleResponsePicker, selectResponse,
-            onResponsePickerKeydown, onResponseSearchInput, clearResponseSearch, onDialogKeydown, saveShortcutKey,
+            onResponsePickerKeydown, onResponseSearchInput, clearResponseSearch, onDialogKeydown, saveShortcutKey, sseEditor, requestSave,
             selectedResponse, forwardSelection, availableHttpTargetConnections, defaultHttpTargetConnection,
             availableJmsTargetConnections, defaultJmsTargetConnection, targetDisplayName,
             ruleMode, ruleModeOptions, editorModeTabs, protocolOptions, responseModeOptions, methodOptions,
@@ -1041,7 +1048,7 @@ const RuleEditModal = {
                     <!-- 回應內容 -->
                     <div v-if="ruleMode==='MOCK'" class="form-block response-content-block">
                         <!-- SSE 表格編輯器 -->
-                        <sse-events-editor v-if="form.sseEnabled && form.protocol==='HTTP'" class="sse-editor-wrap rule-sse-editor"
+                        <sse-events-editor v-if="form.sseEnabled && form.protocol==='HTTP'" ref="sseEditor" class="sse-editor-wrap rule-sse-editor"
                             :events="sseEvents" :loop-enabled="!!form.sseLoopEnabled" @update:loop-enabled="form.sseLoopEnabled = $event"
                             :shared-count="form.responseMode==='existing' && form.responseId ? (selectedResponse?.usageCount || previewResponseUsageCount || 0) : 0"
                             :expanded="contentExpanded" @update:expanded="contentExpanded = $event"
@@ -1265,8 +1272,8 @@ const RuleEditModal = {
                 <span v-if="!canSave" class="sub-info modal-footer-status"><i class="bi bi-info-circle"></i> {{t('modal.requiredFieldsHint')}}</span>
                 <span v-else class="modal-footer-hint"><kbd>{{saveShortcutKey}}</kbd><kbd>Enter</kbd>{{t('modal.saveAndCloseShortcut')}}</span>
                 <ui-button variant="quiet" :disabled="saving" @click="$emit('close')">{{t('modal.cancel')}}</ui-button>
-                <ui-button variant="secondary" @click="$emit('save',false)" :disabled="!canSave||saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-floppy'" :spin="saving"></ui-motion-icon> {{t('modal.save')}}</ui-button>
-                <ui-button variant="primary" @click="$emit('save',true)" :disabled="!canSave||saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-check2-circle'" :spin="saving"></ui-motion-icon> {{t('modal.saveAndClose')}}</ui-button>
+                <ui-button variant="secondary" @click="requestSave(false)" :disabled="!canSave||saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-floppy'" :spin="saving"></ui-motion-icon> {{t('modal.save')}}</ui-button>
+                <ui-button variant="primary" @click="requestSave(true)" :disabled="!canSave||saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-check2-circle'" :spin="saving"></ui-motion-icon> {{t('modal.saveAndClose')}}</ui-button>
             </div>
         </div>
     </div>
