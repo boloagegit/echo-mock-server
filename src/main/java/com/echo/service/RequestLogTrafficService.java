@@ -160,7 +160,7 @@ public class RequestLogTrafficService {
         int maxRecords = configService.getRequestLogMaxRecords();
         boolean truncated;
         if (configService.isRequestLogMemoryMode()) {
-            MemoryTotals memory = scanMemory(from, acc);
+            MemoryTotals memory = scanMemory(from, now, acc);
             earliest = memory.earliest;
             topUnmatched = memory.topUnmatched();
             // 環形緩衝區滿了才會丟掉最舊的
@@ -173,7 +173,7 @@ public class RequestLogTrafficService {
             trafficQuery.countByBucket(starts).forEach(acc::addCounts);
             acc.addResponseTimes(trafficQuery.countByResponseTime(from, RESPONSE_TIME_EDGES));
             earliest = trafficQuery.earliestRequestTime();
-            topUnmatched = trafficQuery.topUnmatchedSince(from, TOP_UNMATCHED).stream()
+            topUnmatched = trafficQuery.topUnmatched(from, now, TOP_UNMATCHED).stream()
                     .map(e -> new Endpoint(e.protocol(), e.method(), e.endpoint(), e.count()))
                     .toList();
             // 資料庫超過上限時會刪到上限以下騰出空間，筆數無法看出是否刪過；最小 id 大於 1 才是刪過的證據
@@ -185,7 +185,7 @@ public class RequestLogTrafficService {
     }
 
     /** 記憶體模式：直接走訪環形緩衝區，不另外複製。 */
-    private MemoryTotals scanMemory(LocalDateTime from, Accumulator acc) {
+    private MemoryTotals scanMemory(LocalDateTime from, LocalDateTime now, Accumulator acc) {
         MemoryTotals totals = new MemoryTotals();
         Iterable<RequestLogService.LogEntry> buffer = requestLogService.getMemoryBuffer();
         if (buffer == null) {
@@ -205,7 +205,8 @@ public class RequestLogTrafficService {
             }
             acc.add(time, entry.isMatched(), entry.isForwarded(), entry.getProxyError() != null,
                     entry.getResponseTimeMs());
-            if (!entry.isMatched()) {
+            // 最常沒比對到的請求只算到概況產生的時間，與「看這些請求」列出的範圍相同
+            if (!entry.isMatched() && time.isBefore(now)) {
                 totals.unmatched.merge(new EndpointKey(entry.getProtocol(), entry.getMethod(), entry.getEndpoint()),
                         1L, Long::sum);
             }

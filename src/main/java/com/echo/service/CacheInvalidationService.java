@@ -81,9 +81,13 @@ public class CacheInvalidationService {
     private Long cursor;
     /** 比 cursor 小但尚未出現的編號 → 放棄等待的時間點。 */
     private final TreeMap<Long, Long> gaps = new TreeMap<>();
-    /** 無法逐一追蹤的編號空缺：到這個時間（nanoTime）整個清空一次。 */
+    /**
+     * 無法逐一追蹤的編號空缺：到 {@code fullClearAt}（nanoTime）整個清空一次；等待期間又出現的空缺
+     * 不延後這次清空，而是在 {@code laterClearAt} 再清一次，不會一直被往後推。
+     */
     private boolean fullClearPending;
     private long fullClearAt;
+    private long laterClearAt;
     private long lastSuccessNanos;
     private long lastFailureLogNanos;
     private boolean failing;
@@ -104,12 +108,16 @@ public class CacheInvalidationService {
         this.nanoTime = nanoTime;
     }
 
-    /** 啟動時從目前最大的事件編號開始；之前的事件與剛啟動、還是空的快取無關。 */
+    /**
+     * 啟動時從目前最大的事件編號開始；之前的事件與剛啟動、還是空的快取無關。
+     * 但編號較小的交易可能還沒提交（之後才出現、又小於起點），所以等晚提交的時間過後再整個清空一次。
+     */
     @PostConstruct
     synchronized void start() {
         try {
             cursor = maxEventId();
             lastSuccessNanos = nanoTime.getAsLong();
+            scheduleFullClear(lastSuccessNanos + GAP_WAIT_NANOS);
         } catch (RuntimeException e) {
             log.warn("Cache sync could not read cache_events at startup; will retry: {}", e.toString());
         }
@@ -236,8 +244,7 @@ public class CacheInvalidationService {
         long deadline = now + GAP_WAIT_NANOS;
         if (missing > MAX_GAP_RUN || gaps.size() + missing > MAX_GAPS) {
             // 太多編號無法逐一等待：等晚提交的交易也該完成了，再整個清空一次，不留下永遠跳過的事件
-            fullClearAt = fullClearPending ? Math.max(fullClearAt, deadline) : deadline;
-            fullClearPending = true;
+            scheduleFullClear(deadline);
             return;
         }
         for (long gap = previous + 1; gap < id; gap++) {
@@ -245,9 +252,23 @@ public class CacheInvalidationService {
         }
     }
 
+    private void scheduleFullClear(long deadline) {
+        if (!fullClearPending) {
+            fullClearPending = true;
+            fullClearAt = deadline;
+            laterClearAt = deadline;
+        } else if (deadline - laterClearAt > 0) {
+            laterClearAt = deadline;
+        }
+    }
+
     private void runDueFullClear(long now) {
         if (fullClearPending && now - fullClearAt >= 0) {
-            fullClearPending = false;
+            if (laterClearAt - now > 0) {
+                fullClearAt = laterClearAt;
+            } else {
+                fullClearPending = false;
+            }
             Changes all = new Changes();
             all.markEverything(protocols.descriptors());
             apply(all);
@@ -270,6 +291,8 @@ public class CacheInvalidationService {
         gaps.clear();
         fullClearPending = false;
         cursor = max;
+        // 同啟動：比 max 小、還沒提交的事件之後才會出現，等待時間過後再清一次
+        scheduleFullClear(nanoTime.getAsLong() + GAP_WAIT_NANOS);
         Changes all = new Changes();
         all.markEverything(protocols.descriptors());
         apply(all);

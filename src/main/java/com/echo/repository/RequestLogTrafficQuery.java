@@ -68,13 +68,15 @@ public class RequestLogTrafficQuery {
 
     /** {@code from} 之後最常沒比對到的請求。 */
     @Transactional(readOnly = true)
-    public List<EndpointCount> topUnmatchedSince(LocalDateTime from, int limit) {
+    /** {@code from} 起到 {@code to}（不含，概況產生的時間）為止：與「看這些請求」列出的範圍相同。 */
+    public List<EndpointCount> topUnmatched(LocalDateTime from, LocalDateTime to, int limit) {
         return entityManager.createQuery(
                         "SELECT r.protocol, r.method, r.endpoint, COUNT(r) FROM RequestLog r "
-                                + "WHERE r.matched = false AND r.requestTime >= :from "
+                                + "WHERE r.matched = false AND r.requestTime >= :from AND r.requestTime < :to "
                                 + "GROUP BY r.protocol, r.method, r.endpoint ORDER BY COUNT(r) DESC, r.endpoint",
                         Object[].class)
                 .setParameter("from", from)
+                .setParameter("to", to)
                 .setMaxResults(limit)
                 .getResultStream()
                 .map(row -> new EndpointCount((Protocol) row[0], (String) row[1], (String) row[2], number(row[3])))

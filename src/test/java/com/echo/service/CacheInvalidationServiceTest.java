@@ -332,6 +332,46 @@ class CacheInvalidationServiceTest {
     }
 
     @Test
+    void repeatedLargeGaps_shouldNotPostponeTheFirstClear() {
+        commit(1, "JMS_RULE_CHANGED");
+        service.checkForInvalidation();
+        commit(201, "JMS_RULE_CHANGED");
+        service.checkForInvalidation();
+        // 一分鐘後又一個大空缺：第一次清空的時間不能被往後推
+        clock.addAndGet(TimeUnit.MINUTES.toNanos(1));
+        commit(401, "JMS_RULE_CHANGED");
+        service.checkForInvalidation();
+        fillCaches();
+
+        clock.addAndGet(TimeUnit.MINUTES.toNanos(1) + 1);
+        service.checkForInvalidation();
+        assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).as("first gap's wait is over").isFalse();
+
+        // 第二個空缺的等待結束時再清一次
+        fillCaches();
+        clock.addAndGet(TimeUnit.MINUTES.toNanos(1));
+        service.checkForInvalidation();
+        assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).as("second gap's wait is over").isFalse();
+    }
+
+    @Test
+    void eventCommittedLateBelowTheStartingPoint_shouldBeCoveredAfterTheWait() {
+        // 另一台主機的交易拿到編號 5 但還沒提交，6 先提交；這台主機此時啟動
+        commit(6, "JMS_RULE_CHANGED");
+        service.start();
+        service.checkForInvalidation();
+        fillCaches();
+        commit(5, "HTTP_RULE_CHANGED");
+        service.checkForInvalidation();
+        assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).as("below the cursor, not seen yet").isTrue();
+
+        clock.addAndGet(TimeUnit.MINUTES.toNanos(2) + 1);
+        service.checkForInvalidation();
+
+        assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).isFalse();
+    }
+
+    @Test
     void manyEvents_shouldBeReadAcrossPolls() {
         for (int i = 1; i <= CacheInvalidationService.PAGE_SIZE; i++) {
             commit(i, "JMS_RULE_CHANGED");

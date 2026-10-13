@@ -145,6 +145,20 @@ class RequestLogTrafficServiceTest {
     }
 
     @Test
+    void memoryModeCountsUnmatchedRequestsOnlyUpToTheSnapshot() {
+        when(config.isRequestLogMemoryMode()).thenReturn(true);
+        ConcurrentLinkedDeque<RequestLogService.LogEntry> buffer = new ConcurrentLinkedDeque<>();
+        buffer.add(entry(NOW.minusMinutes(1), false, "/a"));
+        buffer.add(entry(NOW, false, "/a"));
+        when(requestLogService.getMemoryBuffer()).thenReturn(buffer);
+
+        var traffic = service.compute(Range.DAY);
+
+        assertThat(traffic.topUnmatched()).singleElement().satisfies(e -> assertThat(e.count()).isEqualTo(1));
+        assertThat(traffic.generatedAt()).isEqualTo(NOW);
+    }
+
+    @Test
     void memoryModeWalksTheBufferWithoutTheDatabase() {
         when(config.isRequestLogMemoryMode()).thenReturn(true);
         ConcurrentLinkedDeque<RequestLogService.LogEntry> buffer = new ConcurrentLinkedDeque<>();
@@ -301,7 +315,7 @@ class RequestLogTrafficServiceTest {
         }
 
         @Override
-        public List<EndpointCount> topUnmatchedSince(LocalDateTime from, int limit) {
+        public List<EndpointCount> topUnmatched(LocalDateTime from, LocalDateTime to, int limit) {
             return topUnmatched;
         }
 

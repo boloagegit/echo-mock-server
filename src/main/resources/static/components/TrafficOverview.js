@@ -124,8 +124,9 @@ const TrafficOverview = {
       this.$emit('select-time', { from: bar.bucket.start, to: TrafficChart.bucketEnd(this.traffic, bar.i) });
     },
     showUnmatched(item) {
+      // 結束時間是概況產生的時間：清單與統計的筆數涵蓋同一段時間，之後進來的請求不算
       this.$emit('show-unmatched', { protocol: item.protocol, method: item.method || '', endpoint: item.endpoint,
-        from: this.traffic.from, to: this.traffic.to });
+        from: this.traffic.from, to: this.traffic.generatedAt || this.traffic.to });
     },
     protocolLabel(item) {
       if (item.protocol === 'JMS') { return this.jmsLabel; }

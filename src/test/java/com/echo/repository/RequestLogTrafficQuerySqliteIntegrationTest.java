@@ -66,7 +66,10 @@ class RequestLogTrafficQuerySqliteIntegrationTest {
                 new RequestLogTrafficQuery.BucketCount(0, 2, 0, 1, 0),
                 new RequestLogTrafficQuery.BucketCount(1, 4, 3, 0, 1));
         assertThat(trafficQuery.countByResponseTime(BASE, new int[] {2, 10})).containsExactly(1, 4, 1);
-        assertThat(trafficQuery.topUnmatchedSince(BASE, 5)).containsExactly(
+        // 只算到概況產生的時間（不含）：14:06 那筆 /avatar 不算
+        assertThat(trafficQuery.topUnmatched(BASE, BASE.plusMinutes(6), 5)).containsExactly(
+                new RequestLogTrafficQuery.EndpointCount(Protocol.HTTP, "GET", "/refund", 2));
+        assertThat(trafficQuery.topUnmatched(BASE, BASE.plusHours(1), 5)).containsExactly(
                 new RequestLogTrafficQuery.EndpointCount(Protocol.HTTP, "GET", "/refund", 2),
                 new RequestLogTrafficQuery.EndpointCount(Protocol.HTTP, "GET", "/avatar", 1));
         assertThat(trafficQuery.earliestRequestTime()).isEqualTo(BASE.minusMinutes(90));
