@@ -59,6 +59,9 @@ spring:
 
 # Echo 自訂配置
 echo:
+  sse:
+    # 客戶端連著但不讀資料時，寫入卡住超過這個時間就關閉該連線（毫秒，最少 1000）；事件之間的等待不算
+    stalled-write-timeout-ms: ${ECHO_SSE_STALLED_WRITE_TIMEOUT_MS:30000}
   # Healthy requests write no diagnostic file lines. Anomalies have bounded metadata only.
   diagnostics:
     enabled: ${ECHO_DIAGNOSTICS_ENABLED:true}

@@ -225,7 +225,7 @@ public class SseMockHandler {
 
         player.play(emitter, events, loopEnabled,
                 new SsePlayer.RequestContext(request.getQueryString(), request.getHeaders(), path, method, body),
-                initialDelay, trace);
+                initialDelay, trace, connectionReset);
         return emitter;
     }
 

@@ -57,12 +57,27 @@ comments/unsupported protocol fields, and discards an incomplete event at EOF.
 It decodes UTF-8 across chunk boundaries and exposes non-stream HTTP responses
 as HTTP results. Stopping or replacing a test aborts its fetch.
 
-SSE writes use a separate fixed-size pool so slow clients cannot consume the
-general HTTP delay workers. Completion, timeout, error, failed writes and
-shutdown cancel/remove outstanding playback tasks. A disconnected peer may
-only be detected by the container or next write; without a callback, a delayed
-stream can retain its next task until that write (at most the remaining initial
-rule delay plus the event delay). This is not a persistent detached task.
+SSE timing and SSE writes are separated. Eight scheduler threads only decide
+when the next event is due; the write itself runs on an `sse-writer` thread
+created on demand (at most 256, idle threads end after 60 seconds), and each
+stream has at most one write in progress. A client that stays connected but
+stops reading therefore holds only its own writer: other streams and the
+general HTTP delay workers keep running. A write still unfinished after
+`echo.sse.stalled-write-timeout-ms` (default 30,000, minimum 1,000) closes that
+connection, which ends the blocked write and frees the writer. Only a write in
+progress counts, so long pauses between events are never treated as stalled.
+If all 256 writers are waiting at once, other streams retry every 200 ms and
+continue as soon as the stalled connections are closed; they are delayed, not
+stopped. In a test with a stream sending one event every 100 ms, 12 clients
+that never read previously stopped it completely (no event for 32 s, and the
+stalled connections were never closed); it now keeps its 100 ms rhythm, and
+260 such clients pause it for at most the 30-second timeout.
+
+Completion, timeout, error, failed writes and shutdown cancel/remove
+outstanding playback tasks. A disconnected peer may only be detected by the
+container or next write; without a callback, a delayed stream can retain its
+next task until that write (at most the remaining initial rule delay plus the
+event delay). This is not a persistent detached task.
 
 Native EventSource automatically reconnects after normal EOF and some errors.
 Every request currently restarts the configured sequence at the first event.
