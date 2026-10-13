@@ -455,28 +455,11 @@ const useRules = (deps) => {
             const data = await r.json();
             await hydrateForwardTarget(data);
             const body = data.responseBody || '';
-            // SSE 內容：格式化為 SSE 預覽
-            if (data.sseEnabled) {
-                const events = deserializeSseEvents(body);
-                if (events.length && events[0].data) {
-                    const lines = [];
-                    events.forEach((evt, i) => {
-                        if (i > 0) { lines.push(''); }
-                        if (evt.delayMs > 0) { lines.push(t('ssePreview.delay', {ms: evt.delayMs})); lines.push(''); }
-                        const type = evt.type || 'normal';
-                        if (type === 'abort') { lines.push(t('ssePreview.abort')); return; }
-                        if (type === 'error') { lines.push(t('ssePreview.errorEvent')); }
-                        const evtName = type === 'error' ? 'error' : (evt.event || 'message');
-                        lines.push('event: ' + evtName);
-                        (evt.data || '').split('\n').forEach(line => { lines.push('data: ' + line); });
-                        if (evt.id) { lines.push('id: ' + evt.id); }
-                        lines.push('');
-                    });
-                    data._previewBody = lines.join('\n');
-                    data._isSse = true;
-                } else {
-                    data._previewBody = body;
-                }
+            // SSE 內容：顯示實際送出的串流原文，並附一行摘要（事件數、全長、循環、在哪裡結束連線）
+            const events = data.sseEnabled ? deserializeSseEvents(body) : [];
+            if (events.length && events[0].data) {
+                data._previewBody = SseEvents.rawStream(events, data.sseLoopEnabled === true, t);
+                data._sseSummary = SseEvents.summary(events, data.sseLoopEnabled === true);
             } else {
                 data._previewBody = body;
             }

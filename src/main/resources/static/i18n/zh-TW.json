@@ -376,7 +376,15 @@
     "pvSectionResponse": "回應",
     "pvTargetHost": "來源主機",
     "conditionCountSummary": "{count} 個條件",
-    "tagCountSummary": "{count} 個標籤"
+    "tagCountSummary": "{count} 個標籤",
+    "sseStream": "SSE 串流",
+    "sseEventCount": "{count} 個事件",
+    "sseTotal": "全長 {duration}",
+    "sseLoops": "循環播放",
+    "ssePlaysOnce": "播放一次",
+    "sseEndsAfter": "第 {n} 個事件後結束連線",
+    "sseAbortsAt": "第 {n} 個事件中止連線",
+    "sseSkipped": "（後面 {count} 個不會送出）"
   },
   "responses": {
     "pagination": "回應分頁",

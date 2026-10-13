@@ -376,7 +376,15 @@
     "pvSectionResponse": "Response",
     "pvTargetHost": "Source host",
     "conditionCountSummary": "{count} conditions",
-    "tagCountSummary": "{count} tags"
+    "tagCountSummary": "{count} tags",
+    "sseStream": "SSE stream",
+    "sseEventCount": "{count} events",
+    "sseTotal": "{duration} total",
+    "sseLoops": "Loops",
+    "ssePlaysOnce": "Plays once",
+    "sseEndsAfter": "Connection closes after event {n}",
+    "sseAbortsAt": "Connection aborts at event {n}",
+    "sseSkipped": " ({count} later events not sent)"
   },
   "responses": {
     "pagination": "Response pagination",

@@ -478,6 +478,8 @@
 .detail-copy:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 4px }
 .rule-detail .ui-detail-drawer__title { font-family: var(--font-mono); font-size: 14px }
 .rule-detail-forward { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px }
+.rule-detail-sse { display: flex; flex-direction: column; gap: 2px; font-variant-numeric: tabular-nums }
+.rule-detail-sse__end { display: inline-flex; align-items: center; gap: 6px; color: var(--warning-text, var(--warning)); font-size: .92em }
 
 .ui-detail-drawer code,
 .data-table code { color: inherit }

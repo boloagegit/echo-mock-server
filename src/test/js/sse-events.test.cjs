@@ -184,3 +184,53 @@ test('raw stream text: delays, multi-line data, id, error end with skipped count
   assert.equal(ended, '[ERROR]\nevent: error\ndata: one\n\n1 skipped');
   assert.equal(S.rawStream([{ event: '', data: 'x', id: '', delayMs: 5, type: 'abort' }], false, t), '-- 5 --\n\n[ABORT]');
 });
+
+test('summary: count, total, loop, and where the connection ends', () => {
+  const S = load();
+  assert.deepEqual(plain(S.summary([ev(300), ev(800)], true)),
+    { count: 2, totalMs: 1100, endAt: 0, end: null, skipped: 0, loops: true });
+  assert.equal(S.summary([ev(300)], false).loops, false);
+  // 錯誤／中止事件結束連線：開了循環也不會重播
+  assert.deepEqual(plain(S.summary([ev(100), ev(200, 'error'), ev(500)], true)),
+    { count: 3, totalMs: 300, endAt: 2, end: 'error', skipped: 1, loops: false });
+  assert.deepEqual(plain(S.summary([ev(100), ev(900, 'abort')], false)),
+    { count: 2, totalMs: 1000, endAt: 2, end: 'abort', skipped: 0, loops: false });
+  assert.equal(S.summary(null, true).count, 0);
+});
+
+test('rule detail: SSE summary line in both languages, built from the loaded rule', () => {
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+  const S = load();
+  const context = { SseEvents: S, heldDetailMixin: () => ({}), DETAIL_LIST_PREVIEW: {}, shortId() {}, fmtTime() {},
+    forwardTargetLabel() {}, forwardTargetEndpoint() {} };
+  vm.runInNewContext(read('components/RuleDetail.js') + '\nthis.RuleDetail = RuleDetail;', context);
+  const computed = context.RuleDetail.computed;
+  for (const lang of ['zh-TW', 'en']) {
+    const messages = JSON.parse(read(`i18n/${lang}.json`));
+    const t = (key, p = {}) => key.split('.').reduce((o, k) => o?.[k], messages).replace(/\{(\w+)\}/g, (_, k) => p[k]);
+    const line = (events, loop, extra = {}) => computed.sse.call({ t, isHttp: true, view: { sseEnabled: true, ...extra },
+      shownDetail: { _sseSummary: S.summary(events, loop) } });
+    const looping = line([ev(24000), ev(300)], true);
+    const ended = line([ev(100), ev(200, 'error'), ev(5), ev(5)], true);
+    const aborted = line([ev(100), ev(900, 'abort')], false);
+    if (lang === 'zh-TW') {
+      assert.deepEqual(plain(looping), { count: 2, text: '2 個事件 · 全長 24.3 秒 · 循環播放', end: '' });
+      assert.deepEqual(plain(ended), { count: 4, text: '4 個事件 · 全長 300 ms', end: '第 2 個事件後結束連線（後面 2 個不會送出）' });
+      assert.equal(aborted.end, '第 2 個事件中止連線');
+      assert.equal(line([ev(0)], false).text, '1 個事件 · 全長 0 ms · 播放一次');
+    } else {
+      assert.equal(looping.text, '2 events · 24.3 s total · Loops');
+      assert.equal(ended.end, 'Connection closes after event 2 (2 later events not sent)');
+      assert.equal(aborted.end, 'Connection aborts at event 2');
+    }
+    // 不是 SSE、JMS，或內容讀不到時不顯示
+    assert.equal(line([ev(0)], false, { sseEnabled: false }), null);
+    assert.equal(computed.sse.call({ t, isHttp: false, view: { sseEnabled: true }, shownDetail: { _sseSummary: S.summary([ev(0)]) } }), null);
+    assert.equal(computed.sse.call({ t, isHttp: true, view: { sseEnabled: true }, shownDetail: {} }), null);
+  }
+  const detail = read('components/RuleDetail.js');
+  assert.ok(detail.includes('<template v-if="sse">'));
+  const rules = read('composables/useRules.js');
+  assert.ok(rules.includes('SseEvents.rawStream(events, data.sseLoopEnabled === true, t)'));
+  assert.ok(rules.includes('data._sseSummary = SseEvents.summary(events, data.sseLoopEnabled === true)'));
+});
