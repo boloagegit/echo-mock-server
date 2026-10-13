@@ -55,9 +55,9 @@ public class ResponseSummaryQuery {
             predicates.add(keywordPredicate);
         }
         if ("SSE".equals(filter.contentType())) {
-            predicates.add("r.content_type = 'SSE_EVENTS'");
+            predicates.add("r.content_type IN ('SSE', 'SSE_EVENTS')");
         } else if ("GENERAL".equals(filter.contentType())) {
-            predicates.add("(r.content_type IS NULL OR r.content_type <> 'SSE_EVENTS')");
+            predicates.add("(r.content_type IS NULL OR r.content_type NOT IN ('SSE', 'SSE_EVENTS'))");
         }
         if ("used".equals(filter.usage())) {
             predicates.add("COALESCE(response_usage.usage_count, 0) > 0");

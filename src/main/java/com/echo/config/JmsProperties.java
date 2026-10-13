@@ -64,7 +64,47 @@ public class JmsProperties {
     /** -1 表示不因重送次數自動丟棄訊息。 */
     private int maxDeliveryAttempts = -1;
 
+    /** 從哪裡接收 JMS 請求：內建 Artemis（預設）或外部共用 broker（例如 ESB）。 */
+    private Source source = new Source();
+
     private Target target = new Target();
+
+    /**
+     * JMS 請求來源。{@code embedded} 使用 Echo 內建的 Artemis；
+     * {@code artemis} 或 {@code tibco} 連到外部 broker 的 {@link #queue}，
+     * 多台 Echo 監聽同一個 queue 時由 broker 把每則訊息只交給其中一台。
+     */
+    @Getter
+    @Setter
+    public static class Source {
+        public static final String EMBEDDED = "embedded";
+
+        private String type = EMBEDDED;  // embedded | artemis | tibco
+        private String serverUrl;
+        private String username;
+        private String password;
+        /** 連不上外部 broker 時，多久重試一次。 */
+        private long reconnectIntervalMs = 5_000;
+
+        public boolean isExternal() {
+            return isExternalType(type);
+        }
+
+        /** 供設定類別的條件判斷使用：空白或 {@code embedded} 以外的值都是外部 broker。 */
+        public static boolean isExternalType(String type) {
+            return type != null && !type.isBlank() && !EMBEDDED.equalsIgnoreCase(type.trim());
+        }
+
+        /** 轉成轉送目標的設定格式，沿用各 broker 的 ConnectionFactory 建立方式。 */
+        public Target asConnectionTarget() {
+            Target connection = new Target();
+            connection.setType(type == null ? null : type.trim());
+            connection.setServerUrl(serverUrl);
+            connection.setUsername(username);
+            connection.setPassword(password);
+            return connection;
+        }
+    }
 
     @Getter
     @Setter

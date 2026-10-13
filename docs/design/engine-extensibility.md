@@ -280,7 +280,7 @@ local name 取代這段 XPath（以差異測試確保結果與順序相同）；
 
 - `explain()` 回傳樹狀結果：每個葉節點包含 expected、actual、passed。
 - 計分：以**根節點的直接子節點**計算 `passed/total`（舊規則就是一個扁平的 `all`，結果與現在的 `score()` 相同）。
-- `MatchChainEntry` 原有欄位與 JSON 格式不變；新增可選欄位 `detailTree`。前端只在有值時顯示。
+- `MatchChainEntry` 原有欄位與 JSON 格式不變；新增可選欄位 `detailTree`。前端只在有值時顯示。（已完成，見 7.2.10）
 
 ## 5. 引擎、協定與回應 SPI
 
@@ -302,7 +302,7 @@ public interface ProtocolAdapter {
 }
 ```
 
-`RuleApplyContractService`、`RuleQueryService`、`CacheInvalidationService`、`AdminController` 中依協定的分支，改為查詢 `ProtocolRegistry` 與 `ProtocolDescriptor`。例如合約 schema 的 `PROTOCOLS` 改為 `registry.ids()`；HTTP 專屬欄位改由 `descriptor.routeSchema()` 提供。
+`RuleApplyContractService`、`RuleQueryService`、`CacheInvalidationService`、`AdminController`（之後拆成數個 controller 與 `RuleEditService`）中依協定的分支，改為查詢 `ProtocolRegistry` 與 `ProtocolDescriptor`。例如合約 schema 的 `PROTOCOLS` 改為 `registry.ids()`；HTTP 專屬欄位改由 `descriptor.routeSchema()` 提供。
 
 ### 5.2 RuleIndex 與快取
 
@@ -510,7 +510,7 @@ SSE 播放測試改為直接測 `SsePlayer`；另新增 `ServeEventDispatcherTes
 - `RuleQueryService`：規則清單查詢、分組查詢逐一查詢已啟用協定（原本以 `echo.jms.enabled` 判斷，與 handler 是否存在同義）。
 - `CacheInvalidationService`：事件名稱與要清除的快取由描述提供；事件字串（`HTTP_RULE_CHANGED`、`JMS_RULE_CHANGED`、
   `RULE_CHANGED`）不變，舊版與新版實例可以混合運作。本實例未啟用的協定事件不清除任何快取。
-- `AdminController`：Excel 匯入與規則異動後的快取清除。
+- `AdminController`（現為 `RuleEditService`）：Excel 匯入與規則異動後的快取清除。
 
 ArchUnit 新增規則：`RuleQueryService` 與 `CacheInvalidationService` 不得引用 `HttpRule`／`JmsRule` 等協定類別
 （已用刻意加入的依賴確認規則會失敗）；`ProtocolDescriptorContractTest` 檢查每個描述的搜尋欄位、action 型別與快取名稱。
@@ -520,8 +520,8 @@ ArchUnit 新增規則：`RuleQueryService` 與 `CacheInvalidationService` 不得
 - `Protocol` enum 換成 `ProtocolId`：enum 存在 entity、DTO、API 與前端，換掉的成本高，而目前只有兩個協定。
 - 核心層的 `ProtocolAdapter`（`RouteCodec`、`RuleIndex`、`ResponseWriter`）：目前執行期的協定差異已集中在
   `HttpMockPipeline`／`JmsMockPipeline` 與 `SseMockHandler`，等 `RuleDefinition`／`ResponseSpec` 出現後再抽成核心介面。
-- 仍保留的協定分支：`RuleApplyContractService` 的 v1 文件驗證、`AdminController` 的「從請求紀錄建立規則」
-  與故障／轉發欄位正規化、SSE 規則驗證。這些都依附在現行 DTO 欄位上，會在步驟 7 的 v2 文件與 `ResponseSpec` 一起改寫。
+- 仍保留的協定分支：`RuleApplyContractService` 的 v1 文件驗證、`AdminController` 的「從請求紀錄建立規則」（現為 `RequestLogController`）
+  與故障／轉發欄位正規化、SSE 規則驗證（現為 `RuleEditService`）。這些都依附在現行 DTO 欄位上，會在步驟 7 的 v2 文件與 `ResponseSpec` 一起改寫。
 
 ### 7.2.5 步驟 7 實作與驗證紀錄
 
@@ -723,6 +723,110 @@ JMS 的結果因此會受其他規則影響。經確認統一成串流的結果�
 結論：JMS 不再因進階條件改用 DOM，大型 XML 不論 HTTP 或 JMS 都明顯變快；其餘情境持平。
 另外一次測試中途因為磁碟空間不足（歷次壓測遺留的資料目錄），內嵌 JMS broker 暫停接收訊息，該次結果作廢重跑；
 壓測腳本已改為每次結束後刪除資料目錄。
+
+### 7.2.10 匹配鏈的條件樹（§4.6）
+
+請求紀錄「匹配鏈」原本只顯示規則與原始條件文字，進階條件是一整段 JSON，看不出哪個群組或條件沒過；
+near-miss 的逐條結果雖然有記錄（`detail`），但畫面讀的是不存在的 `mismatch` 欄位，從來沒有顯示。
+
+- **後端**：`MatchExplanation` 新增 `leaf`（結構化條件的原始節點）；`ConditionMatcher.explainPrepared` 回傳樹狀說明，
+  原本的 `matchesPreparedWithDetail` 由它攤平而來，結果不變。`LogAgent` 只為會顯示的條目（match、第一個 shadowed、
+  第一個 near-miss）以 `MatchExplanationJson` 產生 `detailTree`，因此每筆紀錄最多三棵樹。
+- **格式**：群組 `{node:"all|any|not", passed, children}`；結構化條件 `{node:"leaf", passed, spec, actual}`；
+  舊格式條件 `{node:"legacy", source, passed, condition, actual}`；取不到值為 `missing`，body 太大為 `unavailable`。
+- **大小上限**：一棵樹最多 200 個節點、約 8,000 字（超過時該群組其餘條件不列出，標 `truncated`），單一文字 300 字、`spec` 超過 1,000 字時省略期望值
+  （`valueOmitted`）。只在背景分析時產生，請求路徑與 fast path 不變；分析被略過（佇列壅塞）時也不會產生。
+- **畫面**：根節點的「全部要符合」不另外顯示，直接列出各條件（與規則摘要相同）。沒過的群組預設展開、已通過的收起；
+  造成整條規則沒過的條件標示「卡在這裡」，NOT 底下的條件以「對整體是否有幫助」著色。原始條件改為按需顯示。
+  沒有 `detailTree` 的舊紀錄照舊顯示原始條件，near-miss／skipped 另外顯示原本就有的逐條結果。
+
+**驗證**：`MatchExplanationJsonTest`（群組、實際值、缺值、舊格式、上限）、`MatchChainAnalysisTest`（只有評估過條件的條目附上樹）、
+`match-tree.test.cjs`（顯示用的拆解與 NOT 著色），以及實際啟動伺服器建立進階與舊格式規則、送出請求後以 Playwright
+檢查深色與淺色主題的畫面（無前端錯誤）。
+
+### 7.2.11 請求處理流程圖
+
+請求紀錄新增「處理流程」分頁（預設開啟），把一筆請求實際走過的路畫成步驟：收到請求 → 比對規則 → 模擬回應／SSE 串流／轉發
+（沒走的一邊淡化）或找不到規則 → 回給呼叫端，並以時間條拆成比對、產生回應或等待轉發對象、模擬延遲三段。
+
+- **路線**（依 `AbstractMockPipeline` 與 `SseMockHandler` 的實際順序）：條件命中、改用沒有條件的規則（JMS 先指定佇列再萬用）、
+  情境狀態不符而略過；命中後為模擬回應、SSE、故障注入（連線中斷／空回應）或規則設定的轉發；沒命中時依預設轉發設定、
+  `X-Original-Host` 轉發，或回 404（JMS 回錯誤訊息）。轉發再分為正常、對方回錯誤狀態、連不上或逾時。
+- **新增紀錄欄位**（皆可為空，舊紀錄顯示為未知）：`candidateCount`、`matchedByFallback`（`RuleSelector.Selection.conditionMatched`
+  的反面）、`delayMs`（規則的模擬延遲；HTTP 與 JMS 都在寫入紀錄之後才等待，因此不含在 `responseTimeMs` 內）、
+  `sseEventCount`、`scenarioSkipped`（匹配鏈格式，最多 20 筆）。經 `ServeEvent` → `LogTask` → spool → `RequestLog`／
+  `LogEntry`，只在詳細資料 API 回傳，列表查詢不變。spool 記錄改為不寫入空欄位。
+- **畫面**：`request-flow.js` 為純函式（Node 測試涵蓋 7 條路線與時間條），`RequestFlowView` 負責呈現；抽屜一般寬度時由上而下，
+  加寬到 820px 以上改為由左而右（container query）。「看匹配鏈」直接切到匹配鏈分頁。
+
+**驗證**：`AbstractMockPipelineTest`（候選數、延遲、備選、情境略過）、`UniversalMockControllerSseTest`（SSE 事件數）、
+`RequestLogSpoolTest`（新欄位經 spool 重啟後保留）、`RequestLogIntegrationTest`（詳細資料 API 回傳新欄位）、
+`request-flow.test.cjs`，以及實際啟動伺服器送出 7 種請求（含延遲與情境、情境略過、連線中斷、SSE、萬用規則、轉發失敗、
+規則轉發），以 Playwright 截圖檢查一般與加寬抽屜（無前端錯誤）。
+
+### 7.2.12 規則判斷順序與輪不到的規則
+
+規則詳細資料新增「判斷順序」，規則列表標出一定輪不到的規則（標記說明原因），並提供「輪不到」篩選（規則清單 API 的 `unreachable=true`，依 id 分段以 IN 查詢，與分頁、其他篩選一起使用）（`RuleOrderAnalyzer`、`RuleOrderService`、`RuleOrderController`）。
+
+- **與實際比對一致**：規則來源與排序和比對相同（HTTP 規則快照與 `HTTP_RULE_ORDER`；JMS 快取的規則與 `JMS_RULE_ORDER`，
+  抽成常數共用），排序條件相同時維持規則來源的順序（與穩定排序相同）。挑選規則見 `RuleSelector`：先依序檢查有條件的規則，
+  都不成立時才用第一條沒有條件的規則，所以沒有條件的規則不會擋住後面有條件的規則。
+- **只判斷確定的情況**：較早的規則 E 適用規則 R 的所有請求（HTTP：host、method、路徑都涵蓋，`/x/*` 涵蓋以 `/x/` 開頭的路徑；
+  JMS：queue 相同或 `*`，依 endpoint 欄位分桶時 E 不能限定成別的值），E 不受情境狀態限制，而且兩者條件文字完全相同
+  （結構化條件以 JSON 內容比較），或兩者都沒有條件。寫法不同但意思重疊的條件不判斷。
+- **判斷順序**另外列出只適用部分請求的規則（例如只限某個 host 的萬用規則），標示「只在部分請求時檢查」，不用來判定輪不到；
+  排在預設回應之後的沒有條件規則標示「這裡輪不到」（它在其他路徑仍可能用到）。
+- **效能**：每條規則的條件只轉成一次比對用的文字（結構化條件的 JSON 欄位依名稱排序），規則依路徑（或 queue）與條件分組，
+  判斷一條規則時只看可能涵蓋它、而且條件相同（或同樣沒有條件）的那一組，遇到排在它之後的規則就停止。索引與結果依規則來源物件快取，
+  規則異動清除快取後重算。實測（單執行緒，未暖機的第一次較慢）：
+
+  | 情境 | 改寫前 | 改寫後 |
+  |------|------|------|
+  | 20,000 條規則分散在 2,000 個路徑，檢查全部 | 約 1.1 秒 | 約 0.1 秒 |
+  | 同一路徑 2,000 條舊格式條件規則 | 約 0.24 秒 | 約 0.01 秒 |
+  | 同一路徑 2,000 條結構化條件規則 | 約 4.5 秒 | 約 0.15 秒 |
+  | 單一規則的判斷順序 | — | 數毫秒（重用索引） |
+
+- **畫面上的數量**：判斷順序超過 25 條時只顯示開頭 15 條、這條規則與前後各一條、擋住它的規則與預設回應，其餘以
+  「顯示其餘 N 條」收合；規則列表以篩選分頁顯示，數量不影響畫面。
+
+**驗證**：`RuleOrderServiceTest`（重複條件、預設規則、涵蓋範圍、情境限制、結構化條件、判斷順序、部分適用、停用規則、JMS 分桶、快取）、
+`RuleOrderSoundnessPropertyTest`（隨機規則與請求，以實際的候選查詢與 `RuleSelector` 驗證被判定輪不到的規則從未被選中；
+拿掉涵蓋檢查的錯誤版本會被這個測試抓到）、`RuleOrderIntegrationTest`（API、刪除規則後立即更新），以及實際啟動伺服器以
+Playwright 檢查規則列表的標記、「輪不到」篩選與判斷順序畫面（無前端錯誤）。
+
+### 7.2.13 請求紀錄的流量概況
+
+請求紀錄頁上方的流量概況（`TrafficOverview`、`traffic-chart.js`；後端 `RequestLogTrafficService`、`RequestLogTrafficQuery`、
+`GET /api/admin/logs/traffic`）：最近 1 小時、24 小時或 7 天，每格依結果分成模擬回應、轉發、沒比對到、轉發失敗
+（沒比對到優先；比對到規則且有 `proxyError` 為轉發失敗），加上回應時間估計與最常沒比對到的請求。預設精簡，可展開或收合，
+選擇存在瀏覽器；點一格長條即在列表加上時間篩選（`GET /api/admin/logs` 的 `from`／`to`），已因筆數上限刪除的時段標為沒有資料。
+
+資源使用的取捨：
+
+- **在資料庫內計數**：以時間比較的 `CASE` 分格（不用資料庫日期函式，外部資料庫也適用），只取回幾十列；
+  涵蓋索引 `idx_log_traffic (requestTime, matched, forwarded, proxyError, responseTimeMs)` 讓查詢不讀排在後面的 body 與比對過程。
+  最初版本把每筆紀錄串流到 Java 統計，7 天、100,000 筆時每次產生約 29 MB 短期物件，改為資料庫計數後約 0.2 MB 且與筆數無關。
+- **回應時間**以 28 個固定區間計數，在區間內依名次比例估計中位數與最慢 5%，不保留個別數值。
+- **共用與單一計算**：結果依時間範圍暫存 5 秒，同一時間只有一個統計在執行，所以很多人同時開啟只查一次、最多佔用一條資料庫連線
+  （連線池只有 3 條，也要寫入紀錄與讀取規則）。收合時前端不查詢。記憶體模式直接走訪既有的環形緩衝區。
+
+實測（4 核心，測試程式與伺服器同一台；以登入後的 session 呼叫，與瀏覽器相同）：
+
+| 項目 | 10,000 筆 | 100,000 筆 |
+|------|------|------|
+| 單次統計（7 天，含筆數、最早紀錄與最常沒比對到） | 約 22 ms | 約 140 ms |
+| 單次統計產生的短期物件 | 約 0.2 MB | 約 0.2 MB |
+| 60 人同時開啟（三種範圍各 20 人）的資料庫統計次數 | 3 次 | 3 次 |
+| 30 人連續不停查詢 30 秒（約 4 萬次）的資料庫統計次數 | 18 次 | 18 次 |
+| 上述壓力後 GC 完的 heap | 54.8 → 55.5 MB | 54.1 → 55.8 MB |
+
+同樣壓力改打既有的 `/api/admin/logs/summary`，延遲與模擬請求變慢的程度相同或更多，表示這些數字來自請求量本身（同一台機器的 CPU），
+不是流量概況。既有資料庫升級時，索引於啟動時自動建立（已以舊版建立的資料庫驗證）。
+
+**驗證**：`RequestLogTrafficServiceTest`（分格對齊、分類、回應時間估計、筆數上限、記憶體模式、共用快取、16 執行緒同時查詢只計算一次）、
+`RequestLogTrafficQuerySqliteIntegrationTest`（實際 SQLite 的分格、回應時間區間、最常沒比對到、時間篩選、查詢計畫使用涵蓋索引）、
+`traffic-chart.test.cjs`，以及實際啟動伺服器以 Playwright 檢查三種顯示、點選篩選、鍵盤操作、收合不查詢、淺色主題、手機寬度與筆數上限（無前端錯誤）。
 
 ### 7.3 風險
 

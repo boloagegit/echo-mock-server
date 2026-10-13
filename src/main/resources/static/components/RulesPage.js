@@ -29,7 +29,6 @@ const RulesPage = {
     rulePreviewLoading: Object,
     rulePreviewError: Object,
     rulePreviewCache: Object,
-    canDragRules: Boolean,
     showDataDropdown: Boolean,
     bulkImportExportEnabled: Boolean,
     expandedTagGroups: Array,
@@ -41,8 +40,7 @@ const RulesPage = {
     groupLoading: Object,
     filteredRules: Array,
     getGroupLimit: Function,
-    ruleSortIcon: Function,
-    dragRowClass: Function
+    ruleSortIcon: Function
   },
   emits: [
     'load-rules', 'open-create', 'toggle-batch-select',
@@ -57,14 +55,23 @@ const RulesPage = {
     'open-rule-detail', 'close-rule-detail', 'load-rule-detail',
     'go-to-responses',
     'clip-copy', 'extend-rule',
-    'drag-start', 'drag-over', 'drag-leave', 'drop', 'drag-end',
     'toggle-data-dropdown', 'toggle-tag-group', 'toggle-tag-subgroup',
     'show-more-group', 'show-all-group',
   ],
+  data() {
+    return { orderIssues: { count: 0, issues: {} } };
+  },
+  watch: {
+    // 規則清單重新載入完成時（含新增、修改、刪除後）一併更新輪不到的規則
+    'loading.rules'(busy) { if (!busy) { this.loadOrderIssues(); } }
+  },
+  mounted() {
+    this.loadOrderIssues();
+  },
   computed: {
     hasRuleFilters() {
       return Boolean(this.ruleFilter.keyword || this.ruleFilter.protocol || this.ruleFilter.enabled
-        || this.ruleFilter.isProtected || this.ruleFilter.mode || this.ruleFilter.expiring);
+        || this.ruleFilter.isProtected || this.ruleFilter.mode || this.ruleFilter.expiring || this.ruleFilter.unreachable);
     },
     protocolFilterOptions() {
       return [
@@ -86,6 +93,14 @@ const RulesPage = {
     },
     modeFilterOptions() {
       return ['MOCK', 'FORWARD', 'FAULT'].map(value => ({ value, label: this.t('rules.mode_' + value) }));
+    },
+    unreachableFilterOptions() {
+      return [{
+        value: 'true',
+        label: this.orderIssues.count ? this.t('rules.order.filterLabelCount', { count: this.orderIssues.count }) : this.t('rules.order.filterLabel'),
+        icon: 'bi-exclamation-triangle',
+        title: this.t('rules.order.filterHint'),
+      }];
     },
     expiringFilterOptions() {
       return [{
@@ -144,11 +159,17 @@ const RulesPage = {
     },
   },
   methods: {
+    async loadOrderIssues() {
+      try {
+        const r = await apiCall('/api/admin/rules/order-issues', {}, { silent: true });
+        if (r && r.ok) { this.orderIssues = await r.json(); }
+      } catch { /* 只是提示，載入失敗時不顯示 */ }
+    },
     setFilter(key, value) {
       this.$emit('update:ruleFilter', { ...this.ruleFilter, [key]: value });
     },
     clearFilters() {
-      this.$emit('update:ruleFilter', { protocol: '', enabled: '', isProtected: '', mode: '', expiring: '', keyword: '' });
+      this.$emit('update:ruleFilter', { protocol: '', enabled: '', isProtected: '', mode: '', expiring: '', unreachable: '', keyword: '' });
     },
     handleDataMenuAction(action) {
       if (action === 'export') { this.$emit('export-rules'); }
@@ -220,6 +241,7 @@ const RulesPage = {
         <ui-toggle-group :model-value="ruleFilter.isProtected" :options="protectionFilterOptions" :aria-label="t('rules.protectionFilter')" @update:model-value="setFilter('isProtected', $event)"></ui-toggle-group>
         <ui-toggle-group :model-value="ruleFilter.mode" :options="modeFilterOptions" :aria-label="t('rules.filterMode')" @update:model-value="setFilter('mode', $event)"></ui-toggle-group>
         <ui-toggle-group :model-value="ruleFilter.expiring" :options="expiringFilterOptions" :aria-label="t('rules.filterExpiring')" @update:model-value="setFilter('expiring', $event)"></ui-toggle-group>
+        <ui-toggle-group :model-value="ruleFilter.unreachable" :options="unreachableFilterOptions" :aria-label="t('rules.order.filterLabel')" @update:model-value="setFilter('unreachable', $event)"></ui-toggle-group>
         <div class="list-toolbar__end">
             <ui-segmented-control :model-value="ruleViewMode" :options="viewModeOptions"
                 name="ruleViewMode" size="compact" :aria-label="t('rules.viewMode')"
@@ -249,15 +271,12 @@ const RulesPage = {
                 <div v-if="loading.rules && !rules.length" class="list-skeleton" role="status" :aria-label="t('common.loading')">
                     <div v-for="i in 8" :key="'sk-rule-'+i" class="list-skeleton__row"><span class="sk sk-w-38"></span><span class="sk sk-w-40p"></span><span class="sk sk-w-15p"></span></div>
                 </div>
-                <rule-table v-else-if="pagedRules.length" :rules="pagedRules" :selected-id="ruleDetailId"
+                <rule-table v-else-if="pagedRules.length" :rules="pagedRules" :selected-id="ruleDetailId" :order-issues="orderIssues.issues"
                     :is-logged-in="isLoggedIn" :status="status" :http-label="httpLabel" :jms-label="jmsLabel"
                     sortable :rule-sort="ruleSort" :batch-select-mode="batchSelectMode" :selected-rules="selectedRules"
-                    :can-drag="canDragRules" :drag-row-class="dragRowClass"
                     @select="selectRule" @edit="$emit('open-edit', $event)" @toggle-enabled="$emit('toggle-enabled', $event)"
                     @menu="handleRowMenu" @toggle-selection="toggleSelection" @toggle-select-all="$emit('toggle-select-all', $event)"
-                    @sort="$emit('toggle-rule-sort', $event)"
-                    @drag-start="(e, r) => $emit('drag-start', e, r)" @drag-over="(e, r) => $emit('drag-over', e, r)"
-                    @drag-leave="(e, r) => $emit('drag-leave', e, r)" @drop="$emit('drop', $event)" @drag-end="$emit('drag-end')"></rule-table>
+                    @sort="$emit('toggle-rule-sort', $event)"></rule-table>
                 <ui-load-state v-else kind="empty" has-action
                     :icon="hasRuleFilters?'bi-search':'bi-inbox'"
                     :title="hasRuleFilters?t('rules.emptyFilterResult'):t('rules.emptyNoRules')">
@@ -295,7 +314,7 @@ const RulesPage = {
                 <template v-if="expandedTagGroups.includes(section.key)">
                     <template v-if="!section.isTag">
                         <div v-if="groupLoading['_untagged']" class="rule-group__state loading-reveal" role="status"><i class="bi bi-arrow-clockwise spin" aria-hidden="true"></i>{{t('rules.loading')}}</div>
-                        <rule-table v-if="groupRules('_untagged').length" :rules="groupRules('_untagged')" :selected-id="ruleDetailId"
+                        <rule-table v-if="groupRules('_untagged').length" :rules="groupRules('_untagged')" :selected-id="ruleDetailId" :order-issues="orderIssues.issues"
                             :is-logged-in="isLoggedIn" :status="status" :http-label="httpLabel" :jms-label="jmsLabel"
                             @select="selectRule" @edit="$emit('open-edit', $event)" @toggle-enabled="$emit('toggle-enabled', $event)" @menu="handleRowMenu"></rule-table>
                         <div v-if="(groupCounts['_untagged'] || 0) > (rulesByTagGroup['_untagged']?.length || 0)" class="rule-group__more">
@@ -313,7 +332,7 @@ const RulesPage = {
                             </button>
                             <template v-if="expandedTagSubgroups.includes(sub.id)">
                                 <div v-if="groupLoading[sub.id]" class="rule-group__state loading-reveal" role="status"><i class="bi bi-arrow-clockwise spin" aria-hidden="true"></i>{{t('rules.loading')}}</div>
-                                <rule-table v-if="subgroupRules(sub.id).length" :rules="subgroupRules(sub.id)" :selected-id="ruleDetailId"
+                                <rule-table v-if="subgroupRules(sub.id).length" :rules="subgroupRules(sub.id)" :selected-id="ruleDetailId" :order-issues="orderIssues.issues"
                                     :is-logged-in="isLoggedIn" :status="status" :http-label="httpLabel" :jms-label="jmsLabel"
                                     @select="selectRule" @edit="$emit('open-edit', $event)" @toggle-enabled="$emit('toggle-enabled', $event)" @menu="handleRowMenu"></rule-table>
                                 <div v-if="sub.count > (rulesByTag[sub.id]?.length || 0)" class="rule-group__more">
@@ -334,7 +353,8 @@ const RulesPage = {
         :has-prev="detailIndex > 0" :has-next="detailIndex >= 0 && detailIndex < navRules.length - 1"
         @close="$emit('close-rule-detail')" @prev="stepDetail(-1)" @next="stepDetail(1)"
         @retry="$emit('load-rule-detail', ruleDetailId)"
-        @edit="$emit('open-edit', $event)" @menu="handleRowMenu" @clip-copy="$emit('clip-copy', $event)"></rule-detail>
+        @edit="$emit('open-edit', $event)" @menu="handleRowMenu" @clip-copy="$emit('clip-copy', $event)"
+        @open-rule="$emit('open-rule-detail', {id: $event})"></rule-detail>
 </div>
 `
 };

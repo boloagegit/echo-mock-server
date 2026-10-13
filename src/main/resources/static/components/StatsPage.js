@@ -40,12 +40,13 @@ const StatsPage = {
   })],
   data() {
     return {
-      inspectorTab: 'body',
+      inspectorTab: 'flow',
+      rawConditionOpen: {},
     };
   },
   computed: {
     hasLogFilters() {
-      return Boolean(this.logFilter.protocol || this.logFilter.matched || this.logFilter.endpoint);
+      return Boolean(this.logFilter.protocol || this.logFilter.matched || this.logFilter.endpoint || this.logFilter.from);
     },
     selectedLogItem() {
       return this.pagedLogs.find(item => !!this.logDetailExpanded[item.log.id]) || null;
@@ -59,6 +60,7 @@ const StatsPage = {
     inspectorTabs() {
       const id = this.shownLogItem?.log?.id || 'none';
       return [
+        { value: 'flow', label: this.t('stats.flow.tab'), icon: 'bi-signpost-2', id: 'log-tab-flow-' + id, panelId: 'log-inspector-flow-' + id },
         { value: 'body', label: this.t('stats.inspectorBodyTab'), icon: 'bi-braces', id: 'log-tab-body-' + id, panelId: 'log-inspector-body-' + id },
         { value: 'overview', label: this.t('stats.inspectorOverviewTab'), icon: 'bi-list-ul', id: 'log-tab-overview-' + id, panelId: 'log-inspector-overview-' + id },
         { value: 'trace', label: this.t('stats.matchChainTitle'), icon: 'bi-diagram-3', count: this.shownLogItem?.matchChainData?.length || null,
@@ -81,12 +83,34 @@ const StatsPage = {
   watch: {
     selectedLogItem(item) {
       if (this.inspectorTab === 'trace' && !item?.matchChainData?.length) {
-        this.inspectorTab = 'body';
+        this.inspectorTab = 'flow';
       }
     },
   },
   methods: {
+    /** 重新整理列表與流量概況。 */
+    refreshAll() {
+      this.$emit('load-logs', true);
+      this.$refs.traffic?.load();
+    },
+    /**
+     * 流量概況的「看這些請求」：只列出這段時間內這個方法與網址（完全相同）沒比對到的請求，
+     * 筆數與統計一致；原本的關鍵字搜尋清掉，避免再縮小範圍。
+     */
+    showUnmatched({ protocol, method, endpoint, from, to }) {
+      this.$emit('update:logFilter', { ...this.logFilter, protocol, matched: 'false', endpoint: '',
+        method: method || '', path: endpoint, from, to });
+    },
     shortId, fmtTime, fmtSize, reasonText,
+    treeSummary(tree) {
+      const { total, passed } = MatchTree.explainCounts(tree);
+      return passed === total
+        ? this.t('stats.matchTree.summaryAllPassed', { total })
+        : this.t('stats.matchTree.summary', { total, passed });
+    },
+    toggleRawCondition(key) {
+      this.rawConditionOpen = { ...this.rawConditionOpen, [key]: !this.rawConditionOpen[key] };
+    },
     logDate(value) {
       const formatted = fmtTime(value, false);
       return formatted ? formatted.slice(5, 10) : '-';
@@ -176,11 +200,15 @@ const StatsPage = {
           </button>
         </div>
         <div class="page-actions">
-          <ui-button type="button" variant="secondary" @click="$emit('load-logs', true)" :disabled="loading.logs">
+          <ui-button type="button" variant="secondary" @click="refreshAll" :disabled="loading.logs">
             <i class="bi bi-arrow-clockwise" :class="{'spin':loading.logs}" aria-hidden="true"></i>{{t('stats.refresh')}}
           </ui-button>
         </div>
       </div>
+
+      <traffic-overview ref="traffic" :http-label="httpLabel" :jms-label="jmsLabel" :selected-from="logFilter.from || ''" :selected-to="logFilter.to || ''"
+        @select-time="$emit('update:logFilter', {...logFilter, from: $event.from, to: $event.to})"
+        @show-unmatched="showUnmatched"></traffic-overview>
 
       <div class="list-toolbar">
         <workspace-search-field shortcut="/"
@@ -317,6 +345,12 @@ const StatsPage = {
             <ui-button type="button" variant="secondary" size="compact" @click="$emit('toggle-log-detail', shownLogItem)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</ui-button>
           </div>
 
+          <div v-else-if="inspectorTab==='flow'" class="log-inspector-content log-inspector-flow ui-detail-panel" role="tabpanel"
+            :id="'log-inspector-flow-'+shownLogItem.log.id" :aria-labelledby="'log-tab-flow-'+shownLogItem.log.id">
+            <request-flow-view :item="shownLogItem" :rule-description="shownLogItem.rule?.description || ''"
+              @show-trace="inspectorTab='trace'"></request-flow-view>
+          </div>
+
           <div v-else-if="inspectorTab==='body'" class="log-inspector-content log-inspector-body-grid"
             role="tabpanel" :id="'log-inspector-body-'+shownLogItem.log.id" :aria-labelledby="'log-tab-body-'+shownLogItem.log.id">
             <section class="log-inspector-pane ui-detail-panel" :aria-labelledby="'request-body-heading-'+shownLogItem.log.id">
@@ -395,8 +429,21 @@ const StatsPage = {
                 </div>
                 <div class="match-chain-evaluation">
                   <span class="match-chain-reason" :class="'reason-'+c.reason">{{reasonText(c.reason)}}</span>
-                  <code v-if="c.condition" class="match-chain-cond">{{c.condition}}</code>
-                  <div v-if="c.mismatch" class="match-chain-mismatch"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span>{{c.mismatch}}</span></div>
+                  <span v-if="c.detailTree" class="match-chain-tree-summary">{{treeSummary(c.detailTree)}}</span>
+                  <template v-else>
+                    <code v-if="c.condition" class="match-chain-cond">{{c.condition}}</code>
+                    <div v-if="c.detail && c.reason!=='match' && c.reason!=='shadowed'" class="match-chain-mismatch"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span>{{c.detail}}</span></div>
+                  </template>
+                </div>
+                <div v-if="c.detailTree" class="match-chain-tree">
+                  <match-explain-tree :tree="c.detailTree"></match-explain-tree>
+                  <template v-if="c.condition">
+                    <button type="button" class="match-chain-raw-toggle" :aria-expanded="!!rawConditionOpen[shownLogItem.log.id+':'+i]"
+                      @click="toggleRawCondition(shownLogItem.log.id+':'+i)">
+                      <i class="bi bi-code-slash" aria-hidden="true"></i>{{rawConditionOpen[shownLogItem.log.id+':'+i]?t('stats.matchTree.hideRaw'):t('stats.matchTree.showRaw')}}
+                    </button>
+                    <code v-if="rawConditionOpen[shownLogItem.log.id+':'+i]" class="match-chain-cond">{{c.condition}}</code>
+                  </template>
                 </div>
               </li>
             </ol>

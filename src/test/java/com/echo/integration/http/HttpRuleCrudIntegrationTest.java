@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -163,7 +164,7 @@ class HttpRuleCrudIntegrationTest extends BaseIntegrationTest {
         String largeBody = "x".repeat(512 * 1024);
         RuleDto created = createHttpRule("/api/large-response", "GET", largeBody);
 
-        ResponseEntity<RuleDto[]> listResponse = restTemplate
+        ResponseEntity<RuleDto[]> listResponse = adminClient()
                 .getForEntity("/api/admin/rules", RuleDto[].class);
 
         assertThat(listResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -201,11 +202,20 @@ class HttpRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("唯讀 API 不需認證：GET /api/admin/rules → 200，GET /api/admin/status → 200")
+    @DisplayName("唯讀 API：分頁列表與狀態不需認證；一次取回全部規則與回應需要登入")
     @SuppressWarnings("unchecked")
     void readOnlyEndpoints_shouldNotRequireAuth() {
-        // GET /api/admin/rules 不需認證
-        ResponseEntity<List> rulesResponse = restTemplate
+        // 畫面使用的分頁列表不需認證
+        ResponseEntity<Map> pageResponse = restTemplate
+                .getForEntity("/api/admin/rules/page", Map.class);
+        assertThat(pageResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        // 一次取回全部規則／全部回應內容需要登入
+        assertThat(restTemplate.getForEntity("/api/admin/rules", String.class).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(restTemplate.getForEntity("/api/admin/responses", String.class).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        ResponseEntity<List> rulesResponse = adminClient()
                 .getForEntity("/api/admin/rules", List.class);
         assertThat(rulesResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
 

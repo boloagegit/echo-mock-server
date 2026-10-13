@@ -1,10 +1,12 @@
 package com.echo.agent;
 
+import com.echo.core.match.MatchExplanation;
 import com.echo.entity.Protocol;
 import com.echo.entity.RequestLog;
 import com.echo.repository.RequestLogRepository;
 import com.echo.service.ConditionMatcher;
 import com.echo.service.MatchChainEntry;
+import com.echo.service.MatchExplanationJson;
 import com.echo.service.MatchDescriptionBuilder;
 import com.echo.service.RequestLogBatchWriter;
 import com.echo.service.RequestLogService;
@@ -17,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -51,6 +54,13 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
 
     private static final String AGENT_NAME = "log-agent";
     private static final long DURABLE_CLEANUP_INTERVAL = 1_000;
+    /** 檢查待寫入量是否超過保留上限的間隔。 */
+    private static final long BACKLOG_CHECK_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(1);
+    private static final long SKIP_WARNING_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(30);
+    // 以下只由 durable consumer 執行緒使用
+    private long nextBacklogCheckNanos = System.nanoTime();
+    private long skippedSinceWarning;
+    private long lastSkipWarningNanos;
 
     private final RequestLogRepository requestLogRepository;
     private final SystemConfigService configService;
@@ -304,6 +314,82 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     }
 
     /**
+     * 主資料庫只保留最新 max-records 筆。待寫入的紀錄超過這個數量時，較舊的那些寫入後也會立刻被保留上限刪掉，
+     * 所以直接跳過：在同一個交易中推進進度（不寫入資料列），再從 spool 刪除並釋放空間。
+     * 這樣請求量長時間超過寫入速度時，待寫入的量維持在 max-records 左右，不會塞滿 spool 而卡住請求；
+     * 留下的仍是最新的紀錄。跳過的筆數計入 dropped 並記一筆警告。
+     *
+     * @return 跳過後的進度；沒有跳過時回傳原本的進度
+     */
+    private long skipBacklogBeyondRetention(long checkpoint) {
+        int maxRecords = configService.getRequestLogMaxRecords();
+        long cutoff = durableSpool.sequenceBeforeNewest(maxRecords);
+        if (cutoff <= checkpoint) {
+            return checkpoint;
+        }
+        long skipped = durableSpool.countBetween(checkpoint, cutoff);
+        durableBatchWriter.persist(durableSpool.getSpoolId(), cutoff, List.of(), maxRecords);
+        durableSpool.deleteThrough(cutoff);
+        if (skipped > 0) {
+            recordSkipped(skipped);
+            skippedSinceWarning += skipped;
+            long now = System.nanoTime();
+            // 持續過載時每秒都會跳過；警告最多每 30 秒彙總一次
+            if (lastSkipWarningNanos == 0 || now - lastSkipWarningNanos >= SKIP_WARNING_INTERVAL_NANOS) {
+                log.warn("Request logs arrive faster than they can be saved; skipped {} older entries that the "
+                        + "{}-record limit would delete anyway", skippedSinceWarning, maxRecords);
+                skippedSinceWarning = 0;
+                lastSkipWarningNanos = now;
+            }
+        }
+        return cutoff;
+    }
+
+    /**
+     * 逐筆寫入一批紀錄：被資料庫拒絕的那筆只推進進度、不寫入（記一筆警告並計入 dropped），
+     * 其他錯誤（例如資料庫無法連線）照常拋出，由外層等待後重試，不會跳過任何紀錄。
+     */
+    private void persistOneByOne(List<RequestLogSpool.SpoolEntry> batch, boolean detailedAnalysis) {
+        int maxRecords = configService.getRequestLogMaxRecords();
+        for (RequestLogSpool.SpoolEntry entry : batch) {
+            try {
+                durableBatchWriter.persist(durableSpool.getSpoolId(), entry.sequence(),
+                        List.of(toEntity(entry.task(), detailedAnalysis)), maxRecords);
+            } catch (RuntimeException e) {
+                if (!isRejectedData(e)) {
+                    throw e;
+                }
+                durableBatchWriter.persist(durableSpool.getSpoolId(), entry.sequence(), List.of(), maxRecords);
+                log.warn("Request log at spool sequence {} was rejected by the database and skipped: {}",
+                        entry.sequence(), rootMessage(e));
+                recordRejected("rejected by the database");
+            }
+        }
+    }
+
+    /** 資料本身不被接受（長度、NUL、NOT NULL 等限制），重試也不會成功。 */
+    public static boolean isRejectedData(Throwable error) {
+        for (Throwable t = error; t != null; t = t.getCause() == t ? null : t.getCause()) {
+            if (t instanceof DataIntegrityViolationException
+                    || t instanceof org.hibernate.exception.DataException
+                    || t instanceof org.hibernate.exception.ConstraintViolationException
+                    || t instanceof java.sql.SQLDataException
+                    || t instanceof java.sql.SQLIntegrityConstraintViolationException) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String rootMessage(Throwable error) {
+        Throwable root = error;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        return root.getMessage();
+    }
+
+    /**
      * Replays ordered spool rows. Main-DB commit and checkpoint are atomic; spool
      * cleanup happens only afterwards and is therefore safe to retry after a crash.
      */
@@ -316,6 +402,15 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                     checkpoint = durableBatchWriter.findCheckpoint(durableSpool.getSpoolId());
                     durableSpool.deleteThrough(checkpoint);
                     lastCleanedCheckpoint = checkpoint;
+                }
+                long now = System.nanoTime();
+                if (now - nextBacklogCheckNanos >= 0) {
+                    nextBacklogCheckNanos = now + BACKLOG_CHECK_INTERVAL_NANOS;
+                    long skippedThrough = skipBacklogBeyondRetention(checkpoint);
+                    if (skippedThrough > checkpoint) {
+                        checkpoint = skippedThrough;
+                        lastCleanedCheckpoint = skippedThrough;
+                    }
                 }
 
                 List<RequestLogSpool.SpoolEntry> fetched =
@@ -339,8 +434,16 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                         .map(entry -> toEntity(entry.task(), detailedAnalysis))
                         .toList();
                 long lastSequence = batch.get(batch.size() - 1).sequence();
-                durableBatchWriter.persist(durableSpool.getSpoolId(), lastSequence,
-                        entities, configService.getRequestLogMaxRecords());
+                try {
+                    durableBatchWriter.persist(durableSpool.getSpoolId(), lastSequence,
+                            entities, configService.getRequestLogMaxRecords());
+                } catch (RuntimeException e) {
+                    if (!isRejectedData(e)) {
+                        throw e;
+                    }
+                    // 資料本身被資料庫拒絕（不是連不上）：逐筆重寫，只跳過被拒絕的那筆，其餘照常寫入
+                    persistOneByOne(batch, detailedAnalysis);
+                }
                 checkpoint = lastSequence;
                 if (checkpoint - lastCleanedCheckpoint >= DURABLE_CLEANUP_INTERVAL) {
                     durableSpool.deleteThrough(checkpoint);
@@ -361,6 +464,8 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 durableConsumerRunning.set(false);
                 break;
             } catch (Exception e) {
+                // 從資料庫重新讀取已確認的進度（逐筆重寫可能已前進一部分）
+                checkpoint = null;
                 log.warn("Durable request-log persistence paused; data remains in spool: {}",
                         e.getMessage());
                 try {
@@ -463,10 +568,11 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 }
 
                 // Evaluate conditions
-                ConditionMatcher.ConditionDetail detail = conditionMatcher.matchesPreparedWithDetail(
+                MatchExplanation explanation = conditionMatcher.explainPrepared(
                         candidate.getMatchSpec(), candidate.getBodyCondition(), candidate.getQueryCondition(),
                         candidate.getHeaderCondition(), preparedBody,
                         task.getQueryString(), task.getHeaders());
+                ConditionMatcher.ConditionDetail detail = ConditionMatcher.toConditionDetail(explanation);
 
                 String detailStr = joinDetails(detail.getResults());
 
@@ -478,14 +584,14 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                                 candidate.getRuleId(), "match",
                                 candidate.getEndpoint(), candidate.getDescription(),
                                 buildConditionString(candidate),
-                                detail.score(), detailStr, false));
+                                detail.score(), detailStr, false, MatchExplanationJson.toJson(explanation)));
                     } else if (!hasShadowed) {
                         hasShadowed = true;
                         chain.add(new MatchChainEntry(
                                 candidate.getRuleId(), "shadowed",
                                 candidate.getEndpoint(), candidate.getDescription(),
                                 buildConditionString(candidate),
-                                detail.score(), detailStr, false));
+                                detail.score(), detailStr, false, MatchExplanationJson.toJson(explanation)));
                     }
                 } else if (detail.passedCount() > 0 && detail.passedCount() < detail.totalCount()) {
                     if (!hasNearMiss) {
@@ -494,7 +600,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                                 candidate.getRuleId(), "near-miss",
                                 candidate.getEndpoint(), candidate.getDescription(),
                                 buildConditionString(candidate),
-                                detail.score(), detailStr, true));
+                                detail.score(), detailStr, true, MatchExplanationJson.toJson(explanation)));
                     }
                 }
                 // mismatch (all fail) — skip, not useful to show
@@ -591,6 +697,11 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 .scenarioName(task.getScenarioName())
                 .scenarioFromState(task.getScenarioFromState())
                 .scenarioToState(task.getScenarioToState())
+                .candidateCount(task.getCandidateCount())
+                .matchedByFallback(task.getMatchedByFallback())
+                .delayMs(task.getDelayMs())
+                .sseEventCount(task.getSseEventCount())
+                .scenarioSkipped(task.getScenarioSkipped())
                 .build();
     }
 
@@ -623,6 +734,11 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 .scenarioName(task.getScenarioName())
                 .scenarioFromState(task.getScenarioFromState())
                 .scenarioToState(task.getScenarioToState())
+                .candidateCount(task.getCandidateCount())
+                .matchedByFallback(task.getMatchedByFallback())
+                .delayMs(task.getDelayMs())
+                .sseEventCount(task.getSseEventCount())
+                .scenarioSkipped(task.getScenarioSkipped())
                 .build();
     }
 }

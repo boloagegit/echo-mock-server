@@ -30,7 +30,7 @@ class HttpTargetConnectionServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new HttpTargetConnectionService(repository, httpRuleRepository, cipher);
+        service = new HttpTargetConnectionService(repository, httpRuleRepository, cipher, java.util.Optional.empty());
     }
 
     @Test

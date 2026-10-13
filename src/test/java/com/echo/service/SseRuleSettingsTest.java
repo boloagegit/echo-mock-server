@@ -18,8 +18,8 @@ class SseRuleSettingsTest {
     void timeoutStopsCountingAfterTerminalEventAndRejectsExcessiveSequence() {
         var events = SseEventSequence.parse("[{\"data\":\"a\",\"delayMs\":100,\"type\":\"abort\"},{\"data\":\"b\",\"delayMs\":30000}]");
         assertThat(SseRuleSettings.timeout(events, 0, false)).isEqualTo(30_100);
-        var excessive = java.util.Collections.nCopies(2880,
-                new SseEventSequence.Event(null, "synthetic", null, 30_000L, null));
+        var excessive = java.util.Collections.nCopies(144,
+                new SseEventSequence.Event(null, "synthetic", null, 600_000L, null));
         assertThatThrownBy(() -> SseRuleSettings.timeout(excessive, 0, false)).isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -37,10 +37,10 @@ class SseRuleSettingsTest {
     @Test
     void contractPreservesDataAndNormalizesDelayCompatibly() {
         var events = SseEventSequence.parse("[{\"data\":\"\\n中文😀\\r\\n\",\"event\":null,\"id\":null,\"delayMs\":-1},"
-                + "{\"data\":\"  \",\"delayMs\":999999}]");
+                + "{\"data\":\"  \",\"delayMs\":9999999}]");
         assertThat(events.get(0).data()).isEqualTo("\n中文😀\r\n");
         assertThat(events.get(0).delayMs()).isZero();
-        assertThat(events.get(1).delayMs()).isEqualTo(30_000);
+        assertThat(events.get(1).delayMs()).isEqualTo(600_000);
     }
 
     @Test

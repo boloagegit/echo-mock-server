@@ -24,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -116,6 +117,28 @@ class JmsMockPipelineTest {
 
             assertThat(result.isMatched()).isTrue();
             verify(conditionMatcher, never()).prepareBody(anyString());
+        }
+
+        @Test
+        @DisplayName("回覆內容經共用模板渲染：可用請求 body 與訊息標頭")
+        void responseBodyIsRenderedWithSharedTemplate() {
+            pipeline.setTemplateService(new com.echo.service.ResponseTemplateService());
+            JmsRule rule = buildRule("jms-template", "ORDER.REQUEST", null, 101L);
+            when(jmsProperties.getQueue()).thenReturn("ORDER.REQUEST");
+            when(jmsRuleService.findPreparedJmsRules("ORDER.REQUEST")).thenReturn(List.of(rule));
+            when(ruleService.findResponseBodyById(101L)).thenReturn(Optional.of(
+                    "<R>{{xPath request.body '//ServiceName/text()'}}|{{request.headers.JMSCorrelationID}}</R>"));
+            MockRequest request = MockRequest.builder()
+                    .protocol(Protocol.JMS)
+                    .path("ORDER.REQUEST")
+                    .body("<Order><ServiceName>CreateOrder</ServiceName></Order>")
+                    .headers(Map.of("JMSCorrelationID", "C-9"))
+                    .clientIp("JMS")
+                    .build();
+
+            PipelineResult result = pipeline.execute(request);
+
+            assertThat(result.getResponse().getBody()).isEqualTo("<R>CreateOrder|C-9</R>");
         }
 
         @Test

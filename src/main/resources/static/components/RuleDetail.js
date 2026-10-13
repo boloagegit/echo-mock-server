@@ -22,7 +22,7 @@ const RuleDetail = {
     hasPrev: Boolean,
     hasNext: Boolean,
   },
-  emits: ['close', 'prev', 'next', 'retry', 'edit', 'menu', 'clip-copy'],
+  emits: ['close', 'prev', 'next', 'retry', 'edit', 'menu', 'clip-copy', 'open-rule'],
   data() {
     return { showAllConditions: false, showAllTags: false };
   },
@@ -158,6 +158,10 @@ const RuleDetail = {
         <button v-if="conditionCount > DETAIL_LIST_PREVIEW.conditions" type="button" class="detail-inline-action"
           :aria-expanded="showAllConditions ? 'true' : 'false'" @click="showAllConditions = !showAllConditions">
           {{showAllConditions ? t('common.showLess') : t('common.showAllCount', {count: conditionCount})}}</button>
+      </ui-detail-section>
+
+      <ui-detail-section v-if="view.id" id="rule.order" :title="t('rules.order.title')">
+        <rule-order-view :rule-id="view.id" :version="view.version ?? view.updatedAt" @open-rule="$emit('open-rule', $event)"></rule-order-view>
       </ui-detail-section>
 
       <ui-detail-section id="rule.response" :title="t('rules.pvSectionResponse')" :summary="responseSummary">

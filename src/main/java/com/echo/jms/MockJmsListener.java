@@ -16,6 +16,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jms.annotation.JmsListener;
 import org.springframework.stereotype.Component;
 
+import java.util.Enumeration;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * JMS 訊息監聯器 - 攔截或轉發到目標 JMS Server
  */
@@ -171,6 +175,7 @@ public class MockJmsListener {
             MockRequest mockRequest = MockRequest.builder()
                     .protocol(Protocol.JMS)
                     .path(endpointLabel)
+                    .headers(messageHeaders(message, queue))
                     .body(body)
                     .clientIp("JMS")
                     .endpointValue(endpointValue)
@@ -191,6 +196,46 @@ public class MockJmsListener {
                 requestReservation.close();
             }
             throw e;
+        }
+    }
+
+    /**
+     * 訊息標頭與屬性，放在共用請求的 headers，模板可用 <code>{{request.headers.JMSCorrelationID}}</code> 取得。
+     * 屬性值一律轉成字串；讀不到的標頭或屬性略過，不影響訊息處理。
+     */
+    static Map<String, String> messageHeaders(Message message, String queue) {
+        Map<String, String> headers = new LinkedHashMap<>();
+        putIfPresent(headers, "JMSMessageID", () -> message.getJMSMessageID());
+        putIfPresent(headers, "JMSCorrelationID", () -> message.getJMSCorrelationID());
+        putIfPresent(headers, "JMSType", () -> message.getJMSType());
+        putIfPresent(headers, "JMSDestination", () -> queue);
+        Enumeration<?> names;
+        try {
+            names = message.getPropertyNames();
+        } catch (JMSException | RuntimeException e) {
+            log.debug("JMS property names could not be read: {}", e.getMessage());
+            return headers;
+        }
+        while (names != null && names.hasMoreElements()) {
+            String name = String.valueOf(names.nextElement());
+            putIfPresent(headers, name, () -> message.getObjectProperty(name));
+        }
+        return headers;
+    }
+
+    private interface JmsValue {
+        Object read() throws JMSException;
+    }
+
+    /** 某些 broker 對特定標頭或屬性會拋例外；略過讀不到的項目，不影響訊息處理。 */
+    private static void putIfPresent(Map<String, String> headers, String name, JmsValue value) {
+        try {
+            Object read = value.read();
+            if (read != null) {
+                headers.put(name, String.valueOf(read));
+            }
+        } catch (JMSException | RuntimeException e) {
+            log.debug("JMS header {} could not be read: {}", name, e.getMessage());
         }
     }
 

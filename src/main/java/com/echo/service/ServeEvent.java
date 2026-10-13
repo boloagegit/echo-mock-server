@@ -46,6 +46,16 @@ public class ServeEvent {
     String scenarioName;
     String scenarioFromState;
     String scenarioToState;
+    /** 參與比對的候選規則數；沒有比對時為 null。 */
+    Integer candidateCount;
+    /** 命中的是沒有條件的預設規則（條件都不成立時才選它）；沒有命中時為 null。 */
+    Boolean matchedByFallback;
+    /** 規則設定的模擬延遲（毫秒），在記錄的處理時間之外；SSE 為第一個事件前的延遲。 */
+    Integer delayMs;
+    /** SSE 串流的事件數；不是 SSE 時為 null。 */
+    Integer sseEventCount;
+    /** 因情境狀態不符而略過的規則（匹配鏈格式的 JSON）；沒有時為 null。 */
+    String scenarioSkipped;
     /** 交易診斷 ID；未啟用診斷時為 null。 */
     String diagnosticId;
 }

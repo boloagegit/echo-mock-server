@@ -13,8 +13,9 @@ const useToast = (t) => {
 
     const toasts = ref([]);
 
-    const TOAST_TYPES = ['success', 'error', 'info'];
-    const toastDuration = (type, action) => action ? 6000 : type === 'error' ? 7000 : 3000;
+    const TOAST_TYPES = ['success', 'error', 'info', 'warning'];
+    // 提醒（warning）通常要讀完一句說明，停留久一點
+    const toastDuration = (type, action) => type === 'warning' ? 9000 : action ? 6000 : type === 'error' ? 7000 : 3000;
     let toastSeq = 0;
 
     /**
@@ -26,7 +27,9 @@ const useToast = (t) => {
     const showToast = (msg, type, action = null) => {
         const id = Date.now() + (++toastSeq);
         const kind = type === 'danger' ? 'error' : (TOAST_TYPES.includes(type) ? type : 'info');
-        toasts.value.push({ id, msg, type: kind, action, leaving: false });
+        // msg 可以是 {title, detail}：標題加一行說明，動作按鈕放在說明下方
+        const rich = msg && typeof msg === 'object';
+        toasts.value.push({ id, msg: rich ? msg.detail : msg, title: rich ? msg.title : null, type: kind, action, leaving: false });
         if (toasts.value.length > 3) { toasts.value.shift(); }
         setTimeout(() => { dismissToast(id); }, toastDuration(kind, action));
         return id;

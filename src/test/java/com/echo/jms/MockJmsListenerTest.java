@@ -145,4 +145,37 @@ class MockJmsListenerTest {
         verify(jmsMockPipeline).execute(any(MockRequest.class));
         verify(jmsTemplate, never()).send(any(Destination.class), any(MessageCreator.class));
     }
+
+    @Test
+    void messageHeaders_exposeJmsHeadersAndPropertiesForTemplates() throws Exception {
+        TextMessage message = mock(TextMessage.class);
+        when(message.getJMSMessageID()).thenReturn("ID:1");
+        when(message.getJMSCorrelationID()).thenReturn("C-1");
+        when(message.getPropertyNames()).thenReturn(java.util.Collections.enumeration(
+                java.util.List.of("branch", "retries", "broken", "empty")));
+        when(message.getObjectProperty("branch")).thenReturn("TPE");
+        when(message.getObjectProperty("retries")).thenReturn(3);
+        when(message.getObjectProperty("broken")).thenThrow(new JMSException("unreadable"));
+        when(message.getObjectProperty("empty")).thenReturn(null);
+
+        java.util.Map<String, String> headers = MockJmsListener.messageHeaders(message, "ORDER.Q");
+
+        org.assertj.core.api.Assertions.assertThat(headers).containsExactly(
+                java.util.Map.entry("JMSMessageID", "ID:1"),
+                java.util.Map.entry("JMSCorrelationID", "C-1"),
+                java.util.Map.entry("JMSDestination", "ORDER.Q"),
+                java.util.Map.entry("branch", "TPE"),
+                java.util.Map.entry("retries", "3"));
+    }
+
+    @Test
+    void messageHeaders_skipHeadersTheBrokerCannotProvide() throws Exception {
+        TextMessage message = mock(TextMessage.class);
+        when(message.getJMSMessageID()).thenReturn("ID:2");
+        when(message.getJMSCorrelationID()).thenThrow(new JMSException("unsupported"));
+        when(message.getPropertyNames()).thenThrow(new JMSException("unsupported"));
+
+        org.assertj.core.api.Assertions.assertThat(MockJmsListener.messageHeaders(message, "Q"))
+                .containsExactly(java.util.Map.entry("JMSMessageID", "ID:2"), java.util.Map.entry("JMSDestination", "Q"));
+    }
 }

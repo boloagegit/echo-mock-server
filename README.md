@@ -153,6 +153,8 @@ The application backup feature is for local SQLite files. External database prof
 
 Request-log durability has a separate boundary: every Echo instance writes its local request-log spool to a SQLite file, including when the main database is external. Keep that file on a writable persistent volume, use one spool file per instance, and do not treat it as a shared database or cross-instance queue. The spool is not a substitute for the external database's backup policy.
 
+Request logs are saved to the main database at up to `ECHO_AGENT_LOG_MAX_WRITE_RATE_PER_SECOND` (default 1,000) per second. When traffic stays above that rate, entries waiting in the spool beyond `echo.request-log.max-records` are skipped instead of queued: the record limit would delete them right after saving anyway, so the newest records are kept and mock requests are not slowed down by a full spool. Skipped entries are counted as dropped in the log agent status, with a warning at most every 30 seconds.
+
 For a core matcher/response throughput benchmark, start Echo with
 `ECHO_REQUEST_LOG_ENABLED=false`. This bypasses request-log object creation,
 background processing, database writes, and the local spool while leaving mock
@@ -234,7 +236,6 @@ The following user-facing features are intentionally disabled by default and can
 | `ECHO_ISSUE_REPORTING_ENABLED` | `false` | Shows the issue-reporting page and enables its APIs; existing reports are retained |
 | `ECHO_BULK_IMPORT_EXPORT_ENABLED` | `false` | Shows and enables bulk import/export operations |
 | `ECHO_SCENARIOS_ENABLED` | `false` | Enables stateful Scenario rules and Scenario administration |
-| `ECHO_RULE_DRAG_SORT_ENABLED` | `false` | Enables drag-and-drop priority ordering in the rule list |
 
 Issue reporting can also be enabled with `echo.features.issue-reporting-enabled: true`
 in the deployment configuration. Restart Echo to apply the setting. When disabled,
@@ -340,6 +341,34 @@ System Settings separates **Overview**, **Resource Monitoring**, **Forward Conne
 and Request Log correlation IDs. See the linked guide for configuration, quotas and evidence limits.
 
 For Artemis Core clients that send XML, configure the sender URL as `tcp://echo-host:61616?minLargeMessageSize=524288`. Text payloads up to roughly 256 KB then use the regular-message path instead of creating one large-message file per request, while larger messages still spill to disk to protect the heap. This is a **sender-side** connection setting, not an Echo `application.yml` property.
+
+### Receiving JMS from a Shared Broker (Multi-Instance)
+
+By default each Echo instance receives JMS on its own embedded Artemis, so senders must pick one instance. To run several instances for load sharing and failover, let all of them listen on the same queue of an existing broker (for example the company ESB). The broker hands each message to only one instance; replies go to the message's `JMSReplyTo`, which is on the same broker.
+
+```
+Application ──JMS──▶ ESB queue ECHO.REQUEST ──▶ Echo A
+                                            └─▶ Echo B
+```
+
+```yaml
+echo:
+  jms:
+    enabled: true
+    queue: ECHO.REQUEST            # queue on the broker that the instances share
+    source:
+      type: tibco                  # embedded (default) | artemis | tibco
+      server-url: tcp://esb-server:7222
+      username: echo               # ECHO_JMS_SOURCE_USERNAME
+      password: ${ECHO_JMS_SOURCE_PASSWORD}
+      reconnect-interval-ms: 5000  # retry interval while the broker is unreachable
+```
+
+- The embedded Artemis is not started and `echo.jms.port` is not opened.
+- Echo starts even when the broker is down and keeps reconnecting; **System Settings → Service Configuration** shows whether JMS is receiving.
+- Messages are consumed in a transaction: if an instance stops or crashes mid-message, the broker gives the message to another instance. A crash after the reply was sent but before the commit can produce a second reply (at-least-once delivery).
+- Redelivery delays, attempt limits and dead-letter handling are the broker's own settings; `echo.jms.redelivery-*`, `max-delivery-attempts`, paging and disk settings only apply to the embedded broker.
+- TIBCO EMS needs the EMS 10.3+ client (`tibjms.jar`, `jakarta.jms`) in `libs/`, the same as for forwarding.
 
 ## Condition Matching Syntax
 
@@ -591,7 +620,7 @@ ADMIN can manage built-in accounts via the admin UI:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | /api/admin/rules | List all rules |
+| GET | /api/admin/rules | List all rules in one response (authenticated; the UI uses `/rules/page`) |
 | GET | /api/admin/rules/page | Bounded rule page; supports protocol/enabled/isProtected/mode/expiring/keyword/page/size/sort/direction |
 | GET | /api/admin/rules/groups | Rule group counts with the same filters |
 | GET | /api/admin/rules/group | Bounded content for one rule group with the same filters |
@@ -627,7 +656,7 @@ Rule responses include durable `createdBy` and `updatedBy` metadata. Existing ro
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | /api/admin/responses | List responses (supports keyword search) |
+| GET | /api/admin/responses | List responses with their bodies (authenticated; supports keyword search; the UI uses `/responses/summary`) |
 | GET | /api/admin/responses/summary | Response summary (with usage count) |
 | GET | /api/admin/responses/{id} | Get response |
 | GET | /api/admin/responses/{id}/rules | Rules using this response |
@@ -647,8 +676,9 @@ Rule responses include durable `createdBy` and `updatedBy` metadata. Existing ro
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | /api/admin/logs | Request logs (authenticated; filter by ruleId/protocol/matched/endpoint; page/size/sort/direction; afterId for incremental refresh) |
+| GET | /api/admin/logs | Request logs (authenticated; filter by ruleId/protocol/matched/endpoint; from/to request time (local `YYYY-MM-DDTHH:mm:ss`, from inclusive, to exclusive); page/size/sort/direction; afterId for incremental refresh) |
 | GET | /api/admin/logs/summary | Request log summary (authenticated) |
+| GET | /api/admin/logs/traffic | Traffic overview of the retained request logs (authenticated; `range=1h\|24h\|7d`): per-bar counts of mock responses, forwards, unmatched requests and failed forwards, estimated response times and the most often unmatched requests. Counted in the database and shared for 5 seconds, so concurrent viewers trigger one computation |
 | DELETE | /api/admin/logs/all | Delete all request logs (ADMIN) |
 | GET | /api/admin/rules/{id}/audit | Audit logs for a rule |
 | GET | /api/admin/audit | All audit logs |
@@ -729,23 +759,43 @@ Comparison operators: `eq`, `ne`, `gt`, `lt`, `contains`, `matches`
 {{xPath request.body '//name/text()'}}
 ```
 
+### HTTP and JMS
+
+Templates work the same way for every protocol: HTTP responses, SSE events and JMS replies. Content without `{{` is returned unchanged at no extra cost.
+
+| Variable | HTTP | JMS |
+|----------|------|-----|
+| `request.body` | Request body | Message text |
+| `request.headers.xxx` | Request header | `JMSMessageID`, `JMSCorrelationID`, `JMSType`, `JMSDestination` (the listening queue) and the message's own properties |
+| `request.path` | Request path | Queue, plus the endpoint field value when present (`ECHO.REQUEST \| Order`) |
+| `request.method`, `request.query.xxx` | Method, query parameter | Empty |
+
+```handlebars
+<reply><orderId>{{xPath request.body '//orderId/text()'}}</orderId><ref>{{request.headers.JMSCorrelationID}}</ref></reply>
+```
+
 ## Multi-Instance Deployment
 
 Database mode supports multi-instance deployment with DB-based cache invalidation.
 
 ### Cache Sync Mechanism
 
-Each instance uses local Caffeine cache, synchronized via the `cache_events` table:
+Each instance keeps rules, response bodies and HTTP forwarding profiles in a local Caffeine cache. Changes are announced through the `cache_events` table:
 
 ```
-Instance A modifies rule → Writes to cache_events (RULE_CHANGED)
+Instance A changes a rule → writes a cache_events row in the same transaction
                                     ↓
-Instance B polls every N seconds → Finds new event → Clears local cache
+Instance B polls every N seconds → reads rows with a higher id → clears the affected local cache
 ```
 
-- **Polling interval**: Default 5 seconds, configurable via `echo.cache.sync-interval-ms`
-- **Event cleanup**: Automatically cleans events older than 10 minutes every hour
-- **Performance impact**: Minimal — each poll is a simple timestamp query
+- **What is synchronized**: rule changes (per protocol), edited or deleted responses, HTTP forwarding profile changes, and rules or responses removed by the nightly cleanup
+- **Polling interval**: Default 5 seconds, configurable via `echo.cache.sync-interval-ms`; a change normally reaches the other instances within that time
+- **Ordered by event id, not time**: instance clocks or time zones may differ. An id that is skipped (a transaction that commits later) is waited for up to 2 minutes
+- **Fallbacks**: if an instance could not poll for more than 5 minutes, or the event ids restarted, it clears all of these caches once. Cached rules and HTTP forwarding profiles are also re-read at least every `echo.cache.rules.max-age-minutes` (default 10) and response bodies every `echo.cache.body.max-age-minutes` (default 60), even when a notice was missed
+- **Event cleanup**: Events older than 10 minutes are removed every hour; the newest event is kept so ids never restart
+- **Performance impact**: Minimal — each poll is a primary-key range query
+
+Login sessions are kept in each instance's memory, so configure the load balancer to keep a user on the same instance (sticky sessions). For JMS across instances, see [Receiving JMS from a Shared Broker](#receiving-jms-from-a-shared-broker-multi-instance).
 
 ### Configuration Example
 

@@ -60,10 +60,13 @@ public final class H2ToSqliteMigrator {
     private static final Set<String> OPTIONAL_SOURCE_TABLES = Set.of(
             "jms_target_connections", "http_target_connections", "request_log_checkpoint",
             "scenarios");
-    // An older H2 database may predate matched-rule forwarding. Null preserves old MOCK behavior.
+    // An older H2 database may predate matched-rule forwarding (null preserves old MOCK behavior) and the
+    // request-flow details of the Request Log (null means "not recorded", shown as before).
     private static final Map<String, Set<String>> ALLOWED_TARGET_ONLY_COLUMNS = Map.of(
             "http_rules", Set.of("action", "forward_target_mode", "http_target_connection_id"),
-            "jms_rules", Set.of("action", "forward_target_mode", "jms_target_connection_id")
+            "jms_rules", Set.of("action", "forward_target_mode", "jms_target_connection_id"),
+            "request_log", Set.of("candidate_count", "matched_by_fallback", "delay_ms", "sse_event_count",
+                    "scenario_skipped")
     );
 
     private H2ToSqliteMigrator() {

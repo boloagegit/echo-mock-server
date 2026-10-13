@@ -201,6 +201,12 @@ class AbstractMockPipelineTest {
             assertThat(served.getResponseStatus()).isEqualTo(200);
             assertThat(served.getRequestBody()).isEqualTo("{\"key\":\"value\"}");
             assertThat(served.getResponseBody()).isEqualTo("OK");
+            // 處理流程圖用：候選數與規則的模擬延遲（延遲在記錄之後才執行，不含在處理時間內）
+            assertThat(served.getCandidateCount()).isEqualTo(1);
+            assertThat(served.getMatchedByFallback()).isFalse();
+            assertThat(served.getDelayMs()).isEqualTo(100);
+            assertThat(served.getSseEventCount()).isNull();
+            assertThat(served.getScenarioSkipped()).isNull();
         }
 
         @Test
@@ -243,6 +249,9 @@ class AbstractMockPipelineTest {
             assertThat(served2.getResponseStatus()).isEqualTo(200);
             assertThat(served2.getRequestBody()).isEqualTo("{}");
             assertThat(served2.getResponseBody()).isEqualTo("forwarded");
+            assertThat(served2.getCandidateCount()).isZero();
+            assertThat(served2.getMatchedByFallback()).isNull();
+            assertThat(served2.getDelayMs()).isNull();
         }
 
         @Test
@@ -515,6 +524,35 @@ class AbstractMockPipelineTest {
     @Nested
     @DisplayName("Scenario state transition")
     class ScenarioTransitionTests {
+
+        @Test
+        @DisplayName("情境狀態不符而略過的規則記入 scenarioSkipped（處理流程圖用）")
+        void skippedRulesAreRecordedForTheFlowView() {
+            HttpRule gated = HttpRule.builder().id("gated").enabled(true).bodyCondition("key=value")
+                    .responseId(1L).matchKey("/api/test").method("POST").priority(10)
+                    .description("付款後").scenarioName("checkout").requiredScenarioState("Paid").build();
+            HttpRule fallback = HttpRule.builder().id("fallback").enabled(true).responseId(2L)
+                    .matchKey("/api/test").method("POST").priority(0).build();
+            pipeline.candidateRules = List.of(gated, fallback);
+            pipeline.buildResponseResult = MockResponse.builder()
+                    .status(200).body("fallback").matched(true).forwarded(false).build();
+            lenient().when(conditionMatcher.prepareBody(anyString(), anyCollection()))
+                    .thenReturn(ConditionMatcher.PreparedBody.empty());
+            when(scenarioService.getCurrentState("checkout")).thenReturn("Started");
+            when(ruleService.findResponseBodyById(2L)).thenReturn(Optional.of("fallback"));
+
+            PipelineResult result = pipeline.execute(defaultRequest());
+
+            assertThat(result.getRuleId()).isEqualTo("fallback");
+            ServeEvent served = ServeEventCaptor.single(requestLogService);
+            assertThat(served.getCandidateCount()).isEqualTo(2);
+            assertThat(served.getMatchedByFallback()).isTrue();
+            assertThat(served.getDelayMs()).isZero();
+            assertThat(served.getScenarioSkipped())
+                    .contains("\"ruleId\":\"gated\"", "\"reason\":\"scenario_state_mismatch\"",
+                            "required: Paid, current: Started")
+                    .doesNotContain("fallback");
+        }
 
         @Test
         void advancesScenarioAndReturnsActualTransition() {

@@ -32,7 +32,7 @@
 const useRuleForm = (deps) => {
     const { ref, computed, watch } = Vue;
     const { showToast, showConfirm, t, requireLogin, login,
-            loadRules, rulePreviewCache, ruleDetailId, loadRuleDetail, rulesMarkDirty,
+            loadRules, rulePreviewCache, ruleDetailId, loadRuleDetail, rulesMarkDirty, openRuleOrder,
             responsesMarkDirty, responseSseEvents } = deps;
 
     // --- 工具函式 ---
@@ -166,47 +166,6 @@ const useRuleForm = (deps) => {
     const sseEvents = ref([]);
     const addSseEvent = () => { sseEvents.value.push({ event: '', data: '', id: '', delayMs: 0, type: 'normal' }); };
     const removeSseEvent = (index) => { if (sseEvents.value.length > 1) { sseEvents.value.splice(index, 1); } };
-    const buildSsePreview = (events, loopEnabled = false) => {
-        if (!events || !events.length) { return ''; }
-        const lines = [];
-        let terminalEventReached = false;
-        for (let i = 0; i < events.length; i++) {
-            const evt = events[i];
-            if (i > 0) { lines.push(''); }
-            if (evt.delayMs > 0) { lines.push(t('ssePreview.delay', {ms: evt.delayMs})); lines.push(''); }
-            const type = evt.type || 'normal';
-            if (type === 'abort') {
-                lines.push(t('ssePreview.abort'));
-                terminalEventReached = true;
-            }
-            if (type === 'error') { lines.push(t('ssePreview.errorEvent')); }
-            if (type !== 'abort') {
-                const evtName = type === 'error' ? 'error' : (evt.event || 'message');
-                lines.push('event: ' + evtName);
-                const data = evt.data || '';
-                data.split('\n').forEach(line => { lines.push('data: ' + line); });
-                if (evt.id) { lines.push('id: ' + evt.id); }
-                lines.push('');
-            }
-            if (type === 'error') { terminalEventReached = true; }
-            if (terminalEventReached) {
-                const remainingCount = events.length - i - 1;
-                if (remainingCount > 0) { lines.push(t('ssePreview.remainingSkipped', {count: remainingCount})); }
-                break;
-            }
-        }
-        if (loopEnabled && !terminalEventReached) { lines.push(t('ssePreview.loopPlay')); }
-        return lines.join('\n');
-    };
-    const ssePreview = computed(() => {
-        return buildSsePreview(sseEvents.value, Boolean(form.value.sseLoopEnabled));
-    });
-
-    // --- SSE 回應預覽 ---
-    const responseSsePreview = computed(() => {
-        return buildSsePreview(responseSseEvents.value);
-    });
-
     // --- 驗證 ---
     const validateForm = () => {
         const errors = {};
@@ -319,7 +278,9 @@ const useRuleForm = (deps) => {
             return jmsTargetConnections.value.some(target => target.enabled && target.defaultConnection);
         }
         if (form.value.sseEnabled && form.value.protocol === 'HTTP') {
-            if (!sseEvents.value.length || !sseEvents.value.some(e => e.data && e.data.trim())) return false;
+            // 與伺服器相同：每個事件都要有資料，延遲是 0–600000 的整數毫秒
+            if (!sseEvents.value.length || !sseEvents.value.every(e => e.data
+                && Number.isInteger(e.delayMs) && e.delayMs >= 0 && e.delayMs <= 600000)) return false;
             if (form.value.responseMode === 'existing' && !form.value.responseId) return false;
         } else if (form.value.responseMode === 'existing') {
             if (!form.value.responseId) return false;
@@ -759,10 +720,9 @@ const useRuleForm = (deps) => {
         catchAllConfirmed.value = false;
         showCatchAllWarning.value = false;
         resetResponsePreview();
-        if (!r.responseId) {
-            const res = await apiCall(`/api/admin/rules/${r.id}`, {}, { silent: true });
-            if (res && res.ok) { const full = await res.json(); r = full; }
-        }
+        // 一律讀取最新內容與版本：列表上的資料可能已過時，用舊內容存檔會蓋掉別人的修改
+        const res = await apiCall(`/api/admin/rules/${r.id}`, {}, { silent: true });
+        if (res && res.ok) { r = await res.json(); }
         form.value = { ...r, action: r.action || 'MOCK', forwardTargetMode: r.forwardTargetMode || (r.protocol === 'JMS' ? 'DEFAULT_CONNECTION' : 'ORIGINAL_HOST'), responseMode: r.responseId ? 'existing' : 'new' };
         conditions.value = [];
         sseEvents.value = (r.sseEnabled && r.responseBody) ? deserializeSseEvents(r.responseBody) : [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }];
@@ -809,12 +769,13 @@ const useRuleForm = (deps) => {
     const saving = ref(false);
 
     const saveRule = async (andClose = false) => {
-        // SSE 模式：序列化表格資料到 responseBody
+        // SSE 模式：序列化表格資料到 responseBody。使用現有回應時，事件與規則一起送出，
+        // 由後端在同一個交易內改寫該回應（規則存檔失敗時回應也不會被改到）。
+        let existingResponseBody = null;
         if (form.value.action !== 'FORWARD' && form.value.sseEnabled && form.value.protocol === 'HTTP') {
             const serialized = serializeSseEvents(sseEvents.value);
             if (form.value.responseMode === 'existing' && form.value.responseId) {
-                const rr = await apiCall(`/api/admin/responses/${form.value.responseId}`, { method: 'PUT', body: JSON.stringify({ body: serialized }) }, { errorMsg: t('toast.responseSaveFailed') });
-                if (!rr || !rr.ok) { showToast(t('toast.sseSaveFailed'), 'error'); return; }
+                existingResponseBody = serialized;
             } else {
                 form.value.responseBody = serialized;
             }
@@ -843,16 +804,11 @@ const useRuleForm = (deps) => {
         form.value.bodyCondition = simple.bodyCondition;
         form.value.queryCondition = simple.queryCondition;
         form.value.headerCondition = simple.headerCondition;
-        // 使用現有 Response 時：若正在編輯回應內容，先自動儲存
+        // 使用現有 Response 時：正在編輯的回應內容與規則一起送出，在同一個交易內儲存
         const faulting = form.value.faultType && form.value.faultType !== 'NONE';
-        if (!faulting && form.value.action !== 'FORWARD' && form.value.responseMode === 'existing' && form.value.responseId && previewEditing.value && previewEditBody.value !== previewResponseBody.value) {
-            const resp = selectedResponseSummary.value;
-            const rr = await apiCall(`/api/admin/responses/${form.value.responseId}`, { method: 'PUT', body: JSON.stringify({ description: resp?.description || '', body: previewEditBody.value }) }, { errorMsg: t('toast.responseSaveFailed') });
-            if (!rr || !rr.ok) { saving.value = false; showToast(t('toast.responseSaveFailed'), 'error'); return; }
-            previewResponseBody.value = previewEditBody.value;
-            previewEditing.value = false;
-            responsesMarkDirty();
-        }
+        const previewEdited = !faulting && form.value.action !== 'FORWARD' && form.value.responseMode === 'existing'
+            && form.value.responseId && previewEditing.value && previewEditBody.value !== previewResponseBody.value;
+        if (previewEdited && existingResponseBody === null) existingResponseBody = previewEditBody.value;
         const payload = { ...form.value };
         delete payload.advancedMatch;
         if (matchSpec) {
@@ -886,17 +842,32 @@ const useRuleForm = (deps) => {
                 payload.httpTargetConnectionId = null;
                 if (payload.forwardTargetMode !== 'CONNECTION') payload.jmsTargetConnectionId = null;
             }
-        } else if (payload.responseMode === 'existing') { payload.responseBody = null; }
+        } else if (payload.responseMode === 'existing') {
+            payload.responseBody = existingResponseBody;
+            payload.updateExistingResponse = existingResponseBody !== null;
+        }
         else { payload.responseId = null; }
         delete payload.responseMode;
         let savedSuccessfully = false;
+        let saveConflict = null;
         try {
             const url = editing.value ? `/api/admin/rules/${editing.value.id}` : '/api/admin/rules';
-            const r = await apiCall(url, { method: editing.value ? 'PUT' : 'POST', body: JSON.stringify(payload) }, { errorMsg: t('toast.ruleSaveFailed') });
+            const r = await apiCall(url, { method: editing.value ? 'PUT' : 'POST', body: JSON.stringify(payload) },
+                { errorMsg: t('toast.ruleSaveFailed'), quietStatuses: [409] });
             if (r && r.ok) {
                 const saved = await r.json();
                 savedSuccessfully = true;
-                showToast(editing.value ? t('toast.ruleSaveSuccess') : t('toast.ruleCreateSuccess'), 'success');
+                if (payload.updateExistingResponse) {
+                    if (previewEdited) { previewResponseBody.value = previewEditBody.value; previewEditing.value = false; }
+                    responsesMarkDirty();
+                }
+                // 有判斷順序的問題時只顯示一則提醒（已包含「已儲存」），否則顯示一般的成功訊息
+                const savedMessage = editing.value ? t('toast.ruleSaveSuccess') : t('toast.ruleCreateSuccess');
+                neverReachedWarning(saved).then(warning => {
+                    if (!warning) { showToast(savedMessage, 'success'); return; }
+                    showToast({ title: warning.title, detail: warning.detail }, 'warning',
+                        openRuleOrder ? { label: t('rules.order.viewOrder'), handler: () => openRuleOrder(warning.ruleId) } : null);
+                });
                 rulesMarkDirty();
                 delete rulePreviewCache.value[saved.id];
                 if (ruleDetailId?.value === saved.id) { loadRuleDetail(saved.id, { force: true }); }
@@ -917,10 +888,43 @@ const useRuleForm = (deps) => {
                     loadRules(true);
                 }
             }
+            else if (r && r.status === 409 && editing.value) { saveConflict = editing.value.id; }
             else if (r && (r.status === 401 || r.status === 403)) { login(); }
         } catch (e) { showToast(t('toast.ruleSaveFailed'), 'error'); }
         saving.value = false;
+        // 編輯期間規則被別人改過：表單保持原樣，由使用者決定載入最新版本或保留自己的修改
+        if (saveConflict) { return { conflict: saveConflict }; }
         return savedSuccessfully;
+    };
+
+    /**
+     * 儲存後檢查判斷順序：這條規則永遠輪不到，或它讓其他規則永遠輪不到時，回傳要顯示的提醒（{title, detail, ruleId}）；
+     * 沒有問題或檢查失敗時回傳 null（只是提醒，不影響儲存）。
+     */
+    const neverReachedWarning = async saved => {
+        try {
+            const r = await apiCall('/api/admin/rules/order-issues', {}, { silent: true });
+            if (!r || !r.ok) { return null; }
+            const issues = (await r.json()).issues || {};
+            const own = issues[saved.id];
+            if (own) {
+                const rule = own.byDescription || (own.byRuleId || '').slice(0, 8);
+                return {
+                    title: t('rules.order.savedNeverTitle'),
+                    detail: t(own.type === 'duplicateConditions' ? 'rules.order.savedDuplicate' : 'rules.order.savedEarlierDefault', { rule }),
+                    ruleId: saved.id,
+                };
+            }
+            const blocked = Object.entries(issues).filter(([, issue]) => issue.byRuleId === saved.id);
+            if (!blocked.length) { return null; }
+            const [firstId, first] = blocked[0];
+            const rule = first.description || firstId.slice(0, 8);
+            return blocked.length === 1
+                ? { title: t('rules.order.savedBlocksTitle'), detail: t('rules.order.savedBlocksOther', { rule }), ruleId: firstId }
+                : { title: t('rules.order.savedBlocksManyTitle', { count: blocked.length }), detail: t('rules.order.savedBlocksOthers', { rule }), ruleId: firstId };
+        } catch {
+            return null;
+        }
     };
 
     // --- 回應預覽編輯 ---
@@ -1081,7 +1085,7 @@ const useRuleForm = (deps) => {
         // Body condition 警告
         showBodyConditionWarning,
         // SSE 事件
-        sseEvents, addSseEvent, removeSseEvent, ssePreview,
+        sseEvents, addSseEvent, removeSseEvent,
         // 表單操作
         setProtocol, resetForm, openCreate, copyRule, createFromLog, openEdit, closeModal,
         saveRule, parseConditions, onResponseModeChange,
@@ -1102,7 +1106,6 @@ const useRuleForm = (deps) => {
         // 表單輔助
         newTag, addTag, removeTag, newHeader, addHeader, removeHeader,
         // SSE 回應預覽
-        responseSsePreview,
         // Modal 最大化
         ruleModalMaximized, responseModalMaximized,
         // 格式切換

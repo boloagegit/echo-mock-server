@@ -10,6 +10,7 @@ import com.echo.service.MatchChainEntry;
 import com.echo.service.MatchDescriptionBuilder;
 import com.echo.service.MatchResult;
 import com.echo.service.RequestLogService;
+import com.echo.service.ResponseTemplateService;
 import com.echo.service.RequestLogUnavailableException;
 import com.echo.service.RuleService;
 import com.echo.service.ServeEvent;
@@ -48,6 +49,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     protected final ScenarioService scenarioService;
     private final List<Responder<T>> responders;
     private ServeEventDispatcher serveEvents;
+    private ResponseTemplateService templateService;
 
     protected AbstractMockPipeline(ConditionMatcher conditionMatcher,
                                    RuleService ruleService,
@@ -65,6 +67,12 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     @Autowired(required = false)
     public void setServeEventListeners(List<ServeEventListener> listeners) {
         this.serveEvents = ServeEventDispatcher.of(requestLogService, listeners);
+    }
+
+    /** 回應模板；所有協定在產生回應前共用同一個渲染步驟（見 {@link #ruleResponseBody}）。 */
+    @Autowired
+    public void setTemplateService(ResponseTemplateService templateService) {
+        this.templateService = templateService;
     }
 
     // ==================== Template Method: 主流程 ====================
@@ -235,6 +243,10 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                 .queryString(request.getQueryString()).headers(request.getHeaders())
                 .faultType(faultType).scenarioName(scenarioName)
                 .scenarioFromState(scenarioFromState).scenarioToState(scenarioToState)
+                .candidateCount(candidates != null ? candidates.size() : null)
+                .matchedByFallback(matchResult.isMatched() ? matchResult.isByFallback() : null)
+                .delayMs(matchResult.isMatched() ? (int) Math.min(delayMs, Integer.MAX_VALUE) : null)
+                .scenarioSkipped(MatchDescriptionBuilder.toScenarioSkippedJson(matchResult.getMatchChain()))
                 .diagnosticId(request.getTrace().id())
                 .build());
 
@@ -348,7 +360,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
         if (matched != null) {
             chain.add(createMatchChainEntry(matched, "match"));
         }
-        return new MatchResult<>(matched, chain);
+        return new MatchResult<>(matched, chain, matched != null && !selection.conditionMatched());
     }
 
     /** 沒有條件成立時如何挑選無條件規則；JMS 覆寫為非萬用優先。 */
@@ -389,7 +401,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
             return true;
         }
         chain.add(new MatchChainEntry(
-                rule.getId(), "scenario_state_mismatch",
+                rule.getId(), MatchDescriptionBuilder.SCENARIO_STATE_MISMATCH,
                 null, rule.getDescription(), null,
                 null,
                 "scenario: " + rule.getScenarioName()
@@ -484,6 +496,12 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     /**
      * 從 Response 表查詢回應內容
      */
+    /** 規則的回應內容，含模板渲染；沒有模板語法時不做額外處理。 */
+    protected String ruleResponseBody(T rule, MockRequest request) {
+        String body = resolveResponseBody(rule.getResponseId());
+        return ResponseTemplateService.renderIfTemplate(templateService, body, request::templateContext);
+    }
+
     protected String resolveResponseBody(Long responseId) {
         if (responseId == null) {
             return "";
@@ -547,7 +565,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
 
         @Override
         public ResponsePlan respond(T rule, MockRequest request) {
-            MockResponse response = buildResponse(rule, request, resolveResponseBody(rule.getResponseId()));
+            MockResponse response = buildResponse(rule, request, ruleResponseBody(rule, request));
             if (rule.getFaultType() == FaultType.EMPTY_RESPONSE) {
                 response = MockResponse.builder()
                         .status(response.getStatus())
@@ -578,7 +596,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
         }
     }
 
-    /** 回傳規則設定的回應內容（含協定特有的模板渲染等，見 {@link #buildResponse}）。 */
+    /** 回傳規則設定的回應內容（模板已在共用步驟渲染，協定特有的部分見 {@link #buildResponse}）。 */
     private final class MockResponder implements Responder<T> {
         @Override
         public String mode() {
@@ -592,7 +610,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
 
         @Override
         public ResponsePlan respond(T rule, MockRequest request) {
-            return new ResponsePlan.Content(buildResponse(rule, request, resolveResponseBody(rule.getResponseId())));
+            return new ResponsePlan.Content(buildResponse(rule, request, ruleResponseBody(rule, request)));
         }
     }
 
@@ -601,7 +619,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     /** 查詢候選規則 */
     protected abstract List<T> findCandidateRules(MockRequest request);
 
-    /** 建構回應（含模板渲染等協定特有邏輯） */
+    /** 建構回應（協定特有邏輯；responseBody 已完成模板渲染） */
     protected abstract MockResponse buildResponse(T rule, MockRequest request, String responseBody);
 
     /** 執行轉發 */

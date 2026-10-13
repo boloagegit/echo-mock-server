@@ -120,7 +120,7 @@ public final class MatcherCompiler {
             case AUTO -> predicate.passesWhenMissing();
         };
         return new CompiledNodes.Leaf(extractor, compiledPredicate, leaf.quantifier(), resultWhenMissing,
-                limits.maxFieldValueLength(), describe(leaf), cacheKey, source.readsBody());
+                limits.maxFieldValueLength(), describe(leaf), leaf, cacheKey, source.readsBody());
     }
 
     private static void validateName(ValueSourceFactory source, MatchNode.Leaf leaf, String path) {

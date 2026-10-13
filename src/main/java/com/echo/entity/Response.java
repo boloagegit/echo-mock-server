@@ -63,6 +63,24 @@ public class Response {
     @Column(length = 20)
     private String contentType;
 
+    /** SSE 回應的類型值；舊版或宣告式文件可能寫成 {@code SSE_EVENTS}，讀取時視為相同。 */
+    public static final String SSE = "SSE";
+
+    /** 是否為 SSE 事件回應（{@code SSE} 或舊值 {@code SSE_EVENTS}）。 */
+    public static boolean isSse(String contentType) {
+        return SSE.equalsIgnoreCase(contentType) || "SSE_EVENTS".equalsIgnoreCase(contentType);
+    }
+
+    /** 對外一律回傳統一的類型值（舊資料的 {@code SSE_EVENTS} 也回傳 {@code SSE}）。 */
+    public String getContentType() {
+        return normalizeContentType(contentType);
+    }
+
+    /** 統一儲存的類型值：SSE 一律存成 {@code SSE}，一般回應存成 null。 */
+    public static String normalizeContentType(String contentType) {
+        return isSse(contentType) ? SSE : null;
+    }
+
     /** 建立時間 */
     @Column(updatable = false)
     private LocalDateTime createdAt;

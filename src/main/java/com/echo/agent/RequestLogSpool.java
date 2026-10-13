@@ -2,6 +2,7 @@ package com.echo.agent;
 
 import com.echo.entity.Protocol;
 import com.echo.service.RequestLogUnavailableException;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -353,6 +354,7 @@ public class RequestLogSpool {
         characters = addStringLength(characters, task.getScenarioName());
         characters = addStringLength(characters, task.getScenarioFromState());
         characters = addStringLength(characters, task.getScenarioToState());
+        characters = addStringLength(characters, task.getScenarioSkipped());
         characters = addStringLength(characters, task.getAnalysisBody());
         characters = addStringLength(characters, task.getQueryString());
         for (CandidateSnapshot candidate : task.getCandidates()) {
@@ -536,6 +538,40 @@ public class RequestLogSpool {
                 candidateCache.put(candidateSetId, candidates);
                 return candidates;
             }
+        }
+    }
+
+    /**
+     * 保留最新 {@code keep} 筆時可以略過的最後一個序號：由新到舊數第 {@code keep + 1} 筆的序號；
+     * 筆數不超過 {@code keep} 時回傳 0。
+     */
+    public long sequenceBeforeNewest(int keep) {
+        String sql = "SELECT sequence_id FROM request_log_spool ORDER BY sequence_id DESC LIMIT 1 OFFSET ?";
+        try (Connection connection = openConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, Math.max(0, keep));
+            try (ResultSet row = statement.executeQuery()) {
+                return row.next() ? row.getLong(1) : 0;
+            }
+        } catch (SQLException e) {
+            throw new RequestLogUnavailableException(
+                    "Cannot inspect request-log spool: " + e.getMessage(), e);
+        }
+    }
+
+    /** 序號在 {@code afterExclusive}（不含）到 {@code throughInclusive}（含）之間的筆數。 */
+    public long countBetween(long afterExclusive, long throughInclusive) {
+        String sql = "SELECT COUNT(*) FROM request_log_spool WHERE sequence_id > ? AND sequence_id <= ?";
+        try (Connection connection = openConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, afterExclusive);
+            statement.setLong(2, throughInclusive);
+            try (ResultSet row = statement.executeQuery()) {
+                return row.next() ? row.getLong(1) : 0;
+            }
+        } catch (SQLException e) {
+            throw new RequestLogUnavailableException(
+                    "Cannot inspect request-log spool: " + e.getMessage(), e);
         }
     }
 
@@ -1347,6 +1383,8 @@ public class RequestLogSpool {
         }
     }
 
+    /** 空欄位不寫入（讀回時為 null），每筆紀錄少佔約百位元組；舊格式的紀錄照常讀取。 */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     private record SpoolTask(
             String ruleId, Protocol protocol, String method, String endpoint, boolean matched,
             int responseTimeMs, Integer matchTimeMs, String clientIp, LocalDateTime requestTime,
@@ -1354,6 +1392,8 @@ public class RequestLogSpool {
             Integer proxyStatus, String proxyError,
             Integer responseStatus, String requestBody, String responseBody,
             String faultType, String scenarioName, String scenarioFromState, String scenarioToState,
+            Integer candidateCount, Boolean matchedByFallback, Integer delayMs, Integer sseEventCount,
+            String scenarioSkipped,
             List<CandidateRecord> candidates, String analysisBody, String queryString,
             Map<String, String> headers, Map<String, Boolean> matchOutcomes,
             boolean analysisUsesRequestBody, String diagnosticId) {
@@ -1367,6 +1407,7 @@ public class RequestLogSpool {
                     task.isForwarded(), task.getForwardTarget(), task.getProxyStatus(),
                     task.getProxyError(), task.getResponseStatus(), task.getRequestBody(), task.getResponseBody(),
                     task.getFaultType(), task.getScenarioName(), task.getScenarioFromState(), task.getScenarioToState(),
+                    task.getCandidateCount(), task.getMatchedByFallback(), task.getDelayMs(), task.getSseEventCount(), task.getScenarioSkipped(),
                     null, analysisUsesRequestBody ? null : task.getAnalysisBody(),
                     task.getQueryString(), task.getHeaders(), task.getMatchOutcomes(),
                     analysisUsesRequestBody, task.getDiagnosticId());
@@ -1385,6 +1426,8 @@ public class RequestLogSpool {
                     .requestBody(requestBody).responseBody(responseBody)
                     .faultType(faultType).scenarioName(scenarioName)
                     .scenarioFromState(scenarioFromState).scenarioToState(scenarioToState)
+                    .candidateCount(candidateCount).matchedByFallback(matchedByFallback).delayMs(delayMs).sseEventCount(sseEventCount)
+                    .scenarioSkipped(scenarioSkipped)
                     .candidates(restoredCandidates == null ? List.of() : restoredCandidates.stream()
                             .map(CandidateRecord::toCandidate).toList())
                     .analysisBody(analysisUsesRequestBody ? requestBody : analysisBody)

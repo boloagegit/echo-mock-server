@@ -354,6 +354,11 @@ public class RequestLogService implements ServeEventListener {
                 .scenarioName(event.getScenarioName())
                 .scenarioFromState(event.getScenarioFromState())
                 .scenarioToState(event.getScenarioToState())
+                .candidateCount(event.getCandidateCount())
+                .matchedByFallback(event.getMatchedByFallback())
+                .delayMs(event.getDelayMs())
+                .sseEventCount(event.getSseEventCount())
+                .scenarioSkipped(event.getScenarioSkipped())
                 .candidates(candidateSnapshots)
                 // Never retain PreparedBody: XML PreparedBody owns a full DOM and caused
                 // queued log tasks to pin hundreds of MiB. Persist only source text and
@@ -446,16 +451,19 @@ public class RequestLogService implements ServeEventListener {
                 RequestLogSummaryQuery.Result resultPage = summaryQuery.query(
                         new RequestLogSummaryQuery.Filter(
                                 filter.getRuleId(), filter.getProtocol(), filter.getMatched(),
-                                endpoint, filter.getAfterId()),
+                                endpoint, filter.getAfterId(), filter.getFrom(), filter.getTo(),
+                                blankToNull(filter.getMethod()), blankToNull(filter.getPath())),
                         pageNumber, pageSize, sortField,
                         sortDirection == Sort.Direction.ASC);
                 entries = resultPage.rows().stream().map(this::toSummaryFromRow).toList();
                 totalElements = resultPage.totalElements();
                 totalPages = resultPage.totalPages();
             } else {
+                // 只供保留 repository 測試接縫的建構式使用；正式環境一律走上面的 summaryQuery
                 Page<Object[]> resultPage = requestLogRepository.findSummaryPage(
                         filter.getRuleId(), filter.getProtocol(), filter.getMatched(), endpoint,
-                        filter.getAfterId(), PageRequest.of(pageNumber, pageSize, pageSort));
+                        filter.getAfterId(), filter.getFrom(), filter.getTo(),
+                        PageRequest.of(pageNumber, pageSize, pageSort));
                 entries = resultPage.getContent().stream().map(this::toSummaryFromProjection).toList();
                 totalElements = resultPage.getTotalElements();
                 totalPages = resultPage.getTotalPages();
@@ -506,14 +514,32 @@ public class RequestLogService implements ServeEventListener {
                     || containsIgnoreCase(e.getDiagnosticId(), normalized)
                     || containsIgnoreCase(e.getRuleId(), normalized));
         }
+        String method = blankToNull(filter.getMethod());
+        if (method != null) {
+            stream = stream.filter(e -> method.equalsIgnoreCase(e.getMethod()));
+        }
+        String path = blankToNull(filter.getPath());
+        if (path != null) {
+            stream = stream.filter(e -> path.equals(e.getEndpoint()));
+        }
         if (filter.getAfterId() != null) {
             stream = stream.filter(e -> e.getId() != null && e.getId() > filter.getAfterId());
+        }
+        if (filter.getFrom() != null) {
+            stream = stream.filter(e -> e.getRequestTime() != null && !e.getRequestTime().isBefore(filter.getFrom()));
+        }
+        if (filter.getTo() != null) {
+            stream = stream.filter(e -> e.getRequestTime() != null && e.getRequestTime().isBefore(filter.getTo()));
         }
         return stream;
     }
 
     private boolean containsIgnoreCase(String value, String normalizedKeyword) {
         return value != null && value.toLowerCase(Locale.ROOT).contains(normalizedKeyword);
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private String normalizeEndpoint(String endpoint) {
@@ -616,6 +642,11 @@ public class RequestLogService implements ServeEventListener {
                 .scenarioName(log.getScenarioName())
                 .scenarioFromState(log.getScenarioFromState())
                 .scenarioToState(log.getScenarioToState())
+                .candidateCount(log.getCandidateCount())
+                .matchedByFallback(log.getMatchedByFallback())
+                .delayMs(log.getDelayMs())
+                .sseEventCount(log.getSseEventCount())
+                .scenarioSkipped(log.getScenarioSkipped())
                 .build();
     }
 
@@ -732,6 +763,11 @@ public class RequestLogService implements ServeEventListener {
         private String scenarioName;
         private String scenarioFromState;
         private String scenarioToState;
+        private Integer candidateCount;
+        private Boolean matchedByFallback;
+        private Integer delayMs;
+        private Integer sseEventCount;
+        private String scenarioSkipped;
         private String requestBody;
         private String responseBody;
     }
@@ -815,11 +851,19 @@ public class RequestLogService implements ServeEventListener {
         private Protocol protocol;
         private Boolean matched;
         private String endpoint;
+        /** HTTP 方法，完全相同（不分大小寫）。 */
+        private String method;
+        /** 網址，完全相同（{@link #endpoint} 是部分比對的關鍵字）。 */
+        private String path;
         private Integer page;
         private Integer size;
         private String sortField;
         private String sortDirection;
         private Long afterId;
+        /** 請求時間下限（含）。 */
+        private LocalDateTime from;
+        /** 請求時間上限（不含）。 */
+        private LocalDateTime to;
     }
 
     @Getter @Builder

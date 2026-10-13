@@ -365,7 +365,6 @@
 .list-skeleton__row .sk { height: 10px }
 
 /* ===== Rule table ===== */
-.rule-table .col-drag { width: 32px; padding-inline: 8px; color: var(--text-subtle); cursor: grab }
 .rule-table .col-select { width: 40px }
 .rule-table .col-method { width: 76px }
 .rule-table .col-cond { width: 232px }

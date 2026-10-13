@@ -65,6 +65,7 @@ class MatchChainAnalysisTest {
      * Validates: Requirements 7.1, 8.1, 9.1, 10.3
      */
     @Test
+    @SuppressWarnings("unchecked")
     void analyzeMatchChain_combinedScenario_matchNearMissShadowedSkipped() throws Exception {
         // Arrange
         String bodyJson = "{\"type\":\"ORDER\",\"env\":\"prod\"}";
@@ -159,6 +160,23 @@ class MatchChainAnalysisTest {
         assertThat(skippedEntry.get("ruleId")).isEqualTo("rule-skipped");
         assertThat(skippedEntry.get("reason")).isEqualTo("skipped");
         assertThat(skippedEntry.get("detail")).isEqualTo("Rule disabled");
+
+        // 有評估條件的條目附上樹狀說明（比對過程畫面用）；停用的規則沒有
+        assertThat(treeOf(matchEntry)).containsEntry("node", "all").containsEntry("passed", true);
+        Map<String, Object> nearMissTree = treeOf(nearMissEntry);
+        assertThat(nearMissTree).containsEntry("passed", false);
+        List<Map<String, Object>> children = (List<Map<String, Object>>) nearMissTree.get("children");
+        assertThat(children).hasSize(2);
+        assertThat(children.get(1))
+                .containsEntry("node", "legacy").containsEntry("condition", "env=staging")
+                .containsEntry("passed", false).containsEntry("actual", "prod");
+        assertThat(treeOf(shadowedEntry)).containsEntry("passed", true);
+        assertThat(skippedEntry).doesNotContainKey("detailTree");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> treeOf(Map<String, Object> entry) {
+        return (Map<String, Object>) entry.get("detailTree");
     }
 
     // ==================== Analysis Disabled ====================

@@ -23,6 +23,7 @@ export ECHO_TEST_PASSWORD='your-local-password'
 | `stress-test-jms-match.py` | JMS matching with 2,000 rules and 20-field XML body |
 | `stress-test-memory.py` | Worst-case memory usage test |
 | `stress-test-cache-isolation.py` | Verify HTTP/JMS cache isolation after split |
+| `check-xml-condition-changes.py` | Read-only report of rules whose XML body conditions behave differently after the HTTP/JMS XML unification (relative paths such as `Order/Status`, and `==` on XML); `--json` for machine-readable output |
 | `test-match-scenarios.py` | End-to-end regression — 55 scenarios / 138 assertions covering HTTP, JMS, logs, SSE, fault injection, and Scenario |
 | `migrate-h2-to-sqlite.py` | Offline, staged H2-to-SQLite migration with row/digest/integrity verification and startup smoke test |
 | `test-sqlite-crash-resilience.py` | SQLite WAL crash/restart and request-log durability regression |

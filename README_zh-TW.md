@@ -214,7 +214,6 @@ JVM 參數在 Dockerfile 中設定（預設 `-Xms256m -Xmx512m`，OOM 時保留 
 | `ECHO_BULK_IMPORT_EXPORT_ENABLED` | `false` | 顯示並啟用批次匯入／匯出操作 |
 | `ECHO_ISSUE_REPORTING_ENABLED` | `false` | 顯示問題回報頁面並啟用其 API；既有回報資料保留 |
 | `ECHO_SCENARIOS_ENABLED` | `false` | 啟用 Scenario 狀態機規則與管理功能 |
-| `ECHO_RULE_DRAG_SORT_ENABLED` | `false` | 啟用規則列表的拖曳優先度排序 |
 
 也可在部署設定檔設定 `echo.features.issue-reporting-enabled: true` 啟用問題回報，
 修改後須重新啟動 Echo。關閉時隱藏導覽入口，直接進入 `#/issues` 會返回規則列表，
@@ -318,6 +317,34 @@ Echo 可作為 JMS Proxy，在開發環境攔截 JMS 訊息：
 設定方式、留存限制與證據判讀集中於該文件，正常請求不新增診斷檔案日誌。
 
 使用 Artemis Core client 傳送 XML 時，建議在發送端連線 URL 設定 `tcp://echo-host:61616?minLargeMessageSize=524288`。這會讓約 256KB 以內的文字訊息走一般訊息路徑，避免中型 XML 每筆建立 large-message 檔案；更大的訊息仍會落盤保護 heap。此參數必須設在**發送端**，不是 Echo 的 `application.yml`。
+
+### 從共用 broker 接收 JMS（多實例）
+
+預設每台 Echo 用自己內建的 Artemis 收 JMS，發送端必須指定某一台。要開多台分擔量與備援時，讓所有實例監聽既有 broker（例如公司 ESB）上的同一個 queue：broker 會把每則訊息只交給其中一台，回覆送到訊息的 `JMSReplyTo`，也在同一個 broker 上。
+
+```
+應用程式 ──JMS──▶ ESB 上的 queue ECHO.REQUEST ──▶ Echo A
+                                              └─▶ Echo B
+```
+
+```yaml
+echo:
+  jms:
+    enabled: true
+    queue: ECHO.REQUEST            # 各實例共用的 broker queue
+    source:
+      type: tibco                  # embedded（預設）| artemis | tibco
+      server-url: tcp://esb-server:7222
+      username: echo               # ECHO_JMS_SOURCE_USERNAME
+      password: ${ECHO_JMS_SOURCE_PASSWORD}
+      reconnect-interval-ms: 5000  # broker 連不上時的重試間隔
+```
+
+- 不啟動內建 Artemis，也不開啟 `echo.jms.port`。
+- broker 沒開時 Echo 照樣啟動並持續重連；**系統設定 → 服務設定**會顯示 JMS 是否正在接收。
+- 訊息在交易內處理：某台處理到一半停止或當機，broker 會把訊息交給另一台。若當機剛好發生在回覆送出後、提交前，發送端可能收到兩次回覆（至少一次傳遞）。
+- 重送延遲、次數上限與 dead-letter 由 broker 自己的設定決定；`echo.jms.redelivery-*`、`max-delivery-attempts`、paging 與磁碟設定只適用於內建 broker。
+- TIBCO EMS 需要 EMS 10.3 以上的 client（`tibjms.jar`，`jakarta.jms`）放在 `libs/`，與轉送功能相同。
 
 ## 條件匹配語法
 
@@ -680,23 +707,43 @@ WireMock 風格的 Handlebars 模板引擎，在回應內容中使用 `{{...}}` 
 {{xPath request.body '//name/text()'}}
 ```
 
+### HTTP 與 JMS
+
+各協定共用同一套模板：HTTP 回應、SSE 事件與 JMS 回覆都能使用。內容沒有 `{{` 時原樣回傳，不增加任何成本。
+
+| 變數 | HTTP | JMS |
+|------|------|-----|
+| `request.body` | 請求內容 | 訊息內容 |
+| `request.headers.xxx` | 請求標頭 | `JMSMessageID`、`JMSCorrelationID`、`JMSType`、`JMSDestination`（監聽的 queue）與訊息上的自訂屬性 |
+| `request.path` | 請求路徑 | queue，有端點欄位值時一併附上（`ECHO.REQUEST \| Order`） |
+| `request.method`、`request.query.xxx` | 方法、query 參數 | 空值 |
+
+```handlebars
+<reply><orderId>{{xPath request.body '//orderId/text()'}}</orderId><ref>{{request.headers.JMSCorrelationID}}</ref></reply>
+```
+
 ## 多實例部署
 
 Database 模式支援多實例部署，透過 DB 同步 cache 失效事件。
 
 ### 快取同步機制
 
-每個實例使用本地 Caffeine 快取，透過 `cache_events` 表同步失效：
+每個實例把規則、回應內容與 HTTP 轉送連線設定放在本地 Caffeine 快取，變更透過 `cache_events` 表通知：
 
 ```
-實例 A 修改規則 → 寫入 cache_events (RULE_CHANGED)
+實例 A 修改規則 → 在同一個交易內寫入一筆 cache_events
                           ↓
-實例 B 每 N 秒輪詢 → 發現新事件 → 清除本地快取
+實例 B 每 N 秒輪詢 → 讀取編號更大的事件 → 清除受影響的本地快取
 ```
 
-- **輪詢間隔**: 預設 5 秒，可調整 `echo.cache.sync-interval-ms`
-- **事件清理**: 每小時自動清理 10 分鐘前的舊事件
-- **效能影響**: 極小，每次輪詢只是一個簡單的 timestamp 查詢
+- **同步範圍**: 規則變更（依協定）、回應內容修改或刪除、HTTP 轉送連線設定變更，以及每日自動清理刪掉的規則與回應
+- **輪詢間隔**: 預設 5 秒，可調整 `echo.cache.sync-interval-ms`；變更通常在這段時間內傳到其他實例
+- **依事件編號而不是時間**: 各台時鐘或時區不同也不影響。跳過的編號（較晚提交的交易）最多再等 2 分鐘
+- **保底機制**: 實例超過 5 分鐘無法輪詢，或事件編號重新開始時，會清空上述所有快取一次。即使漏掉通知，規則與 HTTP 轉送連線設定最晚每 `echo.cache.rules.max-age-minutes`（預設 10）分鐘、回應內容每 `echo.cache.body.max-age-minutes`（預設 60）分鐘也會重新讀取
+- **事件清理**: 每小時清理 10 分鐘前的舊事件，但保留最新一筆，事件編號不會重新開始
+- **效能影響**: 極小，每次輪詢只是一個主鍵範圍查詢
+
+登入狀態存在各實例的記憶體，負載平衡器請設定同一位使用者固定導向同一台（sticky session）。JMS 多實例請見[從共用 broker 接收 JMS](#從共用-broker-接收-jms多實例)。
 
 ### 設定範例
 

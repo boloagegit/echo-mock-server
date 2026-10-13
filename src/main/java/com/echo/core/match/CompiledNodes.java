@@ -138,21 +138,24 @@ final class CompiledNodes {
         private final boolean resultWhenMissing;
         private final int maxFieldValueLength;
         private final String description;
+        private final MatchNode.Leaf spec;
         private final String cacheKey;
         private final BodyRequirements bodyRequirements;
 
         /**
+         * @param spec      編譯前的條件，放進說明供畫面顯示
          * @param readsBody 取值器不是內建 body 取值器時，來源是否會讀 body（無法判斷需求時視為需要完整解析）
          */
         Leaf(ValueExtractor extractor, CompiledPredicate predicate, MatchNode.Quantifier quantifier,
-             boolean resultWhenMissing, int maxFieldValueLength, String description, String cacheKey,
-             boolean readsBody) {
+             boolean resultWhenMissing, int maxFieldValueLength, String description, MatchNode.Leaf spec,
+             String cacheKey, boolean readsBody) {
             this.extractor = extractor;
             this.predicate = predicate;
             this.quantifier = quantifier;
             this.resultWhenMissing = resultWhenMissing;
             this.maxFieldValueLength = maxFieldValueLength;
             this.description = description;
+            this.spec = spec;
             this.cacheKey = cacheKey;
             this.bodyRequirements = requirementsOf(extractor, readsBody);
         }
@@ -238,7 +241,7 @@ final class CompiledNodes {
         public MatchExplanation explain(EvalContext context) {
             Extracted extracted = extractor.extract(context.request());
             boolean passed = context.memoized(cacheKey, () -> decide(extracted));
-            return new MatchExplanation("leaf", passed, description, summarize(extracted), List.of());
+            return new MatchExplanation("leaf", passed, description, summarize(extracted), List.of(), spec);
         }
 
         @Override

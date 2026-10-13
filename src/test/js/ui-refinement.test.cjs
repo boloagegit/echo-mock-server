@@ -395,7 +395,8 @@ test('entry resources wire the guard, help flow, save baseline and unload cleanu
   assert.ok(index.indexOf('/composables/useDiscardGuard.js') < index.indexOf('/app.js'));
   assert.ok(index.includes('@start-tour="startTour"'));
   const app = source('app.js');
-  for (const snippet of ['isBusy: () => ruleSaveInFlight.value', 'if (!await saveRuleForm(andClose)) return;',
+  for (const snippet of ['isBusy: () => ruleSaveInFlight.value', 'const saved = await saveRuleForm(andClose);',
+    'if (saved && saved.conflict) { await resolveRuleSaveConflict(saved.conflict); return; }', 'if (!saved) return;',
     'let wasDirty = ruleDraftGuard.isDirty();', 'if (e.defaultPrevented) return;',
     "window.removeEventListener('beforeunload', handleBeforeUnload)"] ) assert.ok(app.includes(snippet));
   const css = source('style.css');

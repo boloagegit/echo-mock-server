@@ -204,7 +204,8 @@ const createSseParser = onEvent => {
 let _showToast = null;
 let _t = null;
 const apiCall = async (url, opt = {}, config = {}) => {
-    const { silent = false, errorMsg = '' } = config;
+    // quietStatuses：呼叫端自行處理的狀態碼，不顯示通用錯誤
+    const { silent = false, errorMsg = '', quietStatuses = [] } = config;
     try {
         const headers = { 'Accept': 'application/json', ...(opt.headers || {}) };
         const isFormData = typeof FormData !== 'undefined' && opt.body instanceof FormData;
@@ -212,6 +213,7 @@ const apiCall = async (url, opt = {}, config = {}) => {
             headers['Content-Type'] = 'application/json';
         }
         const r = await fetch(url, { ...opt, headers });
+        if (quietStatuses.includes(r.status)) { return r; }
         if (r.status === 401 || r.status === 403) {
             if (!silent) { _showToast(_t('toast.loginRequired'), 'error'); }
             return r;

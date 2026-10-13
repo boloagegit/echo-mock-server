@@ -57,13 +57,39 @@ class RequestLogSpoolTest {
     }
 
     @Test
+    void findsTheLastSequenceThatCanBeSkippedWhileKeepingTheNewest() {
+        spool = createSpool(tempDir.resolve("skip.sqlite"), 16 * 1024 * 1024);
+        spool.start();
+        for (int i = 1; i <= 8; i++) {
+            spool.append(task("rule-" + i, "/orders/" + i));
+        }
+        List<RequestLogSpool.SpoolEntry> all = spool.readAfter(0, 100);
+        long third = all.get(2).sequence();
+
+        // 保留最新 5 筆：可略過到第 3 筆
+        assertThat(spool.sequenceBeforeNewest(5)).isEqualTo(third);
+        assertThat(spool.sequenceBeforeNewest(8)).isZero();
+        assertThat(spool.sequenceBeforeNewest(100)).isZero();
+        assertThat(spool.countBetween(0, third)).isEqualTo(3);
+        assertThat(spool.countBetween(all.get(0).sequence(), third)).isEqualTo(2);
+
+        spool.deleteThrough(third);
+        assertThat(spool.readAfter(0, 100)).extracting(entry -> entry.task().getEndpoint())
+                .containsExactly("/orders/4", "/orders/5", "/orders/6", "/orders/7", "/orders/8");
+        assertThat(spool.sequenceBeforeNewest(5)).isZero();
+    }
+
+    @Test
     void committedTaskSurvivesRestartAndRetainsAllFields() {
         Path path = tempDir.resolve("request-log-spool.sqlite");
         spool = createSpool(path, 16 * 1024 * 1024);
         spool.start();
         String firstSpoolId = spool.getSpoolId();
 
-        spool.append(task("rule-1", "/orders/1"));
+        spool.append(taskBuilder("rule-1", "/orders/1")
+                .candidateCount(3).matchedByFallback(true).delayMs(250).sseEventCount(4)
+                .scenarioSkipped("[{\"ruleId\":\"r9\",\"reason\":\"scenario_state_mismatch\"}]")
+                .build());
         assertThat(spool.pendingBytes()).isPositive();
         assertThat(spool.pendingItems()).isEqualTo(1);
         spool.stop();
@@ -84,6 +110,11 @@ class RequestLogSpoolTest {
         assertThat(restored.getScenarioName()).isEqualTo("order-flow");
         assertThat(restored.getScenarioFromState()).isEqualTo("Started");
         assertThat(restored.getScenarioToState()).isEqualTo("Paid");
+        assertThat(restored.getCandidateCount()).isEqualTo(3);
+        assertThat(restored.getMatchedByFallback()).isTrue();
+        assertThat(restored.getDelayMs()).isEqualTo(250);
+        assertThat(restored.getSseEventCount()).isEqualTo(4);
+        assertThat(restored.getScenarioSkipped()).contains("r9");
         assertThat(restored.isForwarded()).isTrue();
         assertThat(restored.getForwardTarget())
                 .isEqualTo("Primary | https://downstream.example");
@@ -650,6 +681,10 @@ class RequestLogSpoolTest {
     }
 
     private LogTask task(String ruleId, String endpoint) {
+        return taskBuilder(ruleId, endpoint).build();
+    }
+
+    private LogTask.LogTaskBuilder taskBuilder(String ruleId, String endpoint) {
         CandidateSnapshot candidate = CandidateSnapshot.builder()
                 .ruleId(ruleId)
                 .endpoint(endpoint)
@@ -683,8 +718,7 @@ class RequestLogSpoolTest {
                 .analysisBody("{\"id\":1}")
                 .queryString("trace=1")
                 .headers(Map.of("X-Test", "value"))
-                .matchOutcomes(Map.of("body:id=1", true))
-                .build();
+                .matchOutcomes(Map.of("body:id=1", true));
     }
 
     private LogTask taskWithCandidateCondition(String ruleId, String condition) {

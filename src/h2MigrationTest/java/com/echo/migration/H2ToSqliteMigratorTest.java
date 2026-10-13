@@ -7,6 +7,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
@@ -185,6 +186,45 @@ class H2ToSqliteMigratorTest {
 
         assertThat(report.tables()).singleElement().satisfies(table ->
                 assertThat(table.skippedLegacyColumns()).containsExactly("condition_matched"));
+    }
+
+    @Test
+    void fillsRequestFlowColumnsThatOlderH2DatabasesDoNotHaveWithNull() throws Exception {
+        String h2Url = h2Url("flow-source");
+        String sqliteUrl = sqliteUrl("flow-target.sqlite");
+        try (Connection h2 = DriverManager.getConnection(h2Url, "sa", "")) {
+            h2.createStatement().execute("CREATE TABLE request_log (id BIGINT PRIMARY KEY, endpoint VARCHAR(500))");
+            h2.createStatement().execute("INSERT INTO request_log VALUES (7, '/before-flow')");
+        }
+        try (Connection sqlite = DriverManager.getConnection(sqliteUrl)) {
+            sqlite.createStatement().execute("""
+                    CREATE TABLE request_log (
+                        id INTEGER PRIMARY KEY,
+                        endpoint VARCHAR(500),
+                        candidate_count INTEGER,
+                        matched_by_fallback BOOLEAN,
+                        delay_ms INTEGER,
+                        sse_event_count INTEGER,
+                        scenario_skipped CLOB
+                    )
+                    """);
+        }
+
+        var report = H2ToSqliteMigrator.migrate(h2Url, "sa", "", sqliteUrl, List.of("request_log"));
+
+        assertThat(report.totalRows()).isEqualTo(1);
+        try (Connection sqlite = DriverManager.getConnection(sqliteUrl);
+             ResultSet rows = sqlite.createStatement().executeQuery(
+                     "SELECT id, endpoint, candidate_count, matched_by_fallback, delay_ms, sse_event_count,"
+                             + " scenario_skipped FROM request_log")) {
+            assertThat(rows.next()).isTrue();
+            assertThat(rows.getLong("id")).isEqualTo(7);
+            assertThat(rows.getString("endpoint")).isEqualTo("/before-flow");
+            for (String column : List.of("candidate_count", "matched_by_fallback", "delay_ms", "sse_event_count",
+                    "scenario_skipped")) {
+                assertThat(rows.getObject(column)).as(column).isNull();
+            }
+        }
     }
 
     @Test

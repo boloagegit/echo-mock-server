@@ -3,9 +3,12 @@ package com.echo.service;
 import com.echo.core.util.InterruptibleCharSequence;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.jknack.handlebars.Context;
 import com.github.jknack.handlebars.Handlebars;
 import com.github.jknack.handlebars.Helper;
+import com.github.jknack.handlebars.Options;
 import com.github.jknack.handlebars.Template;
+import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.PathNotFoundException;
 import org.slf4j.Logger;
@@ -20,6 +23,8 @@ import jakarta.annotation.PreDestroy;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathExpression;
+import javax.xml.xpath.XPathExpressionException;
 import javax.xml.xpath.XPathFactory;
 import java.io.IOException;
 import java.io.StringReader;
@@ -27,6 +32,7 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 /**
  * Response Template Service - WireMock 風格的回應模板引擎
@@ -107,6 +113,43 @@ public class ResponseTemplateService {
     private static final ThreadLocal<XPath> XPATH = ThreadLocal.withInitial(() ->
         XPathFactory.newInstance().newXPath()
     );
+
+    /** 每個執行緒最多保留的已編譯 XPath 數；XPathExpression 不可跨執行緒共用。 */
+    private static final int MAX_COMPILED_XPATHS = 64;
+
+    /**
+     * 只保留這個長度以內的運算式。模板裡寫死的 XPath 都很短；由請求內容組出的長運算式不保留，
+     * 避免每個執行緒長期留住請求大小的字串。
+     */
+    static final int MAX_CACHED_XPATH_LENGTH = 256;
+
+    private static final ThreadLocal<Map<String, XPathExpression>> COMPILED_XPATHS = ThreadLocal.withInitial(() ->
+        new LinkedHashMap<>(16, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, XPathExpression> eldest) {
+                return size() > MAX_COMPILED_XPATHS;
+            }
+        });
+
+    /** 模板裡的 XPath 字串固定，編譯一次後在同一執行緒重用。 */
+    private static XPathExpression compiledXPath(String path) throws XPathExpressionException {
+        Map<String, XPathExpression> compiled = COMPILED_XPATHS.get();
+        XPathExpression expression = compiled.get(path);
+        if (expression == null) {
+            XPath xPath = XPATH.get();
+            xPath.reset();
+            expression = xPath.compile(path);
+            if (path.length() <= MAX_CACHED_XPATH_LENGTH) {
+                compiled.put(path, expression);
+            }
+        }
+        return expression;
+    }
+
+    /** 測試用：目前執行緒保留的已編譯 XPath 數。 */
+    static int compiledXPathCountForCurrentThread() {
+        return COMPILED_XPATHS.get().size();
+    }
 
     private final Handlebars handlebars;
     private final Cache<String, Template> templateCache;
@@ -286,7 +329,13 @@ public class ResponseTemplateService {
                 return "";
             }
             try {
-                Object result = JsonPath.read(jsonStr, path);
+                // 同一次渲染中相同內容只解析一次（見 ParsedBodies）；append() 會修改文件，改用獨立的解析結果
+                DocumentContext document = path.contains("append(")
+                        ? JsonPath.parse(jsonStr) : parsed(options).json(jsonStr);
+                if (document == null) {
+                    return "";
+                }
+                Object result = document.read(path);
                 if (result instanceof List<?> list) {
                     return list;
                 }
@@ -306,12 +355,12 @@ public class ResponseTemplateService {
                 return "";
             }
             try {
-                DocumentBuilder builder = DOC_BUILDER.get();
-                builder.reset();
-                Document doc = builder.parse(new InputSource(new StringReader(xmlStr)));
-                XPath xPath = XPATH.get();
-                xPath.reset();
-                String result = xPath.evaluate(path, doc);
+                // 同一次渲染中相同內容只解析一次（見 ParsedBodies）
+                Document doc = parsed(options).xml(xmlStr);
+                if (doc == null) {
+                    return "";
+                }
+                String result = compiledXPath(path).evaluate(doc);
                 return result != null ? result : "";
             } catch (Exception e) {
                 return "";
@@ -446,8 +495,13 @@ public class ResponseTemplateService {
                 }
             });
 
-            Map<String, Object> model = buildModel(context);
-            return template.apply(model);
+            Context handlebarsContext = Context.newBuilder(buildModel(context)).build();
+            handlebarsContext.data(PARSED_BODIES, new ParsedBodies());
+            try {
+                return template.apply(handlebarsContext);
+            } finally {
+                handlebarsContext.destroy();
+            }
         } catch (Exception e) {
             log.warn("Template rendering failed: {}", e.getMessage());
             return templateStr; // 失敗時返回原始字串
@@ -487,6 +541,65 @@ public class ResponseTemplateService {
         return Map.of("request", request);
     }
 
+    /** 一次渲染的解析結果放在 Handlebars context data 的這個 key。 */
+    private static final String PARSED_BODIES = "echo.parsedBodies";
+
+    private static ParsedBodies parsed(Options options) {
+        ParsedBodies parsed = options.data(PARSED_BODIES);
+        // 不經 render() 的呼叫（理論上不會發生）退回每次解析
+        return parsed != null ? parsed : new ParsedBodies();
+    }
+
+    /**
+     * 同一次渲染中已解析過的 XML / JSON 內容。模板裡多個 {@code xPath} 或 {@code jsonPath}
+     * 讀同一份內容時只解析一次；渲染結束即丟棄，不跨請求保留。渲染期間會同時留住已解析的內容
+     * （最多 4 份 XML 與 4 份 JSON），原本則是每次用完即丟，因此單次渲染的記憶體高峰可能略高。
+     * 解析失敗也會記住，之後同一內容的呼叫直接回傳空字串，與原本的結果一致。
+     * 只記住最近幾份不同內容，避免模板對大量不同字串呼叫時累積。
+     */
+    static final class ParsedBodies {
+        private static final int MAX_ENTRIES = 4;
+        private static final Object FAILED = new Object();
+        private final Map<String, Object> xml = new LinkedHashMap<>();
+        private final Map<String, Object> json = new LinkedHashMap<>();
+
+        Document xml(String source) {
+            Object cached = lookup(xml, source, () -> {
+                DocumentBuilder builder = DOC_BUILDER.get();
+                builder.reset();
+                return builder.parse(new InputSource(new StringReader(source)));
+            });
+            return cached instanceof Document document ? document : null;
+        }
+
+        DocumentContext json(String source) {
+            Object cached = lookup(json, source, () -> JsonPath.parse(source));
+            return cached instanceof DocumentContext document ? document : null;
+        }
+
+        private interface Parser {
+            Object parse() throws Exception;
+        }
+
+        private static Object lookup(Map<String, Object> cache, String source, Parser parser) {
+            Object cached = cache.get(source);
+            if (cached != null) {
+                return cached;
+            }
+            Object value;
+            try {
+                value = parser.parse();
+            } catch (Exception e) {
+                value = FAILED;
+            }
+            if (cache.size() >= MAX_ENTRIES) {
+                cache.remove(cache.keySet().iterator().next());
+            }
+            cache.put(source, value);
+            return value;
+        }
+    }
+
     /**
      * 檢查字串是否包含模板語法
      */
@@ -495,7 +608,21 @@ public class ResponseTemplateService {
     }
 
     /**
-     * 模板上下文
+     * 各協定共用的渲染入口：只在內容含模板語法時才建立上下文並渲染；沒有 <code>{{</code> 時原樣回傳，
+     * 不做任何額外工作。新增協定時只要提供 {@link TemplateContext}，不需要另外支援模板。
+     * 經由 {@link #hasTemplate} 與 {@link #render} 實作，service 為 null 時不渲染。
+     */
+    public static String renderIfTemplate(ResponseTemplateService service, String templateStr,
+                                          Supplier<TemplateContext> context) {
+        if (service == null || !service.hasTemplate(templateStr)) {
+            return templateStr;
+        }
+        return service.render(templateStr, context.get());
+    }
+
+    /**
+     * 模板上下文：{@code request.path / method / query / headers / body}。
+     * 各協定把自己的請求轉成這五項（JMS 的訊息 ID、correlation ID 與屬性放在 headers）。
      */
     public record TemplateContext(
             String path,
@@ -503,5 +630,25 @@ public class ResponseTemplateService {
             Map<String, String> query,
             Map<String, String> headers,
             String body
-    ) {}
+    ) {
+        /** 由原始 query string 建立；query 只在需要渲染時才解析。 */
+        public static TemplateContext of(String path, String method, String queryString,
+                                         Map<String, String> headers, String body) {
+            return new TemplateContext(path, method, parseQuery(queryString), headers, body);
+        }
+
+        static Map<String, String> parseQuery(String queryString) {
+            Map<String, String> params = new HashMap<>();
+            if (queryString == null || queryString.isEmpty()) {
+                return params;
+            }
+            for (String pair : queryString.split("&")) {
+                int idx = pair.indexOf('=');
+                if (idx > 0) {
+                    params.put(pair.substring(0, idx), pair.substring(idx + 1));
+                }
+            }
+            return params;
+        }
+    }
 }
