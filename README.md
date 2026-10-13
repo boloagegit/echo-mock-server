@@ -342,6 +342,34 @@ and Request Log correlation IDs. See the linked guide for configuration, quotas 
 
 For Artemis Core clients that send XML, configure the sender URL as `tcp://echo-host:61616?minLargeMessageSize=524288`. Text payloads up to roughly 256 KB then use the regular-message path instead of creating one large-message file per request, while larger messages still spill to disk to protect the heap. This is a **sender-side** connection setting, not an Echo `application.yml` property.
 
+### Receiving JMS from a Shared Broker (Multi-Instance)
+
+By default each Echo instance receives JMS on its own embedded Artemis, so senders must pick one instance. To run several instances for load sharing and failover, let all of them listen on the same queue of an existing broker (for example the company ESB). The broker hands each message to only one instance; replies go to the message's `JMSReplyTo`, which is on the same broker.
+
+```
+Application ──JMS──▶ ESB queue ECHO.REQUEST ──▶ Echo A
+                                            └─▶ Echo B
+```
+
+```yaml
+echo:
+  jms:
+    enabled: true
+    queue: ECHO.REQUEST            # queue on the broker that the instances share
+    source:
+      type: tibco                  # embedded (default) | artemis | tibco
+      server-url: tcp://esb-server:7222
+      username: echo               # ECHO_JMS_SOURCE_USERNAME
+      password: ${ECHO_JMS_SOURCE_PASSWORD}
+      reconnect-interval-ms: 5000  # retry interval while the broker is unreachable
+```
+
+- The embedded Artemis is not started and `echo.jms.port` is not opened.
+- Echo starts even when the broker is down and keeps reconnecting; **System Settings → Service Configuration** shows whether JMS is receiving.
+- Messages are consumed in a transaction: if an instance stops or crashes mid-message, the broker gives the message to another instance. A crash after the reply was sent but before the commit can produce a second reply (at-least-once delivery).
+- Redelivery delays, attempt limits and dead-letter handling are the broker's own settings; `echo.jms.redelivery-*`, `max-delivery-attempts`, paging and disk settings only apply to the embedded broker.
+- TIBCO EMS needs the EMS 10.3+ client (`tibjms.jar`, `jakarta.jms`) in `libs/`, the same as for forwarding.
+
 ## Condition Matching Syntax
 
 ### HTTP Body Conditions (JSON)
@@ -752,7 +780,7 @@ Instance B polls every N seconds → reads rows with a higher id → clears the 
 - **Event cleanup**: Events older than 10 minutes are removed every hour; the newest event is kept so ids never restart
 - **Performance impact**: Minimal — each poll is a primary-key range query
 
-Login sessions are kept in each instance's memory, so configure the load balancer to keep a user on the same instance (sticky sessions). JMS still uses the embedded broker of each instance.
+Login sessions are kept in each instance's memory, so configure the load balancer to keep a user on the same instance (sticky sessions). For JMS across instances, see [Receiving JMS from a Shared Broker](#receiving-jms-from-a-shared-broker-multi-instance).
 
 ### Configuration Example
 

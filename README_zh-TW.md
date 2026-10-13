@@ -318,6 +318,34 @@ Echo 可作為 JMS Proxy，在開發環境攔截 JMS 訊息：
 
 使用 Artemis Core client 傳送 XML 時，建議在發送端連線 URL 設定 `tcp://echo-host:61616?minLargeMessageSize=524288`。這會讓約 256KB 以內的文字訊息走一般訊息路徑，避免中型 XML 每筆建立 large-message 檔案；更大的訊息仍會落盤保護 heap。此參數必須設在**發送端**，不是 Echo 的 `application.yml`。
 
+### 從共用 broker 接收 JMS（多實例）
+
+預設每台 Echo 用自己內建的 Artemis 收 JMS，發送端必須指定某一台。要開多台分擔量與備援時，讓所有實例監聽既有 broker（例如公司 ESB）上的同一個 queue：broker 會把每則訊息只交給其中一台，回覆送到訊息的 `JMSReplyTo`，也在同一個 broker 上。
+
+```
+應用程式 ──JMS──▶ ESB 上的 queue ECHO.REQUEST ──▶ Echo A
+                                              └─▶ Echo B
+```
+
+```yaml
+echo:
+  jms:
+    enabled: true
+    queue: ECHO.REQUEST            # 各實例共用的 broker queue
+    source:
+      type: tibco                  # embedded（預設）| artemis | tibco
+      server-url: tcp://esb-server:7222
+      username: echo               # ECHO_JMS_SOURCE_USERNAME
+      password: ${ECHO_JMS_SOURCE_PASSWORD}
+      reconnect-interval-ms: 5000  # broker 連不上時的重試間隔
+```
+
+- 不啟動內建 Artemis，也不開啟 `echo.jms.port`。
+- broker 沒開時 Echo 照樣啟動並持續重連；**系統設定 → 服務設定**會顯示 JMS 是否正在接收。
+- 訊息在交易內處理：某台處理到一半停止或當機，broker 會把訊息交給另一台。若當機剛好發生在回覆送出後、提交前，發送端可能收到兩次回覆（至少一次傳遞）。
+- 重送延遲、次數上限與 dead-letter 由 broker 自己的設定決定；`echo.jms.redelivery-*`、`max-delivery-attempts`、paging 與磁碟設定只適用於內建 broker。
+- TIBCO EMS 需要 EMS 10.3 以上的 client（`tibjms.jar`，`jakarta.jms`）放在 `libs/`，與轉送功能相同。
+
 ## 條件匹配語法
 
 ### HTTP Body 條件 (JSON)
@@ -700,7 +728,7 @@ Database 模式支援多實例部署，透過 DB 同步 cache 失效事件。
 - **事件清理**: 每小時清理 10 分鐘前的舊事件，但保留最新一筆，事件編號不會重新開始
 - **效能影響**: 極小，每次輪詢只是一個主鍵範圍查詢
 
-登入狀態存在各實例的記憶體，負載平衡器請設定同一位使用者固定導向同一台（sticky session）。JMS 仍是各實例內建的 broker。
+登入狀態存在各實例的記憶體，負載平衡器請設定同一位使用者固定導向同一台（sticky session）。JMS 多實例請見[從共用 broker 接收 JMS](#從共用-broker-接收-jms多實例)。
 
 ### 設定範例
 

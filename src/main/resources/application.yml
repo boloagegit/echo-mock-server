@@ -129,6 +129,14 @@ echo:
     password: admin
     concurrency: "10-30"     # JMS listener 並發數 (min-max)，可用環境變數 ECHO_JMS_CONCURRENCY 覆蓋
     queue: ECHO.REQUEST      # Echo 監聽的 Source Queue（外部服務送訊息到此 Queue）
+    source:
+      # 從哪裡接收 JMS：embedded（內建 Artemis，預設）| artemis | tibco（外部共用 broker，例如 ESB）
+      # 多台 Echo 監聽同一個外部 queue 時，broker 會把每則訊息只交給其中一台
+      type: ${ECHO_JMS_SOURCE_TYPE:embedded}
+      server-url: ${ECHO_JMS_SOURCE_SERVER_URL:}
+      username: ${ECHO_JMS_SOURCE_USERNAME:}
+      password: ${ECHO_JMS_SOURCE_PASSWORD:}
+      reconnect-interval-ms: 5000   # 外部 broker 連不上時的重試間隔
     endpoint-field: ServiceName  # 從訊息 body 提取端點識別欄位（XML element / JSON key）
     target:
       enabled: false         # true 時啟用轉發到目標 JMS Server

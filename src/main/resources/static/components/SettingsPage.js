@@ -94,6 +94,11 @@ const SettingsPage = {
         value, label: this.t('settings.tabs.' + value), id: 'settings-tab-' + value, panelId: 'settings-content',
       }));
     },
+    jmsSourceLabel() {
+      const type = this.status?.jmsSourceType;
+      if (!type || type === 'embedded') return this.t('settings.jmsSourceEmbedded');
+      return this.t('settings.jmsSourceExternal', { type: type === 'tibco' ? 'TIBCO EMS' : type === 'artemis' ? 'Artemis' : type });
+    },
     databaseKind() {
       const url = this.status?.datasourceUrl || '';
       if (url.startsWith('jdbc:sqlite:')) return 'SQLite';
@@ -573,7 +578,9 @@ const SettingsPage = {
             <div class="settings-item"><span class="settings-label">{{t('settings.httpAlias')}}</span><span class="settings-value">{{ status.httpAlias || t('settings.notSet') }}</span></div>
             <div class="settings-item"><span class="settings-label">{{t('settings.jmsAlias')}}</span><span class="settings-value">{{ status.jmsAlias || t('settings.notSet') }}</span></div>
             <div class="settings-item"><span class="settings-label">{{t('settings.jmsStatus')}}</span><span class="settings-value"><ui-status :tone="jmsEnabled?'success':'neutral'">{{ jmsEnabled ? t('settings.enabled') : t('settings.disabled') }}</ui-status></span></div>
-            <div class="settings-item" v-if="jmsEnabled"><span class="settings-label">{{t('settings.artemisUrl')}}</span><span class="settings-value settings-value-sm">{{ status.artemisBrokerUrl }}</span></div>
+            <div class="settings-item" v-if="jmsEnabled"><span class="settings-label">{{t('settings.jmsSource')}}</span><span class="settings-value">{{ jmsSourceLabel }}</span></div>
+            <div class="settings-item" v-if="jmsEnabled"><span class="settings-label">{{t('settings.artemisUrl')}}</span><span class="settings-value settings-value-sm">{{ status.artemisBrokerUrl }}<template v-if="status.jmsQueue"> · {{ status.jmsQueue }}</template></span></div>
+            <div class="settings-item" v-if="jmsEnabled && status.jmsListenerReceiving != null"><span class="settings-label">{{t('settings.jmsListener')}}</span><span class="settings-value"><ui-status :tone="status.jmsListenerReceiving ? 'success' : 'warning'">{{ status.jmsListenerReceiving ? t('settings.jmsListenerReceiving') : t('settings.jmsListenerReconnecting') }}</ui-status></span></div>
           </div>
         </div>
         <div v-show="activeTab === 'data'" class="settings-card">

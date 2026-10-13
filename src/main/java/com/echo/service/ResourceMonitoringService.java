@@ -185,7 +185,10 @@ public class ResourceMonitoringService {
             values.put("processingRunning", state.running());
         }
         // These reflect Echo's unchanged wildcard policy, not downstream broker health.
-        values.put("maxDeliveryAttempts", jmsProperties.getMaxDeliveryAttempts());
+        // An external source broker applies its own redelivery policy instead.
+        if (!jmsProperties.getSource().isExternal()) {
+            values.put("maxDeliveryAttempts", jmsProperties.getMaxDeliveryAttempts());
+        }
         return values;
     }
 

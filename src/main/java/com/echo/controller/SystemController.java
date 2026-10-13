@@ -158,6 +158,14 @@ public class SystemController {
         status.put("datasourceUrl", datasourceUrl);
         status.put("jmsEnabled", protocolHandlerRegistry.isEnabled(Protocol.JMS));
         status.put("artemisBrokerUrl", "tcp://localhost:" + jmsPort);
+        jmsConnectionManager.ifPresent(jms -> {
+            status.put("jmsSourceType", jms.sourceType());
+            status.put("artemisBrokerUrl", jms.sourceUrl());
+            status.put("jmsQueue", jms.getStatus().getQueue());
+            var listener = jms.listenerState();
+            status.put("jmsListenerReceiving", listener == com.echo.jms.JmsConnectionManager.ListenerState.UNKNOWN
+                    ? null : listener == com.echo.jms.JmsConnectionManager.ListenerState.RECEIVING);
+        });
         status.put("ldapEnabled", ldapEnabled);
         status.put("selfRegistrationEnabled", selfRegistrationEnabled);
         status.put("bulkImportExportEnabled", bulkImportExportEnabled);

@@ -3,6 +3,7 @@ package com.echo.config;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.activemq.artemis.core.settings.impl.AddressFullMessagePolicy;
 import org.apache.activemq.artemis.core.settings.impl.AddressSettings;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jms.artemis.ArtemisConfigurationCustomizer;
 import org.springframework.boot.autoconfigure.jms.artemis.ArtemisMode;
@@ -18,9 +19,13 @@ import org.springframework.context.annotation.Primary;
  * 外部服務可透過 TCP (預設 tcp://localhost:61616) 連入發送訊息。
  * <p>
  * 注意：使用 fully qualified @Configuration 避免與 Artemis Configuration 類別衝突
+ * <p>
+ * 設定外部 broker（{@code echo.jms.source.type} 不是 embedded）時不啟動內建 Artemis，
+ * 改由 {@link ExternalJmsSourceConfig} 提供連線。
  */
 @org.springframework.context.annotation.Configuration
 @ConditionalOnProperty(name = "echo.jms.enabled", havingValue = "true")
+@ConditionalOnExpression("!T(com.echo.config.JmsProperties$Source).isExternalType('${echo.jms.source.type:embedded}')")
 @Slf4j
 public class ArtemisConfig {
 
