@@ -17,6 +17,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 class QuietThreadingHTTPServer(ThreadingHTTPServer):
+    # socketserver's default listen backlog is 5. When 40 timed-out forwards
+    # reconnect at once, the kernel drops the extra SYNs and retries them after
+    # 1 s, which shows up as Echo connect failures at ~1 s and read timeouts
+    # ending at ~4 s instead of 3 s. A larger backlog keeps the stub out of the
+    # measurement.
+    request_queue_size = 128
+
     def handle_error(self, request: object, client_address: object) -> None:
         # Time-out benchmarks intentionally close sockets before delayed responses finish.
         return

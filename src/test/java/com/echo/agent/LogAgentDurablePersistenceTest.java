@@ -1,5 +1,10 @@
 package com.echo.agent;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.slf4j.LoggerFactory;
+
 import com.echo.entity.Protocol;
 import com.echo.entity.RequestLog;
 import com.echo.repository.RequestLogRepository;
@@ -197,6 +202,62 @@ class LogAgentDurablePersistenceTest {
         assertThat(emptyCheckpoints).containsExactly(seventh);
         awaitSpoolEmpty();
         assertThat(agent.getStats().getDroppedCount()).isEqualTo(7);
+    }
+
+    @Test
+    void skipWarningsAddUpToEverySkippedEntryIncludingTheLastBurst() throws Exception {
+        when(configService.getRequestLogMaxRecords()).thenReturn(5);
+        when(batchWriter.findCheckpoint(anyString())).thenReturn(0L);
+        List<String> persisted = new java.util.concurrent.CopyOnWriteArrayList<>();
+        CountDownLatch firstBatchStarted = new CountDownLatch(1);
+        CountDownLatch releaseFirstBatch = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            List<RequestLog> logs = invocation.getArgument(2);
+            if (!logs.isEmpty() && firstBatchStarted.getCount() > 0) {
+                // 第一批寫入卡住，讓第二波紀錄在同一個 30 秒間隔內再被跳過一次
+                firstBatchStarted.countDown();
+                assertThat(releaseFirstBatch.await(5, TimeUnit.SECONDS)).isTrue();
+            }
+            logs.forEach(log -> persisted.add(log.getEndpoint()));
+            if (persisted.contains("/21")) {
+                done.countDown();
+            }
+            return null;
+        }).when(batchWriter).persist(anyString(), anyLong(), anyList(), eq(5));
+        Logger logger = (Logger) LoggerFactory.getLogger(LogAgent.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            for (int i = 1; i <= 12; i++) {
+                spool.append(task("rule-" + i, "/" + i));
+            }
+            startAgent();
+            assertThat(firstBatchStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            for (int i = 13; i <= 21; i++) {
+                spool.append(task("rule-" + i, "/" + i));
+            }
+            Thread.sleep(1_200); // 下一次待寫入量檢查（每秒一次）
+            releaseFirstBatch.countDown();
+
+            assertThat(done.await(5, TimeUnit.SECONDS)).isTrue();
+            // 第一波跳過 7 筆，第二波在 /13 到 /21 中只留最新 5 筆，跳過 4 筆
+            assertThat(persisted).containsExactly("/8", "/9", "/10", "/11", "/12", "/17", "/18", "/19", "/20", "/21");
+            assertThat(agent.getStats().getDroppedCount()).isEqualTo(11);
+            agent.destroy();
+            agent = null;
+
+            // 第二波在 30 秒內，沒有新的警告；停止時補記，警告裡的筆數加總才等於實際跳過的筆數
+            List<ILoggingEvent> warnings = appender.list.stream()
+                    .filter(event -> event.getFormattedMessage().startsWith("Request logs arrive faster"))
+                    .toList();
+            assertThat(warnings).extracting(event -> event.getArgumentArray()[0]).containsExactly(7L, 4L);
+            assertThat(warnings).extracting(event -> event.getArgumentArray()[1]).containsOnly(5);
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
     }
 
     @Test

@@ -60,6 +60,8 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     // 以下只由 durable consumer 執行緒使用
     private long nextBacklogCheckNanos = System.nanoTime();
     private long skippedSinceWarning;
+    /** 跳過時的保留上限（警告裡顯示；停止時不必再讀設定）。 */
+    private int skippedMaxRecords;
     private long lastSkipWarningNanos;
 
     private final RequestLogRepository requestLogRepository;
@@ -333,16 +335,28 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
         if (skipped > 0) {
             recordSkipped(skipped);
             skippedSinceWarning += skipped;
-            long now = System.nanoTime();
-            // 持續過載時每秒都會跳過；警告最多每 30 秒彙總一次
-            if (lastSkipWarningNanos == 0 || now - lastSkipWarningNanos >= SKIP_WARNING_INTERVAL_NANOS) {
-                log.warn("Request logs arrive faster than they can be saved; skipped {} older entries that the "
-                        + "{}-record limit would delete anyway", skippedSinceWarning, maxRecords);
-                skippedSinceWarning = 0;
-                lastSkipWarningNanos = now;
-            }
+            skippedMaxRecords = maxRecords;
+            reportSkipped(System.nanoTime(), false);
         }
         return cutoff;
+    }
+
+    /**
+     * 跳過的筆數寫進警告：持續過載時每秒都會跳過，最多每 30 秒彙總一次；第一次跳過立即記錄。
+     * 累積的筆數在間隔到了時寫出（即使之後沒有再跳過），停止時（force）一律寫出，
+     * 所以警告裡的筆數加總等於實際跳過的筆數。
+     */
+    private void reportSkipped(long now, boolean force) {
+        if (skippedSinceWarning == 0) {
+            return;
+        }
+        if (!force && lastSkipWarningNanos != 0 && now - lastSkipWarningNanos < SKIP_WARNING_INTERVAL_NANOS) {
+            return;
+        }
+        log.warn("Request logs arrive faster than they can be saved; skipped {} older entries that the "
+                + "{}-record limit would delete anyway", skippedSinceWarning, skippedMaxRecords);
+        skippedSinceWarning = 0;
+        lastSkipWarningNanos = now;
     }
 
     /**
@@ -411,6 +425,8 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                         checkpoint = skippedThrough;
                         lastCleanedCheckpoint = skippedThrough;
                     }
+                    // 過載結束後不會再有新的跳過：累積的筆數也要在間隔到了時寫進記錄
+                    reportSkipped(now, false);
                 }
 
                 List<RequestLogSpool.SpoolEntry> fetched =
@@ -476,6 +492,8 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 }
             }
         }
+        // 停止時把還沒寫進記錄的跳過筆數補上，警告的總數才會等於 dropped 計數裡跳過的部分
+        reportSkipped(System.nanoTime(), true);
     }
 
     private void awaitDurableWork() throws InterruptedException {
