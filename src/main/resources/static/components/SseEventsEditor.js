@@ -76,6 +76,8 @@ const SseEventsEditor = {
       return this.events.find(event => Vue.toRaw(event) === target) || null;
     },
     focusIndex() { return this.focusEvent ? this.events.indexOf(this.focusEvent) : -1; },
+    /** 「整串貼上」開著、還沒套用：外層的存檔按鈕要能按（存檔前由 commitPending 套用或擋下）。 */
+    bulkPending() { return this.focus?.kind === 'bulk'; },
     // 只在打開「原始內容」時才產生（幾百個事件時每次輸入都重算會拖慢打字）
     rawText() { return this.rawOpen ? SseEvents.rawStream(this.events, this.loopEnabled, this.t) : ''; },
     unitOptions() {

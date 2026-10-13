@@ -211,6 +211,8 @@ const RuleEditModal = {
             });
         };
         const saveShortcutKey = SAVE_SHORTCUT_KEY;
+        // 「整串貼上」開著時存檔按鈕維持可按：貼上的內容可能正好修好目前不能存的事件（例如新規則的空白事件）
+        const sseBulkPending = Vue.computed(() => !!sseEditor.value?.bulkPending);
         /** 存檔按鈕：SSE「整串貼上」還開著時先套用（看不懂就不存），等套用後的事件與可否存檔更新後再存。 */
         const requestSave = async close => {
             if (sseEditor.value && !sseEditor.value.commitPending()) return;
@@ -575,7 +577,7 @@ const RuleEditModal = {
             conditionTotal, matchModeOptions, hasLegacyConditions, legacyNotSimple, doubleEqualsConditions,
             dialogRef, responsePickerLaunch, responsePickerInput, responsePickerActiveIndex, contentExpanded, responsePickerResults, showPreviewViewer, editResponseLabel, templateMenuItems,
             responseOptionId, openResponsePicker, closeResponsePicker, toggleResponsePicker, selectResponse,
-            onResponsePickerKeydown, onResponseSearchInput, clearResponseSearch, onDialogKeydown, saveShortcutKey, sseEditor, requestSave,
+            onResponsePickerKeydown, onResponseSearchInput, clearResponseSearch, onDialogKeydown, saveShortcutKey, sseEditor, sseBulkPending, requestSave,
             selectedResponse, forwardSelection, availableHttpTargetConnections, defaultHttpTargetConnection,
             availableJmsTargetConnections, defaultJmsTargetConnection, targetDisplayName,
             ruleMode, ruleModeOptions, editorModeTabs, protocolOptions, responseModeOptions, methodOptions,
@@ -1272,8 +1274,8 @@ const RuleEditModal = {
                 <span v-if="!canSave" class="sub-info modal-footer-status"><i class="bi bi-info-circle"></i> {{t('modal.requiredFieldsHint')}}</span>
                 <span v-else class="modal-footer-hint"><kbd>{{saveShortcutKey}}</kbd><kbd>Enter</kbd>{{t('modal.saveAndCloseShortcut')}}</span>
                 <ui-button variant="quiet" :disabled="saving" @click="$emit('close')">{{t('modal.cancel')}}</ui-button>
-                <ui-button variant="secondary" @click="requestSave(false)" :disabled="!canSave||saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-floppy'" :spin="saving"></ui-motion-icon> {{t('modal.save')}}</ui-button>
-                <ui-button variant="primary" @click="requestSave(true)" :disabled="!canSave||saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-check2-circle'" :spin="saving"></ui-motion-icon> {{t('modal.saveAndClose')}}</ui-button>
+                <ui-button variant="secondary" @click="requestSave(false)" :disabled="(!canSave && !sseBulkPending)||saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-floppy'" :spin="saving"></ui-motion-icon> {{t('modal.save')}}</ui-button>
+                <ui-button variant="primary" @click="requestSave(true)" :disabled="(!canSave && !sseBulkPending)||saving"><ui-motion-icon :icon="saving?'bi-arrow-clockwise':'bi-check2-circle'" :spin="saving"></ui-motion-icon> {{t('modal.saveAndClose')}}</ui-button>
             </div>
         </div>
     </div>

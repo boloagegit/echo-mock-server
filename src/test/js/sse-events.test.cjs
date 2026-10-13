@@ -358,4 +358,11 @@ test('event editor: saving while "paste or edit all" is open applies it first, o
   assert.ok(modal.includes('@click="requestSave(false)"') && modal.includes('@click="requestSave(true)"'));
   assert.ok(!modal.includes("@click=\"$emit('save',"));
   assert.ok(modal.includes('ref="sseEditor" class="sse-editor-wrap rule-sse-editor"'));
+  // 「整串貼上」開著時存檔按鈕可按：貼上的內容可能正好修好目前不能存的事件（新規則的空白事件）
+  assert.equal(modal.split(':disabled="(!canSave && !sseBulkPending)||saving"').length - 1, 2);
+  assert.ok(modal.includes('const sseBulkPending = Vue.computed(() => !!sseEditor.value?.bulkPending);'));
+  const { computed } = context.SseEventsEditor;
+  assert.equal(computed.bulkPending.call({ focus: { kind: 'bulk' } }), true);
+  assert.equal(computed.bulkPending.call({ focus: { kind: 'event' } }), false);
+  assert.equal(computed.bulkPending.call({ focus: null }), false);
 });
