@@ -910,4 +910,36 @@ class ResponseTemplateServiceTest {
         var context = buildContext("/t", "POST", null, null, "<r><id>1</id></r>");
         assertEquals("[]1", templateService.render("[{{xPath request.body '//['}}]{{xPath request.body '//id/text()'}}", context));
     }
+
+    @Test
+    @DisplayName("jsonPath append() 不影響同一模板中其他欄位讀到的內容")
+    void jsonPathAppendDoesNotLeakIntoLaterPaths() {
+        var context = buildContext("/t", "POST", null, null, "{\"items\":[{\"id\":7},{\"id\":8}]}");
+
+        String result = templateService.render("{{size (jsonPath request.body '$.items.append(9)')}}|"
+                + "{{size (jsonPath request.body '$.items')}}|{{jsonPath request.body '$.items.length()'}}", context);
+
+        assertEquals("3|2|2", result);
+    }
+
+    @Test
+    @DisplayName("由請求內容組出的長 XPath 不留在執行緒上")
+    void longXPathExpressionsAreNotRetained() throws Exception {
+        var executor = Executors.newSingleThreadExecutor();
+        try {
+            String longPath = "concat('" + "A".repeat(ResponseTemplateService.MAX_CACHED_XPATH_LENGTH) + "', //id/text())";
+            var context = buildContext("/t", "POST", null, Map.of("p", longPath), "<r><id>1</id></r>");
+            var counts = executor.submit(() -> {
+                int before = ResponseTemplateService.compiledXPathCountForCurrentThread();
+                String rendered = templateService.render("{{xPath request.body request.headers.p}}", context);
+                templateService.render("{{xPath request.body '//id/text()'}}", context);
+                return new Object[]{rendered, before, ResponseTemplateService.compiledXPathCountForCurrentThread()};
+            }).get();
+
+            assertTrue(((String) counts[0]).endsWith("A1"));
+            assertEquals((int) counts[1] + 1, (int) counts[2], "only the short expression is kept");
+        } finally {
+            executor.shutdownNow();
+        }
+    }
 }

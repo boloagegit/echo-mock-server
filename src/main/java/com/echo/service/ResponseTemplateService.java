@@ -117,6 +117,12 @@ public class ResponseTemplateService {
     /** 每個執行緒最多保留的已編譯 XPath 數；XPathExpression 不可跨執行緒共用。 */
     private static final int MAX_COMPILED_XPATHS = 64;
 
+    /**
+     * 只保留這個長度以內的運算式。模板裡寫死的 XPath 都很短；由請求內容組出的長運算式不保留，
+     * 避免每個執行緒長期留住請求大小的字串。
+     */
+    static final int MAX_CACHED_XPATH_LENGTH = 256;
+
     private static final ThreadLocal<Map<String, XPathExpression>> COMPILED_XPATHS = ThreadLocal.withInitial(() ->
         new LinkedHashMap<>(16, 0.75f, true) {
             @Override
@@ -133,9 +139,16 @@ public class ResponseTemplateService {
             XPath xPath = XPATH.get();
             xPath.reset();
             expression = xPath.compile(path);
-            compiled.put(path, expression);
+            if (path.length() <= MAX_CACHED_XPATH_LENGTH) {
+                compiled.put(path, expression);
+            }
         }
         return expression;
+    }
+
+    /** 測試用：目前執行緒保留的已編譯 XPath 數。 */
+    static int compiledXPathCountForCurrentThread() {
+        return COMPILED_XPATHS.get().size();
     }
 
     private final Handlebars handlebars;
@@ -316,8 +329,9 @@ public class ResponseTemplateService {
                 return "";
             }
             try {
-                // 同一次渲染中相同內容只解析一次（見 ParsedBodies）
-                DocumentContext document = parsed(options).json(jsonStr);
+                // 同一次渲染中相同內容只解析一次（見 ParsedBodies）；append() 會修改文件，改用獨立的解析結果
+                DocumentContext document = path.contains("append(")
+                        ? JsonPath.parse(jsonStr) : parsed(options).json(jsonStr);
                 if (document == null) {
                     return "";
                 }
@@ -538,7 +552,8 @@ public class ResponseTemplateService {
 
     /**
      * 同一次渲染中已解析過的 XML / JSON 內容。模板裡多個 {@code xPath} 或 {@code jsonPath}
-     * 讀同一份內容時只解析一次；渲染結束即丟棄，不跨請求保留，記憶體與原本每次解析時相同或更少。
+     * 讀同一份內容時只解析一次；渲染結束即丟棄，不跨請求保留。渲染期間會同時留住已解析的內容
+     * （最多 4 份 XML 與 4 份 JSON），原本則是每次用完即丟，因此單次渲染的記憶體高峰可能略高。
      * 解析失敗也會記住，之後同一內容的呼叫直接回傳空字串，與原本的結果一致。
      * 只記住最近幾份不同內容，避免模板對大量不同字串呼叫時累積。
      */
