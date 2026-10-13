@@ -158,7 +158,7 @@ test('wiring: load order, registration, rule editor usage and every text key in 
   assert.ok(at('/components/SseEventsEditor.js') < at('/components/RuleEditModal.js'));
   assert.ok(read('app.js').includes("_app.component('sse-events-editor', SseEventsEditor);"));
   const modal = read('components/RuleEditModal.js');
-  assert.ok(modal.includes('<sse-events-editor v-if="form.sseEnabled && form.protocol===\'HTTP\'" class="sse-editor-wrap rule-sse-editor"'));
+  assert.ok(modal.includes('<sse-events-editor v-if="form.sseEnabled && form.protocol===\'HTTP\'" ref="sseEditor" class="sse-editor-wrap rule-sse-editor"'));
   assert.ok(!modal.includes('rule-sse-table'), 'the old event table is gone');
   const sources = read('components/SseEventsEditor.js') + read('sse-events.js');
   const keys = [...new Set([...sources.matchAll(/'((?:sseEditor|modal)\.[A-Za-z]+)'/g)].map(m => m[1]))];
@@ -183,4 +183,186 @@ test('raw stream text: delays, multi-line data, id, error end with skipped count
     { event: '', data: 'two', id: '', delayMs: 0, type: 'normal' }], true, t);
   assert.equal(ended, '[ERROR]\nevent: error\ndata: one\n\n1 skipped');
   assert.equal(S.rawStream([{ event: '', data: 'x', id: '', delayMs: 5, type: 'abort' }], false, t), '-- 5 --\n\n[ABORT]');
+});
+
+test('summary: count, total, loop, and where the connection ends', () => {
+  const S = load();
+  assert.deepEqual(plain(S.summary([ev(300), ev(800)], true)),
+    { count: 2, totalMs: 1100, endAt: 0, end: null, skipped: 0, loops: true });
+  assert.equal(S.summary([ev(300)], false).loops, false);
+  // 錯誤／中止事件結束連線：開了循環也不會重播
+  assert.deepEqual(plain(S.summary([ev(100), ev(200, 'error'), ev(500)], true)),
+    { count: 3, totalMs: 300, endAt: 2, end: 'error', skipped: 1, loops: false });
+  assert.deepEqual(plain(S.summary([ev(100), ev(900, 'abort')], false)),
+    { count: 2, totalMs: 1000, endAt: 2, end: 'abort', skipped: 0, loops: false });
+  assert.equal(S.summary(null, true).count, 0);
+});
+
+test('rule detail: SSE summary line in both languages, built from the loaded rule', () => {
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+  const S = load();
+  const context = { SseEvents: S, heldDetailMixin: () => ({}), DETAIL_LIST_PREVIEW: {}, shortId() {}, fmtTime() {},
+    forwardTargetLabel() {}, forwardTargetEndpoint() {} };
+  vm.runInNewContext(read('components/RuleDetail.js') + '\nthis.RuleDetail = RuleDetail;', context);
+  const computed = context.RuleDetail.computed;
+  for (const lang of ['zh-TW', 'en']) {
+    const messages = JSON.parse(read(`i18n/${lang}.json`));
+    const t = (key, p = {}) => key.split('.').reduce((o, k) => o?.[k], messages).replace(/\{(\w+)\}/g, (_, k) => p[k]);
+    const line = (events, loop, extra = {}) => computed.sse.call({ t, isHttp: true, view: { sseEnabled: true, ...extra },
+      shownDetail: { _sseSummary: S.summary(events, loop) } });
+    const looping = line([ev(24000), ev(300)], true);
+    const ended = line([ev(100), ev(200, 'error'), ev(5), ev(5)], true);
+    const aborted = line([ev(100), ev(900, 'abort')], false);
+    if (lang === 'zh-TW') {
+      assert.deepEqual(plain(looping), { count: 2, text: '2 個事件 · 全長 24.3 秒 · 循環播放', end: '' });
+      assert.deepEqual(plain(ended), { count: 4, text: '4 個事件 · 全長 300 ms', end: '第 2 個事件後結束連線（後面 2 個不會送出）' });
+      assert.equal(aborted.end, '第 2 個事件中止連線');
+      assert.equal(line([ev(0)], false).text, '1 個事件 · 全長 0 ms · 播放一次');
+    } else {
+      assert.equal(looping.text, '2 events · 24.3 s total · Loops');
+      assert.equal(ended.end, 'Connection closes after event 2 (2 later events not sent)');
+      assert.equal(aborted.end, 'Connection aborts at event 2');
+    }
+    // 不是 SSE、JMS，或內容讀不到時不顯示
+    assert.equal(line([ev(0)], false, { sseEnabled: false }), null);
+    assert.equal(computed.sse.call({ t, isHttp: false, view: { sseEnabled: true }, shownDetail: { _sseSummary: S.summary([ev(0)]) } }), null);
+    assert.equal(computed.sse.call({ t, isHttp: true, view: { sseEnabled: true }, shownDetail: {} }), null);
+  }
+  const detail = read('components/RuleDetail.js');
+  assert.ok(detail.includes('<template v-if="sse">'));
+  const rules = read('composables/useRules.js');
+  assert.ok(rules.includes('SseEvents.rawStream(events, data.sseLoopEnabled === true, t)'));
+  assert.ok(rules.includes('data._sseSummary = SseEvents.summary(events, data.sseLoopEnabled === true)'));
+});
+
+test('responses page: SSE responses use the same event editor, without loop or its own expand button', () => {
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+  const modal = read('components/ResponseEditModal.js');
+  assert.ok(modal.includes('<sse-events-editor ref="sseEditor" class="sse-editor-wrap response-sse-editor" :events="sseEvents" :loopable="false" :expandable="false"'));
+  assert.ok(!modal.includes('sse-table') && !modal.includes('previewEntries'), 'the old table and side preview are gone');
+  const editor = read('components/SseEventsEditor.js');
+  assert.ok(editor.includes('<div v-if="loopable" class="form-check form-switch rule-sse-loop">'));
+  assert.ok(editor.includes('<ui-button v-if="expandable" type="button"'));
+  // 規則編輯器維持原樣：預設有循環與放大
+  assert.ok(!read('components/RuleEditModal.js').includes(':loopable='));
+});
+
+test('responses page: saving SSE with an unfinished event opens that event instead of saving', async () => {
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+  const S = load();
+  const context = { SseEvents: S, SAVE_SHORTCUT_KEY: 'Ctrl', fmtSize() {}, document: {} };
+  vm.runInNewContext(read('components/ResponseEditModal.js') + '\nthis.ResponseEditModal = ResponseEditModal;', context);
+  const { computed, methods } = context.ResponseEditModal;
+  const make = (events, contentType = 'sse') => {
+    const emitted = [];
+    const revealed = [];
+    const self = { form: { contentType }, sseEvents: events, attemptedSave: false, t: (key, p) => `${key}:${JSON.stringify(p || {})}`,
+      $emit: (...args) => emitted.push(args), $nextTick: () => Promise.resolve(), pending: true,
+      $refs: { sseEditor: { reveal: index => revealed.push(index), commitPending: () => self.pending } } };
+    Object.defineProperty(self, 'firstInvalidSse', { get: () => computed.firstInvalidSse.call(self) });
+    Object.defineProperty(self, 'sseError', { get: () => computed.sseError.call(self) });
+    return { self, emitted, revealed };
+  };
+  const good = { event: '', data: 'a', id: '', delayMs: 0, type: 'normal' };
+  const ok = make([good, { ...good, delayMs: 600000 }]);
+  await methods.requestSave.call(ok.self);
+  assert.deepEqual(ok.emitted, [['save']]);
+  assert.equal(ok.self.sseError, '');
+  const noData = make([good, { ...good, data: '' }, { ...good, delayMs: NaN }]);
+  assert.equal(noData.self.sseError, '', 'no message before the first save attempt');
+  await methods.requestSave.call(noData.self);
+  assert.deepEqual(noData.emitted, []);
+  assert.deepEqual(noData.revealed, [1]);
+  assert.equal(noData.self.sseError, 'sseEditor.fixBeforeSave:{"index":2}');
+  const badDelay = make([{ ...good, delayMs: 1.5 }]);
+  await methods.requestSave.call(badDelay.self);
+  assert.deepEqual(badDelay.revealed, [0]);
+  // 「整串貼上」的內容看不懂（commitPending 回 false）：不存檔
+  const unreadable = make([good]);
+  unreadable.self.pending = false;
+  await methods.requestSave.call(unreadable.self);
+  assert.deepEqual(unreadable.emitted, []);
+  // 一般文字回應不受 SSE 事件影響
+  const text = make([{ ...good, data: '' }], 'text');
+  await methods.requestSave.call(text.self);
+  assert.deepEqual(text.emitted, [['save']]);
+  // 新增與刪除改同一個陣列（與規則編輯器相同）：編輯器才會展開新事件，刪除時保留搜尋。最後一個事件不能刪
+  const list = [good];
+  const edits = make(list);
+  methods.addSseEvent.call(edits.self);
+  assert.equal(edits.self.sseEvents, list);
+  assert.deepEqual(plain(list), plain([good, S.blank()]));
+  methods.removeSseEvent.call(edits.self, 0);
+  assert.deepEqual(plain(list), plain([S.blank()]));
+  methods.removeSseEvent.call(edits.self, 0);
+  assert.equal(list.length, 1);
+  assert.deepEqual(edits.emitted, [], 'no replacement array is emitted');
+});
+
+test('event editor: reveal clears the search, leaves the zoomed view and opens the event', () => {
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+  const S = load();
+  const context = { SseEvents: S, Vue: { toRaw: value => value }, serializeSseEvents: JSON.stringify };
+  vm.runInNewContext(read('components/SseEventsEditor.js') + '\nthis.SseEventsEditor = SseEventsEditor;', context);
+  const { methods } = context.SseEventsEditor;
+  const events = [ev(0), ev(2000, 'normal', '')];
+  const focused = [];
+  const self = { events, query: 'abc', focus: { kind: 'bulk' }, openRaw: null, units: new WeakMap(), $el: null,
+    closeFocus() { this.focus = null; }, unitOf: methods.unitOf, $nextTick: fn => fn.call(self), focusData: index => focused.push(index) };
+  methods.reveal.call(self, 1);
+  assert.equal(self.query, '');
+  assert.equal(self.focus, null);
+  assert.equal(self.openRaw, events[1]);
+  assert.equal(self.units.get(events[1]), 's', 'keeps the unit the delay is shown in');
+  assert.deepEqual(focused, [1]);
+  methods.reveal.call(self, 9);
+  assert.equal(self.openRaw, events[1], 'an index past the end changes nothing');
+});
+
+test('event editor: saving while "paste or edit all" is open applies it first, or blocks the save', () => {
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+  const S = load();
+  const context = { SseEvents: S, Vue: { toRaw: value => value }, serializeSseEvents: JSON.stringify };
+  vm.runInNewContext(read('components/SseEventsEditor.js') + '\nthis.SseEventsEditor = SseEventsEditor;', context);
+  const { methods } = context.SseEventsEditor;
+  const make = (bulkText, bulkOriginal = '[]') => {
+    const emitted = [];
+    const self = { focus: { kind: 'bulk' }, bulkText, bulkOriginal, bulkError: '', $refs: {}, t: key => key,
+      $emit: (...args) => emitted.push(args), $nextTick: fn => fn(), closeFocus() { this.focus = null; } };
+    self.applyBulk = methods.applyBulk.bind(self);
+    return { self, emitted };
+  };
+  // 沒有開著：直接可以存
+  const idle = make('x');
+  idle.self.focus = null;
+  assert.equal(methods.commitPending.call(idle.self), true);
+  assert.deepEqual(idle.emitted, []);
+  // 改過且看得懂：先套用再存
+  const edited = make('[{"data":"new","delayMs":5}]');
+  assert.equal(methods.commitPending.call(edited.self), true);
+  assert.equal(edited.self.focus, null);
+  assert.deepEqual(plain(edited.emitted), plain([['replace', [{ event: '', data: 'new', id: '', delayMs: 5, type: 'normal' }]]]));
+  // 沒改過：只是關掉，不換成新的事件物件
+  const untouched = make('[1]', '[1]');
+  assert.equal(methods.commitPending.call(untouched.self), true);
+  assert.deepEqual(untouched.emitted, []);
+  // 看不懂：留在原處顯示錯誤，不存
+  const broken = make('[{"data":');
+  assert.equal(methods.commitPending.call(broken.self), false);
+  assert.equal(broken.self.focus.kind, 'bulk');
+  assert.equal(broken.self.bulkError, 'sseEditor.bulkJsonError');
+  assert.deepEqual(broken.emitted, []);
+  // 規則編輯器的兩個存檔按鈕也先經過 commitPending
+  const modal = read('components/RuleEditModal.js');
+  assert.ok(modal.includes('if (sseEditor.value && !sseEditor.value.commitPending()) return;'));
+  assert.ok(modal.includes('@click="requestSave(false)"') && modal.includes('@click="requestSave(true)"'));
+  assert.ok(!modal.includes("@click=\"$emit('save',"));
+  assert.ok(modal.includes('ref="sseEditor" class="sse-editor-wrap rule-sse-editor"'));
+  // 「整串貼上」開著時存檔按鈕可按：貼上的內容可能正好修好目前不能存的事件（新規則的空白事件）
+  assert.equal(modal.split(':disabled="(!canSave && !sseBulkPending)||saving"').length - 1, 2);
+  assert.ok(modal.includes('const sseBulkPending = Vue.computed(() => !!sseEditor.value?.bulkPending);'));
+  const { computed } = context.SseEventsEditor;
+  assert.equal(computed.bulkPending.call({ focus: { kind: 'bulk' } }), true);
+  assert.equal(computed.bulkPending.call({ focus: { kind: 'event' } }), false);
+  assert.equal(computed.bulkPending.call({ focus: null }), false);
 });

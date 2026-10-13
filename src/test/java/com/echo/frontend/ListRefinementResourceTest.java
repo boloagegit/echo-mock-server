@@ -106,7 +106,7 @@ class ListRefinementResourceTest {
 
         assertThat(text("components/RuleEditModal.js"))
                 .contains("<ui-button variant=\"quiet\" :disabled=\"saving\" @click=\"$emit('close')\">{{t('modal.cancel')}}</ui-button>")
-                .contains("<ui-button variant=\"secondary\" @click=\"$emit('save',false)\"");
+                .contains("<ui-button variant=\"secondary\" @click=\"requestSave(false)\"");
 
         Pattern directLegacyButton = Pattern.compile("<button\\b[^>]*class=\\\"(?:btn(?:\\s|\\\")|[^\\\"]+\\sbtn(?:\\s|\\\"))");
         for (String page : new String[]{
@@ -384,8 +384,12 @@ class ListRefinementResourceTest {
                 .doesNotContain(".pv-header {")
                 .doesNotContain(".issues-list-table .issue-disclosure-column")
                 .contains("select.form-select-sm { height: var(--control-h-sm);")
-                .contains(".response-editor-modal .response-sse-table .form-control-sm {\n    min-height: 32px;")
-                .contains(".response-editor-modal .response-sse-table tbody tr {")
+                // SSE responses use the rule editor's event list; the old table and its styles are gone.
+                .contains(".response-sse-workspace.is-expanded .response-sse-editor { flex: 1 1 auto; min-height: 0 }")
+                // A short window must not clip "Edit larger" / "Paste or edit all": the area keeps scrolling.
+                .doesNotContain(".response-sse-workspace.is-expanded { overflow: hidden }")
+                .doesNotContain(".response-sse-table")
+                .doesNotContain(".sse-table {")
                 .contains("grid-template-areas:")
                 .contains(".workspace-modal[tabindex=\"-1\"]:focus-visible { outline: 0 }")
                 .contains(".rule-apply-inline > .rule-apply-body {")
@@ -622,8 +626,9 @@ class ListRefinementResourceTest {
         }
         assertThat(text("components/ResponseEditModal.js"))
                 .contains("<h2 id=\"responseEditorTitle\"")
-                .contains("<h3 id=\"sseEventsTitle\"")
-                .contains("<h4 id=\"ssePreviewTitle\"");
+                .contains("<sse-events-editor ref=\"sseEditor\"")
+                .doesNotContain("<h3")
+                .doesNotContain("<h4");
         assertThat(text("components/PriorityHelpModal.js"))
                 .contains("<h2 id=\"helpModalTitle\"")
                 .doesNotContain("<h4>");
@@ -727,7 +732,7 @@ class ListRefinementResourceTest {
     void unconditionalRulesArePresentedAsIntentionalDefaultMatches() throws IOException {
         assertThat(text("i18n/zh-TW.json")).contains("\"noCondition\": \"預設匹配\"");
         assertThat(text("i18n/en.json")).contains("\"noCondition\": \"Default match\"");
-        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261013.4");
+        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261013.6");
     }
 
     @Test

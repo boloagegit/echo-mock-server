@@ -7,6 +7,7 @@
  * 整串貼上（JSON 或 text/event-stream 原文）與放大編輯單一事件。
  *
  * 事件物件就地修改（與原本的表格相同）；新增、刪除與整串替換交給上層。
+ * 規則編輯器與回應管理共用：回應沒有循環設定（loopable=false），放大由視窗本身處理（expandable=false）。
  */
 const SseEventsEditor = {
   inject: ['t'],
@@ -16,6 +17,8 @@ const SseEventsEditor = {
     sharedCount: { type: Number, default: 0 },
     expanded: { type: Boolean, default: false },
     error: { type: String, default: '' },
+    loopable: { type: Boolean, default: true },
+    expandable: { type: Boolean, default: true },
   },
   emits: ['add', 'remove', 'replace', 'update:loopEnabled', 'update:expanded'],
   data() {
@@ -31,6 +34,7 @@ const SseEventsEditor = {
       focus: null,
       focusOwnsExpansion: false,
       bulkText: '',
+      bulkOriginal: '',
       bulkError: '',
       rawOpen: false,
       dragIndex: null,
@@ -72,6 +76,8 @@ const SseEventsEditor = {
       return this.events.find(event => Vue.toRaw(event) === target) || null;
     },
     focusIndex() { return this.focusEvent ? this.events.indexOf(this.focusEvent) : -1; },
+    /** 「整串貼上」開著、還沒套用：外層的存檔按鈕要能按（存檔前由 commitPending 套用或擋下）。 */
+    bulkPending() { return this.focus?.kind === 'bulk'; },
     // 只在打開「原始內容」時才產生（幾百個事件時每次輸入都重算會拖慢打字）
     rawText() { return this.rawOpen ? SseEvents.rawStream(this.events, this.loopEnabled, this.t) : ''; },
     unitOptions() {
@@ -177,6 +183,22 @@ const SseEventsEditor = {
       this.openRaw = next.raw;
       this.$nextTick(() => this.focusData(next.index));
     },
+    /** 存檔前檢查用：清掉搜尋、收起放大編輯，展開第 index 個事件並把游標放在要修正的欄位。 */
+    reveal(index) {
+      const event = this.events[index];
+      if (!event) return;
+      if (this.focus) this.closeFocus();
+      this.query = '';
+      const raw = Vue.toRaw(event);
+      if (!this.units.has(raw)) this.units.set(raw, this.unitOf(event));
+      this.openRaw = raw;
+      this.$nextTick(() => {
+        if (SseEvents.delayValid(event.delayMs)) { this.focusData(index); return; }
+        const input = this.$el?.querySelector('.sse-ev.is-open .sse-ed-delay-input');
+        input?.focus();
+        input?.closest('.sse-ev')?.scrollIntoView({ block: 'nearest' });
+      });
+    },
     remove(row) {
       if (this.events.length <= 1) return;
       if (row.open) {
@@ -241,6 +263,8 @@ const SseEventsEditor = {
       this.focusOwnsExpansion = !this.expanded;
       this.focus = focus;
       if (!this.expanded) this.$emit('update:expanded', true);
+      // 游標直接放進編輯區：Esc 才會回到清單，而不是被外層當成「關閉視窗」
+      this.$nextTick(() => this.$refs.focusCode?.cm?.focus());
     },
     openEventFocus(row) { this.openFocus({ kind: 'event', raw: row.raw }); },
     openBulk() {
@@ -253,20 +277,44 @@ const SseEventsEditor = {
         return;
       }
       this.bulkText = serializeSseEvents(this.events);
+      this.bulkOriginal = this.bulkText;
       this.bulkError = '';
       this.openFocus({ kind: 'bulk' });
     },
     closeFocus() {
       const owned = this.focusOwnsExpansion;
+      const closed = this.focus;
       this.focus = null;
       this.focusOwnsExpansion = false;
       if (owned && this.expanded) this.$emit('update:expanded', false);
+      // 回到清單後游標放回原處：放大的事件回到它的資料欄，整串貼上回到那顆按鈕
+      this.$nextTick(() => {
+        if (this.focus) return;
+        if (closed?.kind === 'event') {
+          const index = this.events.findIndex(event => Vue.toRaw(event) === Vue.toRaw(closed.raw));
+          if (index >= 0 && Vue.toRaw(this.openRaw) === Vue.toRaw(closed.raw)) { this.focusData(index); return; }
+        }
+        this.$el?.querySelector?.('.sse-ed-bulk-btn')?.focus();
+      });
     },
     applyBulk() {
+      // 沒有改過就只是關掉，不換成新的事件物件
+      if (this.bulkText === this.bulkOriginal) { this.closeFocus(); return true; }
       const result = SseEvents.parseBulk(this.bulkText);
-      if (result.error) { this.bulkError = this.t(result.error.key, result.error.params); return; }
+      if (result.error) { this.bulkError = this.t(result.error.key, result.error.params); return false; }
       this.closeFocus();
       this.$emit('replace', result.events);
+      return true;
+    },
+    /**
+     * 外層存檔前呼叫：「整串貼上」還開著時先套用，否則會存到舊的事件、貼上的內容在關閉視窗時不見。
+     * 內容看不懂時留在原處顯示錯誤並回 false（不要存檔）。
+     */
+    commitPending() {
+      if (this.focus?.kind !== 'bulk') return true;
+      if (this.applyBulk()) return true;
+      this.$nextTick(() => this.$refs.focusCode?.cm?.focus());
+      return false;
     },
     onFocusKeydown(event) {
       if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && this.focus?.kind === 'bulk') {
@@ -314,11 +362,11 @@ const SseEventsEditor = {
             <span class="sse-ed-chip"><strong>{{events.length}}</strong>{{t('sseEditor.eventsUnit', {count: events.length})}}</span>
             <span class="sse-ed-chip">{{loopEnabled && timeline.endIndex < 0 ? t('sseEditor.perRound') : t('sseEditor.total')}}<strong>{{totalLabel}}</strong></span>
             <span v-if="endNotice" class="sse-ed-chip is-ends" :title="t('sseEditor.endsHelp')">{{endNotice}}</span>
-            <div class="form-check form-switch rule-sse-loop">
+            <div v-if="loopable" class="form-check form-switch rule-sse-loop">
               <input class="form-check-input" type="checkbox" id="sseLoopToggle" :checked="loopEnabled" @change="$emit('update:loopEnabled', $event.target.checked)">
               <label class="form-check-label" for="sseLoopToggle"><i class="bi bi-arrow-repeat" aria-hidden="true"></i>{{t('modal.sseLoopMode')}}</label>
             </div>
-            <ui-button type="button" variant="quiet" size="compact" icon-only class="rule-response-expand" :aria-pressed="expanded ? 'true' : 'false'" :title="expanded ? t('modal.collapseContent') : t('modal.expandContent')" :aria-label="expanded ? t('modal.collapseContent') : t('modal.expandContent')" @click="$emit('update:expanded', !expanded)"><i class="bi" :class="expanded ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand'" aria-hidden="true"></i></ui-button>
+            <ui-button v-if="expandable" type="button" variant="quiet" size="compact" icon-only class="rule-response-expand" :aria-pressed="expanded ? 'true' : 'false'" :title="expanded ? t('modal.collapseContent') : t('modal.expandContent')" :aria-label="expanded ? t('modal.collapseContent') : t('modal.expandContent')" @click="$emit('update:expanded', !expanded)"><i class="bi" :class="expanded ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand'" aria-hidden="true"></i></ui-button>
           </div>
         </div>
         <div class="sse-ed-tools">
@@ -330,7 +378,7 @@ const SseEventsEditor = {
           <div class="sse-ed-tool-buttons">
             <ui-button type="button" variant="secondary" size="compact" class="sse-ed-add" @click="$emit('add')"><i class="bi bi-plus-lg" aria-hidden="true"></i>{{t('modal.addSseEvent')}}</ui-button>
             <ui-button type="button" variant="quiet" size="compact" :aria-expanded="bulkDelayOpen ? 'true' : 'false'" @click="openBulkDelay"><i class="bi bi-stopwatch" aria-hidden="true"></i>{{t('sseEditor.bulkDelay')}}</ui-button>
-            <ui-button type="button" variant="quiet" size="compact" @click="openBulk"><i class="bi bi-clipboard-plus" aria-hidden="true"></i>{{t('sseEditor.bulkEdit')}}</ui-button>
+            <ui-button type="button" variant="quiet" size="compact" class="sse-ed-bulk-btn" @click="openBulk"><i class="bi bi-clipboard-plus" aria-hidden="true"></i>{{t('sseEditor.bulkEdit')}}</ui-button>
           </div>
         </div>
         <form v-if="bulkDelayOpen" class="sse-ed-bulkdelay" @submit.prevent="applyBulkDelay" @keydown.esc.stop.prevent="bulkDelayOpen = false">
@@ -420,10 +468,10 @@ const SseEventsEditor = {
           </span>
         </div>
         <div v-if="bulkError" class="sse-ed-focus-error" role="alert"><i class="bi bi-exclamation-circle" aria-hidden="true"></i>{{bulkError}}</div>
-        <ui-code-viewer v-if="focus.kind === 'event' && focusEvent" class="sse-ed-focus-code" fill editable
+        <ui-code-viewer v-if="focus.kind === 'event' && focusEvent" ref="focusCode" class="sse-ed-focus-code" fill editable
           :label="t('modal.sseFieldLabel', {index: focusIndex + 1, field: t('modal.sseEventData')})"
           :value="focusEvent.data || ''" @update:value="focusEvent.data = $event"></ui-code-viewer>
-        <ui-code-viewer v-else-if="focus.kind === 'bulk'" class="sse-ed-focus-code" fill editable
+        <ui-code-viewer v-else-if="focus.kind === 'bulk'" ref="focusCode" class="sse-ed-focus-code" fill editable
           :label="t('sseEditor.bulkTitle')" :placeholder="t('sseEditor.bulkPlaceholder')"
           :value="bulkText" @update:value="bulkText = $event; bulkError = ''"></ui-code-viewer>
       </div>

@@ -78,6 +78,18 @@ const RuleDetail = {
     body() {
       return this.shownDetail?._previewBody || '';
     },
+    /** SSE 規則：「48 個事件 · 全長 24.3 秒 · 循環播放」，有錯誤／中止事件時改說在第幾個事件結束連線。 */
+    sse() {
+      const info = this.isHttp && this.view.sseEnabled ? this.shownDetail?._sseSummary : null;
+      if (!info) return null;
+      const t = this.t;
+      const parts = [t('rules.sseEventCount', { count: info.count }),
+        t('rules.sseTotal', { duration: SseEvents.formatDuration(info.totalMs, t) })];
+      if (!info.end) parts.push(t(info.loops ? 'rules.sseLoops' : 'rules.ssePlaysOnce'));
+      const end = info.end ? t(info.end === 'abort' ? 'rules.sseAbortsAt' : 'rules.sseEndsAfter', { n: info.endAt })
+        + (info.skipped ? t('rules.sseSkipped', { count: info.skipped }) : '') : '';
+      return { count: info.count, text: parts.join(' · '), end };
+    },
     /** Shown beside each section title, so a collapsed section still says what it holds. */
     conditionsSummary() {
       return this.conditionCount ? this.t('rules.conditionCountSummary', { count: this.conditionCount }) : this.t('rules.noCondition');
@@ -85,7 +97,8 @@ const RuleDetail = {
     responseSummary() {
       const parts = [this.modeLabel];
       if (this.showStatusCode) parts.push(String(this.view.status));
-      if (this.body) parts.push(fmtSize(this.body.length));
+      if (this.sse) parts.push(this.t('rules.sseEventCount', { count: this.sse.count }));
+      else if (this.body) parts.push(fmtSize(this.body.length));
       return parts.join(' · ');
     },
     settingsSummary() {
@@ -175,6 +188,10 @@ const RuleDetail = {
           <template v-if="status?.scenariosEnabled && view.scenarioName">
             <dt>{{t('rules.pvScenario')}}</dt>
             <dd><strong>{{view.scenarioName}}</strong> <code>{{view.requiredScenarioState||'Started'}}</code> → <code>{{view.newScenarioState||view.requiredScenarioState||'Started'}}</code></dd>
+          </template>
+          <template v-if="sse">
+            <dt>{{t('rules.sseStream')}}</dt>
+            <dd class="rule-detail-sse"><span>{{sse.text}}</span><span v-if="sse.end" class="rule-detail-sse__end"><i class="bi bi-stop-circle" aria-hidden="true"></i>{{sse.end}}</span></dd>
           </template>
           <dt>{{t('rules.pvDelay')}}</dt><dd class="detail-mono">{{view.delayMs || 0}} ms</dd>
           <template v-if="view.responseHeaders"><dt>{{t('rules.pvResponseHeaders')}}</dt><dd><code>{{view.responseHeaders}}</code></dd></template>

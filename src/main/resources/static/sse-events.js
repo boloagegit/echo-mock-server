@@ -25,6 +25,18 @@ const SseEvents = (() => {
     return { rows, totalMs: atMs, endIndex, skipped: endIndex >= 0 ? events.length - endIndex - 1 : 0 };
   };
 
+  /**
+   * 規則詳細資料的一行摘要用：幾個事件、全長、會不會循環，以及在哪個事件結束連線。
+   * 有錯誤／中止事件時串流在那裡結束，即使開了循環也不會重播（與伺服器的播放器相同）。
+   */
+  const summary = (events, loopEnabled) => {
+    const list = Array.isArray(events) ? events : [];
+    const line = timeline(list);
+    const end = line.endIndex >= 0 ? list[line.endIndex].type : null;
+    return { count: list.length, totalMs: line.totalMs, endAt: line.endIndex + 1, end,
+      skipped: line.skipped, loops: !!loopEnabled && !end };
+  };
+
   const trimNumber = value => String(Math.round(value * 1000) / 1000);
   /** 300 → 300 ms；1500 → 1.5 秒；90000 → 1 分 30 秒；600000 → 10 分鐘。 */
   const formatDuration = (ms, t) => {
@@ -159,6 +171,6 @@ const SseEvents = (() => {
     return lines.join('\n');
   };
 
-  return { MAX_DELAY_MS, blank, timeline, formatDuration, byteLength, formatBytes, previewLine,
+  return { MAX_DELAY_MS, blank, timeline, summary, formatDuration, byteLength, formatBytes, previewLine,
     unitFor, toUnit, fromUnit, delayValid, matches, parseBulk, rawStream };
 })();
