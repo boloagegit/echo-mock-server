@@ -664,8 +664,8 @@ td .sub-info { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
     scrollbar-gutter: stable;
     padding-inline-end: var(--space-xs);
 }
-.response-sse-workspace.is-expanded { overflow: hidden }
-/* 清單照內容長高（不被壓縮），標題才能在捲動時固定在上方；放大編輯時填滿這一區 */
+/* 清單照內容長高（不被壓縮），標題才能在捲動時固定在上方；放大編輯時填滿這一區，
+ * 視窗太矮放不下時這一區照樣可以捲動（編輯區不會被切掉） */
 .response-sse-editor { flex: 0 0 auto }
 .response-sse-workspace.is-expanded .response-sse-editor { flex: 1 1 auto; min-height: 0 }
 .issue-create-modal { max-width: 600px }

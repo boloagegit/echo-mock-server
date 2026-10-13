@@ -280,11 +280,17 @@ test('responses page: saving SSE with an unfinished event opens that event inste
   const text = make([{ ...good, data: '' }], 'text');
   methods.requestSave.call(text.self);
   assert.deepEqual(text.emitted, [['save']]);
-  // 新增與刪除交給上層（新增的是空白事件）
-  const edits = make([good]);
+  // 新增與刪除改同一個陣列（與規則編輯器相同）：編輯器才會展開新事件，刪除時保留搜尋。最後一個事件不能刪
+  const list = [good];
+  const edits = make(list);
   methods.addSseEvent.call(edits.self);
+  assert.equal(edits.self.sseEvents, list);
+  assert.deepEqual(plain(list), plain([good, S.blank()]));
   methods.removeSseEvent.call(edits.self, 0);
-  assert.deepEqual(plain(edits.emitted), plain([['update:sseEvents', [good, S.blank()]], ['update:sseEvents', []]]));
+  assert.deepEqual(plain(list), plain([S.blank()]));
+  methods.removeSseEvent.call(edits.self, 0);
+  assert.equal(list.length, 1);
+  assert.deepEqual(edits.emitted, [], 'no replacement array is emitted');
 });
 
 test('event editor: reveal clears the search, leaves the zoomed view and opens the event', () => {

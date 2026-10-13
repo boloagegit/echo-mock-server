@@ -385,7 +385,9 @@ class ListRefinementResourceTest {
                 .doesNotContain(".issues-list-table .issue-disclosure-column")
                 .contains("select.form-select-sm { height: var(--control-h-sm);")
                 // SSE responses use the rule editor's event list; the old table and its styles are gone.
-                .contains(".response-sse-workspace.is-expanded { overflow: hidden }")
+                .contains(".response-sse-workspace.is-expanded .response-sse-editor { flex: 1 1 auto; min-height: 0 }")
+                // A short window must not clip "Edit larger" / "Paste or edit all": the area keeps scrolling.
+                .doesNotContain(".response-sse-workspace.is-expanded { overflow: hidden }")
                 .doesNotContain(".response-sse-table")
                 .doesNotContain(".sse-table {")
                 .contains("grid-template-areas:")

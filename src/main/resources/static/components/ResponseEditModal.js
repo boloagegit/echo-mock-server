@@ -135,11 +135,13 @@ const ResponseEditModal = {
       }
       this.$emit('save');
     },
+    // 新增與刪除改同一個陣列（與規則編輯器相同）：編輯器才分得出「新增／刪除」與「整串替換」，
+    // 新增時展開新的事件，刪除時保留搜尋與展開中的鄰近事件
     addSseEvent() {
-      this.$emit('update:sseEvents', [...this.sseEvents, SseEvents.blank()]);
+      this.sseEvents.push(SseEvents.blank());
     },
     removeSseEvent(idx) {
-      this.$emit('update:sseEvents', this.sseEvents.filter((_, i) => i !== idx));
+      if (this.sseEvents.length > 1) this.sseEvents.splice(idx, 1);
     },
     updateContentType(contentType) {
       this.$emit('update:form', { ...this.form, contentType });
