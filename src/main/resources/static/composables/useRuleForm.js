@@ -166,47 +166,6 @@ const useRuleForm = (deps) => {
     const sseEvents = ref([]);
     const addSseEvent = () => { sseEvents.value.push({ event: '', data: '', id: '', delayMs: 0, type: 'normal' }); };
     const removeSseEvent = (index) => { if (sseEvents.value.length > 1) { sseEvents.value.splice(index, 1); } };
-    const buildSsePreview = (events, loopEnabled = false) => {
-        if (!events || !events.length) { return ''; }
-        const lines = [];
-        let terminalEventReached = false;
-        for (let i = 0; i < events.length; i++) {
-            const evt = events[i];
-            if (i > 0) { lines.push(''); }
-            if (evt.delayMs > 0) { lines.push(t('ssePreview.delay', {ms: evt.delayMs})); lines.push(''); }
-            const type = evt.type || 'normal';
-            if (type === 'abort') {
-                lines.push(t('ssePreview.abort'));
-                terminalEventReached = true;
-            }
-            if (type === 'error') { lines.push(t('ssePreview.errorEvent')); }
-            if (type !== 'abort') {
-                const evtName = type === 'error' ? 'error' : (evt.event || 'message');
-                lines.push('event: ' + evtName);
-                const data = evt.data || '';
-                data.split('\n').forEach(line => { lines.push('data: ' + line); });
-                if (evt.id) { lines.push('id: ' + evt.id); }
-                lines.push('');
-            }
-            if (type === 'error') { terminalEventReached = true; }
-            if (terminalEventReached) {
-                const remainingCount = events.length - i - 1;
-                if (remainingCount > 0) { lines.push(t('ssePreview.remainingSkipped', {count: remainingCount})); }
-                break;
-            }
-        }
-        if (loopEnabled && !terminalEventReached) { lines.push(t('ssePreview.loopPlay')); }
-        return lines.join('\n');
-    };
-    const ssePreview = computed(() => {
-        return buildSsePreview(sseEvents.value, Boolean(form.value.sseLoopEnabled));
-    });
-
-    // --- SSE 回應預覽 ---
-    const responseSsePreview = computed(() => {
-        return buildSsePreview(responseSseEvents.value);
-    });
-
     // --- 驗證 ---
     const validateForm = () => {
         const errors = {};
@@ -319,7 +278,9 @@ const useRuleForm = (deps) => {
             return jmsTargetConnections.value.some(target => target.enabled && target.defaultConnection);
         }
         if (form.value.sseEnabled && form.value.protocol === 'HTTP') {
-            if (!sseEvents.value.length || !sseEvents.value.some(e => e.data && e.data.trim())) return false;
+            // 與伺服器相同：每個事件都要有資料，延遲是 0–600000 的整數毫秒
+            if (!sseEvents.value.length || !sseEvents.value.every(e => e.data
+                && Number.isInteger(e.delayMs) && e.delayMs >= 0 && e.delayMs <= 600000)) return false;
             if (form.value.responseMode === 'existing' && !form.value.responseId) return false;
         } else if (form.value.responseMode === 'existing') {
             if (!form.value.responseId) return false;
@@ -1124,7 +1085,7 @@ const useRuleForm = (deps) => {
         // Body condition 警告
         showBodyConditionWarning,
         // SSE 事件
-        sseEvents, addSseEvent, removeSseEvent, ssePreview,
+        sseEvents, addSseEvent, removeSseEvent,
         // 表單操作
         setProtocol, resetForm, openCreate, copyRule, createFromLog, openEdit, closeModal,
         saveRule, parseConditions, onResponseModeChange,
@@ -1145,7 +1106,6 @@ const useRuleForm = (deps) => {
         // 表單輔助
         newTag, addTag, removeTag, newHeader, addHeader, removeHeader,
         // SSE 回應預覽
-        responseSsePreview,
         // Modal 最大化
         ruleModalMaximized, responseModalMaximized,
         // 格式切換

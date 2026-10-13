@@ -12,7 +12,6 @@ const ResponseEditModal = {
     maximized: Boolean,
     saving: Boolean,
     sseEvents: Array,
-    ssePreview: String,
   },
   emits: [
     'close', 'save', 'update:form', 'update:maximized',

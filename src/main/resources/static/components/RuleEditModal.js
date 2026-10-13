@@ -40,7 +40,6 @@ const RuleEditModal = {
         responsePickerLoading: Boolean,
         responsePickerError: Boolean,
         sseEvents: Array,
-        ssePreview: String,
         testExpanded: Boolean,
         testParams: Object,
         testResult: Object,
@@ -509,26 +508,6 @@ const RuleEditModal = {
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onUp);
         };
-        // SSE drag logic (local to component)
-        const sseDragIndex = ref(null);
-        const sseRowClass = (evt) => {
-            if (evt.type === 'error') { return 'sse-row-error'; }
-            if (evt.type === 'abort') { return 'sse-row-abort'; }
-            return '';
-        };
-        const onSseDragStart = (e, index) => { sseDragIndex.value = index; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(index)); };
-        const onSseDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
-        const onSseDrop = (e, index) => {
-            e.preventDefault();
-            if (sseDragIndex.value !== null && sseDragIndex.value !== index) {
-                const arr = [...props.sseEvents];
-                const item = arr.splice(sseDragIndex.value, 1)[0];
-                arr.splice(index, 0, item);
-                emit('reorder-sse-events', arr);
-            }
-            sseDragIndex.value = null;
-        };
-        const onSseDragEnd = () => { sseDragIndex.value = null; };
         // Apply split ratio when modal opens
         Vue.watch(() => props.show, (v) => {
             if (v) {
@@ -601,7 +580,6 @@ const RuleEditModal = {
             delaySummary, mockAdvancedSummary, forwardAdvancedSummary, faultAdvancedSummary,
             setMockAdvancedOpen, setForwardAdvancedOpen, setFaultAdvancedOpen,
             splitterDragging, splitRatio, startSplitterDrag, resizeSplitterBy,
-            sseDragIndex, sseRowClass, onSseDragStart, onSseDragOver, onSseDrop, onSseDragEnd,
             parseTags, parseHeaders, fmtTime, fmtSize,
         };
     },
@@ -1063,79 +1041,12 @@ const RuleEditModal = {
                     <!-- 回應內容 -->
                     <div v-if="ruleMode==='MOCK'" class="form-block response-content-block">
                         <!-- SSE 表格編輯器 -->
-                        <div v-if="form.sseEnabled && form.protocol==='HTTP'" class="sse-editor-wrap rule-sse-editor">
-                            <div class="rule-sse-toolbar">
-                                <span class="rule-sse-heading"><span class="response-content-label">{{t('modal.sseEditor')}}</span>
-                                <span v-if="form.responseMode==='existing' && form.responseId && (selectedResponse?.usageCount||previewResponseUsageCount) > 1" class="response-shared-warning" :title="t('modal.modifyAffectsAll')"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>{{t('modal.sharedWarning', {count: selectedResponse?.usageCount||previewResponseUsageCount})}}</span></span>
-                                <div class="form-check form-switch rule-sse-loop">
-                                    <input class="form-check-input" type="checkbox" id="sseLoopToggle" v-model="form.sseLoopEnabled">
-                                    <label class="form-check-label" for="sseLoopToggle"><i class="bi bi-arrow-repeat" aria-hidden="true"></i>{{t('modal.sseLoopMode')}}</label>
-                                </div>
-                            </div>
-                            <div class="sse-table rule-sse-table">
-                                <table :aria-label="t('modal.sseEventsTableLabel')">
-                                    <thead>
-                                        <tr>
-                                            <th class="rule-sse-drag-column"><span class="visually-hidden">{{t('modal.actions')}}</span></th>
-                                            <th class="rule-sse-type-column">{{t('modal.sseEventType')}}</th>
-                                            <th class="rule-sse-name-column">{{t('modal.sseEventName')}}</th>
-                                            <th>{{t('modal.sseEventData')}} <span class="text-danger" aria-hidden="true">*</span></th>
-                                            <th class="rule-sse-id-column">{{t('modal.sseEventId')}}</th>
-                                            <th class="rule-sse-delay-column">{{t('modal.sseEventDelay')}}</th>
-                                            <th class="rule-sse-action-column">{{t('modal.actions')}}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr v-for="(evt, idx) in sseEvents" :key="idx"
-                                            :class="sseRowClass(evt)"
-                                            draggable="true"
-                                            @dragstart="onSseDragStart($event, idx)"
-                                            @dragover="onSseDragOver($event)"
-                                            @drop="onSseDrop($event, idx)"
-                                            @dragend="onSseDragEnd">
-                                            <td class="sse-drag-handle">
-                                                <i class="bi bi-grip-vertical" aria-hidden="true"></i>
-                                            </td>
-                                            <td>
-                                                <select class="form-select form-select-sm" v-model="evt.type" :aria-label="t('modal.sseFieldLabel', {index:idx+1, field:t('modal.sseEventType')})">
-                                                    <option value="normal">{{t('modal.sseTypeNormal')}}</option>
-                                                    <option value="error">{{t('modal.sseTypeError')}}</option>
-                                                    <option value="abort">{{t('modal.sseTypeAbort')}}</option>
-                                                </select>
-                                            </td>
-                                            <td>
-                                                <input class="form-control form-control-sm" v-model="evt.event" :placeholder="t('modal.sseEventNamePlaceholder')" :aria-label="t('modal.sseFieldLabel', {index:idx+1, field:t('modal.sseEventName')})">
-                                            </td>
-                                            <td>
-                                                <textarea class="form-control form-control-sm rule-sse-data" v-model="evt.data" :placeholder="t('modal.sseEventDataPlaceholder')" rows="2" :aria-label="t('modal.sseFieldLabel', {index:idx+1, field:t('modal.sseEventData')})"></textarea>
-                                            </td>
-                                            <td>
-                                                <input class="form-control form-control-sm" v-model="evt.id" :placeholder="t('modal.sseEventIdPlaceholder')" :aria-label="t('modal.sseFieldLabel', {index:idx+1, field:t('modal.sseEventId')})">
-                                            </td>
-                                            <td>
-                                                <div class="input-affix rule-sse-delay"><input class="form-control form-control-sm" type="number" v-model.number="evt.delayMs" min="0" max="600000" placeholder="0" :aria-label="t('modal.sseFieldLabel', {index:idx+1, field:t('modal.sseEventDelay')})"><span class="input-affix-postfix">{{t('modal.millisecondsShort')}}</span></div>
-                                            </td>
-                                            <td class="rule-sse-action-cell">
-                                                <ui-button type="button" variant="danger" size="compact" icon-only @click="$emit('remove-sse-event',idx)" :disabled="sseEvents.length<=1" :title="t('modal.deleteSseEventAt', {index:idx+1})" :aria-label="t('modal.deleteSseEventAt', {index:idx+1})">
-                                                    <i class="bi bi-trash" aria-hidden="true"></i>
-                                                </ui-button>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div class="rule-sse-actions">
-                                <ui-button type="button" variant="secondary" size="compact" @click="$emit('add-sse-event')">
-                                    <i class="bi bi-plus-lg" aria-hidden="true"></i>{{t('modal.addSseEvent')}}
-                                </ui-button>
-                                <span class="sub-info">{{t('modal.sseEventCount', {count: sseEvents.length})}}</span>
-                            </div>
-                            <div v-if="ssePreview" class="sse-preview rule-sse-preview">
-                                <div class="rule-sse-preview-title"><i class="bi bi-eye" aria-hidden="true"></i>{{t('modal.sseStreamPreview')}}</div>
-                                <pre>{{ssePreview}}</pre>
-                            </div>
-                            <div v-if="formErrors.responseBody" class="invalid-feedback rule-sse-error">{{formErrors.responseBody}}</div>
-                        </div>
+                        <sse-events-editor v-if="form.sseEnabled && form.protocol==='HTTP'" class="sse-editor-wrap rule-sse-editor"
+                            :events="sseEvents" :loop-enabled="!!form.sseLoopEnabled" @update:loop-enabled="form.sseLoopEnabled = $event"
+                            :shared-count="form.responseMode==='existing' && form.responseId ? (selectedResponse?.usageCount || previewResponseUsageCount || 0) : 0"
+                            :expanded="contentExpanded" @update:expanded="contentExpanded = $event"
+                            :error="formErrors.responseBody"
+                            @add="$emit('add-sse-event')" @remove="$emit('remove-sse-event', $event)" @replace="$emit('reorder-sse-events', $event)"></sse-events-editor>
                         <!-- 使用現有回應 (非 SSE) -->
                         <!-- The label, state and actions live in the viewer's own toolbar: one row above the body
                              instead of a header row plus a toolbar row. Secondary actions are icon buttons. -->

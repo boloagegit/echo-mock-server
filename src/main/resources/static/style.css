@@ -3232,28 +3232,8 @@ select.is-invalid {
 }
 
 /* ===== SSE 表格編輯器 ===== */
-.rule-sse-editor { display: flex; flex-direction: column; gap: var(--space-md); min-height: 0; overflow: auto }
-.rule-sse-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md) }
 .rule-sse-loop { display: inline-flex; align-items: center; gap: var(--space-xs); margin: 0 }
 .rule-sse-loop .form-check-label { display: inline-flex; align-items: center; gap: var(--space-xs); font-size: var(--font-sm) }
-.rule-sse-table table { min-width: 860px; font-size: var(--font-base) }
-.rule-sse-table .rule-sse-drag-column { width: 32px }
-.rule-sse-table .rule-sse-type-column { width: 132px }
-.rule-sse-table .rule-sse-name-column { width: 140px }
-.rule-sse-table .rule-sse-id-column { width: 120px }
-.rule-sse-table .rule-sse-delay-column { width: 120px }
-.rule-sse-table .rule-sse-action-column { width: 60px; text-align: center }
-.rule-sse-table td { vertical-align: top }
-.rule-sse-data { min-height: 62px; max-height: 180px; resize: vertical; font-family: var(--font-mono); font-size: var(--font-xs) !important; line-height: 1.45 }
-.rule-sse-delay { min-height: 32px; background: var(--bg) }
-.rule-sse-delay > .form-control { min-width: 0; background: transparent !important; border: 0 !important; box-shadow: none !important }
-.rule-sse-delay .input-affix-postfix { padding-inline: var(--space-xs) }
-.rule-sse-action-cell { text-align: center; vertical-align: middle !important }
-.rule-sse-action-cell .btn-icon { width: 32px; height: 32px }
-.rule-sse-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm) }
-.rule-sse-preview { flex-shrink: 0; margin: 0 }
-.rule-sse-preview-title { display: inline-flex; align-items: center; gap: var(--space-xs); margin-bottom: var(--space-sm); color: var(--muted); font-size: var(--font-sm); font-weight: 600 }
-.rule-sse-preview > pre { max-height: 240px; overflow: auto; overflow-wrap: anywhere }
 .rule-sse-error { display: block }
 
 /* 表格容器 */
@@ -4663,4 +4643,144 @@ select.form-select-sm { height: var(--control-h-sm); min-height: var(--control-h
     align-items: center;
     gap: var(--space-3, 12px);
     min-width: 0;
+}
+
+/* ===== SSE event list in the rule editor =====
+ * Events are one line each on a timeline (send time, name, start of the data, size, gap to the previous
+ * event); one event at a time opens for editing. Layers come from background tone and shadow, never from
+ * a coloured outline or side stripe. */
+.rule-sse-editor { display: flex; flex-direction: column; min-height: 0 }
+.rule-editor.is-content-expanded .rule-sse-editor { height: 100% }
+.sse-ed { --sse-time-w: 70px; --sse-rail-w: 22px; display: flex; flex-direction: column; gap: var(--space-md); min-width: 0; min-height: 0 }
+.sse-ed.is-expanded, .sse-ed.is-focused { flex: 1 1 auto; height: 100% }
+.sse-ed-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap }
+.sse-ed-summary { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap }
+.sse-ed-chip {
+    display: inline-flex; align-items: baseline; gap: 5px; padding: 2px 10px; border-radius: 999px;
+    background: rgba(var(--muted-rgb), 0.1); color: var(--muted); font-size: var(--font-xs); white-space: nowrap;
+}
+.sse-ed-chip strong { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums }
+.sse-ed-chip.is-ends { background: rgba(var(--warning-rgb), 0.13); color: var(--warning-text) }
+.sse-ed-tools { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap }
+.sse-ed-search { position: relative; flex: 0 1 280px; min-width: 170px; margin: 0 }
+.sse-ed-search > i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-subtle); font-size: 12px; pointer-events: none }
+.sse-ed-search > input { padding-left: 30px }
+.sse-ed-match { color: var(--muted); font-size: var(--font-xs); font-variant-numeric: tabular-nums }
+.sse-ed-tool-buttons { display: flex; gap: var(--space-2xs); margin-left: auto }
+.sse-ed-bulkdelay {
+    display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-block); background: rgba(var(--muted-rgb), 0.08);
+}
+.sse-ed-bulkdelay-label { color: var(--muted); font-size: var(--font-sm) }
+.sse-ed-delay-input { width: 80px; flex: none; font-family: var(--font-mono); font-variant-numeric: tabular-nums }
+.sse-ed-inline-error { color: var(--danger-text); font-size: var(--font-xs) }
+.sse-ed-note { color: var(--muted); font-size: var(--font-xs) }
+
+.sse-ed-list {
+    list-style: none; margin: 0; padding: 2px 6px 2px 0; min-height: 0;
+    flex: none; max-height: min(560px, 62vh); overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable;
+}
+.sse-ed.is-expanded .sse-ed-list { flex: 1 1 auto; max-height: none }
+.sse-ev { position: relative; display: grid; grid-template-columns: var(--sse-time-w) var(--sse-rail-w) minmax(0, 1fr); align-items: start }
+.sse-ev::before {
+    content: ""; position: absolute; top: 0; bottom: 0; left: calc(var(--sse-time-w) + var(--sse-rail-w) / 2 - 1px);
+    width: 2px; background: rgba(var(--muted-rgb), 0.2);
+}
+.sse-ev:first-child::before { top: 16px }
+.sse-ev:last-child::before { bottom: calc(100% - 16px) }
+.sse-ev-time {
+    grid-column: 1; padding: 8px 8px 0 0; text-align: right; white-space: nowrap;
+    color: var(--muted); font: 500 11.5px/1.35 var(--font-mono); font-variant-numeric: tabular-nums;
+}
+.sse-ev-at { display: block }
+.sse-ev-gap { display: block; margin-top: 2px; color: var(--text-subtle); font-size: 10.5px }
+.sse-ev-dot {
+    grid-column: 2; justify-self: center; position: relative; z-index: 1; width: 9px; height: 9px; margin-top: 12px;
+    border-radius: 50%; background: rgba(var(--muted-rgb), 0.6); box-shadow: 0 0 0 3px var(--card);
+}
+.sse-ev.type-error .sse-ev-dot { background: var(--danger) }
+.sse-ev.type-abort .sse-ev-dot { background: var(--warning) }
+.sse-ev.is-skipped .sse-ev-dot { background: var(--card); box-shadow: inset 0 0 0 2px rgba(var(--muted-rgb), 0.45), 0 0 0 3px var(--card) }
+.sse-ev.is-open .sse-ev-dot {
+    width: 13px; height: 13px; margin-top: 15px; background: var(--primary);
+    box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.22), 0 0 0 7px var(--card);
+}
+.sse-ev.is-open .sse-ev-time { padding-top: 13px; color: var(--text) }
+.sse-ev.is-dragging { opacity: 0.45 }
+
+.sse-ev-line {
+    grid-column: 3; display: flex; align-items: center; margin: 2px 0; border-radius: var(--radius-block);
+    background: rgba(var(--muted-rgb), 0.06); transition: background-color var(--motion-fast, 120ms) ease;
+}
+.sse-ev-line:hover { background: rgba(var(--muted-rgb), 0.12) }
+.sse-ev.is-skipped .sse-ev-line { opacity: 0.55 }
+.sse-ev-grip { display: inline-flex; align-items: center; align-self: stretch; padding: 0 3px 0 6px; color: var(--text-subtle); cursor: grab }
+.sse-ev-grip:hover { color: var(--text) }
+.sse-ev-summary {
+    display: flex; align-items: center; gap: var(--space-sm); flex: 1 1 auto; min-width: 0; padding: 6px 12px 6px 2px;
+    border: 0; border-radius: inherit; background: none; color: inherit; text-align: left; cursor: pointer;
+    font: 12px/1.45 var(--font-mono);
+}
+.sse-ev-summary:focus-visible { outline: 0; box-shadow: var(--focus-ring) }
+.sse-ev-index { flex: none; width: 22px; color: var(--text-subtle); text-align: right; font: 12px/1.45 var(--font-mono); font-variant-numeric: tabular-nums }
+.sse-ev-name { flex: 0 0 88px; overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap }
+.sse-ev-name.is-default { color: var(--muted) }
+.sse-ev.type-error .sse-ev-name { color: var(--danger-text) }
+.sse-ev.type-abort .sse-ev-name { color: var(--warning-text) }
+.sse-ev-preview { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap }
+.sse-ev-preview.is-missing { color: var(--warning-text); font-family: var(--font-ui) }
+.sse-ev-size, .sse-ev-delay { flex: none; color: var(--text-subtle); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums }
+.sse-ev-size { min-width: 54px }
+.sse-ev-delay { min-width: 70px }
+.sse-ev-delay.is-invalid { color: var(--danger-text) }
+
+.sse-ev-card {
+    grid-column: 3; display: flex; flex-direction: column; gap: var(--space-sm); margin: 6px 0 10px; padding: 10px 12px 10px 4px;
+    border-radius: 10px; background: var(--surface-raised);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08), 0 8px 22px rgba(15, 23, 42, 0.1);
+}
+:root:not([data-theme="light"]) .sse-ev-card {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0)) , var(--surface-raised);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 26px rgba(0, 0, 0, 0.42), 0 2px 6px rgba(0, 0, 0, 0.28);
+}
+.sse-ev-fields { display: flex; align-items: center; gap: 6px; flex-wrap: wrap }
+.sse-ev-fields > .sse-ev-grip { align-self: center; padding: 6px 2px 6px 6px }
+.sse-ev-type { flex: none; width: 116px }
+.sse-ev-event { flex: 1 1 140px; min-width: 96px }
+.sse-ev-fixed { flex: 1 1 140px; min-width: 96px; padding: 0 var(--space-sm); color: var(--muted); font: 12px var(--font-mono) }
+.sse-ev-id { flex: none; width: 150px }
+.sse-ev-delay-field { display: inline-flex; align-items: center; gap: 4px; flex: none }
+.sse-ev-delay-field.is-invalid .sse-ed-delay-input { box-shadow: 0 0 0 1px var(--danger) }
+.sse-ev-card-actions { display: inline-flex; gap: 2px; margin-left: auto }
+.sse-ev-card-actions .sse-ev-remove:not(:disabled) { color: var(--danger) }
+.sse-ev-data {
+    width: calc(100% - 32px); margin-left: 32px; resize: vertical; overflow: auto; field-sizing: content;
+    min-height: calc(3 * 1.5em + 14px); max-height: calc(8 * 1.5em + 14px);
+    font: 12px/1.5 var(--font-mono) !important;
+}
+.sse-ev-foot { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; margin-left: 32px; color: var(--text-subtle); font-size: var(--font-xs) }
+.sse-ev-foot-hint { margin-left: auto }
+
+.sse-ed-empty { padding: var(--space-lg); color: var(--muted); text-align: center }
+.sse-ed-actions { display: flex; align-items: center; gap: var(--space-sm); padding-left: calc(var(--sse-time-w) + var(--sse-rail-w)) }
+.sse-ed-raw > summary { width: fit-content; color: var(--muted); font-size: var(--font-sm); cursor: pointer }
+.sse-ed-raw > summary:hover { color: var(--text) }
+.sse-ed-raw > pre {
+    max-height: 260px; margin: var(--space-sm) 0 0; padding: var(--space-md); overflow: auto; border-radius: var(--radius-block);
+    background: var(--code-bg); font: 12px/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+.sse-ed-focus { display: flex; flex-direction: column; gap: var(--space-sm); flex: 1 1 auto; min-height: 420px; height: 100% }
+.sse-ed-focus-head { display: flex; align-items: center; gap: var(--space-md); flex-wrap: wrap }
+.sse-ed-focus-actions { display: flex; gap: var(--space-xs); margin-left: auto }
+.sse-ed-focus-code { flex: 1 1 auto; min-height: 0 }
+.sse-ed-focus-error {
+    display: flex; align-items: center; gap: var(--space-xs); padding: 6px var(--space-md); border-radius: var(--radius-control);
+    background: rgba(var(--danger-rgb), 0.09); color: var(--danger-text); font-size: var(--font-sm);
+}
+@media (max-width: 720px) {
+    .sse-ed { --sse-time-w: 54px; --sse-rail-w: 16px }
+    .sse-ev-size { display: none }
+    .sse-ev-name { flex-basis: 64px }
+    .sse-ev-foot-hint { display: none }
 }
