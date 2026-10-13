@@ -307,6 +307,31 @@ class CacheInvalidationServiceTest {
     }
 
     @Test
+    void gapTooLargeToTrack_shouldClearEverythingOnceLateCommitsHadTime() {
+        commit(1, "JMS_RULE_CHANGED");
+        service.checkForInvalidation();
+        // 編號 2–200 還沒出現（可能有交易尚未提交），201 先出現：空缺太大，無法逐一等待
+        commit(201, "JMS_RULE_CHANGED");
+        service.checkForInvalidation();
+        commit(2, "HTTP_RULE_CHANGED");
+        fillCaches();
+
+        service.checkForInvalidation();
+        assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).as("before the wait ends").isTrue();
+
+        clock.addAndGet(TimeUnit.MINUTES.toNanos(2) + 1);
+        service.checkForInvalidation();
+        assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).as("after the wait").isFalse();
+        assertThat(cached(CacheConfig.JMS_RULES_CACHE)).isFalse();
+
+        // 只清一次
+        fillCaches();
+        clock.addAndGet(TimeUnit.SECONDS.toNanos(5));
+        service.checkForInvalidation();
+        assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).isTrue();
+    }
+
+    @Test
     void manyEvents_shouldBeReadAcrossPolls() {
         for (int i = 1; i <= CacheInvalidationService.PAGE_SIZE; i++) {
             commit(i, "JMS_RULE_CHANGED");

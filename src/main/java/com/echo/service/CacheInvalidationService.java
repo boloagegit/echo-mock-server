@@ -81,6 +81,9 @@ public class CacheInvalidationService {
     private Long cursor;
     /** 比 cursor 小但尚未出現的編號 → 放棄等待的時間點。 */
     private final TreeMap<Long, Long> gaps = new TreeMap<>();
+    /** 無法逐一追蹤的編號空缺：到這個時間（nanoTime）整個清空一次。 */
+    private boolean fullClearPending;
+    private long fullClearAt;
     private long lastSuccessNanos;
     private long lastFailureLogNanos;
     private boolean failing;
@@ -162,6 +165,7 @@ public class CacheInvalidationService {
                 realign("cache sync resumed after " + (cursor == null ? "startup failure" : "a long pause"));
             } else {
                 poll(now);
+                runDueFullClear(now);
             }
             lastSuccessNanos = now;
             if (failing) {
@@ -226,12 +230,28 @@ public class CacheInvalidationService {
 
     private void trackGaps(long previous, long id, long now) {
         long missing = id - previous - 1;
-        if (missing <= 0 || missing > MAX_GAP_RUN) {
+        if (missing <= 0) {
             return;
         }
         long deadline = now + GAP_WAIT_NANOS;
-        for (long gap = previous + 1; gap < id && gaps.size() < MAX_GAPS; gap++) {
+        if (missing > MAX_GAP_RUN || gaps.size() + missing > MAX_GAPS) {
+            // 太多編號無法逐一等待：等晚提交的交易也該完成了，再整個清空一次，不留下永遠跳過的事件
+            fullClearAt = fullClearPending ? Math.max(fullClearAt, deadline) : deadline;
+            fullClearPending = true;
+            return;
+        }
+        for (long gap = previous + 1; gap < id; gap++) {
             gaps.put(gap, deadline);
+        }
+    }
+
+    private void runDueFullClear(long now) {
+        if (fullClearPending && now - fullClearAt >= 0) {
+            fullClearPending = false;
+            Changes all = new Changes();
+            all.markEverything(protocols.descriptors());
+            apply(all);
+            log.info("Cleared all local caches: an event id gap was too large to track");
         }
     }
 
@@ -248,6 +268,7 @@ public class CacheInvalidationService {
     private void realign(String reason) {
         Long max = maxEventId();
         gaps.clear();
+        fullClearPending = false;
         cursor = max;
         Changes all = new Changes();
         all.markEverything(protocols.descriptors());

@@ -194,8 +194,11 @@ public class RuleOrderService {
             return cached;
         }
         // 與實際比對相同的候選：停用的與回應已被刪除的規則都不會被考慮
-        List<JmsRule> active = jmsRuleService.withValidResponses(
-                all.stream().filter(rule -> !Boolean.FALSE.equals(rule.getEnabled())).toList());
+        // 實際比對時的候選清單先依 id 排序，再套用穩定的優先順序比較；同分時才會與實際順序一致
+        List<JmsRule> active = jmsRuleService.withValidResponses(all.stream()
+                .filter(rule -> !Boolean.FALSE.equals(rule.getEnabled()))
+                .sorted(Comparator.comparing(JmsRule::getId, Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList());
         String endpointField = jmsProperties.map(JmsProperties::getEndpointField).orElse(null);
         JmsRoute route = new JmsRoute(endpointField);
         JmsSource source = new JmsSource(all, all, active, route, new RuleOrderAnalyzer.Index<>(active, route));

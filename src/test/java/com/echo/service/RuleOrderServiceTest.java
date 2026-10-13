@@ -221,6 +221,15 @@ class RuleOrderServiceTest {
     }
 
     @Test
+    void jmsRulesThatTieAreOrderedByIdLikeMatching() {
+        // 同 queue、同優先順序、同建立時間：實際比對依 id 排序，所以 "a-default" 才是被使用的預設規則
+        RuleOrderService service = service(List.of(), List.of(
+                jms("b-default", "ORDER", 0, null), jms("a-default", "ORDER", 0, null)), null);
+
+        assertThat(service.issues().issues()).containsOnlyKeys("b-default");
+    }
+
+    @Test
     void jmsRuleWhoseResponseWasDeletedDoesNotHideLaterRules() {
         JmsRule orphan = jms("orphan-default", "ORDER", 10, null);
         orphan.setResponseId(999L);

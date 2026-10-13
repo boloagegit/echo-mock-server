@@ -184,10 +184,7 @@ const useStats = (deps) => {
             }
             return;
         }
-        // 沒有明細可載入
-        if (!item.log.hasRequestBody && !item.log.hasResponseBody && !item.log.hasMatchChain) {
-            return;
-        }
+        // 沒有本文與比對鏈也要載入：「處理流程」需要候選規則數、預設規則、延遲與情境略過等明細
         item._detailLoading = true;
         item._detailError = false;
         try {
