@@ -104,10 +104,11 @@ class RequestLogTrafficServiceTest {
     }
 
     @Test
-    void reportsWhenOlderRecordsWereRemovedByTheRecordLimit() {
+    void reportsWhenOlderRecordsWereRemoved() {
         rows();
         query.earliest = NOW.minusDays(2);
-        when(requestLogService.count()).thenReturn(10_000L);
+        // id 只會遞增：最小 id 大於 1，代表較舊的紀錄被刪過（刪到上限以下之後筆數已經低於上限）
+        query.smallestId = 1_001L;
 
         var traffic = service.compute(Range.WEEK);
 
@@ -117,19 +118,19 @@ class RequestLogTrafficServiceTest {
     }
 
     @Test
-    void stillReportsRemovedRecordsAfterPruningBelowTheLimit() {
+    void aFullDatabaseThatNeverDeletedAnythingIsNotTruncated() {
         rows();
         query.earliest = NOW.minusDays(2);
-        // 超過 10,000 筆時刪到 9,000 筆騰出空間：刪過之後筆數低於上限，但更早的紀錄已經不在了
-        when(requestLogService.count()).thenReturn(9_000L);
+        query.smallestId = 1L;
+        when(requestLogService.count()).thenReturn(9_500L);
 
-        assertThat(service.compute(Range.WEEK).truncated()).isTrue();
+        assertThat(service.compute(Range.WEEK).truncated()).isFalse();
     }
 
     @Test
-    void belowThePruneTargetNothingWasRemoved() {
+    void anEmptyDatabaseIsNotTruncated() {
         rows();
-        when(requestLogService.count()).thenReturn(8_999L);
+        query.smallestId = null;
 
         assertThat(service.compute(Range.WEEK).truncated()).isFalse();
     }
@@ -231,6 +232,7 @@ class RequestLogTrafficServiceTest {
         List<Row> rows = List.of();
         List<RequestLogTrafficQuery.EndpointCount> topUnmatched = List.of();
         LocalDateTime earliest;
+        Long smallestId;
         long delayMs;
         final AtomicInteger calls = new AtomicInteger();
         final AtomicInteger running = new AtomicInteger();
@@ -306,6 +308,11 @@ class RequestLogTrafficServiceTest {
         @Override
         public LocalDateTime earliestRequestTime() {
             return earliest;
+        }
+
+        @Override
+        public Long smallestId() {
+            return smallestId;
         }
     }
 

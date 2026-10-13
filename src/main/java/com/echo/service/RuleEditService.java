@@ -85,6 +85,8 @@ public class RuleEditService {
         validateRuleFields(dto);
         applyMatchSpec(dto);
         Response response;
+        // 改寫的既有回應在規則寫入之後才存：回應的檢查（其他使用它的 SSE 規則）要看到這條規則的新設定
+        Response rewritten = null;
         boolean faulting = dto.getFaultType() != null
                 && !dto.getFaultType().isBlank()
                 && !FaultType.NONE.name().equals(dto.getFaultType());
@@ -135,8 +137,10 @@ public class RuleEditService {
             validateSseRule(dto, dto.getResponseBody());
             validateResponseContent(dto);
             existing.setBody(dto.getResponseBody());
-            if (isSseRule(dto)) existing.setContentType(Response.SSE);
-            response = responseService.save(existing);
+            // 跟著規則決定類型：SSE 規則的回應是 SSE；規則改回一般回應時，回應也改回一般
+            existing.setContentType(isSseRule(dto) ? Response.SSE : null);
+            response = existing;
+            rewritten = existing;
         // 使用現有 Response
         } else if (dto.getResponseId() != null && (dto.getResponseBody() == null || dto.getResponseBody().isBlank())) {
             response = responseService.findById(dto.getResponseId())
@@ -170,6 +174,10 @@ public class RuleEditService {
         BaseRule candidate = handler.fromDto(dto);
         stampForSave(candidate);
         BaseRule saved = handler.save(candidate);
+        if (rewritten != null) {
+            // 仍在同一個交易內：檢查失敗（例如另一條 SSE 規則也用這個回應）時規則與回應一起復原
+            response = responseService.save(rewritten);
+        }
         rulesChanged(dto.getProtocol());
         return new Saved(saved, handler.toDto(saved, response, false));
     }

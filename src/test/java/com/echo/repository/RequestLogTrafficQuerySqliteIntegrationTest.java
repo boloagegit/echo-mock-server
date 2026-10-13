@@ -73,6 +73,21 @@ class RequestLogTrafficQuerySqliteIntegrationTest {
     }
 
     @Test
+    void deletingTheOldestRecordsRaisesTheSmallestId() {
+        repository.deleteAllInBatch();
+        assertThat(trafficQuery.smallestId()).isNull();
+        List<RequestLog> saved = repository.saveAllAndFlush(List.of(
+                log(BASE, true, false, null, "/a"), log(BASE.plusMinutes(1), true, false, null, "/b"),
+                log(BASE.plusMinutes(2), true, false, null, "/c")));
+        assertThat(trafficQuery.smallestId()).isEqualTo(saved.get(0).getId());
+
+        // 與筆數上限相同的刪法：刪掉最舊的
+        repository.deleteOldest(2);
+
+        assertThat(trafficQuery.smallestId()).isEqualTo(saved.get(2).getId());
+    }
+
+    @Test
     void listQueriesCanBeLimitedToATimeRange() {
         repository.deleteAllInBatch();
         repository.saveAllAndFlush(List.of(

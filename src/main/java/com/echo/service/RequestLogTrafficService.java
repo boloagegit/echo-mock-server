@@ -156,17 +156,15 @@ public class RequestLogTrafficService {
         Accumulator acc = new Accumulator(from, range);
 
         LocalDateTime earliest;
-        long retained;
         List<Endpoint> topUnmatched;
         int maxRecords = configService.getRequestLogMaxRecords();
         boolean truncated;
         if (configService.isRequestLogMemoryMode()) {
             MemoryTotals memory = scanMemory(from, acc);
             earliest = memory.earliest;
-            retained = memory.count;
             topUnmatched = memory.topUnmatched();
             // 環形緩衝區滿了才會丟掉最舊的
-            truncated = retained >= maxRecords;
+            truncated = memory.count >= maxRecords;
         } else {
             List<LocalDateTime> starts = new ArrayList<>(range.buckets);
             for (int i = 0; i < range.buckets; i++) {
@@ -175,12 +173,12 @@ public class RequestLogTrafficService {
             trafficQuery.countByBucket(starts).forEach(acc::addCounts);
             acc.addResponseTimes(trafficQuery.countByResponseTime(from, RESPONSE_TIME_EDGES));
             earliest = trafficQuery.earliestRequestTime();
-            retained = requestLogService.count();
             topUnmatched = trafficQuery.topUnmatchedSince(from, TOP_UNMATCHED).stream()
                     .map(e -> new Endpoint(e.protocol(), e.method(), e.endpoint(), e.count()))
                     .toList();
-            // 資料庫超過上限時會刪到上限以下（RequestLogBatchWriter 騰出空間），所以刪過之後筆數低於上限
-            truncated = retained >= RequestLogBatchWriter.retentionLowWatermark(maxRecords);
+            // 資料庫超過上限時會刪到上限以下騰出空間，筆數無法看出是否刪過；最小 id 大於 1 才是刪過的證據
+            Long smallestId = trafficQuery.smallestId();
+            truncated = smallestId != null && smallestId > 1;
         }
         return new Traffic(range.id, from, to, (int) range.bucket.toMinutes(), acc.buckets(), acc.totals(),
                 acc.responseTime(), topUnmatched, earliest, truncated, maxRecords, now);

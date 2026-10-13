@@ -191,6 +191,43 @@ class SseRuleResponseIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    @DisplayName("SSE 規則改回一般回應並改寫內容：回應也改回一般類型")
+    void turningAnSseRuleBackIntoAGeneralResponseConvertsItsResponse() {
+        RuleDto rule = createSseRule("/sse/back");
+        RuleDto current = adminClient().getForObject("/api/admin/rules/" + rule.getId(), RuleDto.class);
+        current.setSseEnabled(false);
+        current.setSseLoopEnabled(false);
+
+        ResponseEntity<RuleDto> saved = adminClient().exchange("/api/admin/rules/" + rule.getId(), HttpMethod.PUT,
+                new HttpEntity<>(rewritePayload(current, "{\"plain\":true}")), RuleDto.class);
+
+        assertThat(saved.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<String, Object> after = response(rule.getResponseId());
+        assertThat(after).containsEntry("body", "{\"plain\":true}");
+        assertThat(after.get("contentType")).isNull();
+    }
+
+    @Test
+    @DisplayName("另一條 SSE 規則也使用這個回應時，不能在規則裡把它改成一般內容（規則與回應都不變）")
+    void aResponseStillUsedByAnotherSseRuleCannotBecomeGeneral() {
+        RuleDto rule = createSseRule("/sse/shared-a");
+        RuleDto other = RuleDto.builder().protocol(Protocol.HTTP).matchKey("/sse/shared-b").method("GET").status(200)
+                .sseEnabled(true).responseId(rule.getResponseId()).build();
+        assertThat(adminClient().postForEntity("/api/admin/rules", other, RuleDto.class).getStatusCode())
+                .isEqualTo(HttpStatus.CREATED);
+        RuleDto current = adminClient().getForObject("/api/admin/rules/" + rule.getId(), RuleDto.class);
+        current.setSseEnabled(false);
+
+        ResponseEntity<String> saved = adminClient().exchange("/api/admin/rules/" + rule.getId(), HttpMethod.PUT,
+                new HttpEntity<>(rewritePayload(current, "plain")), String.class);
+
+        assertThat(saved.getStatusCode().is4xxClientError()).isTrue();
+        assertThat(response(rule.getResponseId())).containsEntry("body", EVENTS).containsEntry("contentType", "SSE");
+        assertThat(adminClient().getForObject("/api/admin/rules/" + rule.getId(), RuleDto.class).getSseEnabled())
+                .isTrue();
+    }
+
+    @Test
     @DisplayName("標成 SSE 的回應必須是有效的 SSE 事件")
     void sseResponseContentIsValidated() {
         ResponseEntity<String> created = adminClient().postForEntity("/api/admin/responses",

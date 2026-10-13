@@ -83,6 +83,14 @@ public class RequestLogTrafficQuery {
 
     /** 目前保留的紀錄中最早的時間；沒有紀錄時為 null。 */
     @Transactional(readOnly = true)
+    /**
+     * 最小的紀錄 id（沒有紀錄時為 null）。id 只會遞增，所以大於 1 代表較舊的紀錄曾被刪除
+     * （筆數上限、清除紀錄）；重新啟動或多台主機也一樣成立。走主鍵索引。
+     */
+    public Long smallestId() {
+        return entityManager.createQuery("SELECT MIN(r.id) FROM RequestLog r", Long.class).getSingleResult();
+    }
+
     public LocalDateTime earliestRequestTime() {
         return entityManager.createQuery("SELECT MIN(r.requestTime) FROM RequestLog r", LocalDateTime.class)
                 .getSingleResult();

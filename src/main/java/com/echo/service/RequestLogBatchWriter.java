@@ -56,15 +56,6 @@ public class RequestLogBatchWriter {
      * subsequent batches. A fresh count is always taken before deleting, so admin
      * cleanup or delete-all cannot make the estimate remove new records by mistake.
      */
-    /**
-     * 超過上限時刪到這個筆數（騰出空間給之後的批次）。保留筆數在這之上就可能已刪過舊紀錄，
-     * 流量概況據此判斷最早一筆之前是「沒有資料」而不是「沒有流量」。
-     */
-    static long retentionLowWatermark(int maxRecords) {
-        int max = Math.max(1, maxRecords);
-        return Math.max(0, (long) max - Math.min(MAX_RETENTION_HEADROOM, Math.max(1, max / 10)));
-    }
-
     private void enforceRetention(int inserted, int maxRecords) {
         if (estimatedRecordCount < 0) {
             // saveAll is flushed by this aggregate query, so the count includes this batch.
@@ -82,7 +73,9 @@ public class RequestLogBatchWriter {
             return;
         }
 
-        long targetCount = Math.min(retentionLowWatermark(maxRecords), Math.max(0, (long) maxRecords - inserted));
+        int headroom = Math.max(inserted,
+                Math.min(MAX_RETENTION_HEADROOM, Math.max(1, maxRecords / 10)));
+        long targetCount = Math.max(0, (long) maxRecords - headroom);
         int requestedDelete = (int) Math.min(Integer.MAX_VALUE, actualCount - targetCount);
         int deleted = requestLogRepository.deleteOldest(requestedDelete);
         estimatedRecordCount = actualCount - deleted;
