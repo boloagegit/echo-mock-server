@@ -3,6 +3,7 @@
  *
  * 用於建立或編輯共用回應內容，支援一般文字與 SSE 事件兩種模式。
  * 一般文字使用共用的 ui-code-viewer（可編輯），工具列與抽屜相同；格式化只改變顯示，存檔永遠是原文。
+ * SSE 事件使用與規則編輯器相同的 sse-events-editor（回應沒有循環設定，放大用視窗本身的全螢幕）。
  */
 const ResponseEditModal = {
   props: {
@@ -24,6 +25,7 @@ const ResponseEditModal = {
       attemptedSave: false,
       returnFocusTo: null,
       inertedElements: [],
+      sseExpanded: false,
     };
   },
   computed: {
@@ -33,64 +35,32 @@ const ResponseEditModal = {
         { value: 'sse', label: this.t('modal.responseTypeSse'), icon: 'bi-broadcast' },
       ];
     },
-    sseErrors() {
-      if (!this.attemptedSave || this.form.contentType !== 'sse') { return []; }
-      return this.sseEvents.map(event => {
-        const data = event?.data == null ? '' : String(event.data);
-        const rawDelay = event?.delayMs;
-        const delay = rawDelay === '' || rawDelay == null ? 0 : Number(rawDelay);
-        return {
-          dataRequired: data.length === 0,
-          delayInvalid: !Number.isInteger(delay) || delay < 0 || delay > 600000,
-        };
-      });
+    /** 第一個還沒填好的事件（沒有資料或延遲不對），-1 表示都可以存。 */
+    firstInvalidSse() {
+      return this.sseEvents.findIndex(event => !event?.data || !SseEvents.delayValid(event.delayMs));
     },
-    hasSseErrors() {
-      return !this.sseEvents.length || this.sseErrors.some(error => error.dataRequired || error.delayInvalid);
-    },
-    hasPreviewContent() {
-      return this.sseEvents.some(event => {
-        const type = event?.type || 'normal';
-        return type === 'abort' || String(event?.data || '').length > 0;
-      });
-    },
-    previewEntries() {
-      if (!this.hasPreviewContent) { return []; }
-      const entries = [];
-      for (let index = 0; index < this.sseEvents.length; index++) {
-        const event = this.sseEvents[index] || {};
-        const type = event.type || 'normal';
-        const data = event.data == null ? '' : String(event.data);
-        const eventName = type === 'error' ? 'error' : (event.event || 'message');
-        entries.push({
-          index: index + 1,
-          type,
-          typeLabel: this.t(type === 'error' ? 'modal.sseTypeError' : type === 'abort' ? 'modal.sseTypeAbort' : 'modal.sseTypeNormal'),
-          eventName,
-          dataLines: data.split('\n'),
-          id: event.id || '',
-          delayMs: Number(event.delayMs) || 0,
-          terminal: type === 'error' || type === 'abort',
-        });
-        if (type === 'error' || type === 'abort') { break; }
-      }
-      return entries;
-    },
-    previewSkippedCount() {
-      const terminal = this.previewEntries.find(entry => entry.terminal);
-      return terminal ? Math.max(0, this.sseEvents.length - terminal.index) : 0;
+    sseError() {
+      if (!this.attemptedSave || this.form.contentType !== 'sse') return '';
+      if (!this.sseEvents.length) return this.t('validation.sseArrayEmpty');
+      return this.firstInvalidSse >= 0 ? this.t('sseEditor.fixBeforeSave', { index: this.firstInvalidSse + 1 }) : '';
     },
   },
   watch: {
     show: {
       immediate: true,
       handler(open) {
-        if (open) { this.activateDialog(); }
+        if (open) {
+          // 每次打開都從乾淨的狀態開始：上一次沒存成的錯誤提示與放大狀態不帶過來
+          this.attemptedSave = false;
+          this.sseExpanded = false;
+          this.activateDialog();
+        }
         else { this.deactivateDialog(); }
       },
     },
     'form.contentType'() {
       this.attemptedSave = false;
+      this.sseExpanded = false;
     },
   },
   beforeUnmount() {
@@ -159,48 +129,17 @@ const ResponseEditModal = {
     },
     requestSave() {
       this.attemptedSave = true;
-      if (this.form.contentType === 'sse' && this.hasSseErrors) {
-        this.$nextTick(() => this.$refs.dialog?.querySelector('[data-sse-invalid="true"]')?.focus());
+      if (this.form.contentType === 'sse' && (!this.sseEvents.length || this.firstInvalidSse >= 0)) {
+        this.$refs.sseEditor?.reveal(this.firstInvalidSse);
         return;
       }
       this.$emit('save');
     },
     addSseEvent() {
-      const events = [...this.sseEvents, { event: '', data: '', id: '', delayMs: 0, type: 'normal' }];
-      this.$emit('update:sseEvents', events);
-      this.$nextTick(() => this.$refs.dialog?.querySelector(`[data-sse-event-name="${events.length - 1}"]`)?.focus());
+      this.$emit('update:sseEvents', [...this.sseEvents, SseEvents.blank()]);
     },
     removeSseEvent(idx) {
-      const events = this.sseEvents.filter((_, i) => i !== idx);
-      this.$emit('update:sseEvents', events);
-      this.$nextTick(() => {
-        const nextIndex = Math.min(idx, events.length - 1);
-        this.$refs.dialog?.querySelector(`[data-sse-type="${nextIndex}"]`)?.focus();
-      });
-    },
-    updateSseEvent(idx, field, value) {
-      const events = this.sseEvents.map((event, eventIndex) => (
-        eventIndex === idx ? { ...event, [field]: value } : event
-      ));
-      this.$emit('update:sseEvents', events);
-    },
-    updateSseDelay(idx, value) {
-      const delayMs = value === '' ? '' : Number(value);
-      this.updateSseEvent(idx, 'delayMs', delayMs);
-    },
-    sseTypeHelp(type) {
-      const keys = {
-        normal: 'modal.sseTypeNormalHelp',
-        error: 'modal.sseTypeErrorHelp',
-        abort: 'modal.sseTypeAbortHelp',
-      };
-      return this.t(keys[type] || keys.normal);
-    },
-    sseFieldLabel(field, idx) {
-      return this.t('modal.sseFieldLabel', { field, index: idx + 1 });
-    },
-    sseError(idx, field) {
-      return Boolean(this.sseErrors[idx]?.[field]);
+      this.$emit('update:sseEvents', this.sseEvents.filter((_, i) => i !== idx));
     },
     updateContentType(contentType) {
       this.$emit('update:form', { ...this.form, contentType });
@@ -242,74 +181,10 @@ const ResponseEditModal = {
             <ui-code-viewer class="response-form-code" fill editable :label="t('modal.responseContent')" :placeholder="t('modal.responseBodyPlaceholder')"
               :value="form.body || ''" @update:value="updateBody" @copy="$emit('copy-text', $event)"></ui-code-viewer>
           </div>
-          <div v-else class="form-group response-sse-workspace">
-            <section class="response-sse-editor-pane" aria-labelledby="sseEventsTitle">
-              <div class="response-sse-section-header">
-                <div class="response-sse-section-title">
-                  <h3 id="sseEventsTitle">{{t('modal.sseEventsTitle')}}</h3>
-                  <button type="button" class="help-tooltip tooltip-align-start" :data-tooltip="t('modal.sseEventsHelp')" :aria-label="t('modal.sseEventsHelp')"><i class="bi bi-question-circle" aria-hidden="true"></i></button>
-                  <span class="response-sse-count">{{t('modal.sseEventCount', {count: sseEvents.length})}}</span>
-                </div>
-                <ui-button type="button" class="btn btn-sm btn-secondary response-sse-add" @click="addSseEvent()"><i class="bi bi-plus-lg" aria-hidden="true"></i> {{t('modal.addSseEvent')}}</ui-button>
-              </div>
-              <div class="sse-table response-sse-table" role="region" tabindex="0" :aria-label="t('modal.sseEventsTableLabel')">
-                <table>
-                  <caption class="visually-hidden">{{t('modal.sseEventsTableLabel')}}</caption>
-                  <thead><tr>
-                    <th class="sse-col-index" scope="col">#</th>
-                    <th class="sse-col-type" scope="col">{{t('modal.sseEventType')}}</th>
-                    <th class="sse-col-event" scope="col">{{t('modal.sseEventName')}}</th>
-                    <th class="sse-col-data" scope="col">{{t('modal.sseEventData')}} <span class="text-danger" aria-hidden="true">*</span></th>
-                    <th class="sse-col-id" scope="col">{{t('modal.sseEventId')}}</th>
-                    <th class="sse-col-delay" scope="col">{{t('modal.sseEventDelay')}}</th>
-                    <th class="sse-col-actions" scope="col"><span class="visually-hidden">{{t('modal.actions')}}</span></th>
-                  </tr></thead>
-                  <tbody>
-                    <tr v-for="(evt, idx) in sseEvents" :key="idx">
-                      <td class="sse-event-index" data-label="#">{{idx + 1}}</td>
-                      <td :data-label="t('modal.sseEventType')"><select class="form-select form-select-sm" :data-sse-type="idx" :value="evt.type" @change="updateSseEvent(idx, 'type', $event.target.value)" :title="sseTypeHelp(evt.type)" :aria-label="sseFieldLabel(t('modal.sseEventType'), idx)"><option value="normal">{{t('modal.sseTypeNormal')}}</option><option value="error">{{t('modal.sseTypeError')}}</option><option value="abort">{{t('modal.sseTypeAbort')}}</option></select></td>
-                      <td :data-label="t('modal.sseEventName')"><input class="form-control form-control-sm" :data-sse-event-name="idx" :value="evt.type==='error' ? 'error' : (evt.type==='abort' ? '' : evt.event)" @input="updateSseEvent(idx, 'event', $event.target.value)" :placeholder="evt.type==='abort' ? t('modal.notApplicableShort') : t('modal.sseEventNamePlaceholder')" :disabled="evt.type!=='normal'" :title="evt.type==='normal' ? '' : sseTypeHelp(evt.type)" :aria-label="sseFieldLabel(t('modal.sseEventName'), idx)"></td>
-                      <td :data-label="t('modal.sseEventData')">
-                        <textarea class="form-control form-control-sm sse-data-input" :class="{'is-invalid':sseError(idx, 'dataRequired')}" :data-sse-invalid="sseError(idx, 'dataRequired')" :value="evt.data" @input="updateSseEvent(idx, 'data', $event.target.value)" :placeholder="t('modal.sseEventDataPlaceholder')" :aria-label="sseFieldLabel(t('modal.sseEventData'), idx)" :aria-invalid="sseError(idx, 'dataRequired') ? 'true' : 'false'" :aria-describedby="sseError(idx, 'dataRequired') ? 'sse-data-error-'+idx : null" rows="4"></textarea>
-                        <div v-if="sseError(idx, 'dataRequired')" class="invalid-feedback" :id="'sse-data-error-'+idx">{{t('modal.sseEventDataRequired')}}</div>
-                      </td>
-                      <td :data-label="t('modal.sseEventId')"><input class="form-control form-control-sm" :value="evt.type==='abort' ? '' : evt.id" @input="updateSseEvent(idx, 'id', $event.target.value)" :placeholder="evt.type==='abort' ? t('modal.notApplicableShort') : t('modal.sseEventIdPlaceholder')" :disabled="evt.type==='abort'" :title="evt.type==='abort' ? sseTypeHelp(evt.type) : ''" :aria-label="sseFieldLabel(t('modal.sseEventId'), idx)"></td>
-                      <td :data-label="t('modal.sseEventDelay')">
-                        <div class="input-affix sse-delay-affix" :class="{'is-invalid':sseError(idx, 'delayInvalid')}">
-                          <input class="form-control form-control-sm" type="number" :data-sse-invalid="sseError(idx, 'delayInvalid')" :value="evt.delayMs" @input="updateSseDelay(idx, $event.target.value)" min="0" max="600000" step="1" inputmode="numeric" placeholder="0" :aria-label="sseFieldLabel(t('modal.sseEventDelay'), idx)" :aria-invalid="sseError(idx, 'delayInvalid') ? 'true' : 'false'" :aria-describedby="sseError(idx, 'delayInvalid') ? 'sse-delay-error-'+idx : null">
-                          <span class="input-affix-postfix" aria-hidden="true">{{t('modal.millisecondsShort')}}</span>
-                        </div>
-                        <div v-if="sseError(idx, 'delayInvalid')" class="invalid-feedback" :id="'sse-delay-error-'+idx">{{t('modal.sseEventDelayInvalid')}}</div>
-                      </td>
-                      <td class="sse-event-actions"><ui-button type="button" variant="danger" icon-only class="sse-remove-event" @click="removeSseEvent(idx)" :disabled="sseEvents.length<=1" :title="t('modal.deleteSseEventAt', {index: idx + 1})" :aria-label="t('modal.deleteSseEventAt', {index: idx + 1})"><i class="bi bi-trash" aria-hidden="true"></i></ui-button></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </section>
-            <section class="response-sse-preview-pane" role="region" aria-labelledby="ssePreviewTitle">
-              <div class="response-sse-section-header">
-                <div class="response-sse-section-title"><i class="bi bi-eye" aria-hidden="true"></i><h4 id="ssePreviewTitle">{{t('modal.sseStreamPreview')}}</h4><button type="button" class="help-tooltip tooltip-align-end" :data-tooltip="t('modal.ssePreviewHelp')" :aria-label="t('modal.ssePreviewHelp')"><i class="bi bi-question-circle" aria-hidden="true"></i></button></div>
-              </div>
-              <div v-if="previewEntries.length" class="response-sse-preview-list">
-                <article v-for="entry in previewEntries" :key="entry.index" class="response-sse-preview-event" :class="'is-'+entry.type">
-                  <div class="response-sse-preview-meta">
-                    <span class="response-sse-preview-index">{{t('modal.ssePreviewEventIndex', {index:entry.index})}}</span>
-                    <span class="response-sse-preview-type"><i class="bi" :class="entry.type==='error'?'bi-exclamation-triangle':entry.type==='abort'?'bi-stop-circle':'bi-broadcast-pin'" aria-hidden="true"></i>{{entry.typeLabel}}</span>
-                    <span v-if="entry.delayMs" class="response-sse-preview-delay"><i class="bi bi-clock" aria-hidden="true"></i>{{t('modal.ssePreviewDelay', {ms:entry.delayMs})}}</span>
-                  </div>
-                  <code v-if="entry.type!=='abort'" class="response-sse-wire">
-                    <span class="response-sse-wire-line"><span class="response-sse-wire-key">event:</span><span>{{entry.eventName}}</span></span>
-                    <span v-for="(line,lineIndex) in entry.dataLines" :key="lineIndex" class="response-sse-wire-line"><span class="response-sse-wire-key">data:</span><span>{{line}}</span></span>
-                    <span v-if="entry.id" class="response-sse-wire-line"><span class="response-sse-wire-key">id:</span><span>{{entry.id}}</span></span>
-                  </code>
-                  <div v-if="entry.type==='error'" class="response-sse-terminal"><i class="bi bi-x-octagon" aria-hidden="true"></i>{{t('modal.ssePreviewErrorEnds')}}</div>
-                  <div v-else-if="entry.type==='abort'" class="response-sse-terminal"><i class="bi bi-stop-circle" aria-hidden="true"></i>{{t('modal.ssePreviewAbortEnds')}}</div>
-                </article>
-                <div v-if="previewSkippedCount" class="response-sse-preview-skipped"><i class="bi bi-skip-forward" aria-hidden="true"></i>{{t('ssePreview.remainingSkipped', {count:previewSkippedCount})}}</div>
-              </div>
-              <div v-else class="response-sse-preview-empty"><i class="bi bi-code-square" aria-hidden="true"></i><span>{{t('modal.ssePreviewEmpty')}}</span></div>
-            </section>
+          <div v-else class="form-group response-sse-workspace" :class="{'is-expanded': sseExpanded}">
+            <sse-events-editor ref="sseEditor" class="sse-editor-wrap response-sse-editor" :events="sseEvents" :loopable="false" :expandable="false"
+              :shared-count="editing?.usageCount || 0" :expanded="sseExpanded" @update:expanded="sseExpanded = $event" :error="sseError"
+              @add="addSseEvent" @remove="removeSseEvent" @replace="$emit('update:sseEvents', $event)"></sse-events-editor>
           </div>
         </div>
         <div class="modal-footer">

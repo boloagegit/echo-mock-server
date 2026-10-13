@@ -653,210 +653,21 @@ td .sub-info { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
     min-height: 0;
 }
 
+/* SSE 回應：與規則編輯器相同的事件清單；只有這一區捲動（標題與工具固定在上方） */
 .response-sse-workspace {
-    display: grid;
-    grid-template-columns: minmax(0, 2.15fr) minmax(300px, 0.85fr);
-    gap: var(--space-lg);
+    display: flex;
     flex: 1 1 auto !important;
-    min-height: 0;
-    overflow: hidden;
-}
-.response-sse-editor-pane,
-.response-sse-preview-pane { min-width: 0; min-height: 0 }
-.response-sse-editor-pane { display: flex; flex-direction: column }
-.response-sse-section-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-md);
-    min-height: 36px;
-    margin-bottom: var(--space-sm);
-}
-.response-sse-section-title { display: flex; align-items: center; gap: var(--space-xs); min-width: 0 }
-.response-sse-section-title h3,
-.response-sse-section-title h4 {
-    margin: 0;
-    color: var(--text);
-    font-size: var(--font-base);
-    font-weight: 600;
-    line-height: 1.35;
-}
-.response-sse-section-title > .bi-eye { color: var(--primary); font-size: 16px }
-.response-sse-section-title .help-tooltip { width: 32px; height: 32px; flex-basis: 32px }
-.response-sse-count {
-    color: var(--muted);
-    font-size: var(--font-sm);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-}
-.response-sse-add { border: 0; background: var(--surface-control); box-shadow: none }
-.response-sse-table {
-    flex: 1;
-    min-height: 240px;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-    border-color: var(--separator);
-    background: var(--bg);
-}
-.response-sse-table:focus-visible { outline: 0; box-shadow: var(--focus-ring) }
-.response-editor-modal .response-sse-table table {
-    width: 100%;
-    min-width: 790px;
-    table-layout: fixed;
-    font-size: var(--font-base);
-}
-.response-editor-modal .response-sse-table th {
-    height: 36px;
-    padding: var(--space-sm);
-    text-transform: none;
-    letter-spacing: 0;
-    background: var(--bg);
-}
-.response-editor-modal .response-sse-table td { padding: var(--space-sm); vertical-align: top; background: var(--card) }
-.response-editor-modal .response-sse-table tbody tr:last-child td { border-bottom: 0 }
-.response-editor-modal .response-sse-table .sse-col-index { width: 36px; text-align: center }
-.response-editor-modal .response-sse-table .sse-col-type { width: 120px }
-.response-editor-modal .response-sse-table .sse-col-event { width: 132px }
-.response-editor-modal .response-sse-table .sse-col-data { width: auto }
-.response-editor-modal .response-sse-table .sse-col-data { color: var(--text) }
-.response-editor-modal .response-sse-table .sse-col-id { width: 96px }
-.response-editor-modal .response-sse-table .sse-col-delay { width: 106px }
-.response-editor-modal .response-sse-table .sse-col-actions { width: 40px }
-.response-editor-modal .response-sse-table .form-select-sm,
-.response-editor-modal .response-sse-table .form-control-sm {
-    min-height: 32px;
-    border-color: transparent;
-    border-radius: var(--radius-control);
-    background-color: var(--surface-control);
-}
-.response-editor-modal .response-sse-table .form-select-sm:hover,
-.response-editor-modal .response-sse-table .form-control-sm:hover { background-color: rgba(var(--muted-rgb), 0.12) }
-.response-editor-modal .response-sse-table .form-select-sm:focus,
-.response-editor-modal .response-sse-table .form-control-sm:focus {
-    border-color: transparent;
-    background-color: var(--card);
-    box-shadow: var(--focus-ring);
-}
-.response-editor-modal .response-sse-table .sse-data-input {
-    min-height: 88px;
-    max-height: 220px;
-    resize: vertical;
-    font-family: var(--font-mono);
-    font-size: var(--font-sm);
-    line-height: 1.45;
-}
-.response-editor-modal .response-sse-table .sse-event-index {
-    padding-top: calc(var(--space-sm) + 7px);
-    text-align: center;
-    color: var(--muted);
-    font-size: var(--font-sm);
-    font-variant-numeric: tabular-nums;
-}
-.response-editor-modal .response-sse-table .sse-delay-affix {
-    min-height: 32px;
-    border-color: transparent;
-    background: var(--surface-control);
-}
-.response-editor-modal .response-sse-table .sse-delay-affix:hover { background: rgba(var(--muted-rgb), 0.12) }
-.response-editor-modal .response-sse-table .sse-delay-affix:focus-within { border-color: transparent; background: var(--card) }
-.response-editor-modal .response-sse-table .sse-delay-affix.is-invalid { background: rgba(var(--danger-rgb), 0.05) }
-.response-editor-modal .response-sse-table .sse-delay-affix > .form-control,
-.response-editor-modal .response-sse-table .sse-delay-affix > .form-control:hover,
-.response-editor-modal .response-sse-table .sse-delay-affix > .form-control:focus { background: transparent; box-shadow: none }
-.response-editor-modal .response-sse-table .sse-delay-affix .input-affix-postfix { padding-inline: var(--space-xs) var(--space-sm) }
-.sse-event-actions { text-align: center }
-.sse-remove-event {
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--muted);
-}
-.sse-remove-event:hover:not(:disabled) { background: rgba(var(--danger-rgb), 0.1); color: var(--danger) }
-.sse-remove-event:focus-visible { outline: 0; box-shadow: var(--focus-ring) }
-.sse-remove-event:disabled { opacity: 0.35; cursor: not-allowed }
-.response-sse-preview-pane {
-    display: flex;
     flex-direction: column;
-    overflow: hidden;
-    padding: var(--space-md);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-panel);
-    background: var(--code-bg);
-}
-.response-sse-preview-list {
-    flex: 1;
     min-height: 0;
     overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
     padding-inline-end: var(--space-xs);
 }
-.response-sse-preview-event {
-    padding: var(--space-md) 0;
-}
-.response-sse-preview-event:first-child { padding-top: var(--space-xs) }
-.response-sse-preview-event + .response-sse-preview-event { margin-top: var(--space-sm) }
-.response-sse-preview-meta {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--space-sm);
-    margin-bottom: var(--space-sm);
-    font-size: var(--font-xs);
-}
-.response-sse-preview-index { color: var(--muted); font-variant-numeric: tabular-nums }
-.response-sse-preview-type,
-.response-sse-preview-delay {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-xs);
-    color: var(--text);
-    font-weight: 600;
-}
-.response-sse-preview-delay { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums }
-.response-sse-preview-event.is-error .response-sse-preview-type,
-.response-sse-preview-event.is-error .response-sse-terminal { color: var(--danger) }
-.response-sse-preview-event.is-abort .response-sse-preview-type,
-.response-sse-preview-event.is-abort .response-sse-terminal { color: var(--warning) }
-.response-sse-wire {
-    display: grid;
-    gap: var(--space-xs);
-    color: var(--text);
-    font-family: var(--font-mono);
-    font-size: var(--font-sm);
-    line-height: 1.55;
-}
-.response-sse-wire-line {
-    display: grid;
-    grid-template-columns: 42px minmax(0, 1fr);
-    gap: var(--space-sm);
-    min-width: 0;
-}
-.response-sse-wire-line > span:last-child { white-space: pre-wrap; overflow-wrap: anywhere }
-.response-sse-wire-key { color: var(--muted); user-select: none }
-.response-sse-terminal,
-.response-sse-preview-skipped {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-xs);
-    margin-top: var(--space-sm);
-    color: var(--muted);
-    font-size: var(--font-sm);
-    line-height: 1.5;
-}
-.response-sse-preview-skipped { margin-top: var(--space-lg) }
-.response-sse-preview-empty {
-    display: flex;
-    flex: 1;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-sm);
-    min-height: 180px;
-    color: var(--muted);
-    font-size: var(--font-sm);
-    text-align: center;
-}
-.response-sse-preview-empty > i { color: var(--muted); font-size: 16px }
+.response-sse-workspace.is-expanded { overflow: hidden }
+/* 清單照內容長高（不被壓縮），標題才能在捲動時固定在上方；放大編輯時填滿這一區 */
+.response-sse-editor { flex: 0 0 auto }
+.response-sse-workspace.is-expanded .response-sse-editor { flex: 1 1 auto; min-height: 0 }
 .issue-create-modal { max-width: 600px }
 .account-modal { max-width: 460px }
 .confirm-modal { max-width: 480px }
@@ -3236,62 +3047,6 @@ select.is-invalid {
 .rule-sse-loop .form-check-label { display: inline-flex; align-items: center; gap: var(--space-xs); font-size: var(--font-sm) }
 .rule-sse-error { display: block }
 
-/* 表格容器 */
-.sse-table {
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--card);
-    overflow: auto;
-}
-.sse-table table {
-    min-width: 600px;
-    border-collapse: collapse;
-    margin: 0;
-}
-.sse-table th {
-    text-align: left;
-    padding: 0.4rem 0.5rem;
-    font-size: var(--font-xs);
-    font-weight: 600;
-    color: var(--muted);
-    text-transform: uppercase;
-    border-bottom: 1px solid var(--border);
-    white-space: nowrap;
-    background: var(--bg);
-    position: sticky;
-    top: 0;
-}
-.sse-table td {
-    padding: 0.35rem 0.5rem;
-    border-bottom: 1px solid var(--border);
-    vertical-align: middle;
-    color: var(--text);
-}
-.sse-table tr:hover {
-    background: var(--hover);
-}
-.sse-table .form-select-sm,
-.sse-table .form-control-sm {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-size: var(--font-sm);
-    padding: 0.25rem 0.4rem;
-    border-radius: 4px;
-}
-.sse-table .form-select-sm:focus,
-.sse-table .form-control-sm:focus {
-    outline: none;
-    border-color: var(--primary);
-    box-shadow: none;
-}
-.sse-table .form-select-sm {
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 0.4rem center;
-    padding-right: 1.4rem;
-}
 
 /* error 列 */
 .sse-row-error {
@@ -4280,19 +4035,7 @@ a:focus-visible,
 
 @media (max-width: 768px) {
     .response-editor-modal .modal-body { overflow-y: auto }
-    .response-sse-workspace {
-        display: flex;
-        flex: 0 0 auto !important;
-        flex-direction: column;
-        min-height: 0;
-        overflow: visible;
-    }
-    .response-sse-editor-pane { min-height: 360px }
-    .response-sse-preview-pane {
-        flex: 0 0 280px;
-        min-height: 280px;
-        overflow: hidden;
-    }
+    .response-sse-workspace { flex: 0 0 auto !important; overflow: visible }
 }
 
 .ui-toggle { position: relative; width: 32px; height: 32px; display: inline-flex; align-items: center; flex: none; padding: 0; border: 0; background: none; color: inherit; cursor: pointer }
@@ -4442,68 +4185,6 @@ select.form-select-sm { height: var(--control-h-sm); min-height: var(--control-h
 }
 
 @media (max-width: 480px) {
-    .response-sse-editor-pane { min-height: 0 }
-    .response-editor-modal .response-sse-table {
-        flex: 0 0 auto;
-        min-height: 0;
-        overflow: visible;
-        border: 0;
-        background: transparent;
-        scrollbar-gutter: auto;
-    }
-    .response-editor-modal .response-sse-table table {
-        display: block;
-        width: 100%;
-        min-width: 0;
-    }
-    .response-editor-modal .response-sse-table thead { display: none }
-    .response-editor-modal .response-sse-table tbody {
-        display: grid;
-        gap: var(--space-sm);
-    }
-    .response-editor-modal .response-sse-table tbody tr {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto 32px;
-        grid-template-areas:
-            "type index actions"
-            "event event event"
-            "data data data"
-            "id id id"
-            "delay delay delay";
-        gap: var(--space-sm) var(--space-xs);
-        padding: var(--space-sm);
-        border: 1px solid var(--separator);
-        border-radius: var(--radius-panel);
-        background: var(--card);
-    }
-    .response-editor-modal .response-sse-table tbody tr:hover { background: var(--card) }
-    .response-editor-modal .response-sse-table td {
-        min-width: 0;
-        padding: 0;
-        border: 0;
-        background: transparent;
-    }
-    .response-editor-modal .response-sse-table td::before {
-        content: attr(data-label);
-        display: block;
-        margin-bottom: 4px;
-        color: var(--muted);
-        font-size: var(--font-xs);
-        font-weight: 600;
-        line-height: 1.35;
-    }
-    .response-editor-modal .response-sse-table td:nth-child(1) { grid-area: index; align-self: center; padding-top: 0 }
-    .response-editor-modal .response-sse-table td:nth-child(1)::before { display: inline; margin: 0 3px 0 0 }
-    .response-editor-modal .response-sse-table td:nth-child(2) { grid-area: type }
-    .response-editor-modal .response-sse-table td:nth-child(3) { grid-area: event }
-    .response-editor-modal .response-sse-table td:nth-child(4) { grid-area: data }
-    .response-editor-modal .response-sse-table td:nth-child(5) { grid-area: id }
-    .response-editor-modal .response-sse-table td:nth-child(6) { grid-area: delay }
-    .response-editor-modal .response-sse-table td:nth-child(7) { grid-area: actions; align-self: start }
-    .response-editor-modal .response-sse-table td:nth-child(7)::before { display: none }
-    .response-editor-modal .response-sse-table .form-select-sm,
-    .response-editor-modal .response-sse-table .form-control-sm,
-    .response-editor-modal .response-sse-table .sse-delay-affix { width: 100% }
                     .rule-modal-fullscreen > .modal-header {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto auto;
@@ -4815,4 +4496,7 @@ select.form-select-sm { height: var(--control-h-sm); min-height: var(--control-h
     .sse-ev-size { display: none }
     .sse-ev-name { flex-basis: 64px }
     .sse-ev-foot-hint { display: none }
+    /* 窄畫面：工具按鈕換行，不撐出橫向捲動 */
+    .sse-ed-search { flex: 1 1 100% }
+    .sse-ed-tool-buttons { flex-wrap: wrap; margin-left: 0 }
 }

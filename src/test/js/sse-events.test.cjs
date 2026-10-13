@@ -234,3 +234,75 @@ test('rule detail: SSE summary line in both languages, built from the loaded rul
   assert.ok(rules.includes('SseEvents.rawStream(events, data.sseLoopEnabled === true, t)'));
   assert.ok(rules.includes('data._sseSummary = SseEvents.summary(events, data.sseLoopEnabled === true)'));
 });
+
+test('responses page: SSE responses use the same event editor, without loop or its own expand button', () => {
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+  const modal = read('components/ResponseEditModal.js');
+  assert.ok(modal.includes('<sse-events-editor ref="sseEditor" class="sse-editor-wrap response-sse-editor" :events="sseEvents" :loopable="false" :expandable="false"'));
+  assert.ok(!modal.includes('sse-table') && !modal.includes('previewEntries'), 'the old table and side preview are gone');
+  const editor = read('components/SseEventsEditor.js');
+  assert.ok(editor.includes('<div v-if="loopable" class="form-check form-switch rule-sse-loop">'));
+  assert.ok(editor.includes('<ui-button v-if="expandable" type="button"'));
+  // 規則編輯器維持原樣：預設有循環與放大
+  assert.ok(!read('components/RuleEditModal.js').includes(':loopable='));
+});
+
+test('responses page: saving SSE with an unfinished event opens that event instead of saving', () => {
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+  const S = load();
+  const context = { SseEvents: S, SAVE_SHORTCUT_KEY: 'Ctrl', fmtSize() {}, document: {} };
+  vm.runInNewContext(read('components/ResponseEditModal.js') + '\nthis.ResponseEditModal = ResponseEditModal;', context);
+  const { computed, methods } = context.ResponseEditModal;
+  const make = (events, contentType = 'sse') => {
+    const emitted = [];
+    const revealed = [];
+    const self = { form: { contentType }, sseEvents: events, attemptedSave: false, t: (key, p) => `${key}:${JSON.stringify(p || {})}`,
+      $emit: (...args) => emitted.push(args), $refs: { sseEditor: { reveal: index => revealed.push(index) } } };
+    Object.defineProperty(self, 'firstInvalidSse', { get: () => computed.firstInvalidSse.call(self) });
+    Object.defineProperty(self, 'sseError', { get: () => computed.sseError.call(self) });
+    return { self, emitted, revealed };
+  };
+  const good = { event: '', data: 'a', id: '', delayMs: 0, type: 'normal' };
+  const ok = make([good, { ...good, delayMs: 600000 }]);
+  methods.requestSave.call(ok.self);
+  assert.deepEqual(ok.emitted, [['save']]);
+  assert.equal(ok.self.sseError, '');
+  const noData = make([good, { ...good, data: '' }, { ...good, delayMs: NaN }]);
+  assert.equal(noData.self.sseError, '', 'no message before the first save attempt');
+  methods.requestSave.call(noData.self);
+  assert.deepEqual(noData.emitted, []);
+  assert.deepEqual(noData.revealed, [1]);
+  assert.equal(noData.self.sseError, 'sseEditor.fixBeforeSave:{"index":2}');
+  const badDelay = make([{ ...good, delayMs: 1.5 }]);
+  methods.requestSave.call(badDelay.self);
+  assert.deepEqual(badDelay.revealed, [0]);
+  // 一般文字回應不受 SSE 事件影響
+  const text = make([{ ...good, data: '' }], 'text');
+  methods.requestSave.call(text.self);
+  assert.deepEqual(text.emitted, [['save']]);
+  // 新增與刪除交給上層（新增的是空白事件）
+  const edits = make([good]);
+  methods.addSseEvent.call(edits.self);
+  methods.removeSseEvent.call(edits.self, 0);
+  assert.deepEqual(plain(edits.emitted), plain([['update:sseEvents', [good, S.blank()]], ['update:sseEvents', []]]));
+});
+
+test('event editor: reveal clears the search, leaves the zoomed view and opens the event', () => {
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+  const S = load();
+  const context = { SseEvents: S, Vue: { toRaw: value => value }, serializeSseEvents: JSON.stringify };
+  vm.runInNewContext(read('components/SseEventsEditor.js') + '\nthis.SseEventsEditor = SseEventsEditor;', context);
+  const { methods } = context.SseEventsEditor;
+  const events = [ev(0), ev(2000, 'normal', '')];
+  const focused = [];
+  const self = { events, query: 'abc', focus: { kind: 'bulk' }, openRaw: null, units: new WeakMap(), $el: null,
+    closeFocus() { this.focus = null; }, unitOf: methods.unitOf, $nextTick: fn => fn.call(self), focusData: index => focused.push(index) };
+  methods.reveal.call(self, 1);
+  assert.equal(self.query, '');
+  assert.equal(self.focus, null);
+  assert.equal(self.openRaw, events[1]);
+  assert.equal(self.units.get(events[1]), 's', 'keeps the unit the delay is shown in');
+  assert.deepEqual(focused, [1]);
+  methods.reveal.call(self, 9);
+  assert.equal(self.openRaw, events[1], 'an index past the end changes nothing');
+});
