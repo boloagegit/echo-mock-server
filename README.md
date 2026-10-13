@@ -737,17 +737,22 @@ Database mode supports multi-instance deployment with DB-based cache invalidatio
 
 ### Cache Sync Mechanism
 
-Each instance uses local Caffeine cache, synchronized via the `cache_events` table:
+Each instance keeps rules, response bodies and HTTP forwarding profiles in a local Caffeine cache. Changes are announced through the `cache_events` table:
 
 ```
-Instance A modifies rule → Writes to cache_events (RULE_CHANGED)
+Instance A changes a rule → writes a cache_events row in the same transaction
                                     ↓
-Instance B polls every N seconds → Finds new event → Clears local cache
+Instance B polls every N seconds → reads rows with a higher id → clears the affected local cache
 ```
 
-- **Polling interval**: Default 5 seconds, configurable via `echo.cache.sync-interval-ms`
-- **Event cleanup**: Automatically cleans events older than 10 minutes every hour
-- **Performance impact**: Minimal — each poll is a simple timestamp query
+- **What is synchronized**: rule changes (per protocol), edited or deleted responses, HTTP forwarding profile changes, and rules or responses removed by the nightly cleanup
+- **Polling interval**: Default 5 seconds, configurable via `echo.cache.sync-interval-ms`; a change normally reaches the other instances within that time
+- **Ordered by event id, not time**: instance clocks or time zones may differ. An id that is skipped (a transaction that commits later) is waited for up to 2 minutes
+- **Fallbacks**: if an instance could not poll for more than 5 minutes, or the event ids restarted, it clears all of these caches once. Cached rules and HTTP forwarding profiles are also re-read at least every `echo.cache.rules.max-age-minutes` (default 10) and response bodies every `echo.cache.body.max-age-minutes` (default 60), even when a notice was missed
+- **Event cleanup**: Events older than 10 minutes are removed every hour; the newest event is kept so ids never restart
+- **Performance impact**: Minimal — each poll is a primary-key range query
+
+Login sessions are kept in each instance's memory, so configure the load balancer to keep a user on the same instance (sticky sessions). JMS still uses the embedded broker of each instance.
 
 ### Configuration Example
 

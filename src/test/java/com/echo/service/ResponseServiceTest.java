@@ -6,9 +6,9 @@ import com.echo.protocol.ProtocolHandler;
 import com.echo.protocol.ProtocolHandlerRegistry;
 import com.echo.repository.ResponseRepository;
 import com.github.benmanes.caffeine.cache.Cache;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cache.CacheManager;
@@ -16,6 +16,7 @@ import org.springframework.cache.CacheManager;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -35,11 +36,18 @@ class ResponseServiceTest {
     private Cache<Long, String> responseBodyCache;
 
     @Mock
-    @SuppressWarnings("UnusedVariable") // injected via @InjectMocks
     private CacheManager cacheManager;
 
-    @InjectMocks
+    @Mock
+    private CacheInvalidationService cacheInvalidationService;
+
     private ResponseService responseService;
+
+    @BeforeEach
+    void setUp() {
+        responseService = new ResponseService(responseRepository, null, protocolHandlerRegistry,
+                responseBodyCache, cacheManager, Optional.of(cacheInvalidationService));
+    }
 
     // ========== countOrphanResponses ==========
 
@@ -72,10 +80,9 @@ class ResponseServiceTest {
         int deleted = responseService.deleteOrphanResponses();
 
         assertThat(deleted).isEqualTo(3);
-        verify(responseBodyCache).invalidate(1L);
-        verify(responseBodyCache).invalidate(2L);
-        verify(responseBodyCache).invalidate(3L);
+        verify(responseBodyCache).invalidateAll(orphanIds);
         verify(responseRepository).deleteAllById(orphanIds);
+        verify(cacheInvalidationService).publishResponsesChanged(orphanIds);
     }
 
     @Test
@@ -166,5 +173,52 @@ class ResponseServiceTest {
 
         assertThat(summaries).hasSize(1);
         assertThat(summaries.get(0).getExtendedAt()).isNull();
+    }
+
+    // ========== 多實例快取同步 ==========
+
+    @Test
+    void save_existingResponse_clearsBodyAndNotifiesOtherInstances() {
+        Response response = Response.builder().id(7L).description("d").body("new").build();
+        when(responseRepository.save(response)).thenReturn(response);
+
+        responseService.save(response);
+
+        verify(responseBodyCache).invalidateAll(List.of(7L));
+        verify(cacheInvalidationService).publishResponsesChanged(List.of(7L));
+    }
+
+    @Test
+    void save_newResponse_doesNotPublishAnEvent() {
+        Response response = Response.builder().description("d").body("new").build();
+        when(responseRepository.save(response)).thenAnswer(invocation -> {
+            response.setId(8L);
+            return response;
+        });
+
+        responseService.save(response);
+
+        verifyNoInteractions(cacheInvalidationService);
+    }
+
+    @Test
+    void deleteWithRules_notifiesBodyAndRuleChanges() {
+        when(protocolHandlerRegistry.deleteByResponseId(9L)).thenReturn(2);
+
+        responseService.deleteWithRules(9L);
+
+        verify(cacheInvalidationService).publishResponsesChanged(List.of(9L));
+        verify(cacheInvalidationService).publishInvalidation();
+    }
+
+    @Test
+    void deleteAll_notifiesAllBodiesAndRules() {
+        when(protocolHandlerRegistry.getAllHandlers()).thenReturn(List.of());
+
+        responseService.deleteAll();
+
+        verify(responseBodyCache).invalidateAll();
+        verify(cacheInvalidationService).publishAllResponsesChanged();
+        verify(cacheInvalidationService).publishInvalidation();
     }
 }
