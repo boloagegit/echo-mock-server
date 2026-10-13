@@ -136,12 +136,12 @@ class SseEventParserTest {
     }
 
     @Test
-    void oversizedDelayMs_cappedAt30000() {
+    void oversizedDelayMs_cappedAtTenMinutes() {
         String json = """
                 [{"data":"x","delayMs":999999}]""";
         List<SseEvent> events = SsePlayer.parseEvents(json);
         assertThat(events).hasSize(1);
-        assertThat(events.get(0).delayMs()).isEqualTo(30000L);
+        assertThat(events.get(0).delayMs()).isEqualTo(600000L);
     }
 
     // --- type field parsing ---
@@ -279,8 +279,8 @@ class SseEventParserTest {
             if (expectedDelay != null) {
                 if (expectedDelay < 0) {
                     expectedDelay = 0L;
-                } else if (expectedDelay > 30000) {
-                    expectedDelay = 30000L;
+                } else if (expectedDelay > 600000) {
+                    expectedDelay = 600000L;
                 }
             }
             assertThat(result.delayMs()).isEqualTo(expectedDelay);

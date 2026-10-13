@@ -42,7 +42,7 @@ const ResponseEditModal = {
         const delay = rawDelay === '' || rawDelay == null ? 0 : Number(rawDelay);
         return {
           dataRequired: data.length === 0,
-          delayInvalid: !Number.isInteger(delay) || delay < 0 || delay > 30000,
+          delayInvalid: !Number.isInteger(delay) || delay < 0 || delay > 600000,
         };
       });
     },
@@ -277,7 +277,7 @@ const ResponseEditModal = {
                       <td :data-label="t('modal.sseEventId')"><input class="form-control form-control-sm" :value="evt.type==='abort' ? '' : evt.id" @input="updateSseEvent(idx, 'id', $event.target.value)" :placeholder="evt.type==='abort' ? t('modal.notApplicableShort') : t('modal.sseEventIdPlaceholder')" :disabled="evt.type==='abort'" :title="evt.type==='abort' ? sseTypeHelp(evt.type) : ''" :aria-label="sseFieldLabel(t('modal.sseEventId'), idx)"></td>
                       <td :data-label="t('modal.sseEventDelay')">
                         <div class="input-affix sse-delay-affix" :class="{'is-invalid':sseError(idx, 'delayInvalid')}">
-                          <input class="form-control form-control-sm" type="number" :data-sse-invalid="sseError(idx, 'delayInvalid')" :value="evt.delayMs" @input="updateSseDelay(idx, $event.target.value)" min="0" max="30000" step="1" inputmode="numeric" placeholder="0" :aria-label="sseFieldLabel(t('modal.sseEventDelay'), idx)" :aria-invalid="sseError(idx, 'delayInvalid') ? 'true' : 'false'" :aria-describedby="sseError(idx, 'delayInvalid') ? 'sse-delay-error-'+idx : null">
+                          <input class="form-control form-control-sm" type="number" :data-sse-invalid="sseError(idx, 'delayInvalid')" :value="evt.delayMs" @input="updateSseDelay(idx, $event.target.value)" min="0" max="600000" step="1" inputmode="numeric" placeholder="0" :aria-label="sseFieldLabel(t('modal.sseEventDelay'), idx)" :aria-invalid="sseError(idx, 'delayInvalid') ? 'true' : 'false'" :aria-describedby="sseError(idx, 'delayInvalid') ? 'sse-delay-error-'+idx : null">
                           <span class="input-affix-postfix" aria-hidden="true">{{t('modal.millisecondsShort')}}</span>
                         </div>
                         <div v-if="sseError(idx, 'delayInvalid')" class="invalid-feedback" :id="'sse-delay-error-'+idx">{{t('modal.sseEventDelayInvalid')}}</div>

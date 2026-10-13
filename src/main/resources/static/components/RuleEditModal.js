@@ -1112,7 +1112,7 @@ const RuleEditModal = {
                                                 <input class="form-control form-control-sm" v-model="evt.id" :placeholder="t('modal.sseEventIdPlaceholder')" :aria-label="t('modal.sseFieldLabel', {index:idx+1, field:t('modal.sseEventId')})">
                                             </td>
                                             <td>
-                                                <div class="input-affix rule-sse-delay"><input class="form-control form-control-sm" type="number" v-model.number="evt.delayMs" min="0" max="30000" placeholder="0" :aria-label="t('modal.sseFieldLabel', {index:idx+1, field:t('modal.sseEventDelay')})"><span class="input-affix-postfix">{{t('modal.millisecondsShort')}}</span></div>
+                                                <div class="input-affix rule-sse-delay"><input class="form-control form-control-sm" type="number" v-model.number="evt.delayMs" min="0" max="600000" placeholder="0" :aria-label="t('modal.sseFieldLabel', {index:idx+1, field:t('modal.sseEventDelay')})"><span class="input-affix-postfix">{{t('modal.millisecondsShort')}}</span></div>
                                             </td>
                                             <td class="rule-sse-action-cell">
                                                 <ui-button type="button" variant="danger" size="compact" icon-only @click="$emit('remove-sse-event',idx)" :disabled="sseEvents.length<=1" :title="t('modal.deleteSseEventAt', {index:idx+1})" :aria-label="t('modal.deleteSseEventAt', {index:idx+1})">

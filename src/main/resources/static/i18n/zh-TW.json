@@ -1174,7 +1174,7 @@
     "sseEventId": "事件 ID",
     "sseEventIdPlaceholder": "event-1",
     "sseEventDelay": "延遲",
-    "sseEventDelayInvalid": "請輸入 0–30000 之間的整數。",
+    "sseEventDelayInvalid": "請輸入 0–600000 之間的整數。",
     "sseEventDataRequired": "請輸入事件資料。",
     "millisecondsShort": "ms",
     "sseTypeNormal": "一般事件",

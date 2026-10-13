@@ -1174,7 +1174,7 @@
     "sseEventId": "Event ID",
     "sseEventIdPlaceholder": "event-1",
     "sseEventDelay": "Delay",
-    "sseEventDelayInvalid": "Enter a whole number from 0 to 30000.",
+    "sseEventDelayInvalid": "Enter a whole number from 0 to 600000.",
     "sseEventDataRequired": "Enter event data.",
     "millisecondsShort": "ms",
     "sseTypeNormal": "Send event",

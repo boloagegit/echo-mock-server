@@ -45,7 +45,7 @@ public class SsePlayer {
     private static final int SCHEDULER_POOL_SIZE = 8;
     /** 同時進行中的寫入上限；每個串流同時最多一個寫入，全部忙碌時其他串流稍後重試。 */
     static final int MAX_WRITERS = 256;
-    static final long DEFAULT_STALLED_WRITE_TIMEOUT_MS = 30_000;
+    static final long DEFAULT_STALLED_WRITE_TIMEOUT_MS = 120_000;
     static final long MIN_STALLED_WRITE_TIMEOUT_MS = 1_000;
     private static final long STALL_CHECK_INTERVAL_MS = 1_000;
     /** writer 全部忙碌時，多久後重試寫入。 */
@@ -71,7 +71,7 @@ public class SsePlayer {
 
     @Autowired
     public SsePlayer(ResponseTemplateService templateService,
-                     @Value("${echo.sse.stalled-write-timeout-ms:30000}") long stalledWriteTimeoutMs) {
+                     @Value("${echo.sse.stalled-write-timeout-ms:120000}") long stalledWriteTimeoutMs) {
         this(templateService, null, null, stalledWriteTimeoutMs);
     }
 
