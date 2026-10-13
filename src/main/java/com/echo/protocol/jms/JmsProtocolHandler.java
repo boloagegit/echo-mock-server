@@ -142,7 +142,8 @@ public class JmsProtocolHandler extends AbstractProtocolHandler {
 
     @Override
     public BaseRule save(BaseRule rule) {
-        return repository.save((JmsRule) rule);
+        // 立即寫入：在外層交易內也要讓回傳的規則帶上新的版本號
+        return repository.saveAndFlush((JmsRule) rule);
     }
 
     @Override
