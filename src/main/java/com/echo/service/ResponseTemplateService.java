@@ -3,9 +3,12 @@ package com.echo.service;
 import com.echo.core.util.InterruptibleCharSequence;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.jknack.handlebars.Context;
 import com.github.jknack.handlebars.Handlebars;
 import com.github.jknack.handlebars.Helper;
+import com.github.jknack.handlebars.Options;
 import com.github.jknack.handlebars.Template;
+import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.PathNotFoundException;
 import org.slf4j.Logger;
@@ -20,6 +23,8 @@ import jakarta.annotation.PreDestroy;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathExpression;
+import javax.xml.xpath.XPathExpressionException;
 import javax.xml.xpath.XPathFactory;
 import java.io.IOException;
 import java.io.StringReader;
@@ -108,6 +113,30 @@ public class ResponseTemplateService {
     private static final ThreadLocal<XPath> XPATH = ThreadLocal.withInitial(() ->
         XPathFactory.newInstance().newXPath()
     );
+
+    /** 每個執行緒最多保留的已編譯 XPath 數；XPathExpression 不可跨執行緒共用。 */
+    private static final int MAX_COMPILED_XPATHS = 64;
+
+    private static final ThreadLocal<Map<String, XPathExpression>> COMPILED_XPATHS = ThreadLocal.withInitial(() ->
+        new LinkedHashMap<>(16, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, XPathExpression> eldest) {
+                return size() > MAX_COMPILED_XPATHS;
+            }
+        });
+
+    /** 模板裡的 XPath 字串固定，編譯一次後在同一執行緒重用。 */
+    private static XPathExpression compiledXPath(String path) throws XPathExpressionException {
+        Map<String, XPathExpression> compiled = COMPILED_XPATHS.get();
+        XPathExpression expression = compiled.get(path);
+        if (expression == null) {
+            XPath xPath = XPATH.get();
+            xPath.reset();
+            expression = xPath.compile(path);
+            compiled.put(path, expression);
+        }
+        return expression;
+    }
 
     private final Handlebars handlebars;
     private final Cache<String, Template> templateCache;
@@ -287,7 +316,12 @@ public class ResponseTemplateService {
                 return "";
             }
             try {
-                Object result = JsonPath.read(jsonStr, path);
+                // 同一次渲染中相同內容只解析一次（見 ParsedBodies）
+                DocumentContext document = parsed(options).json(jsonStr);
+                if (document == null) {
+                    return "";
+                }
+                Object result = document.read(path);
                 if (result instanceof List<?> list) {
                     return list;
                 }
@@ -307,12 +341,12 @@ public class ResponseTemplateService {
                 return "";
             }
             try {
-                DocumentBuilder builder = DOC_BUILDER.get();
-                builder.reset();
-                Document doc = builder.parse(new InputSource(new StringReader(xmlStr)));
-                XPath xPath = XPATH.get();
-                xPath.reset();
-                String result = xPath.evaluate(path, doc);
+                // 同一次渲染中相同內容只解析一次（見 ParsedBodies）
+                Document doc = parsed(options).xml(xmlStr);
+                if (doc == null) {
+                    return "";
+                }
+                String result = compiledXPath(path).evaluate(doc);
                 return result != null ? result : "";
             } catch (Exception e) {
                 return "";
@@ -447,8 +481,13 @@ public class ResponseTemplateService {
                 }
             });
 
-            Map<String, Object> model = buildModel(context);
-            return template.apply(model);
+            Context handlebarsContext = Context.newBuilder(buildModel(context)).build();
+            handlebarsContext.data(PARSED_BODIES, new ParsedBodies());
+            try {
+                return template.apply(handlebarsContext);
+            } finally {
+                handlebarsContext.destroy();
+            }
         } catch (Exception e) {
             log.warn("Template rendering failed: {}", e.getMessage());
             return templateStr; // 失敗時返回原始字串
@@ -486,6 +525,64 @@ public class ResponseTemplateService {
         request.put("body", context.body() != null ? context.body() : "");
 
         return Map.of("request", request);
+    }
+
+    /** 一次渲染的解析結果放在 Handlebars context data 的這個 key。 */
+    private static final String PARSED_BODIES = "echo.parsedBodies";
+
+    private static ParsedBodies parsed(Options options) {
+        ParsedBodies parsed = options.data(PARSED_BODIES);
+        // 不經 render() 的呼叫（理論上不會發生）退回每次解析
+        return parsed != null ? parsed : new ParsedBodies();
+    }
+
+    /**
+     * 同一次渲染中已解析過的 XML / JSON 內容。模板裡多個 {@code xPath} 或 {@code jsonPath}
+     * 讀同一份內容時只解析一次；渲染結束即丟棄，不跨請求保留，記憶體與原本每次解析時相同或更少。
+     * 解析失敗也會記住，之後同一內容的呼叫直接回傳空字串，與原本的結果一致。
+     * 只記住最近幾份不同內容，避免模板對大量不同字串呼叫時累積。
+     */
+    static final class ParsedBodies {
+        private static final int MAX_ENTRIES = 4;
+        private static final Object FAILED = new Object();
+        private final Map<String, Object> xml = new LinkedHashMap<>();
+        private final Map<String, Object> json = new LinkedHashMap<>();
+
+        Document xml(String source) {
+            Object cached = lookup(xml, source, () -> {
+                DocumentBuilder builder = DOC_BUILDER.get();
+                builder.reset();
+                return builder.parse(new InputSource(new StringReader(source)));
+            });
+            return cached instanceof Document document ? document : null;
+        }
+
+        DocumentContext json(String source) {
+            Object cached = lookup(json, source, () -> JsonPath.parse(source));
+            return cached instanceof DocumentContext document ? document : null;
+        }
+
+        private interface Parser {
+            Object parse() throws Exception;
+        }
+
+        private static Object lookup(Map<String, Object> cache, String source, Parser parser) {
+            Object cached = cache.get(source);
+            if (cached != null) {
+                return cached;
+            }
+            Object value;
+            try {
+                value = parser.parse();
+            } catch (Exception e) {
+                value = FAILED;
+            }
+            if (cache.size() >= MAX_ENTRIES) {
+                cache.remove(cache.keySet().iterator().next());
+            }
+            cache.put(source, value);
+            return value;
+        }
     }
 
     /**

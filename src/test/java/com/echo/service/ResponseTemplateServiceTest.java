@@ -818,4 +818,96 @@ class ResponseTemplateServiceTest {
                 "{{request.query.a}}|{{request.query.b}}|{{request.headers.h}}|{{request.body}}", context));
         assertEquals(Map.of("a", "1", "b", "x"), context.query());
     }
+
+    // ========================================
+    // 同一次渲染只解析一次
+    // ========================================
+
+    @Test
+    @DisplayName("同一內容的多個 xPath / jsonPath 結果與逐一解析時相同")
+    void multiplePathsOnSameBodyGiveSameResults() {
+        String xml = "<o><a>1</a><b x='y'>2</b><c><d>3</d></c></o>";
+        var xmlContext = buildContext("/t", "POST", null, null, xml);
+        assertEquals("1|2|y|3|",
+                templateService.render("{{xPath request.body '//a/text()'}}|{{xPath request.body '/o/b'}}|"
+                        + "{{xPath request.body '//b/@x'}}|{{xPath request.body '//c/d/text()'}}|"
+                        + "{{xPath request.body '//missing/text()'}}", xmlContext));
+
+        String json = "{\"a\":1,\"b\":{\"c\":\"x\"},\"items\":[{\"id\":7},{\"id\":8}]}";
+        var jsonContext = buildContext("/t", "POST", null, null, json);
+        assertEquals("1|x|8|2|",
+                templateService.render("{{jsonPath request.body '$.a'}}|{{jsonPath request.body '$.b.c'}}|"
+                        + "{{jsonPath request.body '$.items[1].id'}}|{{size (jsonPath request.body '$.items')}}|"
+                        + "{{jsonPath request.body '$.nope'}}", jsonContext));
+    }
+
+    @Test
+    @DisplayName("ParsedBodies：相同內容只解析一次，解析失敗也記住")
+    void parsedBodiesParseEachSourceOnce() {
+        var parsed = new ResponseTemplateService.ParsedBodies();
+        String xml = "<o><a>1</a></o>";
+
+        assertSame(parsed.xml(xml), parsed.xml(new String(xml)));
+        assertSame(parsed.json("{\"a\":1}"), parsed.json("{\"a\":1}"));
+        assertNull(parsed.xml("<broken"));
+        assertNull(parsed.xml("<broken"));
+        assertNull(parsed.json("{broken"));
+    }
+
+    @Test
+    @DisplayName("ParsedBodies：只保留最近幾份內容")
+    void parsedBodiesKeepOnlyRecentSources() {
+        var parsed = new ResponseTemplateService.ParsedBodies();
+        var first = parsed.xml("<o>0</o>");
+        for (int i = 1; i <= 4; i++) {
+            parsed.xml("<o>" + i + "</o>");
+        }
+
+        assertNotSame(first, parsed.xml("<o>0</o>"));
+    }
+
+    @Test
+    @DisplayName("解析結果不跨請求：不同請求的內容各自取值")
+    void parsedBodiesAreNotSharedAcrossRenders() {
+        String template = "{{xPath request.body '//id/text()'}}-{{jsonPath request.body '$.id'}}";
+        assertEquals("A-", templateService.render(template, buildContext("/t", "POST", null, null, "<r><id>A</id></r>")));
+        assertEquals("B-", templateService.render(template, buildContext("/t", "POST", null, null, "<r><id>B</id></r>")));
+        assertEquals("-9", templateService.render(template, buildContext("/t", "POST", null, null, "{\"id\":9}")));
+    }
+
+    @Test
+    @DisplayName("多執行緒同時渲染 xPath / jsonPath，各自拿到自己的值")
+    void concurrentRendersWithPathsStayIsolated() throws Exception {
+        var executor = Executors.newFixedThreadPool(8);
+        try {
+            java.util.List<Callable<Boolean>> tasks = new java.util.ArrayList<>();
+            for (int i = 0; i < 400; i++) {
+                String id = "id-" + i;
+                boolean xml = i % 2 == 0;
+                tasks.add(() -> {
+                    String body = xml ? "<r><id>" + id + "</id><n>" + id + "</n></r>"
+                            : "{\"id\":\"" + id + "\",\"n\":\"" + id + "\"}";
+                    String template = xml ? "{{xPath request.body '//id/text()'}}{{xPath request.body '/r/n'}}"
+                            : "{{jsonPath request.body '$.id'}}{{jsonPath request.body '$.n'}}";
+                    return (id + id).equals(templateService.render(template, buildContext("/t", "POST", null, null, body)));
+                });
+            }
+            assertTrue(executor.invokeAll(tasks).stream().allMatch(future -> {
+                try {
+                    return future.get();
+                } catch (Exception e) {
+                    return false;
+                }
+            }));
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    @DisplayName("無效的 XPath 運算式回傳空字串，不影響同一模板的其他欄位")
+    void invalidXPathExpressionReturnsEmpty() {
+        var context = buildContext("/t", "POST", null, null, "<r><id>1</id></r>");
+        assertEquals("[]1", templateService.render("[{{xPath request.body '//['}}]{{xPath request.body '//id/text()'}}", context));
+    }
 }
