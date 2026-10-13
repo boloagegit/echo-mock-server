@@ -144,9 +144,21 @@ const SseEventsEditor = {
       this.openRaw = row.open ? null : row.raw;
       if (!row.open) this.$nextTick(() => this.focusData(row.index));
     },
+    /** 打開時從內容開頭顯示，游標放在最前面；高度依內容（最多 8 行，超過在框內捲動）。 */
     focusData(index) {
       const field = this.$el?.querySelector(`[data-sse-data="${index}"]`);
-      if (field) { field.focus(); field.scrollIntoView({ block: 'nearest' }); }
+      if (!field) return;
+      this.fitData(field);
+      field.focus({ preventScroll: true });
+      field.setSelectionRange(0, 0);
+      field.scrollTop = 0;
+      field.closest('.sse-ev')?.scrollIntoView({ block: 'nearest' });
+    },
+    fitData(field) {
+      const max = parseFloat(getComputedStyle(field).maxHeight) || 0;
+      field.style.height = 'auto';
+      const height = field.scrollHeight + 2;
+      field.style.height = (max ? Math.min(height, max) : height) + 'px';
     },
     /** 收起的事件之間用 ↑ ↓ 移動焦點（展開中的事件沒有這顆按鈕，所以依按鈕本身的順序找）。 */
     onRowKeydown(event) {
@@ -293,6 +305,8 @@ const SseEventsEditor = {
   template: /* html */`
     <div class="sse-ed" :class="{'is-expanded': expanded, 'is-focused': !!focus}">
       <template v-if="!focus">
+        <!-- 標題、摘要與工具固定在上方：清單很長時捲動也看得到 -->
+        <div class="sse-ed-sticky">
         <div class="sse-ed-head">
           <span class="rule-sse-heading"><span class="response-content-label">{{t('modal.sseEditor')}}</span>
             <span v-if="sharedCount > 1" class="response-shared-warning" :title="t('modal.modifyAffectsAll')"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>{{t('modal.sharedWarning', {count: sharedCount})}}</span></span>
@@ -314,6 +328,7 @@ const SseEventsEditor = {
           </label>
           <span v-if="searching" class="sse-ed-match" aria-live="polite">{{t('sseEditor.matchCount', {count: rows.length, total: events.length})}}</span>
           <div class="sse-ed-tool-buttons">
+            <ui-button type="button" variant="secondary" size="compact" class="sse-ed-add" @click="$emit('add')"><i class="bi bi-plus-lg" aria-hidden="true"></i>{{t('modal.addSseEvent')}}</ui-button>
             <ui-button type="button" variant="quiet" size="compact" :aria-expanded="bulkDelayOpen ? 'true' : 'false'" @click="openBulkDelay"><i class="bi bi-stopwatch" aria-hidden="true"></i>{{t('sseEditor.bulkDelay')}}</ui-button>
             <ui-button type="button" variant="quiet" size="compact" @click="openBulk"><i class="bi bi-clipboard-plus" aria-hidden="true"></i>{{t('sseEditor.bulkEdit')}}</ui-button>
           </div>
@@ -326,6 +341,7 @@ const SseEventsEditor = {
           <ui-button type="button" variant="quiet" size="compact" @click="bulkDelayOpen = false">{{t('modal.cancel')}}</ui-button>
           <span v-if="bulkDelayError" class="sse-ed-inline-error" role="alert">{{bulkDelayError}}</span>
         </form>
+        </div>
         <ol class="sse-ed-list" :aria-label="t('modal.sseEventsTableLabel')">
           <li v-for="(row, position) in rows" :key="row.key" class="sse-ev"
               :class="['is-' + row.state, 'type-' + (row.event.type || 'normal'), {'is-open': row.open, 'is-dragging': dragIndex === row.index}]"
@@ -368,7 +384,7 @@ const SseEventsEditor = {
                   <ui-button type="button" variant="quiet" size="compact" icon-only class="sse-ev-remove" @click="remove(row)" :disabled="events.length <= 1" :title="t('modal.deleteSseEventAt', {index: row.index + 1})" :aria-label="t('modal.deleteSseEventAt', {index: row.index + 1})"><i class="bi bi-trash" aria-hidden="true"></i></ui-button>
                 </span>
               </div>
-              <textarea class="form-control form-control-sm sse-ev-data" :data-sse-data="row.index" v-model="row.event.data" spellcheck="false"
+              <textarea class="form-control form-control-sm sse-ev-data" :data-sse-data="row.index" v-model="row.event.data" spellcheck="false" @input="fitData($event.target)"
                 :class="{'is-invalid': row.missingData}" :placeholder="t('modal.sseEventDataPlaceholder')"
                 :aria-label="t('modal.sseFieldLabel', {index: row.index + 1, field: t('modal.sseEventData')})"></textarea>
               <div class="sse-ev-foot">
@@ -384,9 +400,6 @@ const SseEventsEditor = {
           </li>
         </ol>
         <div v-if="searching && !rows.length" class="sse-ed-empty">{{t('sseEditor.noMatch')}}</div>
-        <div class="sse-ed-actions">
-          <ui-button type="button" variant="secondary" size="compact" @click="$emit('add')"><i class="bi bi-plus-lg" aria-hidden="true"></i>{{t('modal.addSseEvent')}}</ui-button>
-        </div>
         <details class="sse-ed-raw" @toggle="rawOpen = $event.target.open">
           <summary>{{t('sseEditor.rawPreview')}}</summary>
           <pre v-if="rawOpen">{{rawText}}</pre>

@@ -4653,6 +4653,12 @@ select.form-select-sm { height: var(--control-h-sm); min-height: var(--control-h
 .rule-editor.is-content-expanded .rule-sse-editor { height: 100% }
 .sse-ed { --sse-time-w: 70px; --sse-rail-w: 22px; display: flex; flex-direction: column; gap: var(--space-md); min-width: 0; min-height: 0 }
 .sse-ed.is-expanded, .sse-ed.is-focused { flex: 1 1 auto; height: 100% }
+.sse-ed-sticky {
+    position: sticky; top: 0; z-index: 3; display: flex; flex-direction: column; gap: var(--space-sm);
+    margin: 0 calc(-1 * var(--space-xs)); padding: var(--space-xs) var(--space-xs) var(--space-sm); background: var(--card);
+    box-shadow: 0 12px 12px -14px rgba(15, 23, 42, 0.25);
+}
+:root:not([data-theme="light"]) .sse-ed-sticky { box-shadow: 0 12px 14px -14px rgba(0, 0, 0, 0.7) }
 .sse-ed-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap }
 .sse-ed-summary { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap }
 .sse-ed-chip {
@@ -4678,9 +4684,11 @@ select.form-select-sm { height: var(--control-h-sm); min-height: var(--control-h
 
 .sse-ed-list {
     list-style: none; margin: 0; padding: 2px 6px 2px 0; min-height: 0;
-    flex: none; max-height: min(560px, 62vh); overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable;
+    flex: none;
 }
-.sse-ed.is-expanded .sse-ed-list { flex: 1 1 auto; max-height: none }
+/* 平常只有右側窗格捲動（不做兩層捲動）；放大整個編輯區時清單自己捲動 */
+.sse-ed.is-expanded .sse-ed-list { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain }
+.sse-ev { scroll-margin-top: 112px }
 .sse-ev { position: relative; display: grid; grid-template-columns: var(--sse-time-w) var(--sse-rail-w) minmax(0, 1fr); align-items: start }
 .sse-ev::before {
     content: ""; position: absolute; top: 0; bottom: 0; left: calc(var(--sse-time-w) + var(--sse-rail-w) / 2 - 1px);
@@ -4750,19 +4758,43 @@ select.form-select-sm { height: var(--control-h-sm); min-height: var(--control-h
 .sse-ev-fixed { flex: 1 1 140px; min-width: 96px; padding: 0 var(--space-sm); color: var(--muted); font: 12px var(--font-mono) }
 .sse-ev-id { flex: none; width: 150px }
 .sse-ev-delay-field { display: inline-flex; align-items: center; gap: 4px; flex: none }
-.sse-ev-delay-field.is-invalid .sse-ed-delay-input { box-shadow: 0 0 0 1px var(--danger) }
+.sse-ev-delay-field.is-invalid .sse-ed-delay-input { background-color: rgba(var(--danger-rgb), 0.1) }
 .sse-ev-card-actions { display: inline-flex; gap: 2px; margin-left: auto }
 .sse-ev-card-actions .sse-ev-remove:not(:disabled) { color: var(--danger) }
 .sse-ev-data {
-    width: calc(100% - 32px); margin-left: 32px; resize: vertical; overflow: auto; field-sizing: content;
+    width: calc(100% - 32px); margin-left: 32px; resize: vertical; overflow: auto;
     min-height: calc(3 * 1.5em + 14px); max-height: calc(8 * 1.5em + 14px);
     font: 12px/1.5 var(--font-mono) !important;
 }
+/* Fields inside the open event: no outline, a slightly lighter fill; focus sinks the field and adds a faint
+ * ring instead of a bright border (same idea as the response editor's SSE table). */
+.sse-ev-card .form-control-sm,
+.sse-ev-card .form-select-sm,
+.sse-ed-bulkdelay .form-control-sm,
+.sse-ed-search > input {
+    border-color: transparent; border-radius: var(--radius-control); background-color: rgba(var(--muted-rgb), 0.1); color: var(--text);
+}
+.sse-ev-card .form-control-sm:hover,
+.sse-ev-card .form-select-sm:hover,
+.sse-ed-bulkdelay .form-control-sm:hover,
+.sse-ed-search > input:hover { background-color: rgba(var(--muted-rgb), 0.15) }
+.sse-ev-card .form-control-sm:focus,
+.sse-ev-card .form-select-sm:focus,
+.sse-ed-bulkdelay .form-control-sm:focus,
+.sse-ed-search > input:focus {
+    border-color: transparent; background-color: var(--bg); box-shadow: 0 0 0 1px rgba(var(--primary-rgb), 0.45); outline: 0;
+}
+.sse-ev-card .form-control-sm:disabled { background-color: rgba(var(--muted-rgb), 0.05); color: var(--text-subtle) }
+.sse-ev-card .form-select-sm {
+    appearance: none; padding-right: 1.6rem; background-repeat: no-repeat; background-position: right 0.55rem center;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
+}
+.sse-ev-card .form-select-sm option { background: var(--bg); color: var(--text) }
+.sse-ev-card .sse-ev-data.is-invalid { background-color: rgba(var(--warning-rgb), 0.07); background-image: none }
 .sse-ev-foot { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; margin-left: 32px; color: var(--text-subtle); font-size: var(--font-xs) }
 .sse-ev-foot-hint { margin-left: auto }
 
 .sse-ed-empty { padding: var(--space-lg); color: var(--muted); text-align: center }
-.sse-ed-actions { display: flex; align-items: center; gap: var(--space-sm); padding-left: calc(var(--sse-time-w) + var(--sse-rail-w)) }
 .sse-ed-raw > summary { width: fit-content; color: var(--muted); font-size: var(--font-sm); cursor: pointer }
 .sse-ed-raw > summary:hover { color: var(--text) }
 .sse-ed-raw > pre {
