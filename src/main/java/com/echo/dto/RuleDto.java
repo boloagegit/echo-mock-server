@@ -51,6 +51,13 @@ public class RuleDto {
     private String condition;
     private Long responseId;
     private String responseBody;
+
+    /**
+     * 為 true 時，responseBody 改寫 responseId 指向的既有回應（與規則在同一個交易內儲存），
+     * 而不是另外建立新回應。只用於請求，不會出現在回應中。
+     */
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.WRITE_ONLY)
+    private Boolean updateExistingResponse;
     private String responseDescription;
     private Integer status;
     private String responseHeaders;

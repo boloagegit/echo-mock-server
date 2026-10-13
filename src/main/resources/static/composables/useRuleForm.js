@@ -808,12 +808,13 @@ const useRuleForm = (deps) => {
     const saving = ref(false);
 
     const saveRule = async (andClose = false) => {
-        // SSE 模式：序列化表格資料到 responseBody
+        // SSE 模式：序列化表格資料到 responseBody。使用現有回應時，事件與規則一起送出，
+        // 由後端在同一個交易內改寫該回應（規則存檔失敗時回應也不會被改到）。
+        let existingResponseBody = null;
         if (form.value.action !== 'FORWARD' && form.value.sseEnabled && form.value.protocol === 'HTTP') {
             const serialized = serializeSseEvents(sseEvents.value);
             if (form.value.responseMode === 'existing' && form.value.responseId) {
-                const rr = await apiCall(`/api/admin/responses/${form.value.responseId}`, { method: 'PUT', body: JSON.stringify({ body: serialized }) }, { errorMsg: t('toast.responseSaveFailed') });
-                if (!rr || !rr.ok) { showToast(t('toast.sseSaveFailed'), 'error'); return; }
+                existingResponseBody = serialized;
             } else {
                 form.value.responseBody = serialized;
             }
@@ -842,16 +843,11 @@ const useRuleForm = (deps) => {
         form.value.bodyCondition = simple.bodyCondition;
         form.value.queryCondition = simple.queryCondition;
         form.value.headerCondition = simple.headerCondition;
-        // 使用現有 Response 時：若正在編輯回應內容，先自動儲存
+        // 使用現有 Response 時：正在編輯的回應內容與規則一起送出，在同一個交易內儲存
         const faulting = form.value.faultType && form.value.faultType !== 'NONE';
-        if (!faulting && form.value.action !== 'FORWARD' && form.value.responseMode === 'existing' && form.value.responseId && previewEditing.value && previewEditBody.value !== previewResponseBody.value) {
-            const resp = selectedResponseSummary.value;
-            const rr = await apiCall(`/api/admin/responses/${form.value.responseId}`, { method: 'PUT', body: JSON.stringify({ description: resp?.description || '', body: previewEditBody.value }) }, { errorMsg: t('toast.responseSaveFailed') });
-            if (!rr || !rr.ok) { saving.value = false; showToast(t('toast.responseSaveFailed'), 'error'); return; }
-            previewResponseBody.value = previewEditBody.value;
-            previewEditing.value = false;
-            responsesMarkDirty();
-        }
+        const previewEdited = !faulting && form.value.action !== 'FORWARD' && form.value.responseMode === 'existing'
+            && form.value.responseId && previewEditing.value && previewEditBody.value !== previewResponseBody.value;
+        if (previewEdited && existingResponseBody === null) existingResponseBody = previewEditBody.value;
         const payload = { ...form.value };
         delete payload.advancedMatch;
         if (matchSpec) {
@@ -885,7 +881,10 @@ const useRuleForm = (deps) => {
                 payload.httpTargetConnectionId = null;
                 if (payload.forwardTargetMode !== 'CONNECTION') payload.jmsTargetConnectionId = null;
             }
-        } else if (payload.responseMode === 'existing') { payload.responseBody = null; }
+        } else if (payload.responseMode === 'existing') {
+            payload.responseBody = existingResponseBody;
+            payload.updateExistingResponse = existingResponseBody !== null;
+        }
         else { payload.responseId = null; }
         delete payload.responseMode;
         let savedSuccessfully = false;
@@ -897,6 +896,10 @@ const useRuleForm = (deps) => {
             if (r && r.ok) {
                 const saved = await r.json();
                 savedSuccessfully = true;
+                if (payload.updateExistingResponse) {
+                    if (previewEdited) { previewResponseBody.value = previewEditBody.value; previewEditing.value = false; }
+                    responsesMarkDirty();
+                }
                 // 有判斷順序的問題時只顯示一則提醒（已包含「已儲存」），否則顯示一般的成功訊息
                 const savedMessage = editing.value ? t('toast.ruleSaveSuccess') : t('toast.ruleCreateSuccess');
                 neverReachedWarning(saved).then(warning => {

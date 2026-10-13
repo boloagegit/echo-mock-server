@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Objects;
@@ -78,6 +79,8 @@ public class RuleEditService {
         }
     }
 
+    /** 規則與它建立或改寫的回應在同一個交易內儲存：任一失敗時都不會留下一半的變更。 */
+    @Transactional
     public Saved save(RuleDto dto) {
         validateRuleFields(dto);
         applyMatchSpec(dto);
@@ -123,18 +126,30 @@ public class RuleEditService {
             dto.setSseEnabled(false);
             dto.setSseLoopEnabled(false);
             response = null;
+        // 使用現有 Response，並改寫它的內容（例如在規則裡編輯 SSE 事件）
+        } else if (dto.getResponseId() != null && Boolean.TRUE.equals(dto.getUpdateExistingResponse())
+                && dto.getResponseBody() != null && !dto.getResponseBody().isBlank()) {
+            Response existing = responseService.findById(dto.getResponseId())
+                    .orElseThrow(() -> new IllegalArgumentException("Response not found: " + dto.getResponseId()));
+            validateSseRule(dto, dto.getResponseBody());
+            validateResponseContent(dto);
+            existing.setBody(dto.getResponseBody());
+            if (isSseRule(dto)) existing.setContentType(Response.SSE);
+            response = responseService.save(existing);
         // 使用現有 Response
         } else if (dto.getResponseId() != null && (dto.getResponseBody() == null || dto.getResponseBody().isBlank())) {
             response = responseService.findById(dto.getResponseId())
                     .orElseThrow(() -> new IllegalArgumentException("Response not found: " + dto.getResponseId()));
             validateSseRule(dto, response.getBody());
+            if (isSseRule(dto) && !Response.isSse(response.getContentType())) {
+                // 舊版建立的 SSE 規則回應沒有標成 SSE；內容已通過 SSE 驗證，順便補上類型
+                response.setContentType(Response.SSE);
+                response = responseService.save(response);
+            }
         } else {
             // 驗證回應內容格式
             validateSseRule(dto, dto.getResponseBody());
-            if (dto.getResponseBody() != null && !dto.getResponseBody().isBlank()) {
-                ResponseContentType contentType = ContentTypeConstraints.infer(dto.getProtocol(), dto.getSseEnabled());
-                responseContentValidatorRegistry.getValidator(contentType).validate(dto.getResponseBody());
-            }
+            validateResponseContent(dto);
             // 建立新 Response - 自動產生描述
             String desc = dto.getResponseDescription();
             if (desc == null || desc.isBlank()) {
@@ -143,6 +158,7 @@ public class RuleEditService {
             response = responseService.save(Response.builder()
                     .description(desc)
                     .body(dto.getResponseBody())
+                    .contentType(isSseRule(dto) ? Response.SSE : null)
                     .build());
             dto.setResponseId(response.getId());
         }
@@ -291,7 +307,18 @@ public class RuleEditService {
         return value != null && !value.isBlank();
     }
 
-    private void validateSseRule(RuleDto dto, String body) {
+    private static boolean isSseRule(RuleDto dto) {
+        return dto.getProtocol() == Protocol.HTTP && Boolean.TRUE.equals(dto.getSseEnabled());
+    }
+
+    private void validateResponseContent(RuleDto dto) {
+        if (dto.getResponseBody() != null && !dto.getResponseBody().isBlank()) {
+            ResponseContentType contentType = ContentTypeConstraints.infer(dto.getProtocol(), dto.getSseEnabled());
+            responseContentValidatorRegistry.getValidator(contentType).validate(dto.getResponseBody());
+        }
+    }
+
+        private void validateSseRule(RuleDto dto, String body) {
         if (dto.getProtocol() != Protocol.HTTP || !Boolean.TRUE.equals(dto.getSseEnabled())) return;
         SseRuleSettings.validateMethod(dto.getMethod());
         SseRuleSettings.headers(dto.getResponseHeaders(), dto.getStatus() == null ? 200 : dto.getStatus());

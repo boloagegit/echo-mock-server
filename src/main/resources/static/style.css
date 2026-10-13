@@ -4657,3 +4657,10 @@ select.form-select-sm { height: var(--control-h-sm); min-height: var(--control-h
 .traffic-hint { margin: 6px 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; color: var(--muted); font-size: var(--font-xs) }
 .traffic-hint code { color: var(--text); font-size: var(--font-xs); max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 @media (prefers-reduced-motion: reduce) { .traffic-skeleton { animation: none } }
+
+.rule-sse-heading {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3, 12px);
+    min-width: 0;
+}

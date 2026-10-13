@@ -1065,7 +1065,8 @@ const RuleEditModal = {
                         <!-- SSE 表格編輯器 -->
                         <div v-if="form.sseEnabled && form.protocol==='HTTP'" class="sse-editor-wrap rule-sse-editor">
                             <div class="rule-sse-toolbar">
-                                <span class="response-content-label">{{t('modal.sseEditor')}}</span>
+                                <span class="rule-sse-heading"><span class="response-content-label">{{t('modal.sseEditor')}}</span>
+                                <span v-if="form.responseMode==='existing' && form.responseId && (selectedResponse?.usageCount||previewResponseUsageCount) > 1" class="response-shared-warning" :title="t('modal.modifyAffectsAll')"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>{{t('modal.sharedWarning', {count: selectedResponse?.usageCount||previewResponseUsageCount})}}</span></span>
                                 <div class="form-check form-switch rule-sse-loop">
                                     <input class="form-check-input" type="checkbox" id="sseLoopToggle" v-model="form.sseLoopEnabled">
                                     <label class="form-check-label" for="sseLoopToggle"><i class="bi bi-arrow-repeat" aria-hidden="true"></i>{{t('modal.sseLoopMode')}}</label>

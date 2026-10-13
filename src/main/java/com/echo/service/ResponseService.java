@@ -80,7 +80,7 @@ public class ResponseService {
                         .id(id)
                         .description((String) r[1])
                         .bodySize((Integer) r[2])
-                        .contentType((String) r[3])
+                        .contentType(Response.normalizeContentType((String) r[3]))
                         .usageCount(usageMap.getOrDefault(id, 0L).intValue())
                         .createdAt((LocalDateTime) r[4])
                         .updatedAt((LocalDateTime) r[5])
@@ -115,7 +115,7 @@ public class ResponseService {
                         .id(row.id())
                         .description(row.description())
                         .bodySize(row.bodySize())
-                        .contentType(row.contentType())
+                        .contentType(Response.normalizeContentType(row.contentType()))
                         .usageCount(row.usageCount())
                         .createdAt(row.createdAt())
                         .updatedAt(row.updatedAt())
@@ -138,6 +138,7 @@ public class ResponseService {
 
     @Transactional
     public Response save(Response response) {
+        response.setContentType(Response.normalizeContentType(response.getContentType()));
         validateSseContent(response);
         log.info("Saving response: {}", response.getDescription());
         boolean existing = response.getId() != null;
@@ -149,7 +150,7 @@ public class ResponseService {
     }
 
     private void validateSseContent(Response response) {
-        if ("SSE_EVENTS".equals(response.getContentType())) SseEventSequence.parse(response.getBody());
+        if (Response.isSse(response.getContentType())) SseEventSequence.parse(response.getBody());
         if (response.getId() == null) return;
         for (var rule : protocolHandlerRegistry.findByResponseId(response.getId())) {
             if (rule instanceof com.echo.entity.HttpRule httpRule && Boolean.TRUE.equals(httpRule.getSseEnabled())) {

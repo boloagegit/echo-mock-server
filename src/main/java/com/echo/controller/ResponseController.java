@@ -89,6 +89,8 @@ public class ResponseController {
                     Response before = Response.builder().id(existing.getId()).description(existing.getDescription()).body(existing.getBody()).build();
                     response.setId(id);
                     response.setVersion(existing.getVersion());
+                    // 沒送的欄位沿用原本的值（只改內容時不會清掉描述或類型）
+                    if (response.getDescription() == null) response.setDescription(existing.getDescription());
                     if (response.getContentType() == null) response.setContentType(existing.getContentType());
                     Response saved = responseService.save(response);
                     ruleAuditService.ifPresent(s -> s.logResponseUpdate(before, saved));
