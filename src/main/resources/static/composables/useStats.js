@@ -24,7 +24,8 @@ const useStats = (deps) => {
     // --- 狀態 ---
     const logs = ref([]);
     const logSummary = ref({});
-    const logFilter = ref({ protocol: '', matched: '', endpoint: '', from: '', to: '' });
+    // method / path：完全相同的方法與網址（流量概況「看這些請求」）；endpoint 是部分比對的關鍵字
+    const logFilter = ref({ protocol: '', matched: '', endpoint: '', method: '', path: '', from: '', to: '' });
 
     const savedLogSort = JSON.parse(localStorage.getItem('logSort') || 'null');
     const logSort = ref(savedLogSort || { field: 'requestTime', asc: false });
@@ -100,6 +101,8 @@ const useStats = (deps) => {
         if (logFilter.value.matched) { params.set('matched', logFilter.value.matched); }
         const endpoint = (logFilter.value.endpoint || '').trim();
         if (endpoint) { params.set('endpoint', endpoint); }
+        if (logFilter.value.method) { params.set('method', logFilter.value.method); }
+        if (logFilter.value.path) { params.set('path', logFilter.value.path); }
         // 時間範圍（流量概況點選的格子），伺服器本地時間字串原樣送回
         if (logFilter.value.from) { params.set('from', logFilter.value.from); }
         if (logFilter.value.to) { params.set('to', logFilter.value.to); }
@@ -239,6 +242,10 @@ const useStats = (deps) => {
         if (logFilter.value.matched) {
             chips.push({ key: 'matched', label: t('filterChips.status') + (logFilter.value.matched === 'true' ? t('stats.filterMatched') : t('stats.filterUnmatched')) });
         }
+        if (logFilter.value.path) {
+            const method = logFilter.value.method ? logFilter.value.method + ' ' : '';
+            chips.push({ key: 'path', label: t('filterChips.endpoint') + method + logFilter.value.path });
+        }
         if (logFilter.value.endpoint) {
             chips.push({ key: 'endpoint', label: t('filterChips.keyword') + logFilter.value.endpoint });
         }
@@ -253,13 +260,15 @@ const useStats = (deps) => {
     const removeLogChip = (key) => {
         if (key === 'time') {
             logFilter.value = { ...logFilter.value, from: '', to: '' };
+        } else if (key === 'path') {
+            logFilter.value = { ...logFilter.value, method: '', path: '' };
         } else {
             logFilter.value[key] = '';
         }
     };
 
     const clearLogFilters = () => {
-        logFilter.value = { protocol: '', matched: '', endpoint: '', from: '', to: '' };
+        logFilter.value = { protocol: '', matched: '', endpoint: '', method: '', path: '', from: '', to: '' };
     };
 
     // --- 清理函式（供 onUnmounted 呼叫） ---

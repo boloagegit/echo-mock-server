@@ -34,6 +34,8 @@ public class RequestLogController {
             @RequestParam(required = false) String protocol,
             @RequestParam(required = false) Boolean matched,
             @RequestParam(required = false) String endpoint,
+            @RequestParam(required = false) String method,
+            @RequestParam(required = false) String path,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
             @RequestParam(required = false) Integer limit,
@@ -47,6 +49,8 @@ public class RequestLogController {
                 .protocol(protocol != null ? Protocol.valueOf(protocol) : null)
                 .matched(matched)
                 .endpoint(endpoint)
+                .method(method)
+                .path(path)
                 .page(page)
                 .size(size != null ? size : limit)
                 .sortField(sortField)
@@ -69,8 +73,8 @@ public class RequestLogController {
     public ResponseEntity<RequestLogService.SummaryQueryResult> queryLogs(
             String ruleId, String protocol, Boolean matched, String endpoint, Integer page, Integer size,
             Integer limit, String sortField, String direction, Long afterId) {
-        return queryLogs(ruleId, protocol, matched, endpoint, page, size, limit, sortField, direction, afterId,
-                null, null);
+        return queryLogs(ruleId, protocol, matched, endpoint, null, null, page, size, limit, sortField, direction,
+                afterId, null, null);
     }
 
     /**

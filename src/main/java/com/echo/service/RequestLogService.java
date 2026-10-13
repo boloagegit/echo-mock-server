@@ -451,13 +451,15 @@ public class RequestLogService implements ServeEventListener {
                 RequestLogSummaryQuery.Result resultPage = summaryQuery.query(
                         new RequestLogSummaryQuery.Filter(
                                 filter.getRuleId(), filter.getProtocol(), filter.getMatched(),
-                                endpoint, filter.getAfterId(), filter.getFrom(), filter.getTo()),
+                                endpoint, filter.getAfterId(), filter.getFrom(), filter.getTo(),
+                                blankToNull(filter.getMethod()), blankToNull(filter.getPath())),
                         pageNumber, pageSize, sortField,
                         sortDirection == Sort.Direction.ASC);
                 entries = resultPage.rows().stream().map(this::toSummaryFromRow).toList();
                 totalElements = resultPage.totalElements();
                 totalPages = resultPage.totalPages();
             } else {
+                // 只供保留 repository 測試接縫的建構式使用；正式環境一律走上面的 summaryQuery
                 Page<Object[]> resultPage = requestLogRepository.findSummaryPage(
                         filter.getRuleId(), filter.getProtocol(), filter.getMatched(), endpoint,
                         filter.getAfterId(), filter.getFrom(), filter.getTo(),
@@ -512,6 +514,14 @@ public class RequestLogService implements ServeEventListener {
                     || containsIgnoreCase(e.getDiagnosticId(), normalized)
                     || containsIgnoreCase(e.getRuleId(), normalized));
         }
+        String method = blankToNull(filter.getMethod());
+        if (method != null) {
+            stream = stream.filter(e -> method.equalsIgnoreCase(e.getMethod()));
+        }
+        String path = blankToNull(filter.getPath());
+        if (path != null) {
+            stream = stream.filter(e -> path.equals(e.getEndpoint()));
+        }
         if (filter.getAfterId() != null) {
             stream = stream.filter(e -> e.getId() != null && e.getId() > filter.getAfterId());
         }
@@ -526,6 +536,10 @@ public class RequestLogService implements ServeEventListener {
 
     private boolean containsIgnoreCase(String value, String normalizedKeyword) {
         return value != null && value.toLowerCase(Locale.ROOT).contains(normalizedKeyword);
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private String normalizeEndpoint(String endpoint) {
@@ -837,6 +851,10 @@ public class RequestLogService implements ServeEventListener {
         private Protocol protocol;
         private Boolean matched;
         private String endpoint;
+        /** HTTP 方法，完全相同（不分大小寫）。 */
+        private String method;
+        /** 網址，完全相同（{@link #endpoint} 是部分比對的關鍵字）。 */
+        private String path;
         private Integer page;
         private Integer size;
         private String sortField;

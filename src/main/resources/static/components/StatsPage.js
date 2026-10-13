@@ -93,9 +93,13 @@ const StatsPage = {
       this.$emit('load-logs', true);
       this.$refs.traffic?.load();
     },
-    /** 流量概況的「看這些請求」：只列出這段時間內這個網址沒比對到的請求。 */
-    showUnmatched({ protocol, endpoint, from, to }) {
-      this.$emit('update:logFilter', { ...this.logFilter, protocol, matched: 'false', endpoint, from, to });
+    /**
+     * 流量概況的「看這些請求」：只列出這段時間內這個方法與網址（完全相同）沒比對到的請求，
+     * 筆數與統計一致；原本的關鍵字搜尋清掉，避免再縮小範圍。
+     */
+    showUnmatched({ protocol, method, endpoint, from, to }) {
+      this.$emit('update:logFilter', { ...this.logFilter, protocol, matched: 'false', endpoint: '',
+        method: method || '', path: endpoint, from, to });
     },
     shortId, fmtTime, fmtSize, reasonText,
     treeSummary(tree) {

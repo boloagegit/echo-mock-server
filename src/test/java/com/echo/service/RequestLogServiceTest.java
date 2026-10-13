@@ -115,6 +115,20 @@ class RequestLogServiceTest {
         }
 
         @Test
+        void methodAndPathFilterOnlyTheExactRequest() {
+            service.record(null, Protocol.HTTP, "GET", "/refund", false, 1, "127.0.0.1", null, null, null, null, null, null);
+            service.record(null, Protocol.HTTP, "POST", "/refund", false, 1, "127.0.0.1", null, null, null, null, null, null);
+            service.record(null, Protocol.HTTP, "GET", "/refund/7", false, 1, "127.0.0.1", null, null, null, null, null, null);
+
+            var filter = RequestLogService.QueryFilter.builder().method("get").path("/refund").build();
+
+            assertThat(service.querySummary(filter).getResults()).singleElement().satisfies(item -> {
+                assertThat(item.getLog().getMethod()).isEqualTo("GET");
+                assertThat(item.getLog().getEndpoint()).isEqualTo("/refund");
+            });
+        }
+
+        @Test
         void proxyErrorFitsExistingColumnWithoutTruncatingResponseBody() {
             when(configService.isRequestLogIncludeBody()).thenReturn(true);
             when(configService.getRequestLogMaxBodySize()).thenReturn(1000);

@@ -1,7 +1,7 @@
 /**
  * TrafficOverview - 請求紀錄頁上方的流量概況：精簡（預設）、展開、收合三種顯示，選擇存在瀏覽器。
  * 收合時不查詢；資料來自 GET /api/admin/logs/traffic（伺服器端統計並短暫共用，見 RequestLogTrafficService）。
- * 點一格長條 → emit select-time {from, to}；點「看這些請求」→ emit show-unmatched {protocol, endpoint, from, to}。
+ * 點一格長條 → emit select-time {from, to}；點「看這些請求」→ emit show-unmatched {protocol, method, endpoint, from, to}。
  */
 const TRAFFIC_MODE_KEY = 'echo.traffic.mode';
 const TRAFFIC_RANGE_KEY = 'echo.traffic.range';
@@ -124,7 +124,7 @@ const TrafficOverview = {
       this.$emit('select-time', { from: bar.bucket.start, to: TrafficChart.bucketEnd(this.traffic, bar.i) });
     },
     showUnmatched(item) {
-      this.$emit('show-unmatched', { protocol: item.protocol, endpoint: item.endpoint,
+      this.$emit('show-unmatched', { protocol: item.protocol, method: item.method || '', endpoint: item.endpoint,
         from: this.traffic.from, to: this.traffic.to });
     },
     protocolLabel(item) {
