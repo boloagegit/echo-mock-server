@@ -127,8 +127,9 @@ public class RuleEditService {
             dto.setSseLoopEnabled(false);
             response = null;
         // 使用現有 Response，並改寫它的內容（例如在規則裡編輯 SSE 事件）
+        // 空白內容也算改寫（一般回應可以清空；SSE 回應會被下面的驗證擋下），不可當成「沿用」而默默不存
         } else if (dto.getResponseId() != null && Boolean.TRUE.equals(dto.getUpdateExistingResponse())
-                && dto.getResponseBody() != null && !dto.getResponseBody().isBlank()) {
+                && dto.getResponseBody() != null) {
             Response existing = responseService.findById(dto.getResponseId())
                     .orElseThrow(() -> new IllegalArgumentException("Response not found: " + dto.getResponseId()));
             validateSseRule(dto, dto.getResponseBody());

@@ -117,6 +117,24 @@ class RequestLogTrafficServiceTest {
     }
 
     @Test
+    void stillReportsRemovedRecordsAfterPruningBelowTheLimit() {
+        rows();
+        query.earliest = NOW.minusDays(2);
+        // 超過 10,000 筆時刪到 9,000 筆騰出空間：刪過之後筆數低於上限，但更早的紀錄已經不在了
+        when(requestLogService.count()).thenReturn(9_000L);
+
+        assertThat(service.compute(Range.WEEK).truncated()).isTrue();
+    }
+
+    @Test
+    void belowThePruneTargetNothingWasRemoved() {
+        rows();
+        when(requestLogService.count()).thenReturn(8_999L);
+
+        assertThat(service.compute(Range.WEEK).truncated()).isFalse();
+    }
+
+    @Test
     void topUnmatchedComesFromTheDatabase() {
         rows();
         query.topUnmatched = List.of(new RequestLogTrafficQuery.EndpointCount(Protocol.HTTP, "POST", "/refund", 41));

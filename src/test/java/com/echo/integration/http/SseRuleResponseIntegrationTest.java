@@ -161,6 +161,36 @@ class SseRuleResponseIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    @DisplayName("在規則裡把共用的一般回應清空：回應內容真的被清空，不是默默沿用舊內容")
+    void clearingAnExistingGeneralResponseFromTheRuleSavesTheEmptyBody() {
+        Response shared = createResponse("shared general", "{\"ok\":true}");
+        RuleDto dto = RuleDto.builder().protocol(Protocol.HTTP).matchKey("/general/clear").method("GET").status(200)
+                .responseId(shared.getId()).build();
+        RuleDto rule = adminClient().postForEntity("/api/admin/rules", dto, RuleDto.class).getBody();
+
+        RuleDto current = adminClient().getForObject("/api/admin/rules/" + rule.getId(), RuleDto.class);
+        ResponseEntity<RuleDto> saved = adminClient().exchange("/api/admin/rules/" + rule.getId(), HttpMethod.PUT,
+                new HttpEntity<>(rewritePayload(current, "")), RuleDto.class);
+
+        assertThat(saved.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(saved.getBody().getResponseId()).isEqualTo(shared.getId());
+        assertThat(responseRepository.findById(shared.getId()).orElseThrow().getBody()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("SSE 回應不可在規則裡被清空")
+    void clearingAnSseResponseFromTheRuleIsRejected() {
+        RuleDto rule = createSseRule("/sse/clear");
+        RuleDto current = adminClient().getForObject("/api/admin/rules/" + rule.getId(), RuleDto.class);
+
+        ResponseEntity<String> saved = adminClient().exchange("/api/admin/rules/" + rule.getId(), HttpMethod.PUT,
+                new HttpEntity<>(rewritePayload(current, "")), String.class);
+
+        assertThat(saved.getStatusCode().is4xxClientError()).isTrue();
+        assertThat(response(rule.getResponseId())).containsEntry("body", EVENTS);
+    }
+
+    @Test
     @DisplayName("標成 SSE 的回應必須是有效的 SSE 事件")
     void sseResponseContentIsValidated() {
         ResponseEntity<String> created = adminClient().postForEntity("/api/admin/responses",

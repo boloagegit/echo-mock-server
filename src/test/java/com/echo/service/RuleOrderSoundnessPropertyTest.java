@@ -42,6 +42,7 @@ class RuleOrderSoundnessPropertyTest {
         when(httpRuleService.httpRuleSnapshot()).thenReturn(snapshot);
         JmsRuleService jmsRuleService = mock(JmsRuleService.class);
         when(jmsRuleService.findAllJmsRulesCached()).thenReturn(List.of());
+        when(jmsRuleService.withValidResponses(List.of())).thenReturn(List.of());
         Set<String> neverReached = new RuleOrderService(httpRuleService, jmsRuleService, Optional.empty())
                 .issues().issues().keySet();
 

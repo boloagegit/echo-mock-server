@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -31,10 +32,14 @@ class RuleOrderServiceTest {
                 .bodyCondition(body).enabled(true).createdAt(T0).build();
     }
 
+    @SuppressWarnings("unchecked")
     private RuleOrderService service(List<HttpRule> httpRules, List<JmsRule> jmsRules, String endpointField) {
         when(httpRuleService.httpRuleSnapshot())
                 .thenReturn(new HttpRuleSnapshot(httpRules, HttpRuleService.HTTP_RULE_ORDER, null));
         when(jmsRuleService.findAllJmsRulesCached()).thenReturn(jmsRules);
+        // 回應已被刪除的規則（responseId 999）比對時不會被考慮
+        when(jmsRuleService.withValidResponses(anyList())).thenAnswer(invocation -> ((List<JmsRule>) invocation
+                .getArgument(0)).stream().filter(rule -> !Long.valueOf(999L).equals(rule.getResponseId())).toList());
         JmsProperties properties = new JmsProperties();
         properties.setEndpointField(endpointField);
         return new RuleOrderService(httpRuleService, jmsRuleService, Optional.of(properties));
@@ -213,6 +218,17 @@ class RuleOrderServiceTest {
         assertThat(view.entries().get(0).partial()).isTrue();
         assertThat(view.entries().get(2).usedAsDefault()).isTrue();
         assertThat(view.entries().get(3).issue().type()).isEqualTo(RuleOrderService.NOT_USED_HERE);
+    }
+
+    @Test
+    void jmsRuleWhoseResponseWasDeletedDoesNotHideLaterRules() {
+        JmsRule orphan = jms("orphan-default", "ORDER", 10, null);
+        orphan.setResponseId(999L);
+        RuleOrderService service = service(List.of(), List.of(orphan, jms("pay", "ORDER", 5, "ServiceName=Pay"),
+                jms("queue-default", "ORDER", 0, null)), "ServiceName");
+
+        // 比對時會略過 orphan-default，所以後面的規則都輪得到
+        assertThat(service.issues().count()).isZero();
     }
 
     @Test

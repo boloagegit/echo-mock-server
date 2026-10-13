@@ -103,6 +103,11 @@ public class JmsRuleService {
     }
 
     private List<JmsRule> prepareJmsRules(List<JmsRule> rules) {
+        return withValidResponses(rules).stream().sorted(JMS_RULE_ORDER).toList();
+    }
+
+    /** 拿掉回應已被刪除的規則：比對時不會考慮它們（判斷順序也必須一致）。 */
+    public List<JmsRule> withValidResponses(List<JmsRule> rules) {
         if (rules.isEmpty()) {
             return rules;
         }
@@ -110,7 +115,6 @@ public class JmsRuleService {
                 .map(JmsRule::getResponseId).filter(id -> id != null).collect(Collectors.toSet()));
         return rules.stream()
                 .filter(r -> r.getResponseId() == null || validResponseIds.contains(r.getResponseId()))
-                .sorted(JMS_RULE_ORDER)
                 .toList();
     }
 

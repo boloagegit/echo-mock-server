@@ -158,11 +158,15 @@ public class RequestLogTrafficService {
         LocalDateTime earliest;
         long retained;
         List<Endpoint> topUnmatched;
+        int maxRecords = configService.getRequestLogMaxRecords();
+        boolean truncated;
         if (configService.isRequestLogMemoryMode()) {
             MemoryTotals memory = scanMemory(from, acc);
             earliest = memory.earliest;
             retained = memory.count;
             topUnmatched = memory.topUnmatched();
+            // 環形緩衝區滿了才會丟掉最舊的
+            truncated = retained >= maxRecords;
         } else {
             List<LocalDateTime> starts = new ArrayList<>(range.buckets);
             for (int i = 0; i < range.buckets; i++) {
@@ -175,10 +179,11 @@ public class RequestLogTrafficService {
             topUnmatched = trafficQuery.topUnmatchedSince(from, TOP_UNMATCHED).stream()
                     .map(e -> new Endpoint(e.protocol(), e.method(), e.endpoint(), e.count()))
                     .toList();
+            // 資料庫超過上限時會刪到上限以下（RequestLogBatchWriter 騰出空間），所以刪過之後筆數低於上限
+            truncated = retained >= RequestLogBatchWriter.retentionLowWatermark(maxRecords);
         }
-        int maxRecords = configService.getRequestLogMaxRecords();
         return new Traffic(range.id, from, to, (int) range.bucket.toMinutes(), acc.buckets(), acc.totals(),
-                acc.responseTime(), topUnmatched, earliest, retained >= maxRecords, maxRecords, now);
+                acc.responseTime(), topUnmatched, earliest, truncated, maxRecords, now);
     }
 
     /** 記憶體模式：直接走訪環形緩衝區，不另外複製。 */
