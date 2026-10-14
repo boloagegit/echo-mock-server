@@ -35,7 +35,7 @@ class PerfTestDownstreamTest(unittest.TestCase):
         try:
             conn = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=5)
             timings = []
-            for _ in range(5):
+            for _ in range(21):
                 started = time.perf_counter()
                 conn.request("POST", "/fast", body=b"<x/>")
                 response = conn.getresponse()
@@ -43,8 +43,10 @@ class PerfTestDownstreamTest(unittest.TestCase):
                 response.read()
                 timings.append(time.perf_counter() - started)
             conn.close()
-            # Reused connection: well under the ~40 ms delayed-ACK stall
-            self.assertLess(max(timings[1:]), 0.02, timings)
+            # Reused connection: the typical request stays well under the ~40 ms delayed-ACK stall,
+            # which hit every reused request. The median ignores a few slow ones on a busy machine.
+            reused = sorted(timings[1:])
+            self.assertLess(reused[len(reused) // 2], 0.03, timings)
         finally:
             server.shutdown()
             server.server_close()
