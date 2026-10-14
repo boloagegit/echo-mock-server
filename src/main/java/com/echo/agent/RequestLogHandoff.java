@@ -329,15 +329,16 @@ final class RequestLogHandoff {
         if (task.getMatchOutcomes() != null) {
             fixed += (long) task.getMatchOutcomes().size() * 128;
         }
+        // 每個字串欄位都計入：任何一個都可能很大（例如 scenarioSkipped 帶著被略過規則的條件）
         long chars = 0;
-        chars += length(task.getRequestBody());
-        chars += length(task.getResponseBody());
-        chars += length(task.getAnalysisBody());
-        chars += length(task.getMatchChain());
-        chars += length(task.getQueryString());
-        chars += length(task.getEndpoint());
-        chars += length(task.getForwardTarget());
-        chars += length(task.getProxyError());
+        for (String value : new String[] {
+                task.getRuleId(), task.getMethod(), task.getEndpoint(), task.getClientIp(),
+                task.getMatchChain(), task.getTargetHost(), task.getForwardTarget(), task.getProxyError(),
+                task.getRequestBody(), task.getResponseBody(), task.getFaultType(), task.getScenarioName(),
+                task.getScenarioFromState(), task.getScenarioToState(), task.getScenarioSkipped(),
+                task.getAnalysisBody(), task.getQueryString(), task.getDiagnosticId()}) {
+            chars += length(value);
+        }
         Map<String, String> headers = task.getHeaders();
         if (headers != null) {
             for (Map.Entry<String, String> header : headers.entrySet()) {

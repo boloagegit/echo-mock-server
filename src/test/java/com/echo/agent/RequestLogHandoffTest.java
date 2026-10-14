@@ -336,6 +336,22 @@ class RequestLogHandoffTest {
     }
 
     @Test
+    @DisplayName("大小估計包含每個字串欄位（例如被略過的情境規則）")
+    void sizeEstimateCountsEveryStringField() {
+        long empty = RequestLogHandoff.estimateBytes(LogTask.builder().build());
+        String big = "x".repeat(100_000);
+
+        for (LogTask task : List.of(
+                LogTask.builder().scenarioSkipped(big).build(),
+                LogTask.builder().matchChain(big).build(),
+                LogTask.builder().analysisBody(big).build(),
+                LogTask.builder().diagnosticId(big).build(),
+                LogTask.builder().targetHost(big).build())) {
+            assertThat(RequestLogHandoff.estimateBytes(task) - empty).isGreaterThanOrEqualTo(200_000);
+        }
+    }
+
+    @Test
     @DisplayName("寫入端卡住時，丟棄的警告仍會出現")
     void dropWarningAppearsWhileTheWriterIsStuck() throws Exception {
         Logger logger = (Logger) LoggerFactory.getLogger(RequestLogHandoff.class);
