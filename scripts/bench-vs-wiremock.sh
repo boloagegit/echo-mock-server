@@ -127,7 +127,7 @@ run() {  # run LABEL ROUND echo|wm [server args...]
   SERVER_PID=$!
   ok=
   for _ in $(seq 1 240); do
-    if [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: application/json' "$ready")" = 200 ]; then ok=1; break; fi
+    if [ "$(curl -s --max-time 2 -o /dev/null -w '%{http_code}' -H 'Accept: application/json' "$ready")" = 200 ]; then ok=1; break; fi
     sleep 0.25
   done
   if [ -z "$ok" ]; then echo "server not ready within 60 s" > "$out/ABORTED"; stop_server; return 1; fi
@@ -153,7 +153,7 @@ run() {  # run LABEL ROUND echo|wm [server args...]
   local failed=
   check() {  # check NAME EXPECTED_BODY curl-args...
     local name=$1 expected=$2 actual; shift 2
-    actual=$(curl -s -w '|%{http_code}' -H "$h" "$@")
+    actual=$(curl -s --max-time 30 -w '|%{http_code}' -H "$h" "$@")
     echo "$name=$actual" >> "$out/setup-check.txt"
     [ "$actual" = "$expected|200" ] || failed="$failed $name"
   }
@@ -193,11 +193,16 @@ run() {  # run LABEL ROUND echo|wm [server args...]
   echo done > "$out/DONE"
 }
 
+failures=0
 for round in $(seq 1 "$ROUNDS"); do
-  run echo "$round" echo; sleep 3
-  run wiremock "$round" wm; sleep 3
-  run echo-log-off "$round" echo --echo.request-log.enabled=false; sleep 3
-  run wiremock-no-journal "$round" wm --no-request-journal --disable-request-logging; sleep 3
-  run wiremock-journal-10k "$round" wm --max-request-journal-entries 10000; sleep 3
+  run echo "$round" echo || failures=$((failures + 1)); sleep 3
+  run wiremock "$round" wm || failures=$((failures + 1)); sleep 3
+  run echo-log-off "$round" echo --echo.request-log.enabled=false || failures=$((failures + 1)); sleep 3
+  run wiremock-no-journal "$round" wm --no-request-journal --disable-request-logging || failures=$((failures + 1)); sleep 3
+  run wiremock-journal-10k "$round" wm --max-request-journal-entries 10000 || failures=$((failures + 1)); sleep 3
 done
 echo "Results in $OUT_ROOT"
+if [ "$failures" -gt 0 ]; then
+  echo "$failures run(s) did not complete; see the ABORTED files" >&2
+  exit 1
+fi
