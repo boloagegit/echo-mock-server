@@ -150,6 +150,9 @@ echo:
       password: changeme       # 範例佔位符，請透過環境變數 ECHO_JMS_TARGET_PASSWORD 覆蓋
       timeout-seconds: 30
       queue: TARGET.REQUEST  # 目標 JMS Server 上的 Queue（轉發目的地）
+    # 沒有 consumer 的暫時回覆佇列閒置多久後刪除（毫秒）；0 表示只在客戶端連線關閉時刪除。
+    # 避免客戶端每次請求建新的暫時佇列卻不刪，幾天後耗盡 heap。
+    temporary-queue-idle-delete-ms: ${ECHO_JMS_TEMPORARY_QUEUE_IDLE_DELETE_MS:10000}
     # Listener 交易失敗時保留訊息並以退避間隔重送；-1 表示不自動丟棄。
     redelivery-delay-ms: ${ECHO_JMS_REDELIVERY_DELAY_MS:250}
     redelivery-multiplier: ${ECHO_JMS_REDELIVERY_MULTIPLIER:2.0}

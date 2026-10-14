@@ -52,6 +52,13 @@ public class JmsProperties {
     /** Artemis 重新檢查可用磁碟空間的間隔。 */
     private int diskScanPeriodMs = 1_000;
 
+    /**
+     * 沒有 consumer 的暫時佇列（客戶端 request-reply 的回覆佇列）閒置多久後由內建 broker 刪除。
+     * 有些客戶端在同一條長連線上每次請求都建新的暫時佇列卻不刪，broker 原本要等連線關閉才回收，
+     * 幾天下來會耗盡 heap。0 表示不自動刪除。
+     */
+    private long temporaryQueueIdleDeleteMs = 10_000;
+
     /** 暫時性 listener 失敗的第一次重送等待時間。 */
     private long redeliveryDelayMs = 250;
 
