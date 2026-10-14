@@ -552,6 +552,7 @@ echo:
     data-directory: ./data/artemis # Artemis paging and large-message files
     temporary-queue-idle-delete-ms: 10000 # Delete temporary reply queues left without a consumer this long (0 = only when the client disconnects)
     target:
+      name: ESB-UAT             # Downstream name shown in the UI and request logs (ECHO_JMS_TARGET_NAME); blank shows application.yml
       enabled: false            # Legacy fallback used until a database profile exists
       type: tibco               # artemis or tibco
       server-url: tcp://esb-server:7222

@@ -116,6 +116,8 @@ public class JmsProperties {
     @Getter
     @Setter
     public static class Target {
+        /** 介面與請求記錄顯示的下游名稱；空白時顯示 {@code application.yml}。 */
+        private String name;
         private boolean enabled = false;
         private String type = "tibco";  // artemis | tibco
         private String serverUrl;

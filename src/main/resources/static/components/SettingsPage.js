@@ -351,7 +351,7 @@ const SettingsPage = {
       }
     },
     jmsTargetDisplayName(target) {
-      return target?.legacy ? this.t('settings.jmsApplicationTarget') : (target?.name || '—');
+      return target?.legacy ? (target.name || this.t('settings.jmsApplicationTarget')) : (target?.name || '—');
     },
     onJmsTargetEnabledChange() {
       if (!this.jmsTargetForm.enabled) {

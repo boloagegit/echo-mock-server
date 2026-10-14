@@ -596,6 +596,7 @@ public final class JmsTargetForwarder {
             return Optional.empty();
         }
         return Optional.of(new JmsTargetConnectionService.ResolvedTarget(
-                JmsTargetConnectionService.LEGACY_ID, "Legacy application.yml", target, true));
+                JmsTargetConnectionService.LEGACY_ID,
+                JmsTargetConnectionService.configuredLegacyName(target, "Legacy application.yml"), target, true));
     }
 }

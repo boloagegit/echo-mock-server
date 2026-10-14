@@ -143,6 +143,7 @@ echo:
       reconnect-interval-ms: 5000   # 外部 broker 連不上時的重試間隔
     endpoint-field: ServiceName  # 從訊息 body 提取端點識別欄位（XML element / JSON key）
     target:
+      name: ${ECHO_JMS_TARGET_NAME:}  # 介面與請求記錄顯示的下游名稱，例如 ESB-UAT；空白時顯示 application.yml
       enabled: false         # true 時啟用轉發到目標 JMS Server
       type: tibco            # artemis | tibco
       server-url: tcp://esb-server:7222

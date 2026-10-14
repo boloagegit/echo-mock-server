@@ -298,7 +298,7 @@ const RuleEditModal = {
                 || targets.find(target => !target.legacy && target.defaultConnection && target.enabled);
         });
         const targetDisplayName = target => target?.legacy
-            ? t('settings.jmsApplicationTarget') : (target?.name || '—');
+            ? (target.name || t('settings.jmsApplicationTarget')) : (target?.name || '—');
         const ruleMode = Vue.computed({
             get: () => {
                 if (props.form.faultType && props.form.faultType !== 'NONE') return 'FAULT';
