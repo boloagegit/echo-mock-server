@@ -32,6 +32,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -796,11 +797,9 @@ class RequestLogSpoolTest {
     }
 
     @Test
-    @DisplayName("寫入時發生 Error（例如記憶體不足）：寫入執行緒不結束，這批回報失敗，之後的記錄照常寫入")
+    @DisplayName("寫入時發生 Error（例如記憶體不足）：寫入執行緒不結束，這批回報失敗並釋放容量，之後的記錄照常寫入")
     void writerSurvivesAnErrorAndKeepsWriting() throws Exception {
-        RequestLogSpool spool = new RequestLogSpool(new ObjectMapper().findAndRegisterModules(),
-                tempDir.resolve("error.sqlite").toString(), 16, 4, 1, 2_000, 10, 64L * 1024 * 1024);
-        spool.start();
+        RequestLogSpool spool = errorSpool("error.sqlite");
         try {
             java.util.concurrent.atomic.AtomicBoolean failNext = new java.util.concurrent.atomic.AtomicBoolean(true);
             spool.beforeCommitForTest = () -> {
@@ -811,6 +810,7 @@ class RequestLogSpoolTest {
 
             assertThatThrownBy(() -> spool.append(errorTask("/lost")))
                     .isInstanceOf(RequestLogUnavailableException.class);
+            assertThat(spool.statusSnapshot().pendingItems()).isZero();
             spool.append(errorTask("/after"));
 
             assertThat(spool.readAfter(0, 10)).extracting(entry -> entry.task().getEndpoint())
@@ -818,6 +818,63 @@ class RequestLogSpoolTest {
         } finally {
             spool.stop();
         }
+    }
+
+    @Test
+    @DisplayName("已寫入後才發生 Error：仍回報成功，不讓呼叫端重送，資料只有一筆")
+    void errorAfterTheCommitStillReportsSuccess() throws Exception {
+        RequestLogSpool spool = errorSpool("after-commit.sqlite");
+        try {
+            java.util.concurrent.atomic.AtomicBoolean failNext = new java.util.concurrent.atomic.AtomicBoolean(true);
+            spool.afterCommitForTest = () -> {
+                if (failNext.getAndSet(false)) {
+                    throw new OutOfMemoryError("simulated");
+                }
+            };
+
+            spool.append(errorTask("/committed"));
+
+            assertThat(spool.readAfter(0, 10)).extracting(entry -> entry.task().getEndpoint())
+                    .containsExactly("/committed");
+            spool.append(errorTask("/next"));
+            assertThat(spool.readAfter(0, 10)).hasSize(2);
+        } finally {
+            spool.stop();
+        }
+    }
+
+    @Test
+    @DisplayName("暫存檔暫時無法寫入、重試時又發生 Error：清掉「無法寫入」的狀態，之後的記錄照常寫入")
+    void errorWhileRetryingAnUnavailableStorageDoesNotBlockLaterLogs() throws Exception {
+        RequestLogSpool spool = errorSpool("unavailable.sqlite");
+        try {
+            AtomicInteger attempts = new AtomicInteger();
+            spool.beforeCommitForTest = () -> {
+                int attempt = attempts.incrementAndGet();
+                if (attempt == 1) {
+                    throw new java.sql.SQLException("disk unavailable");
+                }
+                if (attempt == 2) {
+                    throw new OutOfMemoryError("simulated");
+                }
+            };
+
+            assertThatThrownBy(() -> spool.append(errorTask("/lost")))
+                    .isInstanceOf(RequestLogUnavailableException.class);
+
+            spool.append(errorTask("/after"));
+            assertThat(spool.readAfter(0, 10)).extracting(entry -> entry.task().getEndpoint())
+                    .containsExactly("/after");
+        } finally {
+            spool.stop();
+        }
+    }
+
+    private RequestLogSpool errorSpool(String file) {
+        RequestLogSpool spool = new RequestLogSpool(new ObjectMapper().findAndRegisterModules(),
+                tempDir.resolve(file).toString(), 16, 4, 1, 2_000, 10, 64L * 1024 * 1024);
+        spool.start();
+        return spool;
     }
 
     private static LogTask errorTask(String endpoint) {

@@ -140,8 +140,17 @@ public class RequestLogSpool {
     private volatile String spoolId;
     /** 只由寫入執行緒使用：Error 的錯誤訊息最多每 30 秒一次。 */
     private long lastWriterErrorLogNanos;
-    /** 測試用：每次提交前執行，用來模擬寫入時發生的 Error。 */
-    volatile Runnable beforeCommitForTest = () -> { };
+    /** 測試用：每次提交前／提交後執行，用來模擬寫入時發生的錯誤。 */
+    volatile CommitHook beforeCommitForTest = () -> { };
+    volatile CommitHook afterCommitForTest = () -> { };
+
+    @FunctionalInterface
+    interface CommitHook {
+        void run() throws SQLException;
+    }
+    /** 放棄的記錄共用同一個例外：記憶體不足時不必再配置。 */
+    private static final RequestLogUnavailableException WRITE_ABANDONED = new RequestLogUnavailableException(
+            "Request-log write was abandoned after an error and was not written");
     private ExecutorService writerExecutor;
     private Connection writerConnection;
 
@@ -1159,9 +1168,10 @@ public class RequestLogSpool {
                         break;
                     }
                 } catch (Error e) {
-                    // 例如 OutOfMemoryError：這是唯一的寫入執行緒，結束就再也沒有記錄寫得進來，
-                    // 等待中的呼叫端也會一直等。放棄這批、換新連線，稍後繼續。
-                    batch = abandonBatchAfterError(batch, e);
+                    // 例如 OutOfMemoryError（收集這批時發生，尚未寫入）：這是唯一的寫入執行緒，
+                    // 結束就再也沒有記錄寫得進來，等待中的呼叫端也會一直等。放棄這批，稍後繼續。
+                    abandonUncommitted(batch, e);
+                    batch = new ArrayList<>();
                     if (!pauseAfterWriterError()) {
                         break;
                     }
@@ -1176,28 +1186,69 @@ public class RequestLogSpool {
     }
 
     /**
-     * 寫入時發生 Error 後放棄這一批：不確定是否已寫入，通知呼叫端失敗並釋放保留的容量，換一條新連線。
+     * 放棄一批確定沒有寫入的記錄（發生 Error 時）：換一條新連線，通知呼叫端失敗並釋放保留的容量，
+     * 並清掉「暫時無法寫入」的狀態，讓下一筆記錄重新試探暫存檔（否則所有新記錄都會被拒絕）。
+     * 每筆的結算可以重複執行，記憶體仍不足時重試到完成為止。
      */
-    private List<PendingAppend> abandonBatchAfterError(List<PendingAppend> batch, Error error) {
+    private void abandonUncommitted(List<PendingAppend> batch, Error error) {
         try {
             rollbackWriterConnection();
             closeWriterConnection();
-            failBatch(batch, new RequestLogUnavailableException(
-                    "Request-log write failed and was abandoned: " + error));
         } catch (Throwable ignored) {
-            // 記憶體仍不足時盡力而為；下一輪會重試
+            // 連線清理失敗不影響結算；下一批會開新連線
         }
-        long now = System.nanoTime();
-        if (now - lastWriterErrorLogNanos >= TimeUnit.SECONDS.toNanos(30) || lastWriterErrorLogNanos == 0) {
-            lastWriterErrorLogNanos = now;
-            try {
-                log.error("Request-log spool writer hit {}; abandoned {} entries and keeps running",
-                        error, batch.size());
-            } catch (Throwable ignored) {
-                // 記錄失敗也不能讓寫入執行緒結束
+        settleUntilDone(() -> failBatch(batch, WRITE_ABANDONED));
+        storageUnavailable.set(false);
+        try {
+            updateBackpressureState();
+        } catch (Throwable ignored) {
+            // 下一次容量變動時會再更新
+        }
+        logWriterError(error, batch.size());
+    }
+
+    /** 已寫入的一批：一定回報成功；結算可以重複執行，記憶體仍不足時重試到完成為止。 */
+    private void settleCommitted(List<PendingAppend> batch, Set<String> insertedCandidateSets,
+                                 java.util.concurrent.atomic.AtomicBoolean duplicatesReleased) {
+        if (duplicatesReleased.compareAndSet(false, true)) {
+            releaseDuplicateCandidateReservations(batch, insertedCandidateSets);
+        }
+        for (PendingAppend pending : batch) {
+            pending.committed().complete(null);
+            if (pending.claimRelease()) {
+                releaseReservation(0, 0, pending.reservedBytes());
             }
         }
-        return new ArrayList<>(appendBatchSize);
+    }
+
+    /** 重複執行到不再發生 Error 為止（每一步都可以重複執行）。 */
+    private void settleUntilDone(Runnable settle) {
+        while (true) {
+            try {
+                settle.run();
+                return;
+            } catch (Error e) {
+                try {
+                    TimeUnit.MILLISECONDS.sleep(retryMillis);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+    }
+
+    private void logWriterError(Error error, int entries) {
+        long now = System.nanoTime();
+        if (lastWriterErrorLogNanos != 0 && now - lastWriterErrorLogNanos < TimeUnit.SECONDS.toNanos(30)) {
+            return;
+        }
+        lastWriterErrorLogNanos = now;
+        try {
+            log.error("Request-log spool writer hit {}; {} entries were not written; the writer keeps running",
+                    error, entries);
+        } catch (Throwable ignored) {
+            // 記錄失敗也不能讓寫入執行緒結束
+        }
     }
 
     /** 發生 Error 後稍等再繼續；停止中或被中斷時回傳 false。 */
@@ -1213,12 +1264,15 @@ public class RequestLogSpool {
 
     private void commitWithRetry(List<PendingAppend> batch) throws InterruptedException {
         while (running.get()) {
+            boolean committed = false;
+            Set<String> insertedCandidateSets = Set.of();
+            java.util.concurrent.atomic.AtomicBoolean duplicatesReleased = new java.util.concurrent.atomic.AtomicBoolean();
             candidateSetLifecycleLock.readLock().lock();
             try {
                 beforeCommitForTest.run();
                 Connection connection = getWriterConnection();
                 Map<String, CandidateSetPayload> candidateSets = uniqueCandidateSets(batch);
-                Set<String> insertedCandidateSets = persistCandidateSets(connection, candidateSets);
+                insertedCandidateSets = persistCandidateSets(connection, candidateSets);
                 try (PreparedStatement insert = connection.prepareStatement(
                          "INSERT INTO request_log_spool(payload, candidate_set_id, created_at) VALUES (?, ?, ?)")) {
                     for (PendingAppend pending : batch) {
@@ -1234,14 +1288,25 @@ public class RequestLogSpool {
                     insert.executeBatch();
                 }
                 connection.commit();
+                committed = true;
                 storageUnavailable.set(false);
-                releaseDuplicateCandidateReservations(batch, insertedCandidateSets);
-                releaseInFlightReservations(batch);
-                batch.forEach(item -> item.committed().complete(null));
+                afterCommitForTest.run();
+                settleCommitted(batch, insertedCandidateSets, duplicatesReleased);
                 return;
             } catch (CandidateSnapshotCorruptionException e) {
                 rollbackWriterConnection();
                 failBatch(batch, new RequestLogUnavailableException(e.getMessage(), e));
+                return;
+            } catch (Error e) {
+                if (committed) {
+                    // 已經寫入：一定回報成功，不能讓呼叫端重試（會重複）
+                    Set<String> inserted = insertedCandidateSets;
+                    settleUntilDone(() -> settleCommitted(batch, inserted, duplicatesReleased));
+                    logWriterError(e, 0);
+                } else {
+                    abandonUncommitted(batch, e);
+                    TimeUnit.MILLISECONDS.sleep(retryMillis);
+                }
                 return;
             } catch (SQLException e) {
                 storageUnavailable.set(true);
@@ -1331,14 +1396,6 @@ public class RequestLogSpool {
         }
     }
 
-    private void releaseInFlightReservations(List<PendingAppend> batch) {
-        long released = 0;
-        for (PendingAppend pending : batch) {
-            released = saturatingAdd(released, pending.reservedBytes());
-        }
-        releaseReservation(0, 0, released);
-    }
-
     private Connection getWriterConnection() throws SQLException {
         if (writerConnection != null && !writerConnection.isClosed()) {
             return writerConnection;
@@ -1390,15 +1447,22 @@ public class RequestLogSpool {
         failBatch(pending, failure);
     }
 
+    /** 每筆只結算一次：可以重複執行（例如發生 Error 後重試），不會重複釋放容量。 */
     private void failBatch(List<PendingAppend> batch, RuntimeException failure) {
         long pendingBytes = 0;
         long inFlight = 0;
+        int items = 0;
         for (PendingAppend pending : batch) {
-            pendingBytes = saturatingAdd(pendingBytes, pending.reservedBytes());
-            inFlight = saturatingAdd(inFlight, pending.reservedBytes());
             pending.committed().completeExceptionally(failure);
+            if (pending.claimRelease()) {
+                pendingBytes = saturatingAdd(pendingBytes, pending.reservedBytes());
+                inFlight = saturatingAdd(inFlight, pending.reservedBytes());
+                items++;
+            }
         }
-        releaseReservation(pendingBytes, batch.size(), inFlight);
+        if (items > 0) {
+            releaseReservation(pendingBytes, items, inFlight);
+        }
     }
 
     private static final class PendingAppend {
@@ -1406,6 +1470,8 @@ public class RequestLogSpool {
         private final CandidateSetPayload candidateSet;
         private final long reservedBytes;
         private final CompletableFuture<Void> committed;
+        /** 保留的容量是否已經釋放（只釋放一次）。 */
+        private final java.util.concurrent.atomic.AtomicBoolean released = new java.util.concurrent.atomic.AtomicBoolean();
 
         private PendingAppend(
                 byte[] payload, CandidateSetPayload candidateSet,
@@ -1430,6 +1496,11 @@ public class RequestLogSpool {
 
         CompletableFuture<Void> committed() {
             return committed;
+        }
+
+        /** 第一次呼叫回傳 true：由呼叫者釋放這筆保留的容量。 */
+        boolean claimRelease() {
+            return released.compareAndSet(false, true);
         }
     }
 
