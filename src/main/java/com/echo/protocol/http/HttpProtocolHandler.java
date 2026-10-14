@@ -179,9 +179,7 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
     public List<HttpRule> findWithFallback(String targetHost, String matchKey, String method) {
         List<HttpRule> result = new ArrayList<>();
         for (HttpRule rule : findByHostAndMethod(targetHost, method)) {
-            if (matchesPath(rule.getMatchKey(), matchKey)) {
-                result.add(rule);
-            } else if ("*".equals(rule.getMatchKey())) {
+            if (HttpPathPattern.matches(rule.getMatchKey(), matchKey)) {
                 result.add(rule);
             }
         }
@@ -206,20 +204,7 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
 
     /** 保留既有 exact、prefix wildcard 與全域 wildcard 的路徑語意。 */
     public boolean matchesRequestPath(String pattern, String path) {
-        return "*".equals(pattern) || matchesPath(pattern, path);
-    }
-
-    private boolean matchesPath(String pattern, String path) {
-        if (pattern == null || path == null) {
-            return false;
-        }
-        if (pattern.equals(path)) {
-            return true;
-        }
-        if (pattern.endsWith("/*")) {
-            return path.startsWith(pattern.substring(0, pattern.length() - 1));
-        }
-        return false;
+        return HttpPathPattern.matches(pattern, path);
     }
 
     private boolean matchesMethod(String ruleMethod, String requestMethod) {

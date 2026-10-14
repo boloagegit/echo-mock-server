@@ -1,9 +1,12 @@
 package com.echo.service;
 
 import com.echo.entity.HttpRule;
+import com.echo.protocol.http.HttpPathPattern;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -18,6 +21,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * 候選規則依 (host, method) 第一次使用時計算並保留。沒有任何規則提到的 host 或 method 會對應到同一個
  * 共用 key（結果只取決於「沒有指定 host／method 的規則」），所以快照大小只隨規則數量成長，
  * 不會因為用戶端送出任意 {@code X-Original-Host} 或 method 而無限增加。
+ * <p>
+ * 每組候選另外依路徑建索引：完全相同路徑的規則以路徑查表，{@code *} 與 {@code /x/*} 規則逐條比對，
+ * 再依原本的優先順序合併。同一 host 與 method 下規則再多，查詢時間也只取決於符合的規則數。
  */
 final class HttpRuleSnapshot {
 
@@ -32,7 +38,7 @@ final class HttpRuleSnapshot {
     /** 只用來保持強參照，讓條件編譯結果與快照同生命週期。 */
     @SuppressWarnings({"unused", "FieldCanBeLocal"})
     private final List<ConditionMatcher.RuleConditions> pinnedConditions;
-    private final Map<Key, List<HttpRule>> candidates = new ConcurrentHashMap<>();
+    private final Map<Key, Candidates> candidates = new ConcurrentHashMap<>();
 
     /**
      * @param rules      啟用中且 Response 有效的規則，依 id 排序（與原本查詢的順序相同）
@@ -70,8 +76,21 @@ final class HttpRuleSnapshot {
      * 且 method 不分大小寫相同或規則沒有指定 method；不含路徑篩選。
      */
     List<HttpRule> candidates(String host, String method) {
+        return candidateSet(host, method).ordered();
+    }
+
+    /**
+     * {@link #candidates(String, String)} 中符合請求路徑的規則，順序不變；
+     * 與逐條以 {@link HttpPathPattern#matches} 篩選的結果相同。
+     */
+    List<HttpRule> candidates(String host, String method, String path) {
+        return candidateSet(host, method).forPath(path);
+    }
+
+    private Candidates candidateSet(String host, String method) {
         String hostKey = host != null && hosts.contains(host) ? host : UNLISTED;
-        return candidates.computeIfAbsent(new Key(hostKey, methodKey(method)), key -> compute(host, method));
+        return candidates.computeIfAbsent(new Key(hostKey, methodKey(method)),
+                key -> new Candidates(compute(host, method)));
     }
 
     int ruleCount() {
@@ -132,5 +151,65 @@ final class HttpRuleSnapshot {
     }
 
     private record Key(String host, String method) {
+    }
+
+    /** 一組已排序的候選規則與它的路徑索引；建立後不再改變。 */
+    private static final class Candidates {
+
+        private static final int[] NONE = new int[0];
+
+        private final List<HttpRule> ordered;
+        /** 完全相同路徑 → 規則在 {@link #ordered} 中的位置（遞增）。 */
+        private final Map<String, int[]> exact;
+        /** {@code *}、{@code /x/*} 規則的位置（遞增）；沒有路徑的規則不會符合任何請求，不放入。 */
+        private final int[] patterns;
+
+        Candidates(List<HttpRule> ordered) {
+            this.ordered = ordered;
+            Map<String, List<Integer>> byPath = new HashMap<>();
+            List<Integer> patternPositions = new ArrayList<>();
+            for (int i = 0; i < ordered.size(); i++) {
+                String matchKey = ordered.get(i).getMatchKey();
+                if (HttpPathPattern.isExact(matchKey)) {
+                    byPath.computeIfAbsent(matchKey, path -> new ArrayList<>()).add(i);
+                } else if (matchKey != null) {
+                    patternPositions.add(i);
+                }
+            }
+            Map<String, int[]> index = new HashMap<>(byPath.size() * 2);
+            byPath.forEach((path, positions) -> index.put(path, toArray(positions)));
+            this.exact = Map.copyOf(index);
+            this.patterns = toArray(patternPositions);
+        }
+
+        List<HttpRule> ordered() {
+            return ordered;
+        }
+
+        List<HttpRule> forPath(String path) {
+            int[] exactPositions = path == null ? NONE : exact.getOrDefault(path, NONE);
+            List<HttpRule> result = new ArrayList<>(exactPositions.length + patterns.length);
+            int e = 0;
+            int p = 0;
+            while (e < exactPositions.length || p < patterns.length) {
+                if (p == patterns.length || (e < exactPositions.length && exactPositions[e] < patterns[p])) {
+                    result.add(ordered.get(exactPositions[e++]));
+                } else {
+                    HttpRule rule = ordered.get(patterns[p++]);
+                    if (HttpPathPattern.matches(rule.getMatchKey(), path)) {
+                        result.add(rule);
+                    }
+                }
+            }
+            return Collections.unmodifiableList(result);
+        }
+
+        private static int[] toArray(List<Integer> positions) {
+            int[] array = new int[positions.size()];
+            for (int i = 0; i < array.length; i++) {
+                array[i] = positions.get(i);
+            }
+            return array;
+        }
     }
 }
