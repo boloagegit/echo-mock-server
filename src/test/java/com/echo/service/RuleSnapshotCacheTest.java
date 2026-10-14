@@ -199,6 +199,51 @@ class RuleSnapshotCacheTest {
     }
 
     @Test
+    @DisplayName("第一次建立期間有變更提交：回傳與留下的都是包含變更的快照")
+    void changeCommittedDuringTheFirstBuildIsIncluded() throws Exception {
+        SlowBuilder builder = new SlowBuilder();
+        builder.block();
+        RuleSnapshotCache<String, String> cache = cache(builder);
+        Future<String> firstRequest = callers.submit(() -> cache.get("k"));
+        assertThat(builder.started.await(5, TimeUnit.SECONDS)).isTrue();
+
+        // 還沒有快照可等：變更方立即返回，第一份快照必須自己補上這次變更
+        long started = System.nanoTime();
+        cache.changed(false);
+        assertThat(System.nanoTime() - started).isLessThan(TimeUnit.MILLISECONDS.toNanos(500));
+        builder.gate.countDown();
+
+        assertThat(firstRequest.get(5, TimeUnit.SECONDS)).isEqualTo("v2");
+        assertThat(cache.get("k")).isEqualTo("v2");
+        assertThat(cache.generationOf("k")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("一個請求改到兩份快照：共用一個等待期限，不會等兩倍時間")
+    void pendingChangesShareOneDeadline() {
+        SlowBuilder httpBuilder = new SlowBuilder();
+        SlowBuilder jmsBuilder = new SlowBuilder();
+        RuleSnapshotCache<String, String> http = new RuleSnapshotCache<>("http", httpBuilder, builderThread,
+                TimeUnit.MINUTES.toNanos(10), 400, clock::get);
+        RuleSnapshotCache<String, String> jms = new RuleSnapshotCache<>("jms", jmsBuilder, builderThread,
+                TimeUnit.MINUTES.toNanos(10), 400, clock::get);
+        http.get("k");
+        jms.get("q");
+        httpBuilder.block();
+        jmsBuilder.block();
+
+        http.changed(true);
+        jms.changed(true);
+        long started = System.nanoTime();
+        RuleSnapshotCache.awaitPendingChanges();
+        long waitedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+        httpBuilder.gate.countDown();
+        jmsBuilder.gate.countDown();
+
+        assertThat(waitedMs).isBetween(350L, 700L);
+    }
+
+    @Test
     @DisplayName("同時第一次取用：只建立一次")
     void concurrentFirstGetsBuildOnce() throws Exception {
         SlowBuilder builder = new SlowBuilder();

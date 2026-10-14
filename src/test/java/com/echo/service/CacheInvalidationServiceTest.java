@@ -476,6 +476,35 @@ class CacheInvalidationServiceTest {
     }
 
     @Test
+    void publishing_shouldClearNonRuleCachesLocallyAndAgainAfterCommit() {
+        fillCaches();
+        TransactionSynchronizationManager.initSynchronization();
+
+        // 讀回自己的事件時不再清除，所以發出時就清本機的回應內容與轉送連線快取（不必靠呼叫端）
+        service.publishResponsesChanged(List.of(1L));
+        service.publishHttpTargetsChanged();
+        assertThat(bodies.getIfPresent(1L)).isNull();
+        assertThat(cached(CacheConfig.HTTP_TARGET_RESOLVED_CACHE)).isFalse();
+
+        // 提交前另一個請求放回舊資料：提交後再清一次
+        bodies.put(1L, "old");
+        commitSynchronizations();
+        assertThat(bodies.getIfPresent(1L)).isNull();
+        assertThat(bodies.getIfPresent(2L)).isNotNull();
+    }
+
+    @Test
+    void publishingRuleChanges_shouldLeaveRuleCachesToTheCaller() {
+        fillCaches();
+
+        service.publishInvalidation();
+
+        // 規則快取由變更處清除；這裡再清會讓規則快照多重建一次
+        assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).isTrue();
+        assertThat(cached(CacheConfig.JMS_RULES_CACHE)).isTrue();
+    }
+
+    @Test
     void ownEventIds_shouldBeForgottenWhenIdsRestart() {
         commit(1, "JMS_RULE_CHANGED");
         commit(2, "JMS_RULE_CHANGED");
@@ -576,6 +605,12 @@ class CacheInvalidationServiceTest {
             logger.detachAppender(appender);
             appender.stop();
         }
+    }
+
+    private static void commitSynchronizations() {
+        var synchronizations = TransactionSynchronizationManager.getSynchronizations();
+        TransactionSynchronizationManager.clearSynchronization();
+        org.springframework.transaction.support.TransactionSynchronizationUtils.invokeAfterCommit(synchronizations);
     }
 
     private void commit(long id, String type) {

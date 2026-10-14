@@ -167,7 +167,13 @@ public class CacheInvalidationService {
         publish(EVENT_HTTP_TARGETS);
     }
 
-    /** 同一個交易內相同的事件只寫一筆，交易提交時一起生效。 */
+    /**
+     * 同一個交易內相同的事件只寫一筆，交易提交時一起生效。
+     *
+     * <p>讀回本機發出的事件時不再清除，所以規則以外的本機快取（回應內容、轉送連線）在這裡清除，
+     * 提交後再清一次，不依賴各呼叫端。規則快取由變更處自行清除（{@code @CacheEvict} 等），
+     * 這裡不再清，否則規則快照會多重建一次。</p>
+     */
     private void publish(String eventType) {
         if (AfterCommit.firstInTransaction(new PublishedEvent(this, eventType))) {
             Long id = eventRepository.save(new CacheEvent(eventType)).getId();
@@ -175,9 +181,19 @@ public class CacheInvalidationService {
                 ownEvents.put(id, nanoTime.getAsLong());
             }
         }
+        Changes local = new Changes();
+        local.add(eventType, protocols.descriptors());
+        local.caches.removeAll(CacheConfig.ALL_RULE_CACHES);
+        if (!local.isEmpty()) {
+            apply(local);
+            AfterCommit.schedule(new LocalChange(this, eventType), () -> apply(local));
+        }
     }
 
     private record PublishedEvent(CacheInvalidationService owner, String eventType) {
+    }
+
+    private record LocalChange(CacheInvalidationService owner, String eventType) {
     }
 
     /** 定期檢查是否有新事件 */
@@ -375,6 +391,10 @@ public class CacheInvalidationService {
                 return;
             }
             caches.addAll(cachesFor(eventType, enabled));
+        }
+
+        boolean isEmpty() {
+            return caches.isEmpty() && responseIds.isEmpty() && !allResponses;
         }
 
         void markEverything(List<ProtocolDescriptor> enabled) {

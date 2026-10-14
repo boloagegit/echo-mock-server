@@ -30,6 +30,7 @@ public final class RuleSnapshotCache<K, V> {
     /** 這個執行緒在目前網頁請求中變更過的快取 → 需要等到的序號。 */
     private static final ThreadLocal<Map<RuleSnapshotCache<?, ?>, Long>> PENDING = new ThreadLocal<>();
     private static final long FAILURE_BACKOFF_NANOS = TimeUnit.SECONDS.toNanos(1);
+    private static final int FIRST_BUILD_ATTEMPTS = 3;
 
     private final String name;
     private final Function<K, V> builder;
@@ -97,7 +98,15 @@ public final class RuleSnapshotCache<K, V> {
             return;
         }
         PENDING.remove();
-        pending.forEach(RuleSnapshotCache::awaitUpToDate);
+        // 一個請求同時改到 HTTP 與 JMS 規則時，兩者共用同一個等待期限
+        long deadline = 0;
+        for (Map.Entry<RuleSnapshotCache<?, ?>, Long> entry : pending.entrySet()) {
+            RuleSnapshotCache<?, ?> cache = entry.getKey();
+            if (deadline == 0) {
+                deadline = cache.deadlineFromNow();
+            }
+            cache.awaitUpToDate(entry.getValue(), deadline);
+        }
     }
 
     /** 丟掉這個執行緒記下的待等變更（請求開始時呼叫，避免沿用上一個請求的狀態）。 */
@@ -107,7 +116,14 @@ public final class RuleSnapshotCache<K, V> {
 
     /** 等到所有已建立的快照都包含這個序號的變更；逾時則記錄並放行（之後的請求仍會在背景更新）。 */
     boolean awaitUpToDate(long generation) {
-        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(waitTimeoutMillis);
+        return awaitUpToDate(generation, deadlineFromNow());
+    }
+
+    private long deadlineFromNow() {
+        return System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(waitTimeoutMillis);
+    }
+
+    private boolean awaitUpToDate(long generation, long deadline) {
         synchronized (installed) {
             while (!upToDate(generation)) {
                 long remaining = deadline - System.nanoTime();
@@ -137,14 +153,24 @@ public final class RuleSnapshotCache<K, V> {
         return true;
     }
 
+    /**
+     * 還沒有快照時由呼叫端建立（同一個 key 的並行請求在 slot 上等這一次）。建立期間有變更提交時重建，
+     * 直到建立的結果包含開始建立前的所有變更：變更方看不到尚未完成的第一份快照，不會等它，
+     * 所以第一份快照不能比變更舊。持續變更時最多重建 {@value #FIRST_BUILD_ATTEMPTS} 次，之後交給背景。
+     */
     private V buildFirst(K key, Slot<V> slot) {
         synchronized (slot) {
             Built<V> current = slot.current;
             if (current != null) {
                 return current.value;
             }
-            long generation = changes.get();
-            V value = builder.apply(key);
+            long generation;
+            V value;
+            int attempts = 0;
+            do {
+                generation = changes.get();
+                value = builder.apply(key);
+            } while (changes.get() > generation && ++attempts < FIRST_BUILD_ATTEMPTS);
             install(slot, value, generation);
             if (changes.get() > generation) {
                 requestRebuild(key, slot, nanoTime.getAsLong());
