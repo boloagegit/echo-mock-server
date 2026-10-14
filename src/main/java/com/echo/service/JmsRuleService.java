@@ -91,11 +91,17 @@ public class JmsRuleService {
     }
 
     /**
-     * 某一 queue 的 JMS 規則快照。存放在 {@code jmsRules} 快取（queue 名稱來自設定檔，數量有限），
-     * 任何規則或 Response 異動清除快取時一併淘汰；{@code sync = true} 讓並行訊息只建立一次。
+     * 某一 queue 的 JMS 規則快照（{@link RuleSnapshots}；queue 名稱來自設定檔，數量有限）：
+     * 規則或 Response 異動清除 {@code jmsRules} 快取時在背景重建，重建期間訊息繼續使用舊快照。
      */
-    @Cacheable(cacheNames = CacheConfig.JMS_RULES_CACHE, key = "'jms-snapshot:' + #queueName", sync = true)
     public JmsQueueSnapshot jmsQueueSnapshot(String queueName) {
+        RuleSnapshots snapshots = applicationContext == null ? null
+                : applicationContext.getBeanProvider(RuleSnapshots.class).getIfAvailable();
+        return snapshots != null ? snapshots.jms(queueName) : buildJmsQueueSnapshot(queueName);
+    }
+
+    /** 從資料庫建立某一 queue 的 JMS 規則快照（由 {@link RuleSnapshots} 在背景呼叫）。 */
+    JmsQueueSnapshot buildJmsQueueSnapshot(String queueName) {
         log.debug("Building JMS rule snapshot: queue={}", queueName);
         List<JmsRule> rules = isJmsEnabled() ? requireJmsHandler().findWithFallback(queueName) : List.of();
         String endpointField = jmsProperties.map(JmsProperties::getEndpointField).orElse(null);

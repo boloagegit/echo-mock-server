@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
 
@@ -38,6 +39,9 @@ import java.util.function.LongSupplier;
  * <p>變更時在 {@code cache_events} 寫一筆事件，與資料變更在同一個交易內提交；
  * 各實例依事件編號（不是時間）往後讀，所以不受各台時鐘差異影響。
  * 編號較小的事件可能因交易較晚提交而晚出現，跳過的編號會再等 {@link #GAP_WAIT_NANOS}。</p>
+ *
+ * <p>本機發出的事件在變更時已清過本機快取（提交後再清一次），讀回時只推進進度、不再清除，
+ * 否則每次變更都會讓本機的規則快照多重建一次。</p>
  */
 @Service
 @ConditionalOnProperty(name = "echo.storage.mode", havingValue = "database", matchIfMissing = true)
@@ -69,6 +73,10 @@ public class CacheInvalidationService {
     static final long STALE_AFTER_NANOS = TimeUnit.MINUTES.toNanos(5);
     private static final long FAILURE_LOG_INTERVAL_NANOS = TimeUnit.MINUTES.toNanos(1);
     private static final int IN_CHUNK = 500;
+    static final String STARTUP_WINDOW = "scheduled check after startup (changes another instance committed "
+            + "while this one was starting may arrive late)";
+    static final String REALIGN_WINDOW = "scheduled check after resuming cache sync (changes committed during "
+            + "the pause may arrive late)";
 
     private final CacheEventRepository eventRepository;
     private final CacheManager cacheManager;
@@ -76,6 +84,9 @@ public class CacheInvalidationService {
     private final ProtocolHandlerRegistry protocols;
     private final Cache<Long, String> responseBodyCache;
     private final LongSupplier nanoTime;
+
+    /** 本機發出的事件編號 → 發出時間；讀回時跳過。交易回滾的編號不會出現，過一段時間後丟掉。 */
+    private final Map<Long, Long> ownEvents = new ConcurrentHashMap<>();
 
     /** 已處理到的最大事件編號；null 表示啟動時讀不到資料庫，下次成功時重新對齊。 */
     private Long cursor;
@@ -88,6 +99,8 @@ public class CacheInvalidationService {
     private boolean fullClearPending;
     private long fullClearAt;
     private long laterClearAt;
+    private String fullClearReason;
+    private String laterClearReason;
     private long lastSuccessNanos;
     private long lastFailureLogNanos;
     private boolean failing;
@@ -117,7 +130,7 @@ public class CacheInvalidationService {
         try {
             cursor = maxEventId();
             lastSuccessNanos = nanoTime.getAsLong();
-            scheduleFullClear(lastSuccessNanos + GAP_WAIT_NANOS);
+            scheduleFullClear(lastSuccessNanos + GAP_WAIT_NANOS, STARTUP_WINDOW);
         } catch (RuntimeException e) {
             log.warn("Cache sync could not read cache_events at startup; will retry: {}", e.toString());
         }
@@ -157,7 +170,10 @@ public class CacheInvalidationService {
     /** 同一個交易內相同的事件只寫一筆，交易提交時一起生效。 */
     private void publish(String eventType) {
         if (AfterCommit.firstInTransaction(new PublishedEvent(this, eventType))) {
-            eventRepository.save(new CacheEvent(eventType));
+            Long id = eventRepository.save(new CacheEvent(eventType)).getId();
+            if (id != null) {
+                ownEvents.put(id, nanoTime.getAsLong());
+            }
         }
     }
 
@@ -202,6 +218,7 @@ public class CacheInvalidationService {
                 realign("cache event ids restarted");
             }
             expireGaps(now);
+            expireOwnEvents(now);
             return;
         }
 
@@ -218,10 +235,13 @@ public class CacheInvalidationService {
                 trackGaps(newCursor, id, now);
                 newCursor = id;
             }
-            changes.add(event.getEventType(), protocols.descriptors());
+            if (ownEvents.remove(id) == null) {
+                changes.add(event.getEventType(), protocols.descriptors());
+            }
         }
         cursor = newCursor;
         expireGaps(now);
+        expireOwnEvents(now);
         apply(changes);
         log.debug("Cache invalidated: caches={}, responses={}, events={}",
                 changes.caches, changes.allResponses ? "all" : changes.responseIds, events.size());
@@ -244,7 +264,7 @@ public class CacheInvalidationService {
         long deadline = now + GAP_WAIT_NANOS;
         if (missing > MAX_GAP_RUN || gaps.size() + missing > MAX_GAPS) {
             // 太多編號無法逐一等待：等晚提交的交易也該完成了，再整個清空一次，不留下永遠跳過的事件
-            scheduleFullClear(deadline);
+            scheduleFullClear(deadline, "an event id gap was too large to track");
             return;
         }
         for (long gap = previous + 1; gap < id; gap++) {
@@ -252,28 +272,38 @@ public class CacheInvalidationService {
         }
     }
 
-    private void scheduleFullClear(long deadline) {
+    private void scheduleFullClear(long deadline, String reason) {
         if (!fullClearPending) {
             fullClearPending = true;
             fullClearAt = deadline;
             laterClearAt = deadline;
+            fullClearReason = reason;
+            laterClearReason = reason;
         } else if (deadline - laterClearAt > 0) {
             laterClearAt = deadline;
+            laterClearReason = reason;
         }
     }
 
     private void runDueFullClear(long now) {
         if (fullClearPending && now - fullClearAt >= 0) {
+            String reason = fullClearReason;
             if (laterClearAt - now > 0) {
                 fullClearAt = laterClearAt;
+                fullClearReason = laterClearReason;
             } else {
                 fullClearPending = false;
             }
             Changes all = new Changes();
             all.markEverything(protocols.descriptors());
             apply(all);
-            log.info("Cleared all local caches: an event id gap was too large to track");
+            log.info("Cleared all local caches: {}", reason);
         }
+    }
+
+    /** 交易回滾的本機事件編號永遠不會出現；超過等待時間後丟掉，不會一直累積。 */
+    private void expireOwnEvents(long now) {
+        ownEvents.values().removeIf(sentAt -> now - sentAt > 2 * GAP_WAIT_NANOS);
     }
 
     private void expireGaps(long now) {
@@ -289,10 +319,12 @@ public class CacheInvalidationService {
     private void realign(String reason) {
         Long max = maxEventId();
         gaps.clear();
+        // 編號可能已重新開始，記下的本機編號可能撞到其他實例的新事件；全部清空後不再需要
+        ownEvents.clear();
         fullClearPending = false;
         cursor = max;
         // 同啟動：比 max 小、還沒提交的事件之後才會出現，等待時間過後再清一次
-        scheduleFullClear(nanoTime.getAsLong() + GAP_WAIT_NANOS);
+        scheduleFullClear(nanoTime.getAsLong() + GAP_WAIT_NANOS, REALIGN_WINDOW);
         Changes all = new Changes();
         all.markEverything(protocols.descriptors());
         apply(all);

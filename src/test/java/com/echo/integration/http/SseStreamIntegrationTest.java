@@ -1,5 +1,7 @@
 package com.echo.integration.http;
 
+import com.echo.config.CacheConfig;
+
 import com.echo.dto.RuleDto;
 import com.echo.entity.Protocol;
 import com.echo.integration.base.BaseIntegrationTest;
@@ -254,6 +256,8 @@ class SseStreamIntegrationTest extends BaseIntegrationTest {
             rule.setResponseId(null);
             httpRuleRepository.save(rule);
         });
+        // 直接改資料庫不會通知快取：如同外部改資料後，清除規則快取讓新內容生效
+        cacheManager.getCache(CacheConfig.HTTP_RULES_CACHE).clear();
 
         HttpResponse<String> response = sendSseRequest("/stream-no-response");
 

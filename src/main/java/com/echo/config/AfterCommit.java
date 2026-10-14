@@ -35,6 +35,16 @@ public final class AfterCommit {
         return true;
     }
 
+    /** 同 {@link #schedule}，但排在所有 {@link #schedule} 的動作之後執行（例如等快取都補清完才通知）。 */
+    public static boolean scheduleLast(Object key, Runnable action) {
+        Tracker tracker = tracker();
+        if (tracker == null) {
+            return false;
+        }
+        tracker.lastActions.putIfAbsent(key, action);
+        return true;
+    }
+
     /** 同一交易內第一次看到這個 key 時回傳 true；不在交易內時永遠回傳 true。 */
     public static boolean firstInTransaction(Object key) {
         Tracker tracker = tracker();
@@ -58,11 +68,17 @@ public final class AfterCommit {
 
     private static final class Tracker implements TransactionSynchronization {
         private final Map<Object, Runnable> actions = new LinkedHashMap<>();
+        private final Map<Object, Runnable> lastActions = new LinkedHashMap<>();
         private final Set<Object> seen = new HashSet<>();
 
         @Override
         public void afterCommit() {
-            for (Runnable action : actions.values()) {
+            run(actions);
+            run(lastActions);
+        }
+
+        private static void run(Map<Object, Runnable> scheduled) {
+            for (Runnable action : scheduled.values()) {
                 try {
                     action.run();
                 } catch (RuntimeException e) {
