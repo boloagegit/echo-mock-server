@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [Unreleased]
 
 ### Added
+- `docs/performance.md` collects the current performance results in one place: a comparison with WireMock 3.13.2 on the same machine, the request-log modes, what changed since April 2026, known bottlenecks with a CPU breakdown, startup options and how to rerun everything. The README performance section is now a short summary that links to it, and no longer lists two scripts that do not exist.
+- `scripts/bench-vs-wiremock.sh` runs the Echo vs WireMock comparison with wrk, and `scripts/bench-vs-wiremock-summary.py` turns its results into tables
 - SSE events in the rule editor are now a timeline instead of a wide table.
   - **Layout:** each event takes one line: when it is sent, its name, the start of its data, its size and the gap after the previous event. Clicking an event opens it for editing, one at a time; the first event opens with the editor and a newly added event opens with the cursor in its data. Alt + ↑ / ↓ moves to the previous or next event.
   - **Summary:** the header shows the number of events and the total length (per loop in loop mode). An error or abort event shows where the connection ends, and the events after it are marked as not sent.
