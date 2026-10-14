@@ -104,7 +104,8 @@ final class RequestLogHandoff {
      * 停止接收，最多等 {@code drainTimeoutMillis} 把暫存區寫完，之後剩下的丟掉。
      */
     void stop(long drainTimeoutMillis) {
-        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(drainTimeoutMillis);
+        long remaining = TimeUnit.MILLISECONDS.toNanos(drainTimeoutMillis);
+        int left;
         lock.lock();
         try {
             if (!running) {
@@ -112,24 +113,22 @@ final class RequestLogHandoff {
             }
             running = false;
             available.signalAll();
-            while ((!entries.isEmpty() || writing) && writer != null && writer.isAlive()) {
-                long remaining = deadline - System.nanoTime();
-                if (remaining <= 0) {
-                    break;
+            try {
+                while ((!entries.isEmpty() || writing) && writer != null && writer.isAlive() && remaining > 0) {
+                    remaining = drained.awaitNanos(remaining);
                 }
-                drained.awaitNanos(remaining);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        } finally {
-            int left = entries.size();
+            left = entries.size();
             entries.clear();
             bytes = 0;
+        } finally {
             lock.unlock();
-            if (left > 0) {
-                dropped.addAndGet(left);
-                log.warn("Request-log hand-off stopped with {} entries not yet written; they are dropped", left);
-            }
+        }
+        if (left > 0) {
+            dropped.addAndGet(left);
+            log.warn("Request-log hand-off stopped with {} entries not yet written; they are dropped", left);
         }
         if (writer != null) {
             writer.interrupt();
@@ -305,15 +304,14 @@ final class RequestLogHandoff {
 
     /** 測試用：等寫入端把目前的暫存區處理完。 */
     boolean awaitIdle(long timeoutMillis) throws InterruptedException {
-        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+        long remaining = TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
         lock.lock();
         try {
             while (!entries.isEmpty() || writing) {
-                long remaining = deadline - System.nanoTime();
                 if (remaining <= 0) {
                     return false;
                 }
-                drained.awaitNanos(remaining);
+                remaining = drained.awaitNanos(remaining);
             }
             return true;
         } finally {
