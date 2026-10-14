@@ -357,6 +357,49 @@ class RequestLogSpoolTest {
     }
 
     @Test
+    void appendAllCommitsEveryTaskInOrderWithFewCommits() {
+        spool = createSpool(tempDir.resolve("batch.sqlite"), 64 * 1024 * 1024);
+        spool.start();
+        List<LogTask> tasks = new ArrayList<>();
+        for (int i = 0; i < 300; i++) {
+            tasks.add(task("rule-" + i, "/batch/" + i));
+        }
+
+        RequestLogSpool.AppendResult result = spool.appendAll(tasks);
+
+        assertThat(result).isEqualTo(new RequestLogSpool.AppendResult(300, 0));
+        assertThat(spool.readAfter(0, 1_000)).extracting(entry -> entry.task().getEndpoint())
+                .containsExactlyElementsOf(tasks.stream().map(LogTask::getEndpoint).toList());
+    }
+
+    @Test
+    void appendAllSkipsATaskThatCanNeverBeStoredAndKeepsGoing() {
+        spool = createSpoolWithMemory(tempDir.resolve("skip.sqlite"), 64 * 1024 * 1024, 200_000);
+        spool.start();
+        List<LogTask> tasks = List.of(
+                task("rule-1", "/small/1"),
+                taskBuilder("rule-2", "/huge").requestBody("x".repeat(100_000)).build(),
+                task("rule-3", "/small/3"));
+
+        RequestLogSpool.AppendResult result = spool.appendAll(tasks);
+
+        assertThat(result).isEqualTo(new RequestLogSpool.AppendResult(3, 1));
+        assertThat(spool.readAfter(0, 10)).extracting(entry -> entry.task().getEndpoint())
+                .containsExactly("/small/1", "/small/3");
+    }
+
+    @Test
+    void appendAllOnAStoppedSpoolHandlesNothing() {
+        spool = createSpool(tempDir.resolve("stopped.sqlite"), 64 * 1024 * 1024);
+        spool.start();
+        spool.stop();
+
+        // 不是單筆的問題：回報沒處理任何一筆，由呼叫端稍後重試
+        assertThat(spool.appendAll(List.of(task("rule-1", "/a"))))
+                .isEqualTo(new RequestLogSpool.AppendResult(0, 0));
+    }
+
+    @Test
     void byteLimitFailsFastInsteadOfAcceptingAnUnloggedRequest() {
         spool = createSpool(tempDir.resolve("limited.sqlite"), 8);
         spool.start();

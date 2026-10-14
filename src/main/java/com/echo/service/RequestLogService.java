@@ -180,8 +180,9 @@ public class RequestLogService implements ServeEventListener {
     /**
      * 記錄請求（含匹配上下文）
      * <p>
-     * 當 LogAgent 可用時，延遲建構 LogTask 並委派給 durable spool。
-     * Agent 或 spool 不可用時 fail fast，避免回覆成功卻遺失請求紀錄。
+     * 當 LogAgent 可用時，延遲建構 LogTask 並交給 LogAgent：預設放進暫存區後立即返回，寫入跟不上時丟掉最舊的記錄；
+     * {@code echo.request-log.wait-for-write=true} 時等寫入 durable spool，無法寫入時 fail fast。
+     * Agent 不存在時 fail fast。
      * 明確停用請求記錄時則在取得 Agent 或建立任何記錄資料前返回。
      */
     @SuppressWarnings("java:S107") // 參數數量多是因為需要傳遞完整的匹配上下文
@@ -279,7 +280,10 @@ public class RequestLogService implements ServeEventListener {
                 .build());
     }
 
-    /** 請求紀錄是 critical listener：無法持久化時往上傳，HTTP 回 503、JMS 讓遞送失敗。 */
+    /**
+     * 請求紀錄是 critical listener：無法接收時往上傳，HTTP 回 503、JMS 讓遞送失敗。
+     * 預設不等寫入（{@code echo.request-log.wait-for-write=false}）時，只有記錄元件不存在才會發生。
+     */
     @Override
     public void onServed(ServeEvent event) {
         record(event);

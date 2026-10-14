@@ -178,6 +178,12 @@ echo:
     enabled: ${ECHO_REQUEST_LOG_ENABLED:true} # false 時完全停止新增請求記錄，供隔離核心效能壓測
     store: database    # memory 或 database
     max-records: 10000 # 最大記錄數
+    # false（預設）：回應不等記錄寫入；寫入跟不上時丟掉最舊的記錄，模擬回應不受影響，程序意外結束時遺失尚未寫入的記錄
+    # true：每筆記錄寫入暫存檔後才回應，記錄無法寫入時回 503（較慢）
+    wait-for-write: ${ECHO_REQUEST_LOG_WAIT_FOR_WRITE:false}
+    buffer:
+      max-entries: ${ECHO_REQUEST_LOG_BUFFER_MAX_ENTRIES:20000} # 等待寫入的記錄最多幾筆
+      max-mb: ${ECHO_REQUEST_LOG_BUFFER_MAX_MB:64}               # 等待寫入的記錄最多佔多少記憶體 (MB)
     durable:
       # 獨立 SQLite WAL 先接收紀錄，主資料庫暫時不可用時不會靜默丟失
       spool-path: ${ECHO_REQUEST_LOG_SPOOL_PATH:./data/request-log-spool.sqlite}

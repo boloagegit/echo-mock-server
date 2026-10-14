@@ -78,6 +78,8 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     private final AtomicBoolean durableConsumerRunning = new AtomicBoolean(false);
     private final Semaphore durableWorkAvailable = new Semaphore(0);
     private ExecutorService durableConsumerExecutor;
+    /** 不等記錄寫入就回應時的暫存區；嚴格模式（等寫入才回應）或 memory 模式為 null。 */
+    private final RequestLogHandoff handoff;
 
     @Autowired
     public LogAgent(
@@ -91,11 +93,19 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
             @Value("${echo.agent.analysis.enabled:true}") boolean analysisEnabled,
             @Value("${echo.agent.log.max-write-rate-per-second:1000}") int maxWriteRatePerSecond,
             ObjectProvider<RequestLogSpool> durableSpoolProvider,
-            RequestLogBatchWriter durableBatchWriter) {
+            RequestLogBatchWriter durableBatchWriter,
+            @Value("${echo.request-log.wait-for-write:false}") boolean waitForWrite,
+            @Value("${echo.request-log.buffer.max-entries:20000}") int bufferMaxEntries,
+            @Value("${echo.request-log.buffer.max-mb:64}") int bufferMaxMb) {
         this(requestLogRepository, configService, conditionMatcher, requestLogService,
                 durableSpoolProvider.getIfAvailable(), durableBatchWriter,
                 queueCapacity, batchSize, flushIntervalSeconds,
-                analysisEnabled, maxWriteRatePerSecond);
+                analysisEnabled, maxWriteRatePerSecond,
+                waitForWrite ? null : new BufferLimits(bufferMaxEntries, (long) Math.max(1, bufferMaxMb) * 1024 * 1024));
+    }
+
+    /** 不等記錄寫入時暫存區的上限。 */
+    record BufferLimits(int maxEntries, long maxBytes) {
     }
 
     /** Package-private constructor retained for focused unit/property tests. */
@@ -126,6 +136,25 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
             int flushIntervalSeconds,
             boolean analysisEnabled,
             int maxWriteRatePerSecond) {
+        this(requestLogRepository, configService, conditionMatcher, requestLogService,
+                durableSpool, durableBatchWriter, queueCapacity, batchSize, flushIntervalSeconds,
+                analysisEnabled, maxWriteRatePerSecond, null);
+    }
+
+    /** {@code buffer} 為 null：等記錄寫入暫存檔才回應（嚴格模式）。 */
+    LogAgent(
+            RequestLogRepository requestLogRepository,
+            SystemConfigService configService,
+            ConditionMatcher conditionMatcher,
+            RequestLogService requestLogService,
+            RequestLogSpool durableSpool,
+            RequestLogBatchWriter durableBatchWriter,
+            int queueCapacity,
+            int batchSize,
+            int flushIntervalSeconds,
+            boolean analysisEnabled,
+            int maxWriteRatePerSecond,
+            BufferLimits buffer) {
         super(queueCapacity, batchSize, flushIntervalSeconds);
         this.requestLogRepository = requestLogRepository;
         this.configService = configService;
@@ -136,28 +165,58 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
         this.analysisEnabled = analysisEnabled;
         this.maxWriteRatePerSecond = Math.max(1, maxWriteRatePerSecond);
         this.durableBatchSize = Math.max(1, batchSize);
+        this.handoff = buffer == null || durableSpool == null ? null
+                : new RequestLogHandoff(buffer.maxEntries(), buffer.maxBytes(), this::writeToSpool,
+                        250, System::nanoTime);
     }
 
     @PostConstruct
     public void init() {
         start();
         if (!configService.isRequestLogMemoryMode()) {
+            if (handoff != null) {
+                handoff.start();
+            }
             startDurableConsumer();
         }
     }
 
     @PreDestroy
     public void destroy() {
+        if (handoff != null) {
+            handoff.stop(5_000);
+        }
         stopDurableConsumer();
         shutdown();
     }
 
+    private RequestLogSpool.AppendResult writeToSpool(List<LogTask> batch) {
+        RequestLogSpool.AppendResult result = durableSpool.appendAll(batch);
+        if (result.handled() > 0) {
+            durableWorkAvailable.release();
+        }
+        return result;
+    }
+
     /**
-     * Accepts a request log only after the database-mode spool has durably committed it.
-     * Memory mode retains its explicitly best-effort in-memory behavior.
+     * 接收一筆請求記錄。預設（{@code echo.request-log.wait-for-write=false}）放進暫存區後立即返回，
+     * 永不失敗：寫入跟不上時丟掉最舊的記錄。{@code wait-for-write=true} 時等記錄寫入暫存檔才返回，
+     * 無法寫入時拋出 {@link RequestLogUnavailableException}。Memory 模式維持原本的盡力而為。
      */
     public void submitDurably(Supplier<? extends LogTask> taskSupplier) {
         Objects.requireNonNull(taskSupplier, "taskSupplier");
+        if (handoff != null && !configService.isRequestLogMemoryMode()) {
+            LogTask task;
+            try {
+                task = Objects.requireNonNull(taskSupplier.get(), "request log task");
+            } catch (RuntimeException e) {
+                log.debug("Cannot create request-log task: {}", e.toString());
+                handoff.countDropped();
+                return;
+            }
+            handoff.offer(task);
+            return;
+        }
         if (getStatus() != AgentStatus.RUNNING) {
             throw new RequestLogUnavailableException("Request-log agent is not running");
         }
@@ -203,14 +262,16 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
             return base;
         }
         RequestLogSpool.StatusSnapshot durable = durableSpool.statusSnapshot();
+        long buffered = handoff == null ? 0 : handoff.size();
         return AgentStats.builder()
-                .queueSize((int) Math.min(Integer.MAX_VALUE, durable.pendingItems()))
+                .queueSize((int) Math.min(Integer.MAX_VALUE, durable.pendingItems() + buffered))
                 .processedCount(base.getProcessedCount())
-                .droppedCount(base.getDroppedCount())
+                .droppedCount(base.getDroppedCount() + (handoff == null ? 0 : handoff.droppedCount()))
                 .queueBytes(durable.pendingBytes())
                 .queueCapacityBytes(durable.pendingByteLimit())
-                .inFlightBytes(durable.inFlightBytes())
-                .inFlightByteLimit(durable.inFlightByteLimit())
+                // 暫存區（等待寫入的記錄）與暫存檔的序列化資料都在記憶體中
+                .inFlightBytes(durable.inFlightBytes() + (handoff == null ? 0 : handoff.bytes()))
+                .inFlightByteLimit(durable.inFlightByteLimit() + (handoff == null ? 0 : handoff.maxBytes()))
                 .waitingProducers(durable.waitingProducers())
                 .backpressureActive(durable.backpressureActive())
                 .build();
