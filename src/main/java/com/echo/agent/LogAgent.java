@@ -540,11 +540,16 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                         e.sequence(), e.kind(), e.getMessage(), e);
                 durableConsumerRunning.set(false);
                 break;
-            } catch (Exception e) {
-                // 從資料庫重新讀取已確認的進度（逐筆重寫可能已前進一部分）
+            } catch (Exception | Error e) {
+                // Error（例如 OutOfMemoryError）也不能讓這個唯一的寫入執行緒結束，否則從此不再有新的請求記錄。
+                // 從資料庫重新讀取已確認的進度（逐筆重寫可能已前進一部分）；未寫入的資料留在暫存檔，稍後重試
                 checkpoint = null;
-                log.warn("Durable request-log persistence paused; data remains in spool: {}",
-                        e.getMessage());
+                try {
+                    log.warn("Durable request-log persistence paused; data remains in spool: {}",
+                            e instanceof Error ? e.toString() : e.getMessage());
+                } catch (Throwable ignored) {
+                    // 記錄失敗也要繼續
+                }
                 try {
                     awaitDurableWork();
                 } catch (InterruptedException interrupted) {

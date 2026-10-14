@@ -160,7 +160,8 @@ public abstract class AbstractBatchAgent<T> implements EchoAgent {
                 }
 
                 processBatchSafely(batch);
-                batch = new ArrayList<>(batchSize);
+                // 沿用同一個 list：記憶體不足時也不必再配置新的批次
+                batch.clear();
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -190,8 +191,13 @@ public abstract class AbstractBatchAgent<T> implements EchoAgent {
         try {
             processBatch(batch);
             processedCount.addAndGet(batch.size());
-        } catch (Exception e) {
-            log.error("Agent {} processBatch failed: {}", getName(), e.getMessage(), e);
+        } catch (Exception | Error e) {
+            // Error（例如 OutOfMemoryError）也只放棄這一批，不能讓唯一的處理執行緒結束
+            try {
+                log.error("Agent {} processBatch failed: {}", getName(), e.getMessage(), e);
+            } catch (Throwable ignored) {
+                // 記錄失敗也要繼續
+            }
         } finally {
             afterBatchProcessed(batch.size(), System.nanoTime() - startedAt);
         }
@@ -259,7 +265,7 @@ public abstract class AbstractBatchAgent<T> implements EchoAgent {
     /**
      * 子類別實作批次處理邏輯。
      *
-     * @param batch 本次批次的任務列表
+     * @param batch 本次批次的任務列表；返回後會清空重用，需要保留時請複製
      */
     protected abstract void processBatch(List<T> batch);
 
