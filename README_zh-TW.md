@@ -770,97 +770,48 @@ spring:
 
 ## 效能測試
 
-效能數字只代表指定負載，不應視為通用產品宣稱；`scripts/` 下的腳本才是重現基準的依據。
+效能數字只代表特定的機器與情境，不是通用的產品保證。完整結果、測試方式、2026 年 4 月以來的變化、已知瓶頸與較早的結果見 [docs/performance.md](docs/performance.md)；`scripts/` 下的腳本可以重跑。
 
-### 目前關閉請求記錄的 Echo vs WireMock A/B（2026-09-03）
+### Echo 與 WireMock 比較（2026-10-14）
 
-Echo 與 WireMock 3.13.2 使用相同的 JDK 21 Alpine container image、512 MiB heap、1 GiB container 上限、50 個並行連線，且每個服務／場景執行 8 秒。Echo 使用 `ECHO_REQUEST_LOG_ENABLED=false`；WireMock 使用 `--no-request-journal --disable-request-logging`。所有非 2xx 回應與傳輸錯誤都會計為錯誤；雙方四個場景均為 0 錯誤，且沒有因 OOM 終止。
+同一台 4 vCPU Linux、相同 JVM（`-Xms1g -Xmx1g`、OpenJDK 21），WireMock 3.13.2，用 wrk 壓測，兩邊都載入 2,004 條規則，2 輪中位數，每秒處理筆數：
 
-| 場景 | Echo RPS | WireMock RPS | 比值 | Echo p95 | WireMock p95 |
-|------|---------:|-------------:|-----:|---------:|-------------:|
-| 簡單 JSON、無條件 | 7,304 | 6,532 | 1.12x | 12.0ms | 13.9ms |
-| JSON、10 個候選規則 | 6,924 | 6,789 | 1.02x | 12.9ms | 12.1ms |
-| XML 約 1KB + XPath | 6,466 | 4,593 | 1.41x | 13.5ms | 17.7ms |
-| XML 約 80KB + XPath | 3,120 | 250 | 12.46x | 19.8ms | 312.8ms |
+| 情境 | Echo 記錄 | WireMock 記錄 1 萬筆 | Echo 不記錄 | WireMock 不記錄 |
+|------|---------:|---------:|---------:|---------:|
+| 固定 JSON，8 連線 | 8,191 | 1,515 | 9,920 | 38,023 |
+| 回應模板 | 6,760 | 1,490 | 8,544 | 23,629 |
+| XML 約 1.5 KB + XPath | 7,401 | 2,147 | 9,951 | 14,540 |
+| XML 約 100 KB + XPath | 4,097 | 911 | 6,262 | 1,941 |
+| 2,000 條規則中隨機一條 | 6,419 | 417 | 9,195 | 3,204 |
 
-在這組負載中，Echo 的 JSON 吞吐量與 WireMock 相近或略高，XML／XPath 則明顯較快，尤其是 80KB body。這是本機合成測試，不是通用產品宣稱；雙方 matcher 實作不同，短時間測試也不能取代長時間穩定性測試。關閉請求記錄後，Echo 的 HTTP 與 JMS XML mock／reply 路徑也通過整合測試；WireMock 沒有可直接比較的 JMS mock protocol。
-
-### 開啟請求記錄的 Echo vs WireMock A/B（2026-08-11）
-
-Echo 與 WireMock 3.13.2 在相同 Apple Silicon 主機、Java 22.0.2、512 MiB heap、開啟請求紀錄、50 並行及每個服務／場景 8 秒的條件下測試。兩邊 HTTP 5xx 與連線錯誤皆為 0。
-
-| 場景 | Echo RPS | WireMock RPS | 比值 | Echo p95 | WireMock p95 |
-|------|---------:|-------------:|-----:|---------:|-------------:|
-| 簡單 JSON、無條件 | 6,327 | 7,068 | 0.90x | 13.1ms | 12.9ms |
-| JSON、10 個候選規則 | 7,570 | 6,875 | 1.10x | 10.6ms | 13.0ms |
-| XML 約 1KB + XPath | 7,136 | 4,617 | 1.55x | 11.3ms | 24.4ms |
-| XML 約 80KB + XPath | 3,116 | 483 | 6.46x | 23.9ms | 180.6ms |
-
-本輪簡單 JSON 仍比 WireMock 慢約 10%；當候選規則或 XML/XPath 解析成本增加時 Echo 才開始領先。這不代表 Echo 的每項功能都比 WireMock 快。
-
-以下聚焦型基準是較早在 macOS／Apple Silicon、Java 17、20 並行及每場景 10 秒下取得；只有命令與環境完全一致時才可直接比較。
-
-### 規則數量影響（1,600 條規則）
-
-| 指標 | 6 條規則 | 1,600 條規則 |
-|------|---------|-------------|
-| Cold cache 匹配 | 3 ms | 10 ms |
-| Warm cache 匹配 | 3 ms | 6 ms |
-| 10 次平均匹配 | — | 5.0 ms |
-
-規則數量對匹配效能影響極小。規則以 `host + path + method` 為快取 key，只有同端點的候選規則會被遍歷，而非全部 1,600 條。
-
-### XML Body 大小影響
-
-| Body 大小 | XML 匹配 | JSON 匹配 | XML / JSON |
-|-----------|----------|-----------|------------|
-| ~1KB | 16.2 ms | 5.2 ms | 3.1x |
-| ~10KB | 10.0 ms | 3.8 ms | 2.6x |
-| ~50KB | 23.4 ms | 4.2 ms | 5.6x |
-| ~100KB | 34.8 ms | 6.0 ms | 5.8x |
-
-XML 匹配成本隨 body 大小線性增長（DOM 解析）。JSON 匹配不受 body 大小影響（~4-6ms），因 Jackson 的欄位查找為 O(1)。
-
-### 快取機制
-
-- **規則快取**: Caffeine, 10,000 entries, 12 小時過期
-- **Response Body 快取**: 50MB 上限, 5MB 閾值, 12 小時過期
-- 規則變更時自動失效
-
-### 歷史大量規則匹配（2,000 條規則，worst case）
-
-測試條件：2,000 條 HTTP 規則含 XPath 條件（`//ServiceName=xxx;//CustId=yyy`），目標規則排序最後（worst case 全遍歷），10 併發，200 請求。
-
-| 場景 | RPS | avg | p50 | p95 | p99 |
-|------|-----|-----|-----|-----|-----|
-| Echo XML（2,000 規則，XPath） | 434 | 22.7ms | 22.6ms | 34.8ms | 47.0ms |
-| Echo JSON（2,000 規則，欄位匹配） | 1,066 | 9.3ms | 8.0ms | 24.8ms | 28.7ms |
-| WireMock XML（2,000 規則，XPath） | 31 | 311.9ms | 311.3ms | 400.7ms | 427.0ms |
-
-在這組歷史 2,000 規則負載中，Echo 的 XML/XPath 路徑比當時測試的 WireMock **快 14 倍**，主要來自簡單 XPath 的 `getElementsByTagName` 快速路徑與預編譯 `XPathExpression` 快取；此結果只適用於該組 worst-case 規則。
+- 兩邊都保留最近 10,000 筆請求紀錄時，Echo 快 3.5～15 倍。WireMock 設定紀錄上限後，每個請求都會數一遍整串紀錄，這是差距的主因。
+- 兩邊都不記錄（WireMock 用 `--no-request-journal --disable-request-logging`）時，簡單請求（固定 JSON、模板、小 XML）WireMock 快 1.5～4.4 倍；約 100 KB 的 XML Echo 快 1.8～3.2 倍（取決於條件欄位的位置），2,000 條規則時 Echo 快 2.9 倍。
+- WireMock 預設的請求紀錄沒有上限，持續壓測時 heap 會被佔滿，處理量崩落。
+- WireMock 約 1 秒啟動，Echo 約 12 秒。
 
 ### 執行壓力測試
 
 ```bash
-# 單一場景匹配時間
+# Echo 與 WireMock 比較（wrk，見 docs/performance.md）
+scripts/bench-vs-wiremock.sh "$(ls -t build/libs/echo-server-*.jar | head -1)" wiremock-standalone.jar ./bench-out 2
+python3 scripts/bench-vs-wiremock-summary.py ./bench-out
+
+# 每秒處理筆數
+python3 scripts/stress-test-rps.py [URL] [DURATION] [CONCURRENCY]
+
+# 以 Python 用戶端比較 Echo 與 WireMock（需先自行啟動 WireMock）
+python3 scripts/stress-test-vs-wiremock.py [ECHO_URL] [WM_URL] [DURATION] [CONCURRENCY]
+
+# 單一情境匹配時間
 python3 scripts/stress-test-scenario1.py
 
-# 1,600 條規則影響測試
+# 1,600 條規則影響
 python3 scripts/stress-test-1600-rules.py
 
-# XML vs JSON body 大小比較
+# XML 與 JSON body 大小比較
 python3 scripts/stress-test-xml-body.py
 
-# RPS 吞吐量測試
-python3 scripts/stress-test-rps.py [URL] [秒數] [並發數]
-
-# Echo vs WireMock 比較（請先另外啟動 WireMock）
-python3 scripts/stress-test-vs-wiremock.py [ECHO_URL] [WM_URL] [秒數] [並發數]
-
-# 2,000 條規則 RPS 測試（Echo XML/JSON vs WireMock XML）
-python3 scripts/bench-rps-xml.py
-
-# 2,000 條 JMS 規則匹配時間
+# 2,000 條 JMS 規則匹配時間（需開啟 echo.features.bulk-import-export-enabled=true）
 python3 scripts/bench-2000-jms.py
 
 # JMS 匹配壓力測試
@@ -869,10 +820,7 @@ python3 scripts/stress-test-jms-match.py [BASE_URL]
 # 記憶體壓力測試
 python3 scripts/stress-test-memory.py [BASE_URL]
 
-# 日誌檢查
-python3 scripts/check-logs.py
-
-# 匹配情境回歸測試（69 個案例）
+# 匹配情境回歸測試
 python3 scripts/test-match-scenarios.py
 ```
 

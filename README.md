@@ -830,89 +830,38 @@ The main database can be shared for rules, responses, and cache events. The requ
 
 ## Performance Benchmark
 
-Benchmark numbers are workload-specific and should not be treated as universal product claims. The scripts under `scripts/` are the source of truth for reproducing them.
+Benchmark numbers are workload-specific and should not be treated as universal product claims. See [docs/performance.md](docs/performance.md) for the full results, the method, how Echo has changed since April 2026, known bottlenecks and earlier results. The scripts under `scripts/` reproduce them.
 
-### Current no-request-log Echo vs WireMock A/B (2026-09-03)
+### Echo vs WireMock (2026-10-14)
 
-Echo and WireMock 3.13.2 were run in the same JDK 21 Alpine container image
-with a 512 MiB heap, a 1 GiB container limit, 50 concurrent clients, and 8
-seconds per server/scenario. Echo used `ECHO_REQUEST_LOG_ENABLED=false`;
-WireMock used `--no-request-journal --disable-request-logging`. Every non-2xx
-response and transport failure counted as an error, and both sides completed
-all four scenarios with zero errors and no OOM termination.
+Same 4-vCPU Linux machine and JVM (`-Xms1g -Xmx1g`, OpenJDK 21), WireMock 3.13.2, wrk with 2,004 rules loaded on both sides, median of 2 rounds, requests per second:
 
-| Scenario | Echo RPS | WireMock RPS | Ratio | Echo p95 | WireMock p95 |
-|----------|---------:|-------------:|------:|---------:|-------------:|
-| Simple JSON, no condition | 7,304 | 6,532 | 1.12x | 12.0ms | 13.9ms |
-| JSON, 10 candidate rules | 6,924 | 6,789 | 1.02x | 12.9ms | 12.1ms |
-| XML ~1KB + XPath | 6,466 | 4,593 | 1.41x | 13.5ms | 17.7ms |
-| XML ~80KB + XPath | 3,120 | 250 | 12.46x | 19.8ms | 312.8ms |
+| Scenario | Echo, logs kept | WireMock, journal 10k | Echo, no log | WireMock, no journal or logging |
+|----------|---------:|---------:|---------:|---------:|
+| Fixed JSON, 8 connections | 8,191 | 1,515 | 9,920 | 38,023 |
+| Response template | 6,760 | 1,490 | 8,544 | 23,629 |
+| XML ~1.5 KB + XPath | 7,401 | 2,147 | 9,951 | 14,540 |
+| XML ~100 KB + XPath | 4,097 | 911 | 6,262 | 1,941 |
+| One of 2,000 path rules | 6,419 | 417 | 9,195 | 3,204 |
 
-In this workload, Echo was roughly even with or slightly faster than WireMock
-for JSON and materially faster for XML/XPath, especially for the 80KB body.
-This is a local synthetic result, not a universal product claim. The matcher
-implementations differ, and the short run is not a long-duration stability
-test. Echo's HTTP and JMS XML mock/reply paths were also integration-tested
-with request logging disabled; WireMock does not provide a directly comparable
-JMS mock protocol.
-
-### Request-log-enabled Echo vs WireMock A/B (2026-08-11)
-
-Echo and WireMock 3.13.2 were run on the same Apple Silicon host with Java 22.0.2, a 512 MiB heap, request journals enabled, 50 concurrent clients, and 8 seconds per server/scenario. Both sides completed with zero HTTP 5xx or connection errors.
-
-| Scenario | Echo RPS | WireMock RPS | Ratio | Echo p95 | WireMock p95 |
-|----------|---------:|-------------:|------:|---------:|-------------:|
-| Simple JSON, no condition | 6,327 | 7,068 | 0.90x | 13.1ms | 12.9ms |
-| JSON, 10 candidate rules | 7,570 | 6,875 | 1.10x | 10.6ms | 13.0ms |
-| XML ~1KB + XPath | 7,136 | 4,617 | 1.55x | 11.3ms | 24.4ms |
-| XML ~80KB + XPath | 3,116 | 483 | 6.46x | 23.9ms | 180.6ms |
-
-Simple JSON is still about 10% behind WireMock in this run; Echo leads once candidate matching or XML/XPath parsing becomes significant. This does not imply that every Echo feature is faster than its WireMock equivalent.
-
-The focused benchmarks below were collected earlier on macOS/Apple Silicon with Java 17, 20 concurrent threads, and 10 seconds per scenario. Compare results only when the command and environment are identical.
-
-### Rule Count Impact (1,600 rules)
-
-| Metric | 6 rules | 1,600 rules |
-|--------|---------|-------------|
-| Cold cache match | 3 ms | 10 ms |
-| Warm cache match | 3 ms | 6 ms |
-| 10-request average | — | 5.0 ms |
-
-Rule count has minimal impact on matching performance. Rules are cached by `host + path + method`, so only candidate rules for the same endpoint are evaluated — not all 1,600.
-
-### XML Body Size Impact
-
-| Body Size | XML Match | JSON Match | XML / JSON |
-|-----------|-----------|------------|------------|
-| ~1KB | 16.2 ms | 5.2 ms | 3.1x |
-| ~10KB | 10.0 ms | 3.8 ms | 2.6x |
-| ~50KB | 23.4 ms | 4.2 ms | 5.6x |
-| ~100KB | 34.8 ms | 6.0 ms | 5.8x |
-
-XML matching cost grows linearly with body size due to DOM parsing. JSON matching remains stable (~4-6ms) regardless of body size thanks to Jackson's O(1) field lookup.
-
-### Cache Mechanism
-
-- **Rule cache**: Caffeine, 10,000 entries, 12-hour expiration
-- **Response body cache**: 50MB limit, 5MB threshold, 12-hour expiration
-- Automatically invalidated on rule changes
-
-### Historical High-Volume Rule Matching (2,000 rules, worst case)
-
-Test: 2,000 HTTP rules with XPath conditions (`//ServiceName=xxx;//CustId=yyy`), target rule sorted last (worst case full traversal), 10 concurrent threads, 200 requests.
-
-| Scenario | RPS | avg | p50 | p95 | p99 |
-|----------|-----|-----|-----|-----|-----|
-| Echo XML (2,000 rules, XPath) | 434 | 22.7ms | 22.6ms | 34.8ms | 47.0ms |
-| Echo JSON (2,000 rules, field match) | 1,066 | 9.3ms | 8.0ms | 24.8ms | 28.7ms |
-| WireMock XML (2,000 rules, XPath) | 31 | 311.9ms | 311.3ms | 400.7ms | 427.0ms |
-
-In this historical 2,000-rule workload, Echo's XML/XPath path was **14x faster** than the tested WireMock build, thanks to the `getElementsByTagName` fast path for simple XPath patterns and pre-compiled `XPathExpression` caching. The result is specific to this worst-case rule set.
+- With both keeping the latest 10,000 requests, Echo is 3.5–15x faster. A capped WireMock journal counts all its entries on every request, which is most of that gap.
+- With recording off on both sides (WireMock with `--no-request-journal --disable-request-logging`), WireMock is 1.5–4.4x faster for simple requests (fixed JSON, templates, small XML). Echo is 1.8–3.2x faster for ~100 KB XML, depending on where the condition field sits, and 2.9x faster with 2,000 rules.
+- With its default unbounded journal, WireMock's heap fills up under sustained load and throughput collapses.
+- WireMock starts in about 1 s; Echo takes about 12 s.
 
 ### Run Benchmarks
 
 ```bash
+# Echo vs WireMock with wrk (see docs/performance.md)
+scripts/bench-vs-wiremock.sh "$(ls -t build/libs/echo-server-*.jar | head -1)" wiremock-standalone.jar ./bench-out 2
+python3 scripts/bench-vs-wiremock-summary.py ./bench-out
+
+# RPS throughput test
+python3 scripts/stress-test-rps.py [URL] [DURATION] [CONCURRENCY]
+
+# Echo vs WireMock with a Python client (start a separate WireMock instance first)
+python3 scripts/stress-test-vs-wiremock.py [ECHO_URL] [WM_URL] [DURATION] [CONCURRENCY]
+
 # Single scenario match time
 python3 scripts/stress-test-scenario1.py
 
@@ -922,16 +871,7 @@ python3 scripts/stress-test-1600-rules.py
 # XML vs JSON body size comparison
 python3 scripts/stress-test-xml-body.py
 
-# RPS throughput test
-python3 scripts/stress-test-rps.py [URL] [DURATION] [CONCURRENCY]
-
-# Echo vs WireMock comparison (start a separate WireMock instance first)
-python3 scripts/stress-test-vs-wiremock.py [ECHO_URL] [WM_URL] [DURATION] [CONCURRENCY]
-
-# 2,000 rules RPS test (Echo XML/JSON vs WireMock XML)
-python3 scripts/bench-rps-xml.py
-
-# 2,000 JMS rules match time
+# 2,000 JMS rules match time (needs echo.features.bulk-import-export-enabled=true)
 python3 scripts/bench-2000-jms.py
 
 # JMS match stress test
@@ -939,9 +879,6 @@ python3 scripts/stress-test-jms-match.py [BASE_URL]
 
 # Memory stress test
 python3 scripts/stress-test-memory.py [BASE_URL]
-
-# Log check
-python3 scripts/check-logs.py
 
 # Match scenario regression test (69 cases)
 python3 scripts/test-match-scenarios.py
