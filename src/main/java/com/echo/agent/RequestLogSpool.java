@@ -1033,9 +1033,10 @@ public class RequestLogSpool {
                     current.pendingItems(),
                     subtractAtMost(current.serializationBytes(), bytes));
             if (capacityState.compareAndSet(current, next)) {
-                return;
+                break;
             }
         }
+        afterRelease();
     }
 
     private void afterRelease() {
@@ -1138,12 +1139,8 @@ public class RequestLogSpool {
                     subtractAtMost(current.pendingItems(), itemCount),
                     current.serializationBytes());
             if (capacityState.compareAndSet(current, next)) {
-                break;
+                return;
             }
-        }
-        updateBackpressureState();
-        if (waitingAppenders.get() > 0) {
-            signalCapacityAvailable();
         }
     }
 
