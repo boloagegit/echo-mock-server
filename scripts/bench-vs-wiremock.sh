@@ -34,6 +34,13 @@ ECHO_JAR=$(realpath "$1")
 WM_JAR=$(realpath "$2")
 OUT_ROOT=$(realpath -m "${3:-./bench-vs-wiremock-$(date +%Y%m%d-%H%M%S)}")
 ROUNDS=${4:-2}
+if ! [[ "$ROUNDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ROUNDS must be a positive integer, got '$ROUNDS'" >&2
+  exit 2
+fi
+for tool in java wrk curl python3 jcmd bc; do
+  command -v "$tool" > /dev/null || { echo "missing required tool: $tool" >&2; exit 2; }
+done
 PATH_RULES=${ECHO_BENCH_PATH_RULES:-1}
 TYPE_LAST=${ECHO_BENCH_TYPE_LAST:-0}
 PORT=18080
@@ -131,12 +138,15 @@ run() {  # run LABEL ROUND echo|wm [server args...]
     sleep 0.25
   done
   if [ -z "$ok" ]; then echo "server not ready within 60 s" > "$out/ABORTED"; stop_server; return 1; fi
-  echo "startupSec $(echo "$(date +%s.%N) - $start" | bc)" > "$out/startup.txt"
+  local startup
+  startup=$(echo "$(date +%s.%N) - $start" | bc) && [ -n "$startup" ] \
+    || { echo "could not compute the startup time" > "$out/ABORTED"; stop_server; return 1; }
+  echo "startupSec $startup" > "$out/startup.txt"
 
   local h='X-Original-Host: bench.mock'
   if [ "$kind" = echo ]; then
-    curl -s -c "$WORK/cookies" -o /dev/null -X POST -d 'username=admin&password=admin' "$BASE/api/auth/login"
-    api() { curl -s -b "$WORK/cookies" -H 'Accept: application/json' -H 'Content-Type: application/json' "$@"; }
+    curl -s --max-time 30 -c "$WORK/cookies" -o /dev/null -X POST -d 'username=admin&password=admin' "$BASE/api/auth/login"
+    api() { curl -s --max-time 120 -b "$WORK/cookies" -H 'Accept: application/json' -H 'Content-Type: application/json' "$@"; }
     api -X POST "$BASE/api/admin/rules" -d '{"protocol":"HTTP","targetHost":"bench.mock","matchKey":"/fixed","method":"GET","status":200,"responseBody":"{\"ok\":true,\"name\":\"fixed\"}"}' > /dev/null
     api -X POST "$BASE/api/admin/rules" -d '{"protocol":"HTTP","targetHost":"bench.mock","matchKey":"/tpl","method":"GET","status":200,"responseBody":"{\"id\":\"{{request.query.id}}\",\"path\":\"{{request.path}}\"}"}' > /dev/null
     api -X POST "$BASE/api/admin/rules" -d '{"protocol":"HTTP","targetHost":"bench.mock","matchKey":"/x/small","method":"POST","status":200,"bodyCondition":"//Order/Type=VIP","responseBody":"<ok/>"}' > /dev/null
@@ -145,7 +155,7 @@ run() {  # run LABEL ROUND echo|wm [server args...]
       api -X POST "$BASE/api/admin/rules/import-batch" --data-binary @"$DATA/echo-items.json" > "$out/import.txt"
     fi
   else
-    curl -s -X POST -H 'Content-Type: application/json' "$BASE/__admin/mappings/import" \
+    curl -s --max-time 120 -X POST -H 'Content-Type: application/json' "$BASE/__admin/mappings/import" \
       --data-binary @"$DATA/wm-mappings.json" > "$out/import.txt"
   fi
   # Every scenario must answer 200 with the expected body before it is measured
