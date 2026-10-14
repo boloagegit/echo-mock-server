@@ -514,6 +514,7 @@ echo:
     persistent: true              # 正式環境必須保持 true，避免 large message 撐爆 heap
     consumer-window-size: 65536   # 每個 listener 最多預取的 encoded bytes
     data-directory: ./data/artemis # Artemis paging 與 large-message 檔案目錄
+    temporary-queue-idle-delete-ms: 10000 # 沒有 consumer 的暫時回覆佇列閒置多久後刪除（0 = 只在客戶端斷線時刪除）
     target:
       enabled: false            # 舊版單一連線相容設定；未建立資料庫連線時使用
       type: tibco               # artemis 或 tibco

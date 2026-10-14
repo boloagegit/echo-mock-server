@@ -550,6 +550,7 @@ echo:
     persistent: true              # Keep true outside tests so large messages cannot exhaust the heap
     consumer-window-size: 65536   # Encoded bytes prefetched by each listener consumer
     data-directory: ./data/artemis # Artemis paging and large-message files
+    temporary-queue-idle-delete-ms: 10000 # Delete temporary reply queues left without a consumer this long (0 = only when the client disconnects)
     target:
       enabled: false            # Legacy fallback used until a database profile exists
       type: tibco               # artemis or tibco
