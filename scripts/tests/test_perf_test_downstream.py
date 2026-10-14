@@ -1,6 +1,8 @@
 from pathlib import Path
 import runpy
+import http.client
 import threading
+import time
 import unittest
 import urllib.request
 
@@ -20,6 +22,32 @@ class PerfTestDownstreamTest(unittest.TestCase):
         # The default backlog of 5 drops SYNs when 40 forwards reconnect at once,
         # which adds ~1 s to Echo's measured connect and read-timeout latency.
         self.assertGreaterEqual(self.script["QuietThreadingHTTPServer"].request_queue_size, 128)
+
+    def test_responses_are_not_delayed_by_nagle(self):
+        # Headers and body are separate writes; without TCP_NODELAY every response after the
+        # first on a keep-alive connection waits ~40 ms for the client's delayed ACK.
+        self.assertTrue(self.script["BenchmarkHandler"].disable_nagle_algorithm)
+
+    def test_keep_alive_responses_stay_fast(self):
+        server = self.script["QuietThreadingHTTPServer"](("127.0.0.1", 0), self.script["BenchmarkHandler"])
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=5)
+            timings = []
+            for _ in range(5):
+                started = time.perf_counter()
+                conn.request("POST", "/fast", body=b"<x/>")
+                response = conn.getresponse()
+                self.assertEqual(200, response.status)
+                response.read()
+                timings.append(time.perf_counter() - started)
+            conn.close()
+            # Reused connection: well under the ~40 ms delayed-ACK stall
+            self.assertLess(max(timings[1:]), 0.02, timings)
+        finally:
+            server.shutdown()
+            server.server_close()
 
     def test_fast_endpoint_answers(self):
         server = self.script["QuietThreadingHTTPServer"](("127.0.0.1", 0), self.script["BenchmarkHandler"])

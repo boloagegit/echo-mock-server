@@ -31,6 +31,10 @@ class QuietThreadingHTTPServer(ThreadingHTTPServer):
 
 class BenchmarkHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+    # The response is written as headers then body. Without TCP_NODELAY, Nagle holds
+    # the body until the client ACKs the headers, and the client's delayed ACK makes
+    # every response after the first on a keep-alive connection take ~40 ms.
+    disable_nagle_algorithm = True
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
         self._respond()
