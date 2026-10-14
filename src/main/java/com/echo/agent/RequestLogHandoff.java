@@ -48,6 +48,8 @@ final class RequestLogHandoff {
     /** 停止完成：寫入端結束，之後寫不完的記錄計入丟棄、不再放回。 */
     private boolean closed;
     private boolean writing;
+    /** 正在寫入的那批筆數：寫入完成前仍佔著記憶體，計入筆數上限與 {@link #size()}。 */
+    private int inFlight;
     private boolean writeFailureLogged;
 
     private final AtomicLong dropped = new AtomicLong();
@@ -108,6 +110,7 @@ final class RequestLogHandoff {
     /** 計入因其他原因（例如建立記錄失敗）沒有放進暫存區的記錄。 */
     void countDropped() {
         dropped.incrementAndGet();
+        warnAboutDrops(false);
     }
 
     /**
@@ -160,7 +163,7 @@ final class RequestLogHandoff {
     int size() {
         lock.lock();
         try {
-            return entries.size();
+            return entries.size() + inFlight;
         } finally {
             lock.unlock();
         }
@@ -187,7 +190,7 @@ final class RequestLogHandoff {
     /** 超過上限時從最舊的等待記錄開始丟（正在寫入的那批不能丟，但計入記憶體）。 */
     private boolean dropOldestOverLimit() {
         boolean droppedAny = false;
-        while (!entries.isEmpty() && (entries.size() > maxEntries || bytes > maxBytes)) {
+        while (!entries.isEmpty() && (entries.size() + inFlight > maxEntries || bytes > maxBytes)) {
             bytes -= entries.removeFirst().bytes();
             dropped.incrementAndGet();
             droppedAny = true;
@@ -250,6 +253,7 @@ final class RequestLogHandoff {
                 batch.add(entries.removeFirst());
             }
             writing = true;
+            inFlight = batch.size();
             return batch;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -266,6 +270,7 @@ final class RequestLogHandoff {
             for (Entry entry : batch) {
                 bytes -= entry.bytes();
             }
+            inFlight = 0;
             if (closed) {
                 dropped.addAndGet(batch.size() - handled);
             } else {
@@ -305,8 +310,8 @@ final class RequestLogHandoff {
                 || (!force && lastWarningNanos != 0 && now - lastWarningNanos < DROP_WARNING_INTERVAL_NANOS)) {
             return;
         }
-        log.warn("Request logs arrived faster than they could be written; dropped {} of the oldest entries "
-                        + "(buffer limit {} entries / {} MB). Mock responses were not delayed",
+        log.warn("Request logging dropped {} entries (the oldest first when writing falls behind; buffer limit "
+                        + "{} entries / {} MB). Mock responses were not delayed",
                 total - droppedAtLastWarning, maxEntries, maxBytes / (1024 * 1024));
         droppedAtLastWarning = total;
         lastWarningNanos = now;

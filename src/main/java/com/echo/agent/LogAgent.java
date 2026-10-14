@@ -210,8 +210,8 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
             try {
                 task = Objects.requireNonNull(taskSupplier.get(), "request log task");
             } catch (RuntimeException e) {
-                handoff.countDropped();
                 log.debug("Cannot create request-log task: {}", e.toString());
+                handoff.countDropped();
                 return;
             }
             handoff.offer(task);
@@ -269,8 +269,9 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 .droppedCount(base.getDroppedCount() + (handoff == null ? 0 : handoff.droppedCount()))
                 .queueBytes(durable.pendingBytes())
                 .queueCapacityBytes(durable.pendingByteLimit())
-                .inFlightBytes(durable.inFlightBytes())
-                .inFlightByteLimit(durable.inFlightByteLimit())
+                // 暫存區（等待寫入的記錄）與暫存檔的序列化資料都在記憶體中
+                .inFlightBytes(durable.inFlightBytes() + (handoff == null ? 0 : handoff.bytes()))
+                .inFlightByteLimit(durable.inFlightByteLimit() + (handoff == null ? 0 : handoff.maxBytes()))
                 .waitingProducers(durable.waitingProducers())
                 .backpressureActive(durable.backpressureActive())
                 .build();

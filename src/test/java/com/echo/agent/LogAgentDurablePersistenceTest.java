@@ -341,6 +341,9 @@ class LogAgentDurablePersistenceTest {
         assertThat(done.await(10, TimeUnit.SECONDS)).isTrue();
         assertThat(persisted).hasSize(200).startsWith("/1", "/2").endsWith("/200").doesNotHaveDuplicates();
         assertThat(agent.getStats().getDroppedCount()).isZero();
+        // 暫存區的記憶體上限計入監控的記憶體上限
+        assertThat(agent.getStats().getInFlightByteLimit())
+                .isEqualTo(spool.statusSnapshot().inFlightByteLimit() + 64L * 1024 * 1024);
     }
 
     @Test

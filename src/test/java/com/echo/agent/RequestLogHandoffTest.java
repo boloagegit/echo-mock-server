@@ -92,7 +92,7 @@ class RequestLogHandoffTest {
         handoff.offer(task("/first"));
         assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
 
-        // 寫入端忙著寫 /first 時又來 25 筆：只留最新 10 筆
+        // 寫入端忙著寫 /first 時又來 25 筆：連同寫入中的那筆共 10 筆，只留最新 9 筆
         for (int i = 0; i < 25; i++) {
             handoff.offer(task("/" + i));
         }
@@ -100,9 +100,9 @@ class RequestLogHandoffTest {
         gate.countDown();
 
         assertThat(handoff.awaitIdle(5_000)).isTrue();
-        assertThat(written).containsExactly("/first", "/15", "/16", "/17", "/18", "/19", "/20", "/21", "/22",
+        assertThat(written).containsExactly("/first", "/16", "/17", "/18", "/19", "/20", "/21", "/22",
                 "/23", "/24");
-        assertThat(handoff.droppedCount()).isEqualTo(15);
+        assertThat(handoff.droppedCount()).isEqualTo(16);
     }
 
     @Test
@@ -286,10 +286,53 @@ class RequestLogHandoffTest {
             handoff.offer(task("/" + i, 10_000));
         }
         assertThat(handoff.bytes()).isLessThanOrEqualTo(limit);
-        assertThat(handoff.size()).isLessThanOrEqualTo(2);
+        assertThat(handoff.size()).isLessThanOrEqualTo(3);
         gate.countDown();
         assertThat(handoff.awaitIdle(5_000)).isTrue();
         assertThat(written).contains("/first", "/4").hasSizeLessThanOrEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("正在寫入的那批也計入筆數上限")
+    void theBatchBeingWrittenCountsTowardsTheEntryLimit() throws Exception {
+        CountDownLatch gate = new CountDownLatch(1);
+        CountDownLatch entered = new CountDownLatch(1);
+        handoff = new RequestLogHandoff(3, 1 << 20, blockedUntil(gate, entered), 10, System::nanoTime);
+        handoff.start();
+        handoff.offer(task("/first"));
+        assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+
+        for (int i = 0; i < 5; i++) {
+            handoff.offer(task("/" + i));
+        }
+
+        // 寫入中的 /first 佔一筆：等待中最多 2 筆
+        assertThat(handoff.size()).isEqualTo(3);
+        gate.countDown();
+        assertThat(handoff.awaitIdle(5_000)).isTrue();
+        assertThat(written).containsExactly("/first", "/3", "/4");
+        assertThat(handoff.droppedCount()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("建立記錄失敗而沒放進暫存區：也會警告")
+    void droppingBeforeTheBufferAlsoWarns() {
+        Logger logger = (Logger) LoggerFactory.getLogger(RequestLogHandoff.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            handoff = new RequestLogHandoff(10, 1 << 20, recording(), 10, System::nanoTime);
+            handoff.start();
+            handoff.countDropped();
+        } finally {
+            logger.detachAppender(appender);
+        }
+
+        assertThat(appender.list).filteredOn(e -> e.getLevel() == Level.WARN)
+                .extracting(ILoggingEvent::getFormattedMessage)
+                .containsExactly("Request logging dropped 1 entries (the oldest first when writing falls behind; "
+                        + "buffer limit 10 entries / 1 MB). Mock responses were not delayed");
     }
 
     @Test
@@ -344,11 +387,13 @@ class RequestLogHandoffTest {
         // 第一次丟棄就警告，之後最多每 30 秒一次；各次警告的筆數加起來就是丟掉的總數
         List<String> warnings = appender.list.stream().filter(e -> e.getLevel() == Level.WARN)
                 .map(ILoggingEvent::getFormattedMessage).toList();
-        assertThat(warnings).isNotEmpty().allMatch(w -> w.startsWith(
-                "Request logs arrived faster than they could be written; dropped ")
-                && w.endsWith("of the oldest entries (buffer limit 5 entries / 1 MB). Mock responses were not delayed"));
+        assertThat(warnings).isNotEmpty().allMatch(w -> w.startsWith("Request logging dropped ")
+                && w.endsWith(" entries (the oldest first when writing falls behind; buffer limit 5 entries / 1 MB). "
+                        + "Mock responses were not delayed"));
         int reported = warnings.stream()
-                .mapToInt(w -> Integer.parseInt(w.replaceAll("^.*dropped (\\d+) of.*$", "$1"))).sum();
-        assertThat(reported).isEqualTo(7);
+                .mapToInt(w -> Integer.parseInt(w.replaceAll("^Request logging dropped (\\d+) entries.*$", "$1")))
+                .sum();
+        // 上限 5 筆含寫入中的 1 筆：12 筆裡只留得下最新 4 筆
+        assertThat(reported).isEqualTo(8);
     }
 }
