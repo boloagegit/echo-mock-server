@@ -836,16 +836,16 @@ Benchmark numbers are workload-specific and should not be treated as universal p
 
 Same 4-vCPU Linux machine and JVM (`-Xms1g -Xmx1g`, OpenJDK 21), WireMock 3.13.2, wrk with 2,004 rules loaded on both sides, median of 2 rounds, requests per second:
 
-| Scenario | Echo, logs kept | WireMock, journal 10k | Echo, no log | WireMock, no journal |
+| Scenario | Echo, logs kept | WireMock, journal 10k | Echo, no log | WireMock, no journal or logging |
 |----------|---------:|---------:|---------:|---------:|
-| Fixed JSON, 8 connections | 8,191 | 1,515 | 10,000 | 34,911 |
-| Response template | 6,760 | 1,490 | 8,598 | 21,074 |
-| XML ~1.5 KB + XPath | 7,401 | 2,147 | 10,087 | 14,907 |
-| XML ~100 KB + XPath | 4,097 | 911 | 6,721 | 1,919 |
-| One of 2,000 path rules | 6,419 | 417 | 8,888 | 3,140 |
+| Fixed JSON, 8 connections | 8,191 | 1,515 | 9,920 | 38,023 |
+| Response template | 6,760 | 1,490 | 8,544 | 23,629 |
+| XML ~1.5 KB + XPath | 7,401 | 2,147 | 9,951 | 14,540 |
+| XML ~100 KB + XPath | 4,097 | 911 | 6,262 | 1,941 |
+| One of 2,000 path rules | 6,419 | 417 | 9,195 | 3,204 |
 
 - With both keeping the latest 10,000 requests, Echo is 3.5–15x faster. A capped WireMock journal counts all its entries on every request, which is most of that gap.
-- With recording off on both sides, WireMock is 1.3–3.6x faster for simple requests (fixed JSON, templates, small XML). Echo is 1.8–3.5x faster for ~100 KB XML, depending on where the condition field sits, and 2.8x faster with 2,000 rules.
+- With recording off on both sides (WireMock with `--no-request-journal --disable-request-logging`), WireMock is 1.5–4.4x faster for simple requests (fixed JSON, templates, small XML). Echo is 1.8–3.2x faster for ~100 KB XML, depending on where the condition field sits, and 2.9x faster with 2,000 rules.
 - With its default unbounded journal, WireMock's heap fills up under sustained load and throughput collapses.
 - WireMock starts in about 1 s; Echo takes about 12 s.
 
