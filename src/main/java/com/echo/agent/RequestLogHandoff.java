@@ -16,8 +16,8 @@ import java.util.function.LongSupplier;
  * 請求記錄的記憶體暫存區：請求不必等記錄寫入硬碟，記錄放進這裡後由一條背景執行緒批次寫入。
  *
  * <p>筆數與估計記憶體都有上限；超過時丟掉最舊的（只保留最新的記錄本來就是記錄上限的做法），
- * 並定期記錄丟了幾筆，請求永遠不會因為記錄而變慢或失敗。寫入暫時失敗時保留在暫存區稍後重試。
- * 程序意外結束時，尚未寫入的記錄會遺失。</p>
+ * 並定期記錄丟了幾筆，請求不會因為記錄而變慢或失敗。還沒交給暫存檔的記錄在寫入暫時失敗時保留下來稍後重試；
+ * 已交出但沒有確認寫入的計入丟失（重送可能重複）。程序意外結束時，尚未寫入的記錄會遺失。</p>
  */
 @Slf4j
 final class RequestLogHandoff {
@@ -40,11 +40,15 @@ final class RequestLogHandoff {
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition available = lock.newCondition();
     private final Condition drained = lock.newCondition();
-    /** 受 {@link #lock} 保護。 */
+    /** 以下受 {@link #lock} 保護。等待寫入的記錄。 */
     private final ArrayDeque<Entry> entries = new ArrayDeque<>();
+    /** 等待中與正在寫入的記錄的估計大小：寫入完成前仍佔著記憶體，一起計入上限。 */
     private long bytes;
     private boolean running;
+    /** 停止完成：寫入端結束，之後寫不完的記錄計入丟棄、不再放回。 */
+    private boolean closed;
     private boolean writing;
+    private boolean writeFailureLogged;
 
     private final AtomicLong dropped = new AtomicLong();
     private final AtomicLong lost = new AtomicLong();
@@ -79,19 +83,25 @@ final class RequestLogHandoff {
     /** 放進暫存區，永不等待；超過上限時丟掉最舊的。停止後的記錄直接丟掉。 */
     void offer(LogTask task) {
         long size = estimateBytes(task);
+        boolean droppedAny;
         lock.lock();
         try {
             if (!running || size > maxBytes) {
                 // 單筆就超過上限的不保留，也不為它丟掉其他記錄
                 dropped.incrementAndGet();
-                return;
+                droppedAny = true;
+            } else {
+                entries.addLast(new Entry(task, size));
+                bytes += size;
+                droppedAny = dropOldestOverLimit();
+                available.signal();
             }
-            entries.addLast(new Entry(task, size));
-            bytes += size;
-            dropOldestOverLimit();
-            available.signal();
         } finally {
             lock.unlock();
+        }
+        if (droppedAny) {
+            // 寫入端卡住時也要看得到警告（最多每 30 秒一次）
+            warnAboutDrops(false);
         }
     }
 
@@ -120,9 +130,12 @@ final class RequestLogHandoff {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
+            closed = true;
             left = entries.size();
+            for (Entry entry : entries) {
+                bytes -= entry.bytes();
+            }
             entries.clear();
-            bytes = 0;
         } finally {
             lock.unlock();
         }
@@ -166,11 +179,20 @@ final class RequestLogHandoff {
         return maxBytes;
     }
 
-    private void dropOldestOverLimit() {
+    /** 測試用：寫入端是否仍在執行。 */
+    boolean writerAlive() {
+        return writer != null && writer.isAlive();
+    }
+
+    /** 超過上限時從最舊的等待記錄開始丟（正在寫入的那批不能丟，但計入記憶體）。 */
+    private boolean dropOldestOverLimit() {
+        boolean droppedAny = false;
         while (!entries.isEmpty() && (entries.size() > maxEntries || bytes > maxBytes)) {
             bytes -= entries.removeFirst().bytes();
             dropped.incrementAndGet();
+            droppedAny = true;
         }
+        return droppedAny;
     }
 
     private void writeLoop() {
@@ -186,11 +208,18 @@ final class RequestLogHandoff {
             try {
                 RequestLogSpool.AppendResult result = sink.write(tasks);
                 handled = Math.min(result.handled(), batch.size());
-                lostInBatch = result.lost();
-            } catch (RuntimeException e) {
+                lostInBatch = Math.min(result.lost(), handled);
+                writeFailureLogged = false;
+            } catch (Throwable e) {
+                // 包含 Error：寫入端不能就此停止，否則記錄只會一直被丟棄
                 handled = 0;
                 lostInBatch = 0;
-                log.debug("Request-log hand-off write failed; will retry: {}", e.toString());
+                if (!writeFailureLogged) {
+                    writeFailureLogged = true;
+                    log.warn("Request-log hand-off could not write to the spool; will retry: {}", e.toString());
+                } else {
+                    log.debug("Request-log hand-off write failed again: {}", e.toString());
+                }
             }
             written.addAndGet(handled - lostInBatch);
             lost.addAndGet(lostInBatch);
@@ -206,18 +235,19 @@ final class RequestLogHandoff {
     private List<Entry> take() {
         lock.lock();
         try {
-            while (entries.isEmpty()) {
+            while (entries.isEmpty() && !closed) {
                 if (!running) {
                     return null;
                 }
                 available.await();
             }
+            if (closed) {
+                return null;
+            }
             int count = Math.min(BATCH_SIZE, entries.size());
             List<Entry> batch = new ArrayList<>(count);
             for (int i = 0; i < count; i++) {
-                Entry entry = entries.removeFirst();
-                bytes -= entry.bytes();
-                batch.add(entry);
+                batch.add(entries.removeFirst());
             }
             writing = true;
             return batch;
@@ -229,16 +259,23 @@ final class RequestLogHandoff {
         }
     }
 
-    /** 沒寫完的放回最前面（再超過上限時，丟掉的仍是最舊的）。 */
+    /** 沒寫完的放回最前面（再超過上限時，丟掉的仍是最舊的）；已停止時改為計入丟棄。 */
     private void finish(List<Entry> batch, int handled) {
         lock.lock();
         try {
-            for (int i = batch.size() - 1; i >= handled; i--) {
-                Entry entry = batch.get(i);
-                entries.addFirst(entry);
-                bytes += entry.bytes();
+            for (Entry entry : batch) {
+                bytes -= entry.bytes();
             }
-            dropOldestOverLimit();
+            if (closed) {
+                dropped.addAndGet(batch.size() - handled);
+            } else {
+                for (int i = batch.size() - 1; i >= handled; i--) {
+                    Entry entry = batch.get(i);
+                    entries.addFirst(entry);
+                    bytes += entry.bytes();
+                }
+                dropOldestOverLimit();
+            }
             writing = false;
             drained.signalAll();
         } finally {
@@ -251,7 +288,7 @@ final class RequestLogHandoff {
         lock.lock();
         try {
             long remaining = retryNanos;
-            while (remaining > 0) {
+            while (remaining > 0 && !closed) {
                 remaining = drained.awaitNanos(remaining);
             }
         } catch (InterruptedException e) {
@@ -275,8 +312,18 @@ final class RequestLogHandoff {
         lastWarningNanos = now;
     }
 
-    /** 估計一筆記錄在記憶體中的大小（字串以每字元 2 bytes 計），用來限制暫存區的記憶體。 */
+    /**
+     * 估計一筆記錄在記憶體中的大小，用來限制暫存區的記憶體：字串以每字元 2 bytes 計，
+     * 另加物件本身、每個 header、候選規則與比對結果的固定成本。
+     */
     static long estimateBytes(LogTask task) {
+        long fixed = 512;
+        if (task.getCandidates() != null) {
+            fixed += (long) task.getCandidates().size() * 128;
+        }
+        if (task.getMatchOutcomes() != null) {
+            fixed += (long) task.getMatchOutcomes().size() * 128;
+        }
         long chars = 0;
         chars += length(task.getRequestBody());
         chars += length(task.getResponseBody());
@@ -289,10 +336,11 @@ final class RequestLogHandoff {
         Map<String, String> headers = task.getHeaders();
         if (headers != null) {
             for (Map.Entry<String, String> header : headers.entrySet()) {
-                chars += length(header.getKey()) + length(header.getValue()) + 16;
+                chars += length(header.getKey()) + length(header.getValue());
+                fixed += 96;
             }
         }
-        return 512 + chars * 2;
+        return fixed + chars * 2;
     }
 
     private static long length(String value) {

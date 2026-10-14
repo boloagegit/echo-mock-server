@@ -124,8 +124,9 @@ class RequestLogHandoffTest {
         gate.countDown();
 
         assertThat(handoff.awaitIdle(5_000)).isTrue();
-        assertThat(written).containsExactly("/first", "/2", "/3", "/4");
-        assertThat(handoff.droppedCount()).isEqualTo(3);
+        // 寫入中的 /first 也佔記憶體：只留得下最新的 2 筆
+        assertThat(written).containsExactly("/first", "/3", "/4");
+        assertThat(handoff.droppedCount()).isEqualTo(4);
     }
 
     @Test
@@ -149,7 +150,6 @@ class RequestLogHandoffTest {
             TimeUnit.MILLISECONDS.sleep(5);
         }
         assertThat(written).isEmpty();
-        assertThat(handoff.size()).isEqualTo(5);
 
         failing.set(false);
         assertThat(handoff.awaitIdle(5_000)).isTrue();
@@ -211,6 +211,113 @@ class RequestLogHandoffTest {
     }
 
     @Test
+    @DisplayName("停止時寫到一半逾時：寫入端結束、不空轉，沒寫完的計入丟棄")
+    void stopTimingOutMidBatchEndsTheWriterAndCountsTheRest() throws Exception {
+        CountDownLatch gate = new CountDownLatch(1);
+        CountDownLatch entered = new CountDownLatch(1);
+        handoff = new RequestLogHandoff(100, 1 << 20, batch -> {
+            entered.countDown();
+            try {
+                gate.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            // 停止時暫存檔已不收：這一批都沒寫進去
+            return new RequestLogSpool.AppendResult(0, 0);
+        }, 10, System::nanoTime);
+        handoff.start();
+        handoff.offer(task("/0"));
+        assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+        for (int i = 1; i < 10; i++) {
+            handoff.offer(task("/" + i));
+        }
+
+        long started = System.nanoTime();
+        handoff.stop(200);
+        assertThat(System.nanoTime() - started).isLessThan(TimeUnit.SECONDS.toNanos(2));
+        gate.countDown();
+
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (handoff.writerAlive() && System.nanoTime() < deadline) {
+            TimeUnit.MILLISECONDS.sleep(10);
+        }
+        // 等待中的 9 筆在停止時丟掉；寫入中的那筆沒寫成，也計入丟棄，不再放回重試
+        assertThat(handoff.writerAlive()).isFalse();
+        assertThat(handoff.droppedCount()).isEqualTo(10);
+        assertThat(handoff.bytes()).isZero();
+        handoff = null;
+    }
+
+    @Test
+    @DisplayName("寫入時發生 Error：寫入端不停止，之後照常寫入")
+    void anErrorWhileWritingDoesNotStopTheWriter() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        handoff = new RequestLogHandoff(100, 1 << 20, batch -> {
+            if (calls.incrementAndGet() == 1) {
+                throw new OutOfMemoryError("simulated");
+            }
+            batch.forEach(t -> written.add(t.getEndpoint()));
+            return new RequestLogSpool.AppendResult(batch.size(), 0);
+        }, 10, System::nanoTime);
+        handoff.start();
+        handoff.offer(task("/0"));
+        handoff.offer(task("/1"));
+
+        assertThat(handoff.awaitIdle(5_000)).isTrue();
+        assertThat(handoff.writerAlive()).isTrue();
+        assertThat(written).containsExactly("/0", "/1");
+    }
+
+    @Test
+    @DisplayName("正在寫入的那批也計入記憶體上限")
+    void theBatchBeingWrittenCountsTowardsTheMemoryLimit() throws Exception {
+        CountDownLatch gate = new CountDownLatch(1);
+        CountDownLatch entered = new CountDownLatch(1);
+        long oneEntry = RequestLogHandoff.estimateBytes(task("/0", 10_000));
+        long limit = oneEntry * 3 + 2_000;
+        handoff = new RequestLogHandoff(1_000, limit, blockedUntil(gate, entered), 10, System::nanoTime);
+        handoff.start();
+        handoff.offer(task("/first", 10_000));
+        handoff.offer(task("/second", 10_000));
+        assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+
+        // 寫入中的 1～2 筆仍佔記憶體：只能再收 1～2 筆
+        for (int i = 0; i < 5; i++) {
+            handoff.offer(task("/" + i, 10_000));
+        }
+        assertThat(handoff.bytes()).isLessThanOrEqualTo(limit);
+        assertThat(handoff.size()).isLessThanOrEqualTo(2);
+        gate.countDown();
+        assertThat(handoff.awaitIdle(5_000)).isTrue();
+        assertThat(written).contains("/first", "/4").hasSizeLessThanOrEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("寫入端卡住時，丟棄的警告仍會出現")
+    void dropWarningAppearsWhileTheWriterIsStuck() throws Exception {
+        Logger logger = (Logger) LoggerFactory.getLogger(RequestLogHandoff.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        CountDownLatch gate = new CountDownLatch(1);
+        try {
+            CountDownLatch entered = new CountDownLatch(1);
+            handoff = new RequestLogHandoff(3, 1 << 20, blockedUntil(gate, entered), 10, System::nanoTime);
+            handoff.start();
+            handoff.offer(task("/first"));
+            assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+            for (int i = 0; i < 6; i++) {
+                handoff.offer(task("/" + i));
+            }
+
+            assertThat(appender.list).filteredOn(e -> e.getLevel() == Level.WARN).isNotEmpty();
+        } finally {
+            gate.countDown();
+            logger.detachAppender(appender);
+        }
+    }
+
+    @Test
     @DisplayName("丟掉記錄時記錄一次警告，寫出丟了幾筆與上限")
     void warnsAboutDroppedEntries() throws Exception {
         Logger logger = (Logger) LoggerFactory.getLogger(RequestLogHandoff.class);
@@ -229,13 +336,19 @@ class RequestLogHandoffTest {
             }
             gate.countDown();
             assertThat(handoff.awaitIdle(5_000)).isTrue();
+            handoff.stop(1_000);
         } finally {
             logger.detachAppender(appender);
         }
 
-        assertThat(appender.list).filteredOn(e -> e.getLevel() == Level.WARN)
-                .extracting(ILoggingEvent::getFormattedMessage)
-                .containsExactly("Request logs arrived faster than they could be written; dropped 7 of the "
-                        + "oldest entries (buffer limit 5 entries / 1 MB). Mock responses were not delayed");
+        // 第一次丟棄就警告，之後最多每 30 秒一次；各次警告的筆數加起來就是丟掉的總數
+        List<String> warnings = appender.list.stream().filter(e -> e.getLevel() == Level.WARN)
+                .map(ILoggingEvent::getFormattedMessage).toList();
+        assertThat(warnings).isNotEmpty().allMatch(w -> w.startsWith(
+                "Request logs arrived faster than they could be written; dropped ")
+                && w.endsWith("of the oldest entries (buffer limit 5 entries / 1 MB). Mock responses were not delayed"));
+        int reported = warnings.stream()
+                .mapToInt(w -> Integer.parseInt(w.replaceAll("^.*dropped (\\d+) of.*$", "$1"))).sum();
+        assertThat(reported).isEqualTo(7);
     }
 }

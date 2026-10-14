@@ -1,6 +1,7 @@
 package com.echo.agent;
 
 import com.echo.entity.Protocol;
+import com.echo.service.RequestLogRejectedException;
 import com.echo.service.RequestLogUnavailableException;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -37,11 +38,14 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -66,6 +70,8 @@ public class RequestLogSpool {
     static final long CANDIDATE_CACHE_MAX_BYTES = 16L * 1024 * 1024;
     /** Keep only a small bounded hand-off in heap; the rest of the spool is on disk. */
     static final long DEFAULT_IN_MEMORY_BYTES = 64L * 1024 * 1024;
+    /** {@link #appendAll} waits at most this long for the commits of the tasks it admitted. */
+    static final long APPEND_ALL_COMMIT_WAIT_MILLIS = 60_000;
 
     private static final String CREATE_SPOOL = """
             CREATE TABLE IF NOT EXISTS request_log_spool (
@@ -105,6 +111,13 @@ public class RequestLogSpool {
     private final long retryMillis;
     private final long maxPendingBytes;
     private final long maxInMemoryBytes;
+    /**
+     * {@code FULL} fsyncs every commit. When replies do not wait for their log
+     * ({@code echo.request-log.wait-for-write=false}) {@code NORMAL} is enough: WAL
+     * stays consistent after a crash and only a power or OS failure can lose the
+     * latest commits, which that mode already accepts.
+     */
+    private final String synchronousMode;
     private final Cache<List<CandidateSnapshot>, CandidateSetPayload> candidateSetCache = Caffeine.newBuilder()
             .maximumWeight(CANDIDATE_CACHE_MAX_BYTES)
             .weigher((List<CandidateSnapshot> key, CandidateSetPayload payload) ->
@@ -137,10 +150,25 @@ public class RequestLogSpool {
             @Value("${echo.request-log.durable.group-commit-ms:2}") long groupCommitMillis,
             @Value("${echo.request-log.durable.queue-offer-timeout-ms:10000}") long queueOfferTimeoutMillis,
             @Value("${echo.request-log.durable.retry-ms:250}") long retryMillis,
-            @Value("${echo.request-log.durable.max-pending-bytes:10737418240}") long maxPendingBytes) {
+            @Value("${echo.request-log.durable.max-pending-bytes:10737418240}") long maxPendingBytes,
+            @Value("${echo.request-log.wait-for-write:false}") boolean waitForWrite) {
         this(objectMapper, spoolPath, queueCapacity, appendBatchSize, groupCommitMillis,
                 queueOfferTimeoutMillis, retryMillis, maxPendingBytes,
-                DEFAULT_IN_MEMORY_BYTES);
+                DEFAULT_IN_MEMORY_BYTES, waitForWrite ? "FULL" : "NORMAL");
+    }
+
+    /** Package-private seam for tests: replies wait for their log ({@code synchronous=FULL}). */
+    RequestLogSpool(
+            ObjectMapper objectMapper,
+            String spoolPath,
+            int queueCapacity,
+            int appendBatchSize,
+            long groupCommitMillis,
+            long queueOfferTimeoutMillis,
+            long retryMillis,
+            long maxPendingBytes) {
+        this(objectMapper, spoolPath, queueCapacity, appendBatchSize, groupCommitMillis,
+                queueOfferTimeoutMillis, retryMillis, maxPendingBytes, DEFAULT_IN_MEMORY_BYTES);
     }
 
     /** Package-private seam for tests that need a smaller heap hand-off budget. */
@@ -154,6 +182,22 @@ public class RequestLogSpool {
             long retryMillis,
             long maxPendingBytes,
             long maxInMemoryBytes) {
+        this(objectMapper, spoolPath, queueCapacity, appendBatchSize, groupCommitMillis,
+                queueOfferTimeoutMillis, retryMillis, maxPendingBytes, maxInMemoryBytes, "FULL");
+    }
+
+    private RequestLogSpool(
+            ObjectMapper objectMapper,
+            String spoolPath,
+            int queueCapacity,
+            int appendBatchSize,
+            long groupCommitMillis,
+            long queueOfferTimeoutMillis,
+            long retryMillis,
+            long maxPendingBytes,
+            long maxInMemoryBytes,
+            String synchronousMode) {
+        this.synchronousMode = synchronousMode;
         this.objectMapper = objectMapper;
         this.spoolPath = Path.of(spoolPath).toAbsolutePath().normalize();
         this.appendQueue = new ArrayBlockingQueue<>(Math.max(1, queueCapacity));
@@ -236,11 +280,13 @@ public class RequestLogSpool {
     /**
      * Admits several tasks and waits until the admitted ones are committed (a few
      * group commits instead of one per task). A task that can never be stored (too
-     * large, not serializable) is rejected and skipped. Admission stops when the
-     * spool stops or its storage is unavailable; the result says how many tasks,
-     * from the start of the list, were handled, so the caller may retry the rest.
-     * Admitted tasks are never reported for retry: re-sending them could duplicate
-     * the ones that did commit.
+     * large, not serializable) is rejected and skipped. Admission stops at the first
+     * failure that a later retry may overcome (spool stopping, storage unavailable,
+     * capacity wait timed out); the result says how many tasks, from the start of the
+     * list, were handled, so the caller may retry the rest. Admitted tasks are never
+     * reported for retry: re-sending them could duplicate the ones that did commit.
+     * Their commits are awaited for at most {@link #APPEND_ALL_COMMIT_WAIT_MILLIS};
+     * those not confirmed by then are counted as lost.
      */
     public AppendResult appendAll(List<? extends LogTask> tasks) {
         List<PendingAppend> admitted = new ArrayList<>(tasks.size());
@@ -249,22 +295,32 @@ public class RequestLogSpool {
         for (LogTask task : tasks) {
             try {
                 admitted.add(admit(task));
-            } catch (RequestLogUnavailableException e) {
-                if (!running.get() || storageUnavailable.get() || Thread.currentThread().isInterrupted()) {
-                    break;
-                }
+            } catch (RequestLogRejectedException e) {
                 rejected++;
                 log.debug("Request log rejected by the spool: {}", e.getMessage());
+            } catch (RequestLogUnavailableException e) {
+                break;
+            } catch (RuntimeException e) {
+                // Unexpected and specific to this task: retrying it would fail the same way
+                rejected++;
+                log.debug("Request log could not be admitted: {}", e.toString());
             }
             handled++;
         }
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(APPEND_ALL_COMMIT_WAIT_MILLIS);
         int failedCommits = 0;
         for (PendingAppend pending : admitted) {
             try {
-                await(pending);
-            } catch (RequestLogUnavailableException e) {
+                pending.committed().get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+            } catch (ExecutionException | CancellationException | TimeoutException e) {
+                failedCommits++;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 failedCommits++;
             }
+        }
+        if (failedCommits > 0) {
+            log.debug("{} of {} request logs were not confirmed as committed", failedCommits, admitted.size());
         }
         return new AppendResult(handled, rejected + failedCommits);
     }
@@ -300,9 +356,9 @@ public class RequestLogSpool {
                 payload = objectMapper.writeValueAsBytes(SpoolTask.from(task));
                 candidateSet = candidateSetFor(task);
             } catch (IOException e) {
-                throw new RequestLogUnavailableException("Cannot serialize request log", e);
+                throw new RequestLogRejectedException("Cannot serialize request log", e);
             } catch (UncheckedIOException e) {
-                throw new RequestLogUnavailableException("Cannot serialize candidate snapshots", e.getCause());
+                throw new RequestLogRejectedException("Cannot serialize candidate snapshots", e.getCause());
             }
             long bytes = (long) payload.length
                     + (candidateSet != null ? candidateSet.payload().length : 0);
@@ -421,7 +477,7 @@ public class RequestLogSpool {
         characters = saturatingAdd(characters, (long) task.getMatchOutcomes().size() * 64);
         long estimate = saturatingMultiply(characters, 8);
         if (estimate > maxInMemoryBytes) {
-            throw new RequestLogUnavailableException(
+            throw new RequestLogRejectedException(
                     "Request-log payload exceeds the configured in-memory serialization limit");
         }
         return Math.max(1, estimate);
@@ -740,7 +796,7 @@ public class RequestLogSpool {
             }
             try (Connection connection = openConnection(); Statement statement = connection.createStatement()) {
                 statement.execute("PRAGMA journal_mode=WAL");
-                statement.execute("PRAGMA synchronous=FULL");
+                statement.execute("PRAGMA synchronous=" + synchronousMode);
                 statement.execute(CREATE_SPOOL);
                 ensureColumnExists(connection, "request_log_spool", "candidate_set_id", "TEXT");
                 statement.execute(CREATE_CANDIDATE_SETS);
@@ -807,7 +863,7 @@ public class RequestLogSpool {
 
     private void reserveSerialization(long bytes, long deadlineNanos) throws InterruptedException {
         if (bytes <= 0 || bytes > maxInMemoryBytes) {
-            throw new RequestLogUnavailableException(
+            throw new RequestLogRejectedException(
                     "Request-log payload exceeds the configured in-memory serialization limit");
         }
 
@@ -853,10 +909,10 @@ public class RequestLogSpool {
     private void reservePending(
             long bytes, long serializationBytes, long deadlineNanos) throws InterruptedException {
         if (bytes <= 0) {
-            throw new RequestLogUnavailableException("Request-log payload must not be empty");
+            throw new RequestLogRejectedException("Request-log payload must not be empty");
         }
         if (bytes > maxPendingBytes || bytes > maxInMemoryBytes) {
-            throw new RequestLogUnavailableException(
+            throw new RequestLogRejectedException(
                     "Request-log payload exceeds the configured durable or in-memory byte limit");
         }
 
@@ -1241,7 +1297,7 @@ public class RequestLogSpool {
         }
         writerConnection = openConnection();
         try (Statement durability = writerConnection.createStatement()) {
-            durability.execute("PRAGMA synchronous=FULL");
+            durability.execute("PRAGMA synchronous=" + synchronousMode);
         }
         writerConnection.setAutoCommit(false);
         return writerConnection;
