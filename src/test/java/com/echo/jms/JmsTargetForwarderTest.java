@@ -65,6 +65,18 @@ class JmsTargetForwarderTest {
     }
 
     @Test
+    void forwardWithMetadata_shouldUseTheConfiguredTargetName() {
+        jmsProperties.getTarget().setName("  ESB-UAT  ");
+        jmsProperties.getTarget().setServerUrl("tcp://127.0.0.1:19999");
+        jmsProperties.getTarget().setQueue("TARGET.REQUEST");
+
+        JmsTargetForwarder.ForwardResult result =
+                forwarder.forwardWithMetadata("<test>body</test>", originalMessage);
+
+        assertThat(result.target()).isEqualTo("ESB-UAT | tcp://127.0.0.1:19999 | TARGET.REQUEST");
+    }
+
+    @Test
     void sanitizeServerUrl_shouldHandleNullAndFragment() {
         assertThat(JmsTargetForwarder.sanitizeServerUrl(null)).isEqualTo("-");
         assertThat(JmsTargetForwarder.sanitizeServerUrl(

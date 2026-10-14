@@ -304,8 +304,13 @@ public class JmsTargetConnectionService {
 
     /** 設定檔下游的顯示名稱：{@code echo.jms.target.name}，沒設定時為 {@code application.yml}。 */
     private String legacyName() {
-        String name = jmsProperties.getTarget().getName();
-        return name == null || name.isBlank() ? YAML_TARGET_NAME : name.trim();
+        return configuredLegacyName(jmsProperties.getTarget(), YAML_TARGET_NAME);
+    }
+
+    /** {@code echo.jms.target.name}（去掉前後空白）；空白時回傳 {@code fallback}。 */
+    public static String configuredLegacyName(JmsProperties.Target target, String fallback) {
+        String name = target.getName();
+        return name == null || name.isBlank() ? fallback : name.trim();
     }
 
     private boolean legacyConfigured() {
