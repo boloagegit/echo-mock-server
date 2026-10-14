@@ -138,6 +138,10 @@ public class RequestLogSpool {
     private final ReentrantReadWriteLock candidateSetLifecycleLock = new ReentrantReadWriteLock();
 
     private volatile String spoolId;
+    /** 只由寫入執行緒使用：Error 的錯誤訊息最多每 30 秒一次。 */
+    private long lastWriterErrorLogNanos;
+    /** 測試用：每次提交前執行，用來模擬寫入時發生的 Error。 */
+    volatile Runnable beforeCommitForTest = () -> { };
     private ExecutorService writerExecutor;
     private Connection writerConnection;
 
@@ -1154,6 +1158,13 @@ public class RequestLogSpool {
                         Thread.currentThread().interrupt();
                         break;
                     }
+                } catch (Error e) {
+                    // 例如 OutOfMemoryError：這是唯一的寫入執行緒，結束就再也沒有記錄寫得進來，
+                    // 等待中的呼叫端也會一直等。放棄這批、換新連線，稍後繼續。
+                    batch = abandonBatchAfterError(batch, e);
+                    if (!pauseAfterWriterError()) {
+                        break;
+                    }
                 }
             }
         } finally {
@@ -1164,10 +1175,47 @@ public class RequestLogSpool {
         }
     }
 
+    /**
+     * 寫入時發生 Error 後放棄這一批：不確定是否已寫入，通知呼叫端失敗並釋放保留的容量，換一條新連線。
+     */
+    private List<PendingAppend> abandonBatchAfterError(List<PendingAppend> batch, Error error) {
+        try {
+            rollbackWriterConnection();
+            closeWriterConnection();
+            failBatch(batch, new RequestLogUnavailableException(
+                    "Request-log write failed and was abandoned: " + error));
+        } catch (Throwable ignored) {
+            // 記憶體仍不足時盡力而為；下一輪會重試
+        }
+        long now = System.nanoTime();
+        if (now - lastWriterErrorLogNanos >= TimeUnit.SECONDS.toNanos(30) || lastWriterErrorLogNanos == 0) {
+            lastWriterErrorLogNanos = now;
+            try {
+                log.error("Request-log spool writer hit {}; abandoned {} entries and keeps running",
+                        error, batch.size());
+            } catch (Throwable ignored) {
+                // 記錄失敗也不能讓寫入執行緒結束
+            }
+        }
+        return new ArrayList<>(appendBatchSize);
+    }
+
+    /** 發生 Error 後稍等再繼續；停止中或被中斷時回傳 false。 */
+    private boolean pauseAfterWriterError() {
+        try {
+            TimeUnit.MILLISECONDS.sleep(retryMillis);
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
     private void commitWithRetry(List<PendingAppend> batch) throws InterruptedException {
         while (running.get()) {
             candidateSetLifecycleLock.readLock().lock();
             try {
+                beforeCommitForTest.run();
                 Connection connection = getWriterConnection();
                 Map<String, CandidateSetPayload> candidateSets = uniqueCandidateSets(batch);
                 Set<String> insertedCandidateSets = persistCandidateSets(connection, candidateSets);

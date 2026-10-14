@@ -190,8 +190,13 @@ public abstract class AbstractBatchAgent<T> implements EchoAgent {
         try {
             processBatch(batch);
             processedCount.addAndGet(batch.size());
-        } catch (Exception e) {
-            log.error("Agent {} processBatch failed: {}", getName(), e.getMessage(), e);
+        } catch (Exception | Error e) {
+            // Error（例如 OutOfMemoryError）也只放棄這一批，不能讓唯一的處理執行緒結束
+            try {
+                log.error("Agent {} processBatch failed: {}", getName(), e.getMessage(), e);
+            } catch (Throwable ignored) {
+                // 記錄失敗也要繼續
+            }
         } finally {
             afterBatchProcessed(batch.size(), System.nanoTime() - startedAt);
         }

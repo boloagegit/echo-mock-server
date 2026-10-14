@@ -93,6 +93,28 @@ class LogAgentDurablePersistenceTest {
     }
 
     @Test
+    void persistenceWorkerSurvivesAnErrorAndRetries() throws Exception {
+        when(batchWriter.findCheckpoint(anyString())).thenReturn(0L);
+        AtomicInteger attempts = new AtomicInteger();
+        CountDownLatch delivered = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            if (attempts.incrementAndGet() == 1) {
+                throw new OutOfMemoryError("simulated");
+            }
+            delivered.countDown();
+            return null;
+        }).when(batchWriter).persist(anyString(), anyLong(), anyList(), eq(1_000));
+        startAgent();
+
+        agent.submitDurably(() -> task("rule-1", "/after-error"));
+
+        // 第一次寫入主資料庫時發生 Error：工作執行緒不結束，資料留在暫存檔並重試成功
+        assertThat(delivered.await(5, TimeUnit.SECONDS)).isTrue();
+        awaitSpoolEmpty();
+        assertThat(agent.getStats().getProcessedCount()).isEqualTo(1);
+    }
+
+    @Test
     void committedCheckpointSkipsAlreadyDeliveredRowAfterRestart() throws Exception {
         spool.append(task("rule-1", "/already-committed"));
         spool.append(task("rule-2", "/must-deliver"));

@@ -9,6 +9,7 @@ import com.echo.service.SystemConfigService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
@@ -792,5 +793,35 @@ class RequestLogSpoolTest {
                 .endpoint("/minimal")
                 .requestTime(LocalDateTime.now())
                 .build();
+    }
+
+    @Test
+    @DisplayName("寫入時發生 Error（例如記憶體不足）：寫入執行緒不結束，這批回報失敗，之後的記錄照常寫入")
+    void writerSurvivesAnErrorAndKeepsWriting() throws Exception {
+        RequestLogSpool spool = new RequestLogSpool(new ObjectMapper().findAndRegisterModules(),
+                tempDir.resolve("error.sqlite").toString(), 16, 4, 1, 2_000, 10, 64L * 1024 * 1024);
+        spool.start();
+        try {
+            java.util.concurrent.atomic.AtomicBoolean failNext = new java.util.concurrent.atomic.AtomicBoolean(true);
+            spool.beforeCommitForTest = () -> {
+                if (failNext.getAndSet(false)) {
+                    throw new OutOfMemoryError("simulated");
+                }
+            };
+
+            assertThatThrownBy(() -> spool.append(errorTask("/lost")))
+                    .isInstanceOf(RequestLogUnavailableException.class);
+            spool.append(errorTask("/after"));
+
+            assertThat(spool.readAfter(0, 10)).extracting(entry -> entry.task().getEndpoint())
+                    .containsExactly("/after");
+        } finally {
+            spool.stop();
+        }
+    }
+
+    private static LogTask errorTask(String endpoint) {
+        return LogTask.builder().protocol(com.echo.entity.Protocol.HTTP).endpoint(endpoint).matched(true)
+                .requestTime(java.time.LocalDateTime.now()).build();
     }
 }
