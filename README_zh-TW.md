@@ -516,6 +516,7 @@ echo:
     data-directory: ./data/artemis # Artemis paging 與 large-message 檔案目錄
     temporary-queue-idle-delete-ms: 10000 # 沒有 consumer 的暫時回覆佇列閒置多久後刪除（0 = 只在客戶端斷線時刪除）
     target:
+      name: ESB-UAT             # 介面與請求記錄顯示的下游名稱（ECHO_JMS_TARGET_NAME）；空白時顯示 application.yml
       enabled: false            # 舊版單一連線相容設定；未建立資料庫連線時使用
       type: tibco               # artemis 或 tibco
       server-url: tcp://esb-server:7222

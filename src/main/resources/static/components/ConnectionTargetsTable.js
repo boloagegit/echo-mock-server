@@ -23,7 +23,7 @@ const ConnectionTargetsTable = {
     closeOutside(event) {
       if (!this.$el.contains(event.target) || !event.target.closest('.connection-target-menu')) this.openMenuId = null;
     },
-    displayName(target) { return target.legacy ? this.t('settings.jmsApplicationTarget') : target.name; },
+    displayName(target) { return target.legacy ? (target.name || this.t('settings.jmsApplicationTarget')) : target.name; },
     roleLabel(target) {
       if (!target.enabled) return this.t('settings.disabled');
       if (target.legacy) return this.t('settings.jmsTargetForcedDefault');

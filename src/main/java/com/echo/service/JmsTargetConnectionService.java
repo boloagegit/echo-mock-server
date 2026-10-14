@@ -145,7 +145,7 @@ public class JmsTargetConnectionService {
     public Optional<ResolvedTarget> resolveActive() {
         if (legacyConfigured()) {
             return Optional.of(new ResolvedTarget(
-                    LEGACY_ID, YAML_TARGET_NAME, copyLegacyTarget(), true));
+                    LEGACY_ID, legacyName(), copyLegacyTarget(), true));
         }
         Optional<JmsTargetConnection> stored = repository
                 .findFirstByDefaultConnectionTrueAndEnabledTrue();
@@ -165,7 +165,7 @@ public class JmsTargetConnectionService {
                 throw new IllegalArgumentException("JMS_CONNECTION_NOT_FOUND");
             }
             return new ResolvedTarget(
-                    LEGACY_ID, YAML_TARGET_NAME, copyLegacyTarget(), true);
+                    LEGACY_ID, legacyName(), copyLegacyTarget(), true);
         }
         JmsTargetConnection entity = findEntity(parseId(id));
         if (!Boolean.TRUE.equals(entity.getEnabled())) {
@@ -302,6 +302,12 @@ public class JmsTargetConnectionService {
         return copy;
     }
 
+    /** 設定檔下游的顯示名稱：{@code echo.jms.target.name}，沒設定時為 {@code application.yml}。 */
+    private String legacyName() {
+        String name = jmsProperties.getTarget().getName();
+        return name == null || name.isBlank() ? YAML_TARGET_NAME : name.trim();
+    }
+
     private boolean legacyConfigured() {
         JmsProperties.Target target = jmsProperties.getTarget();
         return target.isEnabled() && target.getServerUrl() != null && !target.getServerUrl().isBlank();
@@ -310,7 +316,7 @@ public class JmsTargetConnectionService {
     private JmsTargetConnectionDto legacyDto() {
         JmsProperties.Target target = jmsProperties.getTarget();
         return new JmsTargetConnectionDto(
-                LEGACY_ID, null, YAML_TARGET_NAME, normalizeType(target.getType()),
+                LEGACY_ID, null, legacyName(), normalizeType(target.getType()),
                 target.getServerUrl(), target.getUsername(),
                 target.getPassword() != null && !target.getPassword().isEmpty(),
                 target.getQueue(), target.getTimeoutSeconds(), target.isEnabled(),

@@ -23,6 +23,18 @@ class RuleEditModalResourceTest {
     }
 
     @Test
+    void showsTheConfiguredNameOfTheApplicationYmlJmsTarget() throws IOException {
+        // echo.jms.target.name 設定的名稱要顯示出來；沒設定時後端給 application.yml，標籤只是備援
+        for (String component : new String[]{"RuleEditModal.js", "SettingsPage.js", "ConnectionTargetsTable.js"}) {
+            assertThat(resourceText("static/components/" + component))
+                    .as(component)
+                    .contains("(target.name || ")
+                    .doesNotContain("legacy ? this.t('settings.jmsApplicationTarget') :")
+                    .doesNotContain("? t('settings.jmsApplicationTarget') :");
+        }
+    }
+
+    @Test
     void associatesMatchingFieldsAndAnnouncesMethodSelection() throws IOException {
         String component = resourceText("static/components/RuleEditModal.js");
         for (String field : new String[]{"rule-http-path", "rule-source-host", "rule-jms-queue"}) {
