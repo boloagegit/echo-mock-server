@@ -265,6 +265,7 @@ final class RequestLogHandoff {
 
     /** 沒寫完的放回最前面（再超過上限時，丟掉的仍是最舊的）；已停止時改為計入丟棄。 */
     private void finish(List<Entry> batch, int handled) {
+        boolean droppedAfterStop = false;
         lock.lock();
         try {
             for (Entry entry : batch) {
@@ -273,6 +274,7 @@ final class RequestLogHandoff {
             inFlight = 0;
             if (closed) {
                 dropped.addAndGet(batch.size() - handled);
+                droppedAfterStop = batch.size() > handled;
             } else {
                 for (int i = batch.size() - 1; i >= handled; i--) {
                     Entry entry = batch.get(i);
@@ -285,6 +287,10 @@ final class RequestLogHandoff {
             drained.signalAll();
         } finally {
             lock.unlock();
+        }
+        if (droppedAfterStop) {
+            // stop() 的最後一次警告早於這批的結果：補報這批，停止後的記錄不會少算
+            warnAboutDrops(true);
         }
     }
 

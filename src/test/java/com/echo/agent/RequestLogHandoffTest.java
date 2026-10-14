@@ -232,19 +232,34 @@ class RequestLogHandoffTest {
             handoff.offer(task("/" + i));
         }
 
-        long started = System.nanoTime();
-        handoff.stop(200);
-        assertThat(System.nanoTime() - started).isLessThan(TimeUnit.SECONDS.toNanos(2));
-        gate.countDown();
+        Logger logger = (Logger) LoggerFactory.getLogger(RequestLogHandoff.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            long started = System.nanoTime();
+            handoff.stop(200);
+            assertThat(System.nanoTime() - started).isLessThan(TimeUnit.SECONDS.toNanos(2));
+            gate.countDown();
 
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-        while (handoff.writerAlive() && System.nanoTime() < deadline) {
-            TimeUnit.MILLISECONDS.sleep(10);
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (handoff.writerAlive() && System.nanoTime() < deadline) {
+                TimeUnit.MILLISECONDS.sleep(10);
+            }
+        } finally {
+            logger.detachAppender(appender);
         }
         // 等待中的 9 筆在停止時丟掉；寫入中的那筆沒寫成，也計入丟棄，不再放回重試
         assertThat(handoff.writerAlive()).isFalse();
         assertThat(handoff.droppedCount()).isEqualTo(10);
         assertThat(handoff.bytes()).isZero();
+        // 日誌裡報出的丟棄筆數加起來也是 10（寫入中的那筆在停止後補報）
+        int reported = appender.list.stream().filter(e -> e.getLevel() == Level.WARN)
+                .map(ILoggingEvent::getFormattedMessage)
+                .filter(m -> m.startsWith("Request logging dropped "))
+                .mapToInt(m -> Integer.parseInt(m.replaceAll("^Request logging dropped (\\d+) entries.*$", "$1")))
+                .sum();
+        assertThat(reported).isEqualTo(10);
         handoff = null;
     }
 
