@@ -199,23 +199,51 @@ class RuleSnapshotCacheTest {
     }
 
     @Test
-    @DisplayName("第一次建立期間有變更提交：回傳與留下的都是包含變更的快照")
-    void changeCommittedDuringTheFirstBuildIsIncluded() throws Exception {
+    @DisplayName("第一次建立期間有變更提交：變更方等到包含變更的快照生效")
+    void changeDuringTheFirstBuildWaitsForASnapshotThatIncludesIt() throws Exception {
         SlowBuilder builder = new SlowBuilder();
         builder.block();
         RuleSnapshotCache<String, String> cache = cache(builder);
         Future<String> firstRequest = callers.submit(() -> cache.get("k"));
         assertThat(builder.started.await(5, TimeUnit.SECONDS)).isTrue();
 
-        // 還沒有快照可等：變更方立即返回，第一份快照必須自己補上這次變更
-        long started = System.nanoTime();
-        cache.changed(false);
-        assertThat(System.nanoTime() - started).isLessThan(TimeUnit.MILLISECONDS.toNanos(500));
+        // 第一份快照可能比這次變更舊：變更方不能在它建好前、也不能只因它建好就返回
+        Future<?> change = callers.submit(() -> cache.changed(false));
+        TimeUnit.MILLISECONDS.sleep(100);
+        assertThat(change).isNotDone();
         builder.gate.countDown();
 
-        assertThat(firstRequest.get(5, TimeUnit.SECONDS)).isEqualTo("v2");
+        change.get(5, TimeUnit.SECONDS);
         assertThat(cache.get("k")).isEqualTo("v2");
         assertThat(cache.generationOf("k")).isEqualTo(1);
+        assertThat(firstRequest.get(5, TimeUnit.SECONDS)).isIn("v1", "v2");
+    }
+
+    @Test
+    @DisplayName("第一次建立失敗：變更方不必等到逾時")
+    void failedFirstBuildReleasesWaitingChanges() throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch gate = new CountDownLatch(1);
+        RuleSnapshotCache<String, String> cache = new RuleSnapshotCache<>("test", key -> {
+            started.countDown();
+            try {
+                gate.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            throw new IllegalStateException("database unavailable");
+        }, builderThread, TimeUnit.MINUTES.toNanos(10), 5_000, clock::get);
+        Future<String> firstRequest = callers.submit(() -> cache.get("k"));
+        assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+        Future<?> change = callers.submit(() -> cache.changed(false));
+        TimeUnit.MILLISECONDS.sleep(100);
+
+        long released = System.nanoTime();
+        gate.countDown();
+        change.get(2, TimeUnit.SECONDS);
+
+        assertThat(System.nanoTime() - released).isLessThan(TimeUnit.SECONDS.toNanos(1));
+        assertThat(firstRequest).failsWithin(5, TimeUnit.SECONDS);
     }
 
     @Test

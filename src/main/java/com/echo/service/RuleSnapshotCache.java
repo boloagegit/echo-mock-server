@@ -30,7 +30,6 @@ public final class RuleSnapshotCache<K, V> {
     /** 這個執行緒在目前網頁請求中變更過的快取 → 需要等到的序號。 */
     private static final ThreadLocal<Map<RuleSnapshotCache<?, ?>, Long>> PENDING = new ThreadLocal<>();
     private static final long FAILURE_BACKOFF_NANOS = TimeUnit.SECONDS.toNanos(1);
-    private static final int FIRST_BUILD_ATTEMPTS = 3;
 
     private final String name;
     private final Function<K, V> builder;
@@ -143,10 +142,11 @@ public final class RuleSnapshotCache<K, V> {
         return true;
     }
 
+    /** 第一份快照正在建立的 slot 也算未更新：建立結果可能比這次變更舊。 */
     private boolean upToDate(long generation) {
         for (Slot<V> slot : slots.values()) {
             Built<V> current = slot.current;
-            if (current != null && current.generation < generation) {
+            if (current == null ? slot.firstBuilding : current.generation < generation) {
                 return false;
             }
         }
@@ -154,9 +154,8 @@ public final class RuleSnapshotCache<K, V> {
     }
 
     /**
-     * 還沒有快照時由呼叫端建立（同一個 key 的並行請求在 slot 上等這一次）。建立期間有變更提交時重建，
-     * 直到建立的結果包含開始建立前的所有變更：變更方看不到尚未完成的第一份快照，不會等它，
-     * 所以第一份快照不能比變更舊。持續變更時最多重建 {@value #FIRST_BUILD_ATTEMPTS} 次，之後交給背景。
+     * 還沒有快照時由呼叫端建立（同一個 key 的並行請求在 slot 上等這一次）。建立期間做出的變更會等它：
+     * 結果比變更舊時，建立完成後交給背景重建，變更方等到重建完成（見 {@link #upToDate}）。
      */
     private V buildFirst(K key, Slot<V> slot) {
         synchronized (slot) {
@@ -164,18 +163,24 @@ public final class RuleSnapshotCache<K, V> {
             if (current != null) {
                 return current.value;
             }
-            long generation;
-            V value;
-            int attempts = 0;
-            do {
-                generation = changes.get();
-                value = builder.apply(key);
-            } while (changes.get() > generation && ++attempts < FIRST_BUILD_ATTEMPTS);
-            install(slot, value, generation);
-            if (changes.get() > generation) {
-                requestRebuild(key, slot, nanoTime.getAsLong());
+            slot.firstBuilding = true;
+            try {
+                long generation = changes.get();
+                V value = builder.apply(key);
+                install(slot, value, generation);
+                if (changes.get() > generation) {
+                    requestRebuild(key, slot, nanoTime.getAsLong());
+                }
+                return value;
+            } finally {
+                if (slot.firstBuilding) {
+                    // 建立失敗：不再讓變更方等這份快照
+                    synchronized (installed) {
+                        slot.firstBuilding = false;
+                        installed.notifyAll();
+                    }
+                }
             }
-            return value;
         }
     }
 
@@ -223,6 +228,7 @@ public final class RuleSnapshotCache<K, V> {
             if (current == null || generation >= current.generation) {
                 slot.current = new Built<>(value, generation, nanoTime.getAsLong());
             }
+            slot.firstBuilding = false;
             installed.notifyAll();
         }
     }
@@ -238,6 +244,8 @@ public final class RuleSnapshotCache<K, V> {
         private volatile Built<V> current;
         private final AtomicBoolean queued = new AtomicBoolean();
         private volatile long lastFailureAt;
+        /** 第一份快照建立中（還沒有 {@code current}）。 */
+        private volatile boolean firstBuilding;
     }
 
     private record Built<V>(V value, long generation, long builtAt) {
