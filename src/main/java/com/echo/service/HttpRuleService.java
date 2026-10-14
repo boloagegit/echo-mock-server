@@ -79,11 +79,17 @@ public class HttpRuleService {
     }
 
     /**
-     * 目前的 HTTP 規則快照。存放在 {@code httpRules} 快取的單一項目，任何規則或 Response 異動清除快取時一併淘汰；
-     * {@code sync = true} 讓並行請求只建立一次。
+     * 目前的 HTTP 規則快照（{@link RuleSnapshots}）：規則或 Response 異動清除 {@code httpRules} 快取時在背景重建，
+     * 重建期間請求繼續使用舊快照。沒有 Spring context 的單元測試直接建立。
      */
-    @Cacheable(cacheNames = CacheConfig.HTTP_RULES_CACHE, key = "'http-snapshot'", sync = true)
     public HttpRuleSnapshot httpRuleSnapshot() {
+        RuleSnapshots snapshots = applicationContext == null ? null
+                : applicationContext.getBeanProvider(RuleSnapshots.class).getIfAvailable();
+        return snapshots != null ? snapshots.http() : buildHttpRuleSnapshot();
+    }
+
+    /** 從資料庫建立 HTTP 規則快照（由 {@link RuleSnapshots} 在背景呼叫）。 */
+    HttpRuleSnapshot buildHttpRuleSnapshot() {
         List<HttpRule> rules = httpRuleRepository.findByEnabledTrueOrderByIdAsc();
         Set<Long> validResponseIds = ruleService.getValidResponseIds(rules.stream()
                 .map(HttpRule::getResponseId).filter(id -> id != null).collect(Collectors.toSet()));

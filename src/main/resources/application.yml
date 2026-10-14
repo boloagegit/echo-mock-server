@@ -122,6 +122,7 @@ echo:
       max-weight-mb: ${ECHO_CACHE_TEMPLATE_MAX_WEIGHT_MB:16}
     rules:
       max-age-minutes: 10     # 規則與 HTTP 轉送連線設定快取最晚多久重新讀取 (多實例保底)
+      change-wait-ms: 5000    # 改規則的請求最多等多久讓新規則生效 (模擬請求不等，重建期間用舊規則)
     sync-interval-ms: 5000    # 多實例 cache 同步間隔 (毫秒)
   jms:
     enabled: false

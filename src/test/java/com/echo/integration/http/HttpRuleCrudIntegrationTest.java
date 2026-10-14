@@ -155,7 +155,8 @@ class HttpRuleCrudIntegrationTest extends BaseIntegrationTest {
         assertThat(springCache).isNotNull();
         var nativeCache = (com.github.benmanes.caffeine.cache.Cache<?, ?>)
                 springCache.getNativeCache();
-        assertThat(nativeCache.estimatedSize()).isEqualTo(1);
+        // 不同的動態 URL 不各自占用快取項目；共用的規則集放在規則快照（RuleSnapshots）
+        assertThat(nativeCache.estimatedSize()).isZero();
     }
 
     @Test

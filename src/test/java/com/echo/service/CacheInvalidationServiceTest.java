@@ -1,5 +1,8 @@
 package com.echo.service;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.echo.config.CacheConfig;
 import com.echo.config.CommitAwareCaffeineCacheManager;
 import com.echo.entity.CacheEvent;
@@ -20,6 +23,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cache.CacheManager;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -54,6 +58,7 @@ class CacheInvalidationServiceTest {
                 CacheConfig.HTTP_TARGET_DEFAULT_CACHE, CacheConfig.HTTP_TARGET_RESOLVED_CACHE);
         bodies = Caffeine.newBuilder().build();
         // 以記憶體中的清單模擬 cache_events；「已提交」的事件才放進 table。
+        lenient().when(eventRepository.save(any(CacheEvent.class))).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(eventRepository.findMaxId()).thenAnswer(inv ->
                 table.stream().mapToLong(CacheEvent::getId).boxed().max(Long::compare).orElse(null));
         lenient().when(eventRepository.findByIdGreaterThanOrderByIdAsc(anyLong(), any(Pageable.class)))
@@ -448,6 +453,132 @@ class CacheInvalidationServiceTest {
         assertThat(bodies.estimatedSize()).isZero();
     }
 
+    // ========== 本機發出的事件 ==========
+
+    @Test
+    void ownEvents_shouldNotClearLocalCachesAgain() {
+        AtomicLong ids = new AtomicLong();
+        saveCommits(ids);
+        // 本機變更時已清過本機快取；之後重新建立的快取不必因為讀回自己的事件再清一次
+        service.publishInvalidation(Protocol.HTTP);
+        service.publishResponsesChanged(List.of(1L));
+        fillCaches();
+
+        service.checkForInvalidation();
+
+        assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).isTrue();
+        assertThat(bodies.getIfPresent(1L)).isNotNull();
+
+        // 其他實例的事件照常清除
+        commit(ids.incrementAndGet(), "HTTP_RULE_CHANGED");
+        service.checkForInvalidation();
+        assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).isFalse();
+    }
+
+    @Test
+    void publishing_shouldClearNonRuleCachesLocallyAndAgainAfterCommit() {
+        fillCaches();
+        TransactionSynchronizationManager.initSynchronization();
+
+        // 讀回自己的事件時不再清除，所以發出時就清本機的回應內容與轉送連線快取（不必靠呼叫端）
+        service.publishResponsesChanged(List.of(1L));
+        service.publishHttpTargetsChanged();
+        assertThat(bodies.getIfPresent(1L)).isNull();
+        assertThat(cached(CacheConfig.HTTP_TARGET_RESOLVED_CACHE)).isFalse();
+
+        // 提交前另一個請求放回舊資料：提交後再清一次
+        bodies.put(1L, "old");
+        commitSynchronizations();
+        assertThat(bodies.getIfPresent(1L)).isNull();
+        assertThat(bodies.getIfPresent(2L)).isNotNull();
+    }
+
+    @Test
+    void publishingRuleChanges_shouldLeaveRuleCachesToTheCaller() {
+        fillCaches();
+
+        service.publishInvalidation();
+
+        // 規則快取由變更處清除；這裡再清會讓規則快照多重建一次
+        assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).isTrue();
+        assertThat(cached(CacheConfig.JMS_RULES_CACHE)).isTrue();
+    }
+
+    @Test
+    void rolledBackOwnEventId_shouldNotHideAnotherInstancesEventWithTheSameId() {
+        commit(1, "JMS_RULE_CHANGED");
+        service.checkForInvalidation();
+        when(eventRepository.save(any(CacheEvent.class))).thenAnswer(inv -> {
+            CacheEvent saved = inv.getArgument(0);
+            saved.setId(2L);
+            return saved;
+        });
+        TransactionSynchronizationManager.initSynchronization();
+        service.publishInvalidation(Protocol.HTTP);
+        // 本機交易回滾：SQLite 可能把編號 2 再給另一個實例的事件
+        var synchronizations = TransactionSynchronizationManager.getSynchronizations();
+        TransactionSynchronizationManager.clearSynchronization();
+        org.springframework.transaction.support.TransactionSynchronizationUtils.invokeAfterCompletion(
+                synchronizations, org.springframework.transaction.support.TransactionSynchronization.STATUS_ROLLED_BACK);
+        commit(2, "HTTP_RULE_CHANGED");
+        fillCaches();
+
+        service.checkForInvalidation();
+
+        assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).isFalse();
+    }
+
+    @Test
+    void ownEventIds_shouldBeForgottenWhenIdsRestart() {
+        commit(1, "JMS_RULE_CHANGED");
+        commit(2, "JMS_RULE_CHANGED");
+        service.checkForInvalidation();
+        // 本機發出編號 3 但交易回滾，沒有提交
+        when(eventRepository.save(any(CacheEvent.class))).thenAnswer(inv -> {
+            CacheEvent saved = inv.getArgument(0);
+            saved.setId(3L);
+            return saved;
+        });
+        service.publishInvalidation(Protocol.HTTP);
+        // 事件表清空後編號從頭開始：之後其他實例的編號 3 不能被當成本機事件略過
+        table.clear();
+        service.checkForInvalidation();
+        commit(1, "JMS_RULE_CHANGED");
+        commit(2, "JMS_RULE_CHANGED");
+        commit(3, "HTTP_RULE_CHANGED");
+        fillCaches();
+
+        service.checkForInvalidation();
+
+        assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).isFalse();
+    }
+
+    // ========== 全部清空的記錄 ==========
+
+    @Test
+    void scheduledClearAfterStartup_shouldBeLoggedAsSuch() {
+        clock.addAndGet(CacheInvalidationService.GAP_WAIT_NANOS + 1);
+
+        List<String> logged = infoLogs(service::checkForInvalidation);
+
+        assertThat(logged).containsExactly("Cleared all local caches: " + CacheInvalidationService.STARTUP_WINDOW);
+    }
+
+    @Test
+    void clearForATooLargeGap_shouldBeLoggedAsSuch() {
+        clock.addAndGet(CacheInvalidationService.GAP_WAIT_NANOS + 1);
+        service.checkForInvalidation();
+        commit(1, "JMS_RULE_CHANGED");
+        service.checkForInvalidation();
+        commit(201, "JMS_RULE_CHANGED");
+        service.checkForInvalidation();
+        clock.addAndGet(CacheInvalidationService.GAP_WAIT_NANOS + 1);
+
+        List<String> logged = infoLogs(service::checkForInvalidation);
+
+        assertThat(logged).containsExactly("Cleared all local caches: an event id gap was too large to track");
+    }
+
     // ========== 清理 ==========
 
     @Test
@@ -473,6 +604,37 @@ class CacheInvalidationServiceTest {
         ArgumentCaptor<CacheEvent> captor = ArgumentCaptor.forClass(CacheEvent.class);
         verify(eventRepository, atLeast(0)).save(captor.capture());
         return captor.getAllValues().stream().map(CacheEvent::getEventType).toList();
+    }
+
+    /** 寫入事件即視為已提交，編號依序遞增。 */
+    private void saveCommits(AtomicLong ids) {
+        when(eventRepository.save(any(CacheEvent.class))).thenAnswer(inv -> {
+            CacheEvent saved = inv.getArgument(0);
+            saved.setId(ids.incrementAndGet());
+            table.add(saved);
+            return saved;
+        });
+    }
+
+    private static List<String> infoLogs(Runnable action) {
+        Logger logger = (Logger) LoggerFactory.getLogger(CacheInvalidationService.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            action.run();
+            return appender.list.stream().filter(e -> e.getLevel() == ch.qos.logback.classic.Level.INFO)
+                    .map(ILoggingEvent::getFormattedMessage).toList();
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    private static void commitSynchronizations() {
+        var synchronizations = TransactionSynchronizationManager.getSynchronizations();
+        TransactionSynchronizationManager.clearSynchronization();
+        org.springframework.transaction.support.TransactionSynchronizationUtils.invokeAfterCommit(synchronizations);
     }
 
     private void commit(long id, String type) {
