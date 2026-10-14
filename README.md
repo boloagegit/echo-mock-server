@@ -134,6 +134,8 @@ SPRING_JPA_HIBERNATE_DDL_AUTO=validate \
 | `SPRING_JPA_HIBERNATE_DDL_AUTO` | Current profiles default to `update`; use `validate` after a controlled schema migration |
 | `ECHO_REQUEST_LOG_ENABLED` | Set to `false` to stop creating request logs, the log agent, and the local spool; defaults to `true` |
 | `ECHO_REQUEST_LOG_SPOOL_PATH` | Per-instance local SQLite request-log spool path; default `./data/request-log-spool.sqlite` |
+| `ECHO_REQUEST_LOG_WAIT_FOR_WRITE` | `false` (default): replies do not wait for the request log to be written, and the oldest waiting entries are dropped when writing falls behind. `true`: each reply waits until its log is in the spool |
+| `ECHO_REQUEST_LOG_BUFFER_MAX_ENTRIES` / `ECHO_REQUEST_LOG_BUFFER_MAX_MB` | Limits for request logs waiting to be written when not waiting for writes; default `20000` entries / `64` MB |
 | `ECHO_CACHE_TEMPLATE_MAX_WEIGHT_MB` | Compiled-template cache budget in MiB; default `16`; oversized templates still render without being retained |
 | `ECHO_DB_POOL_MAX_SIZE` / `ECHO_DB_POOL_MIN_IDLE` | Hikari connection-pool sizing for external profiles |
 
@@ -150,6 +152,8 @@ writer metrics, and validation boundaries.
 #### Backup and request-log spool boundaries
 
 The application backup feature is for local SQLite files. External database profiles disable it; PostgreSQL, MySQL/MariaDB, SQL Server, and Oracle backups, point-in-time recovery, retention, and restore drills are owned by the DBA or platform backup service.
+
+By default a mock reply does not wait for its request log to be written. The entry waits in memory, at most `echo.request-log.buffer.max-entries` (20,000) entries and `echo.request-log.buffer.max-mb` (64 MB), and a background thread writes these entries to the spool in batches. When logs arrive faster than they can be written, the oldest waiting entries are dropped, so the newest stay. A warning gives the number dropped, at most every 30 seconds, and the log agent status counts them. Mock replies are never delayed or failed by request logging. Entries that are still waiting are lost if the process stops unexpectedly; on a normal shutdown Echo writes them out first, waiting up to 5 seconds. Set `echo.request-log.wait-for-write=true` (`ECHO_REQUEST_LOG_WAIT_FOR_WRITE`) when every reply must wait until its log is in the spool. In that mode a reply fails with 503 (and a JMS message is rolled back) when the log cannot be written, as before; replies are slower.
 
 Request-log durability has a separate boundary: every Echo instance writes its local request-log spool to a SQLite file, including when the main database is external. Keep that file on a writable persistent volume, use one spool file per instance, and do not treat it as a shared database or cross-instance queue. The spool is not a substitute for the external database's backup policy.
 
@@ -560,6 +564,10 @@ echo:
     enabled: true                  # Set false only when intentionally disabling new request logs
     store: database             # memory or database
     max-records: 10000          # Maximum log records
+    wait-for-write: false       # true: replies wait until their log is written (slower, 503 when it cannot be)
+    buffer:
+      max-entries: 20000        # Logs waiting to be written when not waiting; oldest dropped beyond this
+      max-mb: 64                # Memory limit for those waiting logs
     include-body: true          # Whether to log request/response body
     max-body-size: 65536        # Body log size limit (bytes)
   audit:

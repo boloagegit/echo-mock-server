@@ -314,6 +314,54 @@ class LogAgentDurablePersistenceTest {
         assertThat(persisted.size() + agent.getStats().getDroppedCount()).isEqualTo(6);
     }
 
+    @Test
+    void withoutWaitingForWritesEverySubmittedLogStillReachesTheDatabaseInOrder() throws Exception {
+        when(batchWriter.findCheckpoint(anyString())).thenReturn(0L);
+        List<String> persisted = new java.util.concurrent.CopyOnWriteArrayList<>();
+        CountDownLatch done = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            List<RequestLog> logs = invocation.getArgument(2);
+            logs.forEach(log -> persisted.add(log.getEndpoint()));
+            if (persisted.size() == 200) {
+                done.countDown();
+            }
+            return null;
+        }).when(batchWriter).persist(anyString(), anyLong(), anyList(), eq(1_000));
+        agent = new LogAgent(mock(RequestLogRepository.class), configService,
+                mock(ConditionMatcher.class), mock(RequestLogService.class),
+                spool, batchWriter, 32, 8, 1, false, 10_000,
+                new LogAgent.BufferLimits(1_000, 64L * 1024 * 1024));
+        agent.init();
+
+        for (int i = 1; i <= 200; i++) {
+            int index = i;
+            agent.submitDurably(() -> task("rule-" + index, "/" + index));
+        }
+
+        assertThat(done.await(10, TimeUnit.SECONDS)).isTrue();
+        assertThat(persisted).hasSize(200).startsWith("/1", "/2").endsWith("/200").doesNotHaveDuplicates();
+        assertThat(agent.getStats().getDroppedCount()).isZero();
+    }
+
+    @Test
+    void withoutWaitingForWritesAFailingLogNeverFailsTheRequest() {
+        agent = new LogAgent(mock(RequestLogRepository.class), configService,
+                mock(ConditionMatcher.class), mock(RequestLogService.class),
+                spool, batchWriter, 32, 8, 1, false, 10_000,
+                new LogAgent.BufferLimits(1_000, 64L * 1024 * 1024));
+        agent.init();
+
+        agent.submitDurably(() -> {
+            throw new IllegalStateException("cannot build the log entry");
+        });
+        agent.destroy();
+        // 停止後送來的記錄也只計入丟棄，不讓請求失敗
+        agent.submitDurably(() -> task("rule-late", "/late"));
+
+        assertThat(agent.getStats().getDroppedCount()).isEqualTo(2);
+        agent = null;
+    }
+
     private void startAgent() {
         agent = new LogAgent(mock(RequestLogRepository.class), configService,
                 mock(ConditionMatcher.class), mock(RequestLogService.class),

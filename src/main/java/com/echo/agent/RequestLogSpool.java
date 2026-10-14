@@ -230,6 +230,50 @@ public class RequestLogSpool {
      * ambiguous timeout in which a caller could retry data that later commits.</p>
      */
     public void append(LogTask task) {
+        await(admit(task));
+    }
+
+    /**
+     * Admits several tasks and waits until the admitted ones are committed (a few
+     * group commits instead of one per task). A task that can never be stored (too
+     * large, not serializable) is rejected and skipped. Admission stops when the
+     * spool stops or its storage is unavailable; the result says how many tasks,
+     * from the start of the list, were handled, so the caller may retry the rest.
+     * Admitted tasks are never reported for retry: re-sending them could duplicate
+     * the ones that did commit.
+     */
+    public AppendResult appendAll(List<? extends LogTask> tasks) {
+        List<PendingAppend> admitted = new ArrayList<>(tasks.size());
+        int handled = 0;
+        int rejected = 0;
+        for (LogTask task : tasks) {
+            try {
+                admitted.add(admit(task));
+            } catch (RequestLogUnavailableException e) {
+                if (!running.get() || storageUnavailable.get() || Thread.currentThread().isInterrupted()) {
+                    break;
+                }
+                rejected++;
+                log.debug("Request log rejected by the spool: {}", e.getMessage());
+            }
+            handled++;
+        }
+        int failedCommits = 0;
+        for (PendingAppend pending : admitted) {
+            try {
+                await(pending);
+            } catch (RequestLogUnavailableException e) {
+                failedCommits++;
+            }
+        }
+        return new AppendResult(handled, rejected + failedCommits);
+    }
+
+    /** {@code handled} tasks from the start of the list are done; {@code lost} of them were not stored. */
+    public record AppendResult(int handled, int lost) {
+    }
+
+    private PendingAppend admit(LogTask task) {
         PendingAppend pending;
         long reservedPayloadBytes = 0;
         long serializationBytes = 0;
@@ -286,7 +330,10 @@ public class RequestLogSpool {
         } finally {
             lifecycleLock.readLock().unlock();
         }
+        return pending;
+    }
 
+    private static void await(PendingAppend pending) {
         try {
             pending.committed().join();
         } catch (CompletionException e) {
