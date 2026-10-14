@@ -157,25 +157,52 @@ class RuleSnapshotCacheTest {
     }
 
     @Test
-    @DisplayName("重建失敗時繼續用舊快照，稍後再試")
-    void failedRebuildKeepsThePreviousSnapshot() {
+    @DisplayName("重建失敗：繼續用舊快照，重試間隔過後自動再建，等待中的變更方隨之完成")
+    void failedRebuildKeepsThePreviousSnapshotAndRetriesAfterTheBackoff() {
         AtomicInteger calls = new AtomicInteger();
-        RuntimeException failure = new IllegalStateException("database unavailable");
         RuleSnapshotCache<String, String> cache = new RuleSnapshotCache<>("test", key -> {
             if (calls.incrementAndGet() == 2) {
-                throw failure;
+                throw new IllegalStateException("database unavailable");
             }
             return "v" + calls.get();
-        }, builderThread, TimeUnit.MINUTES.toNanos(10), 300, clock::get);
+        }, builderThread, TimeUnit.MINUTES.toNanos(10), 5_000, clock::get);
         assertThat(cache.get("k")).isEqualTo("v1");
 
-        cache.changed(false); // 第二次建立失敗，等到逾時後放行
-        assertThat(cache.get("k")).isEqualTo("v1");
-
-        clock.addAndGet(TimeUnit.SECONDS.toNanos(2)); // 過了重試間隔：下一次變更會重新建立
+        long started = System.nanoTime();
         cache.changed(false);
+        long waitedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+
+        // 第二次建立失敗；約 1 秒後自動重試成功，不必等到 5 秒逾時，也不必有新的請求或變更
+        assertThat(waitedMs).isBetween(800L, 3_000L);
         assertThat(cache.get("k")).isEqualTo("v3");
+        assertThat(cache.generationOf("k")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("重試間隔中又有變更：不丟掉，間隔過後重建並包含它")
+    void changeDuringTheFailureBackoffIsBuiltAfterIt() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        CountDownLatch failed = new CountDownLatch(1);
+        RuleSnapshotCache<String, String> cache = new RuleSnapshotCache<>("test", key -> {
+            if (calls.incrementAndGet() == 2) {
+                failed.countDown();
+                throw new IllegalStateException("database unavailable");
+            }
+            return "v" + calls.get();
+        }, builderThread, TimeUnit.MINUTES.toNanos(10), 5_000, clock::get);
+        cache.get("k");
+        cache.changed(true);
+        assertThat(failed.await(5, TimeUnit.SECONDS)).isTrue();
+        RuleSnapshotCache.clearPendingChanges();
+
+        // 失敗後的重試間隔內再改一次：變更方在間隔過後就完成
+        long started = System.nanoTime();
+        cache.changed(false);
+        long waitedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+
+        assertThat(waitedMs).isLessThan(3_000L);
         assertThat(cache.generationOf("k")).isEqualTo(2);
+        assertThat(cache.get("k")).isEqualTo("v3");
     }
 
     @Test

@@ -505,6 +505,30 @@ class CacheInvalidationServiceTest {
     }
 
     @Test
+    void rolledBackOwnEventId_shouldNotHideAnotherInstancesEventWithTheSameId() {
+        commit(1, "JMS_RULE_CHANGED");
+        service.checkForInvalidation();
+        when(eventRepository.save(any(CacheEvent.class))).thenAnswer(inv -> {
+            CacheEvent saved = inv.getArgument(0);
+            saved.setId(2L);
+            return saved;
+        });
+        TransactionSynchronizationManager.initSynchronization();
+        service.publishInvalidation(Protocol.HTTP);
+        // 本機交易回滾：SQLite 可能把編號 2 再給另一個實例的事件
+        var synchronizations = TransactionSynchronizationManager.getSynchronizations();
+        TransactionSynchronizationManager.clearSynchronization();
+        org.springframework.transaction.support.TransactionSynchronizationUtils.invokeAfterCompletion(
+                synchronizations, org.springframework.transaction.support.TransactionSynchronization.STATUS_ROLLED_BACK);
+        commit(2, "HTTP_RULE_CHANGED");
+        fillCaches();
+
+        service.checkForInvalidation();
+
+        assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).isFalse();
+    }
+
+    @Test
     void ownEventIds_shouldBeForgottenWhenIdsRestart() {
         commit(1, "JMS_RULE_CHANGED");
         commit(2, "JMS_RULE_CHANGED");

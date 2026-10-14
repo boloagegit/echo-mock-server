@@ -17,6 +17,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -179,6 +181,7 @@ public class CacheInvalidationService {
             Long id = eventRepository.save(new CacheEvent(eventType)).getId();
             if (id != null) {
                 ownEvents.put(id, nanoTime.getAsLong());
+                forgetIfRolledBack(id);
             }
         }
         Changes local = new Changes();
@@ -188,6 +191,24 @@ public class CacheInvalidationService {
             apply(local);
             AfterCommit.schedule(new LocalChange(this, eventType), () -> apply(local));
         }
+    }
+
+    /**
+     * 交易沒有提交時忘掉這個編號：資料庫可能把它再給其他實例的事件（例如 SQLite 回滾後重用最大的 rowid），
+     * 留著會把別人的事件當成自己的而略過。
+     */
+    private void forgetIfRolledBack(Long id) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != STATUS_COMMITTED) {
+                    ownEvents.remove(id);
+                }
+            }
+        });
     }
 
     private record PublishedEvent(CacheInvalidationService owner, String eventType) {

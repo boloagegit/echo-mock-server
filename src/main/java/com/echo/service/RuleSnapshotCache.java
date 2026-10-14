@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -184,23 +185,31 @@ public final class RuleSnapshotCache<K, V> {
         }
     }
 
+    /**
+     * 排一次背景重建（已排或建立中則不重複）。剛失敗過時延到重試間隔結束再建，不丟掉這次請求：
+     * 等待中的變更方因此在間隔過後就能完成，不必等到逾時。
+     */
     private void requestRebuild(K key, Slot<V> slot, long now) {
-        if (now - slot.lastFailureAt < FAILURE_BACKOFF_NANOS && slot.lastFailureAt != 0) {
+        if (!slot.queued.compareAndSet(false, true)) {
             return;
         }
-        if (slot.queued.compareAndSet(false, true)) {
-            try {
-                executor.execute(() -> rebuild(key, slot));
-            } catch (RuntimeException e) {
-                slot.queued.set(false);
-                log.warn("{} rule snapshot rebuild could not be scheduled: {}", name, e.toString());
-            }
+        long sinceFailure = now - slot.lastFailureAt;
+        Executor target = slot.lastFailureAt != 0 && sinceFailure < FAILURE_BACKOFF_NANOS
+                ? CompletableFuture.delayedExecutor(FAILURE_BACKOFF_NANOS - sinceFailure, TimeUnit.NANOSECONDS,
+                        executor)
+                : executor;
+        try {
+            target.execute(() -> rebuild(key, slot));
+        } catch (RuntimeException e) {
+            slot.queued.set(false);
+            log.warn("{} rule snapshot rebuild could not be scheduled: {}", name, e.toString());
         }
     }
 
     /**
      * 建立期間 {@code queued} 保持 true，期間的請求與變更不再排重建；建完後若序號已前進，再建一次
      * （變更先遞增序號才嘗試排重建，所以清掉 {@code queued} 後一定看得到這段期間的變更）。
+     * 失敗時保留舊快照；快照仍比變更舊就在重試間隔後再試，直到成功。
      */
     private void rebuild(K key, Slot<V> slot) {
         long generation = changes.get();
@@ -210,8 +219,22 @@ public final class RuleSnapshotCache<K, V> {
         } catch (RuntimeException e) {
             slot.lastFailureAt = nanoTime.getAsLong();
             slot.queued.set(false);
-            log.warn("{} rule snapshot rebuild failed; still serving the previous rules: {}", name, e.toString());
+            if (!slot.failing) {
+                slot.failing = true;
+                log.warn("{} rule snapshot rebuild failed; still serving the previous rules and retrying every "
+                        + "second: {}", name, e.toString());
+            } else {
+                log.debug("{} rule snapshot rebuild failed again: {}", name, e.toString());
+            }
+            Built<V> current = slot.current;
+            if (current != null && current.generation < changes.get()) {
+                requestRebuild(key, slot, slot.lastFailureAt);
+            }
             return;
+        }
+        if (slot.failing) {
+            slot.failing = false;
+            log.info("{} rule snapshot rebuilt again after failures", name);
         }
         slot.lastFailureAt = 0;
         install(slot, value, generation);
@@ -244,6 +267,8 @@ public final class RuleSnapshotCache<K, V> {
         private volatile Built<V> current;
         private final AtomicBoolean queued = new AtomicBoolean();
         private volatile long lastFailureAt;
+        /** 只由建立執行緒讀寫：連續失敗只記一次警告。 */
+        private boolean failing;
         /** 第一份快照建立中（還沒有 {@code current}）。 */
         private volatile boolean firstBuilding;
     }
