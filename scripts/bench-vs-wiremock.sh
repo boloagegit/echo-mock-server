@@ -133,7 +133,8 @@ run() {  # run LABEL ROUND echo|wm [server args...]
   fi
   SERVER_PID=$!
   ok=
-  for _ in $(seq 1 240); do
+  local ready_deadline=$((SECONDS + 60))
+  while [ "$SECONDS" -lt "$ready_deadline" ]; do
     if [ "$(curl -s --max-time 2 -o /dev/null -w '%{http_code}' -H 'Accept: application/json' "$ready")" = 200 ]; then ok=1; break; fi
     sleep 0.25
   done
