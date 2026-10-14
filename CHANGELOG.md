@@ -84,6 +84,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Drag-and-drop priority ordering in the rule list (`ECHO_RULE_DRAG_SORT_ENABLED` / `echo.features.rule-drag-sort-enabled`, off by default) was removed. It sent only the new priority to the full-rule update API, which rejected it, so reordering never saved. Set priorities in the rule editor; the status API no longer returns `ruleDragSortEnabled`
 
 ### Fixed
+- Request logging keeps working after the JVM runs out of memory once. Before, an `OutOfMemoryError` could end the thread that writes request logs to the local spool, or the one that moves them into the database, for good: no new request logs appeared until a restart, and with `echo.request-log.wait-for-write=true` every reply then waited forever. Both threads now give up only the batch they were working on, log the error and continue
 - SSE rules and their responses:
   - A response created by the rule editor for an SSE rule is now marked as SSE. The editor no longer warns that the rule's own response is "not SSE", and the Responses page SSE filter finds it.
   - Responses stored with the older `SSE_EVENTS` value are also treated as SSE. They are found by the SSE filter, left out of the general filter, and their events are checked on save. They are stored as `SSE` from then on.
