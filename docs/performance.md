@@ -22,7 +22,7 @@
 | --- | --- |
 | 機器 | 4 vCPU（Intel Xeon 2.10 GHz）、15 GiB 記憶體、Linux 6.18 |
 | JVM | OpenJDK 21.0.12，兩邊都用 `-Xms1g -Xmx1g -XX:+UseG1GC` |
-| Echo | commit `1ca682e`，即 [PR #63](https://github.com/boloagegit/echo-mock-server/pull/63)（請求記錄不等寫入）合併前的內容，SQLite |
+| Echo | [PR #63](https://github.com/boloagegit/echo-mock-server/pull/63)（請求記錄不等寫入）審查中的版本，SQLite；合併後的版本是 `186843c`，之後只多了請求記錄上限計算與日誌的修正，沒有重新量測 |
 | WireMock | 3.13.2 standalone（目前最新穩定版），預設執行緒設定 |
 | 壓測工具 | wrk 4.1.0，與伺服器在同一台機器 |
 | 回合 | 每組設定 2 輪，Echo 與 WireMock 輪流執行，表中為 2 輪的中位數（即平均） |

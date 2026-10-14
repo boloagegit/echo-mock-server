@@ -6,8 +6,9 @@ Usage: python3 scripts/bench-vs-wiremock-summary.py OUT_DIR
 Each run directory is named <label>-r<round>. Values are medians over rounds:
 requests per second and p99 latency per scenario (with two rounds the median is
 their mean, so compare the rounds when they differ a lot), then heap after a full
-GC, RSS, threads and startup time. Errors are non-2xx responses plus socket
-errors. Runs without a DONE marker are skipped.
+GC, RSS, threads and startup time. Errors are 4xx/5xx responses plus socket
+errors (wrk does not count 3xx; the benchmark script checks every scenario's
+status and body before measuring). Runs without a DONE marker are skipped.
 """
 import os
 import re
