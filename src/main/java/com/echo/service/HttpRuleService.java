@@ -68,9 +68,7 @@ public class HttpRuleService {
         if (applicationContext == null) {
             return prepareHttpRules(httpHandler.findWithFallback(host, path, method));
         }
-        return proxy().httpRuleSnapshot().candidates(host, method).stream()
-                .filter(rule -> httpHandler.matchesRequestPath(rule.getMatchKey(), path))
-                .toList();
+        return proxy().httpRuleSnapshot().candidates(host, method, path);
     }
 
     /** host + method 的候選規則（已排序、未依路徑篩選），取自目前的規則快照。 */

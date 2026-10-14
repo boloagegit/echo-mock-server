@@ -4,6 +4,7 @@ import com.echo.config.JmsProperties;
 import com.echo.entity.BaseRule;
 import com.echo.entity.HttpRule;
 import com.echo.entity.JmsRule;
+import com.echo.protocol.http.HttpPathPattern;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -278,23 +279,8 @@ public class RuleOrderService {
             return broader == null || (narrower != null && broader.equalsIgnoreCase(narrower));
         }
 
-        /** 與 {@code HttpProtocolHandler.matchesRequestPath} 一致：完全相同、{@code /x/*} 前綴或 {@code *}。 */
         static boolean pathCovers(String broader, String narrower) {
-            if (broader == null || narrower == null) {
-                return false;
-            }
-            if ("*".equals(broader)) {
-                return true;
-            }
-            if ("*".equals(narrower)) {
-                return false;
-            }
-            if (broader.endsWith("/*")) {
-                String prefix = broader.substring(0, broader.length() - 1);
-                String narrowerPrefix = narrower.endsWith("/*") ? narrower.substring(0, narrower.length() - 1) : narrower;
-                return narrowerPrefix.startsWith(prefix);
-            }
-            return broader.equals(narrower);
+            return HttpPathPattern.covers(broader, narrower);
         }
     }
 
