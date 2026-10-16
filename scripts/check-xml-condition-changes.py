@@ -2,7 +2,7 @@
 """
 XML 條件調整影響檢查
 
-2026-10 起，XML body 條件在 HTTP 與 JMS 的比對方式統一（見 CHANGELOG「XML body conditions behave the same…」）。
+2026-10 起，XML body 條件在 HTTP 與 JMS 的比對方式統一（見 CHANGELOG v2026.10.16「XML body conditions behave the same…」）。
 這個工具讀取伺服器上所有規則，列出用到「行為有改變」寫法的規則，讓你確認新的結果是否符合預期：
 
   1. 相對路徑（例如 Order/Status=OPEN、Item/@sku=S1，開頭沒有 /）

@@ -95,7 +95,7 @@ The backup settings above apply only to local SQLite files. External database pr
 
 ## HTTP acceleration
 
-The native HTTP/1.1 path is enabled by default. Its configurable limits are 10 MiB per request or response body, 512 active requests and 128 MiB of estimated buffering. Special requests and custom Servlet extensions keep Servlet handling. Set `ECHO_HTTP_TRANSPORT=servlet` and restart to use the original entry point. See [HTTP acceleration](native-http.md) for limits, timeouts, observations and compatibility, and [HTTP I/O tuning](http-io-tuning.md) for worker settings.
+The native HTTP/1.1 path is enabled by default. Its configurable limits are 10 MiB per request or response body, 512 active requests and 128 MiB of estimated buffering. Special requests and custom Servlet extensions keep Servlet handling. Set `ECHO_HTTP_TRANSPORT=servlet` and restart to use the original entry point. See [HTTP acceleration](native-http.md) for limits, timeouts, observations and compatibility, and [HTTP I/O tuning](http-io-tuning.md) for the I/O thread setting.
 
 ## Authentication
 
