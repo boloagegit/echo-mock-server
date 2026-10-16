@@ -834,6 +834,14 @@ The main database can be shared for rules, responses, and cache events. The requ
 
 Benchmark numbers are workload-specific and should not be treated as universal product claims. See [docs/performance.md](docs/performance.md) for the full results, the method, how Echo has changed since April 2026, known bottlenecks and earlier results. The scripts under `scripts/` reproduce them.
 
+HTTP I/O threads default to a CPU-derived count and can be overridden with `SERVER_UNDERTOW_THREADS_IO`. One I/O thread improved some small-response workloads, with throughput tradeoffs at high concurrency or when parsing an entire XML body. See [HTTP I/O tuning](docs/http-io-tuning.md) for configuration and rollback.
+
+The [bounded native HTTP/1.1 adapter](docs/native-http.md) is enabled by default in normal release jars. It shares the mock pipeline, supports standard server observations and TLS, and preserves Servlet handling for special requests or custom extensions. Its configurable limits default to 10 MiB per body, 512 active requests, and 128 MiB of estimated buffering. Set `ECHO_HTTP_TRANSPORT=servlet` and restart to use the original entry point; existing explicit transport settings still take precedence. [The original architecture experiment](docs/native-http-performance-2026-10-15.md) is retained as historical evidence.
+
+[JMS performance and correctness](docs/jms-performance-and-correctness.md) explains bounded session reuse, independent reply queues, and the preserved source transaction and redelivery contracts.
+
+[HTTP/JMS and startup hardening measurements](docs/performance-hardening-2026-10-16.md) records correctness checks, measured gains, and rejected defaults.
+
 ### Echo vs WireMock (2026-10-14)
 
 Same 4-vCPU Linux machine and JVM (`-Xms1g -Xmx1g`, OpenJDK 21), WireMock 3.13.2, wrk with 2,004 rules loaded on both sides, median of 2 rounds, requests per second:

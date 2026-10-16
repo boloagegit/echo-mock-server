@@ -1,0 +1,939 @@
+===== echo-log-off-r1/DONE =====
+done
+
+
+===== echo-log-off-r1/cpu-fixed-c8-after.txt =====
+17239 (java) S 17222 17213 17213 0 -1 4194560 313444 417 0 0 18500 2654 0 0 20 0 61 0 280421 5488476160 292914 18446744073709551615 94167211884544 94167211885429 140726962182000 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94167211896128 94167211896848 94168244826112 140726962188707 140726962189182 140726962189182 140726962192362 0
+
+
+===== echo-log-off-r1/cpu-fixed-c8-before.txt =====
+17239 (java) S 17222 17213 17213 0 -1 4194560 313159 417 0 0 12664 1550 0 0 20 0 61 0 280421 5488476160 292658 18446744073709551615 94167211884544 94167211885429 140726962182000 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94167211896128 94167211896848 94168244826112 140726962188707 140726962189182 140726962189182 140726962192362 0
+
+
+===== echo-log-off-r1/cpu-items2000-after.txt =====
+17239 (java) S 17222 17213 17213 0 -1 4194560 328748 417 0 0 36027 6068 0 0 20 0 63 0 280421 5496700928 304493 18446744073709551615 94167211884544 94167211885429 140726962182000 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94167211896128 94167211896848 94168244826112 140726962188707 140726962189182 140726962189182 140726962192362 0
+
+
+===== echo-log-off-r1/cpu-items2000-before.txt =====
+17239 (java) S 17222 17213 17213 0 -1 4194560 328385 417 0 0 33338 5438 0 0 20 0 63 0 280421 5496700928 304141 18446744073709551615 94167211884544 94167211885429 140726962182000 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94167211896128 94167211896848 94168244826112 140726962188707 140726962189182 140726962189182 140726962192362 0
+
+
+===== echo-log-off-r1/cpu-tpl-after.txt =====
+17239 (java) S 17222 17213 17213 0 -1 4194560 317842 417 0 0 22984 3449 0 0 20 0 62 0 280421 5490573312 297330 18446744073709551615 94167211884544 94167211885429 140726962182000 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94167211896128 94167211896848 94168244826112 140726962188707 140726962189182 140726962189182 140726962192362 0
+
+
+===== echo-log-off-r1/cpu-tpl-before.txt =====
+17239 (java) S 17222 17213 17213 0 -1 4194560 317803 417 0 0 19990 2914 0 0 20 0 62 0 280421 5490573312 297298 18446744073709551615 94167211884544 94167211885429 140726962182000 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94167211896128 94167211896848 94168244826112 140726962188707 140726962189182 140726962189182 140726962192362 0
+
+
+===== echo-log-off-r1/cpu-xml-large-after.txt =====
+17239 (java) S 17222 17213 17213 0 -1 4194560 328369 417 0 0 31889 5150 0 0 20 0 63 0 280421 5496700928 304109 18446744073709551615 94167211884544 94167211885429 140726962182000 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94167211896128 94167211896848 94168244826112 140726962188707 140726962189182 140726962189182 140726962192362 0
+
+
+===== echo-log-off-r1/cpu-xml-large-before.txt =====
+17239 (java) S 17222 17213 17213 0 -1 4194560 328100 417 0 0 28929 4582 0 0 20 0 63 0 280421 5496700928 303853 18446744073709551615 94167211884544 94167211885429 140726962182000 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94167211896128 94167211896848 94168244826112 140726962188707 140726962189182 140726962189182 140726962192362 0
+
+
+===== echo-log-off-r1/cpu-xml-small-after.txt =====
+17239 (java) S 17222 17213 17213 0 -1 4194560 327716 417 0 0 27480 4275 0 0 20 0 62 0 280421 5496700928 303501 18446744073709551615 94167211884544 94167211885429 140726962182000 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94167211896128 94167211896848 94168244826112 140726962188707 140726962189182 140726962189182 140726962192362 0
+
+
+===== echo-log-off-r1/cpu-xml-small-before.txt =====
+17239 (java) S 17222 17213 17213 0 -1 4194560 326733 417 0 0 24408 3755 0 0 20 0 62 0 280421 5496700928 302509 18446744073709551615 94167211884544 94167211885429 140726962182000 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94167211896128 94167211896848 94168244826112 140726962188707 140726962189182 140726962189182 140726962192362 0
+
+
+===== echo-log-off-r1/heap-after-gc.txt =====
+17239:
+ garbage-first heap   total 1048576K, used 59494K [0x00000000c0000000, 0x0000000100000000)
+  region size 1024K, 1 young (1024K), 0 survivors (0K)
+ Metaspace       used 117785K, committed 118848K, reserved 1179648K
+  class space    used 15404K, committed 15936K, reserved 1048576K
+
+
+===== echo-log-off-r1/proc-fixed-c8.txt =====
+VmHWM:	 1175280 kB
+VmRSS:	 1172252 kB
+Threads:	61
+
+
+===== echo-log-off-r1/proc-items2000.txt =====
+VmHWM:	 1218628 kB
+VmRSS:	 1218628 kB
+Threads:	63
+
+
+===== echo-log-off-r1/proc-tpl.txt =====
+VmHWM:	 1189736 kB
+VmRSS:	 1189736 kB
+Threads:	62
+
+
+===== echo-log-off-r1/proc-xml-large.txt =====
+VmHWM:	 1217156 kB
+VmRSS:	 1217156 kB
+Threads:	63
+
+
+===== echo-log-off-r1/proc-xml-small.txt =====
+VmHWM:	 1215560 kB
+VmRSS:	 1214564 kB
+Threads:	62
+
+
+===== echo-log-off-r1/proc.txt =====
+VmHWM:	 1222032 kB
+VmRSS:	 1222032 kB
+Threads:	64
+
+
+===== echo-log-off-r1/setup-check.txt =====
+fixed={"ok":true,"name":"fixed"}|200
+tpl={"id":"7","path":"/tpl"}|200
+small=<ok/>|200
+large=<ok/>|200
+item1999={"item": 1999}|200
+
+
+===== echo-log-off-r1/startup.txt =====
+startupSec 10.778388023376465
+
+
+===== echo-log-off-r1/warm-fixed-c8.txt =====
+Running 5s test @ http://127.0.0.1:18080/mock/fixed
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     0.91ms    1.31ms  14.61ms   86.02%
+    Req/Sec     4.36k     0.96k    6.57k    66.00%
+  86895 requests in 5.01s, 13.09MB read
+Requests/sec:  17333.76
+Transfer/sec:      2.61MB
+
+
+===== echo-log-off-r1/warm-items2000.txt =====
+Running 5s test @ http://127.0.0.1:18080
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     0.94ms    1.25ms  11.80ms   86.65%
+    Req/Sec     3.60k   452.15     4.91k    67.00%
+  71772 requests in 5.01s, 9.95MB read
+Requests/sec:  14312.85
+Transfer/sec:      1.99MB
+
+
+===== echo-log-off-r1/warm-tpl.txt =====
+Running 5s test @ http://127.0.0.1:18080/mock/tpl?id=7
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.57ms    4.52ms  77.37ms   96.61%
+    Req/Sec     3.24k     0.99k    5.63k    61.50%
+  64717 requests in 5.02s, 9.63MB read
+Requests/sec:  12879.54
+Transfer/sec:      1.92MB
+
+
+===== echo-log-off-r1/warm-xml-large.txt =====
+Running 5s test @ http://127.0.0.1:18080/mock/x/large
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.26ms    1.70ms  33.59ms   87.59%
+    Req/Sec     2.50k   551.48     4.38k    73.50%
+  49760 requests in 5.03s, 6.41MB read
+Requests/sec:   9892.79
+Transfer/sec:      1.27MB
+
+
+===== echo-log-off-r1/warm-xml-small.txt =====
+Running 5s test @ http://127.0.0.1:18080/mock/x/small
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.03ms    1.43ms  18.51ms   87.13%
+    Req/Sec     3.41k     0.96k    9.83k    73.13%
+  68263 requests in 5.10s, 8.79MB read
+Requests/sec:  13386.16
+Transfer/sec:      1.72MB
+
+
+===== echo-log-off-r1/wrk-fixed-c8.txt =====
+Running 20s test @ http://127.0.0.1:18080/mock/fixed
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.04ms    1.94ms  75.44ms   89.42%
+    Req/Sec     4.03k     0.90k    7.40k    67.88%
+  Latency Distribution
+     50%  356.00us
+     75%    1.11ms
+     90%    3.07ms
+     99%    6.10ms
+  321368 requests in 20.09s, 48.42MB read
+Requests/sec:  15993.04
+Transfer/sec:      2.41MB
+
+
+===== echo-log-off-r1/wrk-items2000.txt =====
+Running 10s test @ http://127.0.0.1:18080
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   845.07us    1.14ms  17.56ms   88.31%
+    Req/Sec     3.78k   536.61     5.88k    72.75%
+  Latency Distribution
+     50%  425.00us
+     75%  764.00us
+     90%    2.30ms
+     99%    5.49ms
+  150643 requests in 10.02s, 20.89MB read
+Requests/sec:  15035.80
+Transfer/sec:      2.09MB
+
+
+===== echo-log-off-r1/wrk-tpl.txt =====
+Running 10s test @ http://127.0.0.1:18080/mock/tpl?id=7
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.09ms    1.48ms  17.62ms   85.46%
+    Req/Sec     3.48k   568.35     5.82k    67.75%
+  Latency Distribution
+     50%  402.00us
+     75%    1.30ms
+     90%    3.26ms
+     99%    6.33ms
+  138902 requests in 10.03s, 20.66MB read
+Requests/sec:  13854.13
+Transfer/sec:      2.06MB
+
+
+===== echo-log-off-r1/wrk-xml-large.txt =====
+Running 10s test @ http://127.0.0.1:18080/mock/x/large
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.20ms    1.47ms  17.25ms   85.94%
+    Req/Sec     2.59k   405.76     4.17k    70.50%
+  Latency Distribution
+     50%  577.00us
+     75%    1.33ms
+     90%    3.33ms
+     99%    6.44ms
+  103287 requests in 10.03s, 13.30MB read
+Requests/sec:  10294.70
+Transfer/sec:      1.33MB
+
+
+===== echo-log-off-r1/wrk-xml-small.txt =====
+Running 10s test @ http://127.0.0.1:18080/mock/x/small
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.15ms    1.85ms  53.71ms   88.21%
+    Req/Sec     3.17k   603.85     5.75k    71.25%
+  Latency Distribution
+     50%  452.00us
+     75%    1.29ms
+     90%    3.30ms
+     99%    6.33ms
+  126470 requests in 10.03s, 16.28MB read
+Requests/sec:  12611.13
+Transfer/sec:      1.62MB
+
+
+===== echo-log-off-r2/DONE =====
+done
+
+
+===== echo-log-off-r2/cpu-fixed-c8-after.txt =====
+19518 (java) S 17222 17213 17213 0 -1 4194560 325538 415 0 0 17775 2929 0 0 20 0 66 0 316890 5476315136 298040 18446744073709551615 94714070577152 94714070578037 140727081025632 0 0 0 0 0 16800975 0 0 0 17 2 0 0 0 0 0 94714070588736 94714070589456 94714462740480 140727081030051 140727081030526 140727081030526 140727081033706 0
+
+
+===== echo-log-off-r2/cpu-fixed-c8-before.txt =====
+19518 (java) S 17222 17213 17213 0 -1 4194560 325297 415 0 0 12941 1484 0 0 20 0 66 0 316890 5476315136 297816 18446744073709551615 94714070577152 94714070578037 140727081025632 0 0 0 0 0 16800975 0 0 0 17 2 0 0 0 0 0 94714070588736 94714070589456 94714462740480 140727081030051 140727081030526 140727081030526 140727081033706 0
+
+
+===== echo-log-off-r2/cpu-items2000-after.txt =====
+19518 (java) S 17222 17213 17213 0 -1 4194560 338774 415 0 0 34783 6462 0 0 20 0 67 0 316890 5490663424 306595 18446744073709551615 94714070577152 94714070578037 140727081025632 0 0 0 0 0 16800975 0 0 0 17 2 0 0 0 0 0 94714070588736 94714070589456 94714462740480 140727081030051 140727081030526 140727081030526 140727081033706 0
+
+
+===== echo-log-off-r2/cpu-items2000-before.txt =====
+19518 (java) S 17222 17213 17213 0 -1 4194560 338514 415 0 0 32314 5765 0 0 20 0 67 0 316890 5490663424 306275 18446744073709551615 94714070577152 94714070578037 140727081025632 0 0 0 0 0 16800975 0 0 0 17 2 0 0 0 0 0 94714070588736 94714070589456 94714462740480 140727081030051 140727081030526 140727081030526 140727081033706 0
+
+
+===== echo-log-off-r2/cpu-tpl-after.txt =====
+19518 (java) S 17222 17213 17213 0 -1 4194560 330229 415 0 0 22293 3710 0 0 20 0 66 0 316890 5477363712 302712 18446744073709551615 94714070577152 94714070578037 140727081025632 0 0 0 0 0 16800975 0 0 0 17 2 0 0 0 0 0 94714070588736 94714070589456 94714462740480 140727081030051 140727081030526 140727081030526 140727081033706 0
+
+
+===== echo-log-off-r2/cpu-tpl-before.txt =====
+19518 (java) S 17222 17213 17213 0 -1 4194560 330198 415 0 0 19281 3219 0 0 20 0 66 0 316890 5477363712 302680 18446744073709551615 94714070577152 94714070578037 140727081025632 0 0 0 0 0 16800975 0 0 0 17 2 0 0 0 0 0 94714070588736 94714070589456 94714462740480 140727081030051 140727081030526 140727081030526 140727081033706 0
+
+
+===== echo-log-off-r2/cpu-xml-large-after.txt =====
+19518 (java) S 17222 17213 17213 0 -1 4194560 338496 415 0 0 30964 5461 0 0 20 0 67 0 316890 5490663424 306275 18446744073709551615 94714070577152 94714070578037 140727081025632 0 0 0 0 0 16800975 0 0 0 17 2 0 0 0 0 0 94714070588736 94714070589456 94714462740480 140727081030051 140727081030526 140727081030526 140727081033706 0
+
+
+===== echo-log-off-r2/cpu-xml-large-before.txt =====
+19518 (java) S 17222 17213 17213 0 -1 4194560 337675 415 0 0 28091 4871 0 0 20 0 67 0 316890 5487566848 305475 18446744073709551615 94714070577152 94714070578037 140727081025632 0 0 0 0 0 16800975 0 0 0 17 2 0 0 0 0 0 94714070588736 94714070589456 94714462740480 140727081030051 140727081030526 140727081030526 140727081033706 0
+
+
+===== echo-log-off-r2/cpu-xml-small-after.txt =====
+19518 (java) S 17222 17213 17213 0 -1 4194560 337617 415 0 0 26582 4595 0 0 20 0 66 0 316890 5498904576 308195 18446744073709551615 94714070577152 94714070578037 140727081025632 0 0 0 0 0 16800975 0 0 0 17 2 0 0 0 0 0 94714070588736 94714070589456 94714462740480 140727081030051 140727081030526 140727081030526 140727081033706 0
+
+
+===== echo-log-off-r2/cpu-xml-small-before.txt =====
+19518 (java) S 17222 17213 17213 0 -1 4194560 335271 415 0 0 23749 3998 0 0 20 0 66 0 316890 5493006336 307800 18446744073709551615 94714070577152 94714070578037 140727081025632 0 0 0 0 0 16800975 0 0 0 17 2 0 0 0 0 0 94714070588736 94714070589456 94714462740480 140727081030051 140727081030526 140727081030526 140727081033706 0
+
+
+===== echo-log-off-r2/heap-after-gc.txt =====
+19518:
+ garbage-first heap   total 1048576K, used 59213K [0x00000000c0000000, 0x0000000100000000)
+  region size 1024K, 1 young (1024K), 0 survivors (0K)
+ Metaspace       used 117797K, committed 118912K, reserved 1179648K
+  class space    used 15398K, committed 15936K, reserved 1048576K
+
+
+===== echo-log-off-r2/proc-fixed-c8.txt =====
+VmHWM:	 1196580 kB
+VmRSS:	 1193040 kB
+Threads:	66
+
+
+===== echo-log-off-r2/proc-items2000.txt =====
+VmHWM:	 1234784 kB
+VmRSS:	 1227072 kB
+Threads:	67
+
+
+===== echo-log-off-r2/proc-tpl.txt =====
+VmHWM:	 1211688 kB
+VmRSS:	 1211688 kB
+Threads:	66
+
+
+===== echo-log-off-r2/proc-xml-large.txt =====
+VmHWM:	 1234784 kB
+VmRSS:	 1225968 kB
+Threads:	67
+
+
+===== echo-log-off-r2/proc-xml-small.txt =====
+VmHWM:	 1234784 kB
+VmRSS:	 1233412 kB
+Threads:	66
+
+
+===== echo-log-off-r2/proc.txt =====
+VmHWM:	 1234784 kB
+VmRSS:	 1231676 kB
+Threads:	68
+
+
+===== echo-log-off-r2/setup-check.txt =====
+fixed={"ok":true,"name":"fixed"}|200
+tpl={"id":"7","path":"/tpl"}|200
+small=<ok/>|200
+large=<ok/>|200
+item1999={"item": 1999}|200
+
+
+===== echo-log-off-r2/startup.txt =====
+startupSec 12.278454065322876
+
+
+===== echo-log-off-r2/warm-fixed-c8.txt =====
+Running 5s test @ http://127.0.0.1:18080/mock/fixed
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     0.99ms    1.41ms  15.39ms   85.73%
+    Req/Sec     4.17k   799.54     6.82k    72.50%
+  83049 requests in 5.00s, 12.51MB read
+Requests/sec:  16593.31
+Transfer/sec:      2.50MB
+
+
+===== echo-log-off-r2/warm-items2000.txt =====
+Running 5s test @ http://127.0.0.1:18080
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   806.95us    1.08ms  11.05ms   88.22%
+    Req/Sec     3.97k   501.16     5.87k    71.00%
+  79001 requests in 5.00s, 10.96MB read
+Requests/sec:  15791.01
+Transfer/sec:      2.19MB
+
+
+===== echo-log-off-r2/warm-tpl.txt =====
+Running 5s test @ http://127.0.0.1:18080/mock/tpl?id=7
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.20ms    1.89ms  24.36ms   88.33%
+    Req/Sec     3.38k   695.43     5.47k    72.50%
+  67402 requests in 5.01s, 10.03MB read
+Requests/sec:  13448.77
+Transfer/sec:      2.00MB
+
+
+===== echo-log-off-r2/warm-xml-large.txt =====
+Running 5s test @ http://127.0.0.1:18080/mock/x/large
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.28ms    1.55ms  19.35ms   85.49%
+    Req/Sec     2.45k   423.86     4.35k    71.00%
+  48797 requests in 5.01s, 6.28MB read
+Requests/sec:   9739.27
+Transfer/sec:      1.25MB
+
+
+===== echo-log-off-r2/warm-xml-small.txt =====
+Running 5s test @ http://127.0.0.1:18080/mock/x/small
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.04ms    1.46ms  28.37ms   86.88%
+    Req/Sec     3.37k   783.03     5.48k    66.00%
+  67106 requests in 5.01s, 8.64MB read
+Requests/sec:  13402.13
+Transfer/sec:      1.73MB
+
+
+===== echo-log-off-r2/wrk-fixed-c8.txt =====
+Running 20s test @ http://127.0.0.1:18080/mock/fixed
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   721.73us    1.05ms  15.18ms   88.65%
+    Req/Sec     4.85k     0.89k    8.10k    71.38%
+  Latency Distribution
+     50%  332.00us
+     75%  635.00us
+     90%    2.03ms
+     99%    5.14ms
+  386302 requests in 20.01s, 58.21MB read
+Requests/sec:  19303.50
+Transfer/sec:      2.91MB
+
+
+===== echo-log-off-r2/wrk-items2000.txt =====
+Running 10s test @ http://127.0.0.1:18080
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   664.81us    0.88ms  12.28ms   90.83%
+    Req/Sec     4.30k   473.74     6.03k    72.50%
+  Latency Distribution
+     50%  396.00us
+     75%  624.00us
+     90%    1.38ms
+     99%    4.65ms
+  171021 requests in 10.01s, 23.72MB read
+Requests/sec:  17092.05
+Transfer/sec:      2.37MB
+
+
+===== echo-log-off-r2/wrk-tpl.txt =====
+Running 10s test @ http://127.0.0.1:18080/mock/tpl?id=7
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.07ms    1.72ms  44.76ms   87.68%
+    Req/Sec     3.61k   693.24     7.26k    71.50%
+  Latency Distribution
+     50%  399.00us
+     75%    1.19ms
+     90%    3.17ms
+     99%    6.05ms
+  143816 requests in 10.03s, 21.40MB read
+Requests/sec:  14344.16
+Transfer/sec:      2.13MB
+
+
+===== echo-log-off-r2/wrk-xml-large.txt =====
+Running 10s test @ http://127.0.0.1:18080/mock/x/large
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.17ms    1.40ms  14.90ms   85.72%
+    Req/Sec     2.65k   457.97     4.36k    70.25%
+  Latency Distribution
+     50%  566.00us
+     75%    1.26ms
+     90%    3.27ms
+     99%    6.21ms
+  105556 requests in 10.02s, 13.59MB read
+Requests/sec:  10537.69
+Transfer/sec:      1.36MB
+
+
+===== echo-log-off-r2/wrk-xml-small.txt =====
+Running 10s test @ http://127.0.0.1:18080/mock/x/small
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     0.99ms    1.28ms  14.45ms   86.25%
+    Req/Sec     3.40k   682.49     5.51k    69.25%
+  Latency Distribution
+     50%  448.00us
+     75%    0.98ms
+     90%    2.88ms
+     99%    5.74ms
+  135320 requests in 10.02s, 17.42MB read
+Requests/sec:  13510.93
+Transfer/sec:      1.74MB
+
+
+===== wiremock-no-journal-r1/DONE =====
+done
+
+
+===== wiremock-no-journal-r1/cpu-fixed-c8-after.txt =====
+18574 (java) S 17222 17213 17213 0 -1 4194560 234756 0 0 0 9121 4855 0 0 20 0 41 0 293350 5381640192 215113 18446744073709551615 94201850187776 94201850188661 140721869486640 0 0 0 0 0 16800975 0 0 0 17 4 0 0 0 0 0 94201850199360 94201850200080 94202910572544 140721869488842 140721869489022 140721869489022 140721869492202 0
+
+
+===== wiremock-no-journal-r1/cpu-fixed-c8-before.txt =====
+18574 (java) S 17222 17213 17213 0 -1 4194560 234522 0 0 0 6471 2541 0 0 20 0 41 0 293350 5381640192 214857 18446744073709551615 94201850187776 94201850188661 140721869486640 0 0 0 0 0 16800975 0 0 0 17 4 0 0 0 0 0 94201850199360 94201850200080 94202910572544 140721869488842 140721869489022 140721869489022 140721869492202 0
+
+
+===== wiremock-no-journal-r1/cpu-items2000-after.txt =====
+18574 (java) S 17222 17213 17213 0 -1 4194560 246106 0 0 0 26896 7868 0 0 20 0 41 0 293350 5381640192 224753 18446744073709551615 94201850187776 94201850188661 140721869486640 0 0 0 0 0 16800975 0 0 0 17 4 0 0 0 0 0 94201850199360 94201850200080 94202910572544 140721869488842 140721869489022 140721869489022 140721869492202 0
+
+
+===== wiremock-no-journal-r1/cpu-items2000-before.txt =====
+18574 (java) S 17222 17213 17213 0 -1 4194560 245572 0 0 0 23428 7587 0 0 20 0 41 0 293350 5381640192 224305 18446744073709551615 94201850187776 94201850188661 140721869486640 0 0 0 0 0 16800975 0 0 0 17 4 0 0 0 0 0 94201850199360 94201850200080 94202910572544 140721869488842 140721869489022 140721869489022 140721869492202 0
+
+
+===== wiremock-no-journal-r1/cpu-tpl-after.txt =====
+18574 (java) S 17222 17213 17213 0 -1 4194560 240886 0 0 0 12387 6145 0 0 20 0 41 0 293350 5381640192 219633 18446744073709551615 94201850187776 94201850188661 140721869486640 0 0 0 0 0 16800975 0 0 0 17 4 0 0 0 0 0 94201850199360 94201850200080 94202910572544 140721869488842 140721869489022 140721869489022 140721869492202 0
+
+
+===== wiremock-no-journal-r1/cpu-tpl-before.txt =====
+18574 (java) S 17222 17213 17213 0 -1 4194560 240625 0 0 0 10351 5251 0 0 20 0 41 0 293350 5381640192 219409 18446744073709551615 94201850187776 94201850188661 140721869486640 0 0 0 0 0 16800975 0 0 0 17 4 0 0 0 0 0 94201850199360 94201850200080 94202910572544 140721869488842 140721869489022 140721869489022 140721869492202 0
+
+
+===== wiremock-no-journal-r1/cpu-xml-large-after.txt =====
+18574 (java) S 17222 17213 17213 0 -1 4194560 245110 0 0 0 21652 7460 0 0 20 0 41 0 293350 5381640192 223857 18446744073709551615 94201850187776 94201850188661 140721869486640 0 0 0 0 0 16800975 0 0 0 17 4 0 0 0 0 0 94201850199360 94201850200080 94202910572544 140721869488842 140721869489022 140721869489022 140721869492202 0
+
+
+===== wiremock-no-journal-r1/cpu-xml-large-before.txt =====
+18574 (java) S 17222 17213 17213 0 -1 4194560 244820 0 0 0 17926 7311 0 0 20 0 41 0 293350 5381640192 223569 18446744073709551615 94201850187776 94201850188661 140721869486640 0 0 0 0 0 16800975 0 0 0 17 4 0 0 0 0 0 94201850199360 94201850200080 94202910572544 140721869488842 140721869489022 140721869489022 140721869492202 0
+
+
+===== wiremock-no-journal-r1/cpu-xml-small-after.txt =====
+18574 (java) S 17222 17213 17213 0 -1 4194560 241373 0 0 0 16065 7221 0 0 20 0 41 0 293350 5381640192 220113 18446744073709551615 94201850187776 94201850188661 140721869486640 0 0 0 0 0 16800975 0 0 0 17 4 0 0 0 0 0 94201850199360 94201850200080 94202910572544 140721869488842 140721869489022 140721869489022 140721869492202 0
+
+
+===== wiremock-no-journal-r1/cpu-xml-small-before.txt =====
+18574 (java) S 17222 17213 17213 0 -1 4194560 241120 0 0 0 13611 6489 0 0 20 0 41 0 293350 5381640192 219857 18446744073709551615 94201850187776 94201850188661 140721869486640 0 0 0 0 0 16800975 0 0 0 17 4 0 0 0 0 0 94201850199360 94201850200080 94202910572544 140721869488842 140721869489022 140721869489022 140721869492202 0
+
+
+===== wiremock-no-journal-r1/heap-after-gc.txt =====
+18574:
+ garbage-first heap   total 1048576K, used 14310K [0x00000000c0000000, 0x0000000100000000)
+  region size 1024K, 0 young (0K), 0 survivors (0K)
+ Metaspace       used 28073K, committed 28416K, reserved 1114112K
+  class space    used 3131K, committed 3328K, reserved 1048576K
+
+
+===== wiremock-no-journal-r1/proc-fixed-c8.txt =====
+VmHWM:	  860788 kB
+VmRSS:	  860788 kB
+Threads:	41
+
+
+===== wiremock-no-journal-r1/proc-items2000.txt =====
+VmHWM:	  899476 kB
+VmRSS:	  899476 kB
+Threads:	41
+
+
+===== wiremock-no-journal-r1/proc-tpl.txt =====
+VmHWM:	  878960 kB
+VmRSS:	  878960 kB
+Threads:	41
+
+
+===== wiremock-no-journal-r1/proc-xml-large.txt =====
+VmHWM:	  895788 kB
+VmRSS:	  895788 kB
+Threads:	41
+
+
+===== wiremock-no-journal-r1/proc-xml-small.txt =====
+VmHWM:	  880876 kB
+VmRSS:	  880876 kB
+Threads:	41
+
+
+===== wiremock-no-journal-r1/proc.txt =====
+VmHWM:	  900676 kB
+VmRSS:	  900676 kB
+Threads:	42
+
+
+===== wiremock-no-journal-r1/setup-check.txt =====
+fixed={"ok":true,"name":"fixed"}|200
+tpl={"id":"7","path":"/tpl"}|200
+small=<ok/>|200
+large=<ok/>|200
+item1999={"item": 1999}|200
+
+
+===== wiremock-no-journal-r1/startup.txt =====
+startupSec 0.8808877468109131
+
+
+===== wiremock-no-journal-r1/warm-fixed-c8.txt =====
+Running 5s test @ http://127.0.0.1:18080/fixed
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   356.92us  693.13us   9.85ms   91.67%
+    Req/Sec    11.77k     1.78k   25.11k    76.62%
+  235554 requests in 5.10s, 38.41MB read
+Requests/sec:  46191.80
+Transfer/sec:      7.53MB
+
+
+===== wiremock-no-journal-r1/warm-items2000.txt =====
+Running 5s test @ http://127.0.0.1:18080
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.95ms    1.89ms  20.89ms   87.81%
+    Req/Sec     1.24k   215.79     2.64k    76.62%
+  24884 requests in 5.10s, 3.74MB read
+Requests/sec:   4876.50
+Transfer/sec:    749.85KB
+
+
+===== wiremock-no-journal-r1/warm-tpl.txt =====
+Running 5s test @ http://127.0.0.1:18080/tpl?id=7
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     0.90ms    1.95ms  24.95ms   92.18%
+    Req/Sec     5.72k     1.92k    8.88k    64.00%
+  113841 requests in 5.01s, 18.35MB read
+Requests/sec:  22715.02
+Transfer/sec:      3.66MB
+
+
+===== wiremock-no-journal-r1/warm-xml-large.txt =====
+Running 5s test @ http://127.0.0.1:18080/x/large
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     4.57ms    3.77ms  38.22ms   87.79%
+    Req/Sec   501.17     96.22   780.00     69.00%
+  10031 requests in 5.04s, 1.12MB read
+Requests/sec:   1990.15
+Transfer/sec:    227.41KB
+
+
+===== wiremock-no-journal-r1/warm-xml-small.txt =====
+Running 5s test @ http://127.0.0.1:18080/x/small
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   691.08us    0.92ms  15.03ms   90.89%
+    Req/Sec     4.16k   535.99     5.66k    70.00%
+  82814 requests in 5.00s, 9.24MB read
+Requests/sec:  16546.37
+Transfer/sec:      1.85MB
+
+
+===== wiremock-no-journal-r1/wrk-fixed-c8.txt =====
+Running 20s test @ http://127.0.0.1:18080/fixed
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   384.88us  775.79us  18.00ms   91.53%
+    Req/Sec    11.49k     1.66k   17.12k    69.00%
+  Latency Distribution
+     50%  136.00us
+     75%  280.00us
+     90%    0.92ms
+     99%    3.81ms
+  915003 requests in 20.01s, 149.22MB read
+Requests/sec:  45721.70
+Transfer/sec:      7.46MB
+
+
+===== wiremock-no-journal-r1/wrk-items2000.txt =====
+Running 10s test @ http://127.0.0.1:18080
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     2.12ms    3.12ms  68.13ms   93.77%
+    Req/Sec     1.21k   201.19     2.06k    71.25%
+  Latency Distribution
+     50%    1.46ms
+     75%    2.59ms
+     90%    4.24ms
+     99%   10.40ms
+  48154 requests in 10.03s, 7.23MB read
+Requests/sec:   4802.07
+Transfer/sec:    738.35KB
+
+
+===== wiremock-no-journal-r1/wrk-tpl.txt =====
+Running 10s test @ http://127.0.0.1:18080/tpl?id=7
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   497.63us  785.43us  13.93ms   91.49%
+    Req/Sec     6.56k     0.93k   10.28k    69.50%
+  Latency Distribution
+     50%  240.00us
+     75%  468.00us
+     90%    1.09ms
+     99%    4.01ms
+  261298 requests in 10.01s, 42.11MB read
+Requests/sec:  26111.38
+Transfer/sec:      4.21MB
+
+
+===== wiremock-no-journal-r1/wrk-xml-large.txt =====
+Running 10s test @ http://127.0.0.1:18080/x/large
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     4.34ms    4.55ms  91.81ms   91.35%
+    Req/Sec   540.41     83.32   820.00     70.50%
+  Latency Distribution
+     50%    3.03ms
+     75%    5.21ms
+     90%    8.35ms
+     99%   18.71ms
+  21577 requests in 10.04s, 2.41MB read
+Requests/sec:   2149.96
+Transfer/sec:    245.65KB
+
+
+===== wiremock-no-journal-r1/wrk-xml-small.txt =====
+Running 10s test @ http://127.0.0.1:18080/x/small
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   677.15us    0.90ms  15.61ms   90.72%
+    Req/Sec     4.28k   475.93     6.52k    70.00%
+  Latency Distribution
+     50%  373.00us
+     75%  701.00us
+     90%    1.48ms
+     99%    4.64ms
+  170449 requests in 10.01s, 19.02MB read
+Requests/sec:  17026.04
+Transfer/sec:      1.90MB
+
+
+===== wiremock-no-journal-r2/DONE =====
+done
+
+
+===== wiremock-no-journal-r2/cpu-fixed-c8-after.txt =====
+19066 (java) S 17222 17213 17213 0 -1 4194560 222475 0 0 0 9170 4971 0 0 20 0 41 0 305111 5381640192 209469 18446744073709551615 94836216991744 94836216992629 140729983252400 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94836217003328 94836217004048 94836901421056 140729983255242 140729983255422 140729983255422 140729983258602 0
+
+
+===== wiremock-no-journal-r2/cpu-fixed-c8-before.txt =====
+19066 (java) S 17222 17213 17213 0 -1 4194560 222212 0 0 0 6453 2576 0 0 20 0 41 0 305111 5381640192 209213 18446744073709551615 94836216991744 94836216992629 140729983252400 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94836217003328 94836217004048 94836901421056 140729983255242 140729983255422 140729983255422 140729983258602 0
+
+
+===== wiremock-no-journal-r2/cpu-items2000-after.txt =====
+19066 (java) S 17222 17213 17213 0 -1 4194560 232025 0 0 0 27097 7961 0 0 20 0 41 0 305111 5381640192 217682 18446744073709551615 94836216991744 94836216992629 140729983252400 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94836217003328 94836217004048 94836901421056 140729983255242 140729983255422 140729983255422 140729983258602 0
+
+
+===== wiremock-no-journal-r2/cpu-items2000-before.txt =====
+19066 (java) S 17222 17213 17213 0 -1 4194560 231555 0 0 0 23673 7662 0 0 20 0 41 0 305111 5381640192 217234 18446744073709551615 94836216991744 94836216992629 140729983252400 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94836217003328 94836217004048 94836901421056 140729983255242 140729983255422 140729983255422 140729983258602 0
+
+
+===== wiremock-no-journal-r2/cpu-tpl-after.txt =====
+19066 (java) S 17222 17213 17213 0 -1 4194560 228878 0 0 0 12561 6237 0 0 20 0 41 0 305111 5381640192 214610 18446744073709551615 94836216991744 94836216992629 140729983252400 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94836217003328 94836217004048 94836901421056 140729983255242 140729983255422 140729983255422 140729983258602 0
+
+
+===== wiremock-no-journal-r2/cpu-tpl-before.txt =====
+19066 (java) S 17222 17213 17213 0 -1 4194560 228639 0 0 0 10448 5348 0 0 20 0 41 0 305111 5381640192 214418 18446744073709551615 94836216991744 94836216992629 140729983252400 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94836217003328 94836217004048 94836901421056 140729983255242 140729983255422 140729983255422 140729983258602 0
+
+
+===== wiremock-no-journal-r2/cpu-xml-large-after.txt =====
+19066 (java) S 17222 17213 17213 0 -1 4194560 231142 0 0 0 21929 7533 0 0 20 0 41 0 305111 5381640192 216850 18446744073709551615 94836216991744 94836216992629 140729983252400 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94836217003328 94836217004048 94836901421056 140729983255242 140729983255422 140729983255422 140729983258602 0
+
+
+===== wiremock-no-journal-r2/cpu-xml-large-before.txt =====
+19066 (java) S 17222 17213 17213 0 -1 4194560 230651 0 0 0 18162 7392 0 0 20 0 41 0 305111 5381640192 216370 18446744073709551615 94836216991744 94836216992629 140729983252400 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94836217003328 94836217004048 94836901421056 140729983255242 140729983255422 140729983255422 140729983258602 0
+
+
+===== wiremock-no-journal-r2/cpu-xml-small-after.txt =====
+19066 (java) S 17222 17213 17213 0 -1 4194560 229380 0 0 0 16273 7333 0 0 20 0 41 0 305111 5381640192 215122 18446744073709551615 94836216991744 94836216992629 140729983252400 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94836217003328 94836217004048 94836901421056 140729983255242 140729983255422 140729983255422 140729983258602 0
+
+
+===== wiremock-no-journal-r2/cpu-xml-small-before.txt =====
+19066 (java) S 17222 17213 17213 0 -1 4194560 229125 0 0 0 13848 6589 0 0 20 0 41 0 305111 5381640192 214866 18446744073709551615 94836216991744 94836216992629 140729983252400 0 0 0 0 0 16800975 0 0 0 17 0 0 0 0 0 0 94836217003328 94836217004048 94836901421056 140729983255242 140729983255422 140729983255422 140729983258602 0
+
+
+===== wiremock-no-journal-r2/heap-after-gc.txt =====
+19066:
+ garbage-first heap   total 1048576K, used 14046K [0x00000000c0000000, 0x0000000100000000)
+  region size 1024K, 0 young (0K), 0 survivors (0K)
+ Metaspace       used 28041K, committed 28416K, reserved 1114112K
+  class space    used 3131K, committed 3328K, reserved 1048576K
+
+
+===== wiremock-no-journal-r2/proc-fixed-c8.txt =====
+VmHWM:	  841024 kB
+VmRSS:	  838560 kB
+Threads:	41
+
+
+===== wiremock-no-journal-r2/proc-items2000.txt =====
+VmHWM:	  871340 kB
+VmRSS:	  871340 kB
+Threads:	41
+
+
+===== wiremock-no-journal-r2/proc-tpl.txt =====
+VmHWM:	  862708 kB
+VmRSS:	  859056 kB
+Threads:	41
+
+
+===== wiremock-no-journal-r2/proc-xml-large.txt =====
+VmHWM:	  868040 kB
+VmRSS:	  868040 kB
+Threads:	41
+
+
+===== wiremock-no-journal-r2/proc-xml-small.txt =====
+VmHWM:	  862708 kB
+VmRSS:	  861024 kB
+Threads:	41
+
+
+===== wiremock-no-journal-r2/proc.txt =====
+VmHWM:	  872556 kB
+VmRSS:	  872556 kB
+Threads:	42
+
+
+===== wiremock-no-journal-r2/setup-check.txt =====
+fixed={"ok":true,"name":"fixed"}|200
+tpl={"id":"7","path":"/tpl"}|200
+small=<ok/>|200
+large=<ok/>|200
+item1999={"item": 1999}|200
+
+
+===== wiremock-no-journal-r2/startup.txt =====
+startupSec 0.8809013366699219
+
+
+===== wiremock-no-journal-r2/warm-fixed-c8.txt =====
+Running 5s test @ http://127.0.0.1:18080/fixed
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   397.30us  744.15us  10.65ms   91.40%
+    Req/Sec    10.30k     1.64k   16.71k    67.82%
+  207170 requests in 5.10s, 33.79MB read
+Requests/sec:  40624.32
+Transfer/sec:      6.62MB
+
+
+===== wiremock-no-journal-r2/warm-items2000.txt =====
+Running 5s test @ http://127.0.0.1:18080
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.82ms    1.76ms  20.37ms   88.14%
+    Req/Sec     1.33k   181.11     2.05k    69.50%
+  26448 requests in 5.01s, 3.97MB read
+Requests/sec:   5275.75
+Transfer/sec:    811.23KB
+
+
+===== wiremock-no-journal-r2/warm-tpl.txt =====
+Running 5s test @ http://127.0.0.1:18080/tpl?id=7
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     0.94ms    1.96ms  25.45ms   92.17%
+    Req/Sec     5.08k     1.75k    9.56k    63.00%
+  101251 requests in 5.01s, 16.32MB read
+Requests/sec:  20208.43
+Transfer/sec:      3.26MB
+
+
+===== wiremock-no-journal-r2/warm-xml-large.txt =====
+Running 5s test @ http://127.0.0.1:18080/x/large
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     4.29ms    3.65ms  47.13ms   88.34%
+    Req/Sec   536.47     92.47   800.00     66.00%
+  10718 requests in 5.02s, 1.20MB read
+Requests/sec:   2135.05
+Transfer/sec:    243.97KB
+
+
+===== wiremock-no-journal-r2/warm-xml-small.txt =====
+Running 5s test @ http://127.0.0.1:18080/x/small
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   687.23us    0.95ms  14.58ms   90.88%
+    Req/Sec     4.36k   539.85     6.13k    71.00%
+  86801 requests in 5.01s, 9.69MB read
+Requests/sec:  17335.08
+Transfer/sec:      1.93MB
+
+
+===== wiremock-no-journal-r2/wrk-fixed-c8.txt =====
+Running 20s test @ http://127.0.0.1:18080/fixed
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   415.23us  843.06us  21.81ms   91.67%
+    Req/Sec    10.67k     1.23k   13.96k    68.50%
+  Latency Distribution
+     50%  145.00us
+     75%  306.00us
+     90%    1.00ms
+     99%    4.11ms
+  849715 requests in 20.03s, 138.57MB read
+Requests/sec:  42429.66
+Transfer/sec:      6.92MB
+
+
+===== wiremock-no-journal-r2/wrk-items2000.txt =====
+Running 10s test @ http://127.0.0.1:18080
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     2.34ms    3.68ms  89.65ms   93.73%
+    Req/Sec     1.17k   247.64     1.89k    73.00%
+  Latency Distribution
+     50%    1.47ms
+     75%    2.71ms
+     90%    4.75ms
+     99%   15.00ms
+  46788 requests in 10.03s, 7.03MB read
+Requests/sec:   4667.01
+Transfer/sec:    717.59KB
+
+
+===== wiremock-no-journal-r2/wrk-tpl.txt =====
+Running 10s test @ http://127.0.0.1:18080/tpl?id=7
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   533.23us    0.88ms  17.38ms   91.47%
+    Req/Sec     6.34k     0.93k   14.26k    72.32%
+  Latency Distribution
+     50%  243.00us
+     75%  494.00us
+     90%    1.20ms
+     99%    4.37ms
+  253261 requests in 10.10s, 40.82MB read
+Requests/sec:  25075.83
+Transfer/sec:      4.04MB
+
+
+===== wiremock-no-journal-r2/wrk-xml-large.txt =====
+Running 10s test @ http://127.0.0.1:18080/x/large
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     3.95ms    3.22ms  35.41ms   87.90%
+    Req/Sec   576.65    104.02     0.96k    69.75%
+  Latency Distribution
+     50%    2.80ms
+     75%    4.89ms
+     90%    7.90ms
+     99%   16.51ms
+  23010 requests in 10.02s, 2.57MB read
+Requests/sec:   2295.87
+Transfer/sec:    262.32KB
+
+
+===== wiremock-no-journal-r2/wrk-xml-small.txt =====
+Running 10s test @ http://127.0.0.1:18080/x/small
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   674.51us    0.88ms  12.54ms   90.49%
+    Req/Sec     4.31k   569.68     6.10k    67.50%
+  Latency Distribution
+     50%  370.00us
+     75%  701.00us
+     90%    1.49ms
+     99%    4.59ms
+  171571 requests in 10.01s, 19.14MB read
+Requests/sec:  17136.57
+Transfer/sec:      1.91MB
+

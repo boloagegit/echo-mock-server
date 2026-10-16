@@ -1,0 +1,17 @@
+fixed={"ok":true,"name":"fixed"}|200
+tpl={"id":"7","path":"/tpl"}|200
+small=<ok/>|200
+large=<ok/>|200
+item1999={"item": 1999}|200
+forward-fast={"upstream":true,"delayMs":0}|200
+forward-slow={"upstream":true,"delayMs":50}|200
+delay=delayed|200
+last=<ok/>|200
+forward-error={"upstream":true,"delayMs":0}|503
+delaySeconds=0.054074
+forward-fast={"upstream":true,"delayMs":0}|200
+forward-slow={"upstream":true,"delayMs":50}|200
+delay=delayed|200
+last=<ok/>|200
+forward-error={"upstream":true,"delayMs":0}|503
+delaySeconds=0.055964

@@ -31,6 +31,27 @@ class JmsTargetForwarderCleanupTest {
 
     @ParameterizedTest
     @EnumSource(JmsForwardingRoute.class)
+    void cachedSendFailureRetiresTheConnectionAndNextRequestUsesFreshResources(JmsForwardingRoute route) throws Exception {
+        try (Fixture fixture = new Fixture(route, 8)) {
+            doThrow(new JMSException("send failed")).when(fixture.exchange.producer)
+                    .send(any(Message.class), anyInt(), anyInt(), anyLong());
+            Connection replacement = mock(Connection.class);
+            Exchange recovered = new Exchange();
+            when(fixture.factory.createConnection()).thenReturn(fixture.connection, replacement);
+            when(replacement.createSession(false, Session.AUTO_ACKNOWLEDGE)).thenReturn(recovered.session);
+            assertThat(fixture.forward()).contains("JMS forward error");
+            verify(fixture.exchange.replyQueue).delete();
+            verify(fixture.connection).close();
+            assertThat(fixture.forward()).isEqualTo("reply");
+            verify(fixture.factory, times(2)).createConnection();
+            verify(recovered.replyQueue).delete();
+            assertThat(fixture.metrics.snapshot()).containsEntry("forwardActive", 0)
+                    .containsEntry("forwardFailures", 1L);
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(JmsForwardingRoute.class)
     void deletesReplyQueueAfterClosingConsumersAndBeforeClosingSession(JmsForwardingRoute route) throws Exception {
         try (Fixture fixture = new Fixture(route)) {
             assertThat(fixture.forward()).isEqualTo("reply");
@@ -288,8 +309,15 @@ class JmsTargetForwarderCleanupTest {
         final JmsRuntimeMetrics metrics = new JmsRuntimeMetrics(new com.echo.config.MonitoringProperties());
 
         Fixture(JmsForwardingRoute route) throws Exception {
+            this(route, 0);
+        }
+
+        Fixture(JmsForwardingRoute route, int cacheSize) throws Exception {
             this.route = route;
             JmsProperties props = new JmsProperties();
+            // These tests assert physical close ordering without a cache; cached real-broker
+            // lifecycle and reply isolation are exercised by the integration tests.
+            props.getForward().setSessionCacheSize(cacheSize);
             JmsProperties.Target target = props.getTarget();
             target.setEnabled(true);
             target.setType("artemis");

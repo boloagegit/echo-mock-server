@@ -43,6 +43,13 @@ public final class JmsTargetForwarder {
     private volatile ConnectionFactory targetFactory;
     private volatile Connection targetConnection;
     private volatile String activeTargetKey;
+    private int sessionCacheSize;
+
+    /** Configured once by Spring, or explicitly by standalone clients before their first use. */
+    @Autowired
+    public void configureResources(JmsProperties properties) {
+        sessionCacheSize = properties.getForward().getSessionCacheSize();
+    }
 
     @Autowired
     public JmsTargetForwarder(JmsTargetConnectionService connectionService,
@@ -64,6 +71,7 @@ public final class JmsTargetForwarder {
     public JmsTargetForwarder(JmsProperties jmsProperties,
                               List<JmsTargetFactoryProvider> factoryProviders, JmsRuntimeMetrics metrics) {
         this(() -> legacyTarget(jmsProperties), null, factoryProviders, metrics);
+        configureResources(jmsProperties);
     }
 
     private JmsTargetForwarder(
@@ -262,6 +270,7 @@ public final class JmsTargetForwarder {
                     log.debug("Error closing target JMS connection during reset: {}", e.getMessage());
                 }
                 targetConnection = null;
+                if (targetFactory instanceof CachedJmsConnectionFactory cached) cached.resetConnection();
                 log.info("Target JMS connection reset, will reconnect on next forward");
             }
         }
@@ -316,7 +325,7 @@ public final class JmsTargetForwarder {
 
     private ConnectionFactory createFactory(JmsProperties.Target target) throws Exception {
         String type = target.getType();
-        return factoryProviders.stream()
+        ConnectionFactory factory = factoryProviders.stream()
                 .filter(p -> p.supports(type))
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException(
@@ -325,6 +334,7 @@ public final class JmsTargetForwarder {
                                 .map(p -> p.getClass().getSimpleName())
                                 .toList()))
                 .create(target);
+        return sessionCacheSize == 0 ? factory : new CachedJmsConnectionFactory(factory, sessionCacheSize);
     }
 
     private String exchange(String body, Message originalMessage, JmsProperties.Target target,

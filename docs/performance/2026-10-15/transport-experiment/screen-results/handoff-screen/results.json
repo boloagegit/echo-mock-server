@@ -1,0 +1,51 @@
+{
+  "native-handoff-r1": {
+    "done": true,
+    "cases": {
+      "fixed-c64": {
+        "requests": 959757,
+        "seconds": 10.04,
+        "rps": 95559.76,
+        "p50_ms": 0.516,
+        "p99_ms": 18.39,
+        "server_cpu_seconds": 32.04,
+        "server_cpu_us_per_request": 33.38,
+        "http_errors": 0,
+        "socket_errors": 0
+      },
+      "fixed-c8": {
+        "requests": 955571,
+        "seconds": 15.1,
+        "rps": 63285.38,
+        "p50_ms": 0.11,
+        "p99_ms": 1.48,
+        "server_cpu_seconds": 44.93,
+        "server_cpu_us_per_request": 47.02,
+        "http_errors": 0,
+        "socket_errors": 0
+      },
+      "tpl": {
+        "requests": 611840,
+        "seconds": 10.1,
+        "rps": 60583.41,
+        "p50_ms": 0.115,
+        "p99_ms": 1.15,
+        "server_cpu_seconds": 29.14,
+        "server_cpu_us_per_request": 47.63,
+        "http_errors": 0,
+        "socket_errors": 0
+      },
+      "xml-small": {
+        "requests": 450366,
+        "seconds": 10.1,
+        "rps": 44593.12,
+        "p50_ms": 0.16,
+        "p99_ms": 1.26,
+        "server_cpu_seconds": 31.84,
+        "server_cpu_us_per_request": 70.7,
+        "http_errors": 0,
+        "socket_errors": 0
+      }
+    }
+  }
+}

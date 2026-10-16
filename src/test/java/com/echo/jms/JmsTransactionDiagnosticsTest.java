@@ -122,6 +122,9 @@ class JmsTransactionDiagnosticsTest {
             properties.getTarget().setServerUrl("tcp://user:password@localhost:61616?secret=hidden");
             properties.getTarget().setQueue("TARGET.REQUEST");
             properties.getTarget().setTimeoutSeconds(1);
+            // This matrix asserts physical per-exchange close ordering. Cache-enabled failure
+            // recovery is tested separately, and real brokers verify diagnostics with reuse.
+            properties.getForward().setSessionCacheSize(0);
             ConnectionFactory factory = mock(ConnectionFactory.class);
             Connection connection = mock(Connection.class);
             Session session = mock(Session.class);

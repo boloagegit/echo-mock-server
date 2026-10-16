@@ -1,0 +1,245 @@
+{
+  "execution_samples": 2574,
+  "nearest_recognized_frame": {
+    "Spring other": 434,
+    "Spring MVC handler lookup": 493,
+    "Undertow / XNIO": 954,
+    "Micrometer": 158,
+    "Spring web other": 247,
+    "Echo": 175,
+    "Spring Security": 106,
+    "JDK / other": 7
+  },
+  "undertow_handle_event_leaf_lines": {
+    "125": 1,
+    "128": 320,
+    "137": 115
+  },
+  "sampled_threads": [
+    [
+      "XNIO-1 I/O-1",
+      460
+    ],
+    [
+      "XNIO-1 task-13",
+      223
+    ],
+    [
+      "XNIO-1 task-8",
+      221
+    ],
+    [
+      "XNIO-1 task-11",
+      205
+    ],
+    [
+      "XNIO-1 task-6",
+      202
+    ],
+    [
+      "XNIO-1 task-12",
+      201
+    ],
+    [
+      "XNIO-1 task-7",
+      190
+    ],
+    [
+      "XNIO-1 task-3",
+      175
+    ],
+    [
+      "XNIO-1 task-4",
+      169
+    ],
+    [
+      "XNIO-1 task-5",
+      152
+    ],
+    [
+      "XNIO-1 task-2",
+      138
+    ],
+    [
+      "XNIO-1 task-10",
+      135
+    ],
+    [
+      "XNIO-1 task-9",
+      97
+    ],
+    [
+      "ForkJoinPool.commonPool-worker-2",
+      3
+    ],
+    [
+      "transaction-diagnostics",
+      1
+    ],
+    [
+      "Notification Thread",
+      1
+    ],
+    [
+      "scheduling-1",
+      1
+    ]
+  ],
+  "leaf_methods": [
+    [
+      "io.undertow.server.protocol.http.HttpReadListener.handleEvent",
+      436
+    ],
+    [
+      "java.util.HashMap.getNode",
+      232
+    ],
+    [
+      "java.util.concurrent.locks.LockSupport.parkNanos",
+      89
+    ],
+    [
+      "org.springframework.web.cors.CorsUtils.isPreFlightRequest",
+      76
+    ],
+    [
+      "java.util.concurrent.ConcurrentHashMap.get",
+      56
+    ],
+    [
+      "java.lang.String.hashCode",
+      55
+    ],
+    [
+      "java.util.IdentityHashMap.get",
+      39
+    ],
+    [
+      "io.undertow.util.HttpString.higher",
+      36
+    ],
+    [
+      "java.util.HashMap.putVal",
+      34
+    ],
+    [
+      "org.springframework.util.MimeType.isCompatibleWith",
+      33
+    ],
+    [
+      "java.util.HashMap$HashIterator.<init>",
+      33
+    ],
+    [
+      "jakarta.servlet.http.HttpServletRequestWrapper._getHttpServletRequest",
+      31
+    ],
+    [
+      "java.lang.StringLatin1.toLowerCase",
+      29
+    ],
+    [
+      "java.util.HashMap$HashIterator.nextNode",
+      27
+    ],
+    [
+      "org.springframework.web.servlet.mvc.method.RequestMappingInfo.getMatchingCondition",
+      24
+    ],
+    [
+      "java.util.HashMap.resize",
+      24
+    ],
+    [
+      "java.util.TreeMap.getFirstEntry",
+      23
+    ],
+    [
+      "java.util.regex.Matcher.getTextLength",
+      23
+    ],
+    [
+      "org.springframework.http.server.DefaultPathContainer.createFromUrlPath",
+      22
+    ],
+    [
+      "org.springframework.core.ReactiveAdapterRegistry.getAdapter",
+      19
+    ],
+    [
+      "java.util.Collections$UnmodifiableCollection$1.<init>",
+      19
+    ],
+    [
+      "org.springframework.web.servlet.mvc.method.annotation.AbstractMessageConverterMethodArgumentResolver.readWithMessageConverters",
+      16
+    ],
+    [
+      "java.lang.String.equals",
+      15
+    ],
+    [
+      "java.lang.StringLatin1.lastIndexOf",
+      15
+    ],
+    [
+      "java.lang.StringLatin1.regionMatchesCI",
+      14
+    ],
+    [
+      "org.springframework.web.servlet.handler.AbstractHandlerMethodMapping.getHandlerInternal",
+      14
+    ],
+    [
+      "io.undertow.server.protocol.http.HttpResponseConduit.processWrite",
+      14
+    ],
+    [
+      "org.springframework.web.servlet.mvc.condition.ParamsRequestCondition.getMatchingCondition",
+      13
+    ],
+    [
+      "java.util.regex.Pattern.lambda$and$2",
+      13
+    ],
+    [
+      "java.util.Collections$UnmodifiableCollection$1.next",
+      13
+    ],
+    [
+      "java.lang.StringLatin1.hashCode",
+      13
+    ],
+    [
+      "io.undertow.servlet.spec.HttpServletRequestImpl.parseFormData",
+      12
+    ],
+    [
+      "org.springframework.web.servlet.mvc.condition.ProducesRequestCondition.getMatchingCondition",
+      12
+    ],
+    [
+      "java.util.Collections$UnmodifiableCollection$1.hasNext",
+      11
+    ],
+    [
+      "java.util.regex.Pattern$CharPropertyGreedy.match",
+      11
+    ]
+  ],
+  "inclusive_stack_counts_OVERLAP": {
+    "Spring Security": 1445,
+    "MVC handler lookup": 624,
+    "Micrometer": 171,
+    "MVC handler introspection": 751,
+    "Echo pipeline": 154,
+    "Match chain formatting": 48,
+    "HTTP request adaptation": 102,
+    "Echo diagnostics": 26
+  },
+  "allocation_sample_count": 0,
+  "allocation_weight_bytes": 0,
+  "allocation_classes": [],
+  "allocation_leaf_sites": [],
+  "gc_events": []
+}

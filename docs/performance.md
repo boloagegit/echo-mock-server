@@ -4,6 +4,16 @@
 數字只代表文中的機器與情境，不是通用的產品保證；比較時務必在同一台機器、同一組設定下重跑。
 較早的量測保留在[歷史結果](#歷史結果)，並註明當時的版本與環境。
 
+目前可用：[原生 HTTP/1.1 加速路徑](native-http.md)，一般發行檔預設啟用，包含 TLS、觀測、容量與相容性保護；可設定 `ECHO_HTTP_TRANSPORT=servlet` 後重啟切回原入口。[HTTP／JMS 與啟動補強量測](performance-hardening-2026-10-16.md)包含 JMS 資源重用、啟動縮短 15% 的比較，以及前階段 HTTP 實驗數據。
+
+現行建置的完整測試、交錯量測與持續負載證據見 [原生 HTTP 正式整合與驗證](native-http-validation-2026-10-16.md)。
+
+架構實驗起點：[2026-10-15 原生 HTTP 入口與 WireMock 比較](native-http-performance-2026-10-15.md)，包含三種 HTTP 伺服器、專用 mock 入口、固定到達率延遲及壓力恢復。該頁描述當時的獨立建置，現行設定請依上方使用文件。
+
+JMS 的資源重用、容量策略實測取捨、交易與回覆隔離契約見 [JMS 效能與正確性](jms-performance-and-correctness.md)。HTTP 與 JMS 的成績分開判讀。
+
+前階段調查：[2026-10-15 HTTP 效能與恢復調查](performance-investigation-2026-10-15.md)，使用 `8ee8dcb` 重測，包含 Undertow CPU 取樣、I/O 執行緒對照與開啟記錄的高壓恢復結果。環境不同，請勿與下方舊數字直接計算版本提升幅度。
+
 ## 重點
 
 - **與 WireMock 比較（2026-10-14）**

@@ -774,6 +774,14 @@ spring:
 
 效能數字只代表特定的機器與情境，不是通用的產品保證。完整結果、測試方式、2026 年 4 月以來的變化、已知瓶頸與較早的結果見 [docs/performance.md](docs/performance.md)；`scripts/` 下的腳本可以重跑。
 
+HTTP I/O 執行緒預設依 CPU 數決定，可透過 `SERVER_UNDERTOW_THREADS_IO` 覆寫。單一 I/O 在部分小回應情境較快，但高併發或完整 XML 解析可能有吞吐取捨；設定與還原方式見 [HTTP I/O 調校](docs/http-io-tuning.md)。
+
+[有容量上限的原生 HTTP/1.1 入口](docs/native-http.md)已在一般發行 JAR 預設啟用。共用既有 pipeline，支援標準服務端觀測與 TLS，特殊請求或自訂擴充保留 Servlet 處理。預設上限為單筆本文 10 MiB、512 筆進行中請求、128 MiB 估計緩衝容量，皆可調整。設定 `ECHO_HTTP_TRANSPORT=servlet` 後重啟可切回原入口；既有明確指定的設定仍優先。[原始架構實驗](docs/native-http-performance-2026-10-15.md)保留作為歷史證據。
+
+[JMS 效能與正確性](docs/jms-performance-and-correctness.md)說明 Session 快取、每筆獨立回覆 Queue，以及維持不變的來源交易與重送契約。
+
+[HTTP／JMS 與啟動補強量測](docs/performance-hardening-2026-10-16.md) 記錄正確性檢查、實際改善與未採用的預設。
+
 ### Echo 與 WireMock 比較（2026-10-14）
 
 同一台 4 vCPU Linux、相同 JVM（`-Xms1g -Xmx1g`、OpenJDK 21），WireMock 3.13.2，用 wrk 壓測，兩邊都載入 2,004 條規則，2 輪中位數，每秒處理筆數：

@@ -7,6 +7,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 class JmsPropertiesTest {
 
     @Test
+    void forwardingCacheRejectsInvalidSettings() {
+        var forward = new JmsProperties.Forward();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> forward.setSessionCacheSize(-1))
+                .isInstanceOf(IllegalArgumentException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> forward.setSessionCacheSize(257))
+                .isInstanceOf(IllegalArgumentException.class);
+        forward.setSessionCacheSize(0);
+        assertThat(forward.getSessionCacheSize()).isZero();
+    }
+
+    @Test
     void shouldHaveCorrectDefaults() {
         JmsProperties props = new JmsProperties();
 

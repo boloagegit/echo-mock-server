@@ -1,0 +1,316 @@
+{
+  "recorded_at_utc": "2026-10-16T04:01:15.344149+00:00",
+  "scope": "Default native transport switch; no performance benchmark rerun.",
+  "command": "unset ECHO_HTTP_TRANSPORT; ./gradlew test --tests 'com.echo.integration.http.*' --tests 'com.echo.config.NativeHttp*' check bootJar -PtestForks=2 --no-daemon",
+  "summary": {
+    "tests": 186,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "spotbugs_main": "passed",
+  "h2_migration_tests": "9 passed, task up-to-date",
+  "smoke": {
+    "artifact_sha256": "f3c08604eb008331683d7126376da8b28766ef242a63e16f44e429ee74ea5641",
+    "checks": [
+      {
+        "mode": "default",
+        "response_status": 201,
+        "body_verified": true,
+        "native_metric_status": 200,
+        "native_count": 1.0,
+        "transport_cli_argument": false,
+        "transport_environment": null
+      },
+      {
+        "mode": "servlet",
+        "response_status": 201,
+        "body_verified": true,
+        "native_metric_status": 404,
+        "native_count": null,
+        "transport_cli_argument": false,
+        "transport_environment": "servlet"
+      }
+    ]
+  },
+  "source_sha256": {
+    "src/main/resources/application.yml": "84f1e365e9d1c089092872a77a0cedabc1366da292d8dbd6c69c5d015415f216",
+    "src/main/java/com/echo/config/HttpTransportConfiguration.java": "100116c501971c3635de1352ad8d6e8e2c47e1d4214d857d06810a1d01abc7b6",
+    "src/main/java/com/echo/config/NativeHttpResources.java": "63f735fb544191615f1e338786abec390fc950a02933d6ca40c52a3e94f45aa9",
+    "src/test/java/com/echo/integration/http/NativeHttpTransportIntegrationTest.java": "d68d01be76145a1f8cba79095b4c3c270f2c5ceef962b6e122231c8311f653b5",
+    "src/test/java/com/echo/integration/http/NativeHttpExtensionIntegrationTest.java": "3d8c3daea2e6fa11c2a680527e458540273c31ac0fa9618972702474bbd8d745"
+  },
+  "test_adjustment": "Await server observation completion in two existing metric assertions; receiving the response can precede metric publication. Response and native-routing assertions were already passing.",
+  "suites": [
+    {
+      "name": "com.echo.config.NativeHttpCompatibilityTest",
+      "tests": "7",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:58:30.675Z",
+      "hostname": "711d8d914e75",
+      "time": "0.956"
+    },
+    {
+      "name": "com.echo.config.NativeHttpResourcesTest",
+      "tests": "1",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:58:28.306Z",
+      "hostname": "711d8d914e75",
+      "time": "0.015"
+    },
+    {
+      "name": "com.echo.integration.http.AdvancedMatchIntegrationTest",
+      "tests": "7",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:58:36.688Z",
+      "hostname": "711d8d914e75",
+      "time": "3.283"
+    },
+    {
+      "name": "com.echo.integration.http.AuditLogIntegrationTest",
+      "tests": "6",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:58:30.400Z",
+      "hostname": "711d8d914e75",
+      "time": "2.274"
+    },
+    {
+      "name": "com.echo.integration.http.HttpMockIntegrationTest",
+      "tests": "16",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:58:39.981Z",
+      "hostname": "711d8d914e75",
+      "time": "4.184"
+    },
+    {
+      "name": "com.echo.integration.http.HttpRuleCrudIntegrationTest",
+      "tests": "9",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:58:32.689Z",
+      "hostname": "711d8d914e75",
+      "time": "3.013"
+    },
+    {
+      "name": "com.echo.integration.http.ImportExportIntegrationTest",
+      "tests": "7",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:58:46.448Z",
+      "hostname": "711d8d914e75",
+      "time": "2.112"
+    },
+    {
+      "name": "com.echo.integration.http.MixedProtocolIntegrationTest",
+      "tests": "5",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:58:35.712Z",
+      "hostname": "711d8d914e75",
+      "time": "1.128"
+    },
+    {
+      "name": "com.echo.integration.http.NativeHttpCapacityIntegrationTest",
+      "tests": "8",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:58:50.664Z",
+      "hostname": "711d8d914e75",
+      "time": "5.991"
+    },
+    {
+      "name": "com.echo.integration.http.NativeHttpExtensionIntegrationTest",
+      "tests": "1",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:58:26.378Z",
+      "hostname": "711d8d914e75",
+      "time": "1.925"
+    },
+    {
+      "name": "com.echo.integration.http.NativeHttpShutdownIntegrationTest",
+      "tests": "1",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:58:58.460Z",
+      "hostname": "711d8d914e75",
+      "time": "1.367"
+    },
+    {
+      "name": "com.echo.integration.http.NativeHttpTlsIntegrationTest",
+      "tests": "5",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:58:39.985Z",
+      "hostname": "711d8d914e75",
+      "time": "1.093"
+    },
+    {
+      "name": "com.echo.integration.http.NativeHttpTracingIntegrationTest",
+      "tests": "2",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:58:46.588Z",
+      "hostname": "711d8d914e75",
+      "time": "2.584"
+    },
+    {
+      "name": "com.echo.integration.http.NativeHttpTransportIntegrationTest",
+      "tests": "8",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:58:25.631Z",
+      "hostname": "711d8d914e75",
+      "time": "5.038"
+    },
+    {
+      "name": "com.echo.integration.http.RequestLogIntegrationTest",
+      "tests": "8",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:59:00.033Z",
+      "hostname": "711d8d914e75",
+      "time": "2.127"
+    },
+    {
+      "name": "com.echo.integration.http.ResponseManagementIntegrationTest",
+      "tests": "16",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:58:52.194Z",
+      "hostname": "711d8d914e75",
+      "time": "2.625"
+    },
+    {
+      "name": "com.echo.integration.http.RuleApplyIntegrationTest",
+      "tests": "11",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:59:02.171Z",
+      "hostname": "711d8d914e75",
+      "time": "1.424"
+    },
+    {
+      "name": "com.echo.integration.http.RuleChangeWithoutWaitingIntegrationTest",
+      "tests": "3",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:58:56.687Z",
+      "hostname": "711d8d914e75",
+      "time": "2.656"
+    },
+    {
+      "name": "com.echo.integration.http.RuleConcurrentEditIntegrationTest",
+      "tests": "3",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:59:03.610Z",
+      "hostname": "711d8d914e75",
+      "time": "0.741"
+    },
+    {
+      "name": "com.echo.integration.http.RuleLifecycleIntegrationTest",
+      "tests": "8",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:58:59.350Z",
+      "hostname": "711d8d914e75",
+      "time": "1.595"
+    },
+    {
+      "name": "com.echo.integration.http.RuleOrderIntegrationTest",
+      "tests": "1",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:59:04.362Z",
+      "hostname": "711d8d914e75",
+      "time": "0.253"
+    },
+    {
+      "name": "com.echo.integration.http.RuleTestApiIntegrationTest",
+      "tests": "2",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:59:00.953Z",
+      "hostname": "711d8d914e75",
+      "time": "0.449"
+    },
+    {
+      "name": "com.echo.integration.http.SseForwardingRegressionIntegrationTest",
+      "tests": "7",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:59:03.072Z",
+      "hostname": "711d8d914e75",
+      "time": "3.81"
+    },
+    {
+      "name": "com.echo.integration.http.SsePlaybackRegressionIntegrationTest",
+      "tests": "13",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:59:06.563Z",
+      "hostname": "711d8d914e75",
+      "time": "37.772"
+    },
+    {
+      "name": "com.echo.integration.http.SseRuleCrudIntegrationTest",
+      "tests": "10",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:59:06.893Z",
+      "hostname": "711d8d914e75",
+      "time": "1.119"
+    },
+    {
+      "name": "com.echo.integration.http.SseRuleResponseIntegrationTest",
+      "tests": "11",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:59:46.555Z",
+      "hostname": "711d8d914e75",
+      "time": "1.851"
+    },
+    {
+      "name": "com.echo.integration.http.SseStreamIntegrationTest",
+      "tests": "10",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-16T03:59:48.422Z",
+      "hostname": "711d8d914e75",
+      "time": "1.118"
+    }
+  ]
+}

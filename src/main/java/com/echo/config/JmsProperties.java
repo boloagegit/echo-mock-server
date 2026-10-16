@@ -76,6 +76,19 @@ public class JmsProperties {
 
     private Target target = new Target();
 
+    /** Bounded idle outbound resource reuse; source transactions remain synchronous. */
+    private Forward forward = new Forward();
+
+    @Getter
+    public static class Forward {
+        private int sessionCacheSize = 8;
+
+        public void setSessionCacheSize(int value) {
+            if (value < 0 || value > 256) throw new IllegalArgumentException("JMS session-cache-size must be 0..256");
+            sessionCacheSize = value;
+        }
+    }
+
     /**
      * JMS 請求來源。{@code embedded} 使用 Echo 內建的 Artemis；
      * {@code artemis} 或 {@code tibco} 連到外部 broker 的 {@link #queue}，
