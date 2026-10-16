@@ -143,6 +143,8 @@ public class RequestLogSpool {
     /** 測試用：每次提交前／提交後執行，用來模擬寫入時發生的錯誤。 */
     volatile CommitHook beforeCommitForTest = () -> { };
     volatile CommitHook afterCommitForTest = () -> { };
+    /** 測試用：放棄一批並通知呼叫端之後執行，用來拉長通知與後續步驟之間的時間。 */
+    volatile Runnable afterAbandonNotifiedForTest = () -> { };
 
     @FunctionalInterface
     interface CommitHook {
@@ -1252,10 +1254,10 @@ public class RequestLogSpool {
         } catch (Throwable ignored) {
             // 已經不再使用
         }
-        // Publish recovery before completing the failed append futures. Their callers can
-        // immediately submit a new record; the abandoned connection is already detached.
+        // 先清狀態再通知：呼叫端一收到失敗就可能馬上送下一筆，那時狀態必須已經清掉
         storageUnavailable.set(false);
         failUntilDone(batch);
+        afterAbandonNotifiedForTest.run();
         try {
             updateBackpressureState();
         } catch (Throwable ignored) {
