@@ -1,8 +1,0 @@
-[
-  {
-    "suite": "com.echo.agent.RequestLogSpoolTest",
-    "test": "\u66ab\u5b58\u6a94\u66ab\u6642\u7121\u6cd5\u5beb\u5165\u3001\u91cd\u8a66\u6642\u53c8\u767c\u751f Error\uff1a\u6e05\u6389\u300c\u7121\u6cd5\u5beb\u5165\u300d\u7684\u72c0\u614b\uff0c\u4e4b\u5f8c\u7684\u8a18\u9304\u7167\u5e38\u5beb\u5165",
-    "message": "com.echo.service.RequestLogUnavailableException: Request-log storage is temporarily unavailable and recovering",
-    "stack": "com.echo.service.RequestLogUnavailableException: Request-log storage is temporarily unavailable and recovering\n\tat app//com.echo.agent.RequestLogSpool.admit(RequestLogSpool.java:370)\n\tat app//com.echo.agent.RequestLogSpool.append(RequestLogSpool.java:302)\n\tat app//com.echo.agent.RequestLogSpoolTest.errorWhileRetryingAnUnavailableStorageDoesNotBlockLaterLogs(RequestLogSpoolTest.java:865)\n\tat java.base@17.0.20.1/java.lang.reflect.Method.invoke(Method.java:569)\n\tat java.base@17.0.20.1/java.util.ArrayList.forEach(ArrayList.java:1511)\n\tat java.base@17.0.20.1/java.util.ArrayList.forEach(ArrayList.java:1511)\n"
-  }
-]

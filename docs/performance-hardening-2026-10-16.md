@@ -20,14 +20,14 @@ JFR 確認啟動時存在 `WebJarsResourceResolver → WebJarAssetLocator → Cl
 
 資料庫完整性檢查、Hibernate schema 更新、設定驗證及正常 bean 初始化都保留，沒有開啟全域 lazy initialization，也沒有降低 JIT 最佳化層級。剩餘啟動仍有 Spring／JPA／MVC 初始化成本；這次不是把啟動壓到 WireMock 的等級。外部資料庫、大量待恢復記錄、啟用 JMS 或不同磁碟，應用各自實際資料再量。
 
-重現用 [startup/probe.py](performance/2026-10-16-hardening/startup/probe.py)，需要空閒的 localhost:18082，會建立及清理自己的工作目錄。第一次用舊版建立 seed（不計分），之後所有輪次複製同一 seed；`OUTPUT` 每次必須不同。預設管理員帳密僅用於這個隔離 seed 的規則建立。
+重現用 [startup/probe.py](../scripts/bench/2026-10-16-hardening/startup/probe.py)，需要空閒的 localhost:18082，會建立及清理自己的工作目錄。第一次用舊版建立 seed（不計分），之後所有輪次複製同一 seed；`OUTPUT` 每次必須不同。預設管理員帳密僅用於這個隔離 seed 的規則建立。
 
 ```bash
-taskset -c 0-3 python3 docs/performance/2026-10-16-hardening/startup/probe.py \
+taskset -c 0-3 python3 scripts/bench/2026-10-16-hardening/startup/probe.py \
   /path/to/before.jar /tmp/startup-seed-run \
   --java /path/to/jdk17/bin/java --seed /tmp/startup-seed.sqlite
 # 依 before → after → after → before 重跑兩組；每次給不同 OUTPUT。
-taskset -c 0-3 python3 docs/performance/2026-10-16-hardening/startup/probe.py \
+taskset -c 0-3 python3 scripts/bench/2026-10-16-hardening/startup/probe.py \
   /path/to/after.jar /tmp/startup-after-r1 \
   --java /path/to/jdk17/bin/java --seed /tmp/startup-seed.sqlite
 ```
@@ -101,7 +101,7 @@ taskset -c 0-3 python3 docs/performance/2026-10-16-hardening/startup/probe.py \
 | 50 ms 延遲 Mock，併發 64 | 1,254 | 1,223 | 1.03× |
 | 壓力後固定回覆，併發 8 | 65,918 | 47,230 | 1.40× |
 
-慢速下游與刻意延遲的處理量受等待時間限制，改善只有約 3–5%。表中的大型規則與 XML 收益也與兩者匹配方式有關，不能全歸因於 HTTP 伺服器。這批資料的 jar SHA 與回歸摘要記錄於 `http-regression.json`；它在後續 WebJars 啟動依賴調整前建置，不能把其記憶體／啟動數字當成調整後的結果。
+慢速下游與刻意延遲的處理量受等待時間限制，改善只有約 3–5%。表中的大型規則與 XML 收益也與兩者匹配方式有關，不能全歸因於 HTTP 伺服器。這批資料的 jar 在後續 WebJars 啟動依賴調整前建置，不能把其記憶體／啟動數字當成調整後的結果。
 
 兩輪 Echo 轉發結束後，active／leased／pending／buffered response bytes 均歸零，沒有容量拒絕或目標轉發失敗。此檢查及短時間測量不能代替長時間 soak。
 
@@ -109,7 +109,7 @@ taskset -c 0-3 python3 docs/performance/2026-10-16-hardening/startup/probe.py \
 
 ### 相同到達率下的延遲
 
-後續使用已含 WebJars Lite 的最終實驗 jar（SHA 見 `http-regression-final.json`），以 wrk2、64 連線、每階段 30 秒補一組 Echo → WireMock；WireMock 使用 32 container workers。這組只有一次、沒有 ABBA，不能從它證明所有負載的尾端延遲穩定勝出。兩者皆無 HTTP／socket 錯誤。
+後續使用已含 WebJars Lite 的最終實驗 jar，以 wrk2、64 連線、每階段 30 秒補一組 Echo → WireMock；WireMock 使用 32 container workers。這組只有一次、沒有 ABBA，不能從它證明所有負載的尾端延遲穩定勝出。兩者皆無 HTTP／socket 錯誤。
 
 | 目標 req/s | Echo 實際 req/s | WireMock 實際 req/s | Echo P99 ms | WireMock P99 ms | Echo P99.9 ms | WireMock P99.9 ms |
 |---|---:|---:|---:|---:|---:|---:|
@@ -135,7 +135,7 @@ HTTP 比較使用既有腳本，需在 PATH 準備 Java 21、`wrk`、Node、`jcm
 ```bash
 ./gradlew bootJar -PhttpTransportExperiment
 ECHO_BENCH_WORKERS=8 ECHO_BENCH_IO=2 WM_BENCH_WORKERS=128 \
-  taskset -c 0-3 bash docs/performance/2026-10-15/transport-experiment/matrix.sh \
+  taskset -c 0-3 bash scripts/bench/2026-10-15/transport-experiment/matrix.sh \
   build/http-experiment/echo-server-0.0.0-SNAPSHOT-http-experiment.jar \
   /path/to/wiremock-standalone-3.13.2.jar /tmp/http-matrix 2
 ```
@@ -150,4 +150,4 @@ HTTP 實驗版在啟動依賴調整後另有 133 個測試全部通過，SpotBug
 
 沒有將這些測試解讀為跨 broker／資料庫的 exactly-once 保證。沒有實測 TIBCO 專有 client、外部金融網路／TLS 或多日 soak。原有非同步請求紀錄在壓力下可丟棄待寫紀錄的契約也未改變；需要逐筆等待記錄持久化時，仍須使用既有 `wait-for-write` 設定。
 
-原始數據與檢查摘要在 [2026-10-16-hardening](performance/2026-10-16-hardening/)。效能比較不以關閉來源交易、持久化或正確性檢查換取數字。
+原始資料未保留在 repository，數字以本文為準；啟動量測腳本位於 [scripts/bench/2026-10-16-hardening](../scripts/bench/2026-10-16-hardening/)。效能比較不以關閉來源交易、持久化或正確性檢查換取數字。

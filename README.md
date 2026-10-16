@@ -20,7 +20,7 @@ Echo stands in for the services your application talks to during development and
 - **See why a request matched.** Every logged request shows its processing flow and the full match chain: which rules were candidates, and which condition passed or failed.
 - **Built for teams.** It has logins (built-in accounts or LDAP) with admin and user roles, an audit trail, tags for bulk enable and disable, and rule protection and retention. Several instances can share one database.
 - **Fits a locked-down network.** Ship one JAR, start it with `java -jar`, and keep the data in SQLite. The UI assets are bundled through WebJars, so no CDN is needed.
-- **Measured, not guessed.** The benchmarks against WireMock are published with their method, scripts and raw results, including the cases where Echo gains little, such as slow downstreams. See [Performance](#performance).
+- **Measured, not guessed.** The benchmarks against WireMock are published with their method, scripts and summarized results, including the cases where Echo gains little, such as slow downstreams. See [Performance](#performance).
 
 ## Quick start
 

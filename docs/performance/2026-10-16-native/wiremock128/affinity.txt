@@ -1,1 +1,0 @@
-pid 219395's current affinity list: 0-3

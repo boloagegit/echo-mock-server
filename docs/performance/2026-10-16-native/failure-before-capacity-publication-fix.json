@@ -1,8 +1,0 @@
-[
-  {
-    "suite": "com.echo.agent.RequestLogSpoolTest",
-    "test": "\u5beb\u5165\u6642\u767c\u751f Error\uff08\u4f8b\u5982\u8a18\u61b6\u9ad4\u4e0d\u8db3\uff09\uff1a\u5beb\u5165\u57f7\u884c\u7dd2\u4e0d\u7d50\u675f\uff0c\u9019\u6279\u56de\u5831\u5931\u6557\u4e26\u91cb\u653e\u5bb9\u91cf\uff0c\u4e4b\u5f8c\u7684\u8a18\u9304\u7167\u5e38\u5beb\u5165",
-    "message": "org.opentest4j.AssertionFailedError: \nexpected: 0L\n but was: 1L",
-    "stack": "org.opentest4j.AssertionFailedError: \nexpected: 0L\n but was: 1L\n\tat app//com.echo.agent.RequestLogSpoolTest.writerSurvivesAnErrorAndKeepsWriting(RequestLogSpoolTest.java:813)\n\tat java.base@17.0.20.1/java.lang.reflect.Method.invoke(Method.java:569)\n\tat java.base@17.0.20.1/java.util.ArrayList.forEach(ArrayList.java:1511)\n\tat java.base@17.0.20.1/java.util.ArrayList.forEach(ArrayList.java:1511)\n"
-  }
-]

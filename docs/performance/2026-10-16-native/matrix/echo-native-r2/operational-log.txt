@@ -1,5 +1,0 @@
-2026-10-16 02:57:57.157  WARN [           main] io.undertow.websockets.jsr               : UT026010: Buffer pool was not set on WebSocketDeploymentInfo, the default pool will be used
-2026-10-16 02:58:00.717  WARN [           main] com.echo.service.JmsCredentialCipher     : JMS credential encryption is using the default key; set ECHO_JMS_CREDENTIAL_KEY
-2026-10-16 02:58:01.011  WARN [           main] com.echo.service.HttpOutboundForwarder   : HTTP forwarding application concurrency limit is disabled; connection-pool and timeout limits remain active
-2026-10-16 02:58:02.792  WARN [           main] o.s.s.c.a.web.builders.WebSecurity       : You are asking Spring Security to ignore Deferred [Mvc [pattern='/mock/**'], Ant [pattern='/mock/**']]. This is not recommended -- please use permitAll via HttpSecurity#authorizeHttpRequests instead.
-2026-10-16 02:58:03.319  INFO [           main] com.echo.EchoApplication                 : Started EchoApplication in 9.15 seconds (process running for 9.725)

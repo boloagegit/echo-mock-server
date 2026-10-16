@@ -1,8 +1,0 @@
-{
-  "jarSha256": "61a5cd4dc161eeecc74d7e851fad0d953376291645647cb7b5399eb5b4da9e8a",
-  "runtimeLibrariesAdded": [],
-  "runtimeLibrariesRemoved": [],
-  "baseline": "Servlet jar after WebJars Lite change",
-  "experimentFactoryAbsent": true,
-  "tracingBridgeTestOnly": true
-}

@@ -33,6 +33,7 @@ export ECHO_TEST_PASSWORD='your-local-password'
 | `test-container-resilience.py` | Disposable Compose JMS XML pressure, fixed-heap, SIGKILL/restart, ID accounting, Artemis paging, and bounded tmpfs high-water/full/recovery validation |
 | `test-container-diagnostics.py` | Short real Echo + SQLite + JMS forwarding matrix under CPU/memory caps; 30s no-reply, non-text reply, correlation, bounded anomaly output and cleanup/recovery checks |
 | `test-container-resource-soak.py` | Finite 10-minute fixed-rate HTTP/JMS forwarding resource probe, with two idle minutes, GC floors, RSS/cgroup/FD/connection/queue measurements and real caller reply verification |
+| `bench/` | Scripts behind the performance reports (`2026-10-15`, `2026-10-16-native`, `2026-10-16-hardening`); usage is in the matching document under `docs/`, and rerun output stays out of git |
 | `perf-test-downstream.py` | Local downstream HTTP server for forwarding latency and body-limit tests |
 | `tests/test_windows_script_compatibility.py` | Windows path, command, and process compatibility checks for Python scripts |
 

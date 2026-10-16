@@ -1,3 +1,0 @@
-VmHWM:	 1025492 kB
-VmRSS:	 1025492 kB
-Threads:	152

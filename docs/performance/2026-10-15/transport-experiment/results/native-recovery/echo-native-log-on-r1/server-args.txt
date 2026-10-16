@@ -1,2 +1,0 @@
---echo.http.transport=native-handoff-stream
---server.undertow.threads.io=2

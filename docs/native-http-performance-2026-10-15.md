@@ -121,7 +121,7 @@ Echo 的 P99 在兩個速率都較低，但 40k/s 的 P99.9 較高（25.15 vs 19
 RSS 包含 JVM 保留與已提交記憶體，不等同存活物件。啟動時間包含首次建表等初始化，不代表一般重新啟動。Echo 仍載入 Spring 管理功能、JPA、JMS 等，原生入口沒有移除這些固定成本。若目標包括記憶體與啟動速度，需要讓 HTTP 執行引擎可獨立啟動，按需載入管理與 JMS 能力，並另行量測。
 
 
-最後版本通過 111 項測試，包括既有 HTTP、SSE 轉發、請求紀錄、權限與 controller 回歸，以及 6 項實際 HTTP 入口檢查：原生路徑命中計數、中文／UTF-16 本文、狀態與自訂 header、規則修改與刪除立即生效、延遲與逾時、HEAD／SSE 回退、管理 API 與路徑穿越的權限邊界。測試清單與原始計數在 `regression-final.json`。
+最後版本通過 111 項測試，包括既有 HTTP、SSE 轉發、請求紀錄、權限與 controller 回歸，以及 6 項實際 HTTP 入口檢查：原生路徑命中計數、中文／UTF-16 本文、狀態與自訂 header、規則修改與刪除立即生效、延遲與逾時、HEAD／SSE 回退、管理 API 與路徑穿越的權限邊界。
 
 ## 正式化仍須完成的工作
 
@@ -140,7 +140,7 @@ RSS 包含 JVM 保留與已提交記憶體，不等同存活物件。啟動時�
 
 ECHO_BENCH_WORKERS=8 ECHO_BENCH_IO=2 WM_BENCH_WORKERS=128 \
 PERF_MODE=matrix taskset -c 0-3 bash \
-  docs/performance/2026-10-15/transport-experiment/matrix.sh \
+  scripts/bench/2026-10-15/transport-experiment/matrix.sh \
   build/http-experiment/echo-server-0.0.0-SNAPSHOT-http-experiment.jar \
   /absolute/path/wiremock-standalone-3.13.2.jar \
   /tmp/echo-native-new-results 2
@@ -148,6 +148,6 @@ PERF_MODE=matrix taskset -c 0-3 bash \
 
 需要 Java、`jcmd`、`wrk`、`curl`、Python 3、Node；固定到達率測試另需 `wrk2`。CPU 編號需依實際可用範圍調整。結果目錄必須是新的，腳本會重建每輪目錄，並使用獨立暫存資料庫；18080、18081 連接埠需空閒。
 
-補測 WireMock 可加 `WM_ONLY=1 WM_BENCH_WORKERS=32`，兩輪使用同一個 matrix 模式。相同腳本可使用 `PERF_MODE=latency`、`recovery`、`profile`；後兩者只跑 Echo，`recovery` 使用正常的開啟紀錄設定。原始資料、JAR／來源 SHA-256、環境、測試清單及篩選結果位於 [transport-experiment](performance/2026-10-15/transport-experiment/)。`wrk2` 來源為 [giltene/wrk2](https://github.com/giltene/wrk2)，固定 commit `44a94c17d8e6a0bac8559b53da76848e430cb7a7`。
+補測 WireMock 可加 `WM_ONLY=1 WM_BENCH_WORKERS=32`，兩輪使用同一個 matrix 模式。相同腳本可使用 `PERF_MODE=latency`、`recovery`、`profile`；後兩者只跑 Echo，`recovery` 使用正常的開啟紀錄設定。腳本位於 [scripts/bench/2026-10-15/transport-experiment](../scripts/bench/2026-10-15/transport-experiment/)；原始資料未保留在 repository，數字以本文為準。`wrk2` 來源為 [giltene/wrk2](https://github.com/giltene/wrk2)，固定 commit `44a94c17d8e6a0bac8559b53da76848e430cb7a7`。
 
 一般 `./gradlew bootJar` 已重建並檢查：不包含實驗 class，依賴集合與原版完全相同，未加入 Jetty server／Tomcat core。原本 Undertow 套件共用的 Tomcat EL 仍保留。實驗 JAR 輸出到 `build/http-experiment/`，與正常 `build/libs/` 分開。

@@ -12,12 +12,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - SQLite migration and crash-check scripts explicitly close their database connections, releasing Windows file handles before publishing or cleaning up database files. Migration opens files with the write access Windows requires to flush data to disk before publication.
 - SQLite online backups now pass destination paths directly to the driver, so paths containing spaces or apostrophes work without the driver's limited command parser. Snapshot integrity checks and atomic publication remain in place.
 
+### Changed
+- The benchmark scripts moved from `docs/performance/` to `scripts/bench/`, keeping their layout, and the raw measurement files (about 2,300 text and JSON files) were removed from the repository to keep it small. The performance documents keep the summarized numbers and point to the scripts for reruns; rerun output under `scripts/bench/**/results/` is ignored by git.
+
 ## [v2026.10.16] — 2026-10-16
 
 ### Added
 - Native HTTP/1.1 acceleration is enabled by default, sharing the existing mock pipeline while retaining Servlet handling for special requests and custom extensions. Configurable defaults bound request/response bodies to 10 MiB, active requests to 512 and estimated buffering to 128 MiB. Set `ECHO_HTTP_TRANSPORT=servlet` and restart to switch back; TLS, compression, observations and graceful shutdown remain supported.
 - JMS forwarding reuses up to 8 idle sessions per target by default (`echo.jms.forward.session-cache-size=0` disables reuse), while keeping temporary reply queues and consumers independent for every request. Source transactions and redelivery semantics are unchanged.
-- Startup uses WebJars Lite metadata instead of a full classpath scan, preserving versionless asset URLs. Reproducible HTTP/JMS, startup, capacity and recovery measurements are included under `docs/performance/`.
+- Startup uses WebJars Lite metadata instead of a full classpath scan, preserving versionless asset URLs. The scripts that reproduce the HTTP/JMS, startup, capacity and recovery measurements are included under `docs/performance/` (now `scripts/bench/`); the results are summarized in the performance documents.
 - The README is now a short landing page in English and Traditional Chinese, with screenshots of the console, a one-minute first-mock example and a performance summary. The detailed sections moved into topic guides: `docs/install.md`, `docs/configuration.md`, `docs/rules.md`, `docs/jms.md` and `docs/api.md` (Chinese versions under `docs/zh-TW/`), with an index at `docs/README.md`.
 - The hidden game (Echo Strike) has much more to play and look at. It still downloads only when it is opened, so ordinary page loads are unchanged apart from about 0.7 KB more in the trigger script.
   - **Stages:** three stages (STAGING, UAT, PRODUCTION), each with a mid-stage heavy enemy, its own background and a boss. The bosses are 404 (fades out and reappears elsewhere), 429 (fires a stream, then cools down with its weak point open and a "Retry-After" countdown) and 500 (three phases, plus two side turrets that can be shot off first). After the third stage the game loops, faster.

@@ -1,7 +1,0 @@
-{
-  "jar": "build/libs/echo-server-0.0.0-SNAPSHOT.jar",
-  "sha256": "6222ccb1235c6a885f46606173269f83a6bf7424f1d3c1d842f57ef49b5b3fa5",
-  "experimental_classes_absent": true,
-  "dependency_set_identical_to_original": true,
-  "note": "Original Undertow distribution already includes tomcat-embed-el; no Jetty server or Tomcat core is added to the normal jar."
-}
