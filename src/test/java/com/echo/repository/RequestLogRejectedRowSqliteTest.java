@@ -4,18 +4,17 @@ import com.echo.agent.LogAgent;
 import com.echo.entity.Protocol;
 import com.echo.entity.RequestLog;
 import com.echo.service.RequestLogBatchWriter;
-import org.junit.jupiter.api.AfterAll;
+import com.echo.support.SqliteTestDatabaseCleanupListener;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestExecutionListeners;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -26,6 +25,8 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 
 /** 實際 SQLite：被資料庫拒絕的紀錄會被辨識為「資料本身的問題」，背景寫入只會跳過那一筆。 */
 @DataJpaTest
+@TestExecutionListeners(listeners = SqliteTestDatabaseCleanupListener.class,
+        mergeMode = TestExecutionListeners.MergeMode.MERGE_WITH_DEFAULTS)
 @Import(RequestLogBatchWriter.class)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class RequestLogRejectedRowSqliteTest {
@@ -77,12 +78,5 @@ class RequestLogRejectedRowSqliteTest {
         assertThat(stored.getMethod()).hasSize(10);
         assertThat(stored.getTargetHost()).hasSize(255);
         assertThat(stored.getRequestBody()).isEqualTo("ab");
-    }
-
-    @AfterAll
-    static void cleanupSqliteFiles() throws IOException {
-        Files.deleteIfExists(Path.of(SQLITE_PATH + "-wal"));
-        Files.deleteIfExists(Path.of(SQLITE_PATH + "-shm"));
-        Files.deleteIfExists(SQLITE_PATH);
     }
 }
