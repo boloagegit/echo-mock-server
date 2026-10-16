@@ -261,6 +261,7 @@ public class RuleAuditService {
                 .size(pageSize)
                 .totalElements(resultPage.getTotalElements())
                 .totalPages(resultPage.getTotalPages())
+                .today(java.time.LocalDate.now().toString())
                 .build();
     }
 
@@ -432,6 +433,8 @@ public class RuleAuditService {
         private int size;
         private long totalElements;
         private int totalPages;
+        /** 伺服器今天的日期；修訂時間是伺服器時區，前端用它判斷「今天／昨天」。 */
+        private String today;
     }
 
     @Transactional

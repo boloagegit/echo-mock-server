@@ -23,7 +23,8 @@ const AuditPage = {
     getAuditChangeCount: Function,
     getAuditTarget: Function,
     getAuditProtocol: Function,
-    describeAuditRow: Function
+    describeAuditRow: Function,
+    auditToday: String
   },
   emits: [
     'load-audit', 'update:selectedAudit', 'update:auditFilter',
@@ -118,13 +119,14 @@ const AuditPage = {
   },
   methods: {
     shortId, fmtTime,
+    /** 修訂時間是伺服器時區，所以「今天／昨天」以伺服器日期判斷；不知道時只顯示日期。 */
     dayLabel(key) {
-      const pad = n => String(n).padStart(2, '0');
-      const local = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
-      const now = new Date();
-      const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-      if (key === local(now)) return this.t('audit.dayToday', {date: key});
-      if (key === local(yesterday)) return this.t('audit.dayYesterday', {date: key});
+      const today = this.auditToday;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(today || '')) return key;
+      const [y, m, d] = today.split('-').map(Number);
+      const prev = new Date(Date.UTC(y, m - 1, d - 1)).toISOString().substring(0, 10);
+      if (key === today) return this.t('audit.dayToday', {date: key});
+      if (key === prev) return this.t('audit.dayYesterday', {date: key});
       return key;
     },
     rowTime(log) {

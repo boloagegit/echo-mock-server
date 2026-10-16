@@ -110,3 +110,17 @@ test('opening a record keeps the list summary even if the detail carries its own
   await audit.loadAudit(true);
   assert.equal(audit.describeAuditRow(audit.auditLogs.value[0]).meta[0], 'GET');
 });
+
+test('today and yesterday follow the server date that came with the list, not the browser clock', async () => {
+  const audit = auditFixture(async () => ({ ok: true, json: async () => ({ results: [], totalElements: 0, totalPages: 0, today: '2026-03-01' }) }));
+  await audit.loadAudit(true);
+  assert.equal(audit.auditToday.value, '2026-03-01');
+
+  const context = { heldDetailMixin: () => ({}), shortId: x => x, fmtTime: x => x };
+  vm.runInNewContext(fs.readFileSync(path.join(root, 'components/AuditPage.js'), 'utf8') + '\nthis.AuditPage = AuditPage;', context);
+  const label = key => context.AuditPage.methods.dayLabel.call({ auditToday: audit.auditToday.value, t }, key);
+  assert.equal(label('2026-03-01'), 'audit.dayToday');
+  assert.equal(label('2026-02-28'), 'audit.dayYesterday');
+  assert.equal(label('2026-02-27'), '2026-02-27');
+  assert.equal(context.AuditPage.methods.dayLabel.call({ auditToday: '', t }, '2026-03-01'), '2026-03-01');
+});

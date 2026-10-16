@@ -165,6 +165,33 @@ class AuditLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    @DisplayName("11.5.3 只改 SSE 回應內容時，摘要不會多出內容類型的變更；列表附上伺服器今天日期")
+    @SuppressWarnings("unchecked")
+    void sseResponseBodyEdit_listsOnlyTheBody() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        ResponseEntity<Map> created = adminClient().exchange("/api/admin/responses", HttpMethod.POST,
+                new HttpEntity<>(Map.of("description", "audit-sse-only-body", "contentType", "SSE",
+                        "body", "[{\"type\":\"normal\",\"data\":\"a\"}]"), headers), Map.class);
+        assertThat(created.getStatusCode().is2xxSuccessful()).as(created.getStatusCode() + " " + created.getBody()).isTrue();
+        Number id = (Number) created.getBody().get("id");
+        adminClient().exchange("/api/admin/responses/" + id.longValue(), HttpMethod.PUT,
+                new HttpEntity<>(Map.of("body", "[{\"type\":\"normal\",\"data\":\"b\"}]"), headers), Map.class);
+
+        ResponseEntity<Map> page = adminClient().getForEntity(
+                "/api/admin/audit?page=0&size=5&action=UPDATE&type=RESPONSE&keyword=audit-sse-only-body", Map.class);
+
+        assertThat(page.getBody().get("today")).isEqualTo(java.time.LocalDate.now().toString());
+        List<Map<String, Object>> results = (List<Map<String, Object>>) page.getBody().get("results");
+        assertThat(results).singleElement().satisfies(summary -> {
+            Map<String, Object> listSummary = (Map<String, Object>) summary.get("summary");
+            assertThat(listSummary).containsEntry("changeCount", 1);
+            assertThat((List<Map<String, Object>>) listSummary.get("changes")).singleElement()
+                    .satisfies(change -> assertThat(change).containsEntry("f", "body"));
+        });
+    }
+
+    @Test
     @DisplayName("11.6 清除全部審計日誌")
     void deleteAllAuditLogs() {
         createHttpRule("/api/audit-clear", "GET", "{\"ok\":true}");

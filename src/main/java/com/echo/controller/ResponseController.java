@@ -86,7 +86,8 @@ public class ResponseController {
     public ResponseEntity<Response> updateResponse(@PathVariable Long id, @RequestBody Response response) {
         return responseService.findById(id)
                 .map(existing -> {
-                    Response before = Response.builder().id(existing.getId()).description(existing.getDescription()).body(existing.getBody()).build();
+                    Response before = Response.builder().id(existing.getId()).description(existing.getDescription())
+                            .contentType(existing.getContentType()).body(existing.getBody()).build();
                     response.setId(id);
                     response.setVersion(existing.getVersion());
                     // 沒送的欄位沿用原本的值（只改內容時不會清掉描述或類型）

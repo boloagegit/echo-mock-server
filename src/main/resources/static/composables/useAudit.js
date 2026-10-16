@@ -30,6 +30,8 @@ const useAudit = (deps) => {
     const auditPage = ref(1);
     const auditPageSize = ref(parseInt(localStorage.getItem('auditPageSize')) || 20);
     const auditTotalElements = ref(0);
+    // 伺服器的「今天」（修訂時間沒有時區，以伺服器日期判斷今天／昨天）。
+    const auditToday = ref('');
     const serverTotalPages = ref(0);
     let listRequestSequence = 0;
     let listAbortController = null;
@@ -111,6 +113,7 @@ const useAudit = (deps) => {
                 if (requestId !== listRequestSequence) { return false; }
                 auditLogs.value = hydrateCachedDetails(data.results || []);
                 auditTotalElements.value = Number(data.totalElements || 0);
+                auditToday.value = typeof data.today === 'string' ? data.today : '';
                 serverTotalPages.value = Number(data.totalPages || 0);
                 selectedAudit.value = null;
                 if (auditPage.value > auditTotalPages.value) { auditPage.value = auditTotalPages.value; }
@@ -388,6 +391,7 @@ const useAudit = (deps) => {
         auditPage,
         auditPageSize,
         auditTotalElements,
+        auditToday,
         filteredAudit,
         sortedAudit,
         pagedAudit,
