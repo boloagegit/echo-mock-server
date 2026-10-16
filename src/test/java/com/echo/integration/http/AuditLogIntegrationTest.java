@@ -133,6 +133,38 @@ class AuditLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    @DisplayName("11.5.2 修訂列表直接附上名稱與改了什麼，並可用路徑搜尋、依類型篩選")
+    @SuppressWarnings("unchecked")
+    void pagedAuditSummary_carriesNameAndChangesForSearch() {
+        RuleDto rule = createHttpRule("/api/audit-summary-path", "GET", "{\"ok\":true}");
+        rule.setPriority(7);
+        updateRule(rule.getId(), rule);
+
+        ResponseEntity<Map> byPath = adminClient().getForEntity(
+                "/api/admin/audit?page=0&size=5&action=UPDATE&type=RULE&keyword=audit-summary-PATH", Map.class);
+
+        assertThat(byPath.getStatusCode()).isEqualTo(HttpStatus.OK);
+        List<Map<String, Object>> results = (List<Map<String, Object>>) byPath.getBody().get("results");
+        assertThat(results).singleElement().satisfies(summary -> {
+            assertThat(summary).containsEntry("targetProtocol", "HTTP")
+                    .containsEntry("targetName", "/api/audit-summary-path")
+                    .doesNotContainKeys("beforeJson", "afterJson");
+            Map<String, Object> listSummary = (Map<String, Object>) summary.get("summary");
+            assertThat(listSummary).containsEntry("method", "GET").containsEntry("changeCount", 1);
+            assertThat((List<Map<String, Object>>) listSummary.get("changes")).singleElement()
+                    .satisfies(change -> assertThat(change).containsEntry("f", "priority").containsEntry("a", 7));
+        });
+
+        ResponseEntity<Map> responsesOnly = adminClient().getForEntity(
+                "/api/admin/audit?page=0&size=5&type=RESPONSE&keyword=audit-summary-path", Map.class);
+        assertThat(responsesOnly.getBody().get("totalElements")).isEqualTo(0);
+
+        ResponseEntity<Map> invalidType = adminClient().getForEntity(
+                "/api/admin/audit?page=0&size=5&type=ISSUE", Map.class);
+        assertThat(invalidType.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
     @DisplayName("11.6 清除全部審計日誌")
     void deleteAllAuditLogs() {
         createHttpRule("/api/audit-clear", "GET", "{\"ok\":true}");

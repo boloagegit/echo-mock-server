@@ -46,13 +46,13 @@ class WorkspaceTableResourceTest {
         assertThat(resourceText("static/console.css"))
                 .contains(".data-table .cell-mono { font-family: var(--font-mono); font-size: var(--font-xs) }")
                 .contains(".log-table .col-time { width: 132px }")
-                .contains(".audit-table .col-time { width: 124px }");
+                .contains(".audit-table .col-time { width: 112px }");
         assertThat(stylesheet).doesNotContain(".table-date-stack");
         // Rule rows keep the short timestamp visible and expose the full time and operator on hover.
         assertThat(rules).contains("class=\"col-updated cell-mono cell-subtle\" :title=\"fmtTime(r.updatedAt,false)")
                 .contains("{{fmtTime(r.updatedAt)}}");
         assertThat(responses).contains("class=\"col-updated cell-mono cell-subtle\" :title=\"fmtTime(r.updatedAt,false)\"");
-        assertThat(audit).contains("class=\"col-time cell-mono cell-subtle\" :title=\"fmtTime(log.timestamp,false)\">{{fmtTime(log.timestamp)}}</td>");
+        assertThat(audit).contains("class=\"col-time cell-mono cell-subtle\" :title=\"fmtTime(row.log.timestamp,false)\">{{rowTime(row.log)}}</td>");
     }
 
     @Test

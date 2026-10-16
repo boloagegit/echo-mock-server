@@ -42,12 +42,12 @@ class RuleAuditLogRepositorySqliteTest {
                 .timestamp(LocalDateTime.now())
                 .build());
 
-        Page<Object[]> page = repository.findSummaryPage(RuleAuditLog.Action.UPDATE, "ADMIN", "SQLITE",
+        Page<Object[]> page = repository.findSummaryPage(RuleAuditLog.Action.UPDATE, "ADMIN", "SQLITE", null,
                 PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "timestamp")));
 
         assertThat(page.getTotalElements()).isEqualTo(1);
         assertThat(page.getContent()).singleElement().satisfies(row -> {
-            assertThat(row).hasSize(7);
+            assertThat(row).hasSize(11);
             assertThat(Arrays.asList(row)).doesNotContain(largeJson);
             assertThat(row[5]).isEqualTo(true);
             assertThat(row[6]).isEqualTo(true);
@@ -55,5 +55,41 @@ class RuleAuditLogRepositorySqliteTest {
         assertThat(repository.findById(saved.getId()))
                 .get().extracting(RuleAuditLog::getBeforeJson, RuleAuditLog::getAfterJson)
                 .containsExactly(largeJson, largeJson);
+    }
+
+    @Test
+    void summaryColumns_shouldDriveSearchTypeFilterAndBackfillOnSqlite() {
+        RuleAuditLog rule = repository.saveAndFlush(RuleAuditLog.builder()
+                .ruleId("rule-search").action(RuleAuditLog.Action.UPDATE)
+                .beforeJson("{}").afterJson("{}").operator("admin").timestamp(LocalDateTime.now())
+                .targetProtocol("HTTP").targetName("/users/1").targetDescription("取得使用者")
+                .summary("{\"changeCount\":1}")
+                .build());
+        RuleAuditLog response = repository.saveAndFlush(RuleAuditLog.builder()
+                .ruleId("response-9").action(RuleAuditLog.Action.CREATE)
+                .afterJson("{}").operator("admin").timestamp(LocalDateTime.now())
+                .targetProtocol("RESPONSE").targetName("使用者回應").summary("{}")
+                .build());
+        RuleAuditLog legacy = repository.saveAndFlush(RuleAuditLog.builder()
+                .ruleId("rule-legacy").action(RuleAuditLog.Action.CREATE)
+                .afterJson("{}").operator("admin").timestamp(LocalDateTime.now())
+                .build());
+        PageRequest page = PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "timestamp"));
+
+        assertThat(repository.findSummaryPage(null, null, "USERS/1", null, page).getContent())
+                .extracting(row -> row[0]).containsExactly(rule.getId());
+        assertThat(repository.findSummaryPage(null, null, "取得", null, page).getContent())
+                .extracting(row -> row[0]).containsExactly(rule.getId());
+        assertThat(repository.findSummaryPage(null, null, null, "RESPONSE", page).getContent())
+                .extracting(row -> row[0]).containsExactly(response.getId());
+        assertThat(repository.findSummaryPage(null, null, null, "RULE", page).getContent())
+                .extracting(row -> row[0]).containsExactlyInAnyOrder(rule.getId(), legacy.getId());
+
+        assertThat(repository.findIdsWithoutSummary(page)).containsExactly(legacy.getId());
+        assertThat(repository.fillSummary(legacy.getId(), "HTTP", "/legacy", null, "{}")).isEqualTo(1);
+        assertThat(repository.fillSummary(legacy.getId(), "HTTP", "/other", null, "{}")).isZero();
+        assertThat(repository.findIdsWithoutSummary(page)).isEmpty();
+        assertThat(repository.findById(legacy.getId())).get()
+                .extracting(RuleAuditLog::getTargetName).isEqualTo("/legacy");
     }
 }

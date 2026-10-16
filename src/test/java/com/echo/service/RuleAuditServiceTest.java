@@ -122,8 +122,9 @@ class RuleAuditServiceTest {
     void queryAuditSummary_shouldMapPageWithoutJson() {
         LocalDateTime timestamp = LocalDateTime.now();
         Object[] row = new Object[]{1L, "uuid-1", RuleAuditLog.Action.UPDATE,
-                "admin", timestamp, true, true};
-        when(repository.findSummaryPage(eq(RuleAuditLog.Action.UPDATE), eq("admin"), eq("uuid"), any()))
+                "admin", timestamp, true, true, "HTTP", "/users/1", "取得使用者",
+                "{\"method\":\"GET\",\"changeCount\":1,\"changes\":[{\"f\":\"priority\",\"b\":\"0\",\"a\":\"5\"}]}"};
+        when(repository.findSummaryPage(eq(RuleAuditLog.Action.UPDATE), eq("admin"), eq("uuid"), eq("RULE"), any()))
                 .thenReturn(new PageImpl<>(Collections.singletonList(row)));
 
         RuleAuditService.AuditQueryResult result = service.queryAuditSummary(
@@ -131,6 +132,7 @@ class RuleAuditServiceTest {
                         .action(RuleAuditLog.Action.UPDATE)
                         .operator(" admin ")
                         .keyword(" uuid ")
+                        .targetType("rule")
                         .page(0)
                         .size(20)
                         .sortField("operator")
@@ -141,8 +143,70 @@ class RuleAuditServiceTest {
             assertThat(summary.getRuleId()).isEqualTo("uuid-1");
             assertThat(summary.isHasBeforeJson()).isTrue();
             assertThat(summary.isHasAfterJson()).isTrue();
+            assertThat(summary.getTargetProtocol()).isEqualTo("HTTP");
+            assertThat(summary.getTargetName()).isEqualTo("/users/1");
+            assertThat(summary.getTargetDescription()).isEqualTo("取得使用者");
+            assertThat(summary.getSummary().get("changes").get(0).get("f").asText()).isEqualTo("priority");
         });
         assertThat(result.getTotalElements()).isEqualTo(1);
+        verify(repository, never()).findById(any());
+    }
+
+    @Test
+    void queryAuditSummary_shouldFillMissingSummaryOneRowAtATime() {
+        Object[] row = new Object[]{7L, "uuid-7", RuleAuditLog.Action.UPDATE,
+                "admin", LocalDateTime.now(), true, true, null, null, null, null};
+        when(repository.findSummaryPage(isNull(), isNull(), isNull(), isNull(), any()))
+                .thenReturn(new PageImpl<>(Collections.singletonList(row)));
+        when(repository.findById(7L)).thenReturn(Optional.of(RuleAuditLog.builder()
+                .id(7L).ruleId("uuid-7").action(RuleAuditLog.Action.UPDATE)
+                .beforeJson("{\"id\":\"uuid-7\",\"protocol\":\"HTTP\",\"matchKey\":\"/old\",\"priority\":0}")
+                .afterJson("{\"id\":\"uuid-7\",\"protocol\":\"HTTP\",\"matchKey\":\"/old\",\"priority\":5}")
+                .build()));
+
+        RuleAuditService.AuditQueryResult result = service.queryAuditSummary(
+                RuleAuditService.AuditQueryFilter.builder().page(0).size(20).build());
+
+        assertThat(result.getResults()).singleElement().satisfies(summary -> {
+            assertThat(summary.getTargetName()).isEqualTo("/old");
+            assertThat(summary.getSummary().get("changeCount").asInt()).isEqualTo(1);
+        });
+        verify(repository).fillSummary(eq(7L), eq("HTTP"), eq("/old"), isNull(), contains("\"priority\""));
+    }
+
+    @Test
+    void queryAuditSummary_shouldRejectUnknownTargetType() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.queryAuditSummary(
+                        RuleAuditService.AuditQueryFilter.builder().targetType("issue").build()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void logUpdate_shouldStoreListSummary() {
+        service.logUpdate(
+                "{\"id\":\"uuid-1\",\"protocol\":\"JMS\",\"queueName\":\"ECHO.REQUEST\",\"bodyCondition\":\"a=1\"}",
+                "{\"id\":\"uuid-1\",\"protocol\":\"JMS\",\"queueName\":\"ECHO.REQUEST\",\"bodyCondition\":\"a=2\"}");
+
+        ArgumentCaptor<RuleAuditLog> captor = ArgumentCaptor.forClass(RuleAuditLog.class);
+        verify(repository).save(captor.capture());
+        RuleAuditLog log = captor.getValue();
+        assertThat(log.getTargetProtocol()).isEqualTo("JMS");
+        assertThat(log.getTargetName()).isEqualTo("ECHO.REQUEST");
+        assertThat(log.getSummary()).contains("\"f\":\"bodyCondition\"").contains("\"changeCount\":1");
+    }
+
+    @Test
+    void backfillSummaries_shouldStopWhenNothingIsLeft() {
+        when(repository.findIdsWithoutSummary(any())).thenReturn(List.of(3L), List.of());
+        when(repository.findById(3L)).thenReturn(Optional.of(RuleAuditLog.builder()
+                .id(3L).ruleId("response-3").action(RuleAuditLog.Action.CREATE)
+                .afterJson("{\"id\":3,\"description\":\"共用回應\",\"contentType\":\"application/json\"}")
+                .build()));
+
+        service.backfillSummaries();
+
+        verify(repository).fillSummary(eq(3L), eq("RESPONSE"), eq("共用回應"), isNull(), contains("application/json"));
+        verify(repository, times(2)).findIdsWithoutSummary(any());
     }
 
     @Test

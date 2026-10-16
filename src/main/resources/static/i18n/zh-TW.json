@@ -662,7 +662,7 @@
     "refresh": "重新整理",
     "truncatedWarning": "修訂記錄保留最近 {days} 天，超過將自動清除。目前顯示最近 {count} 筆",
     "searchOperator": "搜尋操作者",
-    "searchContent": "搜尋規則／回應 ID",
+    "searchContent": "搜尋路徑、名稱、佇列或 ID",
     "clearAll": "清除全部",
     "actionCreate": "建立",
     "actionUpdate": "修改",
@@ -694,7 +694,17 @@
     "emptyFilterResult": "找不到符合條件的修訂記錄",
     "openRule": "開啟規則",
     "openResponse": "開啟回應",
-    "changesTitle": "變更內容"
+    "changesTitle": "變更內容",
+    "thChanges": "改了什麼",
+    "typeFilter": "對象類型篩選",
+    "changedTo": "改為",
+    "lineDelta": "+{add} −{del} 行",
+    "contentChanged": "內容已變更",
+    "moreFields": "+{count} 個欄位",
+    "factStatus": "狀態 {status}",
+    "factDisabled": "已停用",
+    "dayToday": "今天 · {date}",
+    "dayYesterday": "昨天 · {date}"
   },
   "monitoring": {
     "gc": {
@@ -1743,7 +1753,8 @@
     "faultEmptyResponse": "空回應",
     "targetOriginalHost": "依 X-Original-Host",
     "targetDefaultConnection": "預設連線",
-    "targetSavedConnection": "指定連線"
+    "targetSavedConnection": "指定連線",
+    "none": "（無）"
   },
   "filterChips": {
     "protocol": "協定: ",

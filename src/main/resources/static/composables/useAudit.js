@@ -24,7 +24,7 @@ const useAudit = (deps) => {
     // --- 狀態 ---
     const auditLogs = ref([]);
     const selectedAudit = ref(null);
-    const auditFilter = ref({ action: '', operator: '', keyword: '' });
+    const auditFilter = ref({ action: '', operator: '', keyword: '', type: '' });
     const savedAuditSort = JSON.parse(localStorage.getItem('auditSort') || 'null');
     const auditSort = ref(savedAuditSort || { field: 'timestamp', asc: false });
     const auditPage = ref(1);
@@ -39,7 +39,9 @@ const useAudit = (deps) => {
     const DETAIL_CACHE_LIMIT = 100;
     const cacheDetail = (id, detail) => {
         if (!detailCache[id]) { detailCacheOrder.push(id); }
-        detailCache[id] = detail;
+        // 列表摘要以列表 API 的版本為準，明細只補上前後快照。
+        const { summary, ...snapshot } = detail || {};
+        detailCache[id] = snapshot;
         while (detailCacheOrder.length > DETAIL_CACHE_LIMIT) {
             delete detailCache[detailCacheOrder.shift()];
         }
@@ -82,6 +84,7 @@ const useAudit = (deps) => {
         const keyword = (auditFilter.value.keyword || '').trim();
         if (operator) { params.set('operator', operator); }
         if (keyword) { params.set('keyword', keyword); }
+        if (auditFilter.value.type) { params.set('type', auditFilter.value.type); }
         return '/api/admin/audit?' + params.toString();
     };
 
@@ -159,9 +162,8 @@ const useAudit = (deps) => {
         try {
             const r = await apiCall('/api/admin/audit?detailId=' + encodeURIComponent(log.id), {}, { silent: true });
             if (r && r.ok) {
-                const detail = await r.json();
-                cacheDetail(log.id, detail);
-                Object.assign(log, detail, { _detailLoaded: true });
+                cacheDetail(log.id, await r.json());
+                Object.assign(log, detailCache[log.id], { _detailLoaded: true });
             }
         } finally {
             log._detailLoading = false;
@@ -252,6 +254,7 @@ const useAudit = (deps) => {
     const escapeHtml = (s) => s?.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') || '';
 
     const getAuditTarget = (log) => {
+        if (log.targetName) { return log.targetName; }
         if (!log.beforeJson && !log.afterJson) { return t('auditValues.expandForDetail'); }
         try {
             const o = JSON.parse(log.afterJson || log.beforeJson);
@@ -277,9 +280,80 @@ const useAudit = (deps) => {
 
     const getAuditChangeCount = (log) => {
         if (log.action !== 'UPDATE') { return ''; }
+        if (!log.beforeJson && !log.afterJson) {
+            const count = log.summary?.changeCount;
+            return count ? t('audit.fieldCount', {count}) : '';
+        }
         const result = getAuditChanges(log);
         if (result.type === 'update' && result.changes.length > 0) { return t('audit.fieldCount', {count: result.changes.length}); }
         return '';
+    };
+
+    // --- 列表摘要（不需載入前後快照）---
+    const LIST_CHANGE_LIMIT = 3;
+
+    const tagPairs = (raw) => {
+        if (raw === null || raw === undefined || raw === '') { return []; }
+        try {
+            const tags = JSON.parse(raw);
+            if (tags && typeof tags === 'object' && !Array.isArray(tags)) {
+                return Object.entries(tags).map(([k, v]) => k + '=' + (typeof v === 'string' ? v : JSON.stringify(v)));
+            }
+        } catch (e) { /* 截短的值無法解析，改顯示原文 */ }
+        return null;
+    };
+
+    const listChange = (c) => {
+        const label = fieldLabel(c.f);
+        if (c.long) {
+            return Number.isFinite(c.add) ? { label, kind: 'lines', add: c.add, del: c.del || 0 } : { label, kind: 'changed' };
+        }
+        if (c.f === 'tags') {
+            const before = tagPairs(c.b), after = tagPairs(c.a);
+            if (before && after) {
+                return { label, kind: 'tags', added: after.filter(x => !before.includes(x)), removed: before.filter(x => !after.includes(x)) };
+            }
+        }
+        return {
+            label, kind: 'value',
+            before: c.b === undefined ? null : formatFieldValue(c.f, c.b),
+            after: c.a === undefined ? null : formatFieldValue(c.f, c.a)
+        };
+    };
+
+    /** 列表每一列要顯示的名稱、說明行與「改了什麼」，全部來自後端的小摘要。 */
+    const describeAuditRow = (log) => {
+        const summary = log.summary || {};
+        const response = !!log.ruleId?.startsWith('response-');
+        const id = response ? log.ruleId.replace('response-', '') : log.ruleId;
+        const protocol = log.targetProtocol || (response ? 'RESPONSE' : '');
+        const meta = [];
+        if (response) {
+            meta.push('#' + id);
+            if (summary.contentType) { meta.push(summary.contentType); }
+        } else {
+            if (summary.method) { meta.push(summary.method); }
+            if (summary.host) { meta.push(summary.host); }
+            if (log.targetDescription) { meta.push(log.targetDescription); }
+        }
+        const allChanges = Array.isArray(summary.changes) ? summary.changes : [];
+        const changes = log.action === 'UPDATE' ? allChanges.slice(0, LIST_CHANGE_LIMIT).map(listChange) : [];
+        const total = Number(summary.changeCount) || allChanges.length;
+        const facts = [];
+        if (log.action !== 'UPDATE') {
+            if (summary.status) { facts.push(t('audit.factStatus', {status: summary.status})); }
+            if (summary.enabled === false) { facts.push(t('audit.factDisabled')); }
+        }
+        return {
+            name: log.targetName || (response ? t('audit.typeResponse') + ' #' + id : shortId(id || '')),
+            named: !!log.targetName,
+            protocol,
+            protocolLabel: protocol === 'RESPONSE' ? t('audit.typeResponse') : protocol,
+            meta,
+            changes,
+            more: Math.max(0, total - changes.length),
+            facts
+        };
     };
 
     // --- Filter chips ---
@@ -295,12 +369,16 @@ const useAudit = (deps) => {
         }
         if (auditFilter.value.operator) chips.push({ key: 'operator', label: t('filterChips.operator') + auditFilter.value.operator });
         if (auditFilter.value.keyword) chips.push({ key: 'keyword', label: t('filterChips.keyword') + auditFilter.value.keyword });
+        if (auditFilter.value.type) {
+            const typeLabel = auditFilter.value.type === 'RESPONSE' ? t('audit.typeResponse') : t('audit.typeRule');
+            chips.push({ key: 'type', label: t('filterChips.type') + typeLabel });
+        }
         return chips;
     });
 
     const removeAuditChip = (key) => { auditFilter.value[key] = ''; };
 
-    const clearAuditFilters = () => { auditFilter.value = { action: '', operator: '', keyword: '' }; };
+    const clearAuditFilters = () => { auditFilter.value = { action: '', operator: '', keyword: '', type: '' }; };
 
     return {
         auditLogs,
@@ -331,6 +409,7 @@ const useAudit = (deps) => {
         getAuditDescription,
         getAuditProtocol,
         getAuditChangeCount,
+        describeAuditRow,
         escapeHtml,
         auditFilterChips,
         removeAuditChip,

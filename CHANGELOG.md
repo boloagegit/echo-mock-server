@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - SQLite online backups now pass destination paths directly to the driver, so paths containing spaces or apostrophes work without the driver's limited command parser. Snapshot integrity checks and atomic publication remain in place.
 
 ### Changed
+- The audit log list now shows what each change was about without opening it: the path, queue or response name, HTTP/JMS, method, host and description, and up to three changed fields with their old and new values (for example "Priority 0 → 5"), or a line count for response bodies. The search box also matches paths, queue names and descriptions, a Rule/Response filter was added, entries are grouped by day, and on phones each entry is a card instead of a table row with hidden columns. The summary is computed once when an entry is written and stored in four small columns, so the list still never reads the before/after snapshots. Entries written before the upgrade are filled in when they are first shown and by a background job of at most 500 entries a minute, one entry at a time.
 - The benchmark scripts moved from `docs/performance/` to `scripts/bench/`, keeping their layout, and the raw measurement files (about 2,300 text and JSON files) were removed from the repository to keep it small. The performance documents keep the summarized numbers and point to the scripts for reruns; rerun output under `scripts/bench/**/results/` is ignored by git.
 
 ## [v2026.10.16] — 2026-10-16
