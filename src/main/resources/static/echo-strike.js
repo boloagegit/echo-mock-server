@@ -571,7 +571,7 @@
         var player, state, score, hi = readHi(), lives, bombs, weapon, level, droneCount, shield, loop, stageIndex, phase, phaseTime, stageTime,
             spawnClock, midDone, dropsDone, chain, chainTime, maxChain, stageChain, stageKills, stageMisses, totalKills, shake, flashAlpha,
             banner, bannerSub, bannerTime, bannerColor, hint, hintTime, fireClock, droneClock, bombFx, bombX, bombY, noBombTime, dangerClock,
-            dangerCooldown, bombedThisRun, gameoverTime, continueTime, continues, results, scoreText, scoreShown, hiText, hiShown, chainText, chainShown, newRecord, bank;
+            dangerShown, bombedThisRun, gameoverTime, continueTime, continues, results, scoreText, scoreShown, hiText, hiShown, chainText, chainShown, newRecord, bank;
         var everBombed = readNumber(BOMBED_KEY) > 0;
 
         var difficulty = function () { return 1 + loop * 0.35 + stageIndex * 0.12 + Math.min(stageTime / 60, 1) * 0.25; };
@@ -589,7 +589,7 @@
             player = { x: W / 2, y: H - 100, inv: 2, alive: true, respawn: 0 };
             score = 0; lives = 3; bombs = 3; weapon = 'spread'; level = 1; droneCount = 0; shield = false; loop = 0; stageIndex = 0;
             chain = 0; chainTime = 0; maxChain = 0; totalKills = 0; shake = 0; flashAlpha = 0; banner = ''; bannerSub = ''; bannerTime = 0; bannerColor = pal.text;
-            hint = ''; hintTime = 0; fireClock = 0; droneClock = 0; bombFx = 0; bombX = 0; bombY = 0; noBombTime = 0; dangerClock = 0; dangerCooldown = 0;
+            hint = ''; hintTime = 0; fireClock = 0; droneClock = 0; bombFx = 0; bombX = 0; bombY = 0; noBombTime = 0; dangerClock = 0; dangerShown = false;
             bombedThisRun = false; gameoverTime = 0; continueTime = 0; continues = 0; results = null; scoreShown = -1; hiShown = -1; chainShown = -1; newRecord = false; bank = 0;
             [shots, orbs, foes, sparks, fx, pops, caps].forEach(function (list) { list.forEach(function (o) { o.on = false; }); });
             boss.on = false;
@@ -755,6 +755,8 @@
             for (var b = 0; b < 7; b++) explode(boss.x + rand(-80, 80), boss.y + rand(-30, 30), b % 2 ? color : pal.warning, rand(24, 44));
             bump(16); flash(0.6);
             for (var i = 0; i < orbs.length; i++) if (orbs[i].on) { orbs[i].on = false; burst(orbs[i].x, orbs[i].y, pal.success, 1, 40); }
+            // minions go down with their boss: nothing hostile is left during the results
+            for (i = 0; i < foes.length; i++) if (foes[i].on) { explode(foes[i].x, foes[i].y, pal.colors[ENEMY_TYPES[foes[i].type].color], 18); foes[i].on = false; }
             addScore(20000);
             dropCapsule(boss.x - 30, boss.y, 'life'); dropCapsule(boss.x + 30, boss.y, 'bomb');
             phase = 'down'; phaseTime = 0;
@@ -938,7 +940,6 @@
             for (i = 0; i < fx.length; i++) { o = fx[i]; if (!o.on) continue; o.life -= dt; if (o.life <= 0) o.on = false; }
             for (i = 0; i < pops.length; i++) { o = pops[i]; if (!o.on) continue; o.life -= dt; o.y -= 26 * dt; if (o.life <= 0) o.on = false; }
             if (bannerTime > 0) bannerTime -= dt;
-            if (hintTime > 0) hintTime -= dt;
             if (noBombTime > 0) noBombTime -= dt;
             if (shake > 0) shake = Math.max(0, shake - 30 * dt);
             if (flashAlpha > 0) flashAlpha = Math.max(0, flashAlpha - dt * 1.6);
@@ -952,6 +953,8 @@
             if (state !== 'play') return;
 
             phaseTime += dt;
+            // the hint only counts down while playing, so a pause does not use it up
+            if (hintTime > 0) hintTime -= dt;
             // player
             var mx = 0;
             if (player.alive) {
@@ -1065,7 +1068,7 @@
                 } else if (f.type === 'OPTIONS') {
                     // slides in from its side, holds position, then leaves the same way
                     if (f.t < 7) f.x += (f.tx - f.x) * Math.min(1, dt * 2.2);
-                    else f.vx = f.side * -160;
+                    else f.vx = f.side * 160;
                 } else if (f.type === 'TIMEOUT') {
                     f.x += Math.sin(f.t * 1.3 + f.phase) * 30 * dt;
                     if (f.y > 30) {
@@ -1146,15 +1149,14 @@
             // chain decays when nothing is destroyed for a moment
             if (chainTime > 0) { chainTime -= dt; if (chainTime <= 0) chain = 0; }
 
-            // a reminder about the bomb when the screen gets crowded
-            if (dangerCooldown > 0) dangerCooldown -= dt;
+            // a one-time reminder about the bomb when the screen gets crowded
             dangerClock -= dt;
             if (dangerClock <= 0 && player.alive) {
                 dangerClock = 0.25;
-                if (bombs > 0 && !bombedThisRun && dangerCooldown <= 0) {
+                if (bombs > 0 && !bombedThisRun && !dangerShown) {
                     var near = 0;
                     for (i = 0; i < orbs.length; i++) { o = orbs[i]; if (!o.on) continue; var ddx = o.x - player.x, ddy = o.y - player.y; if (ddx * ddx + ddy * ddy < 14400) near++; }
-                    if (near >= 10) { tip(touchOnly ? t.dangerTouch : t.danger, 2.5); dangerCooldown = 25; }
+                    if (near >= 10) { tip(touchOnly ? t.dangerTouch : t.danger, 2.5); dangerShown = true; }
                 }
             }
         };

@@ -138,6 +138,11 @@ test('first-time players are told which key is the bomb', () => {
   g.press('KeyZ');
   g.advance(3);
   assert.match(g.snap().hint, /X/);
+  // pausing does not use the hint up
+  g.press('KeyP');
+  g.advance(10);
+  g.press('KeyP');
+  assert.match(g.snap().hint, /X/);
   g.press('KeyX');
   assert.equal(g.snap().hint, '', 'the hint goes away once the bomb has been used');
   assert.equal(g.storage.get('echo.strike.bombed'), '1');
@@ -162,6 +167,7 @@ test('an unbreakable ship plays through all three stages, every boss, and into t
   g.advance(15 * 60, () => {
     const s = g.snap();
     stages.add(s.stage); phases.add(s.phase); if (s.boss) bosses.add(s.boss);
+    if (s.phase === 'results') assert.equal(s.foes, 0, 'nothing hostile is left during the stage results');
     for (const k of Object.keys(peak)) peak[k] = Math.max(peak[k], s[k]);
     if (s.loop >= 1 && s.stage === 1 && s.phase === 'waves') return false;
   });
@@ -218,6 +224,21 @@ test('losing every life offers an unlimited continue that keeps the stage and st
   assert.equal(fresh.continues, 0);
   assert.equal(fresh.score, 0);
   assert.equal(fresh.lives, 3);
+});
+
+test('a boss takes its minions with it: nothing hostile is left during the stage results', () => {
+  // seeds where a boss used to fall with minions still on screen
+  for (const seed of [1, 5, 13]) {
+    const g = startGame({ seed, invulnerable: true });
+    g.press('KeyZ');
+    let results = 0;
+    g.advance(10 * 60, () => {
+      const s = g.snap();
+      if (s.phase === 'results') { results++; assert.equal(s.foes, 0, 'seed ' + seed); }
+      if (s.loop >= 1) return false;
+    });
+    assert.ok(results > 0, 'seed ' + seed + ' reached a stage result');
+  }
 });
 
 test('a tap or click also takes the continue', () => {
