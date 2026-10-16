@@ -27,7 +27,7 @@ public final class LegacyH2Guard implements EnvironmentPostProcessor, Ordered {
 
     private static final String MIGRATION_HINT =
             "Convert existing data with scripts/migrate-h2-to-sqlite.py "
-                    + "(see README: \"Migrating from H2\").";
+                    + "(see docs/install.md: \"Migrating from H2\").";
 
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
