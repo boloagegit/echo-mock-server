@@ -51,6 +51,6 @@ TLS、壓縮與 graceful shutdown 使用 Spring Boot 原本的 Undertow 設定�
 
 可觀察的 metrics：`echo.http.native.requests`、`echo.http.native.active`、`echo.http.native.buffered.bytes`、`echo.http.native.queued`。請求完成、斷線、逾時及容量拒絕皆有釋放驗證；單一清理 callback 失敗不能阻止其他 callback 釋放資源。
 
-效能設定必須依部署量測。四核心比較使用 2 個 I/O、8 個 worker；這不是所有機器的通用最佳值。現行驗證見 [正式整合與驗證](native-http-validation-2026-10-16.md)，比較與持續負載腳本位於 [2026-10-16-native](performance/2026-10-16-native/)，歷史結果見 [效能與穩定性報告](performance-hardening-2026-10-16.md)。
+效能設定必須依部署量測。四核心比較使用 2 個 I/O、8 個 worker；這不是所有機器的通用最佳值。現行驗證見 [正式整合與驗證](native-http-validation-2026-10-16.md)，比較與持續負載腳本位於 [scripts/bench/2026-10-16-native](../scripts/bench/2026-10-16-native/)，歷史結果見 [效能與穩定性報告](performance-hardening-2026-10-16.md)。
 
 上述比較腳本使用 Linux 的 `taskset` 與 cgroup v2，持續負載腳本讀取 `/proc`；請在 Linux 部署測試機執行。Windows 用來驗證開發與功能，Linux 的吞吐、延遲與資源量測才作為部署效能依據。

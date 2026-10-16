@@ -8,7 +8,7 @@
 
 ## 驗證與重現方式
 
-預設啟用後的補驗證：不設定 `ECHO_HTTP_TRANSPORT` 執行 186 項 HTTP／原生資源與相容性測試，全部通過，SpotBugs 通過。另以新打包的 JAR 實際啟動，確認未指定 transport 時原生請求計數增加、狀態與 Unicode 本文正確；設定 `ECHO_HTTP_TRANSPORT=servlet` 時回應同樣正確且沒有原生請求計數。兩個既有觀測測試改為等待請求完成後的統計發布，避免客戶端先收到回應造成過早斷言。新 JAR 雜湊與檢查結果見 [default-native-check.json](performance/2026-10-16-native/default-native-check.json)；下列完整回歸與壓測保留改預設前的結果。
+預設啟用後的補驗證：不設定 `ECHO_HTTP_TRANSPORT` 執行 186 項 HTTP／原生資源與相容性測試，全部通過，SpotBugs 通過。另以新打包的 JAR 實際啟動，確認未指定 transport 時原生請求計數增加、狀態與 Unicode 本文正確；設定 `ECHO_HTTP_TRANSPORT=servlet` 時回應同樣正確且沒有原生請求計數。兩個既有觀測測試改為等待請求完成後的統計發布，避免客戶端先收到回應造成過早斷言。下列完整回歸與壓測保留改預設前的結果。
 
 最終完整檢查：2,085 項測試中 2,079 項通過、6 項既有外部依賴測試跳過；另有 9 項 H2 遷移測試的有效結果，Error Prone 與 SpotBugs 通過。修正後的日誌／原生 HTTP 聚焦檢查有 63 項全部通過。完整回歸以 native 設定執行；HTTP/2、SSE 與自訂擴充依契約保留 Servlet 處理。
 
@@ -23,22 +23,22 @@
 ECHO_HTTP_TRANSPORT=native ./gradlew check bootJar -PtestForks=2 --no-daemon
 
 # 兩輪交錯比較：Echo → WireMock → WireMock → Echo
-taskset -c 0-3 bash docs/performance/2026-10-16-native/compare.sh \
+taskset -c 0-3 bash scripts/bench/2026-10-16-native/compare.sh \
   /path/to/echo.jar /path/to/wiremock-standalone-3.13.2.jar /tmp/new-latency latency 2
-taskset -c 0-3 bash docs/performance/2026-10-16-native/compare.sh \
+taskset -c 0-3 bash scripts/bench/2026-10-16-native/compare.sh \
   /path/to/echo.jar /path/to/wiremock-standalone-3.13.2.jar /tmp/new-matrix matrix 2
 # 補測較大的 WireMock worker pool；每列取 32／128 中較好的平均吞吐
-WM_ONLY=1 WM_BENCH_WORKERS=128 taskset -c 0-3 bash docs/performance/2026-10-16-native/compare.sh \
+WM_ONLY=1 WM_BENCH_WORKERS=128 taskset -c 0-3 bash scripts/bench/2026-10-16-native/compare.sh \
   /path/to/echo.jar /path/to/wiremock-standalone-3.13.2.jar /tmp/new-wiremock128 matrix 2
-python3 docs/performance/2026-10-16-native/collect.py /tmp/new-latency /tmp/checked-latency
+python3 scripts/bench/2026-10-16-native/collect.py /tmp/new-latency /tmp/checked-latency
 
 # 兩產品共同調整 G1 停頓目標，並在每輪延遲測試後補固定回應峰值測量
 JAVA_TOOL_OPTIONS=-XX:MaxGCPauseMillis=20 LATENCY_INCLUDE_PEAK=1 \
-  taskset -c 0-3 bash docs/performance/2026-10-16-native/compare.sh \
+  taskset -c 0-3 bash scripts/bench/2026-10-16-native/compare.sh \
   /path/to/echo.jar /path/to/wiremock-standalone-3.13.2.jar /tmp/new-gc20 latency 2
 
 # 開啟資料庫請求日誌，混合負載、斷線、超大本文與下游故障恢復
-taskset -c 0-3 python3 docs/performance/2026-10-16-native/soak.py \
+taskset -c 0-3 python3 scripts/bench/2026-10-16-native/soak.py \
   /path/to/echo.jar /tmp/new-soak 10 60
 ```
 
@@ -68,7 +68,7 @@ taskset -c 0-3 python3 docs/performance/2026-10-16-native/soak.py \
 
 慢轉送使用 32 workers 時，WireMock 約 505 req/s；改成 128 後超過 1,180 req/s，因此該情境的實際優勢約 5%，不是 2.5 倍。刻意延遲 50 ms 的收益也小。規則與 XML 的差異包含共用 pipeline 的匹配方式，不能全歸因於 HTTP 入口。
 
-兩輪 Echo 在全部負載結束後，轉送 active／leased／pending／buffered bytes 皆歸零，沒有容量拒絕或目標轉送失敗。原始資料見 [matrix](performance/2026-10-16-native/matrix/) 與 [wiremock128](performance/2026-10-16-native/wiremock128/)。
+兩輪 Echo 在全部負載結束後，轉送 active／leased／pending／buffered bytes 皆歸零，沒有容量拒絕或目標轉送失敗。
 
 ## 固定到達率延遲：預設 G1 停頓目標
 
@@ -81,7 +81,7 @@ ABBA、每個產品兩輪，每輪 20k／40k req/s 各 30 秒，64 連線。八�
 
 平均 P99 是每輪百分位的算術平均，不是合併樣本後的百分位。P99.9 列出每輪原值，保留 WireMock 138.62 ms 的離群輪次，也保留 Echo 第一輪 20k 較差的結果。40k 的 P99 兩輪都支持 Echo 較低；20k 的 P99.9 並非每輪勝出，不能宣稱任意流量下皆全面優於 WireMock。
 
-原始檔及各輪結果見 [latency](performance/2026-10-16-native/latency/)。此批使用相同的 G1 預設停頓目標，沒有加 profiler；前後 cgroup 計數沒有新增 CPU quota throttling，仍不能單靠百分位結果判定尖峰的唯一原因。
+此批使用相同的 G1 預設停頓目標，沒有加 profiler；前後 cgroup 計數沒有新增 CPU quota throttling，仍不能單靠百分位結果判定尖峰的唯一原因。
 
 ## 未採用的 GC 調整
 
@@ -94,7 +94,7 @@ ABBA、每個產品兩輪，每輪 20k／40k req/s 各 30 秒，64 連線。八�
 
 20k 的變化不大，Echo 40k 的 P99／P99.9 反而比原設定差，沒有支持將此參數加入預設的證據。補測峰值平均為 Echo 108,849、WireMock 59,889 req/s；它是在延遲測試後量測，與主矩陣的暖機順序不同，不能把兩張表的差額直接當成 GC 調整的吞吐成本。
 
-**沒有變更產品的 JVM GC 預設，也不把 20 ms 參數列為通用建議。** 原始資料見 [gc20](performance/2026-10-16-native/gc20/)。停頓目標不是最大停頓時間保證；這組結果亦不足以單獨歸因所有尖峰。
+**沒有變更產品的 JVM GC 預設，也不把 20 ms 參數列為通用建議。** 停頓目標不是最大停頓時間保證；這組結果亦不足以單獨歸因所有尖峰。
 
 ## 開啟日誌的混合負載與恢復
 
@@ -112,11 +112,10 @@ ABBA、每個產品兩輪，每輪 20k／40k req/s 各 30 秒，64 連線。八�
 
 日誌處理數包含已進入 pipeline、後來斷線的請求；超大本文在 pipeline 前拒絕。RSS 包含已提交 heap 與非 heap，不能等同於回收後仍存活的物件；此處保留其約 22 MiB 的增加，不把十多分鐘觀察解讀為長期零記憶體洩漏。負載發送上限約 400 req/s，此測試用於驗證正確性與資源恢復，不是開啟日誌時的最大吞吐比較。
 
-原始資料見 [soak](performance/2026-10-16-native/soak/)。
 
 ## 證據與限制
 
-原始結果、測試摘要、失敗原因與來源檔案 SHA-256 在 [2026-10-16-native](performance/2026-10-16-native/)。較早的 [JMS 與啟動數據](performance-hardening-2026-10-16.md)保留原本的 jar SHA 與範圍，不與本次 HTTP 數據混成一組。
+比較與持續負載腳本位於 [scripts/bench/2026-10-16-native](../scripts/bench/2026-10-16-native/)；原始資料未保留在 repository，數字以本文為準，可用腳本重跑產生。較早的 [JMS 與啟動數據](performance-hardening-2026-10-16.md)保留原本的 jar SHA 與範圍，不與本次 HTTP 數據混成一組。
 
 前階段 20k req/s 的單輪 P99.9 尖峰曾達 19.57 ms。另一次獨立 JFR 取樣出現約 29.5 ms 的 GC 暫停，該輪 cgroup 沒有 CPU quota throttling；這是線索，不能據此認定前一輪尖峰的唯一原因。後續結論應以無 profiler 的重複量測判讀，不刪除離群輪次。
 

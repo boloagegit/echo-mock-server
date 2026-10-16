@@ -185,24 +185,24 @@ Echo 在該錄製區間有 52 次 GC，總 pause 約 0.125s、最長約 7.73ms�
 - `UniversalMockControllerTest`：18 個。
 - `UniversalMockControllerSseTest`：17 個。
 
-前兩類為 Spring Boot 隨機 port 整合測試，後兩類為 controller 測試；不把它們當成 SSE/TLS 的效能或長時間穩定性證據。命令與結果保存在 `performance/2026-10-15/regression/`。
+前兩類為 Spring Boot 隨機 port 整合測試，後兩類為 controller 測試；不把它們當成 SSE/TLS 的效能或長時間穩定性證據。
 
 ## 重跑與原始資料
 
-資料目錄：[performance/2026-10-15](performance/2026-10-15)。包含執行環境與 JAR SHA-256、原始 wrk / 程序 CPU / heap / agent 狀態、JFR 摘要與腳本。完整 JFR 保留於此次工作區 `/workspace/scratch/echo-perf/results/profile/` 與 `/workspace/scratch/echo-perf/results/io-compare/`；大型展開 JSON 不放入 repository。
+腳本位於 [scripts/bench/2026-10-15](../scripts/bench/2026-10-15/)；原始資料未保留在 repository，數字以本文為準。
 
 ```bash
 # 需 java、jcmd、wrk、curl、python3；18080 必須空閒。
-bash docs/performance/2026-10-15/run.sh ECHO_JAR WIREMOCK_JAR OUT_DIR 2
-PERF_MODE=profile bash docs/performance/2026-10-15/run.sh ECHO_JAR WIREMOCK_JAR PROFILE_DIR 1
-PERF_MODE=recovery bash docs/performance/2026-10-15/run.sh ECHO_JAR WIREMOCK_JAR RECOVERY_DIR 1
-PERF_MODE=io-compare bash docs/performance/2026-10-15/run.sh ECHO_JAR WIREMOCK_JAR IO_COMPARE_DIR 2
-PERF_MODE=io-workloads bash docs/performance/2026-10-15/run.sh ECHO_JAR WIREMOCK_JAR WORKLOADS_DIR 2
-SERVER_UNDERTOW_THREADS_IO=1 PERF_MODE=recovery bash docs/performance/2026-10-15/run.sh ECHO_JAR WIREMOCK_JAR IO1_RECOVERY_DIR 1
+bash scripts/bench/2026-10-15/run.sh ECHO_JAR WIREMOCK_JAR OUT_DIR 2
+PERF_MODE=profile bash scripts/bench/2026-10-15/run.sh ECHO_JAR WIREMOCK_JAR PROFILE_DIR 1
+PERF_MODE=recovery bash scripts/bench/2026-10-15/run.sh ECHO_JAR WIREMOCK_JAR RECOVERY_DIR 1
+PERF_MODE=io-compare bash scripts/bench/2026-10-15/run.sh ECHO_JAR WIREMOCK_JAR IO_COMPARE_DIR 2
+PERF_MODE=io-workloads bash scripts/bench/2026-10-15/run.sh ECHO_JAR WIREMOCK_JAR WORKLOADS_DIR 2
+SERVER_UNDERTOW_THREADS_IO=1 PERF_MODE=recovery bash scripts/bench/2026-10-15/run.sh ECHO_JAR WIREMOCK_JAR IO1_RECOVERY_DIR 1
 
 jfr print --json --events jdk.ExecutionSample,jdk.ObjectAllocationSample,jdk.GarbageCollection PROFILE_DIR/echo-log-off-r1/profile.jfr > profile.json
-python3 docs/performance/2026-10-15/analyze-jfr.py profile.json
-python3 docs/performance/2026-10-15/summarize.py OUT_DIR
+python3 scripts/bench/2026-10-15/analyze-jfr.py profile.json
+python3 scripts/bench/2026-10-15/summarize.py OUT_DIR
 ```
 
 OUT_DIR 必須選用新目錄，腳本會覆寫同名 run 子目錄。此腳本以當時的 `scripts/bench-vs-wiremock.sh` fixtures 為基礎，保留一份研究快照；不取代原本完整比較腳本。

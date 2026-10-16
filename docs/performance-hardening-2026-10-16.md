@@ -20,14 +20,14 @@ JFR 確認啟動時存在 `WebJarsResourceResolver → WebJarAssetLocator → Cl
 
 資料庫完整性檢查、Hibernate schema 更新、設定驗證及正常 bean 初始化都保留，沒有開啟全域 lazy initialization，也沒有降低 JIT 最佳化層級。剩餘啟動仍有 Spring／JPA／MVC 初始化成本；這次不是把啟動壓到 WireMock 的等級。外部資料庫、大量待恢復記錄、啟用 JMS 或不同磁碟，應用各自實際資料再量。
 
-重現用 [startup/probe.py](performance/2026-10-16-hardening/startup/probe.py)，需要空閒的 localhost:18082，會建立及清理自己的工作目錄。第一次用舊版建立 seed（不計分），之後所有輪次複製同一 seed；`OUTPUT` 每次必須不同。預設管理員帳密僅用於這個隔離 seed 的規則建立。
+重現用 [startup/probe.py](../scripts/bench/2026-10-16-hardening/startup/probe.py)，需要空閒的 localhost:18082，會建立及清理自己的工作目錄。第一次用舊版建立 seed（不計分），之後所有輪次複製同一 seed；`OUTPUT` 每次必須不同。預設管理員帳密僅用於這個隔離 seed 的規則建立。
 
 ```bash
-taskset -c 0-3 python3 docs/performance/2026-10-16-hardening/startup/probe.py \
+taskset -c 0-3 python3 scripts/bench/2026-10-16-hardening/startup/probe.py \
   /path/to/before.jar /tmp/startup-seed-run \
   --java /path/to/jdk17/bin/java --seed /tmp/startup-seed.sqlite
 # 依 before → after → after → before 重跑兩組；每次給不同 OUTPUT。
-taskset -c 0-3 python3 docs/performance/2026-10-16-hardening/startup/probe.py \
+taskset -c 0-3 python3 scripts/bench/2026-10-16-hardening/startup/probe.py \
   /path/to/after.jar /tmp/startup-after-r1 \
   --java /path/to/jdk17/bin/java --seed /tmp/startup-seed.sqlite
 ```
@@ -135,7 +135,7 @@ HTTP 比較使用既有腳本，需在 PATH 準備 Java 21、`wrk`、Node、`jcm
 ```bash
 ./gradlew bootJar -PhttpTransportExperiment
 ECHO_BENCH_WORKERS=8 ECHO_BENCH_IO=2 WM_BENCH_WORKERS=128 \
-  taskset -c 0-3 bash docs/performance/2026-10-15/transport-experiment/matrix.sh \
+  taskset -c 0-3 bash scripts/bench/2026-10-15/transport-experiment/matrix.sh \
   build/http-experiment/echo-server-0.0.0-SNAPSHOT-http-experiment.jar \
   /path/to/wiremock-standalone-3.13.2.jar /tmp/http-matrix 2
 ```
@@ -150,4 +150,4 @@ HTTP 實驗版在啟動依賴調整後另有 133 個測試全部通過，SpotBug
 
 沒有將這些測試解讀為跨 broker／資料庫的 exactly-once 保證。沒有實測 TIBCO 專有 client、外部金融網路／TLS 或多日 soak。原有非同步請求紀錄在壓力下可丟棄待寫紀錄的契約也未改變；需要逐筆等待記錄持久化時，仍須使用既有 `wait-for-write` 設定。
 
-原始數據與檢查摘要在 [2026-10-16-hardening](performance/2026-10-16-hardening/)。效能比較不以關閉來源交易、持久化或正確性檢查換取數字。
+原始資料未保留在 repository，數字以本文為準；啟動量測腳本位於 [scripts/bench/2026-10-16-hardening](../scripts/bench/2026-10-16-hardening/)。效能比較不以關閉來源交易、持久化或正確性檢查換取數字。

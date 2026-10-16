@@ -1,3 +1,0 @@
---echo.http.transport=native
---echo.request-log.enabled=false
---server.undertow.threads.io=2

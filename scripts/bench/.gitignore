@@ -1,0 +1,2 @@
+# Raw output from rerunning these benchmarks stays out of git; keep it in CI artifacts or a local directory.
+results/

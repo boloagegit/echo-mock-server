@@ -1,8 +1,0 @@
-Running 3s test @ http://127.0.0.1:18080/x/large
-  4 threads and 8 connections
-  Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency     3.77ms    3.04ms  27.71ms   87.23%
-    Req/Sec   602.29    149.14     1.14k    74.17%
-  7214 requests in 3.01s, 824.36KB read
-Requests/sec:   2394.06
-Transfer/sec:    273.57KB
