@@ -150,9 +150,10 @@ class NativeHttpTlsIntegrationTest {
 
     private static Path createKeyStore() {
         try {
-            Path dir = Files.createTempDirectory("echo-test-tls-");
+            Path dir = Files.createTempDirectory("echo test tls ");
             Path store = dir.resolve("server.p12");
-            Path keytool = Path.of(System.getProperty("java.home"), "bin", "keytool");
+            String executable = System.getProperty("os.name").startsWith("Windows") ? "keytool.exe" : "keytool";
+            Path keytool = Path.of(System.getProperty("java.home"), "bin", executable);
             Process process = new ProcessBuilder(keytool.toString(), "-genkeypair", "-alias", "echo-test",
                     "-storetype", "PKCS12", "-keystore", store.toString(), "-storepass", TEST_PASSWORD,
                     "-keypass", TEST_PASSWORD, "-keyalg", "RSA", "-keysize", "2048", "-dname", "CN=localhost",

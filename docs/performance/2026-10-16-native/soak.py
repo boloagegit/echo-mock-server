@@ -27,6 +27,8 @@ ADMIN_HEADERS = {"Authorization": "Basic " + base64.b64encode(b"admin:admin").de
 
 
 async def main():
+    if sys.platform != "linux":
+        raise SystemExit("This soak harness reads Linux /proc metrics. Run it on the Linux deployment test host; Echo development itself supports Windows.")
     jar = Path(sys.argv[1]).resolve()
     out = Path(sys.argv[2]).resolve()
     cycles = int(sys.argv[3]) if len(sys.argv) > 3 else 10

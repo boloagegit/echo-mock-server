@@ -6,8 +6,8 @@
 
 ## 環境需求
 
-- Java 17+
-- Gradle 8.14+ (或使用內建 wrapper)
+- 執行 JAR 需要 Java 17+；開發與 Gradle toolchain 請安裝 JDK 17
+- 使用內建 Gradle wrapper（Windows 為 `gradlew.bat`，Linux 為 `./gradlew`）
 
 ## 啟動服務
 
@@ -34,14 +34,24 @@ SQLite 暫存目錄可寫，並套用僅限當前使用者的檔案權限。將�
 可用 `SQLITE_TMPDIR` 覆寫預設暫存路徑。這個設定不會改變資料庫 profile，
 也不影響既有啟動方式。
 
-Windows 開發機請在 PowerShell 使用：
+Windows 開發使用 PowerShell，與 Linux 部署共用同一套程式，不需要 WSL、Git Bash 或另外安裝 Gradle。`JAVA_HOME` 與 IDE 的 Gradle JVM 請設為 JDK 17。以下指令從專案根目錄執行，建議使用 `C:\src\echo` 這類較短的本機路徑：
 
 ```powershell
 .\gradlew.bat dev
+# 按 Ctrl+C 停止；以下指令是各自獨立的工作。
 .\gradlew.bat bootRun
-.\gradlew.bat bootJar
-java -jar (Get-ChildItem build\libs\echo-server-*.jar | Select-Object -First 1).FullName
+.\gradlew.bat check -PtestForks=2
+# clean 前先停止 Echo；Windows 會鎖住仍在使用的檔案。
+.\gradlew.bat clean bootJar
+if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
+$echoJars = @(Get-ChildItem build/libs/echo-server-*.jar -File)
+if ($echoJars.Count -ne 1) { throw 'Expected exactly one packaged Echo JAR' }
+java -jar ($echoJars[0].FullName)
 ```
+
+Windows 也預設啟用 HTTP 加速。PowerShell 用 `$env:ECHO_HTTP_TRANSPORT = 'servlet'` 設定切回舊入口，再重啟 Echo；用 `Remove-Item Env:ECHO_HTTP_TRANSPORT -ErrorAction SilentlyContinue` 移除覆寫後重啟，就恢復預設。完整限制與相容性見 [HTTP 加速](../native-http.md)。
+
+Windows 建置的 Java bytecode 可在相容 Java 版本的 Linux 上執行。部署使用打包的 JAR、Linux 路徑與部署設定，本機 SQLite／Artemis 資料及 `dev` profile 不隨程式搬上去。Linux CI 與容器檢查仍負責部署驗證，效能也在 Linux 量測。首次 Gradle 建置仍需能取得依賴套件，或使用公司已備妥的套件快取。
 
 ## 資料庫 Profile
 

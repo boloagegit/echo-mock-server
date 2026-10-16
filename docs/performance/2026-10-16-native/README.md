@@ -2,6 +2,8 @@
 
 閱讀入口：[正式整合與驗證](../../native-http-validation-2026-10-16.md)；設定：[HTTP 加速路徑](../../native-http.md)。
 
+`compare.sh` 與 `soak.py` 是 Linux 部署量測工具，使用 cgroup v2／`taskset` 或 `/proc`；Windows 開發可直接使用 Gradle wrapper，不需執行這兩個工具。後續新增的平台前置檢查不改變工作負載；`script-sha256.json` 保留原始量測當時的腳本雜湊。
+
 - `default-native-check.json`：後續將 native 改為預設後的 186 項聚焦回歸全部通過、SpotBugs、新 JAR 雜湊，以及打包檔的預設啟用／Servlet 切換實測；沒有重新壓測。
 - `release-check.json`：效能量測版本的完整回歸，2,085 項（2,079 通過、6 跳過），以及當時量測 jar SHA-256。
 - `verification.json`：同一 jar 的 98 個量測階段、39,495,614 筆請求，HTTP／socket 錯誤皆為 0。

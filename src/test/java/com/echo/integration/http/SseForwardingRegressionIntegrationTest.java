@@ -230,7 +230,8 @@ class SseForwardingRegressionIntegrationTest extends BaseIntegrationTest {
     private SSLContext syntheticTlsContext() throws Exception {
         Path keyStorePath = tempDirectory.resolve("synthetic-loopback.p12");
         String password = "synthetic-test-only";
-        Process keytool = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "keytool").toString(),
+        String executable = System.getProperty("os.name").startsWith("Windows") ? "keytool.exe" : "keytool";
+        Process keytool = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", executable).toString(),
                 "-genkeypair", "-alias", "loopback", "-keyalg", "RSA", "-keystore", keyStorePath.toString(),
                 "-storetype", "PKCS12", "-storepass", password, "-keypass", password,
                 "-dname", "CN=localhost", "-validity", "1", "-noprompt").redirectErrorStream(true).start();

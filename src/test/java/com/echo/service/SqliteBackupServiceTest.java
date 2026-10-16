@@ -1,6 +1,8 @@
 package com.echo.service;
 
 import com.echo.config.SqliteStartupRecovery;
+import com.zaxxer.hikari.HikariDataSource;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -21,11 +23,14 @@ class SqliteBackupServiceTest {
 
     private Path backupDirectory;
     private SqliteBackupService backupService;
+    private HikariDataSource dataSource;
 
     @BeforeEach
     void setUp() throws Exception {
         Path database = tempDir.resolve("live.sqlite");
-        var dataSource = new DriverManagerDataSource("jdbc:sqlite:" + database.toAbsolutePath());
+        dataSource = new HikariDataSource();
+        dataSource.setJdbcUrl("jdbc:sqlite:" + database.toAbsolutePath());
+        dataSource.setMaximumPoolSize(1);
         try (var connection = dataSource.getConnection();
              var statement = connection.createStatement()) {
             statement.execute("CREATE TABLE marker (value TEXT NOT NULL)");
@@ -37,6 +42,13 @@ class SqliteBackupServiceTest {
         setField("backupPath", backupDirectory.toString());
         setField("retentionDays", 7);
         setField("backupOnShutdown", false);
+    }
+
+    @AfterEach
+    void closePool() {
+        if (dataSource != null) {
+            dataSource.close();
+        }
     }
 
     @Test
@@ -67,9 +79,20 @@ class SqliteBackupServiceTest {
     }
 
     @Test
-    void sqliteBackupCommandEscapesApostrophesInPaths() {
-        assertThat(SqliteBackupService.sqliteSqlPath(Path.of("/tmp/Echo User's Data/backup.sqlite")))
-                .isEqualTo("/tmp/Echo User''s Data/backup.sqlite");
+    void sqliteBackupSupportsPathsWithSpacesAndApostrophes() throws Exception {
+        backupDirectory = tempDir.resolve("Echo User's Data");
+        setField("backupPath", backupDirectory.toString());
+        String filename = backupService.backup("test");
+        Path backup = backupDirectory.resolve(filename);
+        assertThat(SqliteStartupRecovery.isHealthyDatabase(backup)).isTrue();
+        var dataSource = new DriverManagerDataSource("jdbc:sqlite:" + backup.toAbsolutePath());
+        try (var connection = dataSource.getConnection();
+             var statement = connection.createStatement();
+             var rows = statement.executeQuery("SELECT value FROM marker")) {
+            assertThat(rows.next()).isTrue();
+            assertThat(rows.getString(1)).isEqualTo("committed");
+            assertThat(rows.next()).isFalse();
+        }
     }
 
     private void setField(String name, Object value) throws Exception {

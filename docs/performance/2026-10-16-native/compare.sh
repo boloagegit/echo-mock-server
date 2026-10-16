@@ -2,6 +2,10 @@
 # Production jar, same 4 CPUs/JVM/heap; no profiler or concurrent builds.
 # taskset -c 0-3 bash compare.sh ECHO_JAR WIREMOCK_JAR NEW_OUTPUT_DIR latency|matrix [rounds=2]
 set -euo pipefail
+if [ "$(uname -s)" != Linux ] || [ ! -r /sys/fs/cgroup/cpu.stat ]; then
+  echo 'This benchmark requires Linux with cgroup v2 CPU statistics. Build and develop Echo on Windows with gradlew.bat; run deployment benchmarks on Linux.' >&2
+  exit 2
+fi
 if [ "$#" -lt 4 ] || [ "$#" -gt 5 ] || [ -e "$3" ]; then
   echo 'usage: compare.sh ECHO_JAR WIREMOCK_JAR NEW_OUTPUT_DIR latency|matrix [rounds]' >&2
   exit 2
