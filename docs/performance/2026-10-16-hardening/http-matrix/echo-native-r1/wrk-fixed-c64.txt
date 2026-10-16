@@ -1,0 +1,13 @@
+Running 10s test @ http://127.0.0.1:18080/mock/fixed
+  4 threads and 64 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   683.67us    2.90ms  65.47ms   99.18%
+    Req/Sec    34.56k    10.12k   83.87k    67.83%
+  Latency Distribution
+     50%  406.00us
+     75%  590.00us
+     90%  844.00us
+     99%    2.99ms
+  1378858 requests in 10.10s, 207.77MB read
+Requests/sec: 136531.58
+Transfer/sec:     20.57MB

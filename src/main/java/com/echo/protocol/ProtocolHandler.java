@@ -23,6 +23,11 @@ public interface ProtocolHandler {
     Protocol getProtocol();
 
     /**
+     * 協定無關程式（規則查詢、快取失效）需要的協定資訊
+     */
+    ProtocolDescriptor descriptor();
+
+    /**
      * 查詢所有規則
      */
     List<? extends BaseRule> findAllRules();

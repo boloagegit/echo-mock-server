@@ -1,0 +1,853 @@
+package com.echo.controller;
+
+import com.echo.config.CacheConfig;
+import com.echo.dto.RuleDto;
+import com.echo.entity.HttpRule;
+import com.echo.entity.Protocol;
+import com.echo.entity.ResponseContentType;
+import com.echo.entity.RuleAuditLog;
+import com.echo.service.ResponseContentValidatorRegistry;
+import com.echo.service.ResponseContentValidator;
+import com.echo.service.RuleEditService;
+import com.echo.service.RuleService;
+import com.echo.service.RuleQueryService;
+import com.echo.service.RequestLogService;
+import com.echo.service.RequestLogTrafficService;
+import com.echo.service.RuleAuditService;
+import com.echo.service.IssueReportService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.caffeine.CaffeineCache;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
+
+/** 管理後台 API（/api/admin）各 controller 與共用規則儲存的單元測試。 */
+@ExtendWith(MockitoExtension.class)
+class AdminControllersTest {
+
+    @Mock
+    private RuleService ruleService;
+
+    @Mock
+    private RuleQueryService ruleQueryService;
+
+    @Mock
+    private RequestLogService requestLogService;
+
+    @Mock
+    private RuleAuditService ruleAuditService;
+
+    @Mock
+    private com.echo.service.ResponseService responseService;
+
+    @Mock
+    private com.echo.service.ExcelImportService excelImportService;
+
+    @Mock
+    private com.echo.protocol.ProtocolHandlerRegistry protocolHandlerRegistry;
+
+    @Mock
+    private ResponseContentValidatorRegistry responseContentValidatorRegistry;
+
+    @Mock
+    private com.echo.repository.BuiltinUserRepository builtinUserRepository;
+
+    @Mock
+    private com.echo.agent.AgentRegistry agentRegistry;
+
+    @Mock
+    private CacheManager cacheManager;
+
+    @Mock
+    private IssueReportService issueReportService;
+
+    @Mock
+    private com.echo.service.OpenApiImportService openApiImportService;
+
+    @Mock
+    private com.echo.service.ScenarioService scenarioService;
+
+    private RuleEditService ruleEditService;
+    private SystemController system;
+    private RuleController rules;
+    private RuleStateController ruleState;
+    private ImportExportController importExport;
+    private RequestLogController logs;
+    private AuditController audit;
+    private ScenarioController scenarios;
+
+    @BeforeEach
+    void setUp() {
+        ruleEditService = new RuleEditService(protocolHandlerRegistry, responseService,
+                responseContentValidatorRegistry, cacheManager, Optional.empty(), Optional.empty(), Optional.empty());
+        ReflectionTestUtils.setField(ruleEditService, "scenariosEnabled", true);
+        system = new SystemController(protocolHandlerRegistry, responseService, Optional.empty(), Optional.empty(),
+                requestLogService, Optional.empty(), Optional.empty(), builtinUserRepository, agentRegistry,
+                cacheManager, issueReportService);
+        ReflectionTestUtils.setField(system, "ldapEnabled", false);
+        ReflectionTestUtils.setField(system, "ldapUrl", "");
+        ReflectionTestUtils.setField(system, "sessionTimeout", "180d");
+        ReflectionTestUtils.setField(system, "serverPort", 8080);
+        ReflectionTestUtils.setField(system, "jmsPort", 61616);
+        ReflectionTestUtils.setField(system, "datasourceUrl", "jdbc:sqlite::memory:");
+        ReflectionTestUtils.setField(system, "httpAlias", "HTTP");
+        ReflectionTestUtils.setField(system, "jmsAlias", "JMS");
+        ReflectionTestUtils.setField(system, "bulkImportExportEnabled", true);
+        ReflectionTestUtils.setField(system, "scenariosEnabled", true);
+        rules = new RuleController(ruleQueryService, protocolHandlerRegistry, ruleEditService,
+                Optional.of(ruleAuditService), Optional.empty());
+        ruleState = new RuleStateController(ruleService, ruleEditService);
+        importExport = new ImportExportController(protocolHandlerRegistry, ruleEditService, responseService,
+                Optional.of(ruleAuditService), excelImportService, openApiImportService);
+        ReflectionTestUtils.setField(importExport, "bulkImportExportEnabled", true);
+        logs = new RequestLogController(requestLogService, mock(RequestLogTrafficService.class));
+        audit = new AuditController(Optional.of(ruleAuditService));
+        scenarios = new ScenarioController(scenarioService);
+        ReflectionTestUtils.setField(scenarios, "scenariosEnabled", true);
+        // 預設 HTTP 啟用，JMS 停用
+        lenient().when(protocolHandlerRegistry.isEnabled(Protocol.HTTP)).thenReturn(true);
+        lenient().when(protocolHandlerRegistry.isEnabled(Protocol.JMS)).thenReturn(false);
+    }
+
+    @Test
+    void getStatus_shouldReturnSystemInfo() {
+        var response = system.getStatus(null);
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).containsKey("serverPort");
+        assertThat(response.getBody().get("isLoggedIn")).isEqualTo(false);
+        assertThat(response.getBody().get("bulkImportExportEnabled")).isEqualTo(true);
+        assertThat(response.getBody().get("scenariosEnabled")).isEqualTo(true);
+        assertThat(response.getBody()).doesNotContainKey("ruleDragSortEnabled");
+        assertThat(response.getBody().get("issueReportingEnabled")).isEqualTo(false);
+    }
+
+    @Test
+    void getStatus_shouldExposeConfiguredUiAccent() {
+        ReflectionTestUtils.setField(system, "uiAccent", "blue");
+
+        assertThat(system.getStatus(null).getBody().get("uiAccent")).isEqualTo("blue");
+    }
+
+    @Test
+    void getStatus_shouldExposeEasterEggSwitch() {
+        ReflectionTestUtils.setField(system, "uiEasterEgg", true);
+        assertThat(system.getStatus(null).getBody().get("uiEasterEgg")).isEqualTo(true);
+
+        ReflectionTestUtils.setField(system, "uiEasterEgg", false);
+        assertThat(system.getStatus(null).getBody().get("uiEasterEgg")).isEqualTo(false);
+    }
+
+    @Test
+    void getStatus_shouldFallBackToTealForMissingUiAccent() {
+        ReflectionTestUtils.setField(system, "uiAccent", null);
+
+        assertThat(system.getStatus(null).getBody().get("uiAccent")).isEqualTo("teal");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "teal, teal",
+            "blue, blue",
+            "' BLUE ', blue",
+            "Teal, teal",
+            "'', teal",
+            "'   ', teal",
+            "red, teal",
+            "blue;color:red, teal"
+    })
+    void resolveUiAccent_shouldNormalizeOrFallBackToTeal(String configured, String expected) {
+        assertThat(SystemController.resolveUiAccent(configured)).isEqualTo(expected);
+    }
+
+    @Test
+    void getStatus_shouldExposeEnabledIssueReportingFeature() {
+        ReflectionTestUtils.setField(system, "issueReportingEnabled", true);
+
+        assertThat(system.getStatus(null).getBody().get("issueReportingEnabled")).isEqualTo(true);
+    }
+
+    @Test
+    void scenarios_shouldBeUnavailableWhenFeatureIsDisabled() {
+        ReflectionTestUtils.setField(scenarios, "scenariosEnabled", false);
+
+        assertThat(scenarios.listScenarios().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(scenarios.resetScenario("checkout").getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(scenarios.resetAllScenarios().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        verifyNoInteractions(scenarioService);
+    }
+
+    @Test
+    void bulkImportExport_shouldBeUnavailableWhenFeatureIsDisabled() {
+        ReflectionTestUtils.setField(importExport, "bulkImportExportEnabled", false);
+
+        assertThat(importExport.exportAllRules().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(importExport.importRules(List.of()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(importExport.previewOpenApiImport(new MockMultipartFile(
+                "file", "api.yaml", "application/yaml", "openapi: 3.0.0".getBytes()))
+                .getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(importExport.confirmOpenApiImport(List.of()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(importExport.exportAllResponses().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(importExport.importResponses(List.of()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        verifyNoInteractions(responseService);
+    }
+
+    @Test
+    void databaseFilePath_shouldFollowConfiguredDatabase() {
+        assertThat(SystemController.databaseFilePath("jdbc:sqlite:./data/mock.sqlite?busy_timeout=5000"))
+                .contains(java.nio.file.Paths.get("./data/mock.sqlite"));
+        assertThat(SystemController.databaseFilePath("jdbc:postgresql://db:5432/echo")).isEmpty();
+        assertThat(SystemController.databaseFilePath("jdbc:sqlite::memory:")).isEmpty();
+    }
+
+    @Test
+    void getStatus_shouldCountRulesWithoutLoadingAllEntities() {
+        var httpHandler = mock(com.echo.protocol.ProtocolHandler.class);
+        var jmsHandler = mock(com.echo.protocol.ProtocolHandler.class);
+        when(httpHandler.count()).thenReturn(3L);
+        when(jmsHandler.count()).thenReturn(2L);
+        when(protocolHandlerRegistry.getAllHandlers()).thenReturn(List.of(httpHandler, jmsHandler));
+
+        var response = system.getStatus(null);
+
+        assertThat(response.getBody().get("ruleCount")).isEqualTo(5L);
+        verify(protocolHandlerRegistry, never()).findAllRules();
+    }
+
+    @Test
+    void getStatus_shouldShowLoggedInUser() {
+        var user = new User("admin", "pass", List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
+        
+        var response = system.getStatus(user);
+        
+        assertThat(response.getBody().get("isLoggedIn")).isEqualTo(true);
+        assertThat(response.getBody().get("isAdmin")).isEqualTo(true);
+        assertThat(response.getBody().get("username")).isEqualTo("admin");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void getStatus_shouldExposeBoundedRuleCacheStats() {
+        com.github.benmanes.caffeine.cache.Cache<Object, Object> nativeCache =
+                com.github.benmanes.caffeine.cache.Caffeine.newBuilder().recordStats().build();
+        nativeCache.put("known", "rules");
+        Object hit = nativeCache.getIfPresent("known");
+        Object miss = nativeCache.getIfPresent("missing");
+        assertThat(hit).isEqualTo("rules");
+        assertThat(miss).isNull();
+        when(cacheManager.getCache(CacheConfig.HTTP_RULES_CACHE))
+                .thenReturn(new CaffeineCache(CacheConfig.HTTP_RULES_CACHE, nativeCache));
+
+        var response = system.getStatus(null);
+        Map<String, Object> caches = (Map<String, Object>) response.getBody().get("ruleCaches");
+        Map<String, Object> http = (Map<String, Object>) caches.get(CacheConfig.HTTP_RULES_CACHE);
+
+        assertThat(http.get("entries")).isEqualTo(1L);
+        assertThat(http.get("requestCount")).isEqualTo(2L);
+        assertThat((Double) http.get("hitRate")).isEqualTo(0.5);
+    }
+
+    @Test
+    void listRules_shouldReturnAllRules() {
+        when(protocolHandlerRegistry.findAllRules()).thenReturn(List.of(new HttpRule(), new HttpRule()));
+        when(protocolHandlerRegistry.toDto(any(), isNull()))
+                .thenReturn(RuleDto.builder().build());
+        
+        var response = rules.listRules();
+        
+        assertThat(response.getBody()).hasSize(2);
+        verify(protocolHandlerRegistry, times(2)).toDto(any(), isNull());
+        verifyNoInteractions(responseService);
+    }
+
+    @Test
+    void queryRules_shouldReturnStablePagedShape() {
+        HttpRule rule = HttpRule.builder().id("rule-1").matchKey("/orders").build();
+        when(ruleQueryService.query(any())).thenReturn(new RuleQueryService.RuleQueryResult(
+                List.of(rule), 1, 20, 45, 3));
+        when(protocolHandlerRegistry.toDto(rule, null))
+                .thenReturn(RuleDto.builder().id("rule-1").protocol(Protocol.HTTP).build());
+
+        var response = rules.queryRules(Protocol.HTTP, true, false,
+                "orders", 1, 20, "priority", "asc");
+
+        assertThat(response.getBody().results()).extracting(RuleDto::getId).containsExactly("rule-1");
+        assertThat(response.getBody().page()).isEqualTo(1);
+        assertThat(response.getBody().totalElements()).isEqualTo(45);
+        assertThat(response.getBody().totalPages()).isEqualTo(3);
+    }
+
+    @Test
+    void queryRuleGroups_shouldReturnCountsWithoutRuleBodies() {
+        when(ruleQueryService.queryGroupSummary(any())).thenReturn(
+                new RuleQueryService.RuleGroupSummary(
+                        Map.of("env", List.of("prod")),
+                        Map.of("_untagged", 2L, "env=prod", 3L), 5));
+
+        var response = rules.queryRuleGroups(Protocol.HTTP, true, false, "orders");
+
+        assertThat(response.getBody().tagKeys()).containsEntry("env", List.of("prod"));
+        assertThat(response.getBody().counts()).containsEntry("env=prod", 3L);
+        assertThat(response.getBody().totalElements()).isEqualTo(5);
+    }
+
+    @Test
+    void queryRuleGroup_shouldMapOnlyLoadedGroupRules() {
+        HttpRule rule = HttpRule.builder().id("group-rule").matchKey("/orders").build();
+        when(ruleQueryService.queryGroup(any(), eq("env"), eq("prod"), eq(20)))
+                .thenReturn(new RuleQueryService.RuleGroupContent(List.of(rule), 42));
+        when(protocolHandlerRegistry.toDto(rule, null))
+                .thenReturn(RuleDto.builder().id("group-rule").protocol(Protocol.HTTP).build());
+
+        var response = rules.queryRuleGroup("env", "prod", Protocol.HTTP,
+                null, null, null, 20, "priority", "desc");
+
+        assertThat(response.getBody().results()).extracting(RuleDto::getId)
+                .containsExactly("group-rule");
+        assertThat(response.getBody().totalElements()).isEqualTo(42);
+    }
+
+    @Test
+    void getRule_shouldReturnRule_whenExists() {
+        HttpRule rule = new HttpRule();
+        doReturn(Optional.of(rule)).when(protocolHandlerRegistry).findById(any(String.class));
+        when(protocolHandlerRegistry.toDto(any(), any(), anyBoolean())).thenReturn(RuleDto.builder().build());
+        
+        var response = rules.getRule("uuid-1");
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void getRule_shouldReturn404_whenNotExists() {
+        when(protocolHandlerRegistry.findById(any(String.class))).thenReturn(Optional.empty());
+        
+        var response = rules.getRule("uuid-1");
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void createRule_shouldCreateHttpRule() {
+        RuleDto rule = RuleDto.builder().protocol(Protocol.HTTP).matchKey("/test").build();
+        when(responseService.save(any())).thenReturn(com.echo.entity.Response.builder().id(1L).build());
+        var handler = mock(com.echo.protocol.ProtocolHandler.class);
+        when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
+        HttpRule savedRule = HttpRule.builder().matchKey("/test").responseId(1L).build();
+        when(handler.fromDto(any())).thenReturn(savedRule);
+        when(handler.save(any())).thenReturn(savedRule);
+        when(handler.toDto(any(), any(), anyBoolean())).thenReturn(RuleDto.builder().matchKey("/test").build());
+        
+        var response = rules.createRule(rule);
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    }
+
+    @Test
+    void createRule_shouldRejectScenarioFieldsWhenFeatureIsDisabled() {
+        ReflectionTestUtils.setField(ruleEditService, "scenariosEnabled", false);
+        RuleDto rule = RuleDto.builder()
+                .protocol(Protocol.HTTP)
+                .matchKey("/checkout")
+                .scenarioName("checkout")
+                .requiredScenarioState("Started")
+                .build();
+
+        assertThatThrownBy(() -> rules.createRule(rule))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("SCENARIOS_DISABLED");
+    }
+
+    @Test
+    void createFaultRule_shouldNotCreateUnusedResponseOrForward() {
+        RuleDto rule = RuleDto.builder()
+                .protocol(Protocol.HTTP)
+                .matchKey("/fault")
+                .method("GET")
+                .action("FORWARD")
+                .faultType("CONNECTION_RESET")
+                .responseBody("unused")
+                .build();
+        var handler = mock(com.echo.protocol.ProtocolHandler.class);
+        HttpRule savedRule = HttpRule.builder().matchKey("/fault").build();
+        when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
+        when(handler.fromDto(argThat(dto -> "MOCK".equals(dto.getAction())
+                && dto.getResponseId() == null && dto.getResponseBody() == null)))
+                .thenReturn(savedRule);
+        when(handler.save(savedRule)).thenReturn(savedRule);
+        when(handler.toDto(savedRule, null, false)).thenReturn(rule);
+
+        var response = rules.createRule(rule);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        verify(responseService, never()).save(any());
+    }
+
+    @Test
+    void createRule_shouldRejectJmsRule_whenJmsDisabled() {
+        RuleDto rule = RuleDto.builder().protocol(Protocol.JMS).matchKey("QUEUE").build();
+        
+        assertThatThrownBy(() -> rules.createRule(rule))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("JMS is not enabled");
+    }
+
+    @Test
+    void updateRule_shouldUpdateExistingRule() {
+        HttpRule existing = HttpRule.builder().id("uuid-1").version(0L).responseId(1L).build();
+        RuleDto updated = RuleDto.builder().protocol(Protocol.HTTP).matchKey("/updated").responseId(1L).build();
+        doReturn(Optional.of(existing)).when(protocolHandlerRegistry).findById(any(String.class));
+        when(responseService.findById(1L)).thenReturn(Optional.of(com.echo.entity.Response.builder().id(1L).build()));
+        var handler = mock(com.echo.protocol.ProtocolHandler.class);
+        when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
+        HttpRule savedRule = HttpRule.builder().matchKey("/updated").responseId(1L).build();
+        when(handler.fromDto(any())).thenReturn(savedRule);
+        when(handler.save(any())).thenReturn(savedRule);
+        when(handler.toDto(any(), any(), anyBoolean())).thenReturn(RuleDto.builder().matchKey("/updated").build());
+        
+        var response = rules.updateRule("uuid-1", updated);
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void updateRule_shouldPreserveUnchangedLegacyScenarioWhenFeatureIsDisabled() {
+        ReflectionTestUtils.setField(ruleEditService, "scenariosEnabled", false);
+        HttpRule existing = HttpRule.builder()
+                .id("uuid-1").version(0L).responseId(1L)
+                .scenarioName("checkout").requiredScenarioState("Started").newScenarioState("Paid")
+                .build();
+        RuleDto updated = RuleDto.builder()
+                .protocol(Protocol.HTTP).matchKey("/updated").responseId(1L)
+                .scenarioName("checkout").requiredScenarioState("Started").newScenarioState("Paid")
+                .build();
+        doReturn(Optional.of(existing)).when(protocolHandlerRegistry).findById("uuid-1");
+        when(responseService.findById(1L)).thenReturn(Optional.of(com.echo.entity.Response.builder().id(1L).build()));
+        var handler = mock(com.echo.protocol.ProtocolHandler.class);
+        when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
+        HttpRule savedRule = HttpRule.builder().id("uuid-1").matchKey("/updated").responseId(1L).build();
+        when(handler.fromDto(any())).thenReturn(savedRule);
+        when(handler.save(any())).thenReturn(savedRule);
+        when(handler.toDto(any(), any(), anyBoolean())).thenReturn(updated);
+
+        assertThat(rules.updateRule("uuid-1", updated).getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void updateRule_shouldRejectLegacyScenarioChangesWhenFeatureIsDisabled() {
+        ReflectionTestUtils.setField(ruleEditService, "scenariosEnabled", false);
+        HttpRule existing = HttpRule.builder()
+                .id("uuid-1").version(0L)
+                .scenarioName("checkout").requiredScenarioState("Started").newScenarioState("Paid")
+                .build();
+        RuleDto updated = RuleDto.builder()
+                .protocol(Protocol.HTTP).matchKey("/updated")
+                .scenarioName("checkout").requiredScenarioState("Started").newScenarioState("Cancelled")
+                .build();
+        doReturn(Optional.of(existing)).when(protocolHandlerRegistry).findById("uuid-1");
+
+        assertThatThrownBy(() -> rules.updateRule("uuid-1", updated))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("SCENARIOS_DISABLED");
+    }
+
+    @Test
+    void updateRule_shouldRejectAStaleVersionWithoutSaving() {
+        HttpRule existing = HttpRule.builder().id("uuid-1").version(3L).responseId(1L).build();
+        RuleDto stale = RuleDto.builder().protocol(Protocol.HTTP).matchKey("/updated").responseId(1L).version(2L).build();
+        doReturn(Optional.of(existing)).when(protocolHandlerRegistry).findById("uuid-1");
+
+        var response = rules.updateRule("uuid-1", stale);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).isEqualTo(Map.of("error", "OPTIMISTIC_LOCK_CONFLICT", "currentVersion", 3L));
+        verify(protocolHandlerRegistry, never()).getHandler(any());
+        verify(responseService, never()).save(any());
+    }
+
+    @Test
+    void updateRule_shouldReturn404_whenNotExists() {
+        when(protocolHandlerRegistry.findById(any(String.class))).thenReturn(Optional.empty());
+        
+        var response = rules.updateRule("uuid-1", RuleDto.builder().protocol(Protocol.HTTP).build());
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void deleteRule_shouldDeleteExistingRule() {
+        HttpRule existing = HttpRule.builder().id("uuid-1").build();
+        doReturn(Optional.of(existing)).when(protocolHandlerRegistry).findById(any(String.class));
+        var handler = mock(com.echo.protocol.ProtocolHandler.class);
+        when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
+        
+        var response = rules.deleteRule("uuid-1");
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        verify(handler).deleteById(any(String.class));
+    }
+
+    @Test
+    void deleteRule_shouldReturn404_whenNotExists() {
+        when(protocolHandlerRegistry.findById(any(String.class))).thenReturn(Optional.empty());
+        
+        var response = rules.deleteRule("uuid-1");
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void queryLogs_shouldReturnLogs() {
+        when(requestLogService.querySummary(any())).thenReturn(
+                RequestLogService.SummaryQueryResult.builder().results(List.of()).build());
+        
+        var response = logs.queryLogs(null, null, null, null);
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody().getResults()).isEmpty();
+    }
+
+    @Test
+    void queryLogs_shouldPassFilters() {
+        when(requestLogService.querySummary(any())).thenReturn(
+                RequestLogService.SummaryQueryResult.builder().results(List.of()).build());
+        
+        logs.queryLogs("uuid-1", "HTTP", true, "/api");
+        
+        verify(requestLogService).querySummary(argThat(f -> 
+                f.getRuleId().equals("uuid-1") && 
+                f.getProtocol() == Protocol.HTTP && 
+                f.getMatched() == true &&
+                f.getEndpoint().equals("/api")));
+    }
+
+    @Test
+    void queryLogs_shouldPassPaginationSortingAndIncrementalCursor() {
+        when(requestLogService.querySummary(any())).thenReturn(
+                RequestLogService.SummaryQueryResult.builder().results(List.of()).build());
+
+        logs.queryLogs(null, "HTTP", false, "payment", 2, 50, null,
+                "responseTimeMs", "asc", 99L);
+
+        verify(requestLogService).querySummary(argThat(f ->
+                f.getProtocol() == Protocol.HTTP
+                        && Boolean.FALSE.equals(f.getMatched())
+                        && f.getEndpoint().equals("payment")
+                        && f.getPage() == 2
+                        && f.getSize() == 50
+                        && f.getSortField().equals("responseTimeMs")
+                        && f.getSortDirection().equals("asc")
+                        && f.getAfterId() == 99L));
+    }
+
+    @Test
+    void queryLogs_shouldKeepLegacyLimitParameter() {
+        when(requestLogService.querySummary(any())).thenReturn(
+                RequestLogService.SummaryQueryResult.builder().results(List.of()).build());
+
+        logs.queryLogs(null, null, null, null, null, null, 100,
+                null, null, null);
+
+        verify(requestLogService).querySummary(argThat(f -> f.getSize() == 100));
+    }
+
+    @Test
+    void getLogSummary_shouldReturnSummary() {
+        when(requestLogService.getSummary()).thenReturn(
+                RequestLogService.Summary.builder().totalRequests(100).matchedRequests(90).matchRate(90.0).build());
+        
+        var response = logs.getLogSummary();
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody().getTotalRequests()).isEqualTo(100);
+    }
+
+    @Test
+    void deleteAllLogs_shouldReturnDeletedCount() {
+        when(requestLogService.deleteAll()).thenReturn(42L);
+
+        var response = logs.deleteAllLogs();
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody().get("deleted")).isEqualTo(42L);
+        verify(requestLogService).deleteAll();
+    }
+
+    @Test
+    void getRuleAuditLogs_shouldReturnLogs() {
+        when(ruleAuditService.getAuditLogs(eq("uuid-1"), eq(50))).thenReturn(List.of(new RuleAuditLog()));
+        
+        var response = audit.getRuleAuditLogs("uuid-1", 50);
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).hasSize(1);
+    }
+
+    @Test
+    void getAllAuditLogs_shouldReturnLogs() {
+        when(ruleAuditService.getAllAuditLogs(eq(1000))).thenReturn(List.of(new RuleAuditLog()));
+        
+        var response = audit.getAllAuditLogs(1000);
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void queryAuditLogs_shouldReturnPagedSummary() {
+        RuleAuditService.AuditQueryResult result = RuleAuditService.AuditQueryResult.builder()
+                .results(List.of()).page(0).size(20).totalElements(0).totalPages(0).build();
+        when(ruleAuditService.queryAuditSummary(any())).thenReturn(result);
+
+        var response = audit.queryAuditLogs("UPDATE", "admin", "uuid", 0, 20,
+                "timestamp", "desc");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isSameAs(result);
+    }
+
+    @Test
+    void getAuditLogDetail_shouldReturnFullEntityOrNotFound() {
+        RuleAuditLog detail = RuleAuditLog.builder().id(7L).afterJson("{\"id\":7}").build();
+        when(ruleAuditService.getAuditDetail(7L)).thenReturn(detail);
+        when(ruleAuditService.getAuditDetail(8L)).thenReturn(null);
+
+        assertThat(audit.getAuditLogDetail(7L).getBody()).isSameAs(detail);
+        assertThat(audit.getAuditLogDetail(8L).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void exportAllRules_shouldReturnAllRules() {
+        when(protocolHandlerRegistry.findAllRules()).thenReturn(List.of(new HttpRule(), new HttpRule()));
+        
+        var response = importExport.exportAllRules();
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).hasSize(2);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void importRules_shouldImportMultipleRules() {
+        when(responseService.save(any())).thenReturn(com.echo.entity.Response.builder().id(1L).build());
+        var handler = mock(com.echo.protocol.ProtocolHandler.class);
+        when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
+        when(handler.fromDto(any())).thenAnswer(i -> com.echo.entity.HttpRule.builder()
+                .matchKey(((RuleDto) i.getArgument(0)).getMatchKey()).build());
+        when(handler.save(any())).thenAnswer(i -> i.getArgument(0));
+        List<RuleDto> rules = List.of(
+            RuleDto.builder().protocol(Protocol.HTTP).matchKey("/a").build(),
+            RuleDto.builder().protocol(Protocol.HTTP).matchKey("/b").build()
+        );
+        
+        var response = importExport.importRules(rules);
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(((java.util.Map<String, Object>) response.getBody()).get("imported")).isEqualTo(2);
+        verify(handler, times(2)).save(any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void importRules_shouldSkipJmsRules_whenJmsDisabled() {
+        when(responseService.save(any())).thenReturn(com.echo.entity.Response.builder().id(1L).build());
+        var handler = mock(com.echo.protocol.ProtocolHandler.class);
+        when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
+        when(handler.fromDto(any())).thenAnswer(i -> com.echo.entity.HttpRule.builder()
+                .matchKey(((RuleDto) i.getArgument(0)).getMatchKey()).build());
+        when(handler.save(any())).thenAnswer(i -> i.getArgument(0));
+        List<RuleDto> rules = List.of(
+            RuleDto.builder().protocol(Protocol.HTTP).matchKey("/a").build(),
+            RuleDto.builder().protocol(Protocol.JMS).matchKey("QUEUE").build()
+        );
+        
+        var response = importExport.importRules(rules);
+        
+        assertThat(((java.util.Map<String, Object>) response.getBody()).get("imported")).isEqualTo(1);
+        verify(handler, times(1)).save(any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void deleteRules_shouldDeleteSelectedRules() {
+        HttpRule existing = HttpRule.builder().id("uuid-1").build();
+        RuleDto existingDto = RuleDto.builder().id("uuid-1").protocol(Protocol.HTTP).build();
+        doReturn(Optional.of(existing)).when(protocolHandlerRegistry).findById(any(String.class));
+        when(protocolHandlerRegistry.toDto(any(), any(), anyBoolean())).thenReturn(existingDto);
+        var handler = mock(com.echo.protocol.ProtocolHandler.class);
+        when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
+        
+        var response = rules.deleteRules(List.of("uuid-1", "uuid-2"));
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(((java.util.Map<String, Object>) response.getBody()).get("deleted")).isEqualTo(2);
+        verify(handler, times(2)).deleteById(any(String.class));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void deleteAllRules_shouldDeleteAllRules() {
+        var httpHandler = mock(com.echo.protocol.ProtocolHandler.class);
+        var jmsHandler = mock(com.echo.protocol.ProtocolHandler.class);
+        when(protocolHandlerRegistry.getAllHandlers()).thenReturn(List.of(httpHandler, jmsHandler));
+        when(httpHandler.deleteAll()).thenReturn(2);
+        when(jmsHandler.deleteAll()).thenReturn(1);
+        
+        var response = rules.deleteAllRules();
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(((java.util.Map<String, Object>) response.getBody()).get("deleted")).isEqualTo(3);
+    }
+
+    @Test
+    void enableRule_shouldEnableRule() {
+        HttpRule rule = HttpRule.builder().id("uuid-1").enabled(false).build();
+        doReturn(Optional.of(rule)).when(protocolHandlerRegistry).findById("uuid-1");
+        when(protocolHandlerRegistry.toDto(any(), any(), anyBoolean())).thenReturn(RuleDto.builder().id("uuid-1").protocol(Protocol.HTTP).build());
+        when(ruleService.updateEnabled(anyList(), anyBoolean())).thenReturn(1);
+
+        var response = ruleState.enableRule("uuid-1");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void enableByTag_shouldEnableRulesByTag() {
+        when(ruleService.findIdsByTag("env", "prod")).thenReturn(List.of("uuid-1", "uuid-2"));
+        when(ruleService.updateEnabled(anyList(), anyBoolean())).thenReturn(2);
+
+        var response = ruleState.enableByTag("env", "prod");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(((java.util.Map<String, Object>) response.getBody()).get("updated")).isEqualTo(2);
+    }
+
+    // ========== saveRule() SSE validation tests ==========
+
+    @Test
+    void createRule_sseWithValidBody_shouldReturn201() {
+        String validSseBody = "[{\"data\":\"hello\",\"delayMs\":0}]";
+        RuleDto dto = RuleDto.builder()
+                .protocol(Protocol.HTTP)
+                .matchKey("/api/sse")
+                .method("GET")
+                .sseEnabled(true)
+                .status(200)
+                .responseBody(validSseBody)
+                .build();
+
+        ResponseContentValidator mockValidator = mock(ResponseContentValidator.class);
+        when(responseContentValidatorRegistry.getValidator(ResponseContentType.SSE_EVENTS)).thenReturn(mockValidator);
+        when(responseService.save(any())).thenReturn(com.echo.entity.Response.builder().id(1L).build());
+        var handler = mock(com.echo.protocol.ProtocolHandler.class);
+        when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
+        HttpRule savedRule = HttpRule.builder().matchKey("/api/sse").responseId(1L).sseEnabled(true).build();
+        when(handler.fromDto(any())).thenReturn(savedRule);
+        when(handler.save(any())).thenReturn(savedRule);
+        when(handler.toDto(any(), any(), anyBoolean())).thenReturn(RuleDto.builder().matchKey("/api/sse").build());
+
+        var response = rules.createRule(dto);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        verify(mockValidator).validate(validSseBody);
+    }
+
+    @Test
+    void createRule_sseWithInvalidBody_shouldReturn400() {
+        String invalidSseBody = "not json";
+        RuleDto dto = RuleDto.builder()
+                .protocol(Protocol.HTTP)
+                .matchKey("/api/sse-invalid")
+                .method("GET")
+                .sseEnabled(true)
+                .status(200)
+                .responseBody(invalidSseBody)
+                .build();
+
+        var errorResponse = new AdminExceptionHandler().handleIllegalArgument(
+                new IllegalArgumentException("SSE 回應內容必須為 JSON 陣列格式"));
+        assertThat(errorResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(errorResponse.getBody().get("error")).contains("SSE 回應內容必須為 JSON 陣列格式");
+
+        assertThatThrownBy(() -> rules.createRule(dto))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("SSE 回應內容必須為 JSON 陣列格式");
+    }
+
+    @Test
+    void createRule_nonSseRule_shouldNotTriggerSseValidation() {
+        RuleDto dto = RuleDto.builder()
+                .protocol(Protocol.HTTP)
+                .matchKey("/api/plain")
+                .method("GET")
+                .sseEnabled(false)
+                .status(200)
+                .responseBody("plain text response")
+                .build();
+
+        ResponseContentValidator textValidator = mock(ResponseContentValidator.class);
+        when(responseContentValidatorRegistry.getValidator(ResponseContentType.TEXT)).thenReturn(textValidator);
+        when(responseService.save(any())).thenReturn(com.echo.entity.Response.builder().id(1L).build());
+        var handler = mock(com.echo.protocol.ProtocolHandler.class);
+        when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
+        HttpRule savedRule = HttpRule.builder().matchKey("/api/plain").responseId(1L).build();
+        when(handler.fromDto(any())).thenReturn(savedRule);
+        when(handler.save(any())).thenReturn(savedRule);
+        when(handler.toDto(any(), any(), anyBoolean())).thenReturn(RuleDto.builder().matchKey("/api/plain").build());
+
+        var response = rules.createRule(dto);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        verify(textValidator).validate("plain text response");
+        verify(responseContentValidatorRegistry, never()).getValidator(ResponseContentType.SSE_EVENTS);
+    }
+
+    @Test
+    void createRule_existingResponseId_shouldNotValidateBody() {
+        RuleDto dto = RuleDto.builder()
+                .protocol(Protocol.HTTP)
+                .matchKey("/api/existing-resp")
+                .method("GET")
+                .sseEnabled(true)
+                .status(200)
+                .responseId(99L)
+                .responseBody(null)
+                .build();
+
+        when(responseService.findById(99L)).thenReturn(
+                Optional.of(com.echo.entity.Response.builder().id(99L).body("[{\"data\":\"cached\"}]").build()));
+        var handler = mock(com.echo.protocol.ProtocolHandler.class);
+        when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
+        HttpRule savedRule = HttpRule.builder().matchKey("/api/existing-resp").responseId(99L).sseEnabled(true).build();
+        when(handler.fromDto(any())).thenReturn(savedRule);
+        when(handler.save(any())).thenReturn(savedRule);
+        when(handler.toDto(any(), any(), anyBoolean())).thenReturn(RuleDto.builder().matchKey("/api/existing-resp").build());
+
+        var response = rules.createRule(dto);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        verify(responseContentValidatorRegistry, never()).getValidator(any());
+    }
+}

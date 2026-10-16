@@ -10,6 +10,7 @@ import org.apache.hc.core5.ssl.SSLContextBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
+import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
@@ -37,8 +38,10 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addResourceLocations("classpath:/static/")
                 .setCachePeriod(0);
         
+        // WebJar URLs carry no version, so browsers may keep them but must revalidate (304 when unchanged).
         registry.addResourceHandler("/webjars/**")
                 .addResourceLocations("classpath:/META-INF/resources/webjars/")
+                .setCacheControl(CacheControl.noCache())
                 .resourceChain(true);
     }
 

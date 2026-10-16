@@ -10,6 +10,7 @@ import com.echo.service.RuleService;
 import com.echo.service.RequestLogService;
 import com.echo.service.ResponseTemplateService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -25,6 +26,7 @@ import org.springframework.web.context.request.async.DeferredResultProcessingInt
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -57,6 +59,11 @@ class UniversalMockControllerTest {
 
     @InjectMocks
     private UniversalMockController controller;
+
+    @AfterEach
+    void shutdownScheduler() {
+        controller.shutdown();
+    }
 
     @SuppressWarnings("unchecked")
     private ResponseEntity<String> getResult(Object controllerResult) throws Exception {
@@ -148,6 +155,16 @@ class UniversalMockControllerTest {
     @Test
     void requestTimeoutAllowsDefaultPoolConnectAndReadTimeoutsToFinishFirst() {
         assertThat(ReflectionTestUtils.getField(controller, "requestTimeoutMs")).isEqualTo(40_000L);
+    }
+
+    @Test
+    void delaySchedulerRemovesCancelledTasksImmediately() {
+        ScheduledThreadPoolExecutor scheduler =
+                (ScheduledThreadPoolExecutor) ReflectionTestUtils.getField(controller, "delayScheduler");
+
+        assertThat(scheduler).isNotNull();
+        assertThat(scheduler.getRemoveOnCancelPolicy()).isTrue();
+        assertThat(scheduler.getExecuteExistingDelayedTasksAfterShutdownPolicy()).isFalse();
     }
 
     @Test
@@ -347,6 +364,27 @@ class UniversalMockControllerTest {
         interceptor.handleTimeout(new ServletWebRequest(request), deferredResult);
 
         assertThat(pendingForward).isCancelled();
+        ResponseEntity<String> response = getResult(deferredResult);
+        assertThat(response.getStatusCode().value()).isEqualTo(504);
+    }
+
+    @Test
+    void timeoutCancelsAndRemovesScheduledDelayedResponse() throws Exception {
+        when(httpMockPipeline.executeAsync(any(MockRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(matchedResult(200, "{}", 60_000)));
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/mock/delayed");
+        var deferredResult = (org.springframework.web.context.request.async.DeferredResult<?>)
+                controller.handleRequest(request, httpServletResponse, null);
+        ScheduledThreadPoolExecutor scheduler =
+                (ScheduledThreadPoolExecutor) ReflectionTestUtils.getField(controller, "delayScheduler");
+        DeferredResultProcessingInterceptor interceptor = ReflectionTestUtils.invokeMethod(
+                deferredResult, "getLifecycleInterceptor");
+
+        assertThat(scheduler).isNotNull();
+        assertThat(scheduler.getQueue()).hasSize(1);
+        interceptor.handleTimeout(new ServletWebRequest(request), deferredResult);
+
+        assertThat(scheduler.getQueue()).isEmpty();
         ResponseEntity<String> response = getResult(deferredResult);
         assertThat(response.getStatusCode().value()).isEqualTo(504);
     }

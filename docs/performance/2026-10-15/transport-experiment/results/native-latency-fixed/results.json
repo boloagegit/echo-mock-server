@@ -1,0 +1,60 @@
+{
+  "echo-native-r1": {
+    "done": true,
+    "cases": {
+      "fixed-rate-20000": {
+        "requests": 594432,
+        "seconds": 30.0,
+        "rps": 19814.53,
+        "p50_ms": 1.04,
+        "p99_ms": 4.02,
+        "p999_ms": 17.06,
+        "server_cpu_seconds": null,
+        "server_cpu_us_per_request": null,
+        "http_errors": 0,
+        "socket_errors": 0
+      },
+      "fixed-rate-40000": {
+        "requests": 1188794,
+        "seconds": 30.0,
+        "rps": 39627.22,
+        "p50_ms": 1.23,
+        "p99_ms": 8.27,
+        "p999_ms": 25.15,
+        "server_cpu_seconds": null,
+        "server_cpu_us_per_request": null,
+        "http_errors": 0,
+        "socket_errors": 0
+      }
+    }
+  },
+  "wiremock-async-r1": {
+    "done": true,
+    "cases": {
+      "fixed-rate-20000": {
+        "requests": 594433,
+        "seconds": 30.0,
+        "rps": 19815.1,
+        "p50_ms": 1.12,
+        "p99_ms": 5.26,
+        "p999_ms": 27.31,
+        "server_cpu_seconds": null,
+        "server_cpu_us_per_request": null,
+        "http_errors": 0,
+        "socket_errors": 0
+      },
+      "fixed-rate-40000": {
+        "requests": 1198450,
+        "seconds": 30.0,
+        "rps": 39948.5,
+        "p50_ms": 1.54,
+        "p99_ms": 10.17,
+        "p999_ms": 19.31,
+        "server_cpu_seconds": null,
+        "server_cpu_us_per_request": null,
+        "http_errors": 0,
+        "socket_errors": 0
+      }
+    }
+  }
+}

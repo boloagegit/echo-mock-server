@@ -26,4 +26,9 @@ public interface MatchChainInfo {
 
     /** 是否為 near-miss（部分條件通過但未全部通過） */
     boolean isNearMiss();
+
+    /** 樹狀比對說明的 JSON（見 {@link MatchExplanationJson}）；無分析時回傳 null */
+    default String getDetailTree() {
+        return null;
+    }
 }

@@ -1,5 +1,8 @@
 package com.echo.pipeline;
 
+import com.echo.service.ServeEvent;
+import com.echo.service.ServeEventCaptor;
+import com.echo.service.ServeEventListener;
 import com.echo.entity.HttpRule;
 import com.echo.entity.Protocol;
 import com.echo.service.ConditionMatcher;
@@ -16,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -170,7 +174,7 @@ class AbstractMockPipelineTest {
                     .status(200).body("OK").matched(true).forwarded(false).build();
 
             ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
+            when(conditionMatcher.prepareBody(anyString(), anyCollection())).thenReturn(prepared);
             when(conditionMatcher.matchesPrepared(anyString(), isNull(), isNull(),
                     any(), isNull(), isNull())).thenReturn(true);
             when(ruleService.findResponseBodyById(1L)).thenReturn(Optional.of("response body"));
@@ -185,13 +189,24 @@ class AbstractMockPipelineTest {
                     "findCandidateRules", "buildResponse");
 
             // 驗證 recordLog 被呼叫
-            verify(requestLogService).record(
-                    eq("rule-1"), eq(Protocol.HTTP), eq("POST"), eq("/api/test"),
-                    eq(true), anyInt(), eq("127.0.0.1"),
-                    any(), any(), eq(false), isNull(), any(), any(), eq(200), anyInt(),
-                    eq("{\"key\":\"value\"}"), eq("OK"),
-                    anyList(), any(), any(), any(),
-                    any(), any(), any(), any());
+            ServeEvent served = ServeEventCaptor.single(requestLogService);
+            assertThat(served.getRuleId()).isEqualTo("rule-1");
+            assertThat(served.getProtocol()).isEqualTo(Protocol.HTTP);
+            assertThat(served.getMethod()).isEqualTo("POST");
+            assertThat(served.getEndpoint()).isEqualTo("/api/test");
+            assertThat(served.isMatched()).isTrue();
+            assertThat(served.getClientIp()).isEqualTo("127.0.0.1");
+            assertThat(served.isForwarded()).isFalse();
+            assertThat(served.getForwardTarget()).isNull();
+            assertThat(served.getResponseStatus()).isEqualTo(200);
+            assertThat(served.getRequestBody()).isEqualTo("{\"key\":\"value\"}");
+            assertThat(served.getResponseBody()).isEqualTo("OK");
+            // 處理流程圖用：候選數與規則的模擬延遲（延遲在記錄之後才執行，不含在處理時間內）
+            assertThat(served.getCandidateCount()).isEqualTo(1);
+            assertThat(served.getMatchedByFallback()).isFalse();
+            assertThat(served.getDelayMs()).isEqualTo(100);
+            assertThat(served.getSseEventCount()).isNull();
+            assertThat(served.getScenarioSkipped()).isNull();
         }
 
         @Test
@@ -219,14 +234,24 @@ class AbstractMockPipelineTest {
             assertThat(pipeline.callOrder).containsExactly(
                     "findCandidateRules", "shouldForward", "forward");
 
-            verify(requestLogService).record(
-                    isNull(), eq(Protocol.HTTP), eq("GET"), eq("/api/proxy"),
-                    eq(false), anyInt(), eq("10.0.0.1"),
-                    any(), eq("remote-host"), eq(true), isNull(),
-                    eq(200), isNull(), eq(200), anyInt(),
-                    eq("{}"), eq("forwarded"),
-                    anyList(), any(), any(), any(),
-                    any(), any(), any(), any());
+            ServeEvent served2 = ServeEventCaptor.single(requestLogService);
+            assertThat(served2.getRuleId()).isNull();
+            assertThat(served2.getProtocol()).isEqualTo(Protocol.HTTP);
+            assertThat(served2.getMethod()).isEqualTo("GET");
+            assertThat(served2.getEndpoint()).isEqualTo("/api/proxy");
+            assertThat(served2.isMatched()).isFalse();
+            assertThat(served2.getClientIp()).isEqualTo("10.0.0.1");
+            assertThat(served2.getTargetHost()).isEqualTo("remote-host");
+            assertThat(served2.isForwarded()).isTrue();
+            assertThat(served2.getForwardTarget()).isNull();
+            assertThat(served2.getProxyStatus()).isEqualTo(200);
+            assertThat(served2.getProxyError()).isNull();
+            assertThat(served2.getResponseStatus()).isEqualTo(200);
+            assertThat(served2.getRequestBody()).isEqualTo("{}");
+            assertThat(served2.getResponseBody()).isEqualTo("forwarded");
+            assertThat(served2.getCandidateCount()).isZero();
+            assertThat(served2.getMatchedByFallback()).isNull();
+            assertThat(served2.getDelayMs()).isNull();
         }
 
         @Test
@@ -245,14 +270,21 @@ class AbstractMockPipelineTest {
             assertThat(pipeline.callOrder).containsExactly(
                     "findCandidateRules", "shouldForward", "handleNoMatch");
 
-            verify(requestLogService).record(
-                    isNull(), eq(Protocol.HTTP), eq("POST"), eq("/api/test"),
-                    eq(false), anyInt(), eq("127.0.0.1"),
-                    any(), isNull(), eq(false), isNull(),
-                    isNull(), isNull(), eq(404), anyInt(),
-                    eq("{\"key\":\"value\"}"), eq("Not Found"),
-                    anyList(), any(), any(), any(),
-                    any(), any(), any(), any());
+            ServeEvent served3 = ServeEventCaptor.single(requestLogService);
+            assertThat(served3.getRuleId()).isNull();
+            assertThat(served3.getProtocol()).isEqualTo(Protocol.HTTP);
+            assertThat(served3.getMethod()).isEqualTo("POST");
+            assertThat(served3.getEndpoint()).isEqualTo("/api/test");
+            assertThat(served3.isMatched()).isFalse();
+            assertThat(served3.getClientIp()).isEqualTo("127.0.0.1");
+            assertThat(served3.getTargetHost()).isNull();
+            assertThat(served3.isForwarded()).isFalse();
+            assertThat(served3.getForwardTarget()).isNull();
+            assertThat(served3.getProxyStatus()).isNull();
+            assertThat(served3.getProxyError()).isNull();
+            assertThat(served3.getResponseStatus()).isEqualTo(404);
+            assertThat(served3.getRequestBody()).isEqualTo("{\"key\":\"value\"}");
+            assertThat(served3.getResponseBody()).isEqualTo("Not Found");
         }
     }
 
@@ -331,86 +363,51 @@ class AbstractMockPipelineTest {
         }
     }
 
-    // ==================== 4. recordLog() ====================
+    // ==================== 4. publish() ====================
 
     @Nested
-    @DisplayName("recordLog()")
-    class RecordLog {
+    @DisplayName("publish()")
+    class Publish {
+
+        private final ServeEvent event = ServeEvent.builder()
+                .ruleId("rule-abc").protocol(Protocol.HTTP).method("POST").endpoint("/api/endpoint")
+                .matched(true).responseTimeMs(150).clientIp("192.168.1.1").responseStatus(200).build();
 
         @Test
-        @DisplayName("呼叫 RequestLogService.record() 並傳入正確參數")
-        void callsRequestLogServiceWithCorrectParams() {
-            pipeline.recordLog(
-                    "rule-abc", Protocol.HTTP, "POST", "/api/endpoint",
-                    true, 150, "192.168.1.1",
-                    "[{\"ruleId\":\"rule-abc\"}]", "target.host",
-                    200, null, 200, 10,
-                    "{\"req\":1}", "{\"res\":2}",
-                    Collections.emptyList(), null, null, null,
-                    null, null, null, null);
+        @DisplayName("請求紀錄收到同一個事件")
+        void deliversEventToRequestLog() {
+            pipeline.publish(event);
 
-            verify(requestLogService).record(
-                    eq("rule-abc"),
-                    eq(Protocol.HTTP),
-                    eq("POST"),
-                    eq("/api/endpoint"),
-                    eq(true),
-                    eq(150),
-                    eq("192.168.1.1"),
-                    eq("[{\"ruleId\":\"rule-abc\"}]"),
-                    eq("target.host"),
-                    eq(200),
-                    isNull(),
-                    eq(200),
-                    eq(10),
-                    eq("{\"req\":1}"),
-                    eq("{\"res\":2}"),
-                    eq(Collections.emptyList()),
-                    isNull(),
-                    isNull(),
-                    isNull(),
-                    isNull(),
-                    isNull(),
-                    isNull(),
-                    isNull());
+            verify(requestLogService).onServed(same(event));
         }
 
         @Test
-        @DisplayName("未匹配時 ruleId 為 null")
-        void noMatchRuleIdIsNull() {
-            pipeline.recordLog(
-                    null, Protocol.HTTP, "GET", "/api/miss",
-                    false, 50, "10.0.0.1",
-                    null, null,
-                    null, null, 404, 5,
-                    null, null,
-                    Collections.emptyList(), null, null, null,
-                    null, null, null, null);
+        @DisplayName("其他 listener 失敗只記錄、不影響回應；請求紀錄不會重複收到")
+        void otherListenerFailureIsIsolated() {
+            ServeEventListener failing = mock(ServeEventListener.class);
+            ServeEventListener other = mock(ServeEventListener.class);
+            doThrow(new IllegalStateException("boom")).when(failing).onServed(any());
+            pipeline.setServeEventListeners(List.of(failing, requestLogService, other));
 
-            verify(requestLogService).record(
-                    isNull(),
-                    eq(Protocol.HTTP),
-                    eq("GET"),
-                    eq("/api/miss"),
-                    eq(false),
-                    eq(50),
-                    eq("10.0.0.1"),
-                    isNull(),
-                    isNull(),
-                    isNull(),
-                    isNull(),
-                    eq(404),
-                    eq(5),
-                    isNull(),
-                    isNull(),
-                    eq(Collections.emptyList()),
-                    isNull(),
-                    isNull(),
-                    isNull(),
-                    isNull(),
-                    isNull(),
-                    isNull(),
-                    isNull());
+            pipeline.publish(event);
+
+            InOrder order = inOrder(requestLogService, failing, other);
+            order.verify(requestLogService).onServed(same(event));
+            order.verify(failing).onServed(same(event));
+            order.verify(other).onServed(same(event));
+            verify(requestLogService, times(1)).onServed(any());
+        }
+
+        @Test
+        @DisplayName("請求紀錄失敗一定往上傳（HTTP 回 503、JMS 讓遞送失敗）")
+        void requestLogFailurePropagates() {
+            ServeEventListener other = mock(ServeEventListener.class);
+            pipeline.setServeEventListeners(List.of(other));
+            doThrow(new RequestLogUnavailableException("spool full")).when(requestLogService).onServed(any());
+
+            assertThatThrownBy(() -> pipeline.publish(event))
+                    .isInstanceOf(RequestLogUnavailableException.class);
+            verify(other, never()).onServed(any());
         }
     }
 
@@ -430,7 +427,7 @@ class AbstractMockPipelineTest {
                     .status(200).body("resp").matched(true).forwarded(false).build();
 
             ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBody(anyString())).thenReturn(prepared);
+            when(conditionMatcher.prepareBody(anyString(), anyCollection())).thenReturn(prepared);
             when(conditionMatcher.matchesPrepared(anyString(), isNull(), isNull(),
                     any(), isNull(), isNull())).thenReturn(true);
             when(ruleService.findResponseBodyById(5L)).thenReturn(Optional.of("resp body"));
@@ -462,7 +459,7 @@ class AbstractMockPipelineTest {
             assertThat(result.getDelayMs()).isEqualTo(0);
             assertThat(result.getMatchTimeMs()).isGreaterThanOrEqualTo(0);
             assertThat(result.getResponseTimeMs()).isGreaterThanOrEqualTo(0);
-            verify(conditionMatcher, never()).prepareBody(anyString());
+            verify(conditionMatcher, never()).prepareBody(anyString(), anyCollection());
         }
     }
 
@@ -503,20 +500,7 @@ class AbstractMockPipelineTest {
             pipeline.handleNoMatchResult = MockResponse.builder()
                     .status(404).body("not found").matched(false).forwarded(false).build();
             doThrow(new RequestLogUnavailableException("spool full"))
-                    .when(requestLogService).record(
-                            ArgumentMatchers.<String>any(), ArgumentMatchers.<Protocol>any(),
-                            ArgumentMatchers.<String>any(), ArgumentMatchers.<String>any(),
-                            anyBoolean(), anyInt(), ArgumentMatchers.<String>any(),
-                            ArgumentMatchers.<String>any(), ArgumentMatchers.<String>any(),
-                            anyBoolean(), ArgumentMatchers.nullable(String.class),
-                            ArgumentMatchers.<Integer>any(), ArgumentMatchers.<String>any(),
-                            ArgumentMatchers.<Integer>any(), ArgumentMatchers.<Integer>any(),
-                            ArgumentMatchers.<String>any(), ArgumentMatchers.<String>any(),
-                            ArgumentMatchers.<HttpRule>anyList(),
-                            ArgumentMatchers.<ConditionMatcher.PreparedBody>any(),
-                            ArgumentMatchers.<String>any(), ArgumentMatchers.<Map<String, String>>any(),
-                            ArgumentMatchers.nullable(String.class), ArgumentMatchers.nullable(String.class),
-                            ArgumentMatchers.nullable(String.class), ArgumentMatchers.nullable(String.class));
+                    .when(requestLogService).onServed(any());
 
             PipelineResult result = pipeline.execute(defaultRequest());
 
@@ -540,6 +524,35 @@ class AbstractMockPipelineTest {
     @Nested
     @DisplayName("Scenario state transition")
     class ScenarioTransitionTests {
+
+        @Test
+        @DisplayName("情境狀態不符而略過的規則記入 scenarioSkipped（處理流程圖用）")
+        void skippedRulesAreRecordedForTheFlowView() {
+            HttpRule gated = HttpRule.builder().id("gated").enabled(true).bodyCondition("key=value")
+                    .responseId(1L).matchKey("/api/test").method("POST").priority(10)
+                    .description("付款後").scenarioName("checkout").requiredScenarioState("Paid").build();
+            HttpRule fallback = HttpRule.builder().id("fallback").enabled(true).responseId(2L)
+                    .matchKey("/api/test").method("POST").priority(0).build();
+            pipeline.candidateRules = List.of(gated, fallback);
+            pipeline.buildResponseResult = MockResponse.builder()
+                    .status(200).body("fallback").matched(true).forwarded(false).build();
+            lenient().when(conditionMatcher.prepareBody(anyString(), anyCollection()))
+                    .thenReturn(ConditionMatcher.PreparedBody.empty());
+            when(scenarioService.getCurrentState("checkout")).thenReturn("Started");
+            when(ruleService.findResponseBodyById(2L)).thenReturn(Optional.of("fallback"));
+
+            PipelineResult result = pipeline.execute(defaultRequest());
+
+            assertThat(result.getRuleId()).isEqualTo("fallback");
+            ServeEvent served = ServeEventCaptor.single(requestLogService);
+            assertThat(served.getCandidateCount()).isEqualTo(2);
+            assertThat(served.getMatchedByFallback()).isTrue();
+            assertThat(served.getDelayMs()).isZero();
+            assertThat(served.getScenarioSkipped())
+                    .contains("\"ruleId\":\"gated\"", "\"reason\":\"scenario_state_mismatch\"",
+                            "required: Paid, current: Started")
+                    .doesNotContain("fallback");
+        }
 
         @Test
         void advancesScenarioAndReturnsActualTransition() {

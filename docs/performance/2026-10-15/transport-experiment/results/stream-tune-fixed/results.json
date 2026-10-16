@@ -1,0 +1,156 @@
+{
+  "native-w32-io4-r1": {
+    "done": true,
+    "cases": {
+      "fixed-c256": {
+        "requests": 838681,
+        "seconds": 10.03,
+        "rps": 83619.43,
+        "p50_ms": 2.75,
+        "p99_ms": 13.06,
+        "p999_ms": null,
+        "server_cpu_seconds": 32.82,
+        "server_cpu_us_per_request": 39.13,
+        "http_errors": 0,
+        "socket_errors": 0
+      },
+      "fixed-c64": {
+        "requests": 742709,
+        "seconds": 10.02,
+        "rps": 74115.58,
+        "p50_ms": 0.746,
+        "p99_ms": 5.03,
+        "p999_ms": null,
+        "server_cpu_seconds": 32.48,
+        "server_cpu_us_per_request": 43.73,
+        "http_errors": 0,
+        "socket_errors": 0
+      },
+      "fixed-c8": {
+        "requests": 457715,
+        "seconds": 10.1,
+        "rps": 45319.6,
+        "p50_ms": 0.16,
+        "p99_ms": 1.45,
+        "p999_ms": null,
+        "server_cpu_seconds": 27.36,
+        "server_cpu_us_per_request": 59.78,
+        "http_errors": 0,
+        "socket_errors": 0
+      },
+      "tpl": {
+        "requests": 465647,
+        "seconds": 10.1,
+        "rps": 46103.83,
+        "p50_ms": 0.156,
+        "p99_ms": 1.51,
+        "p999_ms": null,
+        "server_cpu_seconds": 28.72,
+        "server_cpu_us_per_request": 61.68,
+        "http_errors": 0,
+        "socket_errors": 0
+      },
+      "xml-large": {
+        "requests": 185732,
+        "seconds": 10.01,
+        "rps": 18555.38,
+        "p50_ms": 0.389,
+        "p99_ms": 4.65,
+        "p999_ms": null,
+        "server_cpu_seconds": 28.43,
+        "server_cpu_us_per_request": 153.07,
+        "http_errors": 0,
+        "socket_errors": 0
+      },
+      "xml-last": {
+        "requests": 42735,
+        "seconds": 10.02,
+        "rps": 4264.68,
+        "p50_ms": 1.76,
+        "p99_ms": 6.99,
+        "p999_ms": null,
+        "server_cpu_seconds": 34.2,
+        "server_cpu_us_per_request": 800.28,
+        "http_errors": 0,
+        "socket_errors": 0
+      }
+    }
+  },
+  "native-w8-io2-r1": {
+    "done": true,
+    "cases": {
+      "fixed-c256": {
+        "requests": 999552,
+        "seconds": 10.02,
+        "rps": 99712.99,
+        "p50_ms": 2.29,
+        "p99_ms": 8.02,
+        "p999_ms": null,
+        "server_cpu_seconds": 27.01,
+        "server_cpu_us_per_request": 27.02,
+        "http_errors": 0,
+        "socket_errors": 0
+      },
+      "fixed-c64": {
+        "requests": 847435,
+        "seconds": 10.02,
+        "rps": 84588.73,
+        "p50_ms": 0.65,
+        "p99_ms": 8.21,
+        "p999_ms": null,
+        "server_cpu_seconds": 27.93,
+        "server_cpu_us_per_request": 32.96,
+        "http_errors": 0,
+        "socket_errors": 0
+      },
+      "fixed-c8": {
+        "requests": 576492,
+        "seconds": 10.1,
+        "rps": 57079.61,
+        "p50_ms": 0.122,
+        "p99_ms": 1.17,
+        "p999_ms": null,
+        "server_cpu_seconds": 24.61,
+        "server_cpu_us_per_request": 42.69,
+        "http_errors": 0,
+        "socket_errors": 0
+      },
+      "tpl": {
+        "requests": 496534,
+        "seconds": 10.1,
+        "rps": 49162.42,
+        "p50_ms": 0.14400000000000002,
+        "p99_ms": 1.27,
+        "p999_ms": null,
+        "server_cpu_seconds": 26.07,
+        "server_cpu_us_per_request": 52.5,
+        "http_errors": 0,
+        "socket_errors": 0
+      },
+      "xml-large": {
+        "requests": 192385,
+        "seconds": 10.1,
+        "rps": 19052.12,
+        "p50_ms": 0.379,
+        "p99_ms": 3.01,
+        "p999_ms": null,
+        "server_cpu_seconds": 27.1,
+        "server_cpu_us_per_request": 140.86,
+        "http_errors": 0,
+        "socket_errors": 0
+      },
+      "xml-last": {
+        "requests": 43877,
+        "seconds": 10.02,
+        "rps": 4380.1,
+        "p50_ms": 1.77,
+        "p99_ms": 5.13,
+        "p999_ms": null,
+        "server_cpu_seconds": 34.85,
+        "server_cpu_us_per_request": 794.27,
+        "http_errors": 0,
+        "socket_errors": 0
+      }
+    }
+  }
+}

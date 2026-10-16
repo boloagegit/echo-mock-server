@@ -1,6 +1,7 @@
 package com.echo.service;
 
 import com.echo.config.CacheConfig;
+import com.echo.core.engine.RuleSelector;
 import com.echo.entity.HttpRule;
 import com.echo.entity.Protocol;
 import com.echo.protocol.http.HttpProtocolHandler;
@@ -67,18 +68,43 @@ public class HttpRuleService {
         if (applicationContext == null) {
             return prepareHttpRules(httpHandler.findWithFallback(host, path, method));
         }
-        return proxy().findPreparedHttpRuleSet(host, method).stream()
-                .filter(rule -> httpHandler.matchesRequestPath(rule.getMatchKey(), path))
-                .toList();
+        return proxy().httpRuleSnapshot().candidates(host, method, path);
     }
 
-    @Cacheable(cacheNames = CacheConfig.HTTP_RULES_CACHE,
-               key = "'http-prepared-set:' + #host + ':' + #method")
+    /** host + method 的候選規則（已排序、未依路徑篩選），取自目前的規則快照。 */
     public List<HttpRule> findPreparedHttpRuleSet(String host, String method) {
-        log.debug("Cache miss - preparing HTTP rule set: host={}, method={}", host, method);
-        List<HttpRule> rules = httpHandler.findByHostAndMethod(host, method);
-        return prepareHttpRules(rules);
+        return proxy().httpRuleSnapshot().candidates(host, method);
     }
+
+    /**
+     * 目前的 HTTP 規則快照（{@link RuleSnapshots}）：規則或 Response 異動清除 {@code httpRules} 快取時在背景重建，
+     * 重建期間請求繼續使用舊快照。沒有 Spring context 的單元測試直接建立。
+     */
+    public HttpRuleSnapshot httpRuleSnapshot() {
+        RuleSnapshots snapshots = applicationContext == null ? null
+                : applicationContext.getBeanProvider(RuleSnapshots.class).getIfAvailable();
+        return snapshots != null ? snapshots.http() : buildHttpRuleSnapshot();
+    }
+
+    /** 從資料庫建立 HTTP 規則快照（由 {@link RuleSnapshots} 在背景呼叫）。 */
+    HttpRuleSnapshot buildHttpRuleSnapshot() {
+        List<HttpRule> rules = httpRuleRepository.findByEnabledTrueOrderByIdAsc();
+        Set<Long> validResponseIds = ruleService.getValidResponseIds(rules.stream()
+                .map(HttpRule::getResponseId).filter(id -> id != null).collect(Collectors.toSet()));
+        List<HttpRule> valid = rules.stream()
+                .filter(r -> r.getResponseId() == null || validResponseIds.contains(r.getResponseId()))
+                .toList();
+        log.debug("Building HTTP rule snapshot: {} enabled rules", valid.size());
+        return new HttpRuleSnapshot(valid, HTTP_RULE_ORDER, conditionMatcher);
+    }
+
+    /** 候選規則優先順序：非萬用路徑 → priority 高 → 有指定 host → 建立時間新。 */
+    static final Comparator<HttpRule> HTTP_RULE_ORDER = Comparator
+            .comparing((HttpRule r) -> "*".equals(r.getMatchKey()) ? 1 : 0)
+            .thenComparing(Comparator.<HttpRule, Integer>comparing(
+                    r -> r.getPriority() != null ? r.getPriority() : Integer.MIN_VALUE).reversed())
+            .thenComparing(r -> r.getTargetHost() == null || r.getTargetHost().isEmpty() ? 1 : 0)
+            .thenComparing(HttpRule::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder()));
 
     private List<HttpRule> prepareHttpRules(List<HttpRule> rules) {
         if (rules.isEmpty()) {
@@ -88,53 +114,44 @@ public class HttpRuleService {
                 .map(HttpRule::getResponseId).filter(id -> id != null).collect(Collectors.toSet()));
         return rules.stream()
                 .filter(r -> r.getResponseId() == null || validResponseIds.contains(r.getResponseId()))
-                .sorted(Comparator
-                        .comparing((HttpRule r) -> "*".equals(r.getMatchKey()) ? 1 : 0)
-                        .thenComparing(Comparator.<HttpRule, Integer>comparing(
-                                r -> r.getPriority() != null ? r.getPriority() : Integer.MIN_VALUE).reversed())
-                        .thenComparing(r -> r.getTargetHost() == null || r.getTargetHost().isEmpty() ? 1 : 0)
-                        .thenComparing(HttpRule::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .sorted(HTTP_RULE_ORDER)
                 .toList();
     }
 
     private MatchResult<HttpRule> findMatchingHttpRuleInternal(List<HttpRule> rules, String body,
             String queryString, Map<String, String> headers) {
-        HttpRule matched = null;
-        HttpRule fallbackRule = null;
         ConditionMatcher.PreparedBody prepared = conditionMatcher.prepareBody(body);
-
-        for (HttpRule rule : rules) {
-            if (Boolean.FALSE.equals(rule.getEnabled())) {
-                continue;
-            }
-
-            boolean hasCondition = (rule.getBodyCondition() != null && !rule.getBodyCondition().isBlank())
-                    || (rule.getQueryCondition() != null && !rule.getQueryCondition().isBlank())
-                    || (rule.getHeaderCondition() != null && !rule.getHeaderCondition().isBlank());
-
-            if (hasCondition) {
-                if (conditionMatcher.matchesPrepared(
-                        rule.getBodyCondition(), rule.getQueryCondition(),
-                        rule.getHeaderCondition(), prepared, queryString, headers)) {
-                    matched = rule;
-                    break;
-                }
-            } else {
-                if (fallbackRule == null) {
-                    fallbackRule = rule;
-                }
-            }
-        }
-
-        if (matched == null && fallbackRule != null) {
-            matched = fallbackRule;
-        }
+        HttpRule matched = RuleSelector.select(rules, RuleSelector.FallbackPolicy.FIRST_UNCONDITIONAL,
+                HTTP_RULE_TRAITS, rule -> true,
+                rule -> rule.getMatchSpec() != null
+                        ? conditionMatcher.matchesPrepared(rule.getMatchSpec(), null, null, null,
+                                prepared, queryString, headers)
+                        : conditionMatcher.matchesPrepared(rule.getBodyCondition(), rule.getQueryCondition(),
+                                rule.getHeaderCondition(), prepared, queryString, headers))
+                .selected();
 
         List<MatchChainEntry> chain = matched != null
                 ? List.of(MatchChainEntry.fromHttp(matched, "match"))
                 : List.of();
         return new MatchResult<>(matched, chain);
     }
+
+    private static final RuleSelector.Traits<HttpRule> HTTP_RULE_TRAITS = new RuleSelector.Traits<>() {
+        @Override
+        public boolean enabled(HttpRule rule) {
+            return !Boolean.FALSE.equals(rule.getEnabled());
+        }
+
+        @Override
+        public boolean unconditional(HttpRule rule) {
+            return rule.getMatchSpec() == null && isBlank(rule.getBodyCondition())
+                    && isBlank(rule.getQueryCondition()) && isBlank(rule.getHeaderCondition());
+        }
+
+        private boolean isBlank(String value) {
+            return value == null || value.isBlank();
+        }
+    };
 
     public List<HttpRule> findAllHttpRules() {
         return httpHandler.findAllRules();

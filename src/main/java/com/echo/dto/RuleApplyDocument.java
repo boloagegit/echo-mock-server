@@ -29,6 +29,8 @@ import java.util.Map;
 public class RuleApplyDocument {
 
     public static final String API_VERSION = "echo.mock/v1";
+    /** v2：v1 的所有欄位，另外支援 {@code spec.match}（結構化條件）。 */
+    public static final String API_VERSION_V2 = "echo.mock/v2";
     public static final String KIND = "Rule";
 
     private String apiVersion;
@@ -77,6 +79,8 @@ public class RuleApplyDocument {
         private String bodyCondition;
         private String queryCondition;
         private String headerCondition;
+        /** 結構化條件（僅 {@code echo.mock/v2}）；與三個舊版條件欄位互斥。 */
+        private JsonNode match;
         private Integer priority;
         private String description;
         private Boolean enabled;

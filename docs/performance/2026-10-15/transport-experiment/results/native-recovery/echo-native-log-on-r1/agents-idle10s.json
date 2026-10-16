@@ -1,0 +1,1 @@
+[{"name":"log-agent","description":"Async batch log writer with match chain analysis","status":"RUNNING","queueSize":2000,"processedCount":115871,"droppedCount":6802594,"queueBytes":1422007,"queueCapacityBytes":10737418240,"inFlightBytes":0,"inFlightByteLimit":134217728,"waitingProducers":0,"backpressureActive":false}]

@@ -182,6 +182,13 @@ public final class JmsMessageMemoryBudget implements AutoCloseable {
         return reservedBytes.get();
     }
 
+    public record Snapshot(long reservedBytes, long maximumBytes, int waitingThreads, boolean running) {}
+
+    /** Reads counters only, without acquiring the admission lock. */
+    public Snapshot snapshot() {
+        return new Snapshot(reservedBytes.get(), maximumBytes, waitingThreads.get(), running.get());
+    }
+
     long maximumBytes() {
         return maximumBytes;
     }

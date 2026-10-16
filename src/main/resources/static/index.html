@@ -4,14 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Echo Mock Server</title>
-    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=20260906.2">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20261007.1">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=20261007.1" sizes="any">
+    <!-- Fonts used on the first paint start loading with the document, so icons and code text never pop in. -->
+    <link rel="preload" href="/webjars/bootstrap-icons/font/fonts/bootstrap-icons.woff2?e34853135f9e39acf64315236852cd5a" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/webjars/fontsource__jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/webjars/fontsource__jetbrains-mono/files/jetbrains-mono-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/webjars/bootstrap/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="/webjars/bootstrap-icons/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="/webjars/codemirror/lib/codemirror.css">
-    <link rel="stylesheet" href="/theme.css?v=20260906.2">
-    <link rel="stylesheet" href="/style.css?v=20260906.2">
+    <link rel="stylesheet" href="/theme.css?v=20261006.1">
+    <link rel="stylesheet" href="/style.css?v=20261016.1">
+    <link rel="stylesheet" href="/console.css?v=20261013.1">
+    <script src="/ui-boot.js?v=20261007.3"></script>
+    <script src="/ui-accent.js?v=20261006.1"></script>
 </head>
 <body>
+<!-- Static shell with the real layout geometry: covers startup until translations and identity are ready. -->
+<div id="boot-shell" class="boot-shell" aria-hidden="true">
+    <div class="boot-shell__sidebar"><span class="boot-shell__mark"></span><span class="boot-shell__line is-name"></span></div>
+    <div class="boot-shell__main"><span class="boot-shell__line is-title"></span><span class="boot-shell__line is-toolbar"></span><span class="boot-shell__card"></span></div>
+</div>
+<script src="/ui-snapshot.js?v=20261007.3"></script>
 <div id="app" v-cloak>
     <div class="top-loader" v-if="loading.rules||loading.logs||loading.audit||loading.responses||loading.accounts||loading.issues"></div>
     <div class="layout">
@@ -21,19 +35,18 @@
             :mobile-menu="mobileMenu" @update:mobile-menu="mobileMenu=$event"
             :env-label="envLabel" :is-admin="isAdmin" :is-logged-in="isLoggedIn"
             :status="status" :jms-enabled="jmsEnabled" :locale="locale"
-            :theme-icon="themeIcon" :theme-label="themeLabel"
-            :density="density" :density-icon="densityIcon" :density-label="densityLabel"
+            :theme="theme" :density="density"
             :help-seen="helpSeen" :open-issue-count="openIssueCount"
-            @show-help="showPriorityHelp=true" @toggle-theme="toggleTheme" @toggle-density="toggleDensity"
+            @show-help="showPriorityHelp=true" @set-theme="setTheme" @set-density="setDensity"
             @start-tour="startTour"
             @switch-locale="switchLocale" @login="login" @logout="logout"
             @change-password="showForceChangePassword=true"
         ></sidebar-nav>
         <div class="mobile-overlay" v-if="mobileMenu" @click="mobileMenu=false"></div>
         <main class="main" @click="mobileMenu=false">
-            <button class="mobile-menu-btn" @click.stop="mobileMenu=!mobileMenu"><i class="bi bi-list"></i></button>
+            <button class="mobile-menu-btn" :aria-label="t('sidebar.openMenu')" @click.stop="mobileMenu=!mobileMenu"><i class="bi bi-list" aria-hidden="true"></i></button>
             <!-- Rules Page -->
-            <rules-page v-if="page==='rules'"
+            <rules-page v-if="shownPage==='rules'"
                 :rules="rules" :loading="loading" :status="status"
                 :jms-enabled="jmsEnabled" :is-logged-in="isLoggedIn"
                 :http-label="httpLabel" :jms-label="jmsLabel"
@@ -43,12 +56,10 @@
                 :rule-page="rulePage" :rule-page-size="rulePageSize"
                 :batch-select-mode="batchSelectMode" :selected-rules="selectedRules"
                 :rule-filter-chips="ruleFilterChips"
-                :show-dbl-click-hint="showDblClickHint"
-                :rule-preview-expanded="rulePreviewExpanded"
+                :rule-detail-id="ruleDetailId"
                 :rule-preview-loading="rulePreviewLoading"
                 :rule-preview-error="rulePreviewError"
                 :rule-preview-cache="rulePreviewCache"
-                :can-drag-rules="canDragRules"
                 :show-data-dropdown="showDataDropdown"
                 :bulk-import-export-enabled="status?.bulkImportExportEnabled===true"
                 :expanded-tag-groups="expandedTagGroups"
@@ -58,7 +69,7 @@
                 :group-counts="groupCounts" :group-loading="groupLoading"
                 :filtered-rules="filteredRules"
                 :get-group-limit="getGroupLimit"
-                :rule-sort-icon="ruleSortIcon" :drag-row-class="dragRowClass"
+                :rule-sort-icon="ruleSortIcon"
                 @load-rules="loadRules($event)"
                 @open-create="openCreate" @toggle-batch-select="batchSelectMode=!batchSelectMode;selectedRules=[]"
                 @batch-protect="batchProtect($event)" @delete-selected="deleteSelectedRules"
@@ -78,15 +89,11 @@
                 @export-rule-json="exportRuleJson($event)"
                 @remove-rule-chip="removeRuleChip($event)"
                 @clear-rule-filters="clearRuleFilters"
-                @toggle-rule-preview="toggleRulePreview($event)"
-                @handle-rule-row-click="handleRuleRowClick($event)"
-                @dismiss-dblclick-hint="dismissDblClickHint"
-                @go-to-responses="page='responses';responseFilter=String($event)"
+                @open-rule-detail="openRuleDetail($event)"
+                @close-rule-detail="closeRuleDetail"
+                @load-rule-detail="loadRuleDetail($event, { force: true })"
+                @go-to-responses="goToResponse(String($event))"
                 @clip-copy="clipCopy($event)" @extend-rule="extendRule($event)"
-                @drag-start="(e, r) => onDragStart(e, r)"
-                @drag-over="(e, r) => onDragOver(e, r)"
-                @drag-leave="(e, r) => onDragLeave(e, r)"
-                @drop="onDrop($event)" @drag-end="onDragEnd"
                 @toggle-data-dropdown="toggleDataDropdown"
                 @toggle-tag-group="toggleTagGroup($event)"
                 @toggle-tag-subgroup="toggleTagSubgroup($event)"
@@ -95,7 +102,7 @@
             ></rules-page>
 
             <!-- Stats Page -->
-            <stats-page v-if="page==='stats'"
+            <stats-page v-if="shownPage==='stats'"
                 :logs="logs" :log-summary="logSummary" :loading="loading"
                 :log-filter="logFilter" :log-sort="logSort"
                 :log-page="logPage" :log-page-size="logPageSize"
@@ -118,7 +125,7 @@
             ></stats-page>
 
             <!-- Audit Page -->
-            <audit-page v-if="page==='audit'"
+            <audit-page v-if="shownPage==='audit'"
                 :audit-logs="auditLogs" :loading="loading" :selected-audit="selectedAudit"
                 :audit-filter="auditFilter" :audit-sort="auditSort"
                 :audit-page="auditPage" :audit-page-size="auditPageSize"
@@ -138,10 +145,11 @@
                 @toggle-audit-sort="toggleAuditSort($event)" @delete-all-audit="deleteAllAudit"
                 @remove-audit-chip="removeAuditChip($event)" @clear-audit-filters="clearAuditFilters"
                 @go-to-rule="goToRule($event)" @go-to-response="goToResponse($event)"
+                @clip-copy="clipCopy($event)"
             ></audit-page>
 
             <!-- Issues Page -->
-            <issues-page v-if="page==='issues'"
+            <issues-page v-if="shownPage==='issues' && status?.issueReportingEnabled === true"
                 :issues="issues" :loading="loading"
                 :issue-filter="issueFilter" :issue-sort="issueSort" :issue-page="issuePage"
                 :issue-page-size="issuePageSize" :paged-issues="pagedIssues"
@@ -161,7 +169,7 @@
             ></issues-page>
 
             <!-- Responses Page -->
-            <responses-page v-if="page==='responses'"
+            <responses-page v-if="shownPage==='responses'"
                 :response-summary="responseSummary" :loading="loading"
                 :is-logged-in="isLoggedIn" :response-filter="responseFilter"
                 :response-sort="responseSort"
@@ -178,6 +186,10 @@
                 :response-page-size="responsePageSize"
                 :response-total-elements="responseTotalElements"
                 :response-total-pages="responseTotalPages"
+                :response-detail-id="responseDetailId" :response-detail-cache="responseDetailCache"
+                :response-detail-loading="responseDetailLoading" :response-detail-error="responseDetailError"
+                @open-response-detail="openResponseDetail($event)" @close-response-detail="closeResponseDetail"
+                @load-response-detail="loadResponseDetail($event, { force: true })"
                 @load-responses="loadResponseSummary($event)"
                 @open-response-modal="openResponseModal($event)"
                 @delete-response="(id, usage) => deleteResponse(id, usage)"
@@ -193,23 +205,23 @@
                 @export-responses="exportResponses();showResponseDataDropdown=false"
                 @import-responses="importResponses($event)"
                 @delete-selected-responses="deleteSelectedResponses"
-                @toggle-response-rules="toggleResponseRules($event)"
                 @toggle-response-data-dropdown="toggleResponseDataDropdown"
                 @trigger-response-import="triggerResponseImport2()"
                 @remove-response-chip="removeResponseChip($event)"
                 @clear-response-filters="clearResponseFilters"
-                @go-to-rule="page='rules';ruleFilter.keyword=$event"
+                @go-to-rule="page='rules';ruleFilter.keyword=$event;openRuleDetail({ id: $event })"
+                @clip-copy="clipCopy($event)"
                 @extend-response="extendResponse($event)"
             ></responses-page>
 
 
             <!-- Accounts Page -->
-            <accounts-page v-if="page==='accounts'"
+            <accounts-page v-if="shownPage==='accounts'"
                 :accounts="accountsCtx" :loading="loading"
             ></accounts-page>
 
             <!-- Settings Page -->
-            <settings-page v-if="page==='settings'"
+            <settings-page v-if="shownPage==='settings'"
                 :status="status" :is-admin="isAdmin" :is-logged-in="isLoggedIn"
                 :loading="loading" :backup-status="backupStatus" :jms-enabled="jmsEnabled"
                 @trigger-backup="triggerBackup"
@@ -218,7 +230,7 @@
                 @delete-orphan-responses="deleteOrphanResponses"
                 @delete-all-audit="deleteAllAuditLogs"
                 @delete-all-logs="deleteAllLogs"
-                @refresh-status="loadStatus"
+                @refresh-status="loadStatus(); loadBackupStatus()"
             ></settings-page>
         </main>
     </div>
@@ -226,27 +238,28 @@
     <!-- Priority Help Modal -->
     <priority-help-modal
         :show="showPriorityHelp" :help-tab="helpTab"
-        @close="showPriorityHelp=false" @start-tour="showPriorityHelp=false;startTour()" @update:help-tab="helpTab=$event"
+        @close="showPriorityHelp=false" @start-tour="startTour" @update:help-tab="helpTab=$event"
     ></priority-help-modal>
 
     <!-- Response Edit Modal -->
     <response-edit-modal
         :show="showResponseModal" :editing="editingResponse"
         :form="responseForm" :maximized="responseModalMaximized" :saving="loading.responseSave"
-        :sse-events="responseSseEvents" :sse-preview="responseSsePreview"
-        :response-form-formatted="responseFormFormatted"
+        :sse-events="responseSseEvents"
         @close="showResponseModal=false"
         @save="saveResponse"
         @update:form="Object.assign(responseForm, $event)"
         @update:maximized="responseModalMaximized=$event"
         @update:sse-events="responseSseEvents=$event"
-        @toggle-format="toggleResponseFormFormat"
+        @copy-text="clipCopy($event)"
     ></response-edit-modal>
 
     <!-- Create/Edit Modal -->
     <rule-edit-modal
         :show="showModal" :editing="editing" :editor-mode="ruleEditorMode" :form="form" :conditions="conditions"
-        :form-errors="formErrors" :can-save="canSave" :saving="saving" :maximized="ruleModalMaximized"
+        :match-mode="matchMode" :match-tree="matchTree" :match-error="matchError" :match-switch-pending="matchSwitchPending" :match-sources="matchSources"
+        @set-match-mode="setMatchMode" @confirm-match-simple="confirmSimpleMatchMode" @cancel-match-simple="cancelSimpleMatchMode"
+        :form-errors="formErrors" :can-save="canSave" :saving="saving || ruleSaveInFlight || ruleApplySaving || previewSaving" :maximized="ruleModalMaximized"
         :show-catch-all-warning="showCatchAllWarning" :catch-all-confirmed="catchAllConfirmed"
         :show-body-condition-warning="showBodyConditionWarning"
         :jms-enabled="jmsEnabled" :scenario-enabled="scenariosEnabled" :http-label="httpLabel" :jms-label="jmsLabel"
@@ -257,14 +270,13 @@
         :response-picker-page="responsePickerPage" :response-picker-total-elements="responsePickerTotalElements"
         :response-picker-total-pages="responsePickerTotalPages" :response-picker-loading="responsePickerLoading"
         :response-picker-error="responsePickerError"
-        :sse-events="sseEvents" :sse-preview="ssePreview"
+        :sse-events="sseEvents"
         :test-expanded="testExpanded" :test-params="testParams" :test-result="testResult"
         :test-loading="testLoading" :test-sse-events="testSseEvents" :test-sse-mode="testSseMode"
         :preview-response-body="previewResponseBody" :preview-response-loading="previewResponseLoading"
         :preview-response-load-failed="previewResponseLoadFailed" :preview-editing="previewEditing"
         :preview-edit-body="previewEditBody" :preview-response-usage-count="previewResponseUsageCount"
-        :preview-saving="previewSaving" :preview-formatted="previewFormatted"
-        :edit-formatted="editFormatted" :new-tag="newTag" :new-header="newHeader"
+        :preview-saving="previewSaving" :new-tag="newTag" :new-header="newHeader"
         @close="closeModal" @save="(close) => saveRule(close)"
         @change-editor-mode="changeRuleEditorMode($event)"
         @update:catch-all-confirmed="catchAllConfirmed=$event"
@@ -287,9 +299,9 @@
         @select-response="selectResponseOption($event)"
         @toggle-preview-editing="togglePreviewEditing"
         @save-preview-response="savePreviewResponse"
-        @toggle-preview-format="togglePreviewFormat"
-        @toggle-edit-format="toggleEditFormat"
-        @go-to-responses="page='responses';showModal=false;responseFilter=String($event)"
+        @update:preview-edit-body="previewEditBody = $event"
+        @copy-text="clipCopy($event)"
+        @go-to-responses="leaveRuleForResponses($event)"
         @clear-response-selection="clearResponseSelection"
         @reorder-sse-events="sseEvents=$event"
         @apply-template="applyTemplate($event)"
@@ -299,7 +311,7 @@
                 :active="ruleEditorMode==='declarative'"
                 :document-text="ruleApplyText"
                 :loading="ruleApplyLoading"
-                :saving="ruleApplySaving"
+                :saving="saving || ruleSaveInFlight || ruleApplySaving || previewSaving"
                 :error="ruleApplyError"
                 :operation="ruleApplyOperation"
                 :schema="ruleApplySchema"
@@ -337,50 +349,87 @@
 
     <confirm-modal :confirm-state="confirmState"></confirm-modal>
 
-    <toast-container :toasts="toasts" @dismiss="dismissToast"></toast-container>
+    <toast-container :toasts="toasts" @dismiss="dismissToast" @action="runToastAction"></toast-container>
 </div>
 <script src="/webjars/vue/dist/vue.global.prod.js"></script>
 <script src="/webjars/codemirror/lib/codemirror.js"></script>
 <script src="/webjars/codemirror/mode/javascript/javascript.js"></script>
 <script src="/webjars/codemirror/mode/xml/xml.js"></script>
-<script src="/utils.js?v=20260822.2"></script>
+<script src="/match-tree.js?v=20261012.5"></script>
+<script src="/request-flow.js?v=20261012.1"></script>
+<script src="/rule-order.js?v=20261012.1"></script>
+<script src="/traffic-chart.js?v=20261012.1"></script>
+<script src="/utils.js?v=20261012.2"></script>
+<script src="/sse-events.js?v=20261013.2"></script>
 <!-- Composables (載入順序：utils.js → composables → components → app.js) -->
-<script src="/composables/useI18n.js"></script>
-<script src="/composables/useToast.js"></script>
-<script src="/composables/useAuth.js"></script>
-<script src="/composables/useTheme.js"></script>
-<script src="/composables/useTour.js"></script>
-<script src="/composables/useEditor.js"></script>
-<script src="/composables/useStats.js?v=20260812.1"></script>
+<script src="/composables/useI18n.js?v=20261013.6"></script>
+<script src="/composables/useToast.js?v=20261012.2"></script>
+<script src="/composables/useDiscardGuard.js?v=20261001.2"></script>
+<script src="/composables/useAuth.js?v=20261007.5"></script>
+<script src="/composables/useTheme.js?v=20261006.1"></script>
+<script src="/composables/useTour.js?v=20261001.2"></script>
+<script src="/composables/useEditor.js?v=20261007.20"></script>
+<script src="/composables/useStats.js?v=20261013.2"></script>
 <script src="/composables/useAudit.js?v=20260812.1"></script>
 <script src="/composables/useResponses.js?v=20260812.1"></script>
-<script src="/composables/useRules.js?v=20260904.1"></script>
-<script src="/composables/useRuleApply.js?v=20260809.3"></script>
-<script src="/composables/useRuleForm.js?v=20260809.5"></script>
+<script src="/composables/useRules.js?v=20261013.1"></script>
+<script src="/composables/useRuleApply.js?v=20261012.2"></script>
+<script src="/composables/useRuleForm.js?v=20261013.4"></script>
 <script src="/composables/useAccounts.js?v=20260904.1"></script>
-<script src="/composables/useIssues.js?v=20260904.1"></script>
-<script src="/composables/useRouter.js"></script>
-<script src="/components/SidebarNav.js?v=20260906.1"></script>
-<script src="/components/ToastContainer.js"></script>
-<script src="/components/WorkspaceSearchField.js?v=20260812.1"></script>
-<script src="/components/WorkspacePagination.js?v=20260811.2"></script>
-<script src="/components/ConfirmModal.js?v=20260809.5"></script>
-<script src="/components/TourOverlay.js?v=20260809.6"></script>
-<script src="/components/ImportModal.js?v=20260809.6"></script>
-<script src="/components/AuditPage.js?v=20260812.1"></script>
-<script src="/components/IssuesPage.js?v=20260904.1"></script>
-<script src="/components/StatsPage.js?v=20260822.2"></script>
-<script src="/components/ResponseEditModal.js?v=20260809.6"></script>
-<script src="/components/ChangePasswordModal.js?v=20260809.5"></script>
-<script src="/components/ResponsesPage.js?v=20260812.1"></script>
-<script src="/components/SettingsPage.js"></script>
-<script src="/components/PriorityHelpModal.js?v=20260809.7"></script>
-<script src="/components/RulesPage.js?v=20260904.1"></script>
-<script src="/components/RuleGroupRow.js?v=20260904.1"></script>
-<script src="/components/AccountsPage.js?v=20260904.1"></script>
-<script src="/components/RuleEditModal.js?v=20260906.1"></script>
-<script src="/components/RuleApplyModal.js?v=20260809.3"></script>
-<script src="/components/OpenApiPreviewModal.js"></script>
-<script src="/app.js?v=20260904.1"></script>
+<script src="/composables/useIssues.js?v=20261001.1"></script>
+<script src="/composables/useRouter.js?v=20261012.1"></script>
+<script src="/components/UiButton.js?v=20260909.4"></script>
+<script src="/components/UiBadge.js?v=20260909.2"></script>
+<script src="/components/UiStatus.js?v=20260909.1"></script>
+<script src="/components/UiToggle.js?v=20261007.15"></script>
+<script src="/components/UiSegmentedControl.js?v=20260912.1"></script>
+<script src="/components/UiToggleGroup.js?v=20260912.1"></script>
+<script src="/components/UiFilterChipList.js?v=20260909.3"></script>
+<script src="/components/UiTableSortHeader.js?v=20260909.1"></script>
+<script src="/components/UiDropdownMenu.js?v=20261007.21"></script>
+<script src="/components/UiRowMenu.js?v=20261007.21"></script>
+<script src="/components/UiDetailDrawer.js?v=20261007.13"></script>
+<script src="/components/UiIcon.js?v=20261007.8"></script>
+<script src="/components/UiDetailSection.js?v=20261007.13"></script>
+<script src="/components/UiCodeViewer.js?v=20261007.21"></script>
+<script src="/components/UiLoadState.js?v=20260909.1"></script>
+<script src="/components/UiTabs.js?v=20260909.1"></script>
+<script src="/components/UiChoiceGroup.js?v=20260909.1"></script>
+<script src="/components/UiModalTransition.js?v=20260909.1"></script>
+<script src="/components/UiMotionIcon.js?v=20260909.1"></script>
+<script src="/components/SidebarNav.js?v=20261007.9"></script>
+<script src="/components/ToastContainer.js?v=20261012.2"></script>
+<script src="/components/WorkspaceSearchField.js?v=20261007.9"></script>
+<script src="/components/WorkspacePagination.js?v=20260909.4"></script>
+<script src="/components/ConfirmModal.js?v=20261007.8"></script>
+<script src="/components/TourOverlay.js?v=20260909.4"></script>
+<script src="/components/ImportModal.js?v=20261007.5"></script>
+<script src="/components/AuditPage.js?v=20261007.15"></script>
+<script src="/components/IssuesPage.js?v=20261007.13"></script>
+<script src="/components/MatchExplainTree.js?v=20261012.1"></script>
+<script src="/components/RequestFlowView.js?v=20261012.1"></script>
+<script src="/components/RuleOrderView.js?v=20261012.2"></script>
+<script src="/components/TrafficOverview.js?v=20261013.2"></script>
+<script src="/components/StatsPage.js?v=20261013.1"></script>
+<script src="/components/ResponseEditModal.js?v=20261013.6"></script>
+<script src="/components/ChangePasswordModal.js?v=20261007.5"></script>
+    <script src="/components/ResponsesPage.js?v=20261007.9"></script>
+    <script src="/components/ResponseDetail.js?v=20261007.13"></script>
+<script src="/components/GcHistoryPanel.js?v=20261016.1"></script>
+<script src="/components/ResourceMonitoringPanel.js?v=20261016.1"></script>
+<script src="/components/ConnectionTargetsTable.js?v=20261007.5"></script>
+<script src="/components/SettingsPage.js?v=20261013.1"></script>
+<script src="/components/PriorityHelpModal.js?v=20261007.5"></script>
+<script src="/components/RuleTable.js?v=20261012.2"></script>
+<script src="/components/RuleDetail.js?v=20261013.1"></script>
+<script src="/components/RulesPage.js?v=20261012.5"></script>
+<script src="/components/AccountsPage.js?v=20261007.13"></script>
+<script src="/components/MatchTreeEditor.js?v=20261012.1"></script>
+<script src="/components/SseEventsEditor.js?v=20261013.5"></script>
+<script src="/components/RuleEditModal.js?v=20261013.6"></script>
+<script src="/components/RuleApplyModal.js?v=20261007.2"></script>
+<script src="/components/OpenApiPreviewModal.js?v=20261007.5"></script>
+<script src="/easter-egg.js?v=20261016.1"></script>
+<script src="/app.js?v=20261016.1"></script>
 </body>
 </html>

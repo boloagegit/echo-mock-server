@@ -11,10 +11,13 @@ const shortId = id => id && id.length > 8 ? id.substring(0, 8) : id;
 const daysLeft = (createdAt, extendedAt, retentionDays) => { if (!retentionDays) return null; const baseDate = extendedAt || createdAt; if (!baseDate) return null; const d = Math.ceil((new Date(baseDate).getTime() + retentionDays * 86400000 - Date.now()) / 86400000); return d > 0 ? d : 0; };
 const fmtSize = bytes => { if (!bytes) return '0 B'; if (bytes < 1024) return bytes + ' B'; if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'; return (bytes / 1024 / 1024).toFixed(2) + ' MB'; };
 const reasonText = r => { const map = {match: _t('reasonText.match'), disabled: _t('reasonText.disabled'), condition_not_match: _t('reasonText.condition_not_match'), fallback: _t('reasonText.fallback'), skipped: _t('reasonText.skipped'), 'near-miss': _t('reasonText.nearMiss'), shadowed: _t('reasonText.shadowed'), mismatch: _t('reasonText.mismatch')}; return map[r] || r; };
-const condCount = r => { const b = (r.bodyCondition||'').split(';').filter(x=>x); const q = (r.queryCondition||'').split(';').filter(x=>x); const h = (r.headerCondition||'').split(';').filter(x=>x); return b.length + q.length + h.length; };
-const condTooltip = r => { const parts = []; (r.bodyCondition||'').split(';').filter(x=>x).forEach(c => parts.push(c)); (r.queryCondition||'').split(';').filter(x=>x).forEach(c => parts.push('?' + c)); (r.headerCondition||'').split(';').filter(x=>x).forEach(c => parts.push('@' + c)); return parts.join('\n'); };
-const condTags = r => { const tags = []; (r.bodyCondition||'').split(';').filter(x=>x).forEach(c => { const t = c.trim(); const label = t.startsWith('$.') ? 'JSONPath' : /^\//.test(t) ? 'XPath' : _t('modal.condFieldBody'); tags.push({t:'body',v:c,label}); }); (r.queryCondition||'').split(';').filter(x=>x).forEach(c => tags.push({t:'query',v:c,label:_t('modal.condFieldQuery')})); (r.headerCondition||'').split(';').filter(x=>x).forEach(c => tags.push({t:'header',v:c,label:_t('modal.condFieldHeader')})); return tags; };
-const condTagsGrouped = r => { const groups = []; const body = (r.bodyCondition||'').split(';').filter(x=>x).map(c => { const t = c.trim(); const label = t.startsWith('$.') ? 'JSONPath' : /^\//.test(t) ? 'XPath' : _t('modal.condFieldBody'); return {t:'body',v:c,label}; }); const query = (r.queryCondition||'').split(';').filter(x=>x).map(c => ({t:'query',v:c,label:_t('modal.condFieldQuery')})); const header = (r.headerCondition||'').split(';').filter(x=>x).map(c => ({t:'header',v:c,label:_t('modal.condFieldHeader')})); if (body.length) { groups.push({type:'body', items:body}); } if (query.length) { groups.push({type:'query', items:query}); } if (header.length) { groups.push({type:'header', items:header}); } return groups; };
+// 使用結構化條件（matchSpec）的規則以摘要顯示；見 match-tree.js。
+const hasMatchSpec = r => !!(r && r.matchSpec && typeof r.matchSpec === 'object');
+const matchSummary = r => MatchTree.summarizeSpec(r.matchSpec);
+const condCount = r => { if (hasMatchSpec(r)) return matchSummary(r).count; const b = (r.bodyCondition||'').split(';').filter(x=>x); const q = (r.queryCondition||'').split(';').filter(x=>x); const h = (r.headerCondition||'').split(';').filter(x=>x); return b.length + q.length + h.length; };
+const condTooltip = r => { if (hasMatchSpec(r)) return matchSummary(r).lines.join('\n'); const parts = []; (r.bodyCondition||'').split(';').filter(x=>x).forEach(c => parts.push(c)); (r.queryCondition||'').split(';').filter(x=>x).forEach(c => parts.push('?' + c)); (r.headerCondition||'').split(';').filter(x=>x).forEach(c => parts.push('@' + c)); return parts.join('\n'); };
+const condTags = r => { if (hasMatchSpec(r)) { const summary = matchSummary(r); return summary.count ? [{t:'advanced', v:summary.line, label:_t('rules.advancedMatch')}] : []; } const tags = []; (r.bodyCondition||'').split(';').filter(x=>x).forEach(c => { const t = c.trim(); const label = t.startsWith('$.') ? 'JSONPath' : /^\//.test(t) ? 'XPath' : _t('modal.condFieldBody'); tags.push({t:'body',v:c,label}); }); (r.queryCondition||'').split(';').filter(x=>x).forEach(c => tags.push({t:'query',v:c,label:_t('modal.condFieldQuery')})); (r.headerCondition||'').split(';').filter(x=>x).forEach(c => tags.push({t:'header',v:c,label:_t('modal.condFieldHeader')})); return tags; };
+const condTagsGrouped = r => { if (hasMatchSpec(r)) { const lines = matchSummary(r).lines; return lines.length ? [{type:'advanced', items: lines.map(line => ({t:'advanced', v:line.trim(), depth:(line.length - line.trimStart().length) / 2, label:_t('rules.advancedMatch')}))}] : []; } const groups = []; const body = (r.bodyCondition||'').split(';').filter(x=>x).map(c => { const t = c.trim(); const label = t.startsWith('$.') ? 'JSONPath' : /^\//.test(t) ? 'XPath' : _t('modal.condFieldBody'); return {t:'body',v:c,label}; }); const query = (r.queryCondition||'').split(';').filter(x=>x).map(c => ({t:'query',v:c,label:_t('modal.condFieldQuery')})); const header = (r.headerCondition||'').split(';').filter(x=>x).map(c => ({t:'header',v:c,label:_t('modal.condFieldHeader')})); if (body.length) { groups.push({type:'body', items:body}); } if (query.length) { groups.push({type:'query', items:query}); } if (header.length) { groups.push({type:'header', items:header}); } return groups; };
 const parseTags = t => { try { return t ? JSON.parse(t) : {} } catch { return {} } };
 const parseHeaders = t => { try { return t ? JSON.parse(t) : {} } catch { return {} } };
 const fmtCond = s => s ? s.split(';').filter(x=>x).join('\n') : '';
@@ -29,8 +32,11 @@ const forwardTargetLabel = rule => {
     const id = protocol === 'JMS'
         ? rule?.jmsTargetConnectionId
         : rule?.httpTargetConnectionId;
-    return id == null || id === '' ? '-' : '#' + id;
+    return id == null || id === ''
+        ? '-'
+        : _t('modal.forwardSpecificConnection', { id });
 };
+const forwardTargetEndpoint = rule => rule?._forwardTargetEndpoint || '';
 const debounce = (fn, delay = 300) => {
     let timer = null;
     const debounced = (...args) => { if (timer) { clearTimeout(timer); } timer = setTimeout(() => { fn(...args); timer = null; }, delay); };
@@ -81,6 +87,56 @@ const trapDialogFocus = (event, dialog) => {
         first.focus();
     }
 };
+/**
+ * Detail drawers keep showing the record already on screen until the next record's
+ * data is ready, then swap in a single frame. Without this, stepping through a list
+ * blanks the drawer for a frame (content → empty → content), which reads as a flash.
+ * Opening from closed waits the same way (up to DETAIL_HOLD_MS), so the drawer slides
+ * in already filled instead of filling in mid-slide.
+ *
+ * `source` runs on the component and returns { open, key, ready, value }; `ready` is
+ * true once the current record can be shown (loaded, failed, or nothing to load).
+ * Templates read `held.value`, `held.open`, `held.waiting` and `held.stale`.
+ */
+/** Many conditions, tags or linked rules in a drawer show the first few, then "show all". */
+const DETAIL_LIST_PREVIEW = { conditions: 6, links: 8, tags: 8 };
+/** Modifier shown in save-shortcut hints (Ctrl+Enter or ⌘+Enter save every form dialog). */
+const SAVE_SHORTCUT_KEY = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘' : 'Ctrl';
+const DETAIL_HOLD_MS = 300;
+const heldDetailMixin = source => ({
+    data() { return { heldSnapshot: null, holdExpired: false }; },
+    computed: {
+        heldSource() { return source.call(this); },
+        held() {
+            const current = this.heldSource;
+            const stale = current.open && !current.ready && !!this.heldSnapshot;
+            return {
+                value: stale ? this.heldSnapshot : current.value,
+                stale,
+                waiting: !current.ready && !stale,
+                open: current.open && (current.ready || stale || this.holdExpired),
+            };
+        },
+    },
+    watch: {
+        heldSource: {
+            immediate: true,
+            handler(current, previous) {
+                if (!current.open || current.ready) {
+                    clearTimeout(this.holdTimer);
+                    this.heldSnapshot = current.open ? current.value : null;
+                    this.holdExpired = false;
+                } else if (!previous || !previous.open || previous.key !== current.key) {
+                    clearTimeout(this.holdTimer);
+                    this.holdExpired = false;
+                    this.holdTimer = setTimeout(() => { this.holdExpired = true; }, DETAIL_HOLD_MS);
+                }
+            },
+        },
+    },
+    beforeUnmount() { clearTimeout(this.holdTimer); },
+});
+
 const deserializeSseEvents = (jsonStr) => {
     const defaultEvent = () => ({ event: '', data: '', id: '', delayMs: 0, type: 'normal' });
     if (jsonStr == null || typeof jsonStr !== 'string' || !jsonStr.trim()) { return [defaultEvent()]; }
@@ -108,10 +164,48 @@ const serializeSseEvents = (events) => {
     });
     return JSON.stringify(arr, null, 2);
 };
+
+// Incremental SSE framing. UTF-8 decoding belongs to the streaming TextDecoder.
+const createSseParser = onEvent => {
+    let line = '', skipLf = false, data = [], event = '', lastId = '';
+    const consumeLine = () => {
+        if (line === '') {
+            if (data.length) onEvent({ event, data: data.join('\n'), id: lastId });
+            data = [];
+            event = '';
+        } else if (!line.startsWith(':')) {
+            const colon = line.indexOf(':');
+            const field = colon < 0 ? line : line.slice(0, colon);
+            let value = colon < 0 ? '' : line.slice(colon + 1);
+            if (value.startsWith(' ')) value = value.slice(1);
+            if (field === 'data') data.push(value);
+            else if (field === 'event') event = value;
+            else if (field === 'id' && !value.includes('\0')) lastId = value;
+        }
+        line = '';
+    };
+    return {
+        push(text) {
+            for (const char of text) {
+                if (skipLf) {
+                    skipLf = false;
+                    if (char === '\n') continue;
+                }
+                if (char === '\r' || char === '\n') {
+                    consumeLine();
+                    skipLf = char === '\r';
+                } else line += char;
+            }
+        },
+        // EOF does not dispatch an event without its terminating blank line.
+        finish() { line = ''; data = []; event = ''; }
+    };
+};
 let _showToast = null;
 let _t = null;
 const apiCall = async (url, opt = {}, config = {}) => {
-    const { silent = false, errorMsg = '' } = config;
+    // quietStatuses：呼叫端自行處理的狀態碼，不顯示通用錯誤
+    const { silent = false, errorMsg = '', quietStatuses = [] } = config;
     try {
         const headers = { 'Accept': 'application/json', ...(opt.headers || {}) };
         const isFormData = typeof FormData !== 'undefined' && opt.body instanceof FormData;
@@ -119,6 +213,7 @@ const apiCall = async (url, opt = {}, config = {}) => {
             headers['Content-Type'] = 'application/json';
         }
         const r = await fetch(url, { ...opt, headers });
+        if (quietStatuses.includes(r.status)) { return r; }
         if (r.status === 401 || r.status === 403) {
             if (!silent) { _showToast(_t('toast.loginRequired'), 'error'); }
             return r;

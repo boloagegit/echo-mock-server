@@ -79,27 +79,13 @@ class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
     // ========== 4.4 測試 SSE body 驗證（端對端）==========
 
     @Test
-    @DisplayName("SSE body 驗證：空白 body（僅空白字元）→ 201（已知缺陷：controller 跳過 SSE 驗證）")
-    @org.junit.jupiter.api.Tag("known-defect")
-    void sseBodyValidation_blankBody_shouldReturn201BecauseValidationSkipped() {
-        // Known defect: controller 的 saveRule 在 responseBody 為 null/blank 時不呼叫驗證器，
-        // 導致空 body 的 SSE 規則可建立成功，但執行時會產生空的 SSE stream。
-        // TODO: 修復 AdminController.saveRule() 讓 SSE 規則強制驗證 body
-        RuleDto dto = RuleDto.builder()
-                .protocol(Protocol.HTTP)
-                .matchKey("/api/sse/empty-body")
-                .method("GET")
-                .responseBody("")
-                .sseEnabled(true)
-                .sseLoopEnabled(false)
-                .build();
-
-        ResponseEntity<RuleDto> response = adminClient()
-                .postForEntity("/api/admin/rules", dto, RuleDto.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().getSseEnabled()).isTrue();
+    void sseBodyValidation_blankOrNullBody_shouldReturn400() {
+        for (String body : java.util.Arrays.asList("", "   ", null)) {
+            RuleDto dto = RuleDto.builder().protocol(Protocol.HTTP).matchKey("/api/sse/empty-body")
+                    .method("GET").responseBody(body).sseEnabled(true).build();
+            assertThat(adminClient().postForEntity("/api/admin/rules", dto, Map.class).getStatusCode())
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+        }
     }
 
     @Test

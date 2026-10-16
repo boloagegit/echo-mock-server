@@ -1,0 +1,66 @@
+[
+  {
+    "name": "com.echo.architecture.ArchitectureRulesTest",
+    "tests": "5",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "3.42"
+  },
+  {
+    "name": "com.echo.config.SecurityIntegrationTest",
+    "tests": "34",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "0.785"
+  },
+  {
+    "name": "com.echo.controller.UniversalMockControllerSseTest",
+    "tests": "17",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "15.936"
+  },
+  {
+    "name": "com.echo.controller.UniversalMockControllerTest",
+    "tests": "18",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "0.169"
+  },
+  {
+    "name": "com.echo.integration.http.HttpMockIntegrationTest",
+    "tests": "16",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "3.842"
+  },
+  {
+    "name": "com.echo.integration.http.RequestLogIntegrationTest",
+    "tests": "8",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "1.722"
+  },
+  {
+    "name": "com.echo.integration.http.SseForwardingRegressionIntegrationTest",
+    "tests": "7",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "1.958"
+  },
+  {
+    "name": "com.echo.integration.http.NativeHttpTransportIntegrationTest",
+    "tests": "6",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "1.316"
+  }
+]

@@ -1,0 +1,20 @@
+{
+  "tests": 119,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "classes": [
+    "com.echo.architecture.ArchitectureRulesTest",
+    "com.echo.config.SecurityIntegrationTest",
+    "com.echo.controller.UniversalMockControllerSseTest",
+    "com.echo.controller.UniversalMockControllerTest",
+    "com.echo.integration.http.HttpMockIntegrationTest",
+    "com.echo.integration.http.RequestLogIntegrationTest",
+    "com.echo.integration.http.SseForwardingRegressionIntegrationTest",
+    "com.echo.integration.http.NativeHttpCapacityIntegrationTest",
+    "com.echo.integration.http.NativeHttpTransportIntegrationTest"
+  ],
+  "spotbugs": "passed (including experimental classes)",
+  "log": "/workspace/scratch/echo-perf/http-release-candidate.log",
+  "jar_sha256": "91262dd72ba0aabae0a8c335391927a2f4f7dbb0e5910bc0f43ebefc08553acc"
+}

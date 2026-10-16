@@ -1,5 +1,8 @@
 package com.echo.service;
 
+import com.echo.protocol.ProtocolHandlerRegistry;
+import com.echo.protocol.http.HttpProtocolHandler;
+import com.echo.protocol.jms.JmsProtocolHandler;
 import com.echo.entity.HttpRule;
 import com.echo.entity.JmsRule;
 import com.echo.repository.HttpRuleRepository;
@@ -20,11 +23,12 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.datasource.driver-class-name=org.sqlite.JDBC",
         "spring.datasource.hikari.maximum-pool-size=1",
         "spring.datasource.hikari.minimum-idle=1",
-        "spring.jpa.database-platform=org.hibernate.community.dialect.SQLiteDialect",
+        "spring.jpa.database-platform=com.echo.config.EchoSqliteDialect",
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "echo.jms.enabled=true"
 })
-@Import(RuleQueryService.class)
+@Import({RuleQueryService.class, ProtocolHandlerRegistry.class,
+        HttpProtocolHandler.class, JmsProtocolHandler.class})
 class RuleQueryServiceSqliteTest {
 
     @Autowired

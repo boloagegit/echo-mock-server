@@ -43,6 +43,19 @@ repositories {
     mavenCentral()
 }
 
+// H2 不再是支援的資料庫。只有離線的 H2→SQLite 轉換工具需要 H2 驅動，因此放在獨立的 source set：
+// 不會打包進 echo-server.jar，也不在一般測試的 classpath（避免 @DataJpaTest 悄悄改用內嵌 H2）。
+sourceSets {
+    h2Migration {
+        java.srcDir 'src/h2Migration/java'
+    }
+    h2MigrationTest {
+        java.srcDir 'src/h2MigrationTest/java'
+        compileClasspath += h2Migration.output
+        runtimeClasspath += h2Migration.output
+    }
+}
+
 dependencies {
     // Spring Boot Web with Undertow (exclude Tomcat)
     implementation 'org.springframework.boot:spring-boot-starter-web'
@@ -62,8 +75,7 @@ dependencies {
     // Data & Persistence
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.hibernate.orm:hibernate-community-dialects'
-    runtimeOnly 'org.xerial:sqlite-jdbc:3.53.2.1'
-    runtimeOnly 'com.h2database:h2'
+    implementation 'org.xerial:sqlite-jdbc:3.53.2.1'
     runtimeOnly 'org.postgresql:postgresql'
     runtimeOnly 'com.mysql:mysql-connector-j'
     runtimeOnly 'org.mariadb.jdbc:mariadb-java-client'
@@ -102,12 +114,15 @@ dependencies {
     compileOnly files('libs/tibjms.jar')
 
     // WebJars for Intranet-friendly Frontend (NO CDN)
-    implementation 'org.webjars:webjars-locator-core'
+    // Spring MVC resolves versionless URLs using WebJar metadata, without a full ClassGraph scan.
+    implementation 'org.webjars:webjars-locator-lite'
     implementation 'org.webjars.npm:vue:3.5.41'
     implementation 'org.webjars.npm:bootstrap:5.3.8'
     implementation 'org.webjars.npm:bootstrap-icons:1.13.1'
     // The UI uses CodeMirror 5's global API and /lib paths; 5.65.21 is the latest compatible release.
     implementation 'org.webjars.npm:codemirror:5.65.21'
+    // Bundled monospace font so endpoints and code render the same on Windows and macOS.
+    implementation 'org.webjars.npm:fontsource__jetbrains-mono:4.5.11'
 
     // Feign (compileOnly - for MockRedirectClient reference code)
     compileOnly 'io.github.openfeign:feign-core:13.13'
@@ -122,16 +137,93 @@ dependencies {
     errorprone 'com.google.errorprone:error_prone_core:2.42.0'
 
     // Testing
+    testImplementation 'io.micrometer:micrometer-tracing-bridge-brave'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
     testImplementation 'com.unboundid:unboundid-ldapsdk:7.0.5'
     testImplementation 'net.jqwik:jqwik:1.10.1'
+    // Architecture boundary rules (see docs/design/engine-extensibility.md)
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.1'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // Offline H2-to-SQLite migration tool (see sourceSets.h2Migration)
+    h2MigrationImplementation 'com.fasterxml.jackson.core:jackson-databind'
+    h2MigrationRuntimeOnly 'com.h2database:h2'
+    h2MigrationRuntimeOnly 'org.xerial:sqlite-jdbc:3.53.2.1'
+    h2MigrationTestImplementation 'org.junit.jupiter:junit-jupiter'
+    h2MigrationTestImplementation 'org.assertj:assertj-core'
+    h2MigrationTestRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    h2MigrationTestRuntimeOnly 'com.h2database:h2'
+    h2MigrationTestRuntimeOnly 'org.xerial:sqlite-jdbc:3.53.2.1'
 }
 
 tasks.named('test') {
     useJUnitPlatform()
     finalizedBy jacocoTestReport
+    // 測試類別分到多個 JVM 平行執行（各自的 Spring context；資料庫檔名與連接埠都是隨機的，不會互相干擾）。
+    // 用一半的核心：Spring context 啟動很吃 CPU，全部核心反而互相拖慢。-PtestForks=1 可改回單一 JVM。
+    maxParallelForks = providers.gradleProperty('testForks').map { it as int }
+            .getOrElse(Math.max(1, Runtime.runtime.availableProcessors().intdiv(2)))
+}
+
+// Opt-in, short real-JMS/file-output A/B measurement; never part of unit-test gates.
+tasks.register('jmsApplicationCost', JavaExec) {
+    dependsOn testClasses
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.echo.jms.JmsApplicationCostProbe'
+    args providers.gradleProperty('jmsBenchmarkOutput').getOrElse('artifacts/jms-application-cost')
+    jvmArgs '-Xms1g', '-Xmx1g', '-XX:+UseG1GC'
+}
+
+// Opt-in, short real-JMS/file-output A/B measurement; never part of unit-test gates.
+tasks.register('jmsForwardingCost', JavaExec) {
+    dependsOn testClasses
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.echo.jms.JmsForwardingCostProbe'
+    args providers.gradleProperty('jmsBenchmarkOutput').getOrElse('artifacts/jms-forwarding-cost')
+    jvmArgs '-Xms512m', '-Xmx512m', '-XX:+UseG1GC'
+}
+
+// Opt-in, short real-JMS/file-output A/B measurement; never part of unit-test gates.
+tasks.register('diagnosticCost', JavaExec) {
+    dependsOn testClasses
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.echo.diagnostics.DiagnosticCostProbe'
+    args providers.gradleProperty('diagnosticOutput').getOrElse('artifacts/diagnostics-cost'),
+            providers.gradleProperty('diagnosticRequests').getOrElse('1500')
+    jvmArgs '-Xmx512m'
+}
+
+// Opt-in short real AP / HTTP / SQLite / durable-spool comparison, isolated temp data.
+tasks.register('diagnosticApplicationCost', JavaExec) {
+    dependsOn testClasses
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.echo.diagnostics.ApplicationDiagnosticCostProbe'
+    args providers.gradleProperty('diagnosticOutput').getOrElse('artifacts/diagnostics-cost'),
+            providers.gradleProperty('diagnosticRequests').getOrElse('1000')
+    jvmArgs '-Xmx512m'
+}
+
+// Opt-in Docker fixture only: never included in the application or normal test gates.
+tasks.register('dockerDiagnosticFixtureJar', Jar) {
+    dependsOn testClasses
+    archiveFileName = 'echo-diagnostic-fixture.jar'
+    from(sourceSets.test.output) {
+        include 'com/echo/diagnostics/ContainerDiagnosticFixture*.class'
+    }
+}
+
+// Standalone Windows/Linux load fixture; no Docker or application packaging dependency.
+tasks.register('memoryObservationFixtureJar', Jar) {
+    dependsOn testClasses
+    archiveFileName = 'echo-memory-observation-fixture.jar'
+    from(sourceSets.test.output) {
+        include 'com/echo/diagnostics/MemoryObservationFixture*.class'
+    }
 }
 
 jacocoTestReport {
@@ -153,6 +245,8 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 
 // Error Prone 編譯期檢查（僅編譯階段，不影響 runtime）
 tasks.withType(JavaCompile).configureEach {
+    // Source files contain Chinese text; Windows JDK 17 may default to a legacy code page.
+    options.encoding = 'UTF-8'
     options.errorprone {
         disableWarningsInGeneratedCode = true
         // Lombok 產生的程式碼會觸發的誤報
@@ -192,6 +286,7 @@ tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
 }
 // 測試程式碼不需要 SpotBugs 靜態分析
 spotbugsTest.enabled = false
+spotbugsH2MigrationTest.enabled = false
 
 // Build Fat Jar
 tasks.named('bootJar') {
@@ -215,8 +310,7 @@ tasks.register('dev') {
     group = 'application'
     description = 'Run in dev mode (no login required)'
     doFirst {
-        // dev task 預設激活 dev profile，DB 使用 application.yml 的預設 H2
-        // 如需 SQLite: ./gradlew bootRun --args='--spring.profiles.active=dev,sqlite'
+        // dev task 使用 dev profile，資料庫沿用 application.yml 的預設 SQLite。
         bootRun.configure {
             args = ["--spring.profiles.active=dev"]
         }
@@ -240,6 +334,18 @@ tasks.register('runJmsTest', JavaExec) {
 tasks.register('migrateH2ToSqlite', JavaExec) {
     group = 'application'
     description = 'Migrate and verify an offline H2 database into a staged SQLite database'
-    classpath = sourceSets.main.runtimeClasspath
+    classpath = sourceSets.h2Migration.runtimeClasspath
     mainClass = 'com.echo.migration.H2ToSqliteMigrator'
+}
+
+tasks.register('h2MigrationTest', Test) {
+    group = 'verification'
+    description = 'Tests the offline H2-to-SQLite migration tool'
+    testClassesDirs = sourceSets.h2MigrationTest.output.classesDirs
+    classpath = sourceSets.h2MigrationTest.runtimeClasspath
+    useJUnitPlatform()
+}
+
+tasks.named('check') {
+    dependsOn 'h2MigrationTest'
 }

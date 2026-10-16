@@ -173,6 +173,28 @@ class JmsTargetConnectionServiceTest {
     }
 
     @Test
+    void yamlTargetUsesConfiguredNameWhenSet() {
+        properties.getTarget().setEnabled(true);
+        properties.getTarget().setType("tibco");
+        properties.getTarget().setServerUrl("tcp://esb:7222");
+        properties.getTarget().setName("  ESB-UAT  ");
+
+        assertThat(service.resolveActive().orElseThrow().name()).isEqualTo("ESB-UAT");
+        assertThat(service.resolveEnabled(JmsTargetConnectionService.LEGACY_ID).name()).isEqualTo("ESB-UAT");
+        assertThat(service.list().get(0).name()).isEqualTo("ESB-UAT");
+    }
+
+    @Test
+    void blankYamlTargetNameFallsBackToApplicationYml() {
+        properties.getTarget().setEnabled(true);
+        properties.getTarget().setType("tibco");
+        properties.getTarget().setServerUrl("tcp://esb:7222");
+        properties.getTarget().setName("   ");
+
+        assertThat(service.resolveActive().orElseThrow().name()).isEqualTo("application.yml");
+    }
+
+    @Test
     void listIncludesYamlTargetAndStoredFallbackDefault() {
         properties.getTarget().setEnabled(true);
         properties.getTarget().setType("artemis");

@@ -1,0 +1,928 @@
+[
+  {
+    "label": "warm",
+    "time": 1792119710.9479623,
+    "counts": {
+      "/large:200": 159,
+      "/fixed:200": 798,
+      "/xml:200": 159,
+      "/tpl:200": 160,
+      "/delay:200": 159,
+      "/forward-error:503": 159,
+      "/forward-fast:200": 159,
+      "/forward-slow:200": 159
+    },
+    "gauges": {
+      "echo.http.native.active": 0.0,
+      "echo.http.native.buffered.bytes": 0.0,
+      "echo.http.native.queued": 0.0
+    },
+    "forwarding": {
+      "activeForwards": 0,
+      "ioThreads": 4,
+      "completedForwards": 477,
+      "cancelledForwards": 0,
+      "rejectedForwards": 0,
+      "clientPoolCount": 2,
+      "pool": {
+        "leased": 0,
+        "pending": 0,
+        "available": 51,
+        "capacity": 1000,
+        "maxConnections": 1000,
+        "maxPendingRequests": 1000,
+        "maxResponseBodyBytes": 10485760,
+        "bufferedResponseBytes": 0,
+        "maxBufferedResponseBytes": 134217728,
+        "poolAcquireTimeoutMs": 3000,
+        "idleConnectionTimeoutSeconds": 30,
+        "backgroundEvictionIntervalSeconds": 30,
+        "maxConnectionsPerRoute": 1000,
+        "validateAfterInactivitySeconds": 0,
+        "maxConnectionsPerPool": 1000
+      },
+      "targets": {
+        "profile:1": {
+          "name": "soak",
+          "failed": 0,
+          "capacityRejected": 0,
+          "poolTimeouts": 0,
+          "connectTimeouts": 0,
+          "readTimeouts": 0,
+          "responseTooLarge": 0,
+          "otherFailures": 0
+        }
+      },
+      "executorThreads": 4,
+      "completedExecutorTasks": 477
+    },
+    "agents": [
+      {
+        "name": "log-agent",
+        "description": "Async batch log writer with match chain analysis",
+        "status": "RUNNING",
+        "queueSize": 0,
+        "processedCount": 1912,
+        "droppedCount": 0,
+        "queueBytes": 0,
+        "queueCapacityBytes": 10737418240,
+        "inFlightBytes": 0,
+        "inFlightByteLimit": 134217728,
+        "waitingProducers": 0,
+        "backpressureActive": false
+      }
+    ],
+    "heap": "218499:\n garbage-first heap   total 1048576K, used 58914K [0x00000000c0000000, 0x0000000100000000)\n  region size 1024K, 2 young (2048K), 0 survivors (0K)\n Metaspace       used 122480K, committed 123712K, reserved 1179648K\n  class space    used 16192K, committed 16768K, reserved 1048576K\n",
+    "fdCount": 194,
+    "process": [
+      "VmHWM:\t 1015544 kB",
+      "VmRSS:\t 1015544 kB",
+      "Threads:\t73"
+    ]
+  },
+  {
+    "label": 1,
+    "time": 1792119773.7110639,
+    "counts": {
+      "/large:200": 2075,
+      "/fixed:200": 10378,
+      "/xml:200": 2075,
+      "/tpl:200": 2076,
+      "/delay:200": 2075,
+      "/forward-error:503": 2075,
+      "/forward-fast:200": 2075,
+      "/forward-slow:200": 2075,
+      "/mutable:200": 1,
+      "oversized:413": 1
+    },
+    "gauges": {
+      "echo.http.native.active": 0.0,
+      "echo.http.native.buffered.bytes": 0.0,
+      "echo.http.native.queued": 0.0
+    },
+    "forwarding": {
+      "activeForwards": 0,
+      "ioThreads": 4,
+      "completedForwards": 6225,
+      "cancelledForwards": 0,
+      "rejectedForwards": 0,
+      "clientPoolCount": 2,
+      "pool": {
+        "leased": 0,
+        "pending": 0,
+        "available": 51,
+        "capacity": 1000,
+        "maxConnections": 1000,
+        "maxPendingRequests": 1000,
+        "maxResponseBodyBytes": 10485760,
+        "bufferedResponseBytes": 0,
+        "maxBufferedResponseBytes": 134217728,
+        "poolAcquireTimeoutMs": 3000,
+        "idleConnectionTimeoutSeconds": 30,
+        "backgroundEvictionIntervalSeconds": 30,
+        "maxConnectionsPerRoute": 1000,
+        "validateAfterInactivitySeconds": 0,
+        "maxConnectionsPerPool": 1000
+      },
+      "targets": {
+        "profile:1": {
+          "name": "soak",
+          "failed": 0,
+          "capacityRejected": 0,
+          "poolTimeouts": 0,
+          "connectTimeouts": 0,
+          "readTimeouts": 0,
+          "responseTooLarge": 0,
+          "otherFailures": 0
+        }
+      },
+      "executorThreads": 4,
+      "completedExecutorTasks": 6225
+    },
+    "agents": [
+      {
+        "name": "log-agent",
+        "description": "Async batch log writer with match chain analysis",
+        "status": "RUNNING",
+        "queueSize": 0,
+        "processedCount": 24913,
+        "droppedCount": 0,
+        "queueBytes": 0,
+        "queueCapacityBytes": 10737418240,
+        "inFlightBytes": 0,
+        "inFlightByteLimit": 134217728,
+        "waitingProducers": 0,
+        "backpressureActive": false
+      }
+    ],
+    "heap": "218499:\n garbage-first heap   total 1048576K, used 59754K [0x00000000c0000000, 0x0000000100000000)\n  region size 1024K, 2 young (2048K), 0 survivors (0K)\n Metaspace       used 123991K, committed 125248K, reserved 1179648K\n  class space    used 16256K, committed 16832K, reserved 1048576K\n",
+    "fdCount": 194,
+    "process": [
+      "VmHWM:\t 1164140 kB",
+      "VmRSS:\t 1164140 kB",
+      "Threads:\t75"
+    ]
+  },
+  {
+    "label": 2,
+    "time": 1792119836.48085,
+    "counts": {
+      "/large:200": 3995,
+      "/fixed:200": 19978,
+      "/xml:200": 3995,
+      "/tpl:200": 3996,
+      "/delay:200": 3995,
+      "/forward-error:503": 3995,
+      "/forward-fast:200": 3995,
+      "/forward-slow:200": 3995,
+      "/mutable:200": 2,
+      "oversized:413": 2
+    },
+    "gauges": {
+      "echo.http.native.active": 0.0,
+      "echo.http.native.buffered.bytes": 0.0,
+      "echo.http.native.queued": 0.0
+    },
+    "forwarding": {
+      "activeForwards": 0,
+      "ioThreads": 4,
+      "completedForwards": 11985,
+      "cancelledForwards": 0,
+      "rejectedForwards": 0,
+      "clientPoolCount": 2,
+      "pool": {
+        "leased": 0,
+        "pending": 0,
+        "available": 51,
+        "capacity": 1000,
+        "maxConnections": 1000,
+        "maxPendingRequests": 1000,
+        "maxResponseBodyBytes": 10485760,
+        "bufferedResponseBytes": 0,
+        "maxBufferedResponseBytes": 134217728,
+        "poolAcquireTimeoutMs": 3000,
+        "idleConnectionTimeoutSeconds": 30,
+        "backgroundEvictionIntervalSeconds": 30,
+        "maxConnectionsPerRoute": 1000,
+        "validateAfterInactivitySeconds": 0,
+        "maxConnectionsPerPool": 1000
+      },
+      "targets": {
+        "profile:1": {
+          "name": "soak",
+          "failed": 0,
+          "capacityRejected": 0,
+          "poolTimeouts": 0,
+          "connectTimeouts": 0,
+          "readTimeouts": 0,
+          "responseTooLarge": 0,
+          "otherFailures": 0
+        }
+      },
+      "executorThreads": 4,
+      "completedExecutorTasks": 11985
+    },
+    "agents": [
+      {
+        "name": "log-agent",
+        "description": "Async batch log writer with match chain analysis",
+        "status": "RUNNING",
+        "queueSize": 0,
+        "processedCount": 47962,
+        "droppedCount": 0,
+        "queueBytes": 0,
+        "queueCapacityBytes": 10737418240,
+        "inFlightBytes": 0,
+        "inFlightByteLimit": 134217728,
+        "waitingProducers": 0,
+        "backpressureActive": false
+      }
+    ],
+    "heap": "218499:\n garbage-first heap   total 1048576K, used 58789K [0x00000000c0000000, 0x0000000100000000)\n  region size 1024K, 2 young (2048K), 0 survivors (0K)\n Metaspace       used 124159K, committed 125376K, reserved 1179648K\n  class space    used 16263K, committed 16832K, reserved 1048576K\n",
+    "fdCount": 195,
+    "process": [
+      "VmHWM:\t 1175364 kB",
+      "VmRSS:\t 1175364 kB",
+      "Threads:\t75"
+    ]
+  },
+  {
+    "label": 3,
+    "time": 1792119899.1662242,
+    "counts": {
+      "/large:200": 5914,
+      "/fixed:200": 29576,
+      "/xml:200": 5914,
+      "/tpl:200": 5916,
+      "/delay:200": 5914,
+      "/forward-error:503": 5914,
+      "/forward-fast:200": 5914,
+      "/forward-slow:200": 5914,
+      "/mutable:200": 3,
+      "oversized:413": 3
+    },
+    "gauges": {
+      "echo.http.native.active": 0.0,
+      "echo.http.native.buffered.bytes": 0.0,
+      "echo.http.native.queued": 0.0
+    },
+    "forwarding": {
+      "activeForwards": 0,
+      "ioThreads": 4,
+      "completedForwards": 17742,
+      "cancelledForwards": 0,
+      "rejectedForwards": 0,
+      "clientPoolCount": 2,
+      "pool": {
+        "leased": 0,
+        "pending": 0,
+        "available": 51,
+        "capacity": 1000,
+        "maxConnections": 1000,
+        "maxPendingRequests": 1000,
+        "maxResponseBodyBytes": 10485760,
+        "bufferedResponseBytes": 0,
+        "maxBufferedResponseBytes": 134217728,
+        "poolAcquireTimeoutMs": 3000,
+        "idleConnectionTimeoutSeconds": 30,
+        "backgroundEvictionIntervalSeconds": 30,
+        "maxConnectionsPerRoute": 1000,
+        "validateAfterInactivitySeconds": 0,
+        "maxConnectionsPerPool": 1000
+      },
+      "targets": {
+        "profile:1": {
+          "name": "soak",
+          "failed": 0,
+          "capacityRejected": 0,
+          "poolTimeouts": 0,
+          "connectTimeouts": 0,
+          "readTimeouts": 0,
+          "responseTooLarge": 0,
+          "otherFailures": 0
+        }
+      },
+      "executorThreads": 4,
+      "completedExecutorTasks": 17742
+    },
+    "agents": [
+      {
+        "name": "log-agent",
+        "description": "Async batch log writer with match chain analysis",
+        "status": "RUNNING",
+        "queueSize": 0,
+        "processedCount": 71003,
+        "droppedCount": 0,
+        "queueBytes": 0,
+        "queueCapacityBytes": 10737418240,
+        "inFlightBytes": 0,
+        "inFlightByteLimit": 134217728,
+        "waitingProducers": 0,
+        "backpressureActive": false
+      }
+    ],
+    "heap": "218499:\n garbage-first heap   total 1048576K, used 58726K [0x00000000c0000000, 0x0000000100000000)\n  region size 1024K, 1 young (1024K), 0 survivors (0K)\n Metaspace       used 124373K, committed 125568K, reserved 1179648K\n  class space    used 16264K, committed 16832K, reserved 1048576K\n",
+    "fdCount": 194,
+    "process": [
+      "VmHWM:\t 1176620 kB",
+      "VmRSS:\t 1176620 kB",
+      "Threads:\t75"
+    ]
+  },
+  {
+    "label": 4,
+    "time": 1792119961.8627155,
+    "counts": {
+      "/large:200": 7833,
+      "/fixed:200": 39169,
+      "/xml:200": 7833,
+      "/tpl:200": 7835,
+      "/delay:200": 7833,
+      "/forward-error:503": 7832,
+      "/forward-fast:200": 7833,
+      "/forward-slow:200": 7832,
+      "/mutable:200": 4,
+      "oversized:413": 4
+    },
+    "gauges": {
+      "echo.http.native.active": 0.0,
+      "echo.http.native.buffered.bytes": 0.0,
+      "echo.http.native.queued": 0.0
+    },
+    "forwarding": {
+      "activeForwards": 0,
+      "ioThreads": 4,
+      "completedForwards": 23497,
+      "cancelledForwards": 0,
+      "rejectedForwards": 0,
+      "clientPoolCount": 2,
+      "pool": {
+        "leased": 0,
+        "pending": 0,
+        "available": 51,
+        "capacity": 1000,
+        "maxConnections": 1000,
+        "maxPendingRequests": 1000,
+        "maxResponseBodyBytes": 10485760,
+        "bufferedResponseBytes": 0,
+        "maxBufferedResponseBytes": 134217728,
+        "poolAcquireTimeoutMs": 3000,
+        "idleConnectionTimeoutSeconds": 30,
+        "backgroundEvictionIntervalSeconds": 30,
+        "maxConnectionsPerRoute": 1000,
+        "validateAfterInactivitySeconds": 0,
+        "maxConnectionsPerPool": 1000
+      },
+      "targets": {
+        "profile:1": {
+          "name": "soak",
+          "failed": 0,
+          "capacityRejected": 0,
+          "poolTimeouts": 0,
+          "connectTimeouts": 0,
+          "readTimeouts": 0,
+          "responseTooLarge": 0,
+          "otherFailures": 0
+        }
+      },
+      "executorThreads": 4,
+      "completedExecutorTasks": 23497
+    },
+    "agents": [
+      {
+        "name": "log-agent",
+        "description": "Async batch log writer with match chain analysis",
+        "status": "RUNNING",
+        "queueSize": 0,
+        "processedCount": 94036,
+        "droppedCount": 0,
+        "queueBytes": 0,
+        "queueCapacityBytes": 10737418240,
+        "inFlightBytes": 0,
+        "inFlightByteLimit": 134217728,
+        "waitingProducers": 0,
+        "backpressureActive": false
+      }
+    ],
+    "heap": "218499:\n garbage-first heap   total 1048576K, used 58646K [0x00000000c0000000, 0x0000000100000000)\n  region size 1024K, 1 young (1024K), 0 survivors (0K)\n Metaspace       used 124512K, committed 125760K, reserved 1179648K\n  class space    used 16265K, committed 16832K, reserved 1048576K\n",
+    "fdCount": 193,
+    "process": [
+      "VmHWM:\t 1176756 kB",
+      "VmRSS:\t 1176756 kB",
+      "Threads:\t75"
+    ]
+  },
+  {
+    "label": 5,
+    "time": 1792120024.5701222,
+    "counts": {
+      "/large:200": 9755,
+      "/fixed:200": 48779,
+      "/xml:200": 9755,
+      "/tpl:200": 9757,
+      "/delay:200": 9755,
+      "/forward-error:503": 9754,
+      "/forward-fast:200": 9755,
+      "/forward-slow:200": 9754,
+      "/mutable:200": 5,
+      "oversized:413": 5
+    },
+    "gauges": {
+      "echo.http.native.active": 0.0,
+      "echo.http.native.buffered.bytes": 0.0,
+      "echo.http.native.queued": 0.0
+    },
+    "forwarding": {
+      "activeForwards": 0,
+      "ioThreads": 4,
+      "completedForwards": 29263,
+      "cancelledForwards": 0,
+      "rejectedForwards": 0,
+      "clientPoolCount": 2,
+      "pool": {
+        "leased": 0,
+        "pending": 0,
+        "available": 51,
+        "capacity": 1000,
+        "maxConnections": 1000,
+        "maxPendingRequests": 1000,
+        "maxResponseBodyBytes": 10485760,
+        "bufferedResponseBytes": 0,
+        "maxBufferedResponseBytes": 134217728,
+        "poolAcquireTimeoutMs": 3000,
+        "idleConnectionTimeoutSeconds": 30,
+        "backgroundEvictionIntervalSeconds": 30,
+        "maxConnectionsPerRoute": 1000,
+        "validateAfterInactivitySeconds": 0,
+        "maxConnectionsPerPool": 1000
+      },
+      "targets": {
+        "profile:1": {
+          "name": "soak",
+          "failed": 0,
+          "capacityRejected": 0,
+          "poolTimeouts": 0,
+          "connectTimeouts": 0,
+          "readTimeouts": 0,
+          "responseTooLarge": 0,
+          "otherFailures": 0
+        }
+      },
+      "executorThreads": 4,
+      "completedExecutorTasks": 29263
+    },
+    "agents": [
+      {
+        "name": "log-agent",
+        "description": "Async batch log writer with match chain analysis",
+        "status": "RUNNING",
+        "queueSize": 0,
+        "processedCount": 117109,
+        "droppedCount": 0,
+        "queueBytes": 0,
+        "queueCapacityBytes": 10737418240,
+        "inFlightBytes": 0,
+        "inFlightByteLimit": 134217728,
+        "waitingProducers": 0,
+        "backpressureActive": false
+      }
+    ],
+    "heap": "218499:\n garbage-first heap   total 1048576K, used 58621K [0x00000000c0000000, 0x0000000100000000)\n  region size 1024K, 1 young (1024K), 0 survivors (0K)\n Metaspace       used 124648K, committed 125824K, reserved 1179648K\n  class space    used 16268K, committed 16832K, reserved 1048576K\n",
+    "fdCount": 192,
+    "process": [
+      "VmHWM:\t 1181760 kB",
+      "VmRSS:\t 1181760 kB",
+      "Threads:\t75"
+    ]
+  },
+  {
+    "label": 6,
+    "time": 1792120092.3464985,
+    "counts": {
+      "/large:200": 11836,
+      "/fixed:200": 59187,
+      "/xml:200": 11836,
+      "/tpl:200": 11839,
+      "/delay:200": 11836,
+      "/forward-error:503": 11675,
+      "/forward-fast:200": 11677,
+      "/forward-slow:200": 11676,
+      "/mutable:200": 6,
+      "oversized:413": 6,
+      "/forward-fast:502": 160,
+      "/forward-error:502": 160,
+      "/forward-slow:502": 160
+    },
+    "gauges": {
+      "echo.http.native.active": 0.0,
+      "echo.http.native.buffered.bytes": 0.0,
+      "echo.http.native.queued": 0.0
+    },
+    "forwarding": {
+      "activeForwards": 0,
+      "ioThreads": 4,
+      "completedForwards": 35508,
+      "cancelledForwards": 0,
+      "rejectedForwards": 0,
+      "clientPoolCount": 2,
+      "pool": {
+        "leased": 0,
+        "pending": 0,
+        "available": 1,
+        "capacity": 1000,
+        "maxConnections": 1000,
+        "maxPendingRequests": 1000,
+        "maxResponseBodyBytes": 10485760,
+        "bufferedResponseBytes": 0,
+        "maxBufferedResponseBytes": 134217728,
+        "poolAcquireTimeoutMs": 3000,
+        "idleConnectionTimeoutSeconds": 30,
+        "backgroundEvictionIntervalSeconds": 30,
+        "maxConnectionsPerRoute": 1000,
+        "validateAfterInactivitySeconds": 0,
+        "maxConnectionsPerPool": 1000
+      },
+      "targets": {
+        "profile:1": {
+          "name": "soak",
+          "failed": 480,
+          "capacityRejected": 0,
+          "poolTimeouts": 0,
+          "connectTimeouts": 0,
+          "readTimeouts": 0,
+          "responseTooLarge": 0,
+          "otherFailures": 480
+        }
+      },
+      "executorThreads": 4,
+      "completedExecutorTasks": 35508
+    },
+    "agents": [
+      {
+        "name": "log-agent",
+        "description": "Async batch log writer with match chain analysis",
+        "status": "RUNNING",
+        "queueSize": 0,
+        "processedCount": 142096,
+        "droppedCount": 0,
+        "queueBytes": 0,
+        "queueCapacityBytes": 10737418240,
+        "inFlightBytes": 0,
+        "inFlightByteLimit": 134217728,
+        "waitingProducers": 0,
+        "backpressureActive": false
+      }
+    ],
+    "heap": "218499:\n garbage-first heap   total 1048576K, used 58853K [0x00000000c0000000, 0x0000000100000000)\n  region size 1024K, 1 young (1024K), 0 survivors (0K)\n Metaspace       used 125268K, committed 126400K, reserved 1179648K\n  class space    used 16299K, committed 16832K, reserved 1048576K\n",
+    "fdCount": 141,
+    "process": [
+      "VmHWM:\t 1183288 kB",
+      "VmRSS:\t 1183288 kB",
+      "Threads:\t75"
+    ]
+  },
+  {
+    "label": 7,
+    "time": 1792120155.0592287,
+    "counts": {
+      "/large:200": 13755,
+      "/fixed:200": 68780,
+      "/xml:200": 13755,
+      "/tpl:200": 13758,
+      "/delay:200": 13755,
+      "/forward-error:503": 13593,
+      "/forward-fast:200": 13596,
+      "/forward-slow:200": 13594,
+      "/mutable:200": 7,
+      "oversized:413": 7,
+      "/forward-fast:502": 160,
+      "/forward-error:502": 160,
+      "/forward-slow:502": 160
+    },
+    "gauges": {
+      "echo.http.native.active": 0.0,
+      "echo.http.native.buffered.bytes": 0.0,
+      "echo.http.native.queued": 0.0
+    },
+    "forwarding": {
+      "activeForwards": 0,
+      "ioThreads": 4,
+      "completedForwards": 41263,
+      "cancelledForwards": 0,
+      "rejectedForwards": 0,
+      "clientPoolCount": 2,
+      "pool": {
+        "leased": 0,
+        "pending": 0,
+        "available": 4,
+        "capacity": 1000,
+        "maxConnections": 1000,
+        "maxPendingRequests": 1000,
+        "maxResponseBodyBytes": 10485760,
+        "bufferedResponseBytes": 0,
+        "maxBufferedResponseBytes": 134217728,
+        "poolAcquireTimeoutMs": 3000,
+        "idleConnectionTimeoutSeconds": 30,
+        "backgroundEvictionIntervalSeconds": 30,
+        "maxConnectionsPerRoute": 1000,
+        "validateAfterInactivitySeconds": 0,
+        "maxConnectionsPerPool": 1000
+      },
+      "targets": {
+        "profile:1": {
+          "name": "soak",
+          "failed": 480,
+          "capacityRejected": 0,
+          "poolTimeouts": 0,
+          "connectTimeouts": 0,
+          "readTimeouts": 0,
+          "responseTooLarge": 0,
+          "otherFailures": 480
+        }
+      },
+      "executorThreads": 4,
+      "completedExecutorTasks": 41263
+    },
+    "agents": [
+      {
+        "name": "log-agent",
+        "description": "Async batch log writer with match chain analysis",
+        "status": "RUNNING",
+        "queueSize": 0,
+        "processedCount": 165129,
+        "droppedCount": 0,
+        "queueBytes": 0,
+        "queueCapacityBytes": 10737418240,
+        "inFlightBytes": 0,
+        "inFlightByteLimit": 134217728,
+        "waitingProducers": 0,
+        "backpressureActive": false
+      }
+    ],
+    "heap": "218499:\n garbage-first heap   total 1048576K, used 59028K [0x00000000c0000000, 0x0000000100000000)\n  region size 1024K, 1 young (1024K), 0 survivors (0K)\n Metaspace       used 125435K, committed 126720K, reserved 1179648K\n  class space    used 16315K, committed 16896K, reserved 1048576K\n",
+    "fdCount": 143,
+    "process": [
+      "VmHWM:\t 1183688 kB",
+      "VmRSS:\t 1183688 kB",
+      "Threads:\t75"
+    ]
+  },
+  {
+    "label": 8,
+    "time": 1792120217.751331,
+    "counts": {
+      "/large:200": 15675,
+      "/fixed:200": 78380,
+      "/xml:200": 15675,
+      "/tpl:200": 15678,
+      "/delay:200": 15675,
+      "/forward-error:503": 15513,
+      "/forward-fast:200": 15516,
+      "/forward-slow:200": 15514,
+      "/mutable:200": 8,
+      "oversized:413": 8,
+      "/forward-fast:502": 160,
+      "/forward-error:502": 160,
+      "/forward-slow:502": 160
+    },
+    "gauges": {
+      "echo.http.native.active": 0.0,
+      "echo.http.native.buffered.bytes": 0.0,
+      "echo.http.native.queued": 0.0
+    },
+    "forwarding": {
+      "activeForwards": 0,
+      "ioThreads": 4,
+      "completedForwards": 47023,
+      "cancelledForwards": 0,
+      "rejectedForwards": 0,
+      "clientPoolCount": 2,
+      "pool": {
+        "leased": 0,
+        "pending": 0,
+        "available": 5,
+        "capacity": 1000,
+        "maxConnections": 1000,
+        "maxPendingRequests": 1000,
+        "maxResponseBodyBytes": 10485760,
+        "bufferedResponseBytes": 0,
+        "maxBufferedResponseBytes": 134217728,
+        "poolAcquireTimeoutMs": 3000,
+        "idleConnectionTimeoutSeconds": 30,
+        "backgroundEvictionIntervalSeconds": 30,
+        "maxConnectionsPerRoute": 1000,
+        "validateAfterInactivitySeconds": 0,
+        "maxConnectionsPerPool": 1000
+      },
+      "targets": {
+        "profile:1": {
+          "name": "soak",
+          "failed": 480,
+          "capacityRejected": 0,
+          "poolTimeouts": 0,
+          "connectTimeouts": 0,
+          "readTimeouts": 0,
+          "responseTooLarge": 0,
+          "otherFailures": 480
+        }
+      },
+      "executorThreads": 4,
+      "completedExecutorTasks": 47023
+    },
+    "agents": [
+      {
+        "name": "log-agent",
+        "description": "Async batch log writer with match chain analysis",
+        "status": "RUNNING",
+        "queueSize": 0,
+        "processedCount": 188178,
+        "droppedCount": 0,
+        "queueBytes": 0,
+        "queueCapacityBytes": 10737418240,
+        "inFlightBytes": 0,
+        "inFlightByteLimit": 134217728,
+        "waitingProducers": 0,
+        "backpressureActive": false
+      }
+    ],
+    "heap": "218499:\n garbage-first heap   total 1048576K, used 58919K [0x00000000c0000000, 0x0000000100000000)\n  region size 1024K, 1 young (1024K), 0 survivors (0K)\n Metaspace       used 125548K, committed 126784K, reserved 1179648K\n  class space    used 16315K, committed 16896K, reserved 1048576K\n",
+    "fdCount": 143,
+    "process": [
+      "VmHWM:\t 1184180 kB",
+      "VmRSS:\t 1184180 kB",
+      "Threads:\t75"
+    ]
+  },
+  {
+    "label": 9,
+    "time": 1792120280.470283,
+    "counts": {
+      "/large:200": 17595,
+      "/fixed:200": 87980,
+      "/xml:200": 17595,
+      "/tpl:200": 17598,
+      "/delay:200": 17595,
+      "/forward-error:503": 17433,
+      "/forward-fast:200": 17436,
+      "/forward-slow:200": 17434,
+      "/mutable:200": 9,
+      "oversized:413": 9,
+      "/forward-fast:502": 160,
+      "/forward-error:502": 160,
+      "/forward-slow:502": 160
+    },
+    "gauges": {
+      "echo.http.native.active": 0.0,
+      "echo.http.native.buffered.bytes": 0.0,
+      "echo.http.native.queued": 0.0
+    },
+    "forwarding": {
+      "activeForwards": 0,
+      "ioThreads": 4,
+      "completedForwards": 52783,
+      "cancelledForwards": 0,
+      "rejectedForwards": 0,
+      "clientPoolCount": 2,
+      "pool": {
+        "leased": 0,
+        "pending": 0,
+        "available": 5,
+        "capacity": 1000,
+        "maxConnections": 1000,
+        "maxPendingRequests": 1000,
+        "maxResponseBodyBytes": 10485760,
+        "bufferedResponseBytes": 0,
+        "maxBufferedResponseBytes": 134217728,
+        "poolAcquireTimeoutMs": 3000,
+        "idleConnectionTimeoutSeconds": 30,
+        "backgroundEvictionIntervalSeconds": 30,
+        "maxConnectionsPerRoute": 1000,
+        "validateAfterInactivitySeconds": 0,
+        "maxConnectionsPerPool": 1000
+      },
+      "targets": {
+        "profile:1": {
+          "name": "soak",
+          "failed": 480,
+          "capacityRejected": 0,
+          "poolTimeouts": 0,
+          "connectTimeouts": 0,
+          "readTimeouts": 0,
+          "responseTooLarge": 0,
+          "otherFailures": 480
+        }
+      },
+      "executorThreads": 4,
+      "completedExecutorTasks": 52783
+    },
+    "agents": [
+      {
+        "name": "log-agent",
+        "description": "Async batch log writer with match chain analysis",
+        "status": "RUNNING",
+        "queueSize": 0,
+        "processedCount": 211227,
+        "droppedCount": 0,
+        "queueBytes": 0,
+        "queueCapacityBytes": 10737418240,
+        "inFlightBytes": 0,
+        "inFlightByteLimit": 134217728,
+        "waitingProducers": 0,
+        "backpressureActive": false
+      }
+    ],
+    "heap": "218499:\n garbage-first heap   total 1048576K, used 58916K [0x00000000c0000000, 0x0000000100000000)\n  region size 1024K, 1 young (1024K), 0 survivors (0K)\n Metaspace       used 125643K, committed 126848K, reserved 1179648K\n  class space    used 16317K, committed 16896K, reserved 1048576K\n",
+    "fdCount": 142,
+    "process": [
+      "VmHWM:\t 1186744 kB",
+      "VmRSS:\t 1186744 kB",
+      "Threads:\t75"
+    ]
+  },
+  {
+    "label": 10,
+    "time": 1792120343.1744046,
+    "counts": {
+      "/large:200": 19515,
+      "/fixed:200": 97580,
+      "/xml:200": 19515,
+      "/tpl:200": 19518,
+      "/delay:200": 19515,
+      "/forward-error:503": 19353,
+      "/forward-fast:200": 19356,
+      "/forward-slow:200": 19354,
+      "/mutable:200": 10,
+      "oversized:413": 10,
+      "/forward-fast:502": 160,
+      "/forward-error:502": 160,
+      "/forward-slow:502": 160
+    },
+    "gauges": {
+      "echo.http.native.active": 0.0,
+      "echo.http.native.buffered.bytes": 0.0,
+      "echo.http.native.queued": 0.0
+    },
+    "forwarding": {
+      "activeForwards": 0,
+      "ioThreads": 4,
+      "completedForwards": 58543,
+      "cancelledForwards": 0,
+      "rejectedForwards": 0,
+      "clientPoolCount": 2,
+      "pool": {
+        "leased": 0,
+        "pending": 0,
+        "available": 5,
+        "capacity": 1000,
+        "maxConnections": 1000,
+        "maxPendingRequests": 1000,
+        "maxResponseBodyBytes": 10485760,
+        "bufferedResponseBytes": 0,
+        "maxBufferedResponseBytes": 134217728,
+        "poolAcquireTimeoutMs": 3000,
+        "idleConnectionTimeoutSeconds": 30,
+        "backgroundEvictionIntervalSeconds": 30,
+        "maxConnectionsPerRoute": 1000,
+        "validateAfterInactivitySeconds": 0,
+        "maxConnectionsPerPool": 1000
+      },
+      "targets": {
+        "profile:1": {
+          "name": "soak",
+          "failed": 480,
+          "capacityRejected": 0,
+          "poolTimeouts": 0,
+          "connectTimeouts": 0,
+          "readTimeouts": 0,
+          "responseTooLarge": 0,
+          "otherFailures": 480
+        }
+      },
+      "executorThreads": 4,
+      "completedExecutorTasks": 58543
+    },
+    "agents": [
+      {
+        "name": "log-agent",
+        "description": "Async batch log writer with match chain analysis",
+        "status": "RUNNING",
+        "queueSize": 0,
+        "processedCount": 234276,
+        "droppedCount": 0,
+        "queueBytes": 0,
+        "queueCapacityBytes": 10737418240,
+        "inFlightBytes": 0,
+        "inFlightByteLimit": 134217728,
+        "waitingProducers": 0,
+        "backpressureActive": false
+      }
+    ],
+    "heap": "218499:\n garbage-first heap   total 1048576K, used 58994K [0x00000000c0000000, 0x0000000100000000)\n  region size 1024K, 1 young (1024K), 0 survivors (0K)\n Metaspace       used 125715K, committed 126912K, reserved 1179648K\n  class space    used 16317K, committed 16896K, reserved 1048576K\n",
+    "fdCount": 141,
+    "process": [
+      "VmHWM:\t 1186840 kB",
+      "VmRSS:\t 1186840 kB",
+      "Threads:\t75"
+    ]
+  }
+]

@@ -14,4 +14,9 @@ public class RequestLogUnavailableException extends RuntimeException {
     public RequestLogUnavailableException(String message, Throwable cause) {
         super(message, cause);
     }
+
+    /** 不記錄堆疊、不接受附加例外：可以預先建立後重複使用。 */
+    protected RequestLogUnavailableException(String message, boolean shared) {
+        super(message, null, !shared, !shared);
+    }
 }

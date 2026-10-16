@@ -28,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 內建帳號管理整合測試
  * <p>
  * 使用 @SpringBootTest + @AutoConfigureMockMvc 測試完整的端對端流程，
- * 包含認證、API 權限控制、H2 資料庫持久化與唯一索引。
+ * 包含認證、API 權限控制、資料庫持久化與唯一索引。
  * <p>
  * Requirements: 2.1-2.5, 3.1-3.5, 4.1-4.5
  */

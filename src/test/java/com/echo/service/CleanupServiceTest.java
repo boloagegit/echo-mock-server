@@ -33,7 +33,7 @@ class CleanupServiceTest {
 
     @BeforeEach
     void setUp() {
-        cleanupService = new CleanupService(protocolRegistry, responseRepository, cacheManager, scenarioService);
+        cleanupService = new CleanupService(protocolRegistry, responseRepository, cacheManager, scenarioService, java.util.Optional.empty());
         ReflectionTestUtils.setField(cleanupService, "ruleRetentionDays", 180);
         ReflectionTestUtils.setField(cleanupService, "responseRetentionDays", 90);
     }

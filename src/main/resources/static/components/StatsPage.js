@@ -34,106 +34,83 @@ const StatsPage = {
     'create-rule-from-log'
   ],
   inject: ['t'],
+  mixins: [heldDetailMixin(function () {
+    const item = this.selectedLogItem;
+    return { open: !!item && !this.loading.logsError, key: item?.log.id, ready: !item?._detailLoading, value: item };
+  })],
   data() {
     return {
-      bodySearch: {},
-      bodySearchIdx: {},
-      bodyFormatted: {},
-      inspectorTab: 'body',
-      compactLogTable: false,
-      logTableMediaQuery: null,
-      logTableMediaListener: null,
+      inspectorTab: 'flow',
+      rawConditionOpen: {},
     };
   },
   computed: {
+    hasLogFilters() {
+      return Boolean(this.logFilter.protocol || this.logFilter.matched || this.logFilter.endpoint || this.logFilter.from);
+    },
     selectedLogItem() {
       return this.pagedLogs.find(item => !!this.logDetailExpanded[item.log.id]) || null;
     },
-    logDetailColspan() {
-      return this.compactLogTable ? 4 : 5;
-    }
+    selectedIndex() {
+      return this.selectedLogItem ? this.pagedLogs.indexOf(this.selectedLogItem) : -1;
+    },
+    shownLogItem() {
+      return this.held.value;
+    },
+    inspectorTabs() {
+      const id = this.shownLogItem?.log?.id || 'none';
+      return [
+        { value: 'flow', label: this.t('stats.flow.tab'), icon: 'bi-signpost-2', id: 'log-tab-flow-' + id, panelId: 'log-inspector-flow-' + id },
+        { value: 'body', label: this.t('stats.inspectorBodyTab'), icon: 'bi-braces', id: 'log-tab-body-' + id, panelId: 'log-inspector-body-' + id },
+        { value: 'overview', label: this.t('stats.inspectorOverviewTab'), icon: 'bi-list-ul', id: 'log-tab-overview-' + id, panelId: 'log-inspector-overview-' + id },
+        { value: 'trace', label: this.t('stats.matchChainTitle'), icon: 'bi-diagram-3', count: this.shownLogItem?.matchChainData?.length || null,
+          disabled: !this.shownLogItem?.matchChainData?.length, id: 'log-tab-trace-' + id, panelId: 'log-inspector-trace-' + id },
+      ];
+    },
+    protocolFilterOptions() {
+      return [
+        { value: 'HTTP', label: this.httpLabel },
+        { value: 'JMS', label: this.jmsLabel, disabled: !this.jmsEnabled },
+      ];
+    },
+    resultFilterOptions() {
+      return [
+        { value: 'true', label: this.t('stats.filterMatched') },
+        { value: 'false', label: this.t('stats.filterUnmatched') },
+      ];
+    },
   },
   watch: {
     selectedLogItem(item) {
       if (this.inspectorTab === 'trace' && !item?.matchChainData?.length) {
-        this.inspectorTab = 'body';
+        this.inspectorTab = 'flow';
       }
     },
-    logDetailExpanded: {
-      deep: true,
-      handler(newVal) {
-        this.$nextTick(() => {
-          for (const item of this.pagedLogs) {
-            const id = item.log.id;
-            if (!id || !newVal[id]) { continue; }
-            // 新選取的紀錄 — 自動啟用 CodeMirror 格式化
-            const detail = item._detail;
-            if (!detail) { continue; }
-            if (detail.requestBody) {
-              const rk = 'reqBody-' + id;
-              if (!this.bodyFormatted[rk]) { this.toggleBodyFormat(rk, detail.requestBody); }
-            }
-            if (detail.responseBody) {
-              const rk = 'resBody-' + id;
-              if (!this.bodyFormatted[rk]) { this.toggleBodyFormat(rk, detail.responseBody); }
-            }
-          }
-        });
-      }
-    }
-  },
-  updated() {
-    this.$nextTick(() => {
-      for (const item of this.pagedLogs) {
-        const id = item.log.id;
-        if (!id || !this.logDetailExpanded[id]) { continue; }
-        const detail = item._detail;
-        if (!detail) { continue; }
-        for (const [prefix, body] of [['reqBody-', detail.requestBody], ['resBody-', detail.responseBody]]) {
-          if (!body) { continue; }
-          const refKey = prefix + id;
-          if (this.bodyFormatted[refKey]) {
-            this._reinitCmIfNeeded(refKey, body);
-          }
-        }
-      }
-    });
-  },
-  mounted() {
-    if (typeof window.matchMedia !== 'function') { return; }
-    this.logTableMediaQuery = window.matchMedia('(max-width: 1024px)');
-    this.logTableMediaListener = event => { this.compactLogTable = event.matches; };
-    this.compactLogTable = this.logTableMediaQuery.matches;
-    if (this.logTableMediaQuery.addEventListener) {
-      this.logTableMediaQuery.addEventListener('change', this.logTableMediaListener);
-    } else {
-      this.logTableMediaQuery.addListener(this.logTableMediaListener);
-    }
-  },
-  beforeUnmount() {
-    if (this.logTableMediaQuery && this.logTableMediaListener) {
-      if (this.logTableMediaQuery.removeEventListener) {
-        this.logTableMediaQuery.removeEventListener('change', this.logTableMediaListener);
-      } else {
-        this.logTableMediaQuery.removeListener(this.logTableMediaListener);
-      }
-    }
-    // 清理所有 CodeMirror instances 和 marks
-    if (this.cmInstances) {
-      for (const key of Object.keys(this.cmInstances)) {
-        try { this.cmInstances[key].toTextArea(); } catch { /* ignore */ }
-      }
-      this.cmInstances = {};
-    }
-    if (this.cmMarks) {
-      for (const key of Object.keys(this.cmMarks)) {
-        if (this.cmMarks[key]) { this.cmMarks[key].forEach(m => { try { m.clear(); } catch { /* ignore */ } }); }
-      }
-      this.cmMarks = {};
-    }
   },
   methods: {
+    /** 重新整理列表與流量概況。 */
+    refreshAll() {
+      this.$emit('load-logs', true);
+      this.$refs.traffic?.load();
+    },
+    /**
+     * 流量概況的「看這些請求」：只列出這段時間內這個方法與網址（完全相同）沒比對到的請求，
+     * 筆數與統計一致；原本的關鍵字搜尋清掉，避免再縮小範圍。
+     */
+    showUnmatched({ protocol, method, endpoint, from, to }) {
+      this.$emit('update:logFilter', { ...this.logFilter, protocol, matched: 'false', endpoint: '',
+        method: method || '', path: endpoint, from, to });
+    },
     shortId, fmtTime, fmtSize, reasonText,
+    treeSummary(tree) {
+      const { total, passed } = MatchTree.explainCounts(tree);
+      return passed === total
+        ? this.t('stats.matchTree.summaryAllPassed', { total })
+        : this.t('stats.matchTree.summary', { total, passed });
+    },
+    toggleRawCondition(key) {
+      this.rawConditionOpen = { ...this.rawConditionOpen, [key]: !this.rawConditionOpen[key] };
+    },
     logDate(value) {
       const formatted = fmtTime(value, false);
       return formatted ? formatted.slice(5, 10) : '-';
@@ -150,217 +127,64 @@ const StatsPage = {
       if (log.protocol !== 'HTTP') { return null; }
       return log.proxyStatus != null ? log.proxyStatus : log.responseStatus;
     },
-    reasonIcon(reason) {
-      if (reason === 'match') { return 'bi-check2-circle'; }
-      if (reason === 'disabled') { return 'bi-pause-circle'; }
-      if (reason === 'condition_not_match') { return 'bi-slash-circle'; }
-      return 'bi-dash-circle';
+    forwardTargetName(value) {
+      if (!value) { return ''; }
+      const separator = value.indexOf('|');
+      return separator === -1 ? value.trim() : value.slice(0, separator).trim();
     },
-    /** 取得 detail body（從 lazy-loaded _detail） */
-    _getBody(item, type) {
-      const detail = item._detail;
-      if (!detail) { return null; }
-      return type === 'req' ? detail.requestBody : detail.responseBody;
-    },
-    /** 收合再展開後 DOM 被重建，CodeMirror 需要重新掛載 */
-    _reinitCmIfNeeded(refKey, text) {
-      this.cmInstances = this.cmInstances || {};
-      const cm = this.cmInstances[refKey];
-      const refs = this.$refs[refKey];
-      const el = Array.isArray(refs) ? refs[0] : refs;
-      if (!el) { return; }
-      // 如果 el 是空的（DOM 重建後），重新初始化
-      if (cm) {
-        // 檢查 cm 的 wrapper 是否還在 DOM 中
-        try {
-          if (el.contains(cm.getWrapperElement())) { return; } // 仍在 DOM，不需重建
-        } catch { /* ignore */ }
-        // wrapper 不在 DOM → 清理舊 instance
-        try { cm.toTextArea(); } catch { /* ignore */ }
-        delete this.cmInstances[refKey];
-      }
-      // 重新建立
-      const _detectMode = this.detectMode || ((t) => { const s = (t || '').trim(); if (s.startsWith('{') || s.startsWith('[')) { return 'application/json'; } if (s.startsWith('<')) { return 'xml'; } return 'text/plain'; });
-      const mode = _detectMode(text);
-      let formatted = text;
-      if (mode === 'application/json') {
-        try { formatted = JSON.stringify(JSON.parse(text), null, 2); } catch { /* keep original */ }
-      } else if (mode === 'xml') {
-        formatted = this.formatXml(text);
-      }
-      el.textContent = '';
-      this.cmInstances[refKey] = CodeMirror(el, {
-        value: formatted,
-        mode: mode,
-        readOnly: true,
-        lineNumbers: true,
-        lineWrapping: false,
-        theme: 'default'
-      });
-    },
-    setBodySearch(refKey, val) {
-      this.bodySearch = { ...this.bodySearch, [refKey]: val };
-      this.bodySearchIdx = { ...this.bodySearchIdx, [refKey]: 0 };
-      this.cmHighlight(refKey);
-    },
-    bodyHighlight(refKey, text) {
-      const kw = (this.bodySearch[refKey] || '').trim();
-      if (!kw || !text) { return [{ text, hl: false }]; }
-      const parts = [];
-      const lower = text.toLowerCase();
-      const kwLower = kw.toLowerCase();
-      let pos = 0;
-      let idx = lower.indexOf(kwLower, pos);
-      while (idx !== -1) {
-        if (idx > pos) { parts.push({ text: text.slice(pos, idx), hl: false }); }
-        parts.push({ text: text.slice(idx, idx + kw.length), hl: true });
-        pos = idx + kw.length;
-        idx = lower.indexOf(kwLower, pos);
-      }
-      if (pos < text.length) { parts.push({ text: text.slice(pos), hl: false }); }
-      return parts;
-    },
-    bodyMatchCount(refKey, text) {
-      const kw = (this.bodySearch[refKey] || '').trim();
-      if (!kw || !text) { return 0; }
-      const lower = text.toLowerCase();
-      const kwLower = kw.toLowerCase();
-      let count = 0;
-      let pos = 0;
-      while ((pos = lower.indexOf(kwLower, pos)) !== -1) { count++; pos += kwLower.length; }
-      return count;
-    },
-    bodyMatchLabel(refKey, text) {
-      const total = this.bodyMatchCount(refKey, text);
-      if (total === 0) { return this.t('stats.bodySearchNoMatches'); }
-      return this.t('stats.bodySearchMatches', {current: (this.bodySearchIdx[refKey] || 0) + 1, total});
-    },
-    bodyNavSearch(refKey, text, dir) {
-      const total = this.bodyMatchCount(refKey, text);
-      if (total === 0) { return; }
-      let cur = (this.bodySearchIdx[refKey] || 0) + dir;
-      if (cur >= total) { cur = 0; }
-      if (cur < 0) { cur = total - 1; }
-      this.bodySearchIdx = { ...this.bodySearchIdx, [refKey]: cur };
-      const cm = this.cmInstances && this.cmInstances[refKey];
-      if (cm) {
-        this.cmHighlight(refKey);
-        return;
-      }
-      this.$nextTick(() => {
-        const refs = this.$refs[refKey];
-        const el = Array.isArray(refs) ? refs[0] : refs;
-        if (!el) { return; }
-        const active = el.querySelector('.pv-highlight-current');
-        if (active) { active.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
-      });
-    },
-    bodyHlIsCurrent(refKey, text, segIdx) {
-      const parts = this.bodyHighlight(refKey, text);
-      let matchIdx = 0;
-      for (let i = 0; i < parts.length; i++) {
-        if (parts[i].hl) {
-          if (i === segIdx) { return matchIdx === (this.bodySearchIdx[refKey] || 0); }
-          matchIdx++;
-        }
-      }
-      return false;
-    },
-    cmHighlight(refKey) {
-      const cm = this.cmInstances && this.cmInstances[refKey];
-      if (!cm) { return; }
-      this.cmMarks = this.cmMarks || {};
-      if (this.cmMarks[refKey]) { this.cmMarks[refKey].forEach(m => m.clear()); }
-      this.cmMarks[refKey] = [];
-      const kw = (this.bodySearch[refKey] || '').trim();
-      if (!kw) { return; }
-      const text = cm.getValue();
-      const kwLower = kw.toLowerCase();
-      const lower = text.toLowerCase();
-      let pos = 0;
-      let matchIdx = 0;
-      const curIdx = this.bodySearchIdx[refKey] || 0;
-      while ((pos = lower.indexOf(kwLower, pos)) !== -1) {
-        const from = cm.posFromIndex(pos);
-        const to = cm.posFromIndex(pos + kw.length);
-        const css = matchIdx === curIdx ? 'background: var(--warning, #ffc107); color: #000; border-radius: 2px;' : 'background: rgba(var(--warning-rgb, 255,193,7), 0.35); border-radius: 2px;';
-        this.cmMarks[refKey].push(cm.markText(from, to, { css }));
-        if (matchIdx === curIdx) { cm.scrollIntoView(from, 60); }
-        matchIdx++;
-        pos += kw.length;
-      }
-    },
-    toggleBodyFormat(refKey, text) {
-      this.bodyFormatted = { ...this.bodyFormatted, [refKey]: !this.bodyFormatted[refKey] };
-      if (this.bodyFormatted[refKey]) {
-        this.$nextTick(() => {
-          const refs = this.$refs[refKey];
-          const el = Array.isArray(refs) ? refs[0] : refs;
-          if (!el) { return; }
-          const _detectMode = this.detectMode || ((t) => { const s = (t || '').trim(); if (s.startsWith('{') || s.startsWith('[')) { return 'application/json'; } if (s.startsWith('<')) { return 'xml'; } return 'text/plain'; });
-          const mode = _detectMode(text);
-          let formatted = text;
-          if (mode === 'application/json') {
-            try { formatted = JSON.stringify(JSON.parse(text), null, 2); } catch { /* keep original */ }
-          } else if (mode === 'xml') {
-            formatted = this.formatXml(text);
-          }
-          el.textContent = '';
-          this.cmInstances = this.cmInstances || {};
-          if (this.cmInstances[refKey]) { try { this.cmInstances[refKey].toTextArea(); } catch { /* ignore */ } }
-          this.cmInstances[refKey] = CodeMirror(el, {
-            value: formatted,
-            mode: mode,
-            readOnly: true,
-            lineNumbers: true,
-            lineWrapping: false,
-            theme: 'default'
-          });
-        });
-      } else {
-        if (this.cmInstances && this.cmInstances[refKey]) {
-          const refs = this.$refs[refKey];
-          const el = Array.isArray(refs) ? refs[0] : refs;
-          try { this.cmInstances[refKey].toTextArea(); } catch { /* ignore */ }
-          delete this.cmInstances[refKey];
-          if (el) { el.textContent = text || ''; }
-        }
-      }
-    },
-    formatXml(xml) {
-      let formatted = '';
-      let indent = 0;
-      const parts = (xml || '').replace(/(>)\s*(<)/g, '$1\n$2').split('\n');
-      for (const part of parts) {
-        const trimmed = part.trim();
-        if (!trimmed) { continue; }
-        if (trimmed.startsWith('</')) { indent = Math.max(indent - 1, 0); }
-        formatted += '  '.repeat(indent) + trimmed + '\n';
-        if (trimmed.startsWith('<') && !trimmed.startsWith('</') && !trimmed.startsWith('<?') && !trimmed.endsWith('/>') && !trimmed.includes('</')) { indent++; }
-      }
-      return formatted.trim();
-    },
-    getFormattedText(refKey, text) {
-      if (this.cmInstances && this.cmInstances[refKey]) {
-        return this.cmInstances[refKey].getValue();
-      }
-      return text;
+    requestDescription(item) {
+      if (item.rule?.description) { return item.rule.description; }
+      if (item.log.matched && item.log.ruleId) { return this.t('stats.deletedRuleDescription'); }
+      if (item.log.forwarded) { return this.t('stats.defaultForwardDescription'); }
+      return this.t('stats.unmatchedDescription');
     },
     copyBody(text) {
       this.$emit('clip-copy', text);
     },
-    moveInspectorTab(event) {
-      const tabs = ['body', 'overview'];
-      if (this.selectedLogItem?.matchChainData?.length) { tabs.push('trace'); }
-      const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
-      if (!keys.includes(event.key)) { return; }
-      event.preventDefault();
-      const current = Math.max(0, tabs.indexOf(this.inspectorTab));
-      const next = event.key === 'Home' ? 0
-        : event.key === 'End' ? tabs.length - 1
-        : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
-      this.inspectorTab = tabs[next];
-      this.$nextTick(() => this.$refs.inspectorTabs?.querySelector('[role="tab"][aria-selected="true"]')?.focus());
+    logOutcome(log) {
+      if (log.forwarded && log.proxyError) return this.t('stats.forwardFailed');
+      if (log.forwarded) return this.t('stats.forwarded');
+      return log.matched ? this.t('stats.matched') : this.t('stats.unmatched');
+    },
+    logTone(log) {
+      if (log.forwarded && log.proxyError) return 'danger';
+      if (log.forwarded) return 'neutral';
+      return log.matched ? 'success' : 'danger';
+    },
+    logMenuItems(item, inDrawer = false) {
+      const t = this.t;
+      const items = [];
+      if (!inDrawer && (item.log.hasResponseBody || item._detail?.responseBody)) {
+        items.push({ key: 'create-rule', label: t('stats.createRuleFromLog'), icon: 'bi-plus-circle' });
+      }
+      if (!inDrawer && item.log.ruleId) {
+        items.push({ key: 'open-rule', label: t('stats.openMatchedRule'), icon: 'bi-box-arrow-up-right' });
+      }
+      items.push({ key: 'copy-endpoint', label: t('stats.copyEndpoint'), icon: 'bi-copy' });
+      if (item.log.diagnosticId) {
+        items.push({ key: 'copy-diagnostic', label: t('stats.copyDiagnosticId'), icon: 'bi-fingerprint' });
+      }
+      return items;
+    },
+    handleLogMenu(action, item) {
+      if (action === 'create-rule') this.$emit('create-rule-from-log', item._detail || item.log);
+      else if (action === 'open-rule') this.$emit('go-to-rule', item.log.ruleId);
+      else if (action === 'copy-endpoint') this.$emit('clip-copy', item.log.endpoint);
+      else if (action === 'copy-diagnostic') this.$emit('clip-copy', item.log.diagnosticId);
+    },
+    selectLog(item) {
+      this.$emit('toggle-log-detail', item);
+    },
+    onRowKeydown(event, item) {
+      if (event.target !== event.currentTarget) return;
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.selectLog(item); }
+    },
+    stepDetail(direction) {
+      const next = this.pagedLogs[this.selectedIndex + direction];
+      if (next) {
+        this.$emit('toggle-log-detail', next);
+        this.$nextTick(() => document.querySelector('.logs-workspace [data-detail-row].is-selected')?.scrollIntoView({ block: 'nearest' }));
+      }
     },
   },
   template: /* html */`
@@ -376,188 +200,101 @@ const StatsPage = {
           </button>
         </div>
         <div class="page-actions">
-          <button type="button" class="btn btn-secondary" @click="$emit('load-logs', true)" :disabled="loading.logs">
-            <i class="bi bi-arrow-clockwise" :class="{'spin':loading.logs}" aria-hidden="true"></i>
-            {{t('stats.refresh')}}
-          </button>
+          <ui-button type="button" variant="secondary" @click="refreshAll" :disabled="loading.logs">
+            <i class="bi bi-arrow-clockwise" :class="{'spin':loading.logs}" aria-hidden="true"></i>{{t('stats.refresh')}}
+          </ui-button>
         </div>
       </div>
 
-      <div class="card workspace-filter-card">
-        <div class="card-body filter-row workspace-filter-bar">
-          <div class="workspace-filter-controls">
-            <div class="btn-group" role="group" :aria-label="t('stats.protocolFilter')">
-              <button type="button" class="btn btn-sm" :class="logFilter.protocol==='HTTP'?'btn-primary':'btn-secondary'"
-                :aria-pressed="logFilter.protocol==='HTTP'"
-                @click="$emit('update:logFilter', {...logFilter, protocol: logFilter.protocol==='HTTP'?'':'HTTP'})">{{httpLabel}}</button>
-              <button type="button" class="btn btn-sm" :class="logFilter.protocol==='JMS'?'btn-primary':'btn-secondary'"
-                :aria-pressed="logFilter.protocol==='JMS'" :disabled="!jmsEnabled"
-                @click="$emit('update:logFilter', {...logFilter, protocol: logFilter.protocol==='JMS'?'':'JMS'})">{{jmsLabel}}</button>
-            </div>
-            <div class="filter-divider" aria-hidden="true"></div>
-            <div class="btn-group" role="group" :aria-label="t('stats.resultFilter')">
-              <button type="button" class="btn btn-sm" :class="logFilter.matched==='true'?'btn-primary':'btn-secondary'"
-                :aria-pressed="logFilter.matched==='true'"
-                @click="$emit('update:logFilter', {...logFilter, matched: logFilter.matched==='true'?'':'true'})">{{t('stats.filterMatched')}}</button>
-              <button type="button" class="btn btn-sm" :class="logFilter.matched==='false'?'btn-primary':'btn-secondary'"
-                :aria-pressed="logFilter.matched==='false'"
-                @click="$emit('update:logFilter', {...logFilter, matched: logFilter.matched==='false'?'':'false'})">{{t('stats.filterUnmatched')}}</button>
-            </div>
-            <div class="filter-divider" aria-hidden="true"></div>
-            <workspace-search-field
-              input-id="logSearch"
-              :model-value="logFilter.endpoint"
-              :placeholder="t('stats.searchPlaceholder')"
-              :aria-label="t('stats.searchLabel')"
-              :clear-label="t('stats.clearSearch')"
-              :submit-mode="true"
-              :submit-label="t('common.searchAction')"
-              @search="$emit('update:logFilter', {...logFilter, endpoint:$event})"
-            ></workspace-search-field>
-          </div>
-        </div>
+      <traffic-overview ref="traffic" :http-label="httpLabel" :jms-label="jmsLabel" :selected-from="logFilter.from || ''" :selected-to="logFilter.to || ''"
+        @select-time="$emit('update:logFilter', {...logFilter, from: $event.from, to: $event.to})"
+        @show-unmatched="showUnmatched"></traffic-overview>
+
+      <div class="list-toolbar">
+        <workspace-search-field shortcut="/"
+          input-id="logSearch"
+          :model-value="logFilter.endpoint"
+          :placeholder="t('stats.searchPlaceholder')"
+          :aria-label="t('stats.searchLabel')"
+          :clear-label="t('stats.clearSearch')"
+          :submit-mode="true"
+          @search="$emit('update:logFilter', {...logFilter, endpoint:$event})"
+        ></workspace-search-field>
+        <ui-toggle-group :model-value="logFilter.protocol" :options="protocolFilterOptions" :aria-label="t('stats.protocolFilter')"
+          @update:model-value="$emit('update:logFilter', {...logFilter, protocol:$event})"></ui-toggle-group>
+        <ui-toggle-group :model-value="logFilter.matched" :options="resultFilterOptions" :aria-label="t('stats.resultFilter')"
+          @update:model-value="$emit('update:logFilter', {...logFilter, matched:$event})"></ui-toggle-group>
       </div>
 
-      <div v-if="logFilterChips.length" class="filter-chips" role="group" :aria-label="t('stats.activeFilters')">
-        <span class="filter-chip" v-for="c in logFilterChips" :key="c.key">
-          {{c.label}}
-          <button type="button" class="chip-remove" @click="$emit('remove-log-chip', c.key)"
-            :aria-label="t('stats.removeFilter', {filter: c.label})"><i class="bi bi-x" aria-hidden="true"></i></button>
-        </span>
-        <button type="button" class="chip-clear" @click="$emit('clear-log-filters')">{{t('stats.clearAll')}}</button>
-      </div>
+      <ui-filter-chip-list :items="logFilterChips" :aria-label="t('common.activeFilters')"
+        :clear-label="t('stats.clearAll')"
+        @remove="$emit('remove-log-chip', $event)"
+        @clear="$emit('clear-log-filters')"></ui-filter-chip-list>
 
-      <div class="card card-table workspace-table-card">
-        <div v-if="loading.logsError && !loading.logs" class="workspace-load-error" role="alert">
-          <i class="bi bi-cloud-slash" aria-hidden="true"></i>
-          <strong>{{t('stats.loadFailed')}}</strong>
-          <button type="button" class="btn btn-sm btn-secondary" @click="$emit('load-logs', true)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</button>
-        </div>
+      <div class="card card-table list-card">
+        <ui-load-state v-if="loading.logsError && !loading.logs" kind="error" icon="bi-cloud-slash" :title="t('stats.loadFailed')" has-action>
+          <template #action><ui-button type="button" variant="secondary" size="compact" @click="$emit('load-logs', true)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</ui-button></template>
+        </ui-load-state>
         <div v-else class="card-table-body">
-          <div v-if="loading.logs && !logs.length" role="status" :aria-label="t('stats.loadingLogs')">
-            <div v-for="i in 6" :key="'sk-log-'+i" class="sk-row">
-              <span class="sk sk-text-sm log-skeleton-time"></span>
-              <span class="sk sk-badge log-skeleton-protocol"></span>
-              <span class="sk sk-badge log-skeleton-method"></span>
-              <span class="sk sk-text log-skeleton-endpoint"></span>
-              <span class="sk sk-text-sm log-skeleton-duration"></span>
-              <span class="sk sk-badge log-skeleton-result"></span>
-              <span class="sk sk-text log-skeleton-detail"></span>
-            </div>
+          <div v-if="loading.logs && !logs.length" class="list-skeleton" role="status" :aria-label="t('stats.loadingLogs')">
+            <div v-for="i in 8" :key="'sk-log-'+i" class="list-skeleton__row"><span class="sk sk-w-15p"></span><span class="sk sk-w-40p"></span><span class="sk sk-w-15p"></span></div>
           </div>
-
-          <table v-if="pagedLogs.length" class="table-fixed workspace-table logs-table">
+          <table v-else-if="pagedLogs.length" class="data-table log-table">
             <caption class="visually-hidden">{{t('stats.tableCaption')}}</caption>
-            <thead>
-              <tr>
-                <th class="log-time-column" :aria-sort="sortAria('requestTime')">
-                  <button type="button" class="table-sort-button" @click="$emit('toggle-sort','requestTime')"
-                    :aria-label="t('stats.sortBy', {field: t('stats.thTime')})">
-                    <span>{{t('stats.thTime')}}</span>
-                    <i class="bi" :class="logSort.field==='requestTime'?(logSort.asc?'bi-caret-up-fill':'bi-caret-down-fill'):'bi-arrow-down-up'" aria-hidden="true"></i>
-                  </button>
-                </th>
-                <th :aria-sort="sortAria('endpoint')">
-                  <button type="button" class="table-sort-button" @click="$emit('toggle-sort','endpoint')"
-                    :aria-label="t('stats.sortBy', {field: t('stats.thRequest')})">
-                    <span>{{t('stats.thRequest')}}</span>
-                    <i class="bi" :class="logSort.field==='endpoint'?(logSort.asc?'bi-caret-up-fill':'bi-caret-down-fill'):'bi-arrow-down-up'" aria-hidden="true"></i>
-                  </button>
-                </th>
-                <th class="col-hide-md log-duration-column" :aria-sort="sortAria('responseTimeMs')">
-                  <button type="button" class="table-sort-button" @click="$emit('toggle-sort','responseTimeMs')"
-                    :aria-label="t('stats.sortBy', {field: t('stats.thDuration')})">
-                    <span>{{t('stats.thDuration')}}</span>
-                    <i class="bi" :class="logSort.field==='responseTimeMs'?(logSort.asc?'bi-caret-up-fill':'bi-caret-down-fill'):'bi-arrow-down-up'" aria-hidden="true"></i>
-                  </button>
-                </th>
-                <th>{{t('stats.thResult')}}</th>
-                <th class="col-actions col-actions-2">{{t('stats.thActions')}}</th>
-              </tr>
-            </thead>
+            <thead><tr>
+              <th class="col-time" :aria-sort="sortAria('requestTime')">
+                <ui-table-sort-header :label="t('stats.thTime')" :active="logSort.field==='requestTime'" :ascending="logSort.asc"
+                  :aria-label="t('stats.sortBy', {field:t('stats.thTime')})" @toggle="$emit('toggle-sort','requestTime')"></ui-table-sort-header>
+              </th>
+              <th class="col-method">{{t('rules.thMethod')}}</th>
+              <th class="col-request" :aria-sort="sortAria('endpoint')">
+                <ui-table-sort-header :label="t('stats.thRequest')" :active="logSort.field==='endpoint'" :ascending="logSort.asc"
+                  :aria-label="t('stats.sortBy', {field:t('stats.thRequest')})" @toggle="$emit('toggle-sort','endpoint')"></ui-table-sort-header>
+              </th>
+              <th class="col-duration cell-end" :aria-sort="sortAria('responseTimeMs')">
+                <ui-table-sort-header :label="t('stats.thDuration')" :active="logSort.field==='responseTimeMs'" :ascending="logSort.asc"
+                  :aria-label="t('stats.sortBy', {field:t('stats.thDuration')})" @toggle="$emit('toggle-sort','responseTimeMs')"></ui-table-sort-header>
+              </th>
+              <th class="col-result">{{t('stats.thResult')}}</th>
+              <th class="col-actions"><span class="visually-hidden">{{t('stats.thActions')}}</span></th>
+            </tr></thead>
             <tbody>
-              <template v-for="item in pagedLogs" :key="item.log.id">
-                <tr class="row-clickable log-summary-row" :id="'log-summary-'+item.log.id"
-                  :class="{'is-expanded': logDetailExpanded[item.log.id]}"
-                  @click="$emit('toggle-log-detail', item)" :title="t('stats.clickExpand')">
-                  <td class="log-time-cell" :title="fmtTime(item.log.requestTime,false)">
-                    <span class="log-time-date">{{logDate(item.log.requestTime)}}</span>
-                    <span class="log-time-clock">{{logClock(item.log.requestTime)}}</span>
-                  </td>
-                  <td>
-                    <div class="log-request-primary">
-                      <span class="badge" :class="'badge-'+item.log.protocol?.toLowerCase()">{{item.log.protocol}}</span>
-                      <span v-if="item.log.protocol==='HTTP' && item.log.method" class="log-method">{{item.log.method}}</span>
-                      <code :title="item.log.endpoint">{{item.log.endpoint}}</code>
-                    </div>
-                    <div v-if="item.log.targetHost" class="log-request-secondary">
-                      <span>{{t('stats.hostLabel')}}</span>
-                      <code :title="item.log.targetHost">{{item.log.targetHost}}</code>
-                    </div>
-                    <div v-if="item.log.forwardTarget" class="log-request-secondary">
-                      <span>{{t('stats.forwardTargetLabel')}}</span>
-                      <code :title="item.log.forwardTarget">{{item.log.forwardTarget}}</code>
-                    </div>
-                  </td>
-                  <td class="col-hide-md log-duration-cell"><span>{{item.log.responseTimeMs}}</span><small>ms</small></td>
-                  <td>
-                    <div class="log-result">
-                      <template v-if="item.log.forwarded && item.log.proxyError">
-                        <span class="log-outcome log-outcome-danger" :title="item.log.proxyError"><i class="bi bi-x-circle" aria-hidden="true"></i>{{t('stats.forwardFailed')}}</span>
-                      </template>
-                      <template v-else-if="item.log.forwarded">
-                        <span class="log-outcome"><i class="bi bi-arrow-right-circle" aria-hidden="true"></i>{{t('stats.forwarded')}}</span>
-                      </template>
-                      <template v-else-if="item.log.matched">
-                        <span class="log-outcome log-outcome-success"><i class="bi bi-check2-circle" aria-hidden="true"></i>{{t('stats.matched')}}</span>
-                      </template>
-                      <template v-else>
-                        <span class="log-outcome log-outcome-danger"><i class="bi bi-x-circle" aria-hidden="true"></i>{{t('stats.unmatched')}}</span>
-                      </template>
-                      <span v-if="logStatusCode(item.log) != null" class="log-status-code"
-                        :class="logStatusCode(item.log)<400?'is-success':logStatusCode(item.log)<500?'is-warning':'is-danger'">{{logStatusCode(item.log)}}</span>
-                    </div>
-                    <div v-if="item.log.matched && item.rule" class="log-result-secondary">
-                      <a href="#" class="log-rule-link" :title="item.rule.id" @click.prevent.stop="$emit('go-to-rule', item.rule.id)">{{shortId(item.rule.id)}}</a>
-                      <span v-if="item.rule.description" :title="item.rule.description">{{item.rule.description}}</span>
-                    </div>
-                    <div v-else-if="item.log.matched && item.log.ruleId" class="log-result-secondary">
-                      <span class="log-rule-link" :title="item.log.ruleId">{{shortId(item.log.ruleId)}}</span>
-                      <span>{{t('stats.deleted')}}</span>
-                    </div>
-                    <div v-else-if="item.log.proxyError" class="log-result-secondary" :title="item.log.proxyError">{{item.log.proxyError}}</div>
-                  </td>
-                  <td class="col-actions col-actions-2">
-                    <div class="log-row-actions">
-                      <button v-if="item.log.hasResponseBody || (item._detail && item._detail.responseBody)" type="button"
-                        class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('create-rule-from-log', item._detail || item.log)"
-                        :title="t('stats.createRuleFromLog')" :aria-label="t('stats.createRuleFromLog')"><i class="bi bi-plus-circle" aria-hidden="true"></i></button>
-                      <button type="button" class="btn btn-sm btn-icon btn-secondary" @click.stop="$emit('toggle-log-detail', item)"
-                        :aria-expanded="!!logDetailExpanded[item.log.id]" :aria-controls="'log-detail-'+item.log.id"
-                        :title="logDetailExpanded[item.log.id]?t('stats.collapseTrace'):t('stats.expandTrace')"
-                        :aria-label="logDetailExpanded[item.log.id]?t('stats.collapseTrace'):t('stats.expandTrace')">
-                        <i class="bi" :class="logDetailExpanded[item.log.id]?'bi-chevron-up':'bi-chevron-down'" aria-hidden="true"></i>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-
-                <tr v-if="logDetailExpanded[item.log.id]" class="log-detail-row">
-                  <td :colspan="logDetailColspan" class="log-detail-cell" @click.stop>
-                    <div class="log-detail-slot" :id="'log-detail-slot-'+item.log.id"></div>
-                  </td>
-                </tr>
-
-              </template>
+              <tr v-for="item in pagedLogs" :key="item.log.id" :id="'log-summary-'+item.log.id" data-detail-row tabindex="0"
+                :class="{'is-selected': !!logDetailExpanded[item.log.id]}" :aria-selected="logDetailExpanded[item.log.id] ? 'true' : 'false'"
+                @click="selectLog(item)" @keydown="onRowKeydown($event, item)">
+                <td class="col-time cell-mono cell-subtle" :title="fmtTime(item.log.requestTime,false)">{{logDate(item.log.requestTime)}} {{logClock(item.log.requestTime)}}</td>
+                <td class="col-method">
+                  <span class="rule-method" :data-method="item.log.protocol==='HTTP' ? item.log.method : null" :data-protocol="item.log.protocol">{{item.log.protocol==='HTTP' ? (item.log.method || 'HTTP') : 'JMS'}}</span>
+                </td>
+                <td class="col-request">
+                  <span class="rule-identity">
+                    <code class="rule-path" :title="item.log.endpoint">{{item.log.endpoint}}</code>
+                    <span class="rule-desc" :title="requestDescription(item)">{{requestDescription(item)}}</span>
+                    <span v-if="item.log.forwardTarget" class="log-forward" :title="item.log.forwardTarget"><i class="bi bi-arrow-right" aria-hidden="true"></i>{{forwardTargetName(item.log.forwardTarget)}}</span>
+                  </span>
+                </td>
+                <td class="col-duration cell-end cell-mono cell-subtle">{{item.log.responseTimeMs}} ms</td>
+                <td class="col-result">
+                  <span class="log-result-line">
+                    <ui-status :tone="logTone(item.log)" :title="item.log.proxyError || null">{{logOutcome(item.log)}}</ui-status>
+                    <span v-if="logStatusCode(item.log) != null" class="log-status-code"
+                      :class="logStatusCode(item.log)<400?'is-success':logStatusCode(item.log)<500?'is-warning':'is-danger'">{{logStatusCode(item.log)}}</span>
+                  </span>
+                </td>
+                <td class="col-actions" @click.stop @dblclick.stop>
+                  <span class="row-actions">
+                    <ui-row-menu :items="logMenuItems(item)" :label="t('common.moreActions') + ' ' + item.log.endpoint" @select="handleLogMenu($event, item)"></ui-row-menu>
+                  </span>
+                </td>
+              </tr>
             </tbody>
           </table>
-
-          <div v-if="!pagedLogs.length && !loading.logs" class="empty workspace-empty">
-            <i class="bi" :class="(logFilter.protocol||logFilter.matched||logFilter.endpoint)?'bi-search':'bi-inbox'" aria-hidden="true"></i>
-            <div class="workspace-empty-title">{{(logFilter.protocol||logFilter.matched||logFilter.endpoint) ? t('stats.emptyNoMatch') : t('stats.emptyNoLogs')}}</div>
-            <div class="workspace-empty-hint">{{(logFilter.protocol||logFilter.matched||logFilter.endpoint) ? t('stats.emptyNoMatchHint') : t('stats.emptyHint')}}</div>
-            <button v-if="logFilter.protocol||logFilter.matched||logFilter.endpoint" type="button" class="btn btn-secondary" @click="$emit('clear-log-filters')">{{t('stats.clearAll')}}</button>
-          </div>
+          <ui-load-state v-else kind="empty" has-action
+            :icon="hasLogFilters?'bi-search':'bi-inbox'"
+            :title="hasLogFilters?t('stats.emptyNoMatch'):t('stats.emptyNoLogs')"
+            :hint="hasLogFilters?t('stats.emptyNoMatchHint'):t('stats.emptyHint')">
+            <template #action><ui-button v-if="hasLogFilters" type="button" variant="secondary" size="compact" @click="$emit('clear-log-filters')">{{t('stats.clearAll')}}</ui-button></template>
+          </ui-load-state>
         </div>
 
         <workspace-pagination v-if="!loading.logsError"
@@ -567,187 +304,121 @@ const StatsPage = {
           :page-size-label="t('stats.pageSize')"
           :first-page-label="t('stats.firstPage')" :previous-page-label="t('stats.previousPage')"
           :next-page-label="t('stats.nextPage')" :last-page-label="t('stats.lastPage')"
+          :scroll-hint-label="t('common.scrollForMore')"
+          :scroll-region-label="t('stats.tableCaption')"
           @update:page="$emit('update:logPage', $event)"
           @update:page-size="$emit('update:logPageSize', $event)"
         >
           <template #summary>
             <span class="sub-info">{{t('stats.totalCount', {count: logSummary.filteredRequests ?? logs.length})}}</span>
-            <button v-if="logFilter.protocol||logFilter.matched||logFilter.endpoint" type="button" class="workspace-filter-reset"
-              :title="t('stats.clickClearFilter')" @click="$emit('clear-log-filters')"><i class="bi bi-funnel-fill" aria-hidden="true"></i> {{t('stats.filtering')}}</button>
           </template>
         </workspace-pagination>
+      </div>
 
-        <Teleport v-if="selectedLogItem && !loading.logsError" defer :to="'#log-detail-slot-'+selectedLogItem.log.id">
-        <section class="log-inspector" :id="'log-detail-'+selectedLogItem.log.id"
-          :aria-labelledby="'log-summary-'+selectedLogItem.log.id">
-          <header class="log-inspector-header">
-            <div class="log-inspector-identity">
-              <span class="badge" :class="'badge-'+selectedLogItem.log.protocol?.toLowerCase()">{{selectedLogItem.log.protocol}}</span>
-              <span v-if="selectedLogItem.log.protocol==='HTTP' && selectedLogItem.log.method" class="log-method">{{selectedLogItem.log.method}}</span>
-              <code :title="selectedLogItem.log.endpoint">{{selectedLogItem.log.endpoint}}</code>
-              <span v-if="logStatusCode(selectedLogItem.log) != null" class="log-status-code"
-                :class="logStatusCode(selectedLogItem.log)<400?'is-success':logStatusCode(selectedLogItem.log)<500?'is-warning':'is-danger'">{{logStatusCode(selectedLogItem.log)}}</span>
-              <span class="log-inspector-duration tabular-nums">{{selectedLogItem.log.responseTimeMs}} ms</span>
-            </div>
-            <div class="log-inspector-actions">
-              <button v-if="selectedLogItem.log.hasResponseBody || selectedLogItem._detail?.responseBody" type="button"
-                class="btn btn-sm btn-secondary" @click.stop="$emit('create-rule-from-log', selectedLogItem._detail || selectedLogItem.log)">
-                <i class="bi bi-plus-circle" aria-hidden="true"></i>{{t('stats.createRuleFromLog')}}
-              </button>
-              <button type="button" class="btn btn-sm btn-icon btn-secondary"
-                @click.stop="$emit('toggle-log-detail', selectedLogItem)"
-                :title="t('stats.closeInspector')" :aria-label="t('stats.closeInspector')">
-                <i class="bi bi-x-lg" aria-hidden="true"></i>
-              </button>
-            </div>
-          </header>
+      <ui-detail-drawer class="log-detail-drawer" :open="held.open" :stale="held.stale"
+        :title="shownLogItem?.log.endpoint || ''" :subtitle="shownLogItem ? requestDescription(shownLogItem) : ''"
+        :has-prev="selectedIndex > 0" :has-next="selectedIndex >= 0 && selectedIndex < pagedLogs.length - 1"
+        @close="selectedLogItem && $emit('toggle-log-detail', selectedLogItem)" @prev="stepDetail(-1)" @next="stepDetail(1)">
+        <template v-if="shownLogItem" #meta>
+          <span class="rule-method" :data-method="shownLogItem.log.protocol==='HTTP' ? shownLogItem.log.method : null" :data-protocol="shownLogItem.log.protocol">{{shownLogItem.log.protocol==='HTTP' ? (shownLogItem.log.method || 'HTTP') : 'JMS'}}</span>
+          <ui-status :tone="logTone(shownLogItem.log)">{{logOutcome(shownLogItem.log)}}</ui-status>
+          <span v-if="logStatusCode(shownLogItem.log) != null" class="log-status-code"
+            :class="logStatusCode(shownLogItem.log)<400?'is-success':logStatusCode(shownLogItem.log)<500?'is-warning':'is-danger'">{{logStatusCode(shownLogItem.log)}}</span>
+          <span class="detail-mono">{{shownLogItem.log.responseTimeMs}} ms · {{fmtTime(shownLogItem.log.requestTime, false)}}</span>
+        </template>
+        <template v-if="shownLogItem" #actions>
+          <ui-button v-if="shownLogItem.log.hasResponseBody || shownLogItem._detail?.responseBody" type="button" variant="primary" size="compact"
+            @click="$emit('create-rule-from-log', shownLogItem._detail || shownLogItem.log)"><i class="bi bi-plus-circle" aria-hidden="true"></i>{{t('stats.createRuleFromLog')}}</ui-button>
+          <ui-button v-if="shownLogItem.log.ruleId" type="button" variant="secondary" size="compact" @click="$emit('go-to-rule', shownLogItem.log.ruleId)"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>{{t('stats.openMatchedRule')}}</ui-button>
+          <ui-row-menu :items="logMenuItems(shownLogItem, true)" :label="t('common.moreActions')" @select="handleLogMenu($event, shownLogItem)"></ui-row-menu>
+        </template>
+        <section v-if="shownLogItem" class="log-inspector" :id="'log-detail-'+shownLogItem.log.id">
+          <ui-tabs class="log-inspector-tabs" variant="compact" v-model="inspectorTab"
+            :items="inspectorTabs" :aria-label="t('stats.inspectorViews')"></ui-tabs>
 
-          <div ref="inspectorTabs" class="log-inspector-tabs" role="tablist" :aria-label="t('stats.inspectorViews')">
-            <button type="button" role="tab" :aria-selected="inspectorTab==='body'" :tabindex="inspectorTab==='body'?0:-1"
-              :aria-controls="'log-inspector-body-'+selectedLogItem.log.id"
-              :class="{'is-active': inspectorTab==='body'}" @click="inspectorTab='body'" @keydown="moveInspectorTab">
-              <i class="bi bi-braces" aria-hidden="true"></i>{{t('stats.inspectorBodyTab')}}
-            </button>
-            <button type="button" role="tab" :aria-selected="inspectorTab==='overview'" :tabindex="inspectorTab==='overview'?0:-1"
-              :aria-controls="'log-inspector-overview-'+selectedLogItem.log.id"
-              :class="{'is-active': inspectorTab==='overview'}" @click="inspectorTab='overview'" @keydown="moveInspectorTab">
-              <i class="bi bi-list-ul" aria-hidden="true"></i>{{t('stats.inspectorOverviewTab')}}
-            </button>
-            <button type="button" role="tab" :aria-selected="inspectorTab==='trace'" :tabindex="inspectorTab==='trace'?0:-1"
-              :aria-controls="'log-inspector-trace-'+selectedLogItem.log.id"
-              :class="{'is-active': inspectorTab==='trace'}" :disabled="!selectedLogItem.matchChainData?.length"
-              @click="inspectorTab='trace'" @keydown="moveInspectorTab">
-              <i class="bi bi-diagram-3" aria-hidden="true"></i>{{t('stats.matchChainTitle')}}
-              <span v-if="selectedLogItem.matchChainData?.length" class="log-inspector-tab-count">{{selectedLogItem.matchChainData.length}}</span>
-            </button>
-          </div>
-
-          <div v-if="selectedLogItem._detailLoading" class="log-inspector-loading" role="status" aria-live="polite">
+          <div v-if="shownLogItem._detailLoading" class="log-inspector-loading loading-reveal" role="status" aria-live="polite">
             <i class="bi bi-arrow-clockwise spin" aria-hidden="true"></i>{{t('stats.loadingDetail')}}
           </div>
 
-          <div v-else-if="selectedLogItem._detailError" class="log-inspector-loading log-inspector-error" role="alert">
+          <div v-else-if="shownLogItem._detailError" class="log-inspector-loading log-inspector-error" role="alert">
             <i class="bi bi-cloud-slash" aria-hidden="true"></i><span>{{t('stats.detailLoadFailed')}}</span>
-            <button type="button" class="btn btn-sm btn-secondary" @click="$emit('toggle-log-detail', selectedLogItem)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</button>
+            <ui-button type="button" variant="secondary" size="compact" @click="$emit('toggle-log-detail', shownLogItem)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</ui-button>
+          </div>
+
+          <div v-else-if="inspectorTab==='flow'" class="log-inspector-content log-inspector-flow ui-detail-panel" role="tabpanel"
+            :id="'log-inspector-flow-'+shownLogItem.log.id" :aria-labelledby="'log-tab-flow-'+shownLogItem.log.id">
+            <request-flow-view :item="shownLogItem" :rule-description="shownLogItem.rule?.description || ''"
+              @show-trace="inspectorTab='trace'"></request-flow-view>
           </div>
 
           <div v-else-if="inspectorTab==='body'" class="log-inspector-content log-inspector-body-grid"
-            role="tabpanel" :id="'log-inspector-body-'+selectedLogItem.log.id">
-            <section class="log-inspector-pane" :aria-labelledby="'request-body-heading-'+selectedLogItem.log.id">
+            role="tabpanel" :id="'log-inspector-body-'+shownLogItem.log.id" :aria-labelledby="'log-tab-body-'+shownLogItem.log.id">
+            <section class="log-inspector-pane ui-detail-panel" :aria-labelledby="'request-body-heading-'+shownLogItem.log.id">
               <div class="log-inspector-pane-header">
-                <h3 :id="'request-body-heading-'+selectedLogItem.log.id">
-                  <i class="bi bi-arrow-up-circle" aria-hidden="true"></i>{{t('stats.detailRequestBody')}}
-                </h3>
-                <span class="log-body-size tabular-nums">{{fmtSize(selectedLogItem._detail?.requestBody?.length || 0)}}</span>
-                <div v-if="selectedLogItem._detail?.requestBody" class="log-body-tools">
-                  <div class="pv-search-bar">
-                    <input :value="bodySearch['reqBody-'+selectedLogItem.log.id]||''"
-                      @input="setBodySearch('reqBody-'+selectedLogItem.log.id, $event.target.value)"
-                      :placeholder="t('rules.pvSearchBody')" :aria-label="t('stats.searchRequestBody')"
-                      @keydown.enter.prevent="bodyNavSearch('reqBody-'+selectedLogItem.log.id, bodyFormatted['reqBody-'+selectedLogItem.log.id] ? getFormattedText('reqBody-'+selectedLogItem.log.id, selectedLogItem._detail.requestBody) : selectedLogItem._detail.requestBody, $event.shiftKey ? -1 : 1)">
-                    <span v-if="bodySearch['reqBody-'+selectedLogItem.log.id]" class="pv-search-count">{{bodyMatchLabel('reqBody-'+selectedLogItem.log.id, bodyFormatted['reqBody-'+selectedLogItem.log.id] ? getFormattedText('reqBody-'+selectedLogItem.log.id, selectedLogItem._detail.requestBody) : selectedLogItem._detail.requestBody)}}</span>
-                    <button v-if="bodySearch['reqBody-'+selectedLogItem.log.id]" type="button"
-                      @click="bodyNavSearch('reqBody-'+selectedLogItem.log.id, bodyFormatted['reqBody-'+selectedLogItem.log.id] ? getFormattedText('reqBody-'+selectedLogItem.log.id, selectedLogItem._detail.requestBody) : selectedLogItem._detail.requestBody, -1)"
-                      :title="t('rules.pvSearchPrev')" :aria-label="t('rules.pvSearchPrev')"><i class="bi bi-chevron-up" aria-hidden="true"></i></button>
-                    <button v-if="bodySearch['reqBody-'+selectedLogItem.log.id]" type="button"
-                      @click="bodyNavSearch('reqBody-'+selectedLogItem.log.id, bodyFormatted['reqBody-'+selectedLogItem.log.id] ? getFormattedText('reqBody-'+selectedLogItem.log.id, selectedLogItem._detail.requestBody) : selectedLogItem._detail.requestBody, 1)"
-                      :title="t('rules.pvSearchNext')" :aria-label="t('rules.pvSearchNext')"><i class="bi bi-chevron-down" aria-hidden="true"></i></button>
-                  </div>
-                  <button type="button" class="btn btn-sm btn-icon btn-secondary"
-                    :class="{'active': bodyFormatted['reqBody-'+selectedLogItem.log.id]}"
-                    :aria-pressed="!!bodyFormatted['reqBody-'+selectedLogItem.log.id]"
-                    @click.stop="toggleBodyFormat('reqBody-'+selectedLogItem.log.id, selectedLogItem._detail.requestBody)"
-                    :title="t('rules.pvFormat')" :aria-label="t('rules.pvFormat')"><i class="bi bi-braces" aria-hidden="true"></i></button>
-                  <button type="button" class="btn btn-sm btn-icon btn-secondary" @click.stop="copyBody(selectedLogItem._detail.requestBody)"
-                    :title="t('rules.copyFullContent')" :aria-label="t('rules.copyFullContent')"><i class="bi bi-clipboard" aria-hidden="true"></i></button>
-                </div>
+                <h2 class="ui-detail-panel-heading" :id="'request-body-heading-'+shownLogItem.log.id">{{t('stats.detailRequestBody')}}</h2>
               </div>
-              <div v-if="selectedLogItem._detail?.requestBody && bodyFormatted['reqBody-'+selectedLogItem.log.id]"
-                :ref="'reqBody-'+selectedLogItem.log.id" class="pv-cm-container"></div>
-              <pre v-else-if="selectedLogItem._detail?.requestBody" :ref="'reqBody-'+selectedLogItem.log.id" class="pv-pre"><template v-if="bodySearch['reqBody-'+selectedLogItem.log.id]"><template v-for="(seg,si) in bodyHighlight('reqBody-'+selectedLogItem.log.id, selectedLogItem._detail.requestBody)" :key="si"><span v-if="seg.hl" class="pv-highlight" :class="{'pv-highlight-current': bodyHlIsCurrent('reqBody-'+selectedLogItem.log.id, selectedLogItem._detail.requestBody, si)}">{{seg.text}}</span><template v-else>{{seg.text}}</template></template></template><template v-else>{{selectedLogItem._detail.requestBody}}</template></pre>
-              <div v-else class="log-body-empty"><i class="bi bi-file-earmark" aria-hidden="true"></i>{{t('stats.emptyRequestBody')}}</div>
+              <ui-code-viewer v-if="shownLogItem._detail?.requestBody" :key="'reqBody-'+shownLogItem.log.id" :value="shownLogItem._detail.requestBody"
+                :label="t('stats.detailRequestBody')" @copy="copyBody($event)"></ui-code-viewer>
+              <div v-else class="pv-body-empty">{{t('stats.emptyRequestBody')}}</div>
             </section>
 
-            <section class="log-inspector-pane" :aria-labelledby="'response-body-heading-'+selectedLogItem.log.id">
+            <section class="log-inspector-pane ui-detail-panel" :aria-labelledby="'response-body-heading-'+shownLogItem.log.id">
               <div class="log-inspector-pane-header">
-                <h3 :id="'response-body-heading-'+selectedLogItem.log.id">
-                  <i class="bi bi-arrow-down-circle" aria-hidden="true"></i>{{t('stats.detailResponseBody')}}
-                </h3>
-                <span class="log-body-size tabular-nums">{{fmtSize(selectedLogItem._detail?.responseBody?.length || 0)}}</span>
-                <div v-if="selectedLogItem._detail?.responseBody" class="log-body-tools">
-                  <div class="pv-search-bar">
-                    <input :value="bodySearch['resBody-'+selectedLogItem.log.id]||''"
-                      @input="setBodySearch('resBody-'+selectedLogItem.log.id, $event.target.value)"
-                      :placeholder="t('rules.pvSearchBody')" :aria-label="t('stats.searchResponseBody')"
-                      @keydown.enter.prevent="bodyNavSearch('resBody-'+selectedLogItem.log.id, bodyFormatted['resBody-'+selectedLogItem.log.id] ? getFormattedText('resBody-'+selectedLogItem.log.id, selectedLogItem._detail.responseBody) : selectedLogItem._detail.responseBody, $event.shiftKey ? -1 : 1)">
-                    <span v-if="bodySearch['resBody-'+selectedLogItem.log.id]" class="pv-search-count">{{bodyMatchLabel('resBody-'+selectedLogItem.log.id, bodyFormatted['resBody-'+selectedLogItem.log.id] ? getFormattedText('resBody-'+selectedLogItem.log.id, selectedLogItem._detail.responseBody) : selectedLogItem._detail.responseBody)}}</span>
-                    <button v-if="bodySearch['resBody-'+selectedLogItem.log.id]" type="button"
-                      @click="bodyNavSearch('resBody-'+selectedLogItem.log.id, bodyFormatted['resBody-'+selectedLogItem.log.id] ? getFormattedText('resBody-'+selectedLogItem.log.id, selectedLogItem._detail.responseBody) : selectedLogItem._detail.responseBody, -1)"
-                      :title="t('rules.pvSearchPrev')" :aria-label="t('rules.pvSearchPrev')"><i class="bi bi-chevron-up" aria-hidden="true"></i></button>
-                    <button v-if="bodySearch['resBody-'+selectedLogItem.log.id]" type="button"
-                      @click="bodyNavSearch('resBody-'+selectedLogItem.log.id, bodyFormatted['resBody-'+selectedLogItem.log.id] ? getFormattedText('resBody-'+selectedLogItem.log.id, selectedLogItem._detail.responseBody) : selectedLogItem._detail.responseBody, 1)"
-                      :title="t('rules.pvSearchNext')" :aria-label="t('rules.pvSearchNext')"><i class="bi bi-chevron-down" aria-hidden="true"></i></button>
-                  </div>
-                  <button type="button" class="btn btn-sm btn-icon btn-secondary"
-                    :class="{'active': bodyFormatted['resBody-'+selectedLogItem.log.id]}"
-                    :aria-pressed="!!bodyFormatted['resBody-'+selectedLogItem.log.id]"
-                    @click.stop="toggleBodyFormat('resBody-'+selectedLogItem.log.id, selectedLogItem._detail.responseBody)"
-                    :title="t('rules.pvFormat')" :aria-label="t('rules.pvFormat')"><i class="bi bi-braces" aria-hidden="true"></i></button>
-                  <button type="button" class="btn btn-sm btn-icon btn-secondary" @click.stop="copyBody(selectedLogItem._detail.responseBody)"
-                    :title="t('rules.copyFullContent')" :aria-label="t('rules.copyFullContent')"><i class="bi bi-clipboard" aria-hidden="true"></i></button>
-                </div>
+                <h2 class="ui-detail-panel-heading" :id="'response-body-heading-'+shownLogItem.log.id">{{t('stats.detailResponseBody')}}</h2>
               </div>
-              <div v-if="selectedLogItem._detail?.responseBody && bodyFormatted['resBody-'+selectedLogItem.log.id]"
-                :ref="'resBody-'+selectedLogItem.log.id" class="pv-cm-container"></div>
-              <pre v-else-if="selectedLogItem._detail?.responseBody" :ref="'resBody-'+selectedLogItem.log.id" class="pv-pre"><template v-if="bodySearch['resBody-'+selectedLogItem.log.id]"><template v-for="(seg,si) in bodyHighlight('resBody-'+selectedLogItem.log.id, selectedLogItem._detail.responseBody)" :key="si"><span v-if="seg.hl" class="pv-highlight" :class="{'pv-highlight-current': bodyHlIsCurrent('resBody-'+selectedLogItem.log.id, selectedLogItem._detail.responseBody, si)}">{{seg.text}}</span><template v-else>{{seg.text}}</template></template></template><template v-else>{{selectedLogItem._detail.responseBody}}</template></pre>
-              <div v-else class="log-body-empty"><i class="bi bi-file-earmark" aria-hidden="true"></i>{{t('stats.emptyResponseBody')}}</div>
+              <ui-code-viewer v-if="shownLogItem._detail?.responseBody" :key="'resBody-'+shownLogItem.log.id" :value="shownLogItem._detail.responseBody"
+                :label="t('stats.detailResponseBody')" @copy="copyBody($event)"></ui-code-viewer>
+              <div v-else class="pv-body-empty">{{t('stats.emptyResponseBody')}}</div>
             </section>
           </div>
 
           <div v-else-if="inspectorTab==='overview'" class="log-inspector-content log-overview-surface"
-            role="tabpanel" :id="'log-inspector-overview-'+selectedLogItem.log.id">
-            <section class="log-overview-section" :aria-labelledby="'request-heading-'+selectedLogItem.log.id">
-              <h3 class="log-detail-heading" :id="'request-heading-'+selectedLogItem.log.id">{{t('stats.sectionRequest')}}</h3>
+            role="tabpanel" :id="'log-inspector-overview-'+shownLogItem.log.id" :aria-labelledby="'log-tab-overview-'+shownLogItem.log.id">
+            <section class="log-overview-section ui-detail-panel" :aria-labelledby="'request-heading-'+shownLogItem.log.id">
+              <h2 class="log-detail-heading" :id="'request-heading-'+shownLogItem.log.id">{{t('stats.sectionRequest')}}</h2>
               <dl class="log-detail-fields">
-                <div><dt>{{t('stats.detailTime')}}</dt><dd class="tabular-nums">{{fmtTime(selectedLogItem.log.requestTime, false)}}</dd></div>
-                <div><dt>{{t('stats.detailProtocol')}}</dt><dd><span class="badge" :class="'badge-'+selectedLogItem.log.protocol?.toLowerCase()">{{selectedLogItem.log.protocol}}</span></dd></div>
-                <div v-if="selectedLogItem.log.method"><dt>{{t('stats.detailMethod')}}</dt><dd><span class="log-method">{{selectedLogItem.log.method}}</span></dd></div>
-                <div><dt>{{t('stats.detailEndpoint')}}</dt><dd><code>{{selectedLogItem.log.endpoint}}</code></dd></div>
-                <div v-if="selectedLogItem.log.targetHost"><dt>{{t('stats.detailTargetHost')}}</dt><dd><code>{{selectedLogItem.log.targetHost}}</code></dd></div>
-                <div v-if="selectedLogItem.log.forwardTarget"><dt>{{t('stats.detailForwardTarget')}}</dt><dd><code>{{selectedLogItem.log.forwardTarget}}</code></dd></div>
-                <div v-if="selectedLogItem.log.clientIp"><dt>{{t('stats.detailClientIp')}}</dt><dd>{{selectedLogItem.log.clientIp}}</dd></div>
+                <div v-if="shownLogItem.log.diagnosticId"><dt>{{t('stats.diagnosticId')}}</dt><dd class="d-flex align-items-center gap-2">
+                  <code>{{shownLogItem.log.diagnosticId}}</code>
+                  <ui-button type="button" class="btn btn-sm btn-icon btn-secondary"
+                    @click.stop="copyBody(shownLogItem.log.diagnosticId)"
+                    :title="t('stats.copyDiagnosticId')" :aria-label="t('stats.copyDiagnosticId')"><i class="bi bi-clipboard" aria-hidden="true"></i></ui-button>
+                </dd></div>
+                <div><dt>{{t('stats.detailTime')}}</dt><dd class="tabular-nums">{{fmtTime(shownLogItem.log.requestTime, false)}}</dd></div>
+                <div><dt>{{t('stats.detailProtocol')}}</dt><dd><ui-badge class="badge" :class="'badge-'+shownLogItem.log.protocol?.toLowerCase()">{{shownLogItem.log.protocol}}</ui-badge></dd></div>
+                <div v-if="shownLogItem.log.method"><dt>{{t('stats.detailMethod')}}</dt><dd><span class="log-method">{{shownLogItem.log.method}}</span></dd></div>
+                <div><dt>{{t('stats.detailEndpoint')}}</dt><dd><code>{{shownLogItem.log.endpoint}}</code></dd></div>
+                <div v-if="shownLogItem.log.targetHost"><dt>{{t('stats.detailTargetHost')}}</dt><dd><code>{{shownLogItem.log.targetHost}}</code></dd></div>
+                <div v-if="shownLogItem.log.forwardTarget"><dt>{{t('stats.detailForwardTarget')}}</dt><dd><code>{{shownLogItem.log.forwardTarget}}</code></dd></div>
+                <div v-if="shownLogItem.log.clientIp"><dt>{{t('stats.detailClientIp')}}</dt><dd>{{shownLogItem.log.clientIp}}</dd></div>
               </dl>
             </section>
-            <section class="log-overview-section" :aria-labelledby="'result-heading-'+selectedLogItem.log.id">
-              <h3 class="log-detail-heading" :id="'result-heading-'+selectedLogItem.log.id">{{t('stats.sectionMatch')}}</h3>
+            <section class="log-overview-section ui-detail-panel" :aria-labelledby="'result-heading-'+shownLogItem.log.id">
+              <h2 class="log-detail-heading" :id="'result-heading-'+shownLogItem.log.id">{{t('stats.sectionMatch')}}</h2>
               <dl class="log-detail-fields">
                 <div><dt>{{t('stats.detailMatched')}}</dt><dd>
-                  <span class="log-outcome" :class="selectedLogItem.log.matched?'log-outcome-success':'log-outcome-danger'">
-                    <i class="bi" :class="selectedLogItem.log.matched?'bi-check2-circle':'bi-x-circle'" aria-hidden="true"></i>
-                    {{selectedLogItem.log.matched ? t('stats.matched') : t('stats.unmatched')}}
-                  </span>
+                  <span class="log-outcome" :class="shownLogItem.log.matched?'log-outcome-success':'log-outcome-danger'">{{shownLogItem.log.matched ? t('stats.matched') : t('stats.unmatched')}}</span>
                 </dd></div>
-                <div v-if="selectedLogItem.log.ruleId"><dt>{{t('stats.detailRuleId')}}</dt><dd><a href="#" class="log-rule-link" @click.prevent.stop="$emit('go-to-rule', selectedLogItem.log.ruleId)">{{selectedLogItem.log.ruleId}}</a></dd></div>
-                <div v-if="selectedLogItem.rule?.description"><dt>{{t('stats.detailRuleDesc')}}</dt><dd>{{selectedLogItem.rule.description}}</dd></div>
-                <div><dt>{{t('stats.detailDuration')}}</dt><dd class="tabular-nums">{{selectedLogItem.log.responseTimeMs}} ms</dd></div>
-                <div><dt>{{t('stats.detailForwarded')}}</dt><dd>{{selectedLogItem.log.forwarded ? t('stats.forwarded') : t('stats.notForwarded')}}</dd></div>
-                <div v-if="selectedLogItem.log.protocol==='HTTP' && selectedLogItem.log.responseStatus != null"><dt>{{t('stats.detailResponseStatus')}}</dt><dd><span class="log-status-code" :class="selectedLogItem.log.responseStatus<400?'is-success':selectedLogItem.log.responseStatus<500?'is-warning':'is-danger'">{{selectedLogItem.log.responseStatus}}</span></dd></div>
-                <div v-if="selectedLogItem.log.faultType && selectedLogItem.log.faultType !== 'NONE'"><dt>{{t('stats.detailFaultType')}}</dt><dd><span class="log-outcome log-outcome-warning"><i class="bi bi-lightning" aria-hidden="true"></i>{{t('rules.fault_' + selectedLogItem.log.faultType)}}</span></dd></div>
-                <div v-if="scenarioEnabled && selectedLogItem.log.scenarioName"><dt>{{t('stats.detailScenario')}}</dt><dd>{{selectedLogItem.log.scenarioName}}</dd></div>
-                <div v-if="scenarioEnabled && selectedLogItem.log.scenarioToState"><dt>{{t('stats.detailScenarioTransition')}}</dt><dd class="log-scenario-transition"><span>{{selectedLogItem.log.scenarioFromState || 'Started'}}</span><i class="bi bi-arrow-right" aria-hidden="true"></i><strong>{{selectedLogItem.log.scenarioToState}}</strong></dd></div>
-                <div v-if="selectedLogItem.log.matchTimeMs != null"><dt>{{t('stats.detailMatchTime')}}</dt><dd class="tabular-nums">{{selectedLogItem.log.matchTimeMs}} ms</dd></div>
-                <div v-if="selectedLogItem.log.matchTimeMs != null && selectedLogItem.log.responseTimeMs > selectedLogItem.log.matchTimeMs"><dt>{{t('stats.detailOtherTime')}}</dt><dd class="tabular-nums">{{selectedLogItem.log.responseTimeMs - selectedLogItem.log.matchTimeMs}} ms</dd></div>
-                <div v-if="selectedLogItem.log.protocol==='HTTP' && selectedLogItem.log.proxyStatus != null"><dt>{{t('stats.detailProxyStatus')}}</dt><dd><span class="log-status-code" :class="selectedLogItem.log.proxyStatus<400?'is-success':selectedLogItem.log.proxyStatus<500?'is-warning':'is-danger'">{{selectedLogItem.log.proxyStatus}}</span></dd></div>
-                <div v-if="selectedLogItem.log.proxyError"><dt>{{t('stats.detailProxyError')}}</dt><dd class="log-error-text">{{selectedLogItem.log.proxyError}}</dd></div>
+                <div v-if="shownLogItem.log.ruleId"><dt>{{t('stats.detailRuleId')}}</dt><dd><a href="#" class="log-rule-link" @click.prevent.stop="$emit('go-to-rule', shownLogItem.log.ruleId)">{{shownLogItem.log.ruleId}}</a></dd></div>
+                <div v-if="shownLogItem.rule?.description"><dt>{{t('stats.detailRuleDesc')}}</dt><dd>{{shownLogItem.rule.description}}</dd></div>
+                <div><dt>{{t('stats.detailDuration')}}</dt><dd class="tabular-nums">{{shownLogItem.log.responseTimeMs}} ms</dd></div>
+                <div><dt>{{t('stats.detailForwarded')}}</dt><dd>{{shownLogItem.log.forwarded ? t('stats.forwarded') : t('stats.notForwarded')}}</dd></div>
+                <div v-if="shownLogItem.log.protocol==='HTTP' && shownLogItem.log.responseStatus != null"><dt>{{t('stats.detailResponseStatus')}}</dt><dd><span class="log-status-code" :class="shownLogItem.log.responseStatus<400?'is-success':shownLogItem.log.responseStatus<500?'is-warning':'is-danger'">{{shownLogItem.log.responseStatus}}</span></dd></div>
+                <div v-if="shownLogItem.log.faultType && shownLogItem.log.faultType !== 'NONE'"><dt>{{t('stats.detailFaultType')}}</dt><dd><span class="log-outcome log-outcome-warning"><i class="bi bi-lightning" aria-hidden="true"></i>{{t('rules.fault_' + shownLogItem.log.faultType)}}</span></dd></div>
+                <div v-if="scenarioEnabled && shownLogItem.log.scenarioName"><dt>{{t('stats.detailScenario')}}</dt><dd>{{shownLogItem.log.scenarioName}}</dd></div>
+                <div v-if="scenarioEnabled && shownLogItem.log.scenarioToState"><dt>{{t('stats.detailScenarioTransition')}}</dt><dd class="log-scenario-transition"><span>{{shownLogItem.log.scenarioFromState || 'Started'}}</span><i class="bi bi-arrow-right" aria-hidden="true"></i><strong>{{shownLogItem.log.scenarioToState}}</strong></dd></div>
+                <div v-if="shownLogItem.log.matchTimeMs != null"><dt>{{t('stats.detailMatchTime')}}</dt><dd class="tabular-nums">{{shownLogItem.log.matchTimeMs}} ms</dd></div>
+                <div v-if="shownLogItem.log.matchTimeMs != null && shownLogItem.log.responseTimeMs > shownLogItem.log.matchTimeMs"><dt>{{t('stats.detailOtherTime')}}</dt><dd class="tabular-nums">{{shownLogItem.log.responseTimeMs - shownLogItem.log.matchTimeMs}} ms</dd></div>
+                <div v-if="shownLogItem.log.protocol==='HTTP' && shownLogItem.log.proxyStatus != null"><dt>{{t('stats.detailProxyStatus')}}</dt><dd><span class="log-status-code" :class="shownLogItem.log.proxyStatus<400?'is-success':shownLogItem.log.proxyStatus<500?'is-warning':'is-danger'">{{shownLogItem.log.proxyStatus}}</span></dd></div>
+                <div v-if="shownLogItem.log.proxyError"><dt>{{t('stats.detailProxyError')}}</dt><dd class="log-error-text">{{shownLogItem.log.proxyError}}</dd></div>
               </dl>
             </section>
           </div>
 
-          <div v-else class="log-inspector-content log-inspector-trace" role="tabpanel"
-            :id="'log-inspector-trace-'+selectedLogItem.log.id">
+          <div v-else class="log-inspector-content log-inspector-trace ui-detail-panel" role="tabpanel"
+            :id="'log-inspector-trace-'+shownLogItem.log.id" :aria-labelledby="'log-tab-trace-'+shownLogItem.log.id">
             <ol class="match-chain-list">
-              <li v-for="(c,i) in selectedLogItem.matchChainData" :key="c.ruleId" class="match-chain-item" :class="{'match-chain-match':c.reason==='match'}">
-                <span class="match-chain-num" :aria-label="t('stats.matchChainStep', {step:i+1})">{{i+1}}</span>
+              <li v-for="(c,i) in shownLogItem.matchChainData" :key="c.ruleId" class="match-chain-item" :class="{'match-chain-match':c.reason==='match'}">
+                <span class="match-chain-num" role="img" :aria-label="t('stats.matchChainStep', {step:i+1})">{{i+1}}</span>
                 <div class="match-chain-identity">
                   <div class="match-chain-rule">
                     <a v-if="c.endpoint" href="#" @click.prevent.stop="$emit('go-to-rule', c.ruleId)" class="match-chain-id" :title="c.ruleId">{{shortId(c.ruleId)}}</a>
@@ -757,16 +428,28 @@ const StatsPage = {
                   <span v-if="c.description" class="match-chain-desc">{{c.description}}</span>
                 </div>
                 <div class="match-chain-evaluation">
-                  <span class="match-chain-reason" :class="'reason-'+c.reason"><i class="bi" :class="reasonIcon(c.reason)" aria-hidden="true"></i>{{reasonText(c.reason)}}</span>
-                  <code v-if="c.condition" class="match-chain-cond">{{c.condition}}</code>
-                  <div v-if="c.mismatch" class="match-chain-mismatch"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span>{{c.mismatch}}</span></div>
+                  <span class="match-chain-reason" :class="'reason-'+c.reason">{{reasonText(c.reason)}}</span>
+                  <span v-if="c.detailTree" class="match-chain-tree-summary">{{treeSummary(c.detailTree)}}</span>
+                  <template v-else>
+                    <code v-if="c.condition" class="match-chain-cond">{{c.condition}}</code>
+                    <div v-if="c.detail && c.reason!=='match' && c.reason!=='shadowed'" class="match-chain-mismatch"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span>{{c.detail}}</span></div>
+                  </template>
+                </div>
+                <div v-if="c.detailTree" class="match-chain-tree">
+                  <match-explain-tree :tree="c.detailTree"></match-explain-tree>
+                  <template v-if="c.condition">
+                    <button type="button" class="match-chain-raw-toggle" :aria-expanded="!!rawConditionOpen[shownLogItem.log.id+':'+i]"
+                      @click="toggleRawCondition(shownLogItem.log.id+':'+i)">
+                      <i class="bi bi-code-slash" aria-hidden="true"></i>{{rawConditionOpen[shownLogItem.log.id+':'+i]?t('stats.matchTree.hideRaw'):t('stats.matchTree.showRaw')}}
+                    </button>
+                    <code v-if="rawConditionOpen[shownLogItem.log.id+':'+i]" class="match-chain-cond">{{c.condition}}</code>
+                  </template>
                 </div>
               </li>
             </ol>
           </div>
         </section>
-        </Teleport>
-      </div>
+      </ui-detail-drawer>
     </div>
   `
 };

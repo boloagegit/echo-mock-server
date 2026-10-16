@@ -1,5 +1,8 @@
 package com.echo.service;
 
+import com.echo.protocol.ProtocolHandlerRegistry;
+import com.echo.protocol.http.HttpProtocolHandler;
+import com.echo.protocol.jms.JmsProtocolHandler;
 import com.echo.entity.HttpRule;
 import com.echo.entity.BaseRule;
 import com.echo.entity.JmsRule;
@@ -27,7 +30,8 @@ import static org.assertj.core.api.Assertions.assertThat;
         "echo.jms.enabled=true",
         "spring.jpa.properties.hibernate.generate_statistics=true"
 })
-@Import(RuleQueryService.class)
+@Import({RuleQueryService.class, ProtocolHandlerRegistry.class,
+        HttpProtocolHandler.class, JmsProtocolHandler.class})
 class RuleQueryServiceTest {
 
     @Autowired

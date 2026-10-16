@@ -9,6 +9,7 @@ import com.echo.service.SystemConfigService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
@@ -31,6 +32,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -57,13 +59,39 @@ class RequestLogSpoolTest {
     }
 
     @Test
+    void findsTheLastSequenceThatCanBeSkippedWhileKeepingTheNewest() {
+        spool = createSpool(tempDir.resolve("skip.sqlite"), 16 * 1024 * 1024);
+        spool.start();
+        for (int i = 1; i <= 8; i++) {
+            spool.append(task("rule-" + i, "/orders/" + i));
+        }
+        List<RequestLogSpool.SpoolEntry> all = spool.readAfter(0, 100);
+        long third = all.get(2).sequence();
+
+        // 保留最新 5 筆：可略過到第 3 筆
+        assertThat(spool.sequenceBeforeNewest(5)).isEqualTo(third);
+        assertThat(spool.sequenceBeforeNewest(8)).isZero();
+        assertThat(spool.sequenceBeforeNewest(100)).isZero();
+        assertThat(spool.countBetween(0, third)).isEqualTo(3);
+        assertThat(spool.countBetween(all.get(0).sequence(), third)).isEqualTo(2);
+
+        spool.deleteThrough(third);
+        assertThat(spool.readAfter(0, 100)).extracting(entry -> entry.task().getEndpoint())
+                .containsExactly("/orders/4", "/orders/5", "/orders/6", "/orders/7", "/orders/8");
+        assertThat(spool.sequenceBeforeNewest(5)).isZero();
+    }
+
+    @Test
     void committedTaskSurvivesRestartAndRetainsAllFields() {
         Path path = tempDir.resolve("request-log-spool.sqlite");
         spool = createSpool(path, 16 * 1024 * 1024);
         spool.start();
         String firstSpoolId = spool.getSpoolId();
 
-        spool.append(task("rule-1", "/orders/1"));
+        spool.append(taskBuilder("rule-1", "/orders/1")
+                .candidateCount(3).matchedByFallback(true).delayMs(250).sseEventCount(4)
+                .scenarioSkipped("[{\"ruleId\":\"r9\",\"reason\":\"scenario_state_mismatch\"}]")
+                .build());
         assertThat(spool.pendingBytes()).isPositive();
         assertThat(spool.pendingItems()).isEqualTo(1);
         spool.stop();
@@ -84,6 +112,11 @@ class RequestLogSpoolTest {
         assertThat(restored.getScenarioName()).isEqualTo("order-flow");
         assertThat(restored.getScenarioFromState()).isEqualTo("Started");
         assertThat(restored.getScenarioToState()).isEqualTo("Paid");
+        assertThat(restored.getCandidateCount()).isEqualTo(3);
+        assertThat(restored.getMatchedByFallback()).isTrue();
+        assertThat(restored.getDelayMs()).isEqualTo(250);
+        assertThat(restored.getSseEventCount()).isEqualTo(4);
+        assertThat(restored.getScenarioSkipped()).contains("r9");
         assertThat(restored.isForwarded()).isTrue();
         assertThat(restored.getForwardTarget())
                 .isEqualTo("Primary | https://downstream.example");
@@ -94,6 +127,20 @@ class RequestLogSpoolTest {
         assertThat(spool.readAfter(0, 10)).isEmpty();
         assertThat(spool.pendingBytes()).isZero();
         assertThat(spool.pendingItems()).isZero();
+    }
+
+    @Test
+    void diagnosticIdSurvivesSpoolRestart() {
+        Path path = tempDir.resolve("diagnostic-id.sqlite");
+        spool = createSpool(path, 16 * 1024 * 1024);
+        spool.start();
+        spool.append(LogTask.builder().protocol(Protocol.JMS).endpoint("DEMO.REQUEST")
+                .diagnosticId("process-123").requestTime(LocalDateTime.now()).build());
+        spool.stop();
+        spool = createSpool(path, 16 * 1024 * 1024);
+        spool.start();
+        assertThat(spool.readAfter(0, 10)).singleElement().satisfies(entry ->
+                assertThat(entry.task().getDiagnosticId()).isEqualTo("process-123"));
     }
 
     @Test
@@ -212,6 +259,7 @@ class RequestLogSpoolTest {
         List<RequestLogSpool.SpoolEntry> entries = spool.readAfter(0, 10);
         assertThat(entries).singleElement().satisfies(entry -> {
             assertThat(entry.task().getRuleId()).isEqualTo("legacy-rule");
+            assertThat(entry.task().getDiagnosticId()).isNull();
             assertThat(entry.task().isForwarded()).isFalse();
             assertThat(entry.task().getForwardTarget()).isNull();
             assertThat(entry.task().getAnalysisBody()).isEqualTo("{\"id\":1}");
@@ -308,6 +356,49 @@ class RequestLogSpoolTest {
         assertThatThrownBy(() -> spool.readAfter(0, 10))
                 .isInstanceOf(RequestLogUnavailableException.class)
                 .hasMessageContaining("Cannot read request-log spool");
+    }
+
+    @Test
+    void appendAllCommitsEveryTaskInOrderWithFewCommits() {
+        spool = createSpool(tempDir.resolve("batch.sqlite"), 64 * 1024 * 1024);
+        spool.start();
+        List<LogTask> tasks = new ArrayList<>();
+        for (int i = 0; i < 300; i++) {
+            tasks.add(task("rule-" + i, "/batch/" + i));
+        }
+
+        RequestLogSpool.AppendResult result = spool.appendAll(tasks);
+
+        assertThat(result).isEqualTo(new RequestLogSpool.AppendResult(300, 0));
+        assertThat(spool.readAfter(0, 1_000)).extracting(entry -> entry.task().getEndpoint())
+                .containsExactlyElementsOf(tasks.stream().map(LogTask::getEndpoint).toList());
+    }
+
+    @Test
+    void appendAllSkipsATaskThatCanNeverBeStoredAndKeepsGoing() {
+        spool = createSpoolWithMemory(tempDir.resolve("skip.sqlite"), 64 * 1024 * 1024, 200_000);
+        spool.start();
+        List<LogTask> tasks = List.of(
+                task("rule-1", "/small/1"),
+                taskBuilder("rule-2", "/huge").requestBody("x".repeat(100_000)).build(),
+                task("rule-3", "/small/3"));
+
+        RequestLogSpool.AppendResult result = spool.appendAll(tasks);
+
+        assertThat(result).isEqualTo(new RequestLogSpool.AppendResult(3, 1));
+        assertThat(spool.readAfter(0, 10)).extracting(entry -> entry.task().getEndpoint())
+                .containsExactly("/small/1", "/small/3");
+    }
+
+    @Test
+    void appendAllOnAStoppedSpoolHandlesNothing() {
+        spool = createSpool(tempDir.resolve("stopped.sqlite"), 64 * 1024 * 1024);
+        spool.start();
+        spool.stop();
+
+        // 不是單筆的問題：回報沒處理任何一筆，由呼叫端稍後重試
+        assertThat(spool.appendAll(List.of(task("rule-1", "/a"))))
+                .isEqualTo(new RequestLogSpool.AppendResult(0, 0));
     }
 
     @Test
@@ -635,6 +726,10 @@ class RequestLogSpoolTest {
     }
 
     private LogTask task(String ruleId, String endpoint) {
+        return taskBuilder(ruleId, endpoint).build();
+    }
+
+    private LogTask.LogTaskBuilder taskBuilder(String ruleId, String endpoint) {
         CandidateSnapshot candidate = CandidateSnapshot.builder()
                 .ruleId(ruleId)
                 .endpoint(endpoint)
@@ -668,8 +763,7 @@ class RequestLogSpoolTest {
                 .analysisBody("{\"id\":1}")
                 .queryString("trace=1")
                 .headers(Map.of("X-Test", "value"))
-                .matchOutcomes(Map.of("body:id=1", true))
-                .build();
+                .matchOutcomes(Map.of("body:id=1", true));
     }
 
     private LogTask taskWithCandidateCondition(String ruleId, String condition) {
@@ -700,5 +794,143 @@ class RequestLogSpoolTest {
                 .endpoint("/minimal")
                 .requestTime(LocalDateTime.now())
                 .build();
+    }
+
+    @Test
+    @DisplayName("寫入時發生 Error（例如記憶體不足）：寫入執行緒不結束，這批回報失敗並釋放容量，之後的記錄照常寫入")
+    void writerSurvivesAnErrorAndKeepsWriting() throws Exception {
+        RequestLogSpool spool = errorSpool("error.sqlite");
+        try {
+            java.util.concurrent.atomic.AtomicBoolean failNext = new java.util.concurrent.atomic.AtomicBoolean(true);
+            spool.beforeCommitForTest = () -> {
+                if (failNext.getAndSet(false)) {
+                    throw new OutOfMemoryError("simulated");
+                }
+            };
+
+            assertThatThrownBy(() -> spool.append(errorTask("/lost")))
+                    .isInstanceOf(RequestLogUnavailableException.class);
+            assertThat(spool.statusSnapshot().pendingItems()).isZero();
+            spool.append(errorTask("/after"));
+
+            assertThat(spool.readAfter(0, 10)).extracting(entry -> entry.task().getEndpoint())
+                    .containsExactly("/after");
+        } finally {
+            spool.stop();
+        }
+    }
+
+    @Test
+    @DisplayName("已寫入後才發生 Error：仍回報成功，不讓呼叫端重送，資料只有一筆")
+    void errorAfterTheCommitStillReportsSuccess() throws Exception {
+        RequestLogSpool spool = errorSpool("after-commit.sqlite");
+        try {
+            java.util.concurrent.atomic.AtomicBoolean failNext = new java.util.concurrent.atomic.AtomicBoolean(true);
+            spool.afterCommitForTest = () -> {
+                if (failNext.getAndSet(false)) {
+                    throw new OutOfMemoryError("simulated");
+                }
+            };
+
+            spool.append(errorTask("/committed"));
+
+            assertThat(spool.readAfter(0, 10)).extracting(entry -> entry.task().getEndpoint())
+                    .containsExactly("/committed");
+            spool.append(errorTask("/next"));
+            assertThat(spool.readAfter(0, 10)).hasSize(2);
+        } finally {
+            spool.stop();
+        }
+    }
+
+    @Test
+    @DisplayName("暫存檔暫時無法寫入、重試時又發生 Error：清掉「無法寫入」的狀態，之後的記錄照常寫入")
+    void errorWhileRetryingAnUnavailableStorageDoesNotBlockLaterLogs() throws Exception {
+        RequestLogSpool spool = errorSpool("unavailable.sqlite");
+        try {
+            AtomicInteger attempts = new AtomicInteger();
+            spool.beforeCommitForTest = () -> {
+                int attempt = attempts.incrementAndGet();
+                if (attempt == 1) {
+                    throw new java.sql.SQLException("disk unavailable");
+                }
+                if (attempt == 2) {
+                    throw new OutOfMemoryError("simulated");
+                }
+            };
+            // 呼叫端收到失敗後，寫入執行緒先停一下：狀態若還沒清掉，下一筆一定會被擋（以前偶爾發生）
+            spool.afterAbandonNotifiedForTest = () -> {
+                try {
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            };
+
+            assertThatThrownBy(() -> spool.append(errorTask("/lost")))
+                    .isInstanceOf(RequestLogUnavailableException.class);
+
+            spool.append(errorTask("/after"));
+            assertThat(spool.readAfter(0, 10)).extracting(entry -> entry.task().getEndpoint())
+                    .containsExactly("/after");
+        } finally {
+            spool.stop();
+        }
+    }
+
+    @Test
+    void failedAppendPublishesRecoveryBeforeWakingTheCaller() throws Exception {
+        RequestLogSpool spool = errorSpool("recovery-publication.sqlite");
+        CountDownLatch callbackInstalled = new CountDownLatch(1);
+        try {
+            AtomicInteger attempts = new AtomicInteger();
+            spool.beforeCommitForTest = () -> {
+                int attempt = attempts.incrementAndGet();
+                if (attempt == 1) throw new java.sql.SQLException("disk unavailable");
+                if (attempt == 2) {
+                    try {
+                        if (!callbackInstalled.await(5, TimeUnit.SECONDS)) {
+                            throw new IllegalStateException("completion callback not installed");
+                        }
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException(interrupted);
+                    }
+                    throw new OutOfMemoryError("simulated");
+                }
+            };
+            // Observe the exact completion boundary rather than hoping the awaiting thread
+            // wins a scheduling race. The public append/recovery behavior is checked below.
+            Object pending = org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                    spool, "admit", errorTask("/lost"));
+            var completion = (java.util.concurrent.CompletableFuture<?>)
+                    org.springframework.test.util.ReflectionTestUtils.getField(pending, "committed");
+            var unavailableWhenNotified = completion.handle((value, failure) -> {
+                assertThat(failure).isInstanceOf(RequestLogUnavailableException.class);
+                assertThat(spool.statusSnapshot().pendingItems()).isZero();
+                assertThat(spool.statusSnapshot().inFlightBytes()).isZero();
+                return spool.isStorageUnavailable();
+            });
+            callbackInstalled.countDown();
+            assertThat(unavailableWhenNotified.get(5, TimeUnit.SECONDS)).isFalse();
+            spool.append(errorTask("/after"));
+            assertThat(spool.readAfter(0, 10)).extracting(entry -> entry.task().getEndpoint())
+                    .containsExactly("/after");
+        } finally {
+            callbackInstalled.countDown();
+            spool.stop();
+        }
+    }
+
+    private RequestLogSpool errorSpool(String file) {
+        RequestLogSpool spool = new RequestLogSpool(new ObjectMapper().findAndRegisterModules(),
+                tempDir.resolve(file).toString(), 16, 4, 1, 2_000, 10, 64L * 1024 * 1024);
+        spool.start();
+        return spool;
+    }
+
+    private static LogTask errorTask(String endpoint) {
+        return LogTask.builder().protocol(com.echo.entity.Protocol.HTTP).endpoint(endpoint).matched(true)
+                .requestTime(java.time.LocalDateTime.now()).build();
     }
 }

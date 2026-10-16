@@ -105,29 +105,32 @@ class MixedProtocolIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("14.6 連續快速更新 → 兩次都成功（last-write-wins 設計）")
+    @DisplayName("14.6 另一人修改後用舊版本更新 → 409；用每次存檔回傳的版本連續更新 → 都成功")
     void sequentialUpdates_bothSucceed() {
         RuleDto rule = createHttpRule("/api/lock-test", "GET", "{\"ok\":true}");
 
-        // 透過 repository 直接修改 DB 中的 version，模擬另一個使用者已更新
+        // 透過 repository 直接修改 DB，模擬另一個使用者已更新（版本因此前進）
         HttpRule entity = httpRuleRepository.findById(rule.getId()).orElseThrow();
         entity.setDescription("被另一個使用者修改");
         httpRuleRepository.saveAndFlush(entity);
 
-        // 用原始 version 的 dto 嘗試更新 → 因為 controller 會重新讀取 version，
-        // 所以我們需要在 controller 讀取後、save 前再改一次。
-        // 改用另一種方式：同時發兩次更新，第二次應該成功因為 controller 每次都讀最新 version。
-        // 
-        // 實際上此 controller 設計不會產生 409（因為它總是讀最新 version），
-        // 所以改為驗證：兩次快速連續更新都能成功（無衝突）
-        rule.setDescription("第一次更新");
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        rule.setDescription("用舊版本更新");
+        ResponseEntity<String> stale = adminClient().exchange(
+                "/api/admin/rules/" + rule.getId(), HttpMethod.PUT,
+                new HttpEntity<>(rule, headers), String.class);
+        assertThat(stale.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+
+        // 重新讀取後連續更新，每次帶上一次存檔回傳的版本（與編輯畫面相同）
+        rule = adminClient().getForEntity("/api/admin/rules/" + rule.getId(), RuleDto.class).getBody();
+        rule.setDescription("第一次更新");
         ResponseEntity<RuleDto> firstUpdate = adminClient().exchange(
                 "/api/admin/rules/" + rule.getId(), HttpMethod.PUT,
                 new HttpEntity<>(rule, headers), RuleDto.class);
         assertThat(firstUpdate.getStatusCode()).isEqualTo(HttpStatus.OK);
 
+        rule.setVersion(firstUpdate.getBody().getVersion());
         rule.setDescription("第二次更新");
         ResponseEntity<RuleDto> secondUpdate = adminClient().exchange(
                 "/api/admin/rules/" + rule.getId(), HttpMethod.PUT,

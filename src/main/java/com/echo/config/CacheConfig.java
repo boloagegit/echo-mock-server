@@ -36,6 +36,13 @@ public class CacheConfig {
     @Value("${echo.cache.rules.expire-minutes:60}")
     private int ruleCacheExpireMinutes = 60;
 
+    /**
+     * 規則與連線設定快取的最長存活分鐘數，不論是否常被使用。
+     * 多台部署時若漏掉變更通知，最晚這麼久之後也會重新讀取。
+     */
+    @Value("${echo.cache.rules.max-age-minutes:10}")
+    private int ruleCacheMaxAgeMinutes = 10;
+
     /** Response body 快取上限 (預設 200MB) */
     @Value("${echo.cache.body.max-size-mb:200}")
     private int bodyCacheMaxSizeMb;
@@ -48,17 +55,22 @@ public class CacheConfig {
     @Value("${echo.cache.body.expire-minutes:720}")
     private int bodyCacheExpireMinutes;
 
+    /** Body 快取最長存活分鐘數，不論是否常被使用（漏掉變更通知時的保底）。 */
+    @Value("${echo.cache.body.max-age-minutes:60}")
+    private int bodyCacheMaxAgeMinutes = 60;
+
     @Bean
     public Caffeine<Object, Object> caffeineConfig() {
         return Caffeine.newBuilder()
                 .maximumSize(Math.max(1, ruleCacheMaxEntries))
                 .expireAfterAccess(Math.max(1, ruleCacheExpireMinutes), TimeUnit.MINUTES)
+                .expireAfterWrite(Math.max(1, ruleCacheMaxAgeMinutes), TimeUnit.MINUTES)
                 .recordStats();
     }
 
     @Bean
     public CacheManager cacheManager(Caffeine<Object, Object> caffeine) {
-        CaffeineCacheManager cacheManager = new CaffeineCacheManager(
+        CaffeineCacheManager cacheManager = new CommitAwareCaffeineCacheManager(
                 HTTP_RULES_CACHE, JMS_RULES_CACHE, HTTP_TARGET_DEFAULT_CACHE,
                 HTTP_TARGET_RESOLVED_CACHE);
         cacheManager.setCaffeine(caffeine);
@@ -69,11 +81,23 @@ public class CacheConfig {
     @Bean
     public Cache<Long, String> responseBodyCache() {
         return Caffeine.newBuilder()
-                .maximumWeight((long) bodyCacheMaxSizeMb * 1024 * 1024)
-                .weigher((Long id, String body) -> body != null ? body.length() : 0)
-                .expireAfterAccess(bodyCacheExpireMinutes, TimeUnit.MINUTES)
+                .maximumWeight((long) Math.max(1, bodyCacheMaxSizeMb) * 1024 * 1024)
+                .weigher((Long id, String body) -> estimateBodyWeight(body))
+                .expireAfterAccess(Math.max(1, bodyCacheExpireMinutes), TimeUnit.MINUTES)
+                .expireAfterWrite(Math.max(1, bodyCacheMaxAgeMinutes), TimeUnit.MINUTES)
                 .recordStats()
                 .build();
+    }
+
+    /**
+     * Caffeine weights are relative capacity estimates, not exact retained-heap measurements.
+     * Count UTF-16 storage plus conservative String/cache-entry overhead so non-ASCII and
+     * large response bodies cannot consume roughly twice the configured byte budget.
+     */
+    static int estimateBodyWeight(String body) {
+        if (body == null) return 1;
+        long estimatedBytes = 96L + (long) body.length() * Character.BYTES;
+        return (int) Math.min(Integer.MAX_VALUE, Math.max(1L, estimatedBytes));
     }
 
     public int getBodyCacheThresholdBytes() {
@@ -86,5 +110,9 @@ public class CacheConfig {
 
     public int getRuleCacheExpireMinutes() {
         return ruleCacheExpireMinutes;
+    }
+
+    public int getRuleCacheMaxAgeMinutes() {
+        return ruleCacheMaxAgeMinutes;
     }
 }

@@ -77,9 +77,9 @@ const TourOverlay = {
         <div class="tour-tooltip-footer">
           <span class="tour-tooltip-steps" :aria-label="t('tour.progress', {current:step+1, total:steps.length})">{{step + 1}} / {{steps.length}}</span>
           <div class="tour-tooltip-actions">
-            <button v-if="step > 0" type="button" class="btn btn-sm btn-secondary" @click="$emit('prev')"><i class="bi bi-arrow-left" aria-hidden="true"></i>{{t('tour.prev')}}</button>
-            <button type="button" class="btn btn-sm btn-secondary" @click="$emit('skip')">{{t('tour.skip')}}</button>
-            <button type="button" class="btn btn-sm btn-primary" @click="$emit('next')">{{step < steps.length - 1 ? t('tour.next') : t('tour.finish')}}<i class="bi" :class="step < steps.length - 1?'bi-arrow-right':'bi-check2'" aria-hidden="true"></i></button>
+            <ui-button v-if="step > 0" type="button" variant="secondary" size="compact" @click="$emit('prev')"><i class="bi bi-arrow-left" aria-hidden="true"></i>{{t('tour.prev')}}</ui-button>
+            <ui-button type="button" class="btn btn-sm btn-secondary" @click="$emit('skip')">{{t('tour.skip')}}</ui-button>
+            <ui-button type="button" class="btn btn-sm btn-primary" @click="$emit('next')">{{step < steps.length - 1 ? t('tour.next') : t('tour.finish')}}<i class="bi" :class="step < steps.length - 1?'bi-arrow-right':'bi-check2'" aria-hidden="true"></i></ui-button>
           </div>
         </div>
       </section>

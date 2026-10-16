@@ -2,12 +2,12 @@ package com.echo.service;
 
 import com.echo.entity.BuiltinUser;
 import com.echo.repository.BuiltinUserRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,7 +23,6 @@ import java.util.Set;
  * 密碼一律以 BCrypt 雜湊儲存，永不以明文存於資料庫。
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class BuiltinUserService {
 
@@ -32,7 +31,18 @@ public class BuiltinUserService {
             "username", "role", "enabled", "createdAt", "updatedAt", "lastLoginAt");
 
     private final BuiltinUserRepository builtinUserRepository;
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final BCryptPasswordEncoder passwordEncoder;
+
+    @Autowired
+    public BuiltinUserService(BuiltinUserRepository builtinUserRepository) {
+        this(builtinUserRepository, new BCryptPasswordEncoder());
+    }
+
+    /** 測試用：可改用較低強度的 BCrypt，雜湊格式與驗證行為相同，只是比較快。 */
+    BuiltinUserService(BuiltinUserRepository builtinUserRepository, BCryptPasswordEncoder passwordEncoder) {
+        this.builtinUserRepository = builtinUserRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
 
     /**
      * 建立新的內建帳號

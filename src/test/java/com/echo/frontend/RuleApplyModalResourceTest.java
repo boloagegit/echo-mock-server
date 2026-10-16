@@ -53,6 +53,29 @@ class RuleApplyModalResourceTest {
         assertThat(en.path("applyFullStateWarning").asText()).contains("not a partial update");
     }
 
+    @Test
+    void editorSwitchDoesNotRequireCompleteRuleAndInitialDraftDoesNotShowAnError() throws IOException {
+        String app = resourceText("static/app.js");
+        String composable = resourceText("static/composables/useRuleApply.js");
+        String component = resourceText("static/components/RuleApplyModal.js");
+
+        assertThat(app)
+                .contains("readRuleApplyDocument({ validate: false })")
+                .contains("ruleEditorMode.value = 'form';")
+                .contains("ruleApplyFormSource.value = signature;")
+                .contains("ruleApplyText.value !== ruleApplyDraftBaseline.value")
+                .contains("rawRuleApplyValidationErrors.value.every(error => error.code === 'REQUIRED')");
+        assertThat(composable)
+                .contains("const ruleApplyValidationVisible = Vue.ref(false)")
+                .contains("const firstError = validate ? ruleApplyValidationErrors.value[0] : null;")
+                .contains("ruleApplyValidationVisible.value = true;");
+        assertThat(component).contains("v-else-if=\"schema && spec.matchKey\"");
+        JsonNode zh = OBJECT_MAPPER.readTree(resourceText("static/i18n/zh-TW.json")).path("rules");
+        JsonNode en = OBJECT_MAPPER.readTree(resourceText("static/i18n/en.json")).path("rules");
+        assertThat(zh.path("applyReplaceDraftMessage").asText()).contains("取代");
+        assertThat(en.path("applyReplaceDraftMessage").asText()).contains("replace");
+    }
+
     private static String resourceText(String path) throws IOException {
         try (var input = new ClassPathResource(path).getInputStream()) {
             return new String(input.readAllBytes(), StandardCharsets.UTF_8);

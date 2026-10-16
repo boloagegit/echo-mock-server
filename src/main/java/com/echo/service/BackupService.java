@@ -5,7 +5,7 @@ import java.util.List;
 /**
  * 資料庫備份服務介面
  * <p>
- * 由 H2BackupService 和 SqliteBackupService 分別實作。
+ * 由 SqliteBackupService 實作；外部資料庫的備份由 DBA 負責。
  */
 public interface BackupService {
 

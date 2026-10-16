@@ -14,6 +14,7 @@ SQLite Crash Resilience Test
 import base64
 import json
 import os
+from contextlib import closing
 from pathlib import Path
 import random
 import signal
@@ -163,7 +164,7 @@ def stop_server(proc):
 def check_db_integrity():
     """使用 Python 標準 sqlite3 驗證，不要求 Windows 額外安裝 CLI。"""
     try:
-        with sqlite3.connect(DB_FILE, timeout=10) as connection:
+        with closing(sqlite3.connect(DB_FILE, timeout=10)) as connection:
             result = connection.execute("PRAGMA integrity_check").fetchone()
         return bool(result) and result[0] == "ok"
     except sqlite3.Error:
@@ -173,7 +174,7 @@ def check_db_integrity():
 def count_rules():
     """查詢目前規則數（WAL mode 需要 shm/wal 檔案存在才能讀取最新資料）"""
     try:
-        with sqlite3.connect(DB_FILE, timeout=10) as connection:
+        with closing(sqlite3.connect(DB_FILE, timeout=10)) as connection:
             result = connection.execute("SELECT COUNT(*) FROM http_rules").fetchone()
         return int(result[0]) if result else 0
     except sqlite3.Error:

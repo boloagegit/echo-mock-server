@@ -244,6 +244,11 @@ class RuleApplyContractServiceTest {
         regex.getSpec().setHeaderCondition("X-Request~=[");
         assertValidation(regex, "INVALID_REGEX", "spec.headerCondition");
 
+        // 與比對相同看第一個 =：這是「等於 b~=[」，不是正規表達式，所以合法
+        RuleApplyDocument firstEquals = httpMock();
+        firstEquals.getSpec().setHeaderCondition("X-Request=b~=[");
+        assertThatCode(() -> contract.validate(firstEquals)).doesNotThrowAnyException();
+
         RuleApplyDocument header = httpMock();
         header.getSpec().setResponseHeaders(Map.of("Invalid Header", "value"));
         assertValidation(header, "HEADER_NAME", "spec.responseHeaders.Invalid Header");

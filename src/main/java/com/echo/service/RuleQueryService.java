@@ -1,12 +1,10 @@
 package com.echo.service;
 
 import com.echo.entity.BaseRule;
-import com.echo.entity.HttpRule;
-import com.echo.entity.HttpRuleAction;
-import com.echo.entity.JmsRule;
-import com.echo.entity.JmsRuleAction;
 import com.echo.entity.FaultType;
 import com.echo.entity.Protocol;
+import com.echo.protocol.ProtocolDescriptor;
+import com.echo.protocol.ProtocolHandlerRegistry;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
@@ -28,6 +26,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -42,16 +41,12 @@ public class RuleQueryService {
     private static final int ID_QUERY_CHUNK_SIZE = 500;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("updatedAt", "createdAt", "priority");
-    private static final List<String> HTTP_SEARCH_FIELDS = List.of(
-            "id", "matchKey", "description", "targetHost", "tags",
-            "bodyCondition", "queryCondition", "headerCondition");
-    private static final List<String> JMS_SEARCH_FIELDS = List.of(
-            "id", "queueName", "description", "tags", "bodyCondition");
 
     private final EntityManager entityManager;
-
-    @Value("${echo.jms.enabled:false}")
-    private boolean jmsEnabled;
+    /** 已啟用的協定；每個協定的規則 entity 與搜尋欄位由其 {@link ProtocolDescriptor} 提供。 */
+    private final ProtocolHandlerRegistry protocols;
+    /** 「輪不到」篩選用；只有查詢資料的測試設定沒有這個 bean。 */
+    private final Optional<RuleOrderService> ruleOrder;
 
     @Value("${echo.cleanup.rule-retention-days:180}")
     private int ruleRetentionDays;
@@ -65,19 +60,16 @@ public class RuleQueryService {
         List<String> keywords = tokenize(query.keyword());
         LocalDateTime expiringCutoff = Boolean.TRUE.equals(query.expiring())
                 ? LocalDateTime.now().minusDays(Math.max(0, ruleRetentionDays - 7L)) : null;
+        Set<String> onlyIds = onlyIds(query);
 
-        boolean includeHttp = query.protocol() == null || query.protocol() == Protocol.HTTP;
-        boolean includeJms = jmsEnabled && (query.protocol() == null || query.protocol() == Protocol.JMS);
-
-        long httpCount = includeHttp
-                ? count(HttpRule.class, query.enabled(), query.isProtected(), query.mode(),
-                        expiringCutoff, keywords, HTTP_SEARCH_FIELDS)
-                : 0;
-        long jmsCount = includeJms
-                ? count(JmsRule.class, query.enabled(), query.isProtected(), query.mode(),
-                        expiringCutoff, keywords, JMS_SEARCH_FIELDS)
-                : 0;
-        long totalElements = httpCount + jmsCount;
+        Map<ProtocolDescriptor, Long> counts = new LinkedHashMap<>();
+        long totalElements = 0;
+        for (ProtocolDescriptor protocol : protocolsFor(query.protocol())) {
+            long protocolCount = count(protocol.ruleType(), query.enabled(), query.isProtected(), query.mode(),
+                    expiringCutoff, onlyIds, keywords, protocol.searchFields());
+            counts.put(protocol, protocolCount);
+            totalElements += protocolCount;
+        }
         int totalPages = totalElements == 0 ? 0
                 : (int) Math.ceil((double) totalElements / pageSize);
         int page = totalPages == 0 ? 0 : Math.min(requestedPage, totalPages - 1);
@@ -85,17 +77,14 @@ public class RuleQueryService {
         long prefixSize = Math.min(totalElements, offset + pageSize);
 
         List<BaseRule> candidates = new ArrayList<>();
-        if (httpCount > 0) {
-            int limit = Math.toIntExact(Math.min(httpCount, prefixSize));
-            candidates.addAll(fetch(HttpRule.class, query.enabled(), query.isProtected(), query.mode(),
-                    expiringCutoff, keywords,
-                    HTTP_SEARCH_FIELDS, sortField, ascending, limit));
-        }
-        if (jmsCount > 0) {
-            int limit = Math.toIntExact(Math.min(jmsCount, prefixSize));
-            candidates.addAll(fetch(JmsRule.class, query.enabled(), query.isProtected(), query.mode(),
-                    expiringCutoff, keywords,
-                    JMS_SEARCH_FIELDS, sortField, ascending, limit));
+        for (Map.Entry<ProtocolDescriptor, Long> entry : counts.entrySet()) {
+            if (entry.getValue() > 0) {
+                ProtocolDescriptor protocol = entry.getKey();
+                int limit = Math.toIntExact(Math.min(entry.getValue(), prefixSize));
+                candidates.addAll(fetch(protocol.ruleType(), query.enabled(), query.isProtected(), query.mode(),
+                        expiringCutoff, onlyIds, keywords,
+                        protocol.searchFields(), sortField, ascending, limit));
+            }
         }
 
         candidates.sort(ruleComparator(sortField, ascending));
@@ -139,18 +128,14 @@ public class RuleQueryService {
         String sortField = normalizeSortField(query.sortField());
         boolean ascending = "asc".equalsIgnoreCase(query.direction());
 
-        List<String> httpIds = matchingRows.stream()
-                .filter(row -> row.protocol() == Protocol.HTTP)
-                .map(TagRow::id)
-                .toList();
-        List<String> jmsIds = matchingRows.stream()
-                .filter(row -> row.protocol() == Protocol.JMS)
-                .map(TagRow::id)
-                .toList();
-
         List<BaseRule> candidates = new ArrayList<>();
-        candidates.addAll(fetchByIds(HttpRule.class, httpIds, sortField, ascending, limit));
-        candidates.addAll(fetchByIds(JmsRule.class, jmsIds, sortField, ascending, limit));
+        for (ProtocolDescriptor protocol : protocols.descriptors()) {
+            List<String> ids = matchingRows.stream()
+                    .filter(row -> row.protocol() == protocol.id())
+                    .map(TagRow::id)
+                    .toList();
+            candidates.addAll(fetchByIds(protocol.ruleType(), ids, sortField, ascending, limit));
+        }
         candidates.sort(ruleComparator(sortField, ascending));
         return new RuleGroupContent(List.copyOf(candidates.subList(0, Math.min(limit, candidates.size()))),
                 matchingRows.size());
@@ -160,31 +145,41 @@ public class RuleQueryService {
         List<String> keywords = tokenize(query.keyword());
         LocalDateTime expiringCutoff = Boolean.TRUE.equals(query.expiring())
                 ? LocalDateTime.now().minusDays(Math.max(0, ruleRetentionDays - 7L)) : null;
+        Set<String> onlyIds = onlyIds(query);
         List<TagRow> rows = new ArrayList<>();
-        if (query.protocol() == null || query.protocol() == Protocol.HTTP) {
-            rows.addAll(findTagRows(HttpRule.class, Protocol.HTTP, query.enabled(), query.isProtected(),
-                    query.mode(), expiringCutoff,
-                    keywords, HTTP_SEARCH_FIELDS));
-        }
-        if (jmsEnabled && (query.protocol() == null || query.protocol() == Protocol.JMS)) {
-            rows.addAll(findTagRows(JmsRule.class, Protocol.JMS, query.enabled(), query.isProtected(),
-                    query.mode(), expiringCutoff,
-                    keywords, JMS_SEARCH_FIELDS));
+        for (ProtocolDescriptor protocol : protocolsFor(query.protocol())) {
+            rows.addAll(findTagRows(protocol.ruleType(), protocol.id(), query.enabled(), query.isProtected(),
+                    query.mode(), expiringCutoff, onlyIds,
+                    keywords, protocol.searchFields()));
         }
         return rows;
+    }
+
+    private ProtocolDescriptor protocolOf(Class<?> entityType) {
+        return protocols.descriptors().stream()
+                .filter(protocol -> protocol.ruleType() == entityType)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No protocol for rule type " + entityType.getName()));
+    }
+
+    /** 查詢指定的協定；未指定時為所有已啟用協定。指定的協定未啟用時沒有結果。 */
+    private List<ProtocolDescriptor> protocolsFor(Protocol requested) {
+        return protocols.descriptors().stream()
+                .filter(protocol -> requested == null || protocol.id() == requested)
+                .toList();
     }
 
     private <T extends BaseRule> List<TagRow> findTagRows(Class<T> entityType, Protocol protocol,
                                                            Boolean enabled, Boolean isProtected,
                                                            RuleMode mode, LocalDateTime expiringCutoff,
-                                                           List<String> keywords,
+                                                           Set<String> onlyIds, List<String> keywords,
                                                            List<String> searchFields) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Object[]> criteria = cb.createQuery(Object[].class);
         Root<T> root = criteria.from(entityType);
         criteria.multiselect(root.get("id"), root.get("tags"));
         criteria.where(predicates(cb, root, entityType, enabled, isProtected, mode,
-                expiringCutoff, keywords, searchFields));
+                expiringCutoff, onlyIds, keywords, searchFields));
         return entityManager.createQuery(criteria).getResultList().stream()
                 .map(row -> new TagRow((String) row[0], (String) row[1], protocol))
                 .toList();
@@ -213,28 +208,28 @@ public class RuleQueryService {
 
     private <T extends BaseRule> long count(Class<T> entityType, Boolean enabled,
                                              Boolean isProtected, RuleMode mode,
-                                             LocalDateTime expiringCutoff, List<String> keywords,
-                                             List<String> searchFields) {
+                                             LocalDateTime expiringCutoff, Set<String> onlyIds,
+                                             List<String> keywords, List<String> searchFields) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Long> criteria = cb.createQuery(Long.class);
         Root<T> root = criteria.from(entityType);
         criteria.select(cb.count(root));
         criteria.where(predicates(cb, root, entityType, enabled, isProtected, mode,
-                expiringCutoff, keywords, searchFields));
+                expiringCutoff, onlyIds, keywords, searchFields));
         return entityManager.createQuery(criteria).getSingleResult();
     }
 
     private <T extends BaseRule> List<T> fetch(Class<T> entityType, Boolean enabled,
                                                 Boolean isProtected, RuleMode mode,
-                                                LocalDateTime expiringCutoff, List<String> keywords,
-                                                List<String> searchFields, String sortField,
-                                                boolean ascending, int limit) {
+                                                LocalDateTime expiringCutoff, Set<String> onlyIds,
+                                                List<String> keywords, List<String> searchFields,
+                                                String sortField, boolean ascending, int limit) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<T> criteria = cb.createQuery(entityType);
         Root<T> root = criteria.from(entityType);
         criteria.select(root);
         criteria.where(predicates(cb, root, entityType, enabled, isProtected, mode,
-                expiringCutoff, keywords, searchFields));
+                expiringCutoff, onlyIds, keywords, searchFields));
         List<Order> order = ascending
                 ? List.of(cb.asc(root.get(sortField)), cb.asc(root.get("id")))
                 : List.of(cb.desc(root.get(sortField)), cb.desc(root.get("id")));
@@ -246,9 +241,12 @@ public class RuleQueryService {
 
     private Predicate[] predicates(CriteriaBuilder cb, Root<?> root, Class<?> entityType,
                                    Boolean enabled, Boolean isProtected, RuleMode mode,
-                                   LocalDateTime expiringCutoff, List<String> keywords,
-                                   List<String> searchFields) {
+                                   LocalDateTime expiringCutoff, Set<String> onlyIds,
+                                   List<String> keywords, List<String> searchFields) {
         List<Predicate> result = new ArrayList<>();
+        if (onlyIds != null) {
+            result.add(idIn(cb, root, onlyIds));
+        }
         if (enabled != null) {
             result.add(enabled ? cb.isTrue(root.get("enabled")) : cb.isFalse(root.get("enabled")));
         }
@@ -256,8 +254,9 @@ public class RuleQueryService {
             result.add(isProtected ? cb.isTrue(root.get("isProtected")) : cb.isFalse(root.get("isProtected")));
         }
         if (mode != null) {
-            Object mockAction = entityType == HttpRule.class ? HttpRuleAction.MOCK : JmsRuleAction.MOCK;
-            Object forwardAction = entityType == HttpRule.class ? HttpRuleAction.FORWARD : JmsRuleAction.FORWARD;
+            ProtocolDescriptor protocol = protocolOf(entityType);
+            Object mockAction = protocol.mockAction();
+            Object forwardAction = protocol.forwardAction();
             Predicate noFault = cb.or(cb.isNull(root.get("faultType")), cb.equal(root.get("faultType"), FaultType.NONE));
             switch (mode) {
                 case MOCK -> result.add(cb.and(
@@ -290,6 +289,27 @@ public class RuleQueryService {
         return result.toArray(Predicate[]::new);
     }
 
+    /** 「輪不到」篩選時只看這些規則；沒有篩選時為 null。 */
+    private Set<String> onlyIds(RuleQuery query) {
+        if (!Boolean.TRUE.equals(query.unreachable())) {
+            return null;
+        }
+        return ruleOrder.map(order -> order.issues().issues().keySet()).orElse(Set.of());
+    }
+
+    /** id 在集合中；分段組成多個 IN，避免部分資料庫單一 IN 清單的數量上限。 */
+    private static Predicate idIn(CriteriaBuilder cb, Root<?> root, Set<String> ids) {
+        if (ids.isEmpty()) {
+            return cb.disjunction();
+        }
+        List<String> all = List.copyOf(ids);
+        List<Predicate> chunks = new ArrayList<>();
+        for (int from = 0; from < all.size(); from += ID_QUERY_CHUNK_SIZE) {
+            chunks.add(root.get("id").in(all.subList(from, Math.min(from + ID_QUERY_CHUNK_SIZE, all.size()))));
+        }
+        return cb.or(chunks.toArray(Predicate[]::new));
+    }
+
     private Comparator<BaseRule> ruleComparator(String sortField, boolean ascending) {
         Comparator<BaseRule> comparator = switch (sortField) {
             case "createdAt" -> Comparator.comparing(BaseRule::getCreatedAt,
@@ -308,7 +328,8 @@ public class RuleQueryService {
     }
 
     private String normalizeSortField(String field) {
-        return ALLOWED_SORT_FIELDS.contains(field) ? field : "updatedAt";
+        // Set.of(...).contains(null) 會丟出例外；沒有指定排序（API 直接呼叫）時用預設值
+        return field != null && ALLOWED_SORT_FIELDS.contains(field) ? field : "updatedAt";
     }
 
     private List<String> tokenize(String keyword) {
@@ -358,13 +379,20 @@ public class RuleQueryService {
 
     public enum RuleMode { MOCK, FORWARD, FAULT }
 
+    /** @param unreachable 只看一定輪不到的規則（見 {@link RuleOrderService}） */
     public record RuleQuery(Protocol protocol, Boolean enabled, Boolean isProtected,
                             String keyword, int page, int size, String sortField,
-                            String direction, RuleMode mode, Boolean expiring) {
+                            String direction, RuleMode mode, Boolean expiring, Boolean unreachable) {
+        public RuleQuery(Protocol protocol, Boolean enabled, Boolean isProtected,
+                         String keyword, int page, int size, String sortField,
+                         String direction, RuleMode mode, Boolean expiring) {
+            this(protocol, enabled, isProtected, keyword, page, size, sortField, direction, mode, expiring, null);
+        }
+
         public RuleQuery(Protocol protocol, Boolean enabled, Boolean isProtected,
                          String keyword, int page, int size, String sortField,
                          String direction) {
-            this(protocol, enabled, isProtected, keyword, page, size, sortField, direction, null, null);
+            this(protocol, enabled, isProtected, keyword, page, size, sortField, direction, null, null, null);
         }
     }
 

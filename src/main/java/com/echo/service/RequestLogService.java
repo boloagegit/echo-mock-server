@@ -45,7 +45,7 @@ import java.util.stream.Stream;
  */
 @Service
 @Slf4j
-public class RequestLogService {
+public class RequestLogService implements ServeEventListener {
 
     private final RequestLogRepository requestLogRepository;
     private final SystemConfigService configService;
@@ -180,8 +180,9 @@ public class RequestLogService {
     /**
      * 記錄請求（含匹配上下文）
      * <p>
-     * 當 LogAgent 可用時，延遲建構 LogTask 並委派給 durable spool。
-     * Agent 或 spool 不可用時 fail fast，避免回覆成功卻遺失請求紀錄。
+     * 當 LogAgent 可用時，延遲建構 LogTask 並交給 LogAgent：預設放進暫存區後立即返回，寫入跟不上時丟掉最舊的記錄；
+     * {@code echo.request-log.wait-for-write=true} 時等寫入 durable spool，無法寫入時 fail fast。
+     * Agent 不存在時 fail fast。
      * 明確停用請求記錄時則在取得 Agent 或建立任何記錄資料前返回。
      */
     @SuppressWarnings("java:S107") // 參數數量多是因為需要傳遞完整的匹配上下文
@@ -241,6 +242,66 @@ public class RequestLogService {
                        String scenarioName,
                        String scenarioFromState,
                        String scenarioToState) {
+        record(ruleId, protocol, method, endpoint, matched, responseTimeMs, clientIp,
+                matchChain, targetHost, forwarded, forwardTarget, proxyStatus, proxyError,
+                responseStatus, matchTimeMs, requestBody, responseBody, candidates, preparedBody,
+                queryString, headers, faultType, scenarioName, scenarioFromState, scenarioToState, null);
+    }
+
+    /** 記錄請求，並保留轉發、故障注入與 Scenario 狀態轉移資訊。 */
+    @SuppressWarnings("java:S107")
+    public <T extends BaseRule> void record(String ruleId, Protocol protocol, String method, String endpoint,
+                       boolean matched, int responseTimeMs, String clientIp,
+                       String matchChain, String targetHost,
+                       boolean forwarded, String forwardTarget,
+                       Integer proxyStatus, String proxyError,
+                       Integer responseStatus, Integer matchTimeMs,
+                       String requestBody, String responseBody,
+                       List<T> candidates,
+                       ConditionMatcher.PreparedBody preparedBody,
+                       String queryString,
+                       Map<String, String> headers,
+                       String faultType,
+                       String scenarioName,
+                       String scenarioFromState,
+                       String scenarioToState, String diagnosticId) {
+        record(ServeEvent.builder()
+                .ruleId(ruleId).protocol(protocol).method(method).endpoint(endpoint)
+                .matched(matched).responseTimeMs(responseTimeMs).clientIp(clientIp)
+                .matchChain(matchChain).targetHost(targetHost)
+                .forwarded(forwarded).forwardTarget(forwardTarget)
+                .proxyStatus(proxyStatus).proxyError(proxyError)
+                .responseStatus(responseStatus).matchTimeMs(matchTimeMs)
+                .requestBody(requestBody).responseBody(responseBody)
+                .candidates(candidates).preparedBody(preparedBody)
+                .queryString(queryString).headers(headers).faultType(faultType)
+                .scenarioName(scenarioName).scenarioFromState(scenarioFromState).scenarioToState(scenarioToState)
+                .diagnosticId(diagnosticId)
+                .build());
+    }
+
+    /**
+     * 請求紀錄是 critical listener：無法接收時往上傳，HTTP 回 503、JMS 讓遞送失敗。
+     * 預設不等寫入（{@code echo.request-log.wait-for-write=false}）時，只有記錄元件不存在才會發生。
+     */
+    @Override
+    public void onServed(ServeEvent event) {
+        record(event);
+    }
+
+    @Override
+    public boolean critical() {
+        return true;
+    }
+
+    /**
+     * 記錄一筆已處理的請求。
+     * <p>
+     * 當 LogAgent 可用時，延遲建構 LogTask 並委派給 durable spool。
+     * Agent 或 spool 不可用時 fail fast，避免回覆成功卻遺失請求紀錄。
+     * 明確停用請求記錄時則在取得 Agent 或建立任何記錄資料前返回。
+     */
+    public void record(ServeEvent event) {
         if (configService.isRequestLogDisabled()) {
             return;
         }
@@ -252,25 +313,14 @@ public class RequestLogService {
             throw new RequestLogUnavailableException("Request-log agent is unavailable");
         }
         agentUnavailableWarned.set(false);
-        agent.submitDurably(() -> buildLogTask(
-                ruleId, protocol, method, endpoint, matched, responseTimeMs, clientIp,
-                matchChain, targetHost, forwarded, forwardTarget,
-                proxyStatus, proxyError, responseStatus, matchTimeMs,
-                requestBody, responseBody, candidates, preparedBody, queryString, headers,
-                faultType, scenarioName, scenarioFromState, scenarioToState));
+        agent.submitDurably(() -> buildLogTask(event));
     }
 
-    private <T extends BaseRule> LogTask buildLogTask(
-            String ruleId, Protocol protocol, String method, String endpoint,
-            boolean matched, int responseTimeMs, String clientIp,
-            String matchChain, String targetHost, boolean forwarded, String forwardTarget,
-            Integer proxyStatus, String proxyError,
-            Integer responseStatus, Integer matchTimeMs, String requestBody, String responseBody,
-            List<T> candidates, ConditionMatcher.PreparedBody preparedBody,
-            String queryString, Map<String, String> headers,
-            String faultType, String scenarioName,
-            String scenarioFromState, String scenarioToState) {
-        List<CandidateSnapshot> candidateSnapshots = CandidateSnapshot.toCandidateSnapshots(candidates);
+    private LogTask buildLogTask(ServeEvent event) {
+        String requestBody = event.getRequestBody();
+        String responseBody = event.getResponseBody();
+        ConditionMatcher.PreparedBody preparedBody = event.getPreparedBody();
+        List<CandidateSnapshot> candidateSnapshots = CandidateSnapshot.toCandidateSnapshots(event.getCandidates());
         String reqBody = null;
         String resBody = null;
         int maxSize = configService.getRequestLogMaxBodySize();
@@ -284,35 +334,42 @@ public class RequestLogService {
         String analysisBody = rawAnalysisBody != null && rawAnalysisBody.length() <= maxSize
                 ? rawAnalysisBody : null;
         return LogTask.builder()
-                .ruleId(ruleId)
-                .protocol(protocol)
-                .method(method)
-                .endpoint(endpoint)
-                .matched(matched)
-                .responseTimeMs(responseTimeMs)
-                .matchTimeMs(matchTimeMs)
-                .clientIp(clientIp)
+                .diagnosticId(event.getDiagnosticId())
+                .ruleId(event.getRuleId())
+                .protocol(event.getProtocol())
+                .method(event.getMethod())
+                .endpoint(event.getEndpoint())
+                .matched(event.isMatched())
+                .responseTimeMs(event.getResponseTimeMs())
+                .matchTimeMs(event.getMatchTimeMs())
+                .clientIp(event.getClientIp())
                 .requestTime(LocalDateTime.now())
-                .matchChain(matchChain)
-                .targetHost(targetHost)
-                .forwarded(forwarded)
-                .forwardTarget(RequestLog.limitForwardTarget(forwardTarget))
-                .proxyStatus(proxyStatus)
-                .proxyError(proxyError)
-                .responseStatus(responseStatus)
+                .matchChain(event.getMatchChain())
+                .targetHost(event.getTargetHost())
+                .forwarded(event.isForwarded())
+                .forwardTarget(RequestLog.limitForwardTarget(event.getForwardTarget()))
+                .proxyStatus(event.getProxyStatus())
+                // Match the existing DB column, without changing the actual response body.
+                .proxyError(RequestLog.limitProxyError(event.getProxyError()))
+                .responseStatus(event.getResponseStatus())
                 .requestBody(reqBody)
                 .responseBody(resBody)
-                .faultType(faultType)
-                .scenarioName(scenarioName)
-                .scenarioFromState(scenarioFromState)
-                .scenarioToState(scenarioToState)
+                .faultType(event.getFaultType())
+                .scenarioName(event.getScenarioName())
+                .scenarioFromState(event.getScenarioFromState())
+                .scenarioToState(event.getScenarioToState())
+                .candidateCount(event.getCandidateCount())
+                .matchedByFallback(event.getMatchedByFallback())
+                .delayMs(event.getDelayMs())
+                .sseEventCount(event.getSseEventCount())
+                .scenarioSkipped(event.getScenarioSkipped())
                 .candidates(candidateSnapshots)
                 // Never retain PreparedBody: XML PreparedBody owns a full DOM and caused
                 // queued log tasks to pin hundreds of MiB. Persist only source text and
                 // reconstruct parsed state inside the background analysis worker.
                 .analysisBody(analysisBody)
-                .queryString(queryString)
-                .headers(headers)
+                .queryString(event.getQueryString())
+                .headers(event.getHeaders())
                 .matchOutcomes(preparedBody != null
                         ? preparedBody.getMatchOutcomesSnapshot() : Map.of())
                 .build();
@@ -344,6 +401,7 @@ public class RequestLogService {
             stream = stream.filter(e -> containsIgnoreCase(e.getEndpoint(), keyword)
                     || containsIgnoreCase(e.getTargetHost(), keyword)
                     || containsIgnoreCase(e.getForwardTarget(), keyword)
+                    || containsIgnoreCase(e.getDiagnosticId(), keyword)
                     || containsIgnoreCase(e.getRuleId(), keyword));
         }
 
@@ -397,16 +455,19 @@ public class RequestLogService {
                 RequestLogSummaryQuery.Result resultPage = summaryQuery.query(
                         new RequestLogSummaryQuery.Filter(
                                 filter.getRuleId(), filter.getProtocol(), filter.getMatched(),
-                                endpoint, filter.getAfterId()),
+                                endpoint, filter.getAfterId(), filter.getFrom(), filter.getTo(),
+                                blankToNull(filter.getMethod()), blankToNull(filter.getPath())),
                         pageNumber, pageSize, sortField,
                         sortDirection == Sort.Direction.ASC);
                 entries = resultPage.rows().stream().map(this::toSummaryFromRow).toList();
                 totalElements = resultPage.totalElements();
                 totalPages = resultPage.totalPages();
             } else {
+                // 只供保留 repository 測試接縫的建構式使用；正式環境一律走上面的 summaryQuery
                 Page<Object[]> resultPage = requestLogRepository.findSummaryPage(
                         filter.getRuleId(), filter.getProtocol(), filter.getMatched(), endpoint,
-                        filter.getAfterId(), PageRequest.of(pageNumber, pageSize, pageSort));
+                        filter.getAfterId(), filter.getFrom(), filter.getTo(),
+                        PageRequest.of(pageNumber, pageSize, pageSort));
                 entries = resultPage.getContent().stream().map(this::toSummaryFromProjection).toList();
                 totalElements = resultPage.getTotalElements();
                 totalPages = resultPage.getTotalPages();
@@ -454,16 +515,35 @@ public class RequestLogService {
             stream = stream.filter(e -> containsIgnoreCase(e.getEndpoint(), normalized)
                     || containsIgnoreCase(e.getTargetHost(), normalized)
                     || containsIgnoreCase(e.getForwardTarget(), normalized)
+                    || containsIgnoreCase(e.getDiagnosticId(), normalized)
                     || containsIgnoreCase(e.getRuleId(), normalized));
+        }
+        String method = blankToNull(filter.getMethod());
+        if (method != null) {
+            stream = stream.filter(e -> method.equalsIgnoreCase(e.getMethod()));
+        }
+        String path = blankToNull(filter.getPath());
+        if (path != null) {
+            stream = stream.filter(e -> path.equals(e.getEndpoint()));
         }
         if (filter.getAfterId() != null) {
             stream = stream.filter(e -> e.getId() != null && e.getId() > filter.getAfterId());
+        }
+        if (filter.getFrom() != null) {
+            stream = stream.filter(e -> e.getRequestTime() != null && !e.getRequestTime().isBefore(filter.getFrom()));
+        }
+        if (filter.getTo() != null) {
+            stream = stream.filter(e -> e.getRequestTime() != null && e.getRequestTime().isBefore(filter.getTo()));
         }
         return stream;
     }
 
     private boolean containsIgnoreCase(String value, String normalizedKeyword) {
         return value != null && value.toLowerCase(Locale.ROOT).contains(normalizedKeyword);
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private String normalizeEndpoint(String endpoint) {
@@ -542,6 +622,7 @@ public class RequestLogService {
 
     private LogEntry toEntry(RequestLog log) {
         return LogEntry.builder()
+                .diagnosticId(log.getDiagnosticId())
                 .id(log.getId())
                 .ruleId(log.getRuleId())
                 .protocol(log.getProtocol())
@@ -565,11 +646,17 @@ public class RequestLogService {
                 .scenarioName(log.getScenarioName())
                 .scenarioFromState(log.getScenarioFromState())
                 .scenarioToState(log.getScenarioToState())
+                .candidateCount(log.getCandidateCount())
+                .matchedByFallback(log.getMatchedByFallback())
+                .delayMs(log.getDelayMs())
+                .sseEventCount(log.getSseEventCount())
+                .scenarioSkipped(log.getScenarioSkipped())
                 .build();
     }
 
     private LogSummaryEntry toSummaryFromEntry(LogEntry e) {
         return LogSummaryEntry.builder()
+                .diagnosticId(e.getDiagnosticId())
                 .id(e.getId())
                 .ruleId(e.getRuleId())
                 .protocol(e.getProtocol())
@@ -598,6 +685,7 @@ public class RequestLogService {
 
     private LogSummaryEntry toSummaryFromProjection(Object[] row) {
         return LogSummaryEntry.builder()
+                .diagnosticId(row.length > 23 ? (String) row[23] : null)
                 .id((Long) row[0])
                 .ruleId((String) row[1])
                 .protocol((Protocol) row[2])
@@ -626,6 +714,7 @@ public class RequestLogService {
 
     private LogSummaryEntry toSummaryFromRow(RequestLogSummaryQuery.SummaryRow row) {
         return LogSummaryEntry.builder()
+                .diagnosticId(row.diagnosticId())
                 .id(row.id())
                 .ruleId(row.ruleId())
                 .protocol(row.protocol())
@@ -657,6 +746,7 @@ public class RequestLogService {
     @Getter @Builder
     public static class LogEntry {
         private Long id;
+        private String diagnosticId;
         private String ruleId;
         private Protocol protocol;
         private String method;
@@ -677,6 +767,11 @@ public class RequestLogService {
         private String scenarioName;
         private String scenarioFromState;
         private String scenarioToState;
+        private Integer candidateCount;
+        private Boolean matchedByFallback;
+        private Integer delayMs;
+        private Integer sseEventCount;
+        private String scenarioSkipped;
         private String requestBody;
         private String responseBody;
     }
@@ -688,6 +783,7 @@ public class RequestLogService {
     @Getter @Builder
     public static class LogSummaryEntry {
         private Long id;
+        private String diagnosticId;
         private String ruleId;
         private Protocol protocol;
         private String method;
@@ -759,11 +855,19 @@ public class RequestLogService {
         private Protocol protocol;
         private Boolean matched;
         private String endpoint;
+        /** HTTP 方法，完全相同（不分大小寫）。 */
+        private String method;
+        /** 網址，完全相同（{@link #endpoint} 是部分比對的關鍵字）。 */
+        private String path;
         private Integer page;
         private Integer size;
         private String sortField;
         private String sortDirection;
         private Long afterId;
+        /** 請求時間下限（含）。 */
+        private LocalDateTime from;
+        /** 請求時間上限（不含）。 */
+        private LocalDateTime to;
     }
 
     @Getter @Builder

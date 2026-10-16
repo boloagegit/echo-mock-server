@@ -48,7 +48,8 @@ class RuleTestApiIntegrationTest extends BaseIntegrationTest {
     @Test
     @DisplayName("13.3 JMS 規則測試: POST /api/admin/rules/{id}/test → 回傳結果")
     void testJmsRule() {
-        RuleDto rule = createJmsRule("TEST.QUEUE", "{\"jms\":\"response\"}");
+        // 送到 Echo 實際監聽的 queue：會收到規則的回應，不必等 30 秒逾時（舊寫法送到沒有人監聽的 TEST.QUEUE）
+        RuleDto rule = createJmsRule("ECHO.REQUEST", "{\"jms\":\"response\"}");
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -64,7 +65,7 @@ class RuleTestApiIntegrationTest extends BaseIntegrationTest {
 
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(resp.getBody()).isNotNull();
-        assertThat(resp.getBody()).containsKey("status");
-        assertThat(resp.getBody()).containsKey("body");
+        assertThat(resp.getBody()).containsEntry("status", 200);
+        assertThat(resp.getBody()).containsEntry("body", "{\"jms\":\"response\"}");
     }
 }

@@ -2,18 +2,17 @@ package com.echo.repository;
 
 import com.echo.entity.Protocol;
 import com.echo.entity.RequestLog;
-import org.junit.jupiter.api.AfterAll;
+import com.echo.support.SqliteTestDatabaseCleanupListener;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestExecutionListeners;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,6 +21,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
+@TestExecutionListeners(listeners = SqliteTestDatabaseCleanupListener.class,
+        mergeMode = TestExecutionListeners.MergeMode.MERGE_WITH_DEFAULTS)
 @Import(RequestLogSummaryQuery.class)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class RequestLogSummaryQuerySqliteIntegrationTest {
@@ -34,7 +35,7 @@ class RequestLogSummaryQuerySqliteIntegrationTest {
         registry.add("spring.datasource.url", () -> "jdbc:sqlite:" + SQLITE_PATH);
         registry.add("spring.datasource.driver-class-name", () -> "org.sqlite.JDBC");
         registry.add("spring.jpa.database-platform",
-                () -> "org.hibernate.community.dialect.SQLiteDialect");
+                () -> "com.echo.config.EchoSqliteDialect");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "create");
     }
 
@@ -59,24 +60,22 @@ class RequestLogSummaryQuerySqliteIntegrationTest {
                 .containsExactly("/orders/3", "/orders/1");
         assertThat(result.rows().get(0).faultType()).isEqualTo("EMPTY_RESPONSE");
         assertThat(result.rows().get(0).scenarioName()).isEqualTo("order-flow");
+        assertThat(result.rows().get(0).diagnosticId()).isEqualTo("process-orders-3");
+        var byTrace = query.query(new RequestLogSummaryQuery.Filter(null, null, null,
+                "process-orders-3", null), 0, 10, "requestTime", false);
+        assertThat(byTrace.rows()).singleElement().satisfies(row -> assertThat(row.endpoint()).isEqualTo("/orders/3"));
     }
 
     private RequestLog log(Protocol protocol, boolean matched,
                            String endpoint, LocalDateTime time) {
         boolean statefulFault = "/orders/3".equals(endpoint);
         return RequestLog.builder().protocol(protocol).endpoint(endpoint)
+                .diagnosticId(statefulFault ? "process-orders-3" : null)
                 .matched(matched).responseTimeMs(1).requestTime(time)
                 .faultType(statefulFault ? "EMPTY_RESPONSE" : null)
                 .scenarioName(statefulFault ? "order-flow" : null)
                 .scenarioFromState(statefulFault ? "Started" : null)
                 .scenarioToState(statefulFault ? "Paid" : null)
                 .build();
-    }
-
-    @AfterAll
-    static void cleanupSqliteFiles() throws IOException {
-        Files.deleteIfExists(Path.of(SQLITE_PATH + "-wal"));
-        Files.deleteIfExists(Path.of(SQLITE_PATH + "-shm"));
-        Files.deleteIfExists(SQLITE_PATH);
     }
 }

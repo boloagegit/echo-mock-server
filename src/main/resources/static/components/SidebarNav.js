@@ -3,6 +3,8 @@
  *
  * 使用全域註冊，不需要 ES Module。
  * 透過 inject 取得 t() 函數。
+ *
+ * 側欄只放導覽；主題、密度、語言、說明與帳號操作收在底部的使用者選單。
  */
 const SidebarNav = {
   props: {
@@ -15,92 +17,219 @@ const SidebarNav = {
     status: Object,
     jmsEnabled: Boolean,
     locale: String,
-    themeIcon: String,
-    themeLabel: String,
+    theme: String,
     density: String,
-    densityIcon: String,
-    densityLabel: String,
     helpSeen: Boolean,
     openIssueCount: Number
   },
   emits: [
     'update:page', 'update:sidebarCollapsed', 'update:mobileMenu',
-    'show-help', 'toggle-theme', 'toggle-density', 'switch-locale',
+    'show-help', 'set-theme', 'set-density', 'switch-locale',
     'login', 'logout', 'start-tour', 'change-password'
   ],
   inject: ['t'],
+  data() {
+    return { userMenuOpen: false, indicator: null, indicatorReady: false };
+  },
+  computed: {
+    userName() {
+      return this.isLoggedIn ? (this.status?.username || '') : this.t('sidebar.guestMode');
+    },
+    userRole() {
+      if (!this.isLoggedIn) return '';
+      return this.isAdmin ? this.t('sidebar.roleAdmin') : this.t('sidebar.roleUser');
+    },
+    userInitial() {
+      return this.isLoggedIn && this.status?.username ? this.status.username.charAt(0).toUpperCase() : '';
+    },
+    httpPort() {
+      return this.status?.serverPort ? ':' + this.status.serverPort : '';
+    },
+    jmsPort() {
+      const match = /:(\d+)$/.exec(this.status?.artemisBrokerUrl || '');
+      return match ? ':' + match[1] : '';
+    },
+    themeOptions() {
+      return ['dark', 'light', 'auto'].map(value => ({ value, label: this.t('theme.' + value) }));
+    },
+    densityOptions() {
+      return ['compact', 'normal', 'comfortable'].map(value => ({ value, label: this.t('density.' + value) }));
+    },
+    localeOptions() {
+      return [{ value: 'zh-TW', label: this.t('sidebar.languageZh') }, { value: 'en', label: this.t('sidebar.languageEn') }];
+    }
+  },
+  watch: {
+    page() { this.$nextTick(this.placeIndicator); },
+    isAdmin() { this.$nextTick(this.placeIndicator); },
+  },
+  mounted() {
+    document.addEventListener('pointerdown', this.onDocumentPointerDown);
+    // The active highlight slides between items; it follows size changes such as collapsing the sidebar.
+    this.navObserver = new ResizeObserver(() => this.placeIndicator());
+    this.navObserver.observe(this.$refs.nav);
+    this.placeIndicator();
+    // Enable the slide only after the first placement has rendered, so it never animates in from the corner.
+    this.$nextTick(() => setTimeout(() => { this.indicatorReady = true; }, 0));
+  },
+  unmounted() {
+    this.navObserver?.disconnect();
+    document.removeEventListener('pointerdown', this.onDocumentPointerDown);
+  },
+  methods: {
+    placeIndicator() {
+      const item = this.$refs.nav?.querySelector('.nav-item.active');
+      this.indicator = item
+        ? { '--nav-indicator-x': item.offsetLeft + 'px', '--nav-indicator-y': item.offsetTop + 'px', '--nav-indicator-w': item.offsetWidth + 'px', '--nav-indicator-h': item.offsetHeight + 'px' }
+        : null;
+    },
+    go(target) {
+      this.$emit('update:page', target);
+      this.$emit('update:mobileMenu', false);
+    },
+    toggleUserMenu() {
+      this.userMenuOpen ? this.closeUserMenu(false) : this.openUserMenu();
+    },
+    openUserMenu() {
+      this.userMenuOpen = true;
+      this.$nextTick(() => this.$refs.userMenu?.querySelector('input, button')?.focus());
+    },
+    closeUserMenu(restoreFocus = true) {
+      if (!this.userMenuOpen) return;
+      this.userMenuOpen = false;
+      if (restoreFocus) this.$nextTick(() => this.$refs.userTrigger?.focus());
+    },
+    onDocumentPointerDown(event) {
+      if (!this.userMenuOpen) return;
+      if (this.$refs.userMenu?.contains(event.target) || this.$refs.userTrigger?.contains(event.target)) return;
+      this.closeUserMenu(false);
+    },
+    onUserMenuFocusOut(event) {
+      const next = event.relatedTarget;
+      if (!next || this.$refs.userMenu?.contains(next) || this.$refs.userTrigger?.contains(next)) return;
+      this.closeUserMenu(false);
+    },
+    setLocale(value) {
+      if (value !== this.locale) this.$emit('switch-locale');
+    },
+    runMenuAction(action) {
+      this.closeUserMenu();
+      this.$emit(action);
+    }
+  },
   template: /* html */`
-    <aside class="sidebar" :class="{collapsed: sidebarCollapsed, 'mobile-open': mobileMenu}" @click.stop>
+    <aside class="sidebar" :class="{collapsed: sidebarCollapsed, 'mobile-open': mobileMenu, 'has-user-menu': userMenuOpen}" @click.stop>
       <div class="sidebar-header">
         <div class="sidebar-brand">
-          <img class="brand-icon" src="/favicon.ico?v=20260906.2" alt="" width="22" height="22">
-          <span>Echo</span>
-          <span v-if="envLabel" class="env-label">{{envLabel}}</span>
+          <span class="brand-mark" aria-hidden="true"><svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.4" aria-hidden="true"><path d="M6.5 4.5V19.5"/><path d="M6.5 4.5H18"/><path d="M6.5 12H15.5" stroke-opacity="0.78"/><path d="M6.5 19.5H14.5" stroke-opacity="0.55"/></svg></span>
+          <span class="brand-text">
+            <span class="brand-name">Echo<span v-if="envLabel" class="env-label">{{envLabel}}</span></span>
+            <span class="brand-sub">Mock Server</span>
+          </span>
         </div>
         <button class="sidebar-toggle" :aria-label="mobileMenu ? t('sidebar.closeMenu') : (sidebarCollapsed ? t('sidebar.expandSidebar') : t('sidebar.collapseSidebar'))" @click="mobileMenu ? $emit('update:mobileMenu', false) : $emit('update:sidebarCollapsed', !sidebarCollapsed)">
-          <i class="bi" :class="mobileMenu ? 'bi-x-lg' : (sidebarCollapsed ? 'bi-chevron-right' : 'bi-chevron-left')"></i>
+          <ui-motion-icon :icon="mobileMenu ? 'bi-x-lg' : (sidebarCollapsed ? 'bi-chevron-right' : 'bi-chevron-left')"></ui-motion-icon>
         </button>
       </div>
-      <div class="sidebar-nav">
+      <nav ref="nav" class="sidebar-nav" :aria-label="t('sidebar.workspace')">
+        <span v-if="indicator" class="nav-indicator" :class="{'is-ready': indicatorReady}" :style="indicator" aria-hidden="true"></span>
         <div class="nav-section">{{t('sidebar.workspace')}}</div>
-        <button type="button" class="nav-item" :class="{active: page==='rules'}" @click="$emit('update:page', 'rules'); $emit('update:mobileMenu', false)">
-          <i class="bi bi-list-ul"></i><span class="nav-text">{{t('sidebar.rules')}}</span>
+        <button type="button" class="nav-item" :class="{active: page==='rules'}" :aria-label="t('sidebar.rules')" :title="sidebarCollapsed?t('sidebar.rules'):undefined" :aria-current="page==='rules'?'page':undefined" @click="go('rules')">
+          <ui-icon name="rules"></ui-icon><span class="nav-text">{{t('sidebar.rules')}}</span>
         </button>
-        <button type="button" class="nav-item" :class="{active: page==='responses'}" @click="$emit('update:page', 'responses'); $emit('update:mobileMenu', false)">
-          <i class="bi bi-file-earmark-text"></i><span class="nav-text">{{t('sidebar.responses')}}</span>
+        <button type="button" class="nav-item" :class="{active: page==='responses'}" :aria-label="t('sidebar.responses')" :title="sidebarCollapsed?t('sidebar.responses'):undefined" :aria-current="page==='responses'?'page':undefined" @click="go('responses')">
+          <ui-icon name="responses"></ui-icon><span class="nav-text">{{t('sidebar.responses')}}</span>
         </button>
-        <button type="button" class="nav-item" :class="{active: page==='stats'}" @click="$emit('update:page', 'stats'); $emit('update:mobileMenu', false)">
-          <i class="bi bi-clock-history"></i><span class="nav-text">{{t('sidebar.stats')}}</span>
+        <button type="button" class="nav-item" :class="{active: page==='stats'}" :aria-label="t('sidebar.stats')" :title="sidebarCollapsed?t('sidebar.stats'):undefined" :aria-current="page==='stats'?'page':undefined" @click="go('stats')">
+          <ui-icon name="logs"></ui-icon><span class="nav-text">{{t('sidebar.stats')}}</span>
         </button>
-        <button type="button" class="nav-item" :class="{active: page==='audit'}" @click="$emit('update:page', 'audit'); $emit('update:mobileMenu', false)">
-          <i class="bi bi-journal-text"></i><span class="nav-text">{{t('sidebar.audit')}}</span>
+        <button type="button" class="nav-item" :class="{active: page==='audit'}" :aria-label="t('sidebar.audit')" :title="sidebarCollapsed?t('sidebar.audit'):undefined" :aria-current="page==='audit'?'page':undefined" @click="go('audit')">
+          <ui-icon name="audit"></ui-icon><span class="nav-text">{{t('sidebar.audit')}}</span>
         </button>
-        <button type="button" v-if="isLoggedIn" class="nav-item" :class="{active: page==='issues'}" @click="$emit('update:page', 'issues'); $emit('update:mobileMenu', false)">
-          <i class="bi bi-flag"></i><span class="nav-text">{{t('sidebar.issues')}}</span>
+        <button type="button" v-if="isLoggedIn && status?.issueReportingEnabled === true" class="nav-item" :class="{active: page==='issues'}" :aria-label="t('sidebar.issues')" :title="sidebarCollapsed?t('sidebar.issues'):undefined" :aria-current="page==='issues'?'page':undefined" @click="go('issues')">
+          <ui-icon name="issues"></ui-icon><span class="nav-text">{{t('sidebar.issues')}}</span>
           <span v-if="openIssueCount>0" class="nav-badge">{{openIssueCount}}</span>
         </button>
-        <button type="button" v-if="isAdmin" class="nav-item" :class="{active: page==='accounts'}" @click="$emit('update:page', 'accounts'); $emit('update:mobileMenu', false)">
-          <i class="bi bi-people"></i><span class="nav-text">{{t('sidebar.accounts')}}</span>
-        </button>
-        <button type="button" v-if="isAdmin" class="nav-item" :class="{active: page==='settings'}" @click="$emit('update:page', 'settings'); $emit('update:mobileMenu', false)">
-          <i class="bi bi-gear"></i><span class="nav-text">{{t('sidebar.settings')}}</span>
-        </button>
 
-        <div class="nav-divider" style="margin-top:auto"></div>
-        <div class="nav-section">{{t('sidebar.preferences')}}</div>
+        <template v-if="isAdmin">
+          <div class="nav-section">{{t('sidebar.manage')}}</div>
+          <button type="button" class="nav-item" :class="{active: page==='accounts'}" :aria-label="t('sidebar.accounts')" :title="sidebarCollapsed?t('sidebar.accounts'):undefined" :aria-current="page==='accounts'?'page':undefined" @click="go('accounts')">
+            <ui-icon name="accounts"></ui-icon><span class="nav-text">{{t('sidebar.accounts')}}</span>
+          </button>
+          <button type="button" class="nav-item" :class="{active: page==='settings'}" :aria-label="t('sidebar.settings')" :title="sidebarCollapsed?t('sidebar.settings'):undefined" :aria-current="page==='settings'?'page':undefined" @click="go('settings')">
+            <ui-icon name="settings"></ui-icon><span class="nav-text">{{t('sidebar.settings')}}</span>
+          </button>
+        </template>
+      </nav>
 
-        <button type="button" class="nav-item" @click="helpSeen ? $emit('show-help') : $emit('start-tour')" :title="t('sidebar.help')">
-          <i class="bi bi-question-circle"></i><span class="nav-text">{{t('sidebar.help')}}</span>
-        </button>
-        <button type="button" class="nav-item" @click="$emit('toggle-density')" :title="densityLabel">
-          <i class="bi" :class="densityIcon"></i><span class="nav-text">{{densityLabel}}</span>
-        </button>
-        <button type="button" class="nav-item" @click="$emit('toggle-theme')">
-          <i class="bi" :class="themeIcon"></i><span class="nav-text">{{themeLabel}}</span>
-        </button>
-        <button type="button" class="nav-item" @click="$emit('switch-locale')">
-          <i class="bi bi-translate"></i><span class="nav-text">{{t('sidebar.languageShort')}}</span>
-        </button>
+      <div class="sidebar-footer">
+        <section class="service-status" :aria-label="t('sidebar.serviceStatus')">
+          <div class="service-status__title">{{t('sidebar.serviceStatus')}}</div>
+          <div class="service-status__row">
+            <span class="service-status__dot is-on" aria-hidden="true"></span>
+            <span class="service-status__name">HTTP</span>
+            <span class="service-status__value">{{httpPort || t('sidebar.serviceRunning')}}</span>
+          </div>
+          <div class="service-status__row">
+            <span class="service-status__dot" :class="{'is-on': jmsEnabled}" aria-hidden="true"></span>
+            <span class="service-status__name">JMS</span>
+            <span class="service-status__value">{{jmsEnabled ? (jmsPort || t('sidebar.serviceRunning')) : t('sidebar.serviceDisabled')}}</span>
+          </div>
+        </section>
 
-        <div class="nav-divider"></div>
-
-        <div v-if="isLoggedIn" class="nav-user">
-          <div class="user-avatar"><i class="bi bi-person-fill"></i></div>
-          <span class="nav-text nav-user-name">{{status?.username}}</span>
+        <div class="user-menu-anchor">
+          <Transition name="ui-popover-motion">
+            <div v-if="userMenuOpen" id="sidebar-user-menu" ref="userMenu" class="user-menu" role="dialog" :aria-label="t('sidebar.userMenu')" @keydown.esc.prevent="closeUserMenu()" @focusout="onUserMenuFocusOut">
+              <div class="user-menu__identity">
+                <span class="user-menu__name">{{userName}}</span>
+                <span v-if="userRole" class="user-menu__role">{{userRole}}</span>
+              </div>
+              <div class="user-menu__section-title">{{t('sidebar.preferences')}}</div>
+              <div class="user-menu__pref">
+                <span class="user-menu__pref-label" aria-hidden="true">{{t('sidebar.appearance')}}</span>
+                <ui-segmented-control size="compact" name="sidebar-theme" :aria-label="t('sidebar.appearance')"
+                  :model-value="theme" :options="themeOptions" @update:model-value="$emit('set-theme', $event)"></ui-segmented-control>
+              </div>
+              <div class="user-menu__pref">
+                <span class="user-menu__pref-label" aria-hidden="true">{{t('sidebar.density')}}</span>
+                <ui-segmented-control size="compact" name="sidebar-density" :aria-label="t('sidebar.density')"
+                  :model-value="density" :options="densityOptions" @update:model-value="$emit('set-density', $event)"></ui-segmented-control>
+              </div>
+              <div class="user-menu__pref">
+                <span class="user-menu__pref-label" aria-hidden="true">{{t('sidebar.language')}}</span>
+                <ui-segmented-control size="compact" name="sidebar-locale" :aria-label="t('sidebar.language')"
+                  :model-value="locale" :options="localeOptions" @update:model-value="setLocale"></ui-segmented-control>
+              </div>
+              <div class="user-menu__divider" role="separator"></div>
+              <button type="button" class="user-menu__item" @click="runMenuAction('show-help')">
+                <ui-icon name="help"></ui-icon><span>{{t('sidebar.help')}}</span>
+              </button>
+              <button type="button" v-if="isLoggedIn && status?.isBuiltinUser" class="user-menu__item" @click="runMenuAction('change-password')">
+                <ui-icon name="key"></ui-icon><span>{{t('sidebar.changePassword')}}</span>
+              </button>
+              <button type="button" v-if="isLoggedIn" class="user-menu__item user-menu__item--danger" @click="runMenuAction('logout')">
+                <ui-icon name="logout"></ui-icon><span>{{t('sidebar.logout')}}</span>
+              </button>
+              <button type="button" v-else class="user-menu__item" @click="runMenuAction('login')">
+                <ui-icon name="login"></ui-icon><span>{{t('sidebar.login')}}</span>
+              </button>
+            </div>
+          </Transition>
+          <button type="button" ref="userTrigger" class="user-trigger" :class="{'is-open': userMenuOpen, 'is-guest': !isLoggedIn}"
+            :aria-label="t('sidebar.userMenuFor', {name: userName})" :title="sidebarCollapsed ? userName : undefined"
+            aria-haspopup="dialog" :aria-expanded="userMenuOpen ? 'true' : 'false'" aria-controls="sidebar-user-menu"
+            @click="toggleUserMenu">
+            <span class="user-avatar" aria-hidden="true">
+              <template v-if="userInitial">{{userInitial}}</template>
+              <i v-else class="bi bi-person"></i>
+            </span>
+            <span class="user-trigger__text nav-text">
+              <span class="user-trigger__name">{{userName}}</span>
+              <span v-if="userRole" class="user-trigger__role">{{userRole}}</span>
+            </span>
+            <i class="bi bi-chevron-expand user-trigger__chevron" aria-hidden="true"></i>
+          </button>
         </div>
-        <div v-else class="nav-user nav-guest">
-          <div class="user-avatar"><i class="bi bi-person"></i></div>
-          <span class="nav-text nav-user-name">{{t('sidebar.guestMode')}}</span>
-        </div>
-        <button type="button" v-if="isLoggedIn && status?.isBuiltinUser" class="nav-item" @click="$emit('change-password')">
-          <i class="bi bi-key"></i><span class="nav-text">{{t('sidebar.changePassword')}}</span>
-        </button>
-        <button type="button" v-if="isLoggedIn" class="nav-item" @click="$emit('logout')">
-          <i class="bi bi-box-arrow-left"></i><span class="nav-text">{{t('sidebar.logout')}}</span>
-        </button>
-        <button type="button" v-else class="nav-item" @click="$emit('login')">
-          <i class="bi bi-box-arrow-in-right"></i><span class="nav-text">{{t('sidebar.login')}}</span>
-        </button>
       </div>
     </aside>
   `

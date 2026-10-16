@@ -1,0 +1,8 @@
+Running 3s test @ http://127.0.0.1:18080/forward-fast
+  4 threads and 64 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    38.94ms   24.48ms 147.73ms   60.49%
+    Req/Sec   413.85     85.93   727.00     74.17%
+  4972 requests in 3.02s, 776.88KB read
+Requests/sec:   1644.21
+Transfer/sec:    256.91KB

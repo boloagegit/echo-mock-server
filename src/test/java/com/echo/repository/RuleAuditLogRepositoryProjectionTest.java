@@ -20,7 +20,7 @@ class RuleAuditLogRepositoryProjectionTest {
     private RuleAuditLogRepository repository;
 
     @Test
-    void pagedSummary_shouldExcludeLobsAndPreserveDetailOnH2() {
+    void pagedSummary_shouldExcludeLobsAndPreserveDetail() {
         String largeJson = "{\"body\":\"" + "x".repeat(512 * 1024) + "\"}";
         RuleAuditLog first = repository.save(audit("rule-one", RuleAuditLog.Action.CREATE,
                 null, largeJson, "alice", LocalDateTime.now().minusSeconds(1)));

@@ -15,6 +15,7 @@ public class MatchChainEntry implements MatchChainInfo {
     private final String score;
     private final String detail;
     private final boolean nearMiss;
+    private final String detailTree;
 
     public MatchChainEntry(String ruleId, String reason, String endpoint,
                            String description, String condition) {
@@ -24,6 +25,13 @@ public class MatchChainEntry implements MatchChainInfo {
     public MatchChainEntry(String ruleId, String reason, String endpoint,
                            String description, String condition,
                            String score, String detail, boolean nearMiss) {
+        this(ruleId, reason, endpoint, description, condition, score, detail, nearMiss, null);
+    }
+
+    /** @param detailTree 樹狀比對說明的 JSON（見 {@link MatchExplanationJson}），可為 null */
+    public MatchChainEntry(String ruleId, String reason, String endpoint,
+                           String description, String condition,
+                           String score, String detail, boolean nearMiss, String detailTree) {
         this.ruleId = ruleId;
         this.reason = reason;
         this.endpoint = endpoint;
@@ -32,6 +40,7 @@ public class MatchChainEntry implements MatchChainInfo {
         this.score = score;
         this.detail = detail;
         this.nearMiss = nearMiss;
+        this.detailTree = detailTree;
     }
 
     public static MatchChainEntry from(BaseRule rule, String endpoint, String condition,
@@ -45,10 +54,14 @@ public class MatchChainEntry implements MatchChainInfo {
     }
 
     public static MatchChainEntry fromJms(JmsRule rule, String reason) {
-        return from(rule, rule.getQueueName(), rule.getBodyCondition(), reason);
+        return from(rule, rule.getQueueName(),
+                rule.getMatchSpec() != null ? "match: " + rule.getMatchSpec() : rule.getBodyCondition(), reason);
     }
 
     private static String buildHttpCondition(HttpRule rule) {
+        if (rule.getMatchSpec() != null) {
+            return "match: " + rule.getMatchSpec();
+        }
         String body = rule.getBodyCondition();
         String query = rule.getQueryCondition();
         if ((body == null || body.isBlank()) && (query == null || query.isBlank())) {

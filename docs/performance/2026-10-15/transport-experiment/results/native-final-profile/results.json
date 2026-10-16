@@ -1,0 +1,19 @@
+{
+  "echo-native-profile-r1": {
+    "done": true,
+    "cases": {
+      "fixed-c8": {
+        "requests": 2450741,
+        "seconds": 45.1,
+        "rps": 54340.58,
+        "p50_ms": 0.128,
+        "p99_ms": 1.86,
+        "p999_ms": null,
+        "server_cpu_seconds": 113.32,
+        "server_cpu_us_per_request": 46.24,
+        "http_errors": 0,
+        "socket_errors": 0
+      }
+    }
+  }
+}

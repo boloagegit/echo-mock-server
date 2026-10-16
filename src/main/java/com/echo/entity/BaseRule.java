@@ -50,6 +50,14 @@ public abstract class BaseRule {
     private String bodyCondition;
 
     /**
+     * 結構化匹配條件（JSON，見 {@code com.echo.core.match.MatchSpecCodec}）
+     * <p>只有無法用舊版條件字串表達的條件（{@code any}、{@code not}、exists、數值比較等）才會寫入；
+     * 有值時以它為準，舊版三個條件欄位為 null。
+     */
+    @Column(length = Length.LONG32)
+    private String matchSpec;
+
+    /**
      * 關聯的回應 ID
      * <p>必須設定，指向 Response 表的回應內容
      */

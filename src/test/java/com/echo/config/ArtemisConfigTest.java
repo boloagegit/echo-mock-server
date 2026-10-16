@@ -74,6 +74,46 @@ class ArtemisConfigTest {
     }
 
     @Test
+    void artemisConfigurationCustomizer_shouldDeleteIdleTemporaryQueuesByDefault() throws Exception {
+        ConfigurationImpl artemisConfiguration = new ConfigurationImpl();
+        new ArtemisConfig().artemisConfigurationCustomizer(new JmsProperties()).customize(artemisConfiguration);
+
+        assertThat(artemisConfiguration.getTemporaryQueueNamespace())
+                .isEqualTo(ArtemisConfig.TEMPORARY_QUEUE_NAMESPACE);
+        var temporary = artemisConfiguration.getAddressSettings()
+                .get(ArtemisConfig.TEMPORARY_QUEUE_NAMESPACE + ".#");
+        assertThat(temporary.isAutoDeleteCreatedQueues()).isTrue();
+        assertThat(temporary.getAutoDeleteQueuesDelay()).isEqualTo(10_000);
+        assertThat(artemisConfiguration.getAddressQueueScanPeriod())
+                .isEqualTo(ArtemisConfig.TEMPORARY_QUEUE_SCAN_PERIOD_MS);
+        assertThat(temporary.getAutoDeleteQueuesMessageCount()).isEqualTo(-1);
+        assertThat(artemisConfiguration.getAddressSettings().get("#").isAutoDeleteCreatedQueues()).isNotEqualTo(Boolean.TRUE);
+    }
+
+    @Test
+    void artemisConfigurationCustomizer_zeroKeepsTemporaryQueuesUntilDisconnect() throws Exception {
+        JmsProperties jmsProperties = new JmsProperties();
+        jmsProperties.setTemporaryQueueIdleDeleteMs(0);
+        ConfigurationImpl artemisConfiguration = new ConfigurationImpl();
+        new ArtemisConfig().artemisConfigurationCustomizer(jmsProperties).customize(artemisConfiguration);
+
+        assertThat(artemisConfiguration.getTemporaryQueueNamespace()).isNotEqualTo(ArtemisConfig.TEMPORARY_QUEUE_NAMESPACE);
+        assertThat(artemisConfiguration.getAddressSettings())
+                .doesNotContainKey(ArtemisConfig.TEMPORARY_QUEUE_NAMESPACE + ".#");
+    }
+
+    @Test
+    void artemisConfigurationCustomizer_rejectsNegativeTemporaryQueueIdleTime() {
+        JmsProperties jmsProperties = new JmsProperties();
+        jmsProperties.setTemporaryQueueIdleDeleteMs(-1);
+        ArtemisConfigurationCustomizer customizer = new ArtemisConfig().artemisConfigurationCustomizer(jmsProperties);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> customizer.customize(new ConfigurationImpl()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("temporary queue");
+    }
+
+    @Test
     void artemisConfigurationCustomizer_shouldUseDefaultPort() throws Exception {
         JmsProperties jmsProperties = new JmsProperties();
         // 預設 port = 61616

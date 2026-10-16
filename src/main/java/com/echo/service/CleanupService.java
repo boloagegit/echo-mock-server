@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -29,6 +30,7 @@ public class CleanupService {
     private final ResponseRepository responseRepository;
     private final CacheManager cacheManager;
     private final ScenarioService scenarioService;
+    private final Optional<CacheInvalidationService> cacheInvalidationService;
 
     @Value("${echo.cleanup.rule-retention-days:180}")
     private int ruleRetentionDays;
@@ -54,7 +56,7 @@ public class CleanupService {
             responseRepository.deleteAllById(toDelete);
         }
 
-        // 清除快取
+        // 清除快取（交易內的清除會在提交後再清一次）並通知其他實例
         if (rulesDeleted > 0) {
             for (String cacheName : CacheConfig.ALL_RULE_CACHES) {
                 var cache = cacheManager.getCache(cacheName);
@@ -62,6 +64,10 @@ public class CleanupService {
                     cache.clear();
                 }
             }
+            cacheInvalidationService.ifPresent(CacheInvalidationService::publishInvalidation);
+        }
+        if (!toDelete.isEmpty()) {
+            cacheInvalidationService.ifPresent(s -> s.publishResponsesChanged(toDelete));
         }
 
         // 清理不再被任何規則引用的 Scenario

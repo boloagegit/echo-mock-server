@@ -3,7 +3,6 @@ package com.echo.entity;
 import com.echo.repository.BuiltinUserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -19,12 +18,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Validates: Requirements 8.2
  */
 @DataJpaTest
-@AutoConfigureTestDatabase
 @TestPropertySource(properties = {
-    "spring.jpa.hibernate.ddl-auto=create-drop",
-    "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
-    "spring.datasource.url=jdbc:h2:mem:builtinuser-test;DB_CLOSE_DELAY=-1",
-    "spring.datasource.driver-class-name=org.h2.Driver"
+    "spring.jpa.hibernate.ddl-auto=create-drop"
 })
 class BuiltinUserTest {
 
