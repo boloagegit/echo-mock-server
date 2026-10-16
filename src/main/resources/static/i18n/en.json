@@ -1816,6 +1816,7 @@
     "kbNewRule": "Add rule / response",
     "kbCloseModal": "Close modal / dialog",
     "kbHint": "Shortcuts are disabled when an input is focused (except Esc)",
+    "secretHint": "Psst: type ↑ ↑ ↓ ↓ ← → ← → B A on any page, or click the Echo logo (top left) five times quickly.",
     "httpRequestFlow": "HTTP Request Flow",
     "httpRuleFields": "HTTP Rule Fields",
     "fieldTargetHost": "Used only for rule matching (e.g., <code>api.example.com</code>). Leave empty to match all; it never changes the forwarding destination.",
