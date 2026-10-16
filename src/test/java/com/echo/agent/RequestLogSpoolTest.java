@@ -858,6 +858,14 @@ class RequestLogSpoolTest {
                     throw new OutOfMemoryError("simulated");
                 }
             };
+            // 呼叫端收到失敗後，寫入執行緒先停一下：狀態若還沒清掉，下一筆一定會被擋（以前偶爾發生）
+            spool.afterAbandonNotifiedForTest = () -> {
+                try {
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            };
 
             assertThatThrownBy(() -> spool.append(errorTask("/lost")))
                     .isInstanceOf(RequestLogUnavailableException.class);
