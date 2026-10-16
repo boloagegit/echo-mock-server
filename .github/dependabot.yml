@@ -6,6 +6,10 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 5
     rebase-strategy: "auto"
+    ignore:
+      # Error Prone 2.50+ needs a Java 21 compiler; the build runs on Java 17.
+      # Upgrade it together with the build JDK, not automatically.
+      - dependency-name: "com.google.errorprone:error_prone_core"
 
   - package-ecosystem: "github-actions"
     directory: "/"
