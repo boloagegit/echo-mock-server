@@ -29,6 +29,10 @@
 | [HTTP 加速](../native-http.md) | 預設原生入口、容量上限、相容性與切回方式 |
 | [原生 HTTP 驗證](../native-http-validation-2026-10-16.md) | 現行比較、延遲、生命週期檢查與證據 |
 | [JMS 效能與正確性](../jms-performance-and-correctness.md) | Session 重用、回覆隔離與交易行為 |
+| [HTTP I/O 調校](../http-io-tuning.md) | Undertow I/O 執行緒設定，以及什麼情況下調整才有幫助 |
+| [效能與啟動補強](../performance-hardening-2026-10-16.md) | JMS Session 重用、啟動縮短 15%，以及前階段 HTTP 實驗 |
+| [原生 HTTP 實驗](../native-http-performance-2026-10-15.md) | 2026-10-15 原型與 WireMock 的比較 |
+| [HTTP 效能調查](../performance-investigation-2026-10-15.md) | 2026-10-15 的 CPU 取樣、I/O 執行緒與高壓恢復 |
 | [容器韌性驗證](../container-resilience-validation.md)（英文） | JMS XML 壓力、重啟與儲存空間測試 |
 | [容器長時間驗證](../container-endurance-validation.md)（英文） | 8 小時與 24 小時長時間測試 |
 | [封存](../archive/README.md) | 較早的效能量測與工程紀錄 |

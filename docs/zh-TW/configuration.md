@@ -91,7 +91,7 @@ echo:
 
 ## HTTP 加速
 
-原生 HTTP/1.1 路徑已預設啟用，可調整的預設上限為單筆請求或回應本文 10 MiB、512 筆進行中請求、128 MiB 估計緩衝容量。特殊請求與自訂 Servlet 擴充保留 Servlet 處理。設定 `ECHO_HTTP_TRANSPORT=servlet` 後重啟可切回原入口。限制、逾時、觀測與相容性見 [HTTP 加速](../native-http.md)，執行緒設定見 [HTTP I/O 調校](../http-io-tuning.md)。
+原生 HTTP/1.1 路徑已預設啟用，可調整的預設上限為單筆請求或回應本文 10 MiB、512 筆進行中請求、128 MiB 估計緩衝容量。特殊請求與自訂 Servlet 擴充保留 Servlet 處理。設定 `ECHO_HTTP_TRANSPORT=servlet` 後重啟可切回原入口。限制、逾時、觀測與相容性見 [HTTP 加速](../native-http.md)，I/O 執行緒設定見 [HTTP I/O 調校](../http-io-tuning.md)。
 
 ## 使用者認證
 

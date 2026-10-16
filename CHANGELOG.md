@@ -6,11 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [v2026.10.16] — 2026-10-16
+
 ### Added
 - Native HTTP/1.1 acceleration is enabled by default, sharing the existing mock pipeline while retaining Servlet handling for special requests and custom extensions. Configurable defaults bound request/response bodies to 10 MiB, active requests to 512 and estimated buffering to 128 MiB. Set `ECHO_HTTP_TRANSPORT=servlet` and restart to switch back; TLS, compression, observations and graceful shutdown remain supported.
 - JMS forwarding reuses up to 8 idle sessions per target by default (`echo.jms.forward.session-cache-size=0` disables reuse), while keeping temporary reply queues and consumers independent for every request. Source transactions and redelivery semantics are unchanged.
 - Startup uses WebJars Lite metadata instead of a full classpath scan, preserving versionless asset URLs. Reproducible HTTP/JMS, startup, capacity and recovery measurements are included under `docs/performance/`.
-- Request-log spool recovery clears the unavailable state and releases reservations before notifying append callers, preventing immediate retries from being incorrectly rejected or observing stale capacity.
 - The README is now a short landing page in English and Traditional Chinese, with screenshots of the console, a one-minute first-mock example and a performance summary. The detailed sections moved into topic guides: `docs/install.md`, `docs/configuration.md`, `docs/rules.md`, `docs/jms.md` and `docs/api.md` (Chinese versions under `docs/zh-TW/`), with an index at `docs/README.md`.
 - The hidden game (Echo Strike) has much more to play and look at. It still downloads only when it is opened, so ordinary page loads are unchanged apart from about 0.7 KB more in the trigger script.
   - **Stages:** three stages (STAGING, UAT, PRODUCTION), each with a mid-stage heavy enemy, its own background and a boss. The bosses are 404 (fades out and reappears elsewhere), 429 (fires a stream, then cools down with its weak point open and a "Retry-After" countdown) and 500 (three phases, plus two side turrets that can be shot off first). After the third stage the game loops, faster.
@@ -50,19 +51,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Advanced condition editor: the rule editor switches between the existing simple rows and a tree editor for `all` / `any` groups, NOT and the new operators, validates against the server while typing, and round-trips `echo.mock/v2` documents; the rule list and detail summarize structured conditions
 - Structured match conditions (`matchSpec`): `all` / `any` / `not` groups with `exists`, `absent`, numeric `gt`/`gte`/`lt`/`lte`, `in` and `equalToJson` in addition to the existing operators, validated on save with the JSON path of any error; available through the REST API, JSON import/export and new `echo.mock/v2` documents (`spec.match`). `echo.mock/v1` is unchanged, and manifests of rules that use structured conditions are emitted as v2
 - Anomaly-only HTTP/JMS/SSE diagnostics: zero supplemental file bytes for healthy traffic, one bounded error summary, separate 10 MiB/day / 50 MiB retained files, rate limits, expiring opt-in detail, and nullable Request Log correlation IDs
-- Fault Injection — rules can simulate CONNECTION_RESET (close connection) or EMPTY_RESPONSE (return empty body) for HTTP and JMS
-- Faker Handlebars helpers — randomFirstName, randomLastName, randomFullName, randomEmail, randomPhoneNumber, randomCity, randomCountry, randomStreetAddress, randomInt
-- OpenAPI/Swagger import — upload spec to auto-generate mock rules with preview
-- Declarative rule authoring — create or update rules from a validated JSON document while retaining the form editor
-- Selectable HTTP and JMS forwarding profiles with application configuration fallback
-- Durable SQLite WAL request-log spool so transient primary-database failures delay records instead of silently dropping them
-- Verified H2-to-SQLite migration script with row counts, SHA-256 digests, integrity checks, and startup smoke tests
-- Agent Framework with Log Agent and match chain analysis (near-miss / shadowed detection)
-- Built-in account management — CRUD, enable/disable, password reset, self-registration
-- Error Prone compile-time static analysis
-- Request log body search and formatted preview with CodeMirror highlighting
-- Forwarding observability in request logs, including the actual safe downstream target label
-- One-click maintainer release workflow with validated CalVer tags, release artifacts, checksums, generated notes, and GHCR images
 
 ### Changed
 - Dated benchmark reports and the console-redesign hand-off notes moved to `docs/archive/`. CONTRIBUTING lists all three test suites (Gradle, `node --test`, Python), the current source layout and the tech stack. SECURITY no longer mentions the H2 console, which was removed. The H2 migration hint at startup points to `docs/install.md`.
@@ -85,23 +73,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Tests run on SQLite (one temporary database per Spring context) instead of embedded H2
 - The test suite runs test classes in parallel JVM forks (half the CPU cores; `-PtestForks=1` for one JVM) and no longer waits on BCrypt at production strength, a 30 s JMS reply timeout or a 40 s SSE sequence: `./gradlew test` drops from about 330 s to about 190 s with the same 1,836 tests. Integration-test cleanup now fails the test when deleting data fails instead of leaving it to later tests
 - System Settings now separates overview, resource details, forwarding targets, data/backups, and service configuration; shared target tables and six metric disclosures retain manual-refresh behavior
-- Priority field semantics reversed to higher-number-higher-priority
-- Split HTTP/JMS rule caches for better isolation
-- Extract Template Method pipeline for HTTP/JMS mock processing
-- WebJar paths changed to version-agnostic (no more HTML edits on upgrade)
-- HTTP downstream forwarding now uses Reactor Netty with bounded response buffering, connection-pool limits, and explicit timeout budgets
-- Request-log persistence is handled by a single background consumer rather than flushing the primary database on request threads
-- Scenario and bulk import/export user interfaces are controlled by feature flags and are disabled by default
-- Desktop UI surfaces, rule editing, request details, settings, accessibility, and light/dark design tokens were aligned without changing the main navigation model
-- Authenticated rule editors can read password-free forwarding target lists; target management remains administrator-only
-- Request logs require authentication because details can include request data and downstream topology
-- Spring Boot updated to 3.5.16 and the build aligned with the supported Gradle 8.14.5 line
 
 ### Removed
 - Drag-and-drop priority ordering in the rule list (`ECHO_RULE_DRAG_SORT_ENABLED` / `echo.features.rule-drag-sort-enabled`, off by default) was removed. It sent only the new priority to the full-rule update API, which rejected it, so reordering never saved. Set priorities in the rule editor; the status API no longer returns `ruleDragSortEnabled`
 
 ### Fixed
-- Request logging no longer rejects a log that arrives right after a failed write was abandoned. The "temporarily unavailable" state is now cleared before the waiting caller is told about the failure, so its next log is accepted. Before, a log sent in that short gap was turned away.
+- Request logging no longer rejects a log that arrives right after a failed write was abandoned. The "temporarily unavailable" state is now cleared, and the batch's reserved capacity released, before the waiting caller is told about the result, so its next log is accepted and sees the freed capacity. Before, a log sent in that short gap could be turned away.
 - The rule examples in the docs used field names the API ignores or rejects. JMS rules take the queue name in `matchKey` (not `queueName`), and the reply status is `status` (not `httpStatus`).
 - Request logging keeps working after the JVM runs out of memory once. Before, an `OutOfMemoryError` could end the thread that writes request logs to the local spool, or the one that moves them into the database, for good: no new request logs appeared until a restart, and with `echo.request-log.wait-for-write=true` every reply then waited forever. Both threads now give up only the batch they were working on, log the error and continue
 - The embedded JMS broker no longer runs out of memory when a client creates a new temporary reply queue for every request on one long-lived connection and never deletes it. Each such queue kept about 50 KB of heap until the client disconnected, so about 7,000 of them filled a 512 MB heap. Temporary queues that have had no consumer for `echo.jms.temporary-queue-idle-delete-ms` (default 10000, `0` turns this off) are now deleted by the broker, which checks every 5 seconds. Queues a client is still listening on are kept, a client that later listens on a deleted queue gets it recreated automatically, and other queues are not affected.
@@ -131,18 +108,78 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - The default Docker database now lives in the persisted `/app/data` volume
 - Forwarding target dialogs now place and contain keyboard focus, support Escape, and restore the launch control; Settings action menus remain within the viewport
 - JMS forwarding documentation now reflects configuration-first default selection and distinguishes it from automatic failover
-- SpotBugs mutable array warnings
-- Remember Me validity now uses dedicated `echo.remember-me.validity` setting
-- Rule matching performance — removed MatchChain/Detail construction in hot loop
+
+## [v2026.09.12] — 2026-09-12
+
+No changelog entries were recorded for this release. See the [release notes](https://github.com/boloagegit/echo-mock-server/releases/tag/v2026.09.12) for the pull requests it contains.
+
+## [v2026.09.06] — 2026-09-06
+
+No changelog entries were recorded for this release. See the [release notes](https://github.com/boloagegit/echo-mock-server/releases/tag/v2026.09.06) for the pull requests it contains.
+
+## [v2026.08.22] — 2026-08-22
+
+### Added
+- Forwarding observability in request logs, including the actual safe downstream target label
+
+### Changed
+- Authenticated rule editors can read password-free forwarding target lists; target management remains administrator-only
+- Request logs require authentication because details can include request data and downstream topology
+
+### Fixed
+- H2 response identity sequences are realigned after restoring an older database snapshot
+- JMS rule previews and request-log rule creation now use protocol-correct forwarding and match fields
+- Updated or deleted JMS forwarding profiles retire their cached connections after active messages finish
+- Request-log candidate snapshots and HTTP forwarding metrics are released when their profiles are no longer referenced
+
+## [v2026.08.13] — 2026-08-13
+
+No changelog entries were recorded for this release. See the [release notes](https://github.com/boloagegit/echo-mock-server/releases/tag/v2026.08.13) for the pull requests it contains.
+
+## [v2026.08.12] — 2026-08-12
+
+### Added
+- Declarative rule authoring — create or update rules from a validated JSON document while retaining the form editor
+- Selectable HTTP and JMS forwarding profiles with application configuration fallback
+- Durable SQLite WAL request-log spool so transient primary-database failures delay records instead of silently dropping them
+- Verified H2-to-SQLite migration script with row counts, SHA-256 digests, integrity checks, and startup smoke tests
+- One-click maintainer release workflow with validated CalVer tags, release artifacts, checksums, generated notes, and GHCR images
+
+### Changed
+- HTTP downstream forwarding now uses Reactor Netty with bounded response buffering, connection-pool limits, and explicit timeout budgets
+- Request-log persistence is handled by a single background consumer rather than flushing the primary database on request threads
+- Scenario and bulk import/export user interfaces are controlled by feature flags and are disabled by default
+- Desktop UI surfaces, rule editing, request details, settings, accessibility, and light/dark design tokens were aligned without changing the main navigation model
+- Spring Boot updated to 3.5.16 and the build aligned with the supported Gradle 8.14.5 line
+
+### Fixed
 - Dynamic-path cache churn and unnecessary JSON/XML parsing in the matching hot path
 - Request-log spool startup when a macOS temporary-directory path resolves through a symbolic link
 - Backup filename handling for root-like paths reported by static analysis
 - Docker Compose health check now targets the administrative status endpoint
 - Docker health checks send the required JSON accept header and include the curl runtime dependency
-- H2 response identity sequences are realigned after restoring an older database snapshot
-- JMS rule previews and request-log rule creation now use protocol-correct forwarding and match fields
-- Updated or deleted JMS forwarding profiles retire their cached connections after active messages finish
-- Request-log candidate snapshots and HTTP forwarding metrics are released when their profiles are no longer referenced
+
+## [v2026.05.05] — 2026-05-05
+
+### Added
+- Fault Injection — rules can simulate CONNECTION_RESET (close connection) or EMPTY_RESPONSE (return empty body) for HTTP and JMS
+- Faker Handlebars helpers — randomFirstName, randomLastName, randomFullName, randomEmail, randomPhoneNumber, randomCity, randomCountry, randomStreetAddress, randomInt
+- OpenAPI/Swagger import — upload spec to auto-generate mock rules with preview
+- Agent Framework with Log Agent and match chain analysis (near-miss / shadowed detection)
+- Built-in account management — CRUD, enable/disable, password reset, self-registration
+- Error Prone compile-time static analysis
+- Request log body search and formatted preview with CodeMirror highlighting
+
+### Changed
+- Priority field semantics reversed to higher-number-higher-priority
+- Split HTTP/JMS rule caches for better isolation
+- Extract Template Method pipeline for HTTP/JMS mock processing
+- WebJar paths changed to version-agnostic (no more HTML edits on upgrade)
+
+### Fixed
+- SpotBugs mutable array warnings
+- Remember Me validity now uses dedicated `echo.remember-me.validity` setting
+- Rule matching performance — removed MatchChain/Detail construction in hot loop
 
 ## [v2026.04.02] — 2026-04-02
 
