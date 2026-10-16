@@ -124,21 +124,17 @@ There is also a light theme:
 
 ## Performance
 
-Measured on one 4-vCPU Linux machine with 2,004 rules loaded on both servers (Echo vs WireMock 3.13.2, wrk, 2026-10-14). The table shows requests per second:
+HTTP/1.1 acceleration is enabled by default. The 2026-10-16 comparison used Java 21, a shared four-core CPU allocation, a 1 GiB heap and disabled request recording on both products. Echo used 8 workers; each WireMock result is the better mean from 32 and 128 workers.
 
-| Scenario | Echo, logs kept | WireMock, journal 10k | Echo, no log | WireMock, no journal |
-|----------|---------:|---------:|---------:|---------:|
-| Fixed JSON, 8 connections | 8,191 | 1,515 | 9,920 | 38,023 |
-| Response template | 6,760 | 1,490 | 8,544 | 23,629 |
-| XML ~1.5 KB + XPath | 7,401 | 2,147 | 9,951 | 14,540 |
-| XML ~100 KB + XPath | 4,097 | 911 | 6,262 | 1,941 |
-| One of 2,000 path rules | 6,419 | 417 | 9,195 | 3,204 |
+| Scenario | Echo req/s | WireMock 3.13.2 req/s |
+|----------|-----------:|---------------------:|
+| Fixed response, 64 connections | 113,280 | 59,840 |
+| One of 2,000 path rules, 8 connections | 50,866 | 4,965 |
+| Forwarding to a 50 ms downstream, 64 connections | 1,243 | 1,185 |
 
-- **Request history on.** When both servers keep the last 10,000 requests, Echo is 3.5 to 15 times faster.
-- **Recording off.** With recording off on both servers, WireMock is 1.5 to 4.4 times faster on simple requests. Echo is 1.8 to 3.2 times faster on large XML, and 2.9 times faster when matching across 2,000 rules.
-- **Startup.** WireMock starts in about 1 second; Echo takes about 12 seconds.
+Slow downstream calls and deliberate delays gain much less than simple responses. These are workload-specific measurements, not a promise that every request is faster. See the [validation report](docs/native-http-validation-2026-10-16.md) for the full matrix, latency, errors and rerun scripts, and [performance history](docs/performance.md) for earlier comparisons.
 
-These numbers apply only to this workload. The full method, bottlenecks and rerun scripts are in [docs/performance.md](docs/performance.md) (in Traditional Chinese).
+The [HTTP acceleration guide](docs/native-http.md) covers capacity limits, compatibility and switching back with `ECHO_HTTP_TRANSPORT=servlet`. [JMS resource reuse](docs/jms-performance-and-correctness.md) and [startup measurements](docs/performance-hardening-2026-10-16.md) are documented separately.
 
 ## Documentation
 

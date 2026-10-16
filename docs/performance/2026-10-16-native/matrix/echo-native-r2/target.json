@@ -1,0 +1,1 @@
+{"id":1,"version":0,"name":"local-perf","baseUrl":"http://127.0.0.1:18081","authType":"NONE","username":null,"secretConfigured":false,"connectTimeoutSeconds":2,"readTimeoutSeconds":3,"tlsVerificationEnabled":true,"enabled":true,"defaultConnection":true,"createdAt":"2026-10-16T02:58:03.992839874","updatedAt":"2026-10-16T02:58:03.992839874"}

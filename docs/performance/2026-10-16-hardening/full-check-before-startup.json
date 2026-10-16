@@ -1,0 +1,28 @@
+{
+  "test": {
+    "tests": 2040,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 6,
+    "skipped_cases": [
+      "com.echo.jms.ManualJmsTest.sendAndReceive()",
+      "com.echo.jms.target.JmsFullE2eTest.fullE2e_echoForwardsToTargetAndReceivesReply()",
+      "com.echo.jms.target.JmsTargetFactoryProviderE2eTest.strategyDispatch_shouldSelectCorrectProvider()",
+      "com.echo.jms.target.JmsTargetFactoryProviderE2eTest.artemisProvider_shouldConnectAndSendReceive()",
+      "com.echo.jms.target.JmsTargetFactoryProviderE2eTest.artemisProvider_requestReplyPattern()",
+      "com.echo.jms.target.JmsTargetFactoryProviderE2eTest.tibcoProvider_shouldCreateFactory_whenJarPresent()"
+    ]
+  },
+  "h2MigrationTest": {
+    "tests": 9,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "skipped_cases": []
+  },
+  "command": "./gradlew check bootJar -PtestForks=2 --no-daemon",
+  "spotbugs": "passed (normal build)",
+  "jar_sha256": "7f48b9a857f7f589dfc658ca04cc3299779e25de5cf469659d6a6d2eda2c4657",
+  "artifact_isolation": "Normal jar excludes HTTP experiment and removed JMS admission prototype",
+  "runtime_dependencies": "Identical BOOT-INF/lib names to echo-original.jar (baseline capture)"
+}

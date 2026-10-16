@@ -878,6 +878,50 @@ class RequestLogSpoolTest {
         }
     }
 
+    @Test
+    void failedAppendPublishesRecoveryBeforeWakingTheCaller() throws Exception {
+        RequestLogSpool spool = errorSpool("recovery-publication.sqlite");
+        CountDownLatch callbackInstalled = new CountDownLatch(1);
+        try {
+            AtomicInteger attempts = new AtomicInteger();
+            spool.beforeCommitForTest = () -> {
+                int attempt = attempts.incrementAndGet();
+                if (attempt == 1) throw new java.sql.SQLException("disk unavailable");
+                if (attempt == 2) {
+                    try {
+                        if (!callbackInstalled.await(5, TimeUnit.SECONDS)) {
+                            throw new IllegalStateException("completion callback not installed");
+                        }
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException(interrupted);
+                    }
+                    throw new OutOfMemoryError("simulated");
+                }
+            };
+            // Observe the exact completion boundary rather than hoping the awaiting thread
+            // wins a scheduling race. The public append/recovery behavior is checked below.
+            Object pending = org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                    spool, "admit", errorTask("/lost"));
+            var completion = (java.util.concurrent.CompletableFuture<?>)
+                    org.springframework.test.util.ReflectionTestUtils.getField(pending, "committed");
+            var unavailableWhenNotified = completion.handle((value, failure) -> {
+                assertThat(failure).isInstanceOf(RequestLogUnavailableException.class);
+                assertThat(spool.statusSnapshot().pendingItems()).isZero();
+                assertThat(spool.statusSnapshot().inFlightBytes()).isZero();
+                return spool.isStorageUnavailable();
+            });
+            callbackInstalled.countDown();
+            assertThat(unavailableWhenNotified.get(5, TimeUnit.SECONDS)).isFalse();
+            spool.append(errorTask("/after"));
+            assertThat(spool.readAfter(0, 10)).extracting(entry -> entry.task().getEndpoint())
+                    .containsExactly("/after");
+        } finally {
+            callbackInstalled.countDown();
+            spool.stop();
+        }
+    }
+
     private RequestLogSpool errorSpool(String file) {
         RequestLogSpool spool = new RequestLogSpool(new ObjectMapper().findAndRegisterModules(),
                 tempDir.resolve(file).toString(), 16, 4, 1, 2_000, 10, 64L * 1024 * 1024);

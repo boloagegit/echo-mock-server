@@ -1,0 +1,1 @@
+pid 216168's current affinity list: 0-3

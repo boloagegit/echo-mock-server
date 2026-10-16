@@ -28,6 +28,9 @@ class JmsMonitoringLifecycleTest {
     void setup() throws Exception {
         metrics = new JmsRuntimeMetrics(new MonitoringProperties());
         var properties = new JmsProperties();
+        // Physical close ordering is tested without caching. The real-broker cache tests cover
+        // idle resource reuse, bounded retention, duplicate replies and client retirement.
+        properties.getForward().setSessionCacheSize(0);
         properties.getTarget().setEnabled(true);
         properties.getTarget().setType("artemis");
         properties.getTarget().setServerUrl("vm://test");

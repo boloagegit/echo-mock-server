@@ -1,0 +1,96 @@
+{
+  "commit": "8ee8dcbed814a3dfb5fab1f6b791556d6c81cea7",
+  "java": "openjdk version \"21.0.12.1\" 2026-08-18\nOpenJDK Runtime Environment (build 21.0.12.1+1-1-deb13u1-Debian)\nOpenJDK 64-Bit Server VM (build 21.0.12.1+1-1-deb13u1-Debian, mixed mode, sharing)",
+  "wrk": "wrk  [epoll] Copyright (C) 2012 Will Glozer",
+  "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           46 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  5\nOn-line CPU(s) list:                     0-4\nVendor ID:                               AuthenticAMD\nModel name:                              AMD EPYC 9V74 80-Core Processor\nCPU family:                              25\nModel:                                   17\nThread(s) per core:                      1\nCore(s) per socket:                      5\nSocket(s):                               1\nStepping:                                1\nBogoMIPS:                                5192.27\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology nonstop_tsc cpuid extd_apicid tsc_known_freq pni pclmulqdq ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm cmp_legacy cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw topoext vmmcall fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves avx512_bf16 clzero xsaveerptr arat npt nrip_save tsc_scale vmcb_clean flushbyasid pausefilter pfthreshold v_vmsave_vmload avx512vbmi umip avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid fsrm arch_capabilities\nHypervisor vendor:                       KVM\nVirtualization type:                     full\nL1d cache:                               96 KiB (3 instances)\nL1i cache:                               96 KiB (3 instances)\nL2 cache:                                3 MiB (3 instances)\nL3 cache:                                32 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-4\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Vulnerable\nVulnerability Spec store bypass:         Vulnerable\nVulnerability Spectre v1:                Vulnerable: __user pointer sanitization and usercopy barriers only; no swapgs barriers\nVulnerability Spectre v2:                Vulnerable; STIBP: disabled; PBRSB-eIBRS: Not affected; BHI: Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Vulnerable\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Not affected",
+  "cgroup_cpu_max": "400000 100000",
+  "cgroup_memory_max": "17179869184",
+  "jvm_args": [
+    "-Xms1g",
+    "-Xmx1g",
+    "-XX:+UseG1GC"
+  ],
+  "round_order": [
+    "echo",
+    "wiremock",
+    "wiremock",
+    "echo"
+  ],
+  "conditions": {
+    "path_rules": 2000,
+    "base_rules": 4,
+    "request_log": false,
+    "warmup_seconds": 25,
+    "each_case_prewarm_seconds": 5,
+    "fixed_duration_seconds": 20,
+    "other_duration_seconds": 10,
+    "connections": 8,
+    "wrk_threads": 4,
+    "client_location": "same container as server"
+  },
+  "sha256": {
+    "/workspace/echo-mock-server/build/libs/echo-server-0.0.0-SNAPSHOT.jar": "282d98dd0c1ec1c83354901ba6f45c7a99f504503640de70f423effde01b48c5",
+    "/workspace/scratch/echo-perf/tools/wiremock-standalone-3.13.2.jar": "d097b19bd483c5038479b13a5c71e9faf8f2f5106584f0c120a7770ab0bdb367",
+    "/workspace/scratch/echo-perf/investigate.sh": "a1390741ba5ecfc7c1ae4a42d651b0dbd19e7f8fa8179140066612e410219e39"
+  },
+  "undertow_source_url": "https://repo.maven.apache.org/maven2/io/undertow/undertow-core/2.3.24.Final/undertow-core-2.3.24.Final-sources.jar",
+  "jfr_sha256": {
+    "/workspace/scratch/echo-perf/results/profile/wiremock-no-journal-r1/profile.jfr": "14c00cfa30089ced96056bb5ed2b24c55d045decd7f1deeb2a7e8dd5b48c8814",
+    "/workspace/scratch/echo-perf/results/profile/echo-log-off-r1/profile.jfr": "2cdcb50fdcb772a59902b2536a190cbd532382dcd812607d93260bed008fe9e8",
+    "/workspace/scratch/echo-perf/results/io-compare/echo-io1-r2/profile.jfr": "c4b279eb428e3fd0bf682c462c626b595d433f046224e8d1ae2bea9a35223ecb",
+    "/workspace/scratch/echo-perf/results/io-compare/echo-default-r2/profile.jfr": "7ba0551ad5effb83d9eb74419ffa470e294e2734d3eb5e6b643cdbcdb21a66b2"
+  },
+  "io_comparison": {
+    "variants": [
+      "Echo defaults (4 I/O threads, 32 worker threads)",
+      "--server.undertow.threads.io=1 (32 worker threads unchanged)"
+    ],
+    "order": [
+      "default",
+      "io1",
+      "io1",
+      "default"
+    ],
+    "fixed_case_seconds": 30,
+    "separate_jfr_in_round_2": "5s warmup + 20s measurement; not included in throughput comparison"
+  },
+  "recording_notes": "Main profile summaries include ExecutionSample, ObjectAllocationSample and GarbageCollection. I/O comparison CPU summaries include only ExecutionSample; zero allocation / GC fields there mean not exported, not zero activity.",
+  "io_workloads": {
+    "base_rules": 4,
+    "additional_rules": 6,
+    "path_rules": 2000,
+    "total_rules": 2010,
+    "initial_warmup_seconds": 25,
+    "per_case_warmup_seconds": 3,
+    "per_case_measure_seconds": 10,
+    "order": [
+      "default",
+      "io1",
+      "io1",
+      "default"
+    ],
+    "logging": false,
+    "downstream": "local Node HTTP server, 127.0.0.1:18081; same CPU quota; direct control recorded",
+    "new_cases": [
+      "fixed c64/c256",
+      "100KB XML with Type last",
+      "256KiB response c64",
+      "fast forward c64",
+      "50ms forward c64",
+      "50ms mock delay c64",
+      "fixed c8 recovery"
+    ],
+    "checks": "exact bodies and status before/after; delay >=45ms; upstream503 passthrough; zero leased/pending/active/buffered bytes after load"
+  },
+  "io1_recovery": {
+    "entry_io_threads": 1,
+    "worker_threads": 32,
+    "request_logging": true,
+    "initial_heap_mib": 60.115234375,
+    "final_heap_mib": 59.486328125,
+    "handoff_dropped": 0,
+    "retention_skipped": 2712632,
+    "final_queue_size": 0
+  },
+  "reproduction_control": "Final run.sh pins comparison controls to 4 I/O threads and all Echo runs to 32 workers, matching actual measured settings; this prevents inherited SERVER_* thread overrides from changing the comparison."
+}

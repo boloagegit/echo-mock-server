@@ -3,6 +3,8 @@ server:
   undertow:
     max-http-post-size: 10485760  # 10MB，允許帶 base64 圖片的大 request 進入
     threads:
+      # I/O threads stay CPU-derived unless SERVER_UNDERTOW_THREADS_IO is set.
+      # A single I/O thread helps some workloads but is not universally faster; see docs/http-io-tuning.md.
       worker: 32        # Undertow worker threads，可用環境變數 SERVER_UNDERTOW_THREADS_WORKER 覆蓋
   servlet:
     session:
@@ -132,6 +134,8 @@ echo:
     username: admin          # Artemis 帳密，可用環境變數 ECHO_JMS_USERNAME / ECHO_JMS_PASSWORD 覆蓋
     password: admin
     concurrency: "10-30"     # JMS listener 並發數 (min-max)，可用環境變數 ECHO_JMS_CONCURRENCY 覆蓋
+    forward:
+      session-cache-size: 8       # 每個目標版本最多保留的 idle Session；0 停用快取。回覆 Queue 每筆獨立。
     queue: ECHO.REQUEST      # Echo 監聽的 Source Queue（外部服務送訊息到此 Queue）
     source:
       # 從哪裡接收 JMS：embedded（內建 Artemis，預設）| artemis | tibco（外部共用 broker，例如 ESB）
@@ -164,6 +168,9 @@ echo:
     disk-scan-period-ms: ${ECHO_JMS_DISK_SCAN_PERIOD_MS:1000}
   http:
     alias: HTTP     # HTTP 協定顯示名稱
+    # native：有容量上限的 HTTP/1.1 加速路徑；特殊請求仍走 Servlet。詳見 docs/native-http.md。
+    # 預設啟用；設 ECHO_HTTP_TRANSPORT=servlet 並重啟可切回原入口。
+    transport: ${ECHO_HTTP_TRANSPORT:native}
     # HTTP request 的總時間預算；連線設定的 pool + connect + read 必須小於此值
     request-timeout-ms: ${ECHO_HTTP_REQUEST_TIMEOUT_MS:40000}
     forward:

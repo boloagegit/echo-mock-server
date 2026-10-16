@@ -1,0 +1,8 @@
+--no-request-journal
+--disable-request-logging
+--async-response-enabled
+true
+--async-response-threads
+32
+--container-threads
+128

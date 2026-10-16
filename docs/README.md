@@ -26,6 +26,9 @@
 | Document | What you'll find |
 |----------|------------------|
 | [Performance](performance.md) | Echo vs WireMock, request-log modes, known bottlenecks and how to rerun the benchmarks (Traditional Chinese) |
+| [HTTP acceleration](native-http.md) | Default native transport, limits, compatibility and rollback (Traditional Chinese) |
+| [Native HTTP validation](native-http-validation-2026-10-16.md) | Current comparisons, latency, lifecycle checks and evidence (Traditional Chinese) |
+| [JMS performance and correctness](jms-performance-and-correctness.md) | Session reuse, reply isolation and transaction behavior (Traditional Chinese) |
 | [Container resilience validation](container-resilience-validation.md) | The JMS XML pressure, restart and storage harness |
 | [Container endurance validation](container-endurance-validation.md) | The 8-hour and 24-hour endurance runs |
 | [Archive](archive/README.md) | Older benchmarks and engineering notes |

@@ -22,6 +22,10 @@ and Request Log correlation IDs. See the linked guide for configuration, quotas 
 
 For Artemis Core clients that send XML, configure the sender URL as `tcp://echo-host:61616?minLargeMessageSize=524288`. Text payloads up to roughly 256 KB then use the regular-message path instead of creating one large-message file per request, while larger messages still spill to disk to protect the heap. This is a **sender-side** connection setting, not an Echo `application.yml` property.
 
+## Forwarding resource reuse
+
+Outbound forwarding keeps up to 8 idle sessions per target by default (`echo.jms.forward.session-cache-size`; set to `0` to disable reuse). Each request still owns its temporary reply queue and consumer, so late or duplicate replies cannot become another request's response. Source transactions and redelivery behavior are unchanged. See [JMS performance and correctness](jms-performance-and-correctness.md) for measurements and lifecycle checks.
+
 ## Receiving JMS from a Shared Broker (Multi-Instance)
 
 By default each Echo instance receives JMS on its own embedded Artemis, so senders must pick one instance. To run several instances for load sharing and failover, let all of them listen on the same queue of an existing broker (for example the company ESB). The broker hands each message to only one instance; replies go to the message's `JMSReplyTo`, which is on the same broker.

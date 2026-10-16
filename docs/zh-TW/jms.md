@@ -22,6 +22,10 @@ Echo 可作為 JMS Proxy，在開發環境攔截 JMS 訊息：
 
 使用 Artemis Core client 傳送 XML 時，建議在發送端連線 URL 設定 `tcp://echo-host:61616?minLargeMessageSize=524288`。這會讓約 256KB 以內的文字訊息走一般訊息路徑，避免中型 XML 每筆建立 large-message 檔案；更大的訊息仍會落盤保護 heap。此參數必須設在**發送端**，不是 Echo 的 `application.yml`。
 
+## 轉送資源重用
+
+轉送預設為每個目標保留最多 8 個 idle Session（`echo.jms.forward.session-cache-size`；設為 `0` 停用重用）。每筆請求仍使用自己的暫存回覆 Queue 與 Consumer，避免遲到或重複回覆成為另一筆請求的答案。來源交易與重送行為不變。量測與資源生命週期檢查見 [JMS 效能與正確性](../jms-performance-and-correctness.md)。
+
 ## 從共用 broker 接收 JMS（多實例）
 
 預設每台 Echo 用自己內建的 Artemis 收 JMS，發送端必須指定某一台。要開多台分擔量與備援時，讓所有實例監聽既有 broker（例如公司 ESB）上的同一個 queue：broker 會把每則訊息只交給其中一台，回覆送到訊息的 `JMSReplyTo`，也在同一個 broker 上。

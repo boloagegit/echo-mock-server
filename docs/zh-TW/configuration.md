@@ -34,6 +34,8 @@ echo:
     sync-interval-ms: 5000      # 多實例 cache 同步間隔 (毫秒)
   jms:
     enabled: false              # 設為 true 啟用 JMS
+    forward:
+      session-cache-size: 8     # 每個轉送目標保留的 idle Session；0 停用重用
     credential-key: ${ECHO_JMS_CREDENTIAL_KEY} # 資料庫內轉發密碼的加密金鑰
     port: 61616                 # Artemis 監聽埠
     queue: ECHO.REQUEST         # 監聽的 Queue
@@ -54,6 +56,7 @@ echo:
       queue: TARGET.REQUEST     # 目標 Queue
   http:
     alias: HTTP                 # HTTP 協定顯示名稱
+    transport: native           # 預設加速；ECHO_HTTP_TRANSPORT=servlet 可切回原入口
   stats:
     retention-days: 7           # 統計資料保留天數
   request-log:
@@ -85,6 +88,10 @@ echo:
 ```
 
 上面的備份設定只適用於本機 SQLite 檔案。外部資料庫 profile 會將應用程式備份關閉，請使用 DBA 或平台備份服務。
+
+## HTTP 加速
+
+原生 HTTP/1.1 路徑已預設啟用，可調整的預設上限為單筆請求或回應本文 10 MiB、512 筆進行中請求、128 MiB 估計緩衝容量。特殊請求與自訂 Servlet 擴充保留 Servlet 處理。設定 `ECHO_HTTP_TRANSPORT=servlet` 後重啟可切回原入口。限制、逾時、觀測與相容性見 [HTTP 加速](../native-http.md)，執行緒設定見 [HTTP I/O 調校](../http-io-tuning.md)。
 
 ## 使用者認證
 

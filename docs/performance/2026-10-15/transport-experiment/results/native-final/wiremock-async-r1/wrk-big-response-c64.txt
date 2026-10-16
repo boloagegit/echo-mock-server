@@ -1,0 +1,13 @@
+Running 10s test @ http://127.0.0.1:18080/big-response
+  4 threads and 64 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    40.11ms   42.68ms 301.52ms   87.78%
+    Req/Sec   519.70    112.00     0.95k    66.92%
+  Latency Distribution
+     50%   27.38ms
+     75%   50.54ms
+     90%   94.13ms
+     99%  203.02ms
+  20846 requests in 10.11s, 5.09GB read
+Requests/sec:   2062.63
+Transfer/sec:    516.05MB

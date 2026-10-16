@@ -1,0 +1,5 @@
+fixed={"ok":true,"name":"fixed"}|200
+tpl={"id":"7","path":"/tpl"}|200
+small=<ok/>|200
+large=<ok/>|200
+item1999={"item": 1999}|200

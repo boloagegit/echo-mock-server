@@ -1,0 +1,28 @@
+{
+  "test": {
+    "tests": 2051,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 6,
+    "skipped_cases": [
+      "com.echo.jms.ManualJmsTest.sendAndReceive()",
+      "com.echo.jms.target.JmsFullE2eTest.fullE2e_echoForwardsToTargetAndReceivesReply()",
+      "com.echo.jms.target.JmsTargetFactoryProviderE2eTest.strategyDispatch_shouldSelectCorrectProvider()",
+      "com.echo.jms.target.JmsTargetFactoryProviderE2eTest.artemisProvider_shouldConnectAndSendReceive()",
+      "com.echo.jms.target.JmsTargetFactoryProviderE2eTest.artemisProvider_requestReplyPattern()",
+      "com.echo.jms.target.JmsTargetFactoryProviderE2eTest.tibcoProvider_shouldCreateFactory_whenJarPresent()"
+    ]
+  },
+  "h2MigrationTest": {
+    "tests": 9,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "skipped_cases": []
+  },
+  "command": "./gradlew check bootJar -PtestForks=2 --no-daemon",
+  "spotbugs": "passed",
+  "jar_sha256": "ff329a83580b44b47f8497db13cb6fcaedf11a5d1920c5686196fcc5262771a7",
+  "runtime_dependencies": "Replace webjars-locator-core 0.59 and ClassGraph 4.8.173 with webjars-locator-lite 1.1.3; all other runtime jars unchanged",
+  "artifact_isolation": "Normal jar excludes HTTP experiment and removed JMS admission prototype"
+}

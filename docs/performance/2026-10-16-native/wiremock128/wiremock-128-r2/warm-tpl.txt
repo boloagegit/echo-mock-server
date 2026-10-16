@@ -1,0 +1,8 @@
+Running 3s test @ http://127.0.0.1:18080/tpl?id=7
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.01ms    1.65ms  21.03ms   89.02%
+    Req/Sec     4.09k     1.14k    9.07k    79.67%
+  50169 requests in 3.10s, 8.09MB read
+Requests/sec:  16170.08
+Transfer/sec:      2.61MB

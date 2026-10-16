@@ -34,6 +34,8 @@ echo:
     sync-interval-ms: 5000      # Multi-instance cache sync interval (ms)
   jms:
     enabled: false              # Set to true to enable JMS
+    forward:
+      session-cache-size: 8     # Idle outbound sessions per target; 0 disables reuse
     credential-key: ${ECHO_JMS_CREDENTIAL_KEY} # Encrypts stored forwarding credentials
     port: 61616                 # Artemis listen port
     queue: ECHO.REQUEST         # Queue to listen on
@@ -54,6 +56,7 @@ echo:
       queue: TARGET.REQUEST     # Target queue
   http:
     alias: HTTP                 # HTTP protocol display name
+    transport: native           # Default acceleration; ECHO_HTTP_TRANSPORT=servlet switches back
   stats:
     retention-days: 7           # Statistics retention days
   request-log:
@@ -89,6 +92,10 @@ echo:
 ```
 
 The backup settings above apply only to local SQLite files. External database profiles set application backup to false; use the DBA or platform backup service for those databases.
+
+## HTTP acceleration
+
+The native HTTP/1.1 path is enabled by default. Its configurable limits are 10 MiB per request or response body, 512 active requests and 128 MiB of estimated buffering. Special requests and custom Servlet extensions keep Servlet handling. Set `ECHO_HTTP_TRANSPORT=servlet` and restart to use the original entry point. See [HTTP acceleration](native-http.md) for limits, timeouts, observations and compatibility, and [HTTP I/O tuning](http-io-tuning.md) for worker settings.
 
 ## Authentication
 

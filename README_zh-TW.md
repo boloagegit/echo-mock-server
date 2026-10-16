@@ -124,21 +124,17 @@ curl http://localhost:8080/mock/users/1 -H 'X-Original-Host: api.example.com'
 
 ## 效能
 
-同一台 4 vCPU Linux 機器，兩邊都載入 2,004 條規則（Echo 與 WireMock 3.13.2，wrk，2026-10-14）。下表是每秒處理筆數：
+HTTP/1.1 加速已預設開啟。2026-10-16 比較使用 Java 21、共用四核心 CPU、1 GiB heap，兩邊都關閉請求記錄。Echo 使用 8 個 worker；WireMock 每列取 32／128 個 worker 中較好的平均結果。
 
-| 情境 | Echo 記錄 | WireMock 記錄 1 萬筆 | Echo 不記錄 | WireMock 不記錄 |
-|------|---------:|---------:|---------:|---------:|
-| 固定 JSON，8 連線 | 8,191 | 1,515 | 9,920 | 38,023 |
-| 回應模板 | 6,760 | 1,490 | 8,544 | 23,629 |
-| XML 約 1.5 KB + XPath | 7,401 | 2,147 | 9,951 | 14,540 |
-| XML 約 100 KB + XPath | 4,097 | 911 | 6,262 | 1,941 |
-| 2,000 條規則中隨機一條 | 6,419 | 417 | 9,195 | 3,204 |
+| 情境 | Echo 每秒筆數 | WireMock 3.13.2 每秒筆數 |
+|------|-------------:|-----------------------:|
+| 固定回應，64 連線 | 113,280 | 59,840 |
+| 2,000 條路徑規則中隨機一條，8 連線 | 50,866 | 4,965 |
+| 轉送至延遲 50 ms 的下游，64 連線 | 1,243 | 1,185 |
 
-- **有記錄請求時。** 兩邊都保留最近 10,000 筆請求紀錄，Echo 快 3.5～15 倍。
-- **都不記錄時。** 簡單請求 WireMock 快 1.5～4.4 倍；大 XML Echo 快 1.8～3.2 倍，2,000 條規則時 Echo 快 2.9 倍。
-- **啟動時間。** WireMock 約 1 秒，Echo 約 12 秒。
+慢下游與刻意延遲的改善遠小於一般回應。數字只代表這組情境，不保證每筆請求都更快。完整矩陣、延遲、錯誤數與重跑腳本見[驗證報告](docs/native-http-validation-2026-10-16.md)，較早的比較保留在[效能總覽](docs/performance.md)。
 
-這些數字只代表這組情境。完整的測試方式、已知瓶頸與重跑腳本見 [docs/performance.md](docs/performance.md)。
+[HTTP 加速說明](docs/native-http.md)包含容量上限、相容性與 `ECHO_HTTP_TRANSPORT=servlet` 切回方式；另有 [JMS 資源重用](docs/jms-performance-and-correctness.md)與[啟動量測](docs/performance-hardening-2026-10-16.md)。
 
 ## 文件
 

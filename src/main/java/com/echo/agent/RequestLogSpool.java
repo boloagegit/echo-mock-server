@@ -1289,8 +1289,8 @@ public class RequestLogSpool {
             duplicatesReleased.set(true);
         }
         for (PendingAppend pending : batch) {
-            pending.committed().complete(null);
             releaseOnce(pending, 0, 0, pending.reservedBytes());
+            pending.committed().complete(null);
         }
         afterReleaseQuietly();
     }
@@ -1525,8 +1525,8 @@ public class RequestLogSpool {
     /** 每筆只結算一次：可以重複執行（例如發生 Error 後重試），不會重複釋放容量。 */
     private void failBatch(List<PendingAppend> batch, RuntimeException failure) {
         for (PendingAppend pending : batch) {
-            pending.committed().completeExceptionally(failure);
             releaseOnce(pending, pending.reservedBytes(), 1, pending.reservedBytes());
+            pending.committed().completeExceptionally(failure);
         }
         afterReleaseQuietly();
     }

@@ -29,7 +29,9 @@ enum JmsForwardingRoute {
         } else {
             when(service.resolveEnabled("7")).thenReturn(resolved);
         }
-        return new JmsTargetForwarder(service, providers, metrics);
+        var forwarder = new JmsTargetForwarder(service, providers, metrics);
+        forwarder.configureResources(properties);
+        return forwarder;
     }
 
     String forward(JmsTargetForwarder forwarder, String body) {

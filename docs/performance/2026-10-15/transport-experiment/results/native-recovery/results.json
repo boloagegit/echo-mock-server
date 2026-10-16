@@ -1,0 +1,55 @@
+{
+  "echo-native-log-on-r1": {
+    "done": true,
+    "cases": {
+      "after-c8": {
+        "requests": 744361,
+        "seconds": 20.03,
+        "rps": 37159.6,
+        "p50_ms": 0.17200000000000001,
+        "p99_ms": 3.58,
+        "p999_ms": null,
+        "server_cpu_seconds": 54.92,
+        "server_cpu_us_per_request": 73.78,
+        "http_errors": 0,
+        "socket_errors": 0
+      },
+      "before-c8": {
+        "requests": 659744,
+        "seconds": 20.02,
+        "rps": 32952.51,
+        "p50_ms": 0.194,
+        "p99_ms": 4.65,
+        "p999_ms": null,
+        "server_cpu_seconds": 52.3,
+        "server_cpu_us_per_request": 79.27,
+        "http_errors": 0,
+        "socket_errors": 0
+      },
+      "pressure-c256": {
+        "requests": 4307789,
+        "seconds": 60.0,
+        "rps": 71765.02,
+        "p50_ms": 3.24,
+        "p99_ms": 13.98,
+        "p999_ms": null,
+        "server_cpu_seconds": 187.79,
+        "server_cpu_us_per_request": 43.59,
+        "http_errors": 0,
+        "socket_errors": 0
+      },
+      "recovered-c8": {
+        "requests": 757135,
+        "seconds": 20.02,
+        "rps": 37810.83,
+        "p50_ms": 0.171,
+        "p99_ms": 3.3,
+        "p999_ms": null,
+        "server_cpu_seconds": 55.1,
+        "server_cpu_us_per_request": 72.77,
+        "http_errors": 0,
+        "socket_errors": 0
+      }
+    }
+  }
+}

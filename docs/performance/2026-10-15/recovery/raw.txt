@@ -1,0 +1,590 @@
+===== echo-log-on-r1/wrk-after-c8.txt =====
+Running 20s test @ http://127.0.0.1:18080/mock/fixed
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.12ms    1.48ms  21.93ms   85.61%
+    Req/Sec     3.18k   759.77     5.59k    64.88%
+  Latency Distribution
+     50%  458.00us
+     75%    1.33ms
+     90%    3.29ms
+     99%    6.36ms
+  254081 requests in 20.07s, 38.29MB read
+Requests/sec:  12660.70
+Transfer/sec:      1.91MB
+
+
+===== echo-log-on-r1/wrk-before-c8.txt =====
+Running 20s test @ http://127.0.0.1:18080/mock/fixed
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.46ms    2.39ms  39.49ms   89.71%
+    Req/Sec     2.72k   711.61     4.94k    69.00%
+  Latency Distribution
+     50%  523.00us
+     75%    1.67ms
+     90%    3.92ms
+     99%   11.74ms
+  216681 requests in 20.06s, 32.65MB read
+Requests/sec:  10799.13
+Transfer/sec:      1.63MB
+
+
+===== echo-log-on-r1/wrk-pressure-c256.txt =====
+Running 1m test @ http://127.0.0.1:18080/mock/fixed
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    14.64ms   15.30ms 318.40ms   86.82%
+    Req/Sec     5.61k     1.04k   10.14k    69.10%
+  Latency Distribution
+     50%    9.16ms
+     75%   20.53ms
+     90%   34.02ms
+     99%   70.05ms
+  1339007 requests in 1.00m, 201.76MB read
+Requests/sec:  22278.95
+Transfer/sec:      3.36MB
+
+
+===== echo-log-on-r1/wrk-recovered-c8.txt =====
+Running 20s test @ http://127.0.0.1:18080/mock/fixed
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.15ms    1.51ms  18.08ms   85.61%
+    Req/Sec     3.12k   495.47     5.02k    70.62%
+  Latency Distribution
+     50%  459.00us
+     75%    1.37ms
+     90%    3.35ms
+     99%    6.52ms
+  248573 requests in 20.06s, 37.46MB read
+Requests/sec:  12392.54
+Transfer/sec:      1.87MB
+
+
+===== echo-log-on-r1/warm-after-c8.txt =====
+Running 5s test @ http://127.0.0.1:18080/mock/fixed
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.06ms    1.62ms  35.40ms   88.05%
+    Req/Sec     3.38k   747.65     8.97k    71.14%
+  67596 requests in 5.10s, 10.19MB read
+Requests/sec:  13256.15
+Transfer/sec:      2.00MB
+
+
+===== echo-log-on-r1/warm-before-c8.txt =====
+Running 5s test @ http://127.0.0.1:18080/mock/fixed
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.42ms    2.29ms  26.36ms   89.27%
+    Req/Sec     2.88k     0.90k    6.30k    67.00%
+  57550 requests in 5.02s, 8.67MB read
+Requests/sec:  11455.82
+Transfer/sec:      1.73MB
+
+
+===== echo-log-on-r1/warm-pressure-c256.txt =====
+Running 5s test @ http://127.0.0.1:18080/mock/fixed
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    17.84ms   19.08ms 173.03ms   86.58%
+    Req/Sec     4.74k     1.19k    7.81k    69.35%
+  95022 requests in 5.09s, 14.32MB read
+Requests/sec:  18682.80
+Transfer/sec:      2.82MB
+
+
+===== echo-log-on-r1/warm-recovered-c8.txt =====
+Running 5s test @ http://127.0.0.1:18080/mock/fixed
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.41ms    2.24ms  29.81ms   89.14%
+    Req/Sec     2.84k   842.73     5.57k    67.00%
+  56781 requests in 5.02s, 8.56MB read
+Requests/sec:  11307.53
+Transfer/sec:      1.70MB
+
+
+===== echo-log-on-r1/cpu-after-c8-after.txt =====
+22180 (java) S 22163 18920 18920 0 -1 4194560 341372 416 0 0 46512 7777 0 0 20 0 89 0 350398 5570019328 309936 18446744073709551615 94516836175872 94516836176757 140735860545488 0 0 0 0 0 16800975 0 0 0 17 4 0 0 0 0 0 94516836187456 94516836188176 94517668995072 140735860548017 140735860548459 140735860548459 140735860551658 0
+
+
+===== echo-log-on-r1/cpu-after-c8-before.txt =====
+22180 (java) S 22163 18920 18920 0 -1 4194560 341247 416 0 0 40604 6627 0 0 20 0 89 0 350398 5570019328 311428 18446744073709551615 94516836175872 94516836176757 140735860545488 0 0 0 0 0 16800975 0 0 0 17 4 0 0 0 0 0 94516836187456 94516836188176 94517668995072 140735860548017 140735860548459 140735860548459 140735860551658 0
+
+
+===== echo-log-on-r1/cpu-before-c8-after.txt =====
+22180 (java) S 22163 18920 18920 0 -1 4194560 326690 416 0 0 18590 2497 0 0 20 0 65 0 350398 5543772160 301406 18446744073709551615 94516836175872 94516836176757 140735860545488 0 0 0 0 0 16800975 0 0 0 17 4 0 0 0 0 0 94516836187456 94516836188176 94517668995072 140735860548017 140735860548459 140735860548459 140735860551658 0
+
+
+===== echo-log-on-r1/cpu-before-c8-before.txt =====
+22180 (java) S 22163 18920 18920 0 -1 4194560 325857 416 0 0 13329 1436 0 0 20 0 65 0 350398 5543772160 300574 18446744073709551615 94516836175872 94516836176757 140735860545488 0 0 0 0 0 16800975 0 0 0 17 4 0 0 0 0 0 94516836187456 94516836188176 94517668995072 140735860548017 140735860548459 140735860548459 140735860551658 0
+
+
+===== echo-log-on-r1/cpu-pressure-c256-after.txt =====
+22180 (java) S 22163 18920 18920 0 -1 4194560 335669 416 0 0 39161 6303 0 0 20 0 89 0 350398 5568970752 305860 18446744073709551615 94516836175872 94516836176757 140735860545488 0 0 0 0 0 16800975 0 0 0 17 4 0 0 0 0 0 94516836187456 94516836188176 94517668995072 140735860548017 140735860548459 140735860548459 140735860551658 0
+
+
+===== echo-log-on-r1/cpu-pressure-c256-before.txt =====
+22180 (java) S 22163 18920 18920 0 -1 4194560 331967 416 0 0 20171 2757 0 0 20 0 88 0 350398 5567889408 305128 18446744073709551615 94516836175872 94516836176757 140735860545488 0 0 0 0 0 16800975 0 0 0 17 4 0 0 0 0 0 94516836187456 94516836188176 94517668995072 140735860548017 140735860548459 140735860548459 140735860551658 0
+
+
+===== echo-log-on-r1/cpu-recovered-c8-after.txt =====
+22180 (java) S 22163 18920 18920 0 -1 4194560 347528 416 0 0 54247 9194 0 0 20 0 89 0 350398 5570019328 312603 18446744073709551615 94516836175872 94516836176757 140735860545488 0 0 0 0 0 16800975 0 0 0 17 4 0 0 0 0 0 94516836187456 94516836188176 94517668995072 140735860548017 140735860548459 140735860548459 140735860551658 0
+
+
+===== echo-log-on-r1/cpu-recovered-c8-before.txt =====
+22180 (java) S 22163 18920 18920 0 -1 4194560 347455 416 0 0 48204 8039 0 0 20 0 89 0 350398 5570019328 312571 18446744073709551615 94516836175872 94516836176757 140735860545488 0 0 0 0 0 16800975 0 0 0 17 4 0 0 0 0 0 94516836187456 94516836188176 94517668995072 140735860548017 140735860548459 140735860548459 140735860551658 0
+
+
+===== echo-log-on-r1/heap-after-gc.txt =====
+22180:
+ garbage-first heap   total 1048576K, used 61022K [0x00000000c0000000, 0x0000000100000000)
+  region size 1024K, 2 young (2048K), 0 survivors (0K)
+ Metaspace       used 120732K, committed 121920K, reserved 1179648K
+  class space    used 15645K, committed 16256K, reserved 1048576K
+
+
+===== echo-log-on-r1/heap-before.txt =====
+22180:
+ garbage-first heap   total 1048576K, used 61646K [0x00000000c0000000, 0x0000000100000000)
+  region size 1024K, 2 young (2048K), 0 survivors (0K)
+ Metaspace       used 120385K, committed 121664K, reserved 1179648K
+  class space    used 15635K, committed 16256K, reserved 1048576K
+
+
+===== echo-log-on-r1/proc-after-c8.txt =====
+VmHWM:	 1245712 kB
+VmRSS:	 1240336 kB
+Threads:	89
+
+
+===== echo-log-on-r1/proc-before-c8.txt =====
+VmHWM:	 1213804 kB
+VmRSS:	 1206184 kB
+Threads:	65
+
+
+===== echo-log-on-r1/proc-pressure-c256.txt =====
+VmHWM:	 1224188 kB
+VmRSS:	 1224188 kB
+Threads:	89
+
+
+===== echo-log-on-r1/proc-recovered-c8.txt =====
+VmHWM:	 1259232 kB
+VmRSS:	 1251000 kB
+Threads:	89
+
+
+===== echo-log-on-r1/proc.txt =====
+VmHWM:	 1259232 kB
+VmRSS:	 1246600 kB
+Threads:	89
+
+
+===== echo-log-on-r1/setup-check.txt =====
+fixed={"ok":true,"name":"fixed"}|200
+tpl={"id":"7","path":"/tpl"}|200
+small=<ok/>|200
+large=<ok/>|200
+item1999={"item": 1999}|200
+
+
+===== echo-log-on-r1/startup.txt =====
+startupSec 10.43522310256958
+
+
+===== echo-log-on-r1/DONE =====
+done
+
+
+===== echo-log-on-r1/agents-after-c8.json =====
+[{"name":"log-agent","description":"Async batch log writer with match chain analysis","status":"RUNNING","queueSize":11032,"processedCount":103759,"droppedCount":2084929,"queueBytes":7842749,"queueCapacityBytes":10737418240,"inFlightBytes":0,"inFlightByteLimit":134217728,"waitingProducers":0,"backpressureActive":false}]
+
+===== echo-log-on-r1/agents-before-c8.json =====
+[{"name":"log-agent","description":"Async batch log writer with match chain analysis","status":"RUNNING","queueSize":19351,"processedCount":44159,"droppedCount":380939,"queueBytes":13737350,"queueCapacityBytes":10737418240,"inFlightBytes":0,"inFlightByteLimit":134217728,"waitingProducers":0,"backpressureActive":false}]
+
+===== echo-log-on-r1/agents-final-idle20s.json =====
+[{"name":"log-agent","description":"Async batch log writer with match chain analysis","status":"RUNNING","queueSize":0,"processedCount":146709,"droppedCount":2358323,"queueBytes":0,"queueCapacityBytes":10737418240,"inFlightBytes":0,"inFlightByteLimit":134217728,"waitingProducers":0,"backpressureActive":false}]
+
+===== echo-log-on-r1/agents-idle10s.json =====
+[{"name":"log-agent","description":"Async batch log writer with match chain analysis","status":"RUNNING","queueSize":2000,"processedCount":113509,"droppedCount":2085061,"queueBytes":1422021,"queueCapacityBytes":10737418240,"inFlightBytes":0,"inFlightByteLimit":134217728,"waitingProducers":0,"backpressureActive":false}]
+
+===== echo-log-on-r1/agents-initial.json =====
+[{"name":"log-agent","description":"Async batch log writer with match chain analysis","status":"RUNNING","queueSize":15330,"processedCount":21759,"droppedCount":132771,"queueBytes":11282659,"queueCapacityBytes":10737418240,"inFlightBytes":0,"inFlightByteLimit":134217728,"waitingProducers":0,"backpressureActive":false}]
+
+===== echo-log-on-r1/agents-pressure-c256.json =====
+[{"name":"log-agent","description":"Async batch log writer with match chain analysis","status":"RUNNING","queueSize":28684,"processedCount":81059,"droppedCount":1769091,"queueBytes":15759795,"queueCapacityBytes":10737418240,"inFlightBytes":9382444,"inFlightByteLimit":134217728,"waitingProducers":0,"backpressureActive":false}]
+
+===== echo-log-on-r1/agents-recovered-c8.json =====
+[{"name":"log-agent","description":"Async batch log writer with match chain analysis","status":"RUNNING","queueSize":14109,"processedCount":136059,"droppedCount":2355164,"queueBytes":10030127,"queueCapacityBytes":10737418240,"inFlightBytes":0,"inFlightByteLimit":134217728,"waitingProducers":0,"backpressureActive":false}]
+
+===== echo-log-on-r1/memory-timeline.txt =====
+2026-10-15T13:35:43Z
+VmHWM:	 1195012 kB
+VmRSS:	 1195012 kB
+Threads:	65
+2026-10-15T13:35:45Z
+VmHWM:	 1214372 kB
+VmRSS:	 1214372 kB
+Threads:	65
+2026-10-15T13:35:47Z
+VmHWM:	 1213804 kB
+VmRSS:	 1202864 kB
+Threads:	65
+2026-10-15T13:35:49Z
+VmHWM:	 1213804 kB
+VmRSS:	 1203000 kB
+Threads:	65
+2026-10-15T13:35:51Z
+VmHWM:	 1213804 kB
+VmRSS:	 1203148 kB
+Threads:	65
+2026-10-15T13:35:53Z
+VmHWM:	 1213804 kB
+VmRSS:	 1204924 kB
+Threads:	65
+2026-10-15T13:35:55Z
+VmHWM:	 1213804 kB
+VmRSS:	 1205384 kB
+Threads:	65
+2026-10-15T13:35:57Z
+VmHWM:	 1213804 kB
+VmRSS:	 1205460 kB
+Threads:	65
+2026-10-15T13:35:59Z
+VmHWM:	 1213804 kB
+VmRSS:	 1205792 kB
+Threads:	65
+2026-10-15T13:36:01Z
+VmHWM:	 1213804 kB
+VmRSS:	 1205984 kB
+Threads:	65
+2026-10-15T13:36:03Z
+VmHWM:	 1213804 kB
+VmRSS:	 1206036 kB
+Threads:	65
+2026-10-15T13:36:05Z
+VmHWM:	 1213804 kB
+VmRSS:	 1206136 kB
+Threads:	65
+2026-10-15T13:36:07Z
+VmHWM:	 1213804 kB
+VmRSS:	 1206172 kB
+Threads:	65
+2026-10-15T13:36:09Z
+VmHWM:	 1213804 kB
+VmRSS:	 1207520 kB
+Threads:	88
+2026-10-15T13:36:11Z
+VmHWM:	 1218388 kB
+VmRSS:	 1218388 kB
+Threads:	87
+2026-10-15T13:36:13Z
+VmHWM:	 1218484 kB
+VmRSS:	 1218484 kB
+Threads:	88
+2026-10-15T13:36:15Z
+VmHWM:	 1221540 kB
+VmRSS:	 1221540 kB
+Threads:	88
+2026-10-15T13:36:17Z
+VmHWM:	 1221588 kB
+VmRSS:	 1221588 kB
+Threads:	87
+2026-10-15T13:36:19Z
+VmHWM:	 1222192 kB
+VmRSS:	 1222192 kB
+Threads:	87
+2026-10-15T13:36:21Z
+VmHWM:	 1221408 kB
+VmRSS:	 1215648 kB
+Threads:	87
+2026-10-15T13:36:23Z
+VmHWM:	 1221408 kB
+VmRSS:	 1216332 kB
+Threads:	87
+2026-10-15T13:36:25Z
+VmHWM:	 1221408 kB
+VmRSS:	 1216396 kB
+Threads:	87
+2026-10-15T13:36:27Z
+VmHWM:	 1221408 kB
+VmRSS:	 1216468 kB
+Threads:	87
+2026-10-15T13:36:30Z
+VmHWM:	 1221408 kB
+VmRSS:	 1216580 kB
+Threads:	87
+2026-10-15T13:36:32Z
+VmHWM:	 1221408 kB
+VmRSS:	 1216636 kB
+Threads:	87
+2026-10-15T13:36:34Z
+VmHWM:	 1221408 kB
+VmRSS:	 1216704 kB
+Threads:	87
+2026-10-15T13:36:36Z
+VmHWM:	 1221408 kB
+VmRSS:	 1216760 kB
+Threads:	87
+2026-10-15T13:36:38Z
+VmHWM:	 1221408 kB
+VmRSS:	 1216824 kB
+Threads:	87
+2026-10-15T13:36:40Z
+VmHWM:	 1221408 kB
+VmRSS:	 1216920 kB
+Threads:	87
+2026-10-15T13:36:42Z
+VmHWM:	 1221408 kB
+VmRSS:	 1216984 kB
+Threads:	87
+2026-10-15T13:36:44Z
+VmHWM:	 1221408 kB
+VmRSS:	 1217112 kB
+Threads:	88
+2026-10-15T13:36:46Z
+VmHWM:	 1221408 kB
+VmRSS:	 1218864 kB
+Threads:	88
+2026-10-15T13:36:48Z
+VmHWM:	 1221892 kB
+VmRSS:	 1221892 kB
+Threads:	88
+2026-10-15T13:36:50Z
+VmHWM:	 1221980 kB
+VmRSS:	 1221980 kB
+Threads:	88
+2026-10-15T13:36:52Z
+VmHWM:	 1223496 kB
+VmRSS:	 1223496 kB
+Threads:	88
+2026-10-15T13:36:54Z
+VmHWM:	 1223580 kB
+VmRSS:	 1223580 kB
+Threads:	88
+2026-10-15T13:36:56Z
+VmHWM:	 1223644 kB
+VmRSS:	 1223644 kB
+Threads:	88
+2026-10-15T13:36:58Z
+VmHWM:	 1223712 kB
+VmRSS:	 1223712 kB
+Threads:	88
+2026-10-15T13:37:00Z
+VmHWM:	 1223780 kB
+VmRSS:	 1223780 kB
+Threads:	88
+2026-10-15T13:37:02Z
+VmHWM:	 1223864 kB
+VmRSS:	 1223864 kB
+Threads:	88
+2026-10-15T13:37:04Z
+VmHWM:	 1223912 kB
+VmRSS:	 1223912 kB
+Threads:	88
+2026-10-15T13:37:06Z
+VmHWM:	 1223956 kB
+VmRSS:	 1223956 kB
+Threads:	88
+2026-10-15T13:37:08Z
+VmHWM:	 1224028 kB
+VmRSS:	 1224028 kB
+Threads:	88
+2026-10-15T13:37:10Z
+VmHWM:	 1224068 kB
+VmRSS:	 1224068 kB
+Threads:	88
+2026-10-15T13:37:12Z
+VmHWM:	 1224116 kB
+VmRSS:	 1224116 kB
+Threads:	88
+2026-10-15T13:37:14Z
+VmHWM:	 1226732 kB
+VmRSS:	 1226732 kB
+Threads:	89
+2026-10-15T13:37:16Z
+VmHWM:	 1246456 kB
+VmRSS:	 1246456 kB
+Threads:	89
+2026-10-15T13:37:18Z
+VmHWM:	 1246484 kB
+VmRSS:	 1246484 kB
+Threads:	89
+2026-10-15T13:37:20Z
+VmHWM:	 1246488 kB
+VmRSS:	 1246488 kB
+Threads:	89
+2026-10-15T13:37:22Z
+VmHWM:	 1245712 kB
+VmRSS:	 1239864 kB
+Threads:	89
+2026-10-15T13:37:24Z
+VmHWM:	 1245712 kB
+VmRSS:	 1239880 kB
+Threads:	89
+2026-10-15T13:37:26Z
+VmHWM:	 1245712 kB
+VmRSS:	 1239900 kB
+Threads:	89
+2026-10-15T13:37:28Z
+VmHWM:	 1245712 kB
+VmRSS:	 1240004 kB
+Threads:	89
+2026-10-15T13:37:30Z
+VmHWM:	 1245712 kB
+VmRSS:	 1240256 kB
+Threads:	89
+2026-10-15T13:37:32Z
+VmHWM:	 1245712 kB
+VmRSS:	 1240276 kB
+Threads:	89
+2026-10-15T13:37:34Z
+VmHWM:	 1245712 kB
+VmRSS:	 1240316 kB
+Threads:	89
+2026-10-15T13:37:36Z
+VmHWM:	 1245712 kB
+VmRSS:	 1240324 kB
+Threads:	89
+2026-10-15T13:37:39Z
+VmHWM:	 1245712 kB
+VmRSS:	 1240332 kB
+Threads:	89
+2026-10-15T13:37:41Z
+VmHWM:	 1245712 kB
+VmRSS:	 1240496 kB
+Threads:	89
+2026-10-15T13:37:43Z
+VmHWM:	 1245712 kB
+VmRSS:	 1240500 kB
+Threads:	89
+2026-10-15T13:37:45Z
+VmHWM:	 1245712 kB
+VmRSS:	 1240524 kB
+Threads:	89
+2026-10-15T13:37:47Z
+VmHWM:	 1245712 kB
+VmRSS:	 1240556 kB
+Threads:	89
+2026-10-15T13:37:49Z
+VmHWM:	 1245712 kB
+VmRSS:	 1240572 kB
+Threads:	89
+2026-10-15T13:37:51Z
+VmHWM:	 1259884 kB
+VmRSS:	 1259884 kB
+Threads:	90
+2026-10-15T13:37:53Z
+VmHWM:	 1259232 kB
+VmRSS:	 1250708 kB
+Threads:	89
+2026-10-15T13:37:55Z
+VmHWM:	 1259232 kB
+VmRSS:	 1250716 kB
+Threads:	89
+2026-10-15T13:37:57Z
+VmHWM:	 1259232 kB
+VmRSS:	 1250776 kB
+Threads:	89
+2026-10-15T13:37:59Z
+VmHWM:	 1259232 kB
+VmRSS:	 1250788 kB
+Threads:	89
+2026-10-15T13:38:01Z
+VmHWM:	 1259232 kB
+VmRSS:	 1250820 kB
+Threads:	89
+2026-10-15T13:38:03Z
+VmHWM:	 1259232 kB
+VmRSS:	 1250824 kB
+Threads:	89
+2026-10-15T13:38:05Z
+VmHWM:	 1259232 kB
+VmRSS:	 1250856 kB
+Threads:	89
+2026-10-15T13:38:07Z
+VmHWM:	 1259232 kB
+VmRSS:	 1250880 kB
+Threads:	89
+2026-10-15T13:38:09Z
+VmHWM:	 1259232 kB
+VmRSS:	 1250900 kB
+Threads:	89
+2026-10-15T13:38:11Z
+VmHWM:	 1259232 kB
+VmRSS:	 1250944 kB
+Threads:	89
+2026-10-15T13:38:13Z
+VmHWM:	 1259232 kB
+VmRSS:	 1250976 kB
+Threads:	89
+2026-10-15T13:38:15Z
+VmHWM:	 1259232 kB
+VmRSS:	 1251028 kB
+Threads:	89
+2026-10-15T13:38:17Z
+VmHWM:	 1259232 kB
+VmRSS:	 1251048 kB
+Threads:	89
+2026-10-15T13:38:19Z
+VmHWM:	 1259232 kB
+VmRSS:	 1251060 kB
+Threads:	89
+2026-10-15T13:38:21Z
+VmHWM:	 1259232 kB
+VmRSS:	 1251068 kB
+Threads:	89
+2026-10-15T13:38:23Z
+VmHWM:	 1259232 kB
+VmRSS:	 1251108 kB
+Threads:	89
+2026-10-15T13:38:25Z
+VmHWM:	 1259232 kB
+VmRSS:	 1251120 kB
+Threads:	89
+2026-10-15T13:38:27Z
+VmHWM:	 1259232 kB
+VmRSS:	 1251128 kB
+Threads:	89
+2026-10-15T13:38:29Z
+VmHWM:	 1259232 kB
+VmRSS:	 1251128 kB
+Threads:	89
+2026-10-15T13:38:31Z
+VmHWM:	 1259232 kB
+VmRSS:	 1251128 kB
+Threads:	89
+2026-10-15T13:38:33Z
+VmHWM:	 1259232 kB
+VmRSS:	 1251128 kB
+Threads:	89
+2026-10-15T13:38:35Z
+VmHWM:	 1259232 kB
+VmRSS:	 1251132 kB
+Threads:	89
+2026-10-15T13:38:37Z
+VmHWM:	 1259232 kB
+VmRSS:	 1251136 kB
+Threads:	89
+2026-10-15T13:38:39Z
+VmHWM:	 1259232 kB
+VmRSS:	 1246600 kB
+Threads:	89
+
+
+===== log retention / handoff warnings =====
+2026-10-15 13:35:23.409  WARN [sistence-worker] com.echo.agent.LogAgent                  : Request logs arrive faster than they can be saved; skipped 1779 older entries that the 10000-record limit would delete anyway
+2026-10-15 13:35:54.408  WARN [sistence-worker] com.echo.agent.LogAgent                  : Request logs arrive faster than they can be saved; skipped 256111 older entries that the 10000-record limit would delete anyway
+2026-10-15 13:36:13.349  WARN [ XNIO-1 task-27] com.echo.agent.RequestLogHandoff         : Request logging dropped 1 entries (the oldest first when writing falls behind; buffer limit 20000 entries / 64 MB). Mock responses were not delayed
+2026-10-15 13:36:24.455  WARN [sistence-worker] com.echo.agent.LogAgent                  : Request logs arrive faster than they can be saved; skipped 401092 older entries that the 10000-record limit would delete anyway
+2026-10-15 13:36:43.384  WARN [est-log-handoff] com.echo.agent.RequestLogHandoff         : Request logging dropped 91706 entries (the oldest first when writing falls behind; buffer limit 20000 entries / 64 MB). Mock responses were not delayed
+2026-10-15 13:36:55.404  WARN [sistence-worker] com.echo.agent.LogAgent                  : Request logs arrive faster than they can be saved; skipped 553550 older entries that the 10000-record limit would delete anyway
+2026-10-15 13:37:13.389  WARN [est-log-handoff] com.echo.agent.RequestLogHandoff         : Request logging dropped 94152 entries (the oldest first when writing falls behind; buffer limit 20000 entries / 64 MB). Mock responses were not delayed
+2026-10-15 13:37:26.120  WARN [sistence-worker] com.echo.agent.LogAgent                  : Request logs arrive faster than they can be saved; skipped 531110 older entries that the 10000-record limit would delete anyway
+2026-10-15 13:37:56.842  WARN [sistence-worker] com.echo.agent.LogAgent                  : Request logs arrive faster than they can be saved; skipped 225708 older entries that the 10000-record limit would delete anyway
+2026-10-15 13:38:27.717  WARN [sistence-worker] com.echo.agent.LogAgent                  : Request logs arrive faster than they can be saved; skipped 203114 older entries that the 10000-record limit would delete anyway
+2026-10-15 13:38:40.080  INFO [ionShutdownHook] com.echo.agent.AbstractBatchAgent        : Agent log-agent stopped. processed=146709, dropped=2172464
