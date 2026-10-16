@@ -704,7 +704,17 @@
     "factStatus": "狀態 {status}",
     "factDisabled": "已停用",
     "dayToday": "今天 · {date}",
-    "dayYesterday": "昨天 · {date}"
+    "dayYesterday": "昨天 · {date}",
+    "historyTitle": "這個項目的記錄",
+    "showAllHistory": "查看全部 {count} 筆",
+    "currentEntry": "（目前檢視）",
+    "historyLoadFailed": "無法載入這個項目的記錄。",
+    "diffChangedOnly": "只顯示有變的行",
+    "diffShowAll": "顯示全文",
+    "copyAfter": "複製變更後內容",
+    "lineAdded": "新增",
+    "lineRemoved": "刪除",
+    "filterThisItem": "只看這個項目"
   },
   "monitoring": {
     "gc": {
@@ -1769,7 +1779,8 @@
     "operator": "操作者：",
     "search": "搜尋：",
     "type": "類型：",
-    "role": "角色："
+    "role": "角色：",
+    "target": "項目："
   },
   "ssePreview": {
     "delay": "—— 延遲 {ms} ms ——",

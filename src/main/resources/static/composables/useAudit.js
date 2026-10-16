@@ -24,7 +24,10 @@ const useAudit = (deps) => {
     // --- 狀態 ---
     const auditLogs = ref([]);
     const selectedAudit = ref(null);
-    const auditFilter = ref({ action: '', operator: '', keyword: '', type: '' });
+    const auditFilter = ref({ action: '', operator: '', keyword: '', type: '', ruleId: '' });
+    // 單一規則／回應的最近記錄（詳細面板下方的時間軸），以 ruleId 為鍵。
+    const targetHistory = ref({});
+    const TARGET_HISTORY_SIZE = 8;
     const savedAuditSort = JSON.parse(localStorage.getItem('auditSort') || 'null');
     const auditSort = ref(savedAuditSort || { field: 'timestamp', asc: false });
     const auditPage = ref(1);
@@ -87,6 +90,7 @@ const useAudit = (deps) => {
         if (operator) { params.set('operator', operator); }
         if (keyword) { params.set('keyword', keyword); }
         if (auditFilter.value.type) { params.set('type', auditFilter.value.type); }
+        if (auditFilter.value.ruleId) { params.set('ruleId', auditFilter.value.ruleId); }
         return '/api/admin/audit?' + params.toString();
     };
 
@@ -112,6 +116,7 @@ const useAudit = (deps) => {
                 const data = await r.json();
                 if (requestId !== listRequestSequence) { return false; }
                 auditLogs.value = hydrateCachedDetails(data.results || []);
+                targetHistory.value = {};
                 auditTotalElements.value = Number(data.totalElements || 0);
                 auditToday.value = typeof data.today === 'string' ? data.today : '';
                 serverTotalPages.value = Number(data.totalPages || 0);
@@ -149,6 +154,28 @@ const useAudit = (deps) => {
         localStorage.setItem('auditPageSize', auditPageSize.value);
         reloadAuditFromFirstPage();
     });
+
+    /** 載入某個規則／回應最近的修訂記錄；同一次列表載入內只抓一次。 */
+    const loadTargetHistory = async (ruleId) => {
+        if (!ruleId || targetHistory.value[ruleId]) { return; }
+        targetHistory.value = { ...targetHistory.value, [ruleId]: { loading: true, items: [], total: 0, failed: false } };
+        const params = new URLSearchParams({ page: '0', size: String(TARGET_HISTORY_SIZE), sort: 'timestamp', direction: 'desc', ruleId });
+        let entry = { loading: false, items: [], total: 0, failed: true };
+        try {
+            const r = await apiCall('/api/admin/audit?' + params.toString(), {}, { silent: true });
+            if (r && r.ok) {
+                const data = await r.json();
+                entry = { loading: false, items: data.results || [], total: Number(data.totalElements || 0), failed: false };
+            }
+        } finally {
+            targetHistory.value = { ...targetHistory.value, [ruleId]: entry };
+        }
+    };
+
+    /** 只看某一個規則或回應的全部修訂記錄。 */
+    const filterAuditTarget = (ruleId) => {
+        auditFilter.value = { action: '', operator: '', keyword: '', type: '', ruleId: ruleId || '' };
+    };
 
     const toggleAuditDetail = async (log) => {
         if (selectedAudit.value === log.id) {
@@ -228,12 +255,21 @@ const useAudit = (deps) => {
             if (log.action === 'UPDATE' && before && after) {
                 const changes = [];
                 const allKeys = new Set([...Object.keys(before), ...Object.keys(after)]);
+                const isEmpty = (v) => v === null || v === undefined || v === '';
                 for (const key of allKeys) {
                     if (AUDIT_HIDDEN_FIELDS.has(key)) { continue; }
                     const bv = before[key], av = after[key];
+                    if (isEmpty(bv) && isEmpty(av)) { continue; }
                     if (JSON.stringify(bv) !== JSON.stringify(av)) {
+                        if (key === 'tags') {
+                            const bt = tagPairs(bv) || [], at = tagPairs(av) || [];
+                            changes.push({ label: fieldLabel(key), kind: 'tags', added: at.filter(x => !bt.includes(x)), removed: bt.filter(x => !at.includes(x)) });
+                            continue;
+                        }
                         const b = formatFieldValue(key, bv), a = formatFieldValue(key, av);
-                        changes.push({ label: fieldLabel(key), before: b, after: a, long: isLong(b) || isLong(a) });
+                        // beforeText/afterText 是逐行比對用的原文；沒有值時為空字串，不是「(空)」。
+                        changes.push({ label: fieldLabel(key), before: b, after: a, long: isLong(b) || isLong(a),
+                            beforeText: isEmpty(bv) ? '' : b, afterText: isEmpty(av) ? '' : a });
                     }
                 }
                 return { type: 'update', changes };
@@ -372,6 +408,12 @@ const useAudit = (deps) => {
         }
         if (auditFilter.value.operator) chips.push({ key: 'operator', label: t('filterChips.operator') + auditFilter.value.operator });
         if (auditFilter.value.keyword) chips.push({ key: 'keyword', label: t('filterChips.keyword') + auditFilter.value.keyword });
+        if (auditFilter.value.ruleId) {
+            const id = auditFilter.value.ruleId;
+            const named = auditLogs.value.find(log => log.ruleId === id && log.targetName);
+            const fallback = id.startsWith('response-') ? t('audit.typeResponse') + ' #' + id.replace('response-', '') : shortId(id);
+            chips.push({ key: 'ruleId', label: t('filterChips.target') + (named ? named.targetName : fallback) });
+        }
         if (auditFilter.value.type) {
             const typeLabel = auditFilter.value.type === 'RESPONSE' ? t('audit.typeResponse') : t('audit.typeRule');
             chips.push({ key: 'type', label: t('filterChips.type') + typeLabel });
@@ -381,7 +423,7 @@ const useAudit = (deps) => {
 
     const removeAuditChip = (key) => { auditFilter.value[key] = ''; };
 
-    const clearAuditFilters = () => { auditFilter.value = { action: '', operator: '', keyword: '', type: '' }; };
+    const clearAuditFilters = () => { auditFilter.value = { action: '', operator: '', keyword: '', type: '', ruleId: '' }; };
 
     return {
         auditLogs,
@@ -414,6 +456,9 @@ const useAudit = (deps) => {
         getAuditProtocol,
         getAuditChangeCount,
         describeAuditRow,
+        targetHistory,
+        loadTargetHistory,
+        filterAuditTarget,
         escapeHtml,
         auditFilterChips,
         removeAuditChip,

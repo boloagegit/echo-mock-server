@@ -48,6 +48,7 @@ public class AuditController {
             @RequestParam(required = false) String operator,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String type,
+            @RequestParam(required = false) String ruleId,
             @RequestParam(defaultValue = "0") Integer page,
             @RequestParam(defaultValue = "20") Integer size,
             @RequestParam(required = false, name = "sort") String sortField,
@@ -57,6 +58,7 @@ public class AuditController {
                 .operator(operator)
                 .keyword(keyword)
                 .targetType(type)
+                .ruleId(ruleId)
                 .page(page)
                 .size(size)
                 .sortField(sortField)

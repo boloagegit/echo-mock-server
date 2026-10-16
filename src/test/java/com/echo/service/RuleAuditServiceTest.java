@@ -124,7 +124,7 @@ class RuleAuditServiceTest {
         Object[] row = new Object[]{1L, "uuid-1", RuleAuditLog.Action.UPDATE,
                 "admin", timestamp, true, true, "HTTP", "/users/1", "取得使用者",
                 "{\"method\":\"GET\",\"changeCount\":1,\"changes\":[{\"f\":\"priority\",\"b\":\"0\",\"a\":\"5\"}]}"};
-        when(repository.findSummaryPage(eq(RuleAuditLog.Action.UPDATE), eq("admin"), eq("uuid"), eq("RULE"), any()))
+        when(repository.findSummaryPage(eq(RuleAuditLog.Action.UPDATE), eq("admin"), eq("uuid"), eq("RULE"), isNull(), any()))
                 .thenReturn(new PageImpl<>(Collections.singletonList(row)));
 
         RuleAuditService.AuditQueryResult result = service.queryAuditSummary(
@@ -156,7 +156,7 @@ class RuleAuditServiceTest {
     void queryAuditSummary_shouldFillMissingSummaryOneRowAtATime() {
         Object[] row = new Object[]{7L, "uuid-7", RuleAuditLog.Action.UPDATE,
                 "admin", LocalDateTime.now(), true, true, null, null, null, null};
-        when(repository.findSummaryPage(isNull(), isNull(), isNull(), isNull(), any()))
+        when(repository.findSummaryPage(isNull(), isNull(), isNull(), isNull(), isNull(), any()))
                 .thenReturn(new PageImpl<>(Collections.singletonList(row)));
         when(repository.findById(7L)).thenReturn(Optional.of(RuleAuditLog.builder()
                 .id(7L).ruleId("uuid-7").action(RuleAuditLog.Action.UPDATE)

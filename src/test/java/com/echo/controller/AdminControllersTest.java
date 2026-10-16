@@ -621,12 +621,12 @@ class AdminControllersTest {
                 .results(List.of()).page(0).size(20).totalElements(0).totalPages(0).build();
         when(ruleAuditService.queryAuditSummary(any())).thenReturn(result);
 
-        var response = audit.queryAuditLogs("UPDATE", "admin", "uuid", "RESPONSE", 0, 20,
+        var response = audit.queryAuditLogs("UPDATE", "admin", "uuid", "RESPONSE", "response-3", 0, 20,
                 "timestamp", "desc");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isSameAs(result);
-        verify(ruleAuditService).queryAuditSummary(argThat(filter -> "RESPONSE".equals(filter.getTargetType())));
+        verify(ruleAuditService).queryAuditSummary(argThat(filter -> "RESPONSE".equals(filter.getTargetType()) && "response-3".equals(filter.getRuleId())));
     }
 
     @Test

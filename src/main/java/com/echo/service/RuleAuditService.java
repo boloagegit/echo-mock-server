@@ -253,7 +253,7 @@ public class RuleAuditService {
         Page<Object[]> resultPage = repository.findSummaryPage(
                 filter.getAction(), normalizeFilter(filter.getOperator()),
                 normalizeFilter(filter.getKeyword()), normalizeTargetType(filter.getTargetType()),
-                PageRequest.of(pageNumber, pageSize, sort));
+                normalizeFilter(filter.getRuleId()), PageRequest.of(pageNumber, pageSize, sort));
 
         return AuditQueryResult.builder()
                 .results(resultPage.getContent().stream().map(this::mapAuditSummaryRow).toList())
@@ -403,6 +403,7 @@ public class RuleAuditService {
         private String operator;
         private String keyword;
         private String targetType;
+        private String ruleId;
         private Integer page;
         private Integer size;
         private String sortField;

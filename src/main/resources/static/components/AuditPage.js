@@ -24,15 +24,27 @@ const AuditPage = {
     getAuditTarget: Function,
     getAuditProtocol: Function,
     describeAuditRow: Function,
-    auditToday: String
+    auditToday: String,
+    targetHistory: Object
   },
   emits: [
     'load-audit', 'update:selectedAudit', 'update:auditFilter',
     'update:auditPage', 'update:auditPageSize',
     'toggle-audit-sort', 'delete-all-audit',
     'remove-audit-chip', 'clear-audit-filters',
-    'go-to-rule', 'go-to-response', 'toggle-audit-detail', 'clip-copy'
+    'go-to-rule', 'go-to-response', 'toggle-audit-detail', 'clip-copy',
+    'load-target-history', 'filter-audit-target'
   ],
+  data() {
+    return { fullDiff: {} };
+  },
+  watch: {
+    // 打開某筆記錄時，順便載入同一個規則／回應的最近記錄。
+    'shownLog.ruleId': {
+      immediate: true,
+      handler(ruleId) { if (ruleId) this.$emit('load-target-history', ruleId); }
+    }
+  },
   inject: ['t'],
   components: {
     // 一列修訂記錄「改了什麼」的精簡列表；寬螢幕放在自己的欄位，窄螢幕放在名稱下方。
@@ -78,13 +90,17 @@ const AuditPage = {
       return this.held.value;
     },
     hasAuditFilters() {
-      return Boolean(this.auditFilter.action || this.auditFilter.operator || this.auditFilter.keyword || this.auditFilter.type);
+      return Boolean(this.auditFilter.action || this.auditFilter.operator || this.auditFilter.keyword || this.auditFilter.type || this.auditFilter.ruleId);
     },
     selectedIndex() {
       return this.pagedAudit.findIndex(log => log.id === this.selectedAudit);
     },
     selectedLog() {
       return this.selectedIndex >= 0 ? this.pagedAudit[this.selectedIndex] : null;
+    },
+    shownHistory() {
+      const id = this.shownLog?.ruleId;
+      return id ? (this.targetHistory?.[id] || null) : null;
     },
     groupedByDay() {
       return this.auditSort.field === 'timestamp';
@@ -128,6 +144,25 @@ const AuditPage = {
       if (key === today) return this.t('audit.dayToday', {date: key});
       if (key === prev) return this.t('audit.dayYesterday', {date: key});
       return key;
+    },
+    /** 長內容的逐行比對；同一筆記錄同一欄位只算一次。 */
+    diffOf(log, change) {
+      const full = !!this.fullDiff[log.id + ':' + change.label];
+      const key = log.id + ':' + change.label + ':' + (full ? 'full' : 'changed');
+      this._diffCache = this._diffCache || new Map();
+      if (!this._diffCache.has(key)) {
+        if (this._diffCache.size > 50) this._diffCache.clear();
+        this._diffCache.set(key, AuditDiff.lines(change.beforeText ?? '', change.afterText ?? '', { context: full ? Infinity : 3 }));
+      }
+      return this._diffCache.get(key);
+    },
+    toggleFullDiff(log, change) {
+      const key = log.id + ':' + change.label;
+      this.fullDiff = { ...this.fullDiff, [key]: !this.fullDiff[key] };
+    },
+    historyEntryLabel(entry) {
+      const count = entry.summary?.changeCount;
+      return this.auditActionLabel(entry.action) + (entry.action === 'UPDATE' && count ? ' · ' + this.t('audit.fieldCount', {count}) : '');
     },
     rowTime(log) {
       return this.groupedByDay ? String(log.timestamp || '').substring(11, 16) : fmtTime(log.timestamp);
@@ -315,19 +350,46 @@ const AuditPage = {
           <span class="detail-mono">{{fmtTime(shownLog.timestamp, false)}}</span>
           <span class="cell-subtle">{{shownLog.operator}}</span>
         </template>
-        <template v-if="shownLog && shownLog.action!=='DELETE'" #actions>
-          <ui-button variant="secondary" size="compact" @click="openTarget(shownLog)"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>{{isResponse(shownLog) ? t('audit.openResponse') : t('audit.openRule')}}</ui-button>
+        <template v-if="shownLog" #actions>
+          <ui-button v-if="shownLog.action!=='DELETE'" variant="secondary" size="compact" @click="openTarget(shownLog)"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>{{isResponse(shownLog) ? t('audit.openResponse') : t('audit.openRule')}}</ui-button>
+          <ui-button v-if="auditFilter.ruleId !== shownLog.ruleId" variant="secondary" size="compact" @click="$emit('filter-audit-target', shownLog.ruleId)"><i class="bi bi-funnel" aria-hidden="true"></i>{{t('audit.filterThisItem')}}</ui-button>
         </template>
         <ui-detail-section v-if="shownLog" id="audit.changes" class="audit-changes" :title="t('audit.changesTitle')" :summary="getAuditChangeCount(shownLog) ? String(getAuditChangeCount(shownLog)) : ''">
                   <template v-for="detail in [getAuditChanges(shownLog)]" :key="shownLog.id">
                   <template v-if="detail.type==='update'">
                     <div v-if="detail.changes.length" class="ac-list">
                       <template v-for="c in detail.changes" :key="c.label">
-                        <div v-if="!c.long" class="ac-row">
+                        <div v-if="c.kind==='tags'" class="ac-row">
                           <span class="ac-label">{{c.label}}</span>
-                          <span class="ac-val ac-before" :class="{'ac-empty':c.before==='(空)'}">{{c.before}}</span>
-                          <i class="bi bi-arrow-right ac-arrow"></i>
-                          <span class="ac-val ac-after" :class="{'ac-empty':c.after==='(空)'}">{{c.after}}</span>
+                          <span class="ac-tags">
+                            <span v-for="tag in c.added" :key="'+'+tag" class="ac-val ac-after">+ {{tag}}</span>
+                            <span v-for="tag in c.removed" :key="'-'+tag" class="ac-val ac-before">− {{tag}}</span>
+                          </span>
+                        </div>
+                        <div v-else-if="!c.long" class="ac-row">
+                          <span class="ac-label">{{c.label}}</span>
+                          <span class="ac-val ac-before" :class="{'ac-empty':c.beforeText===''}">{{c.before}}</span>
+                          <i class="bi bi-arrow-right ac-arrow" aria-hidden="true"></i><span class="visually-hidden">{{t('audit.changedTo')}}</span>
+                          <span class="ac-val ac-after" :class="{'ac-empty':c.afterText===''}">{{c.after}}</span>
+                        </div>
+                        <div v-else-if="!diffOf(shownLog, c).tooLarge" class="ac-block ac-diff">
+                          <div class="ac-block-label ac-diff__head">
+                            <span>{{c.label}}</span>
+                            <span class="ac-diff__count">{{t('audit.lineDelta', {add: diffOf(shownLog, c).added, del: diffOf(shownLog, c).removed})}}</span>
+                            <ui-button variant="quiet" size="compact" class="ac-diff__toggle" :aria-pressed="!!fullDiff[shownLog.id + ':' + c.label]" @click="toggleFullDiff(shownLog, c)">{{fullDiff[shownLog.id + ':' + c.label] ? t('audit.diffChangedOnly') : t('audit.diffShowAll')}}</ui-button>
+                            <ui-button variant="quiet" size="compact" :aria-label="t('audit.copyAfter')" :title="t('audit.copyAfter')" @click="$emit('clip-copy', c.afterText)"><i class="bi bi-clipboard" aria-hidden="true"></i></ui-button>
+                          </div>
+                          <div class="ac-diff__body" role="table" :aria-label="c.label">
+                            <template v-for="(hunk, hi) in diffOf(shownLog, c).hunks" :key="hi">
+                              <div v-if="hi > 0" class="ac-diff__gap" aria-hidden="true">⋯</div>
+                              <div v-for="(line, li) in hunk.lines" :key="hi + '-' + li" class="ac-diff__line" :class="{'is-add': line.type==='+', 'is-del': line.type==='-'}" role="row">
+                                <span class="ac-diff__no" role="cell">{{line.oldNo ?? ''}}</span>
+                                <span class="ac-diff__no" role="cell">{{line.newNo ?? ''}}</span>
+                                <span class="ac-diff__sign" role="cell">{{line.type === ' ' ? '' : (line.type === '+' ? '+' : '−')}}<span class="visually-hidden">{{line.type==='+' ? t('audit.lineAdded') : line.type==='-' ? t('audit.lineRemoved') : ''}}</span></span>
+                                <span class="ac-diff__text" role="cell">{{line.text}}</span>
+                              </div>
+                            </template>
+                          </div>
                         </div>
                         <div v-else class="ac-block">
                           <div class="ac-block-label">{{c.label}}</div>
@@ -365,6 +427,20 @@ const AuditPage = {
                   </template>
                   <div v-else class="audit-no-change">{{t('audit.noChangeData')}}</div>
                   </template>
+        </ui-detail-section>
+        <ui-detail-section v-if="shownLog" id="audit.history" class="audit-history" :title="t('audit.historyTitle')"
+          :summary="shownHistory && shownHistory.total ? String(shownHistory.total) : ''">
+          <div v-if="!shownHistory || shownHistory.loading" class="audit-no-change">{{t('common.loading')}}</div>
+          <div v-else-if="shownHistory.failed" class="audit-no-change">{{t('audit.historyLoadFailed')}}</div>
+          <ol v-else class="audit-history__list">
+            <li v-for="entry in shownHistory.items" :key="entry.id" class="audit-history__item" :class="{'is-current': entry.id === shownLog.id}" :aria-current="entry.id === shownLog.id ? 'true' : null">
+              <span class="audit-history__dot" aria-hidden="true"></span>
+              <span class="audit-history__what">{{historyEntryLabel(entry)}}<span v-if="entry.id === shownLog.id" class="audit-history__current">{{t('audit.currentEntry')}}</span></span>
+              <span class="audit-history__when cell-subtle"><span class="detail-mono">{{fmtTime(entry.timestamp)}}</span> · {{entry.operator}}</span>
+            </li>
+          </ol>
+          <ui-button v-if="shownHistory && shownHistory.total > shownHistory.items.length && auditFilter.ruleId !== shownLog.ruleId" variant="ghost" size="compact" class="audit-history__more"
+            @click="$emit('filter-audit-target', shownLog.ruleId)">{{t('audit.showAllHistory', {count: shownHistory.total})}}</ui-button>
         </ui-detail-section>
       </ui-detail-drawer>
     </div>

@@ -124,3 +124,43 @@ test('today and yesterday follow the server date that came with the list, not th
   assert.equal(label('2026-02-27'), '2026-02-27');
   assert.equal(context.AuditPage.methods.dayLabel.call({ auditToday: '', t }, '2026-03-01'), '2026-03-01');
 });
+
+test('a single item can be filtered exactly, and its recent history loads once per list load', async () => {
+  const urls = [];
+  const audit = auditFixture(async url => {
+    urls.push(url);
+    if (url.includes('size=8')) {
+      return { ok: true, json: async () => ({ results: [{ id: 3, action: 'UPDATE', summary: { changeCount: 2 } }], totalElements: 12, totalPages: 2 }) };
+    }
+    return { ok: true, json: async () => ({ results: [{ id: 3, ruleId: 'response-12', targetName: '使用者回應' }], totalElements: 1, totalPages: 1 }) };
+  });
+
+  audit.filterAuditTarget('response-12');
+  await audit.loadAudit(true);
+  assert.match(urls[0], /[?&]ruleId=response-12(&|$)/);
+  assert.deepEqual(Array.from(audit.auditFilterChips.value, c => ({ ...c })), [{ key: 'ruleId', label: 'filterChips.target使用者回應' }]);
+
+  await audit.loadTargetHistory('response-12');
+  await audit.loadTargetHistory('response-12');
+  assert.equal(urls.filter(u => u.includes('size=8')).length, 1);
+  assert.match(urls[1], /ruleId=response-12/);
+  assert.equal(audit.targetHistory.value['response-12'].total, 12);
+  assert.equal(audit.targetHistory.value['response-12'].items[0].summary.changeCount, 2);
+});
+
+test('detail changes show tags as added/removed pairs and keep the raw text for line diffs', () => {
+  const audit = auditFixture();
+  const result = audit.getAuditChanges({ action: 'UPDATE',
+    beforeJson: JSON.stringify({ tags: '{"env":"SIT","team":"a"}', description: '', body: null }),
+    afterJson: JSON.stringify({ tags: '{"env":"UAT","team":"a"}', description: null, body: 'line1\nline2' }) });
+
+  assert.equal(result.type, 'update');
+  const tags = result.changes.find(c => c.kind === 'tags');
+  assert.deepEqual(Array.from(tags.added), ['env=UAT']);
+  assert.deepEqual(Array.from(tags.removed), ['env=SIT']);
+  assert.equal(result.changes.some(c => c.label === 'auditFields.description'), false);
+  const body = result.changes.find(c => c.label === '回應內容');
+  assert.equal(body.long, true);
+  assert.equal(body.beforeText, '');
+  assert.equal(body.afterText, 'line1\nline2');
+});
