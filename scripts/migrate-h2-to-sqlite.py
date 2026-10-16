@@ -170,7 +170,8 @@ def sha256_file(path: Path) -> str:
 
 
 def fsync_file(path: Path) -> None:
-    with path.open("rb") as stream:
+    # Windows _commit/FlushFileBuffers needs a writable handle; r+b does not truncate.
+    with path.open("r+b" if sys.platform == "win32" else "rb") as stream:
         os.fsync(stream.fileno())
 
 

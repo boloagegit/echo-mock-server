@@ -105,9 +105,6 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Build, test and analyze from a path containing spaces
-        run: .\gradlew.bat build jacocoTestReport -PtestForks=2 --no-daemon
-
       - name: Web console tests
         run: |
           $testFiles = @(Get-ChildItem src/test/js/*.test.cjs -File | ForEach-Object { $_.FullName })
@@ -116,6 +113,9 @@ jobs:
 
       - name: Windows script compatibility tests
         run: python -m unittest discover -s scripts/tests -p test_windows_script_compatibility.py
+
+      - name: Build, test and analyze from a path containing spaces
+        run: .\gradlew.bat build jacocoTestReport -PtestForks=2 --no-daemon
 
       - name: Upload Windows test and analysis reports
         if: always()
