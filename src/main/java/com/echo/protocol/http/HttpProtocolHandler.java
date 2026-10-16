@@ -1,5 +1,6 @@
 package com.echo.protocol.http;
 
+import com.echo.config.CacheConfig;
 import com.echo.dto.RuleDto;
 import com.echo.entity.BaseRule;
 import com.echo.entity.FaultType;
@@ -9,8 +10,10 @@ import com.echo.entity.HttpForwardTargetMode;
 import com.echo.entity.Protocol;
 import com.echo.entity.Response;
 import com.echo.protocol.AbstractProtocolHandler;
+import com.echo.protocol.ProtocolDescriptor;
 import com.echo.repository.HttpRuleRepository;
 import com.echo.service.ContentTypeConstraints;
+import com.echo.service.MatchSpecs;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -23,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * HTTP 協定處理器
@@ -33,9 +37,20 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
 
     private final HttpRuleRepository repository;
 
+    public static final ProtocolDescriptor DESCRIPTOR = new ProtocolDescriptor(
+            Protocol.HTTP, HttpRule.class, CacheConfig.HTTP_RULES_CACHE, List.of(
+            "id", "matchKey", "description", "targetHost", "tags",
+            "bodyCondition", "queryCondition", "headerCondition", "matchSpec"),
+            HttpRuleAction.MOCK, HttpRuleAction.FORWARD, Set.of("body", "query", "header"));
+
     @Override
     public Protocol getProtocol() {
         return Protocol.HTTP;
+    }
+
+    @Override
+    public ProtocolDescriptor descriptor() {
+        return DESCRIPTOR;
     }
 
     @Override
@@ -49,6 +64,8 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
                 .matchKey(r.getMatchKey())
                 .method(r.getMethod())
                 .bodyCondition(r.getBodyCondition())
+                .matchSpec(MatchSpecs.read(r.getMatchSpec()).orElse(null))
+                .advancedMatch(r.getMatchSpec() != null)
                 .queryCondition(r.getQueryCondition())
                 .headerCondition(r.getHeaderCondition())
                 .priority(r.getPriority())
@@ -96,6 +113,7 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
                 .matchKey(dto.getMatchKey())
                 .method(dto.getMethod())
                 .bodyCondition(dto.getBodyCondition())
+                .matchSpec(MatchSpecs.toStored(dto.getMatchSpec()))
                 .queryCondition(dto.getQueryCondition())
                 .headerCondition(dto.getHeaderCondition())
                 .priority(dto.getPriority() != null ? dto.getPriority() : 0)
@@ -146,7 +164,8 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
 
     @Override
     public BaseRule save(BaseRule rule) {
-        return repository.save((HttpRule) rule);
+        // 立即寫入：在外層交易內也要讓回傳的規則帶上新的版本號
+        return repository.saveAndFlush((HttpRule) rule);
     }
 
     @Override
@@ -160,9 +179,7 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
     public List<HttpRule> findWithFallback(String targetHost, String matchKey, String method) {
         List<HttpRule> result = new ArrayList<>();
         for (HttpRule rule : findByHostAndMethod(targetHost, method)) {
-            if (matchesPath(rule.getMatchKey(), matchKey)) {
-                result.add(rule);
-            } else if ("*".equals(rule.getMatchKey())) {
+            if (HttpPathPattern.matches(rule.getMatchKey(), matchKey)) {
                 result.add(rule);
             }
         }
@@ -187,20 +204,7 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
 
     /** 保留既有 exact、prefix wildcard 與全域 wildcard 的路徑語意。 */
     public boolean matchesRequestPath(String pattern, String path) {
-        return "*".equals(pattern) || matchesPath(pattern, path);
-    }
-
-    private boolean matchesPath(String pattern, String path) {
-        if (pattern == null || path == null) {
-            return false;
-        }
-        if (pattern.equals(path)) {
-            return true;
-        }
-        if (pattern.endsWith("/*")) {
-            return path.startsWith(pattern.substring(0, pattern.length() - 1));
-        }
-        return false;
+        return HttpPathPattern.matches(pattern, path);
     }
 
     private boolean matchesMethod(String ruleMethod, String requestMethod) {
@@ -303,7 +307,7 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
     }
 
     private int countConditions(RuleDto dto) {
-        int count = 0;
+        int count = MatchSpecs.conditionCount(dto.getMatchSpec());
         if (dto.getBodyCondition() != null && !dto.getBodyCondition().isBlank()) {
             count += dto.getBodyCondition().split(";").length;
         }

@@ -67,8 +67,15 @@ class CacheConfigExtendedTest {
         cache.put(3L, largeBody);
         cache.cleanUp();
 
-        long size = cache.estimatedSize();
-        assertThat(size).isLessThanOrEqualTo(3);
+        assertThat(cache.estimatedSize()).isZero();
+        assertThat(cache.stats().evictionWeight()).isGreaterThanOrEqualTo(3L * (512 * 1024));
+    }
+
+    @Test
+    void responseBodyWeight_shouldAccountForUtf16StorageAndEntryOverhead() {
+        assertThat(CacheConfig.estimateBodyWeight("x".repeat(1_000)))
+                .isGreaterThanOrEqualTo(2_000);
+        assertThat(CacheConfig.estimateBodyWeight(null)).isEqualTo(1);
     }
 
     @Test

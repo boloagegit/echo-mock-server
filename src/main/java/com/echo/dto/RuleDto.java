@@ -1,6 +1,8 @@
 package com.echo.dto;
 
 import com.echo.entity.Protocol;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -28,6 +30,14 @@ public class RuleDto {
     private String bodyCondition;
     private String queryCondition;
     private String headerCondition;
+    /**
+     * 結構化條件（JSON 物件）。有值時以它為準，舊版三個條件欄位必須為空；
+     * 可用舊版字串表達的條件在儲存時會轉成舊欄位。要清除進階條件請送 {@code {"all": []}}。
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private JsonNode matchSpec;
+    /** 唯讀：此規則使用結構化條件（舊版 UI 無法編輯其條件）。 */
+    private Boolean advancedMatch;
     private Integer priority;
     private String description;
     private Boolean enabled;
@@ -41,6 +51,13 @@ public class RuleDto {
     private String condition;
     private Long responseId;
     private String responseBody;
+
+    /**
+     * 為 true 時，responseBody 改寫 responseId 指向的既有回應（與規則在同一個交易內儲存），
+     * 而不是另外建立新回應。只用於請求，不會出現在回應中。
+     */
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.WRITE_ONLY)
+    private Boolean updateExistingResponse;
     private String responseDescription;
     private Integer status;
     private String responseHeaders;

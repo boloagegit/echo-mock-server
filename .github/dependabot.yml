@@ -20,3 +20,8 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 3
     rebase-strategy: "auto"
+    ignore:
+      # Echo targets Java 17. Switching Java versions is a deliberate change,
+      # not an automatic bump (Dependabot also proposes non-LTS releases such as 23).
+      - dependency-name: "eclipse-temurin"
+        update-types: ["version-update:semver-major"]

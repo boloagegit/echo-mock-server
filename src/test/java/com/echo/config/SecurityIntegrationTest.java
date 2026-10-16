@@ -1,6 +1,14 @@
 package com.echo.config;
 
-import com.echo.controller.AdminController;
+import com.echo.controller.AuditController;
+import com.echo.controller.ImportExportController;
+import com.echo.controller.RequestLogController;
+import com.echo.controller.ResponseController;
+import com.echo.controller.RuleApplyController;
+import com.echo.controller.RuleController;
+import com.echo.controller.RuleStateController;
+import com.echo.controller.ScenarioController;
+import com.echo.controller.SystemController;
 import com.echo.dto.RuleDto;
 import com.echo.entity.HttpRule;
 import com.echo.entity.Protocol;
@@ -14,6 +22,7 @@ import com.echo.service.IssueReportService;
 import com.echo.service.RuleApplyMapper;
 import com.echo.service.RuleApplyContractService;
 import com.echo.service.RuleApplyPersistenceSynchronizer;
+import com.echo.service.RuleEditService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,8 +48,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(AdminController.class)
-@Import({SecurityConfig.class, LdapConfig.class, RuleApplyContractService.class})
+@WebMvcTest({SystemController.class, RuleController.class, RuleApplyController.class, RuleStateController.class,
+        ImportExportController.class, ResponseController.class, RequestLogController.class, AuditController.class,
+        ScenarioController.class})
+@Import({SecurityConfig.class, LdapConfig.class, RuleApplyContractService.class, RuleEditService.class})
 @TestPropertySource(properties = "echo.features.bulk-import-export-enabled=true")
 class SecurityIntegrationTest {
 
@@ -115,6 +126,9 @@ class SecurityIntegrationTest {
     @SuppressWarnings("UnusedVariable") // required for Spring context
     private com.echo.service.ScenarioService scenarioService;
 
+    @MockitoBean
+    private com.echo.service.RequestLogTrafficService requestLogTrafficService;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
@@ -157,6 +171,42 @@ class SecurityIntegrationTest {
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/admin/logs/1/detail").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/admin/logs/traffic").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void requestLogTraffic_shouldUseTheRequestedRangeAndRejectUnknownRanges() throws Exception {
+        when(requestLogTrafficService.traffic(com.echo.service.RequestLogTrafficService.Range.HOUR))
+                .thenReturn(new com.echo.service.RequestLogTrafficService.Traffic("1h",
+                        java.time.LocalDateTime.of(2026, 10, 12, 13, 2), java.time.LocalDateTime.of(2026, 10, 12, 14, 2),
+                        2, List.of(), new com.echo.service.RequestLogTrafficService.Totals(0, 0, 0, 0, 0),
+                        new com.echo.service.RequestLogTrafficService.ResponseTime(null, null), List.of(),
+                        null, false, 10000, java.time.LocalDateTime.of(2026, 10, 12, 14, 1)));
+
+        mockMvc.perform(get("/api/admin/logs/traffic").param("range", "1h").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"from\":\"2026-10-12T13:02:00\"")));
+        mockMvc.perform(get("/api/admin/logs/traffic").param("range", "30d").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void requestLogs_shouldPassTheTimeRangeFilter() throws Exception {
+        when(requestLogService.querySummary(any())).thenReturn(
+                RequestLogService.SummaryQueryResult.builder()
+                        .results(List.of()).page(0).size(20).totalElements(0)
+                        .totalPages(0).build());
+
+        mockMvc.perform(get("/api/admin/logs").param("from", "2026-10-12T14:00:00")
+                        .param("to", "2026-10-12T14:30:00").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        org.mockito.Mockito.verify(requestLogService).querySummary(org.mockito.ArgumentMatchers.argThat(f ->
+                java.time.LocalDateTime.of(2026, 10, 12, 14, 0).equals(f.getFrom())
+                        && java.time.LocalDateTime.of(2026, 10, 12, 14, 30).equals(f.getTo())));
     }
 
     @Test
@@ -319,9 +369,29 @@ class SecurityIntegrationTest {
     }
 
     @Test
-    void listRules_shouldReturn200_whenNotAuthenticated() throws Exception {
-        when(protocolHandlerRegistry.findAllRules()).thenReturn(List.of());
+    void fullListsRequireLogin_whilePagedViewsStayOpen() throws Exception {
         mockMvc.perform(get("/api/admin/rules").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/admin/responses").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+
+        when(ruleQueryService.query(any())).thenReturn(new RuleQueryService.RuleQueryResult(List.of(), 0, 20, 0, 0));
+        mockMvc.perform(get("/api/admin/rules/page").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+        when(responseService.findSummaryPage(any(), any(), any(), anyInt(), anyInt(), any(), any()))
+                .thenReturn(null);
+        mockMvc.perform(get("/api/admin/responses/summary").param("page", "0").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void fullListsReturn200_whenAuthenticated() throws Exception {
+        when(protocolHandlerRegistry.findAllRules()).thenReturn(List.of());
+        when(responseService.search(isNull())).thenReturn(List.of());
+        mockMvc.perform(get("/api/admin/rules").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/admin/responses").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
     }
 

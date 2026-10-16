@@ -1,0 +1,14 @@
+[
+  "/workspace/.echo-cloud/toolchains/jdk-17.0.20.1+1/bin/java",
+  "-Xms512m",
+  "-Xmx512m",
+  "-XX:+UseG1GC",
+  "-jar",
+  "/workspace/scratch/echo-perf/candidates/echo-final-normal.jar",
+  "--server.port=18082",
+  "--spring.profiles.active=default",
+  "--server.undertow.threads.io=2",
+  "--echo.backup.enabled=false",
+  "--echo.backup.on-shutdown=false",
+  "--echo.cleanup.enabled=false"
+]

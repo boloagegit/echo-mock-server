@@ -1,6 +1,7 @@
 package com.echo.pipeline;
 
 import com.echo.config.JmsProperties;
+import com.echo.core.engine.RuleSelector;
 import com.echo.entity.JmsRule;
 import com.echo.entity.JmsForwardTargetMode;
 import com.echo.entity.JmsRuleAction;
@@ -8,7 +9,6 @@ import com.echo.jms.JmsTargetForwarder;
 import com.echo.service.ConditionMatcher;
 import com.echo.service.JmsRuleService;
 import com.echo.service.MatchChainEntry;
-import com.echo.service.MatchResult;
 import com.echo.service.RequestLogService;
 import com.echo.service.RuleService;
 import com.echo.service.ScenarioService;
@@ -16,9 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * JMS 協定的 MockPipeline 實作
@@ -26,7 +24,7 @@ import java.util.Map;
  * 實作 JMS 特有的 pipeline 步驟：
  * <ul>
  *   <li>候選規則查詢：委派給 {@link JmsRuleService} 的 prepared/bucketed 查詢</li>
- *   <li>匹配規則：覆寫 matchRule() 保留 JMS 三層 fallback 邏輯</li>
+ *   <li>匹配規則：以 {@link RuleSelector.FallbackPolicy#EXACT_BEFORE_WILDCARD} 保留 JMS 三層 fallback</li>
  *   <li>轉發：委派給 {@link JmsTargetForwarder}</li>
  * </ul>
  */
@@ -63,88 +61,28 @@ public class JmsMockPipeline extends AbstractMockPipeline<JmsRule> {
         return jmsRuleService.findPreparedJmsRules(queueName);
     }
 
+    /** JMS 的候選清單取自規則快照（queue 與分桶清單），快照存在期間是同一個物件。 */
     @Override
-    protected ConditionMatcher.PreparedBody prepareBody(
-            MockRequest request, List<JmsRule> candidates) {
-        List<String> bodyConditions = candidates.stream()
-                .filter(rule -> !Boolean.FALSE.equals(rule.getEnabled()))
-                .map(JmsRule::getBodyCondition)
-                .filter(condition -> condition != null && !condition.isBlank())
-                .toList();
-        return conditionMatcher.prepareBodyForConditions(request.getBody(), bodyConditions);
+    protected boolean candidateListsAreStable() {
+        return true;
     }
 
     /**
-     * 覆寫匹配邏輯，保留 JMS 特有的三層 fallback：
+     * JMS 特有的三層 fallback：
      * <ol>
-     *   <li>Layer 1: 有條件且條件匹配成功的精確 queue 規則</li>
-     *   <li>Layer 2: 無條件的精確 queue 規則（fallback）</li>
-     *   <li>Layer 3: wildcard queue {@code *} 規則（last resort）</li>
+     *   <li>Layer 1: 有條件且條件匹配成功的規則</li>
+     *   <li>Layer 2: 無條件的精確 queue 規則</li>
+     *   <li>Layer 3: 無條件的 wildcard queue {@code *} 規則（last resort）</li>
      * </ol>
      */
     @Override
-    public MatchResult<JmsRule> matchRule(List<JmsRule> candidates,
-                                          ConditionMatcher.PreparedBody prepared,
-                                          String queryString,
-                                          Map<String, String> headers) {
-        JmsRule matched = null;
-        JmsRule noConditionRule = null;
-        JmsRule wildcardRule = null;
-        List<MatchChainEntry> chain = new ArrayList<>();
+    protected RuleSelector.FallbackPolicy fallbackPolicy() {
+        return RuleSelector.FallbackPolicy.EXACT_BEFORE_WILDCARD;
+    }
 
-        for (JmsRule rule : candidates) {
-            if (Boolean.FALSE.equals(rule.getEnabled())) {
-                continue;
-            }
-
-            // Scenario 狀態檢查
-            if (rule.getScenarioName() != null && !rule.getScenarioName().isBlank()
-                    && rule.getRequiredScenarioState() != null && !rule.getRequiredScenarioState().isBlank()) {
-                String currentState = scenarioService.getCurrentState(rule.getScenarioName());
-                if (!rule.getRequiredScenarioState().equals(currentState)) {
-                    chain.add(new MatchChainEntry(
-                            rule.getId(), "scenario_state_mismatch",
-                            null, rule.getDescription(), null,
-                            null,
-                            "scenario: " + rule.getScenarioName()
-                                    + " (required: " + rule.getRequiredScenarioState()
-                                    + ", current: " + currentState + ")",
-                            false));
-                    continue;
-                }
-            }
-
-            boolean isWildcard = "*".equals(rule.getQueueName());
-            boolean hasCondition = rule.getBodyCondition() != null
-                    && !rule.getBodyCondition().isBlank();
-
-            if (hasCondition) {
-                if (conditionMatcher.matchesPrepared(
-                        rule.getBodyCondition(), null, null,
-                        prepared, null, null)) {
-                    matched = rule;
-                    break;
-                }
-            } else if (isWildcard) {
-                if (wildcardRule == null) {
-                    wildcardRule = rule;
-                }
-            } else {
-                if (noConditionRule == null) {
-                    noConditionRule = rule;
-                }
-            }
-        }
-
-        if (matched == null) {
-            matched = noConditionRule != null ? noConditionRule : wildcardRule;
-        }
-
-        if (matched != null) {
-            chain.add(MatchChainEntry.fromJms(matched, "match"));
-        }
-
-        return new MatchResult<>(matched, chain);
+    @Override
+    protected boolean isWildcard(JmsRule rule) {
+        return "*".equals(rule.getQueueName());
     }
 
     @Override
@@ -152,7 +90,9 @@ public class JmsMockPipeline extends AbstractMockPipeline<JmsRule> {
         log.debug("No rule matched, forwarding through the selected outbound JMS connection");
 
         return forwardedResponse(
-                targetForwarder.forwardWithMetadata(request.getBody(), null), false);
+                request.getTrace().enabled()
+                        ? targetForwarder.forwardWithMetadata(request.getBody(), null, request.getTrace())
+                        : targetForwarder.forwardWithMetadata(request.getBody(), null), false);
     }
 
     @Override
@@ -164,9 +104,11 @@ public class JmsMockPipeline extends AbstractMockPipeline<JmsRule> {
     protected MockResponse forwardMatchedRule(JmsRule rule, MockRequest request) {
         JmsForwardTargetMode mode = rule.getForwardTargetMode() == null
                 ? JmsForwardTargetMode.DEFAULT_CONNECTION : rule.getForwardTargetMode();
-        JmsTargetForwarder.ForwardResult result = targetForwarder.forwardWithMetadata(
-                request.getBody(), null, rule.getJmsTargetConnectionId(),
-                mode == JmsForwardTargetMode.DEFAULT_CONNECTION);
+        JmsTargetForwarder.ForwardResult result = request.getTrace().enabled()
+                ? targetForwarder.forwardWithMetadata(request.getBody(), null, rule.getJmsTargetConnectionId(),
+                        mode == JmsForwardTargetMode.DEFAULT_CONNECTION, request.getTrace())
+                : targetForwarder.forwardWithMetadata(request.getBody(), null, rule.getJmsTargetConnectionId(),
+                        mode == JmsForwardTargetMode.DEFAULT_CONNECTION);
         return forwardedResponse(result, true);
     }
 
@@ -219,13 +161,15 @@ public class JmsMockPipeline extends AbstractMockPipeline<JmsRule> {
 
     @Override
     protected boolean hasCondition(JmsRule rule) {
-        return rule.getBodyCondition() != null && !rule.getBodyCondition().isBlank();
+        return rule.getMatchSpec() != null
+                || (rule.getBodyCondition() != null && !rule.getBodyCondition().isBlank());
     }
 
     @Override
     protected ConditionSet extractConditions(JmsRule rule) {
         return ConditionSet.builder()
                 .bodyCondition(rule.getBodyCondition())
+                .matchSpec(rule.getMatchSpec())
                 .build();
     }
 

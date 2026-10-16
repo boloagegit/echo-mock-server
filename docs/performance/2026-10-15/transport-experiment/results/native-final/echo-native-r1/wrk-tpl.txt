@@ -1,0 +1,13 @@
+Running 10s test @ http://127.0.0.1:18080/mock/tpl?id=7
+  4 threads and 8 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   208.67us  552.17us  16.41ms   97.90%
+    Req/Sec    13.19k     2.51k   22.44k    71.96%
+  Latency Distribution
+     50%  137.00us
+     75%  188.00us
+     90%  259.00us
+     99%    2.03ms
+  528846 requests in 10.10s, 78.68MB read
+Requests/sec:  52360.04
+Transfer/sec:      7.79MB

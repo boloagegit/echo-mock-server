@@ -1,0 +1,18 @@
+[
+  {
+    "name": "com.echo.architecture.ArchitectureRulesTest",
+    "tests": "5",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "3.819"
+  },
+  {
+    "name": "com.echo.integration.http.NativeHttpTransportIntegrationTest",
+    "tests": "6",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "2.836"
+  }
+]

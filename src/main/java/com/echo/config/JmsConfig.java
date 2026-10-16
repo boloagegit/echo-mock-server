@@ -38,6 +38,8 @@ public class JmsConfig {
         // returns, which would make transient capacity/logging failures lose
         // the request instead of allowing Artemis to redeliver it.
         factory.setSessionTransacted(true);
+        // 外部 broker 斷線或重啟時，listener 依這個間隔重新連線；內建 broker 不會用到。
+        factory.setRecoveryInterval(jmsProperties.getSource().getReconnectIntervalMs());
         return factory;
     }
 }

@@ -1,0 +1,13 @@
+Running 10s test @ http://127.0.0.1:18080/forward-slow
+  4 threads and 64 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   155.39ms  138.03ms 628.73ms   81.32%
+    Req/Sec   121.80     31.69   212.00     66.16%
+  Latency Distribution
+     50%   57.51ms
+     75%  256.29ms
+     90%  377.42ms
+     99%  544.01ms
+  4853 requests in 10.10s, 763.02KB read
+Requests/sec:    480.56
+Transfer/sec:     75.56KB

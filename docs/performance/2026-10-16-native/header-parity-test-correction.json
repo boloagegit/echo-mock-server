@@ -1,0 +1,7 @@
+[
+  {
+    "suite": "com.echo.integration.http.NativeHttpTransportIntegrationTest",
+    "test": "headerControlCharactersRetainTheServletFirewall()",
+    "message": "org.opentest4j.AssertionFailedError: \nexpected: 400\n but was: 200"
+  }
+]

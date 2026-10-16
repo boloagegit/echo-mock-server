@@ -30,6 +30,15 @@ The shared theme tokens live in `src/main/resources/static/theme.css`. Page and 
 - Empty states explain what will appear and what causes it, without decorative illustration.
 - Code, JSON, and XML use a dedicated neutral code surface and monospace text.
 
+## Settings information architecture
+
+- Keep five local tabs: Overview, Resource Monitoring, Forward Connections, Data & Backups, and Service Configuration.
+- Overview is a compact snapshot summary, not a health dashboard. Resource details separate current usage, lifetime counters, and configured limits/timestamps.
+- Retain collection availability and stale states; unavailable values must never appear as zero. Do not imply that cleanup counters measure broker inventory or that a backup proves successful restore.
+- HTTP and JMS targets use one shared table with source, destination, default role, last explicit test, and actions. At narrow widths, stack these fields instead of hiding operational actions or outcomes.
+- Keep backup actions separate from collapsed destructive maintenance. Long connection strings belong in a disclosure, not the primary summary.
+- Switching tabs or opening details must not refresh resources. Keep one monitoring instance and preserve manual refresh, retry, timeout, and permission-loss behavior.
+
 ## Accessibility and behavior
 
 - Every interactive control must remain keyboard reachable and display a solid focus ring.

@@ -1,0 +1,6 @@
+{
+  "docs/performance/2026-10-15/transport-experiment/matrix.sh": "0426efccc2581e0f355d5a82ff9a60013d28b620b74e63fc5794218009e29929",
+  "docs/performance/2026-10-16-native/collect.py": "b7d6d565a696e2226595fa8107cca5f583814a26c67a70ba6cd4d2cfd585cd99",
+  "docs/performance/2026-10-16-native/soak.py": "5a008f2974754fe9e736fcc575b7bd05d344691fc4fc5e8d14cf3b3c4e30a3e1",
+  "docs/performance/2026-10-16-native/compare.sh": "55db783b508d385de6a0c2a5a48dff79ed6126a265114002caf9363aca4afa31"
+}

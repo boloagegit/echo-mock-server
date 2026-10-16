@@ -31,6 +31,7 @@ public class HttpTargetConnectionService {
     private final HttpTargetConnectionRepository repository;
     private final HttpRuleRepository httpRuleRepository;
     private final JmsCredentialCipher credentialCipher;
+    private final Optional<CacheInvalidationService> cacheInvalidationService;
 
     @Value("${echo.http.request-timeout-ms:40000}")
     private long requestTimeoutMs = 40_000L;
@@ -70,7 +71,9 @@ public class HttpTargetConnectionService {
                 .enabled(!Boolean.FALSE.equals(request.enabled()))
                 .defaultConnection(makeDefault)
                 .build();
-        return toDto(repository.saveAndFlush(entity));
+        HttpTargetConnectionDto saved = toDto(repository.saveAndFlush(entity));
+        targetsChanged();
+        return saved;
     }
 
     @Transactional
@@ -116,7 +119,9 @@ public class HttpTargetConnectionService {
         } else if (request.secret() != null && !request.secret().isEmpty()) {
             entity.setEncryptedSecret(credentialCipher.encrypt(request.secret()));
         }
-        return toDto(repository.saveAndFlush(entity));
+        HttpTargetConnectionDto saved = toDto(repository.saveAndFlush(entity));
+        targetsChanged();
+        return saved;
     }
 
     @Transactional
@@ -128,7 +133,9 @@ public class HttpTargetConnectionService {
         }
         clearDefaultConnections();
         entity.setDefaultConnection(true);
-        return toDto(repository.saveAndFlush(entity));
+        HttpTargetConnectionDto saved = toDto(repository.saveAndFlush(entity));
+        targetsChanged();
+        return saved;
     }
 
     @Transactional
@@ -145,6 +152,12 @@ public class HttpTargetConnectionService {
             throw new IllegalArgumentException("HTTP_CONNECTION_IN_USE");
         }
         repository.delete(entity);
+        targetsChanged();
+    }
+
+    /** 通知其他實例重新讀取轉送連線設定。 */
+    private void targetsChanged() {
+        cacheInvalidationService.ifPresent(CacheInvalidationService::publishHttpTargetsChanged);
     }
 
     @Transactional(readOnly = true)

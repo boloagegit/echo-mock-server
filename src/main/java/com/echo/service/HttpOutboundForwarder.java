@@ -97,6 +97,7 @@ public final class HttpOutboundForwarder {
     private final int poolAcquireTimeoutMs;
     private final int overloadBackoffMs;
     private final int idleConnectionTimeoutSeconds;
+    private final int legacyReadTimeoutSeconds;
     private final LongAdder rejectedForwards = new LongAdder();
     private final AtomicLong lastRejectionWarning = new AtomicLong();
 
@@ -191,6 +192,7 @@ public final class HttpOutboundForwarder {
         this.poolAcquireTimeoutMs = poolAcquireTimeoutMs;
         this.overloadBackoffMs = overloadBackoffMs;
         this.idleConnectionTimeoutSeconds = idleConnectionTimeoutSeconds;
+        this.legacyReadTimeoutSeconds = legacyReadTimeoutSeconds;
         this.forwardingSlots = maxConcurrent == 0 ? null : new Semaphore(maxConcurrent);
         if (maxConcurrent == 0) {
             log.warn("HTTP forwarding application concurrency limit is disabled; "
@@ -214,6 +216,7 @@ public final class HttpOutboundForwarder {
     public CompletionStage<MockResponse> forwardAsync(MockRequest request,
                                                        Long connectionId,
                                                        boolean useDefault) {
+        request.getTrace().stage("SELECT_TARGET");
         try {
             HttpTargetConnectionService.ResolvedTarget target = useDefault
                     ? connectionService.resolveDefault().orElseThrow(
@@ -221,8 +224,9 @@ public final class HttpOutboundForwarder {
                     : connectionService.resolveEnabled(connectionId);
             TargetMetrics metrics = metricsFor("profile:" + target.id(), target.name());
             return submit(() -> exchange(request, target, true), true, metrics,
-                    describeTarget(target));
+                    describeTarget(target), request.getTrace());
         } catch (Exception e) {
+            request.getTrace().failure("FORWARD_SELECTION_FAILED", e);
             return CompletableFuture.completedFuture(proxyError(e, true));
         }
     }
@@ -237,6 +241,7 @@ public final class HttpOutboundForwarder {
     }
 
     public CompletionStage<Optional<MockResponse>> forwardDefaultAsync(MockRequest request) {
+        request.getTrace().stage("SELECT_TARGET");
         try {
             Optional<HttpTargetConnectionService.ResolvedTarget> target = connectionService.resolveDefault();
             if (target.isEmpty()) {
@@ -246,9 +251,10 @@ public final class HttpOutboundForwarder {
             TargetMetrics metrics = metricsFor("profile:" + resolved.id(), resolved.name());
             return CancellableStages.map(
                     submit(() -> exchange(request, resolved, false), false, metrics,
-                            describeTarget(resolved)),
+                            describeTarget(resolved), request.getTrace()),
                     Optional::of);
         } catch (Exception e) {
+            request.getTrace().failure("FORWARD_SELECTION_FAILED", e);
             return CompletableFuture.completedFuture(Optional.of(proxyError(e, false)));
         }
     }
@@ -267,7 +273,7 @@ public final class HttpOutboundForwarder {
         }
         TargetMetrics metrics = metricsFor("original-host", "X-Original-Host");
         return submit(() -> exchangeOriginalHost(request, targetHost, matched),
-                matched, metrics, sanitizeOriginalHost(targetHost));
+                matched, metrics, sanitizeOriginalHost(targetHost), request.getTrace());
     }
 
     public ConnectionTestResult test(Long id) {
@@ -292,12 +298,16 @@ public final class HttpOutboundForwarder {
     private Mono<MockResponse> exchange(MockRequest request,
                                         HttpTargetConnectionService.ResolvedTarget target,
                                         boolean matched) {
+        request.getTrace().stage("HTTP_EXCHANGE");
+        request.getTrace().event("FORWARD_BEGIN", "connectionId", target.id(), "connectionVersion", target.version(),
+                "source", "PROFILE", "readTimeoutMs", target.readTimeoutSeconds() * 1000L);
         String url = joinUrl(target.baseUrl(), request.getPath(), request.getQueryString());
         log.debug("HTTP profile forwarding via '{}' to: {} {}", target.name(), request.getMethod(), url);
         HttpHeaders headers = copyHeaders(request.getHeaders(), true);
         applyAuthentication(headers, target);
         HttpMethod method = HttpMethod.valueOf(request.getMethod().toUpperCase(Locale.ROOT));
         return exchangeResponse(clientFor(target), URI.create(url), method, headers, request.getBody())
+                .doOnNext(response -> request.getTrace().event("HTTP_TARGET_RESPONSE", "status", response.status()))
                 .map(response -> MockResponse.builder()
                         .status(response.status())
                         .body(response.body())
@@ -342,6 +352,10 @@ public final class HttpOutboundForwarder {
                     .pendingAcquireTimeout(Duration.ofMillis(poolAcquireTimeoutMs))
                     .maxIdleTime(Duration.ofSeconds(idleConnectionTimeoutSeconds))
                     .evictInBackground(Duration.ofSeconds(idleConnectionTimeoutSeconds))
+                    // Connection eviction alone leaves per-host pools and their metrics behind.
+                    // Dispose only empty, inactive pools; active/pending requests remain intact.
+                    .disposeInactivePoolsInBackground(Duration.ofSeconds(idleConnectionTimeoutSeconds),
+                            Duration.ofSeconds(idleConnectionTimeoutSeconds))
                     .metrics(true, () -> metricsCollector)
                     .build();
             HttpClient httpClient = HttpClient.create(connectionProvider)
@@ -373,6 +387,9 @@ public final class HttpOutboundForwarder {
     private Mono<MockResponse> exchangeOriginalHost(MockRequest request,
                                                     String targetHost,
                                                     boolean matched) {
+        request.getTrace().stage("HTTP_EXCHANGE");
+        request.getTrace().event("FORWARD_BEGIN", "source", "ORIGINAL_HOST",
+                "readTimeoutMs", legacyReadTimeoutSeconds * 1000L);
         String baseUrl = "https://" + targetHost;
         String url = joinUrl(baseUrl, request.getPath(), request.getQueryString());
         log.debug("X-Original-Host forwarding to: {} {}", request.getMethod(), url);
@@ -383,6 +400,7 @@ public final class HttpOutboundForwarder {
             return Mono.error(new IllegalStateException("HTTP_CLIENT_CLOSED"));
         }
         return exchangeResponse(client, URI.create(url), method, headers, request.getBody())
+                .doOnNext(response -> request.getTrace().event("HTTP_TARGET_RESPONSE", "status", response.status()))
                 .map(response -> MockResponse.builder()
                         .status(response.status())
                         .body(response.body())
@@ -493,8 +511,10 @@ public final class HttpOutboundForwarder {
     private CompletionStage<MockResponse> submit(Supplier<Mono<MockResponse>> action,
                                                   boolean matched,
                                                   TargetMetrics metrics,
-                                                  String forwardTarget) {
+                                                  String forwardTarget,
+                                                  com.echo.diagnostics.TransactionDiagnostics.Trace trace) {
         if (forwardingSlots != null && !forwardingSlots.tryAcquire()) {
+            trace.event("FORWARD_REJECTED", "reason", "CONCURRENCY_CAPACITY");
             rejectedForwards.increment();
             metrics.recordCapacityRejection();
             warnRejectedForward();
@@ -515,6 +535,7 @@ public final class HttpOutboundForwarder {
         return Mono.defer(action)
                 .onErrorResume(error -> {
                     Throwable cause = unwrap(error);
+                    trace.failure("FORWARD_FAILED", cause);
                     if (cause instanceof ReactiveConnectionLimiter.CapacityException
                             || cause instanceof ResponseBufferCapacityException) {
                         rejectedForwards.increment();
@@ -524,7 +545,10 @@ public final class HttpOutboundForwarder {
                     log.debug("HTTP proxy error: {}", cause.getMessage());
                     return Mono.just(proxyError(cause, matched, forwardTarget));
                 })
-                .doFinally(signal -> finishForward(signal))
+                .doFinally(signal -> {
+                    trace.event("FORWARD_END", "signal", signal.name());
+                    finishForward(signal);
+                })
                 .toFuture();
     }
 
@@ -588,6 +612,46 @@ public final class HttpOutboundForwarder {
                         poolAcquireTimeoutMs,
                         idleConnectionTimeoutSeconds, idleConnectionTimeoutSeconds),
                 Map.copyOf(targets));
+    }
+
+    /** Bounded aggregate for resource diagnostics; never enumerates target identities. */
+    public Map<String, Object> resourceMetricsSnapshot() {
+        final int limit = 64;
+        Set<ClientHolder> seen = new HashSet<>();
+        seen.add(originalHostClient);
+        boolean complete = true;
+        for (ClientHolder holder : clients.values()) {
+            if (seen.size() >= limit) { complete = false; break; }
+            seen.add(holder);
+        }
+        for (ClientHolder holder : retiredClients) {
+            if (seen.size() >= limit) { complete = false; break; }
+            seen.add(holder);
+        }
+        long leased = 0, pending = connectionLimiter.pendingCount(), idle = 0, capacity = 0;
+        for (ClientHolder holder : seen) {
+            int count = 0;
+            for (ConnectionPoolMetrics pool : holder.metricsCollector().pools.values()) {
+                if (count++ >= limit) { complete = false; break; }
+                leased += pool.acquiredSize();
+                pending += pool.pendingAcquireSize();
+                idle += pool.idleSize();
+                capacity += pool.maxAllocatedSize();
+            }
+        }
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("activeForwards", activeForwards.get());
+        values.put("completedForwards", completedForwards.sum());
+        values.put("cancelledForwards", cancelledForwards.sum());
+        values.put("rejectedForwards", rejectedForwards.sum());
+        values.put("poolLeased", leased);
+        values.put("poolPending", pending);
+        values.put("poolIdle", idle);
+        values.put("poolCapacity", capacity);
+        values.put("bufferedBytes", responseBufferBudget.reservedBytes());
+        values.put("bufferLimitBytes", responseBufferBudget.maximumBytes());
+        values.put("coverageComplete", complete);
+        return Map.copyOf(values);
     }
 
     private TargetMetrics metricsFor(String key, String name) {

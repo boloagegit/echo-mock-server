@@ -1,5 +1,6 @@
 package com.echo.service;
 
+import com.echo.config.AfterCommit;
 import com.echo.config.CacheConfig;
 import com.echo.entity.Response;
 import com.echo.protocol.ProtocolHandlerRegistry;
@@ -30,6 +31,7 @@ public class ResponseService {
     private final ProtocolHandlerRegistry protocolHandlerRegistry;
     private final Cache<Long, String> responseBodyCache;
     private final CacheManager cacheManager;
+    private final Optional<CacheInvalidationService> cacheInvalidationService;
 
     public List<Response> findAll() {
         return responseRepository.findAll();
@@ -37,6 +39,19 @@ public class ResponseService {
 
     public long count() {
         return responseRepository.count();
+    }
+
+    public Map<String, Object> getBodyCacheStats() {
+        Map<String, Object> result = new HashMap<>();
+        result.put("entries", responseBodyCache.estimatedSize());
+        responseBodyCache.policy().eviction().ifPresent(eviction -> {
+            result.put("weightedSize", eviction.weightedSize().orElse(0L));
+            result.put("maximumWeight", eviction.getMaximum());
+        });
+        var stats = responseBodyCache.stats();
+        result.put("requestCount", stats.requestCount());
+        result.put("evictionCount", stats.evictionCount());
+        return result;
     }
 
     public Optional<Response> findById(Long id) {
@@ -65,7 +80,7 @@ public class ResponseService {
                         .id(id)
                         .description((String) r[1])
                         .bodySize((Integer) r[2])
-                        .contentType((String) r[3])
+                        .contentType(Response.normalizeContentType((String) r[3]))
                         .usageCount(usageMap.getOrDefault(id, 0L).intValue())
                         .createdAt((LocalDateTime) r[4])
                         .updatedAt((LocalDateTime) r[5])
@@ -100,7 +115,7 @@ public class ResponseService {
                         .id(row.id())
                         .description(row.description())
                         .bodySize(row.bodySize())
-                        .contentType(row.contentType())
+                        .contentType(Response.normalizeContentType(row.contentType()))
                         .usageCount(row.usageCount())
                         .createdAt(row.createdAt())
                         .updatedAt(row.updatedAt())
@@ -123,19 +138,35 @@ public class ResponseService {
 
     @Transactional
     public Response save(Response response) {
+        response.setContentType(Response.normalizeContentType(response.getContentType()));
+        validateSseContent(response);
         log.info("Saving response: {}", response.getDescription());
+        boolean existing = response.getId() != null;
         Response saved = responseRepository.save(response);
-        if (saved.getId() != null) {
-            responseBodyCache.invalidate(saved.getId());
+        if (existing) {
+            bodiesChanged(List.of(saved.getId()));
         }
         return saved;
+    }
+
+    private void validateSseContent(Response response) {
+        if (Response.isSse(response.getContentType())) SseEventSequence.parse(response.getBody());
+        if (response.getId() == null) return;
+        for (var rule : protocolHandlerRegistry.findByResponseId(response.getId())) {
+            if (rule instanceof com.echo.entity.HttpRule httpRule && Boolean.TRUE.equals(httpRule.getSseEnabled())) {
+                long minimum = rule.getDelayMs() == null ? 0 : rule.getDelayMs();
+                long maximum = rule.getMaxDelayMs() == null ? minimum : Math.max(minimum, rule.getMaxDelayMs());
+                SseRuleSettings.timeout(SseEventSequence.parse(response.getBody()), maximum,
+                        Boolean.TRUE.equals(httpRule.getSseLoopEnabled()));
+            }
+        }
     }
 
     @Transactional
     public void deleteById(Long id) {
         log.info("Deleting response: id={}", id);
-        responseBodyCache.invalidate(id);
         responseRepository.deleteById(id);
+        bodiesChanged(List.of(id));
     }
 
     /** 刪除 Response 並連帶刪除引用的 Rule，回傳刪除的 Rule 數量 */
@@ -143,10 +174,11 @@ public class ResponseService {
     public int deleteWithRules(Long id) {
         log.info("Deleting response with rules: id={}", id);
         int rulesDeleted = protocolHandlerRegistry.deleteByResponseId(id);
-        responseBodyCache.invalidate(id);
         responseRepository.deleteById(id);
+        bodiesChanged(List.of(id));
         if (rulesDeleted > 0) {
             evictRuleCache();
+            cacheInvalidationService.ifPresent(CacheInvalidationService::publishInvalidation);
         }
         return rulesDeleted;
     }
@@ -160,11 +192,30 @@ public class ResponseService {
         int respCount = (int) responseRepository.count();
         responseRepository.deleteAll();
         responseBodyCache.invalidateAll();
+        AfterCommit.schedule(new AllBodies(responseBodyCache), responseBodyCache::invalidateAll);
         evictRuleCache();
+        cacheInvalidationService.ifPresent(s -> {
+            s.publishAllResponsesChanged();
+            s.publishInvalidation();
+        });
         log.info("Deleted all: {} responses, {} rules", respCount, ruleCount);
         return new DeleteAllResult(respCount, ruleCount);
     }
     
+    /** 清除本機的回應內容快取（提交後再清一次），並通知其他實例。 */
+    private void bodiesChanged(List<Long> ids) {
+        responseBodyCache.invalidateAll(ids);
+        AfterCommit.schedule(new Bodies(responseBodyCache, List.copyOf(ids)),
+                () -> responseBodyCache.invalidateAll(ids));
+        cacheInvalidationService.ifPresent(s -> s.publishResponsesChanged(ids));
+    }
+
+    private record Bodies(Object cache, List<Long> ids) {
+    }
+
+    private record AllBodies(Object cache) {
+    }
+
     private void evictRuleCache() {
         for (String cacheName : CacheConfig.ALL_RULE_CACHES) {
             var cache = cacheManager.getCache(cacheName);
@@ -191,10 +242,8 @@ public class ResponseService {
         if (orphanIds.isEmpty()) {
             return 0;
         }
-        for (Long id : orphanIds) {
-            responseBodyCache.invalidate(id);
-        }
         responseRepository.deleteAllById(orphanIds);
+        bodiesChanged(orphanIds);
         log.info("Deleted {} orphan responses", orphanIds.size());
         return orphanIds.size();
     }

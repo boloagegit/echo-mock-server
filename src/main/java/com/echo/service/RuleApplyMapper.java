@@ -34,6 +34,7 @@ public class RuleApplyMapper {
                 .bodyCondition(spec.getBodyCondition())
                 .queryCondition(spec.getQueryCondition())
                 .headerCondition(spec.getHeaderCondition())
+                .matchSpec(spec.getMatch())
                 .priority(spec.getPriority())
                 .description(spec.getDescription())
                 .enabled(spec.getEnabled())
@@ -110,8 +111,13 @@ public class RuleApplyMapper {
             }
         }
 
+        // 使用結構化條件的規則無法用 v1 表達，改以 v2 輸出，避免條件在文件中消失
+        boolean advanced = dto.getMatchSpec() != null && !dto.getMatchSpec().isNull();
+        if (advanced) {
+            spec.match(dto.getMatchSpec());
+        }
         return RuleApplyDocument.builder()
-                .apiVersion(RuleApplyDocument.API_VERSION)
+                .apiVersion(advanced ? RuleApplyDocument.API_VERSION_V2 : RuleApplyDocument.API_VERSION)
                 .kind(RuleApplyDocument.KIND)
                 .metadata(RuleApplyDocument.Metadata.builder()
                         .id(dto.getId())

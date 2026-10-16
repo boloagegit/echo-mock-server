@@ -8,7 +8,6 @@ import com.echo.service.ConditionMatcher;
 import com.echo.service.HttpOutboundForwarder;
 import com.echo.service.HttpRuleService;
 import com.echo.service.RequestLogService;
-import com.echo.service.ResponseTemplateService;
 import com.echo.service.RuleService;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestTemplate;
@@ -33,7 +32,7 @@ class HttpMatchedForwardRuleTest {
         HttpRuleService httpRuleService = mock(HttpRuleService.class);
         HttpOutboundForwarder forwarder = mock(HttpOutboundForwarder.class);
         HttpMockPipeline pipeline = new HttpMockPipeline(matcher, ruleService, logService,
-                httpRuleService, mock(ResponseTemplateService.class), mock(RestTemplate.class), forwarder);
+                httpRuleService, mock(RestTemplate.class), forwarder);
         HttpRule rule = HttpRule.builder().id("forward-1").enabled(true).matchKey("/orders")
                 .method("GET").priority(0).delayMs(0L).action(HttpRuleAction.FORWARD)
                 .forwardTargetMode(HttpForwardTargetMode.CONNECTION).httpTargetConnectionId(8L).build();

@@ -1,11 +1,14 @@
 package com.echo.pipeline;
 
+import com.echo.service.ServeEvent;
+import com.echo.service.ServeEventCaptor;
 import com.echo.config.JmsProperties;
 import com.echo.entity.JmsRule;
 import com.echo.entity.JmsForwardTargetMode;
 import com.echo.entity.JmsRuleAction;
 import com.echo.entity.Protocol;
 import com.echo.jms.JmsTargetForwarder;
+import com.echo.core.match.BodyRequirements;
 import com.echo.service.ConditionMatcher;
 import com.echo.service.JmsRuleService;
 import com.echo.service.RequestLogService;
@@ -21,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,6 +42,9 @@ class JmsMockPipelineTest {
 
     @Mock
     private ConditionMatcher conditionMatcher;
+
+    /** 規則條件的 body 需求由真的 ConditionMatcher 編譯（mock 不會回傳可用的條件物件）。 */
+    private static final ConditionMatcher REAL_MATCHER = new ConditionMatcher();
 
     @Mock
     private RuleService ruleService;
@@ -113,6 +120,28 @@ class JmsMockPipelineTest {
         }
 
         @Test
+        @DisplayName("回覆內容經共用模板渲染：可用請求 body 與訊息標頭")
+        void responseBodyIsRenderedWithSharedTemplate() {
+            pipeline.setTemplateService(new com.echo.service.ResponseTemplateService());
+            JmsRule rule = buildRule("jms-template", "ORDER.REQUEST", null, 101L);
+            when(jmsProperties.getQueue()).thenReturn("ORDER.REQUEST");
+            when(jmsRuleService.findPreparedJmsRules("ORDER.REQUEST")).thenReturn(List.of(rule));
+            when(ruleService.findResponseBodyById(101L)).thenReturn(Optional.of(
+                    "<R>{{xPath request.body '//ServiceName/text()'}}|{{request.headers.JMSCorrelationID}}</R>"));
+            MockRequest request = MockRequest.builder()
+                    .protocol(Protocol.JMS)
+                    .path("ORDER.REQUEST")
+                    .body("<Order><ServiceName>CreateOrder</ServiceName></Order>")
+                    .headers(Map.of("JMSCorrelationID", "C-9"))
+                    .clientIp("JMS")
+                    .build();
+
+            PipelineResult result = pipeline.execute(request);
+
+            assertThat(result.getResponse().getBody()).isEqualTo("<R>CreateOrder|C-9</R>");
+        }
+
+        @Test
         @DisplayName("匹配成功時回傳 status=200、正確 body、matched=true")
         void matchedReturnsCorrectResponse() {
             JmsRule rule = buildRule("jms-rule-1", "ORDER.REQUEST",
@@ -124,7 +153,10 @@ class JmsMockPipelineTest {
                     .thenReturn(List.of(rule));
 
             ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBodyForConditions(anyString(), anyList()))
+            when(conditionMatcher.conditions(any(), any(), any(), any()))
+                    .thenAnswer(call -> REAL_MATCHER.conditions(call.getArgument(0), call.getArgument(1),
+                            call.getArgument(2), call.getArgument(3)));
+            when(conditionMatcher.prepareBody(anyString(), any(BodyRequirements.class)))
                     .thenReturn(prepared);
             when(conditionMatcher.matchesPrepared(
                     eq("ServiceName=CreateOrder"), isNull(), isNull(),
@@ -338,7 +370,10 @@ class JmsMockPipelineTest {
                     .thenReturn(List.of(rule));
 
             ConditionMatcher.PreparedBody prepared = ConditionMatcher.PreparedBody.empty();
-            when(conditionMatcher.prepareBodyForConditions(anyString(), anyList()))
+            when(conditionMatcher.conditions(any(), any(), any(), any()))
+                    .thenAnswer(call -> REAL_MATCHER.conditions(call.getArgument(0), call.getArgument(1),
+                            call.getArgument(2), call.getArgument(3)));
+            when(conditionMatcher.prepareBody(anyString(), any(BodyRequirements.class)))
                     .thenReturn(prepared);
             when(conditionMatcher.matchesPrepared(
                     eq("ServiceName=CreateOrder"), isNull(), isNull(),
@@ -351,33 +386,20 @@ class JmsMockPipelineTest {
 
             pipeline.execute(defaultRequest());
 
-            verify(requestLogService).record(
-                    eq("jms-log-rule"),       // ruleId
-                    eq(Protocol.JMS),         // protocol
-                    isNull(),                 // method (JMS has no method)
-                    eq("ORDER.REQUEST"),      // endpoint
-                    eq(true),                 // matched
-                    anyInt(),                 // responseTimeMs
-                    eq("JMS"),                // clientIp
-                    any(),                    // matchChainJson
-                    isNull(),                 // targetHost (matched, but JMS request has no targetHost)
-                    eq(false),                // forwarded
-                    isNull(),                 // forwardTarget
-                    any(),                    // proxyStatus
-                    isNull(),                 // proxyError
-                    eq(200),                  // responseStatus
-                    anyInt(),                 // matchTimeMs
-                    eq("<Order><ServiceName>CreateOrder</ServiceName></Order>"), // requestBody
-                    eq(responseBody),         // responseBody
-                    anyList(),                // candidates
-                    any(),                    // preparedBody
-                    any(),                    // queryString
-                    any(),                    // headers
-                    any(),                    // faultType
-                    any(),                    // scenarioName
-                    any(),                    // scenarioFromState
-                    any()                     // scenarioToState
-            );
+            ServeEvent served = ServeEventCaptor.single(requestLogService);
+            assertThat(served.getRuleId()).isEqualTo("jms-log-rule");
+            assertThat(served.getProtocol()).isEqualTo(Protocol.JMS);
+            assertThat(served.getMethod()).isNull();
+            assertThat(served.getEndpoint()).isEqualTo("ORDER.REQUEST");
+            assertThat(served.isMatched()).isTrue();
+            assertThat(served.getClientIp()).isEqualTo("JMS");
+            assertThat(served.getTargetHost()).isNull();
+            assertThat(served.isForwarded()).isFalse();
+            assertThat(served.getForwardTarget()).isNull();
+            assertThat(served.getProxyError()).isNull();
+            assertThat(served.getResponseStatus()).isEqualTo(200);
+            assertThat(served.getRequestBody()).isEqualTo("<Order><ServiceName>CreateOrder</ServiceName></Order>");
+            assertThat(served.getResponseBody()).isEqualTo(responseBody);
         }
 
         @Test
@@ -390,33 +412,20 @@ class JmsMockPipelineTest {
 
             pipeline.execute(defaultRequest());
 
-            verify(requestLogService).record(
-                    isNull(),                 // ruleId = null (no match)
-                    eq(Protocol.JMS),         // protocol
-                    isNull(),                 // method
-                    eq("ORDER.REQUEST"),      // endpoint
-                    eq(false),                // matched = false
-                    anyInt(),                 // responseTimeMs
-                    eq("JMS"),                // clientIp
-                    any(),                    // matchChainJson
-                    isNull(),                 // targetHost = null (handleNoMatch path)
-                    eq(false),                // forwarded
-                    isNull(),                 // forwardTarget
-                    isNull(),                 // proxyStatus
-                    isNull(),                 // proxyError
-                    eq(200),                  // responseStatus
-                    anyInt(),                 // matchTimeMs
-                    eq("<Order><ServiceName>CreateOrder</ServiceName></Order>"), // requestBody
-                    any(),                    // responseBody (error message)
-                    anyList(),                // candidates
-                    any(),                    // preparedBody
-                    any(),                    // queryString
-                    any(),                    // headers
-                    any(),                    // faultType
-                    any(),                    // scenarioName
-                    any(),                    // scenarioFromState
-                    any()                     // scenarioToState
-            );
+            ServeEvent served2 = ServeEventCaptor.single(requestLogService);
+            assertThat(served2.getRuleId()).isNull();
+            assertThat(served2.getProtocol()).isEqualTo(Protocol.JMS);
+            assertThat(served2.getMethod()).isNull();
+            assertThat(served2.getEndpoint()).isEqualTo("ORDER.REQUEST");
+            assertThat(served2.isMatched()).isFalse();
+            assertThat(served2.getClientIp()).isEqualTo("JMS");
+            assertThat(served2.getTargetHost()).isNull();
+            assertThat(served2.isForwarded()).isFalse();
+            assertThat(served2.getForwardTarget()).isNull();
+            assertThat(served2.getProxyStatus()).isNull();
+            assertThat(served2.getProxyError()).isNull();
+            assertThat(served2.getResponseStatus()).isEqualTo(200);
+            assertThat(served2.getRequestBody()).isEqualTo("<Order><ServiceName>CreateOrder</ServiceName></Order>");
         }
     }
 }

@@ -8,7 +8,6 @@ import com.echo.service.HttpRuleService;
 import com.echo.service.HttpOutboundForwarder;
 import com.echo.service.MatchChainEntry;
 import com.echo.service.RequestLogService;
-import com.echo.service.ResponseTemplateService;
 import com.echo.service.RuleService;
 import com.echo.util.CancellableStages;
 import com.echo.service.ScenarioService;
@@ -25,7 +24,6 @@ import org.springframework.web.client.RestTemplate;
 import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -49,7 +47,6 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final HttpRuleService httpRuleService;
-    private final ResponseTemplateService templateService;
     private final RestTemplate restTemplate;
     private final HttpOutboundForwarder outboundForwarder;
 
@@ -58,13 +55,11 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
                             RuleService ruleService,
                             RequestLogService requestLogService,
                             HttpRuleService httpRuleService,
-                            ResponseTemplateService templateService,
                             RestTemplate restTemplate,
                             HttpOutboundForwarder outboundForwarder,
                             ScenarioService scenarioService) {
         super(conditionMatcher, ruleService, requestLogService, scenarioService);
         this.httpRuleService = httpRuleService;
-        this.templateService = templateService;
         this.restTemplate = restTemplate;
         this.outboundForwarder = outboundForwarder;
     }
@@ -74,11 +69,10 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
                             RuleService ruleService,
                             RequestLogService requestLogService,
                             HttpRuleService httpRuleService,
-                            ResponseTemplateService templateService,
                             RestTemplate restTemplate,
                             HttpOutboundForwarder outboundForwarder) {
         this(conditionMatcher, ruleService, requestLogService, httpRuleService,
-                templateService, restTemplate, outboundForwarder, null);
+                restTemplate, outboundForwarder, null);
     }
 
     @Override
@@ -89,16 +83,6 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
 
     @Override
     protected MockResponse buildResponse(HttpRule rule, MockRequest request, String responseBody) {
-        // 模板渲染（有 {{ 語法才處理）
-        String renderedBody = responseBody;
-        if (templateService.hasTemplate(responseBody)) {
-            Map<String, String> queryParams = parseQueryString(request.getQueryString());
-            var templateContext = new ResponseTemplateService.TemplateContext(
-                    request.getPath(), request.getMethod(), queryParams,
-                    request.getHeaders(), request.getBody());
-            renderedBody = templateService.render(responseBody, templateContext);
-        }
-
         // 解析自訂 HTTP headers
         Map<String, String> responseHeaders = parseHttpHeaders(rule.getHttpHeaders());
 
@@ -106,7 +90,7 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
 
         return MockResponse.builder()
                 .status(status)
-                .body(renderedBody)
+                .body(responseBody)
                 .headers(responseHeaders)
                 .matched(true)
                 .forwarded(false)
@@ -260,7 +244,8 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
 
     @Override
     protected boolean hasCondition(HttpRule rule) {
-        return (rule.getBodyCondition() != null && !rule.getBodyCondition().isBlank())
+        return rule.getMatchSpec() != null
+                || (rule.getBodyCondition() != null && !rule.getBodyCondition().isBlank())
                 || (rule.getQueryCondition() != null && !rule.getQueryCondition().isBlank())
                 || (rule.getHeaderCondition() != null && !rule.getHeaderCondition().isBlank());
     }
@@ -271,6 +256,7 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
                 .bodyCondition(rule.getBodyCondition())
                 .queryCondition(rule.getQueryCondition())
                 .headerCondition(rule.getHeaderCondition())
+                .matchSpec(rule.getMatchSpec())
                 .build();
     }
 
@@ -280,20 +266,6 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
     }
 
     // ==================== Private Helpers ====================
-
-    private Map<String, String> parseQueryString(String queryString) {
-        Map<String, String> params = new HashMap<>();
-        if (queryString == null || queryString.isEmpty()) {
-            return params;
-        }
-        for (String pair : queryString.split("&")) {
-            int idx = pair.indexOf('=');
-            if (idx > 0) {
-                params.put(pair.substring(0, idx), pair.substring(idx + 1));
-            }
-        }
-        return params;
-    }
 
     @SuppressWarnings("unchecked")
     private Map<String, String> parseHttpHeaders(String httpHeadersJson) {

@@ -15,12 +15,11 @@
  * @param {import('vue').Ref} deps.page - 當前頁面（來自 app.js）
  * @param {import('vue').Ref} deps.httpLabel - HTTP 協定標籤
  * @param {import('vue').Ref} deps.jmsLabel - JMS 協定標籤
- * @param {import('vue').Ref} deps.ruleDragSortEnabled - 部署端是否啟用拖曳排序
  * @returns {Object} 規則管理相關的狀態與方法
  */
 const useRules = (deps) => {
     const { ref, computed, watch } = Vue;
-    const { showToast, showConfirm, t, requireLogin, login, isLoggedIn, loading, httpLabel, jmsLabel, ruleDragSortEnabled } = deps;
+    const { showToast, showConfirm, t, requireLogin, login, isLoggedIn, loading, httpLabel, jmsLabel } = deps;
 
     // --- 資料快取機制 ---
     const dataLastLoaded = { rules: 0 };
@@ -33,7 +32,7 @@ const useRules = (deps) => {
     // --- 狀態 ---
     const rules = ref([]);
     const savedRuleSort = JSON.parse(localStorage.getItem('ruleSort') || 'null');
-    const ruleFilter = ref({ protocol: '', enabled: '', isProtected: '', mode: '', expiring: '', keyword: '' });
+    const ruleFilter = ref({ protocol: '', enabled: '', isProtected: '', mode: '', expiring: '', unreachable: '', keyword: '' });
     const ruleSort = ref(savedRuleSort || { field: 'updatedAt', asc: false });
     const rulePage = ref(1);
     const rulePageSize = ref(20);
@@ -119,6 +118,7 @@ const useRules = (deps) => {
         if (ruleFilter.value.isProtected !== '') { params.set('isProtected', ruleFilter.value.isProtected); }
         if (ruleFilter.value.mode) { params.set('mode', ruleFilter.value.mode); }
         if (ruleFilter.value.expiring !== '') { params.set('expiring', ruleFilter.value.expiring); }
+        if (ruleFilter.value.unreachable) { params.set('unreachable', ruleFilter.value.unreachable); }
         const keyword = (ruleFilter.value.keyword || '').trim();
         if (keyword) { params.set('keyword', keyword); }
         return '/api/admin/rules/page?' + params.toString();
@@ -131,6 +131,7 @@ const useRules = (deps) => {
         if (ruleFilter.value.isProtected !== '') { params.set('isProtected', ruleFilter.value.isProtected); }
         if (ruleFilter.value.mode) { params.set('mode', ruleFilter.value.mode); }
         if (ruleFilter.value.expiring !== '') { params.set('expiring', ruleFilter.value.expiring); }
+        if (ruleFilter.value.unreachable) { params.set('unreachable', ruleFilter.value.unreachable); }
         const keyword = (ruleFilter.value.keyword || '').trim();
         if (keyword) { params.set('keyword', keyword); }
         return '/api/admin/rules/groups?' + params.toString();
@@ -149,6 +150,7 @@ const useRules = (deps) => {
         if (ruleFilter.value.isProtected !== '') { params.set('isProtected', ruleFilter.value.isProtected); }
         if (ruleFilter.value.mode) { params.set('mode', ruleFilter.value.mode); }
         if (ruleFilter.value.expiring !== '') { params.set('expiring', ruleFilter.value.expiring); }
+        if (ruleFilter.value.unreachable) { params.set('unreachable', ruleFilter.value.unreachable); }
         const keyword = (ruleFilter.value.keyword || '').trim();
         if (keyword) { params.set('keyword', keyword); }
         return '/api/admin/rules/group?' + params.toString();
@@ -213,7 +215,9 @@ const useRules = (deps) => {
                     serverRuleTotalPages.value = 0;
                 }
                 markLoaded();
-                rulePreviewExpanded.value = {};
+                // Details may have changed on the server; refetch the open drawer instead of showing stale data.
+                rulePreviewCache.value = {};
+                if (ruleDetailId.value) { loadRuleDetail(ruleDetailId.value); }
             } else {
                 loading.value.rulesError = t('rules.loadFailed');
             }
@@ -257,6 +261,7 @@ const useRules = (deps) => {
         rules.value = rules.value.filter(r => r.id !== id);
         const r = await apiCall(`/api/admin/rules/${id}`, { method: 'DELETE' }, { errorMsg: t('toast.ruleDeleteFailed') });
         if (r && r.ok) {
+            if (ruleDetailId.value === id) { closeRuleDetail(); }
             showToast(t('toast.ruleDeleteSuccess'), 'success');
             markDirty();
             await loadRules(true);
@@ -273,18 +278,23 @@ const useRules = (deps) => {
         if (r && r.ok) { showToast(t('toast.ruleExtendSuccess'), 'success'); markDirty(); loadRules(true); }
     };
 
-    const toggleEnabled = async rule => {
+    /**
+     * 切換啟用狀態：立即生效，並在通知中提供「復原」。
+     * 這是可逆操作，所以不再逐次確認；刪除等不可逆操作仍會確認。
+     */
+    const toggleEnabled = async (rule, { offerUndo = true } = {}) => {
         if (!await requireLogin()) return;
         const newEnabled = rule.enabled === false;
         const action = newEnabled ? 'enable' : 'disable';
-        const msg = newEnabled ? t('confirm.enableRuleMsg') : t('confirm.disableRuleMsg');
-        if (!await showConfirm({ title: newEnabled ? t('confirm.enableRule') : t('confirm.disableRule'), message: msg })) return;
         const r = await apiCall(`/api/admin/rules/${rule.id}/${action}`, { method: 'PUT' }, { errorMsg: t('toast.ruleStatusFailed') });
         if (r && r.ok) {
             rule.enabled = newEnabled;
-            showToast(newEnabled ? t('toast.ruleEnabled') : t('toast.ruleDisabled'), 'success');
+            const name = rule.description || rule.matchKey || shortId(rule.id);
+            const undo = offerUndo ? { label: t('common.undo'), handler: () => toggleEnabled(rule, { offerUndo: false }) } : null;
+            showToast(t(newEnabled ? 'toast.ruleEnabledNamed' : 'toast.ruleDisabledNamed', { name }), 'success', undo);
+            // Update in place: reloading would re-sort by update time and make the row jump away.
             markDirty();
-            await loadRules(true);
+            if (ruleDetailId.value === rule.id && rulePreviewCache.value[rule.id]) { rulePreviewCache.value[rule.id].enabled = newEnabled; }
         }
     };
 
@@ -406,58 +416,50 @@ const useRules = (deps) => {
         if (r && r.ok) { const d = await r.json(); showToast(t('toast.batchDeleteSuccess', {count: d.deleted}), 'success'); selectedRules.value = []; markDirty(); loadRules(true); }
     };
 
-    const deleteAllRules = async () => {
+    const deleteAllRules = async (knownCount = null) => {
         if (!await requireLogin()) return;
-        const count = ruleTotalElements.value;
+        const count = knownCount != null && Number.isFinite(Number(knownCount)) ? Number(knownCount) : ruleTotalElements.value;
         if (!await showConfirm({ title: t('confirm.deleteAllRules'), message: t('confirm.deleteAllRulesMsg', {count}), confirmText: t('confirm.deleteAll'), danger: true, requireInput: String(count), inputLabel: t('confirm.deleteAllRulesInputLabel', {count}) })) return;
         const r = await apiCall('/api/admin/rules/all', { method: 'DELETE' }, { errorMsg: t('toast.deleteAllRulesFailed') });
         if (r && r.ok) { const d = await r.json(); showToast(t('toast.deleteAllRulesSuccess', {count: d.deleted}), 'success'); markDirty(); loadRules(true); }
     };
 
-    // --- 行內預覽 ---
+    // --- 詳情抽屜 ---
+    const ruleDetailId = ref(null);
     const rulePreviewCache = ref({});
-    const rulePreviewExpanded = ref({});
     const rulePreviewLoading = ref({});
     const rulePreviewError = ref({});
-    const toggleRulePreview = async (rule) => {
-        const id = rule.id;
-        if (rulePreviewExpanded.value[id] && !rulePreviewError.value[id]) {
-            rulePreviewExpanded.value[id] = false;
-            return;
-        }
-        if (rulePreviewCache.value[id]) {
-            rulePreviewExpanded.value[id] = true;
-            return;
-        }
+    const hydrateForwardTarget = async (data) => {
+        if (data?.action !== 'FORWARD' || data?.forwardTargetMode === 'ORIGINAL_HOST') return;
+        const protocol = String(data.protocol || '').toUpperCase();
+        const isJms = protocol === 'JMS';
+        const endpoint = isJms ? '/api/admin/jms-target-connections' : '/api/admin/http-target-connections';
+        const response = await apiCall(endpoint, {}, { silent: true });
+        if (!response || !response.ok) return;
+        const targets = await response.json().catch(() => []);
+        if (!Array.isArray(targets)) return;
+        const connectionId = isJms ? data.jmsTargetConnectionId : data.httpTargetConnectionId;
+        const target = data.forwardTargetMode === 'CONNECTION'
+            ? targets.find(item => String(item.id) === String(connectionId))
+            : targets.find(item => item.defaultConnection);
+        if (!target) return;
+        data._forwardTargetName = target.name || '';
+        data._forwardTargetEndpoint = isJms ? (target.serverUrl || '') : (target.baseUrl || '');
+    };
+    const loadRuleDetail = async (id, { force = false } = {}) => {
+        if (!id || rulePreviewLoading.value[id] || (!force && rulePreviewCache.value[id])) { return; }
         rulePreviewLoading.value[id] = true;
         rulePreviewError.value[id] = false;
-        rulePreviewExpanded.value[id] = true;
         const r = await apiCall(`/api/admin/rules/${id}`, {}, { silent: true });
         if (r && r.ok) {
             const data = await r.json();
+            await hydrateForwardTarget(data);
             const body = data.responseBody || '';
-            // SSE 內容：格式化為 SSE 預覽
-            if (data.sseEnabled) {
-                const events = deserializeSseEvents(body);
-                if (events.length && events[0].data) {
-                    const lines = [];
-                    events.forEach((evt, i) => {
-                        if (i > 0) { lines.push(''); }
-                        if (evt.delayMs > 0) { lines.push(t('ssePreview.delay', {ms: evt.delayMs})); lines.push(''); }
-                        const type = evt.type || 'normal';
-                        if (type === 'abort') { lines.push(t('ssePreview.abort')); return; }
-                        if (type === 'error') { lines.push(t('ssePreview.errorEvent')); }
-                        const evtName = type === 'error' ? 'error' : (evt.event || 'message');
-                        lines.push('event: ' + evtName);
-                        (evt.data || '').split('\n').forEach(line => { lines.push('data: ' + line); });
-                        if (evt.id) { lines.push('id: ' + evt.id); }
-                        lines.push('');
-                    });
-                    data._previewBody = lines.join('\n');
-                    data._isSse = true;
-                } else {
-                    data._previewBody = body;
-                }
+            // SSE 內容：顯示實際送出的串流原文，並附一行摘要（事件數、全長、循環、在哪裡結束連線）
+            const events = data.sseEnabled ? deserializeSseEvents(body) : [];
+            if (events.length && events[0].data) {
+                data._previewBody = SseEvents.rawStream(events, data.sseLoopEnabled === true, t);
+                data._sseSummary = SseEvents.summary(events, data.sseLoopEnabled === true);
             } else {
                 data._previewBody = body;
             }
@@ -467,112 +469,13 @@ const useRules = (deps) => {
         }
         rulePreviewLoading.value[id] = false;
     };
+    const openRuleDetail = rule => {
+        if (!rule?.id) { return; }
+        ruleDetailId.value = rule.id;
+        loadRuleDetail(rule.id);
+    };
+    const closeRuleDetail = () => { ruleDetailId.value = null; };
 
-    let ruleClickTimer = null;
-    const handleRuleRowClick = (r) => {
-        if (ruleClickTimer) {
-            clearTimeout(ruleClickTimer);
-            ruleClickTimer = null;
-            if (isLoggedIn.value) { if (deps.openEdit) deps.openEdit(r); }
-        } else {
-            ruleClickTimer = setTimeout(() => {
-                ruleClickTimer = null;
-                toggleRulePreview(r);
-            }, 250);
-        }
-    };
-
-    // --- 拖曳排序 ---
-    const dragState = ref({ dragging: false, dragId: null, overId: null, overPos: null });
-    const ruleDragAvailable = computed(() => ruleDragSortEnabled?.value === true
-        && isLoggedIn.value && !batchSelectMode.value && ruleViewMode.value === 'list');
-    const canDragRules = computed(() => ruleDragAvailable.value
-        && ruleSort.value.field === 'priority' && !ruleSort.value.asc);
-
-    const onDragStart = (e, rule) => {
-        if (!canDragRules.value) return;
-        dragState.value = { dragging: true, dragId: rule.id, overId: null, overPos: null };
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', rule.id);
-        e.target.closest('tr').classList.add('drag-source');
-    };
-    const onDragOver = (e, rule) => {
-        if (!dragState.value.dragging || rule.id === dragState.value.dragId) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        const rect = e.target.closest('tr').getBoundingClientRect();
-        const mid = rect.top + rect.height / 2;
-        dragState.value.overId = rule.id;
-        dragState.value.overPos = e.clientY < mid ? 'before' : 'after';
-    };
-    const onDragLeave = (e, rule) => {
-        if (dragState.value.overId === rule.id) {
-            const tr = e.target.closest('tr');
-            if (tr && !tr.contains(e.relatedTarget)) {
-                dragState.value.overId = null;
-                dragState.value.overPos = null;
-            }
-        }
-    };
-    const onDrop = async (e) => {
-        e.preventDefault();
-        const { dragId, overId, overPos } = dragState.value;
-        if (!dragId || !overId || dragId === overId) { resetDrag(); return; }
-        const list = pagedRules.value;
-        const dragIdx = list.findIndex(r => r.id === dragId);
-        const overIdx = list.findIndex(r => r.id === overId);
-        if (dragIdx < 0 || overIdx < 0) { resetDrag(); return; }
-        let insertIdx = overPos === 'before' ? overIdx : overIdx + 1;
-        if (dragIdx < insertIdx) { insertIdx--; }
-        if (insertIdx === dragIdx) { resetDrag(); return; }
-        const ordered = list.map(r => r.id);
-        ordered.splice(dragIdx, 1);
-        ordered.splice(insertIdx, 0, dragId);
-        const maxPri = Math.max(...list.map(r => r.priority ?? 0));
-        const updates = [];
-        ordered.forEach((id, i) => {
-            const newPri = maxPri - i;
-            const rule = list.find(r => r.id === id);
-            if (rule && (rule.priority ?? 0) !== newPri) {
-                updates.push({ id, priority: newPri, version: rule.version });
-            }
-        });
-        resetDrag();
-        if (!updates.length) return;
-        showToast(t('toast.updatingSort'), 'success');
-        let failed = 0;
-        for (const u of updates) {
-            const r = await apiCall(`/api/admin/rules/${u.id}`, { method: 'PUT', body: JSON.stringify({ priority: u.priority, version: u.version }) }, { silent: true });
-            if (!r || !r.ok) { failed++; }
-        }
-        if (failed) { showToast(t('toast.sortUpdateFailed', {count: failed}), 'error'); }
-        else { showToast(t('toast.sortUpdated'), 'success'); }
-        markDirty();
-        await loadRules(true);
-    };
-    const onDragEnd = () => { resetDrag(); };
-    const resetDrag = () => {
-        document.querySelectorAll('.drag-source').forEach(el => el.classList.remove('drag-source'));
-        dragState.value = { dragging: false, dragId: null, overId: null, overPos: null };
-    };
-    const dragRowClass = (rule) => {
-        if (!dragState.value.dragging) return '';
-        if (rule.id === dragState.value.dragId) return 'drag-source';
-        if (rule.id === dragState.value.overId) return dragState.value.overPos === 'before' ? 'drag-over-before' : 'drag-over-after';
-        return '';
-    };
-
-    watch(ruleDragSortEnabled, enabled => {
-        if (!enabled) {
-            resetDrag();
-            return;
-        }
-        ruleSort.value = { field: 'priority', asc: false };
-        localStorage.setItem('ruleSort', JSON.stringify(ruleSort.value));
-        rulePage.value = 1;
-    });
-    watch(ruleDragAvailable, available => { if (!available) resetDrag(); });
-    watch(ruleSort, () => resetDrag(), { deep: true });
 
     // --- Filter chips ---
     const ruleFilterChips = computed(() => {
@@ -582,11 +485,12 @@ const useRules = (deps) => {
         if (ruleFilter.value.isProtected) chips.push({ key: 'isProtected', label: t('filterChips.protection') + (ruleFilter.value.isProtected === 'true' ? t('rules.filterProtected') : t('rules.filterUnprotected')) });
         if (ruleFilter.value.mode) chips.push({ key: 'mode', label: t('filterChips.mode') + t('rules.mode_' + ruleFilter.value.mode) });
         if (ruleFilter.value.expiring) chips.push({ key: 'expiring', label: t('rules.filterExpiring') });
+        if (ruleFilter.value.unreachable) chips.push({ key: 'unreachable', label: t('rules.order.filterLabel') });
         if (ruleFilter.value.keyword) chips.push({ key: 'keyword', label: t('filterChips.keyword') + ruleFilter.value.keyword });
         return chips;
     });
     const removeRuleChip = key => { ruleFilter.value[key] = ''; };
-    const clearRuleFilters = () => { ruleFilter.value = { protocol: '', enabled: '', isProtected: '', mode: '', expiring: '', keyword: '' }; };
+    const clearRuleFilters = () => { ruleFilter.value = { protocol: '', enabled: '', isProtected: '', mode: '', expiring: '', unreachable: '', keyword: '' }; };
 
     // --- 其他 ---
     const showPriorityHelp = ref(false);
@@ -617,7 +521,7 @@ const useRules = (deps) => {
         if (r && r.ok) { const data = await r.json(); const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `rule-${id.substring(0, 8)}.json`; a.click(); showToast(t('toast.ruleJsonExported'), 'success'); }
     };
 
-    const goToRule = id => { deps.page.value = 'rules'; ruleFilter.value.keyword = id; };
+    const goToRule = id => { deps.page.value = 'rules'; ruleFilter.value.keyword = id; openRuleDetail({ id }); };
 
     // --- 匯出匯入整合 dropdown ---
     const showDataDropdown = ref(false);
@@ -691,22 +595,14 @@ const useRules = (deps) => {
         importFileName,
         handleImportFile,
         doImport,
-        // 行內預覽
+        // 詳情抽屜
+        ruleDetailId,
         rulePreviewCache,
-        rulePreviewExpanded,
         rulePreviewLoading,
         rulePreviewError,
-        toggleRulePreview,
-        handleRuleRowClick,
-        // 拖曳排序
-        dragState,
-        canDragRules,
-        onDragStart,
-        onDragOver,
-        onDragLeave,
-        onDrop,
-        onDragEnd,
-        dragRowClass,
+        loadRuleDetail,
+        openRuleDetail,
+        closeRuleDetail,
         // Filter chips
         ruleFilterChips,
         removeRuleChip,

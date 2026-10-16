@@ -19,6 +19,9 @@ public interface HttpRuleRepository extends JpaRepository<HttpRule, String> {
 
     List<HttpRule> findAllByOrderByIdDesc();
 
+    /** 規則快照使用：所有啟用中的規則，依 id 排序（與 findByTargetHostOrWildcard 的順序一致）。 */
+    List<HttpRule> findByEnabledTrueOrderByIdAsc();
+
     int countByResponseId(Long responseId);
 
     List<HttpRule> findByResponseId(Long responseId);
@@ -39,19 +42,19 @@ public interface HttpRuleRepository extends JpaRepository<HttpRule, String> {
 
     /** 批次啟用/停用 */
     @Modifying
-    @Query("UPDATE HttpRule r SET r.enabled = :enabled, r.updatedAt = :updatedAt, r.updatedBy = :updatedBy WHERE r.id IN :ids")
+    @Query("UPDATE HttpRule r SET r.enabled = :enabled, r.updatedAt = :updatedAt, r.updatedBy = :updatedBy, r.version = COALESCE(r.version, 0) + 1 WHERE r.id IN :ids")
     int updateEnabledByIds(@Param("ids") List<String> ids, @Param("enabled") boolean enabled,
                            @Param("updatedAt") LocalDateTime updatedAt, @Param("updatedBy") String updatedBy);
 
     /** 批次更新保護狀態 */
     @Modifying
-    @Query("UPDATE HttpRule r SET r.isProtected = :isProtected, r.updatedAt = :updatedAt, r.updatedBy = :updatedBy WHERE r.id IN :ids")
+    @Query("UPDATE HttpRule r SET r.isProtected = :isProtected, r.updatedAt = :updatedAt, r.updatedBy = :updatedBy, r.version = COALESCE(r.version, 0) + 1 WHERE r.id IN :ids")
     int updateProtectedByIds(@Param("ids") List<String> ids, @Param("isProtected") boolean isProtected,
                              @Param("updatedAt") LocalDateTime updatedAt, @Param("updatedBy") String updatedBy);
 
     /** 批次展延 */
     @Modifying
-    @Query("UPDATE HttpRule r SET r.extendedAt = :extendedAt, r.updatedAt = :updatedAt, r.updatedBy = :updatedBy WHERE r.id IN :ids")
+    @Query("UPDATE HttpRule r SET r.extendedAt = :extendedAt, r.updatedAt = :updatedAt, r.updatedBy = :updatedBy, r.version = COALESCE(r.version, 0) + 1 WHERE r.id IN :ids")
     int extendByIds(@Param("ids") List<String> ids, @Param("extendedAt") LocalDateTime extendedAt,
                     @Param("updatedAt") LocalDateTime updatedAt, @Param("updatedBy") String updatedBy);
 

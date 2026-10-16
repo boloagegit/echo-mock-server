@@ -17,6 +17,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 class QuietThreadingHTTPServer(ThreadingHTTPServer):
+    # socketserver's default listen backlog is 5. When 40 timed-out forwards
+    # reconnect at once, the kernel drops the extra SYNs and retries them after
+    # 1 s, which shows up as Echo connect failures at ~1 s and read timeouts
+    # ending at ~4 s instead of 3 s. A larger backlog keeps the stub out of the
+    # measurement.
+    request_queue_size = 128
+
     def handle_error(self, request: object, client_address: object) -> None:
         # Time-out benchmarks intentionally close sockets before delayed responses finish.
         return
@@ -24,6 +31,10 @@ class QuietThreadingHTTPServer(ThreadingHTTPServer):
 
 class BenchmarkHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+    # The response is written as headers then body. Without TCP_NODELAY, Nagle holds
+    # the body until the client ACKs the headers, and the client's delayed ACK makes
+    # every response after the first on a keep-alive connection take ~40 ms.
+    disable_nagle_algorithm = True
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
         self._respond()

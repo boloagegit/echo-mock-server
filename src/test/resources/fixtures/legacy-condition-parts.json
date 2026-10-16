@@ -1,0 +1,23 @@
+{
+  "description": "舊版條件拆解規則的共用案例：後端 LegacyConditions.parts 與前端 MatchTree.parseLegacyCondition 都必須得到相同結果。parts 為 null 表示沒有運算子；simpleRow 表示能否無損地以簡易模式條件列表示。",
+  "cases": [
+    {"condition": "user.type=vip", "parts": {"field": "user.type", "operator": "=", "value": "vip"}, "simpleRow": true},
+    {"condition": "a=x!=y", "parts": {"field": "a", "operator": "=", "value": "x!=y"}, "simpleRow": true},
+    {"condition": "a=b~=c", "parts": {"field": "a", "operator": "=", "value": "b~=c"}, "simpleRow": true},
+    {"condition": "a*=x~=y", "parts": {"field": "a", "operator": "*=", "value": "x~=y"}, "simpleRow": true},
+    {"condition": "a=b=c", "parts": {"field": "a", "operator": "=", "value": "b=c"}, "simpleRow": true},
+    {"condition": "status!=CLOSED", "parts": {"field": "status", "operator": "!=", "value": "CLOSED"}, "simpleRow": true},
+    {"condition": "name*=Smith", "parts": {"field": "name", "operator": "*=", "value": "Smith"}, "simpleRow": true},
+    {"condition": "X-Type~=v.*", "parts": {"field": "X-Type", "operator": "~=", "value": "v.*"}, "simpleRow": true},
+    {"condition": "//Order/Status=OPEN", "parts": {"field": "//Order/Status", "operator": "=", "value": "OPEN"}, "simpleRow": true},
+    {"condition": "/Order/@id=7", "parts": {"field": "/Order/@id", "operator": "=", "value": "7"}, "simpleRow": true},
+    {"condition": "$.items[0].sku=S1", "parts": {"field": "$.items[0].sku", "operator": "=", "value": "S1"}, "simpleRow": true},
+    {"condition": "$.a==b", "parts": {"field": "$.a", "operator": "=", "value": "=b"}, "simpleRow": true},
+    {"condition": "a = b ", "parts": {"field": "a", "operator": "=", "value": "b"}, "simpleRow": true},
+    {"condition": "a! =b", "parts": {"field": "a!", "operator": "=", "value": "b"}, "simpleRow": false},
+    {"condition": "a=", "parts": {"field": "a", "operator": "=", "value": ""}, "simpleRow": false},
+    {"condition": "!=x", "parts": {"field": "", "operator": "!=", "value": "x"}, "simpleRow": false},
+    {"condition": "=x", "parts": null, "simpleRow": false},
+    {"condition": "hello", "parts": null, "simpleRow": false}
+  ]
+}

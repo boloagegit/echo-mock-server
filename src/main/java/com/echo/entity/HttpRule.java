@@ -126,6 +126,9 @@ public class HttpRule extends BaseRule {
      */
     @Transient
     public String getCondition() {
+        if (getMatchSpec() != null) {
+            return getMatchSpec();
+        }
         StringBuilder sb = new StringBuilder();
         if (getBodyCondition() != null && !getBodyCondition().isBlank()) {
             sb.append(getBodyCondition());

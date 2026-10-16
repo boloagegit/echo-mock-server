@@ -29,6 +29,10 @@ public interface ResponseRepository extends JpaRepository<Response, Long> {
     @Query("SELECT r.id FROM Response r WHERE r.id IN :ids")
     List<Long> findExistingIds(@Param("ids") Collection<Long> ids);
 
+    /** 所有 Response 的 ID；只取主鍵，供大量比對時在記憶體中求交集。 */
+    @Query("SELECT r.id FROM Response r")
+    List<Long> findAllIds();
+
     /** 搜尋（描述包含關鍵字） */
     List<Response> findByDescriptionContainingIgnoreCase(String keyword);
 

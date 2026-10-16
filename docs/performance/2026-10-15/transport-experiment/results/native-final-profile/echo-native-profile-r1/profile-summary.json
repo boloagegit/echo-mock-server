@@ -1,0 +1,472 @@
+{
+  "execution_samples": 1471,
+  "nearest_recognized_frame": {
+    "Undertow / XNIO": 718,
+    "JDK / other": 157,
+    "Echo": 244,
+    "Spring other": 340,
+    "Micrometer": 12
+  },
+  "undertow_handle_event_leaf_lines": {
+    "137": 4
+  },
+  "sampled_threads": [
+    [
+      "XNIO-1 I/O-1",
+      263
+    ],
+    [
+      "XNIO-1 I/O-2",
+      195
+    ],
+    [
+      "XNIO-1 task-9",
+      134
+    ],
+    [
+      "XNIO-1 task-7",
+      132
+    ],
+    [
+      "XNIO-1 task-6",
+      132
+    ],
+    [
+      "XNIO-1 task-5",
+      130
+    ],
+    [
+      "XNIO-1 task-4",
+      129
+    ],
+    [
+      "XNIO-1 task-3",
+      129
+    ],
+    [
+      "XNIO-1 task-8",
+      122
+    ],
+    [
+      "XNIO-1 task-2",
+      92
+    ],
+    [
+      "ForkJoinPool.commonPool-worker-2",
+      4
+    ],
+    [
+      "ForkJoinPool.commonPool-worker-1",
+      3
+    ],
+    [
+      "scheduling-1",
+      3
+    ],
+    [
+      "Thread-0 (ActiveMQ-server-ActiveMQServerImpl::name=localhost)",
+      1
+    ],
+    [
+      "JFR Periodic Tasks",
+      1
+    ],
+    [
+      "sse-stall-watchdog",
+      1
+    ]
+  ],
+  "leaf_methods": [
+    [
+      "java.util.concurrent.locks.LockSupport.parkNanos",
+      415
+    ],
+    [
+      "java.util.concurrent.ConcurrentHashMap.get",
+      85
+    ],
+    [
+      "org.springframework.beans.factory.support.DefaultListableBeanFactory.findAutowireCandidates",
+      28
+    ],
+    [
+      "org.springframework.util.ObjectUtils.nullSafeEquals",
+      27
+    ],
+    [
+      "org.springframework.aop.framework.AdvisedSupport.getInterceptorsAndDynamicInterceptionAdvice",
+      25
+    ],
+    [
+      "java.lang.AbstractStringBuilder.ensureCapacityInternal",
+      24
+    ],
+    [
+      "io.undertow.util.HttpString.higher",
+      23
+    ],
+    [
+      "com.echo.diagnostics.TransactionDiagnostics$Trace.event",
+      23
+    ],
+    [
+      "io.undertow.util.HeaderMap$1._next",
+      21
+    ],
+    [
+      "jdk.internal.util.ArraysSupport.mismatch",
+      20
+    ],
+    [
+      "io.undertow.util.HeaderMap.getEntry",
+      20
+    ],
+    [
+      "java.util.regex.Pattern$GroupHead.match",
+      19
+    ],
+    [
+      "com.echo.config.NativeMockHttpHandler.eligible",
+      17
+    ],
+    [
+      "com.echo.diagnostics.TransactionDiagnostics$Trace.safeValue",
+      16
+    ],
+    [
+      "java.util.Objects.equals",
+      14
+    ],
+    [
+      "java.util.concurrent.ConcurrentHashMap.computeIfAbsent",
+      14
+    ],
+    [
+      "com.echo.config.NativeMockHttpHandler.execute",
+      13
+    ],
+    [
+      "sun.nio.ch.EventFD.set",
+      13
+    ],
+    [
+      "java.util.HashMap.getNode",
+      13
+    ],
+    [
+      "java.util.stream.AbstractPipeline.wrapSink",
+      13
+    ],
+    [
+      "java.util.HashMap.putVal",
+      11
+    ],
+    [
+      "java.util.LinkedHashMap.valuesToArray",
+      10
+    ],
+    [
+      "com.echo.service.MatchDescriptionBuilder.toChainJsonString",
+      10
+    ],
+    [
+      "java.lang.ThreadLocal$ThreadLocalMap.getEntry",
+      10
+    ],
+    [
+      "java.lang.String.replace",
+      10
+    ],
+    [
+      "org.xnio.nio.WorkerThread.run",
+      9
+    ],
+    [
+      "com.echo.pipeline.AbstractMockPipeline.executeAsync",
+      9
+    ],
+    [
+      "org.jboss.threads.EnhancedQueueExecutor$ThreadBody.getOrAddNode",
+      9
+    ],
+    [
+      "java.util.stream.Sink$ChainedReference.<init>",
+      9
+    ],
+    [
+      "ch.qos.logback.classic.Logger.debug",
+      9
+    ],
+    [
+      "org.springframework.core.MethodParameter.getNestedParameterType",
+      8
+    ],
+    [
+      "com.echo.service.RequestLogService$$SpringCGLIB$$0.onServed",
+      8
+    ],
+    [
+      "com.echo.pipeline.AbstractMockPipeline.responderFor",
+      8
+    ],
+    [
+      "org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency",
+      8
+    ],
+    [
+      "io.undertow.io.AsyncSenderImpl.send",
+      8
+    ]
+  ],
+  "inclusive_stack_counts_OVERLAP": {
+    "Echo pipeline": 115,
+    "Match chain formatting": 50,
+    "Echo diagnostics": 48,
+    "Micrometer": 12
+  },
+  "gc_events": [
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.012218359S",
+      "sumOfPauses": "PT0.012218359S",
+      "longestPause": "PT0.012218359S"
+    },
+    {
+      "name": "G1New",
+      "cause": "CodeCache GC Threshold",
+      "duration": "PT0.004166861S",
+      "sumOfPauses": "PT0.004166861S",
+      "longestPause": "PT0.004166861S"
+    },
+    {
+      "name": "G1Old",
+      "cause": "CodeCache GC Threshold",
+      "duration": "PT0.360998378S",
+      "sumOfPauses": "PT0.028737822S",
+      "longestPause": "PT0.028554576S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.005900991S",
+      "sumOfPauses": "PT0.005900991S",
+      "longestPause": "PT0.005900991S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.008889919S",
+      "sumOfPauses": "PT0.008889919S",
+      "longestPause": "PT0.008889919S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.003225385S",
+      "sumOfPauses": "PT0.003225385S",
+      "longestPause": "PT0.003225385S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.002781967S",
+      "sumOfPauses": "PT0.002781967S",
+      "longestPause": "PT0.002781967S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.003292695S",
+      "sumOfPauses": "PT0.003292695S",
+      "longestPause": "PT0.003292695S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.003419096S",
+      "sumOfPauses": "PT0.003419096S",
+      "longestPause": "PT0.003419096S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.003293672S",
+      "sumOfPauses": "PT0.003293672S",
+      "longestPause": "PT0.003293672S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.002819624S",
+      "sumOfPauses": "PT0.002819624S",
+      "longestPause": "PT0.002819624S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.003399737S",
+      "sumOfPauses": "PT0.003399737S",
+      "longestPause": "PT0.003399737S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.003206025S",
+      "sumOfPauses": "PT0.003206025S",
+      "longestPause": "PT0.003206025S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.003537533S",
+      "sumOfPauses": "PT0.003537533S",
+      "longestPause": "PT0.003537533S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.003111442S",
+      "sumOfPauses": "PT0.003111442S",
+      "longestPause": "PT0.003111442S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.0022127S",
+      "sumOfPauses": "PT0.0022127S",
+      "longestPause": "PT0.0022127S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.0028838S",
+      "sumOfPauses": "PT0.0028838S",
+      "longestPause": "PT0.0028838S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.001637965S",
+      "sumOfPauses": "PT0.001637965S",
+      "longestPause": "PT0.001637965S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.002479792S",
+      "sumOfPauses": "PT0.002479792S",
+      "longestPause": "PT0.002479792S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.001692127S",
+      "sumOfPauses": "PT0.001692127S",
+      "longestPause": "PT0.001692127S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.001519386S",
+      "sumOfPauses": "PT0.001519386S",
+      "longestPause": "PT0.001519386S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.002252851S",
+      "sumOfPauses": "PT0.002252851S",
+      "longestPause": "PT0.002252851S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.002165088S",
+      "sumOfPauses": "PT0.002165088S",
+      "longestPause": "PT0.002165088S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.002457378S",
+      "sumOfPauses": "PT0.002457378S",
+      "longestPause": "PT0.002457378S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.001875682S",
+      "sumOfPauses": "PT0.001875682S",
+      "longestPause": "PT0.001875682S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.002251318S",
+      "sumOfPauses": "PT0.002251318S",
+      "longestPause": "PT0.002251318S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.002474319S",
+      "sumOfPauses": "PT0.002474319S",
+      "longestPause": "PT0.002474319S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.001832788S",
+      "sumOfPauses": "PT0.001832788S",
+      "longestPause": "PT0.001832788S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.002188603S",
+      "sumOfPauses": "PT0.002188603S",
+      "longestPause": "PT0.002188603S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.002061433S",
+      "sumOfPauses": "PT0.002061433S",
+      "longestPause": "PT0.002061433S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.001897265S",
+      "sumOfPauses": "PT0.001897265S",
+      "longestPause": "PT0.001897265S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.002494223S",
+      "sumOfPauses": "PT0.002494223S",
+      "longestPause": "PT0.002494223S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.003191252S",
+      "sumOfPauses": "PT0.003191252S",
+      "longestPause": "PT0.003191252S"
+    },
+    {
+      "name": "G1New",
+      "cause": "G1 Evacuation Pause",
+      "duration": "PT0.00273739S",
+      "sumOfPauses": "PT0.00273739S",
+      "longestPause": "PT0.00273739S"
+    }
+  ],
+  "included_event_types": [
+    "jdk.ExecutionSample",
+    "jdk.GarbageCollection"
+  ],
+  "allocation_summary_not_collected": true
+}

@@ -6,6 +6,7 @@ import com.echo.dto.IssueReportPageDto;
 import com.echo.service.IssueReportService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -26,6 +27,7 @@ import java.util.Map;
  */
 @Slf4j
 @RestController
+@ConditionalOnProperty(name = "echo.features.issue-reporting-enabled", havingValue = "true")
 @RequestMapping(value = "/api/admin/issues", produces = "application/json")
 @RequiredArgsConstructor
 public class IssueReportController {

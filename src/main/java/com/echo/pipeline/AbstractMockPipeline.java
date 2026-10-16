@@ -1,5 +1,7 @@
 package com.echo.pipeline;
 
+import com.echo.core.engine.RuleSelector;
+import com.echo.core.match.BodyRequirements;
 import com.echo.entity.BaseRule;
 import com.echo.entity.FaultType;
 import com.echo.entity.Protocol;
@@ -8,11 +10,18 @@ import com.echo.service.MatchChainEntry;
 import com.echo.service.MatchDescriptionBuilder;
 import com.echo.service.MatchResult;
 import com.echo.service.RequestLogService;
+import com.echo.service.ResponseTemplateService;
 import com.echo.service.RequestLogUnavailableException;
 import com.echo.service.RuleService;
+import com.echo.service.ServeEvent;
+import com.echo.service.ServeEventDispatcher;
+import com.echo.service.ServeEventListener;
 import com.echo.util.CancellableStages;
 import com.echo.service.ScenarioService;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,6 +47,9 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     protected final RuleService ruleService;
     protected final RequestLogService requestLogService;
     protected final ScenarioService scenarioService;
+    private final List<Responder<T>> responders;
+    private ServeEventDispatcher serveEvents;
+    private ResponseTemplateService templateService;
 
     protected AbstractMockPipeline(ConditionMatcher conditionMatcher,
                                    RuleService ruleService,
@@ -47,6 +59,20 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
         this.ruleService = ruleService;
         this.requestLogService = requestLogService;
         this.scenarioService = scenarioService;
+        this.responders = List.of(new FaultResponder(), new ForwardResponder(), new MockResponder());
+        this.serveEvents = ServeEventDispatcher.of(requestLogService, List.of());
+    }
+
+    /** 請求紀錄之外的其他 listener（例如指標、Webhook）；請求紀錄永遠排在第一個。 */
+    @Autowired(required = false)
+    public void setServeEventListeners(List<ServeEventListener> listeners) {
+        this.serveEvents = ServeEventDispatcher.of(requestLogService, listeners);
+    }
+
+    /** 回應模板；所有協定在產生回應前共用同一個渲染步驟（見 {@link #ruleResponseBody}）。 */
+    @Autowired
+    public void setTemplateService(ResponseTemplateService templateService) {
+        this.templateService = templateService;
     }
 
     // ==================== Template Method: 主流程 ====================
@@ -83,9 +109,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
             // 2. 準備 body（若 MockRequest 已有 preparedBody 則直接使用）
             ConditionMatcher.PreparedBody preparedBody = request.getPreparedBody();
             if (preparedBody == null) {
-                preparedBody = requiresBodyParsing(candidates)
-                        ? prepareBody(request, candidates)
-                        : ConditionMatcher.PreparedBody.rawOnly(request.getBody());
+                preparedBody = prepareBodyForMatching(request, candidates);
             }
 
             // 3. 匹配規則
@@ -107,13 +131,17 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
 
             if (matchResult.isMatched()) {
                 T rule = matchResult.getMatchedRule();
+                Responder<T> responder = responderFor(rule, request);
+                request.getTrace().event("ROUTE", "ruleId", rule.getId(), "ruleVersion", rule.getVersion(),
+                        "responseId", rule.getResponseId(), "mode", responder.mode(),
+                        "endpoint", request.getEndpointValue() != null ? request.getEndpointValue() : request.getPath());
                 ruleId = rule.getId();
                 delayMs = calculateDelay(
                     rule.getDelayMs() != null ? rule.getDelayMs() : 0,
                     rule.getMaxDelayMs()
                 );
 
-                // 4a. Scenario 狀態轉移（在 buildResponse 之前）
+                // 4a. Scenario 狀態轉移（在產生回應之前）
                 ScenarioTransition scenarioTransition = advanceScenarioState(rule);
                 if (scenarioTransition != null) {
                     scenarioName = scenarioTransition.name();
@@ -121,33 +149,24 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                     scenarioNewState = scenarioTransition.toState();
                 }
 
-                FaultType faultType = rule.getFaultType() != null ? rule.getFaultType() : FaultType.NONE;
-                if (faultType != FaultType.NONE) {
-                    String responseBody = resolveResponseBody(rule.getResponseId());
-                    immediateResponse = buildResponse(rule, request, responseBody);
-                    faultTypeName = faultType.name();
-                    if (faultType == FaultType.EMPTY_RESPONSE) {
-                        immediateResponse = MockResponse.builder()
-                            .status(immediateResponse.getStatus())
-                            .body("")
-                            .matched(true)
-                            .forwarded(false)
-                            .build();
-                    }
-                } else if (shouldForwardMatchedRule(rule, request)) {
-                    responseStage = forwardMatchedRuleAsync(rule, request);
-                } else {
-                    // 4b. 解析回應內容
-                    String responseBody = resolveResponseBody(rule.getResponseId());
-
-                    // 4c. 建構回應（子類別實作，含模板渲染等）
-                    immediateResponse = buildResponse(rule, request, responseBody);
+                // 4b. 由 responder 產生回應
+                ResponsePlan plan = responder.respond(rule, request);
+                if (plan instanceof ResponsePlan.Content content) {
+                    immediateResponse = content.response();
+                } else if (plan instanceof ResponsePlan.Fault fault) {
+                    immediateResponse = fault.response();
+                    faultTypeName = fault.type().name();
+                } else if (plan instanceof ResponsePlan.Forwarded forwarded) {
+                    responseStage = forwarded.response();
                 }
             } else {
                 ruleId = null;
                 delayMs = 0;
                 // 5. 無匹配：判斷是否轉發
-                if (shouldForward(request)) {
+                boolean forward = shouldForward(request);
+                request.getTrace().event("ROUTE", "ruleId", null, "mode", forward ? "FORWARD" : "UNMATCHED",
+                        "endpoint", request.getEndpointValue() != null ? request.getEndpointValue() : request.getPath());
+                if (forward) {
                     responseStage = forwardAsync(request);
                 } else {
                     immediateResponse = handleNoMatch(request);
@@ -211,13 +230,25 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
 
         Integer loggedResponseStatus = "CONNECTION_RESET".equals(faultType)
                 ? null : response.getStatus();
-        recordLog(ruleId, request.getProtocol(), request.getMethod(), request.getPath(),
-                matchResult.isMatched(), responseTimeMs, request.getClientIp(), matchChainJson,
-                logTargetHost, response.isForwarded(), response.getForwardTarget(),
-                proxyStatus, response.getProxyError(), loggedResponseStatus,
-                matchTimeMs, request.getBody(), response.getBody(), candidates, preparedBody,
-                request.getQueryString(), request.getHeaders(), faultType,
-                scenarioName, scenarioFromState, scenarioToState);
+        publish(ServeEvent.builder()
+                .ruleId(ruleId).protocol(request.getProtocol())
+                .method(request.getMethod()).endpoint(request.getPath())
+                .matched(matchResult.isMatched()).responseTimeMs(responseTimeMs)
+                .clientIp(request.getClientIp()).matchChain(matchChainJson).targetHost(logTargetHost)
+                .forwarded(response.isForwarded()).forwardTarget(response.getForwardTarget())
+                .proxyStatus(proxyStatus).proxyError(response.getProxyError())
+                .responseStatus(loggedResponseStatus).matchTimeMs(matchTimeMs)
+                .requestBody(request.getBody()).responseBody(response.getBody())
+                .candidates(candidates).preparedBody(preparedBody)
+                .queryString(request.getQueryString()).headers(request.getHeaders())
+                .faultType(faultType).scenarioName(scenarioName)
+                .scenarioFromState(scenarioFromState).scenarioToState(scenarioToState)
+                .candidateCount(candidates != null ? candidates.size() : null)
+                .matchedByFallback(matchResult.isMatched() ? matchResult.isByFallback() : null)
+                .delayMs(matchResult.isMatched() ? (int) Math.min(delayMs, Integer.MAX_VALUE) : null)
+                .scenarioSkipped(MatchDescriptionBuilder.toScenarioSkippedJson(matchResult.getMatchChain()))
+                .diagnosticId(request.getTrace().id())
+                .build());
 
         return PipelineResult.builder()
                 .response(response)
@@ -234,7 +265,8 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     }
 
     private PipelineResult pipelineError(MockRequest request, long startTime, Throwable error) {
-        log.error("Pipeline execution error: {}", error.getMessage(), error);
+        request.getTrace().failure("PIPELINE_FAILED", error);
+        if (!request.getTrace().enabled()) log.error("Pipeline execution error: {}", error.getMessage(), error);
         int responseTimeMs = (int) (System.currentTimeMillis() - startTime);
         boolean logUnavailable = error instanceof RequestLogUnavailableException;
         if (logUnavailable && request.getProtocol() == Protocol.JMS) {
@@ -273,7 +305,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
      * 計算實際延遲時間。
      * 若 maxDelayMs 有設定且大於 delayMs，則在 [delayMs, maxDelayMs] 範圍內隨機取值。
      */
-    static long calculateDelay(long delayMs, Long maxDelayMs) {
+    public static long calculateDelay(long delayMs, Long maxDelayMs) {
         if (maxDelayMs != null && maxDelayMs > delayMs) {
             return ThreadLocalRandom.current().nextLong(delayMs, maxDelayMs + 1);
         }
@@ -307,90 +339,156 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     // ==================== 共用匹配邏輯 ====================
 
     /**
-     * 共用匹配邏輯：遍歷候選規則，跳過 disabled，條件匹配或 fallback
+     * 共用匹配邏輯：依序挑選規則（見 {@link RuleSelector}），並記錄匹配鏈。
      * <p>
      * 匹配優先順序：
      * <ol>
-     *   <li>有條件且條件匹配成功 → 立即回傳</li>
-     *   <li>無條件 → 記為 fallback（第一個）</li>
-     *   <li>遍歷完畢 → 回傳 fallback 或空 MatchResult</li>
+     *   <li>Scenario 狀態不符的規則略過，並記入匹配鏈</li>
+     *   <li>有條件且條件匹配成功 → 立即選中</li>
+     *   <li>都不成立 → 依 {@link #fallbackPolicy()} 選無條件規則，或沒有匹配</li>
      * </ol>
      */
     public MatchResult<T> matchRule(List<T> candidates,
                                     ConditionMatcher.PreparedBody prepared,
                                     String queryString,
                                     Map<String, String> headers) {
-        T matched = null;
-        T fallbackRule = null;
         List<MatchChainEntry> chain = new ArrayList<>();
-
-        for (T rule : candidates) {
-            if (Boolean.FALSE.equals(rule.getEnabled())) {
-                continue;
-            }
-
-            // Scenario 狀態檢查
-            if (rule.getScenarioName() != null && !rule.getScenarioName().isBlank()
-                    && rule.getRequiredScenarioState() != null && !rule.getRequiredScenarioState().isBlank()) {
-                String currentState = scenarioService.getCurrentState(rule.getScenarioName());
-                if (!rule.getRequiredScenarioState().equals(currentState)) {
-                    chain.add(new MatchChainEntry(
-                            rule.getId(), "scenario_state_mismatch",
-                            null, rule.getDescription(), null,
-                            null,
-                            "scenario: " + rule.getScenarioName()
-                                    + " (required: " + rule.getRequiredScenarioState()
-                                    + ", current: " + currentState + ")",
-                            false));
-                    continue;
-                }
-            }
-
-            if (hasCondition(rule)) {
-                ConditionSet conditions = extractConditions(rule);
-                if (conditionMatcher.matchesPrepared(
-                        conditions.getBodyCondition(),
-                        conditions.getQueryCondition(),
-                        conditions.getHeaderCondition(),
-                        prepared, queryString, headers)) {
-                    matched = rule;
-                    chain.add(createMatchChainEntry(rule, "match"));
-                    break;
-                }
-            } else {
-                if (fallbackRule == null) {
-                    fallbackRule = rule;
-                }
-            }
+        RuleSelector.Selection<T> selection = RuleSelector.select(candidates, fallbackPolicy(), ruleTraits,
+                rule -> passesScenarioGate(rule, chain),
+                rule -> conditionsMatch(rule, prepared, queryString, headers));
+        T matched = selection.selected();
+        if (matched != null) {
+            chain.add(createMatchChainEntry(matched, "match"));
         }
-
-        if (matched == null && fallbackRule != null) {
-            matched = fallbackRule;
-            chain.add(createMatchChainEntry(fallbackRule, "match"));
-        }
-
-        return new MatchResult<>(matched, chain);
+        return new MatchResult<>(matched, chain, matched != null && !selection.conditionMatched());
     }
 
-    /** JSON/XML 只在至少一條啟用候選規則真的使用 body 條件時解析。 */
-    private boolean requiresBodyParsing(List<T> candidates) {
-        for (T rule : candidates) {
-            if (Boolean.FALSE.equals(rule.getEnabled())) {
-                continue;
-            }
-            String bodyCondition = extractConditions(rule).getBodyCondition();
-            if (bodyCondition != null && !bodyCondition.isBlank()) {
-                return true;
-            }
-        }
+    /** 沒有條件成立時如何挑選無條件規則；JMS 覆寫為非萬用優先。 */
+    protected RuleSelector.FallbackPolicy fallbackPolicy() {
+        return RuleSelector.FallbackPolicy.FIRST_UNCONDITIONAL;
+    }
+
+    /** 萬用規則（只在 {@link RuleSelector.FallbackPolicy#EXACT_BEFORE_WILDCARD} 時有意義）。 */
+    protected boolean isWildcard(T rule) {
         return false;
     }
 
+    private final RuleSelector.Traits<T> ruleTraits = new RuleSelector.Traits<>() {
+        @Override
+        public boolean enabled(T rule) {
+            return !Boolean.FALSE.equals(rule.getEnabled());
+        }
+
+        @Override
+        public boolean unconditional(T rule) {
+            return !hasCondition(rule);
+        }
+
+        @Override
+        public boolean wildcard(T rule) {
+            return isWildcard(rule);
+        }
+    };
+
+    /** Scenario 狀態不符時記入匹配鏈並回傳 false。 */
+    private boolean passesScenarioGate(T rule, List<MatchChainEntry> chain) {
+        if (rule.getScenarioName() == null || rule.getScenarioName().isBlank()
+                || rule.getRequiredScenarioState() == null || rule.getRequiredScenarioState().isBlank()) {
+            return true;
+        }
+        String currentState = scenarioService.getCurrentState(rule.getScenarioName());
+        if (rule.getRequiredScenarioState().equals(currentState)) {
+            return true;
+        }
+        chain.add(new MatchChainEntry(
+                rule.getId(), MatchDescriptionBuilder.SCENARIO_STATE_MISMATCH,
+                null, rule.getDescription(), null,
+                null,
+                "scenario: " + rule.getScenarioName()
+                        + " (required: " + rule.getRequiredScenarioState()
+                        + ", current: " + currentState + ")",
+                false));
+        return false;
+    }
+
+    private boolean conditionsMatch(T rule, ConditionMatcher.PreparedBody prepared,
+                                    String queryString, Map<String, String> headers) {
+        ConditionSet conditions = extractConditions(rule);
+        if (conditions.getMatchSpec() != null) {
+            return conditionMatcher.matchesPrepared(conditions.getMatchSpec(), null, null, null,
+                    prepared, queryString, headers);
+        }
+        return conditionMatcher.matchesPrepared(
+                conditions.getBodyCondition(),
+                conditions.getQueryCondition(),
+                conditions.getHeaderCondition(),
+                prepared, queryString, headers);
+    }
+
     /**
-     * 協定可覆寫 body 準備策略；HTTP 維持既有完整解析，JMS 可依候選條件走串流路徑。
+     * 依候選規則條件的需求準備 body（§4.5）：沒有條件讀 body 時不解析；XML 且條件都能串流時只掃描一次、不建立 DOM；
+     * 其他情況照常解析。HTTP 與 JMS 用同一套規則。
      */
-    protected ConditionMatcher.PreparedBody prepareBody(MockRequest request, List<T> candidates) {
-        return conditionMatcher.prepareBody(request.getBody());
+    public ConditionMatcher.PreparedBody prepareBodyForMatching(MockRequest request, List<T> candidates) {
+        if (candidateListsAreStable()) {
+            // 合併 2,000 條規則的需求約 0.7 ms；候選清單來自規則快照、物件固定，因此依物件快取
+            return conditionMatcher.prepareBody(request.getBody(),
+                    bodyRequirementsByCandidates.get(candidates, this::bodyRequirementsOf));
+        }
+        return prepareBody(request.getBody(), candidates);
+    }
+
+    /**
+     * 候選清單是否來自規則快照、在快照存在期間是同一個物件（JMS 的 queue 與分桶清單）。
+     * 是的話合併後的 body 需求依清單物件快取；HTTP 的候選清單依 path 每次重新篩選，不快取。
+     */
+    protected boolean candidateListsAreStable() {
+        return false;
+    }
+
+    /** 以清單物件本身為 key（weakKeys 用 identity 比較），快照淘汰後隨清單一起回收。 */
+    private final Cache<List<?>, BodyRequirements> bodyRequirementsByCandidates =
+            Caffeine.newBuilder().weakKeys().build();
+
+    private BodyRequirements bodyRequirementsOf(List<?> candidates) {
+        List<BodyRequirements> requirements = new ArrayList<>();
+        for (ConditionMatcher.RuleConditions conditions : bodyConditionsOf(castCandidates(candidates))) {
+            requirements.add(conditions.bodyRequirements());
+        }
+        return BodyRequirements.merge(requirements);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<T> castCandidates(List<?> candidates) {
+        return (List<T>) candidates;
+    }
+
+    private ConditionMatcher.PreparedBody prepareBody(String body, List<T> candidates) {
+        List<ConditionMatcher.RuleConditions> conditions = bodyConditionsOf(candidates);
+        return conditions.isEmpty() ? ConditionMatcher.PreparedBody.rawOnly(body)
+                : conditionMatcher.prepareBody(body, conditions);
+    }
+
+    /** 會讀 body 的啟用規則條件；只有 query／header 條件的規則不必查詢需求。 */
+    private List<ConditionMatcher.RuleConditions> bodyConditionsOf(List<T> candidates) {
+        List<ConditionMatcher.RuleConditions> conditions = null;
+        for (T rule : candidates) {
+            if (Boolean.FALSE.equals(rule.getEnabled())) {
+                continue;
+            }
+            ConditionSet set = extractConditions(rule);
+            String bodyCondition = set.getBodyCondition();
+            // 只有 query／header 條件的規則不讀 body，不必查詢它們的需求
+            if ((bodyCondition == null || bodyCondition.isBlank()) && set.getMatchSpec() == null) {
+                continue;
+            }
+            if (conditions == null) {
+                conditions = new ArrayList<>();
+            }
+            conditions.add(conditionMatcher.conditions(set.getMatchSpec(), bodyCondition,
+                    set.getQueryCondition(), set.getHeaderCondition()));
+        }
+        return conditions == null ? List.of() : conditions;
     }
 
     // ==================== 共用實作方法 ====================
@@ -398,6 +496,12 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     /**
      * 從 Response 表查詢回應內容
      */
+    /** 規則的回應內容，含模板渲染；沒有模板語法時不做額外處理。 */
+    protected String ruleResponseBody(T rule, MockRequest request) {
+        String body = resolveResponseBody(rule.getResponseId());
+        return ResponseTemplateService.renderIfTemplate(templateService, body, request::templateContext);
+    }
+
     protected String resolveResponseBody(Long responseId) {
         if (responseId == null) {
             return "";
@@ -419,54 +523,95 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
         }
     }
 
-    /**
-     * 記錄請求日誌，呼叫 RequestLogService.record() 並傳入所有參數（含匹配上下文）
-     */
-    protected void recordLog(String ruleId, Protocol protocol, String method,
-                             String endpoint, boolean matched, int responseTimeMs,
-                             String clientIp, String matchChainJson, String targetHost,
-                             Integer proxyStatus, String proxyError,
-                             Integer responseStatus, Integer matchTimeMs,
-                             String requestBody, String responseBody,
-                             List<T> candidates,
-                             ConditionMatcher.PreparedBody preparedBody,
-                             String queryString,
-                             Map<String, String> headers,
-                             String faultType,
-                             String scenarioName,
-                             String scenarioFromState,
-                             String scenarioToState) {
-        requestLogService.record(ruleId, protocol, method, endpoint,
-                matched, responseTimeMs, clientIp, matchChainJson, targetHost,
-                proxyStatus, proxyError, responseStatus, matchTimeMs,
-                requestBody, responseBody,
-                candidates, preparedBody, queryString, headers, faultType,
-                scenarioName, scenarioFromState, scenarioToState);
+    /** 把處理結果交給 listener（請求紀錄為 critical，失敗時往上傳）。 */
+    protected void publish(ServeEvent event) {
+        serveEvents.dispatch(event);
     }
 
-    /** 記錄包含明確轉發狀態與安全目標資訊的請求日誌。 */
-    protected void recordLog(String ruleId, Protocol protocol, String method,
-                             String endpoint, boolean matched, int responseTimeMs,
-                             String clientIp, String matchChainJson, String targetHost,
-                             boolean forwarded, String forwardTarget,
-                             Integer proxyStatus, String proxyError,
-                             Integer responseStatus, Integer matchTimeMs,
-                             String requestBody, String responseBody,
-                             List<T> candidates,
-                             ConditionMatcher.PreparedBody preparedBody,
-                             String queryString,
-                             Map<String, String> headers,
-                             String faultType,
-                             String scenarioName,
-                             String scenarioFromState,
-                             String scenarioToState) {
-        requestLogService.record(ruleId, protocol, method, endpoint,
-                matched, responseTimeMs, clientIp, matchChainJson, targetHost,
-                forwarded, forwardTarget,
-                proxyStatus, proxyError, responseStatus, matchTimeMs,
-                requestBody, responseBody,
-                candidates, preparedBody, queryString, headers, faultType,
-                scenarioName, scenarioFromState, scenarioToState);
+    // ==================== Responder ====================
+
+    /**
+     * 依序挑選適用的 responder；預設為故障注入 → 命中規則轉發 → mock。
+     * 子類別可覆寫 {@link #responders()} 加入協定特有的回應方式。
+     */
+    private Responder<T> responderFor(T rule, MockRequest request) {
+        for (Responder<T> responder : responders()) {
+            if (responder.appliesTo(rule, request)) {
+                return responder;
+            }
+        }
+        throw new IllegalStateException("No responder applies to rule " + rule.getId());
+    }
+
+    protected List<Responder<T>> responders() {
+        return responders;
+    }
+
+    private static boolean hasFault(BaseRule rule) {
+        return rule.getFaultType() != null && rule.getFaultType() != FaultType.NONE;
+    }
+
+    /** 故障注入：EMPTY_RESPONSE 回空 body；CONNECTION_RESET 由協定在寫回時關閉連線。 */
+    private final class FaultResponder implements Responder<T> {
+        @Override
+        public String mode() {
+            return "FAULT";
+        }
+
+        @Override
+        public boolean appliesTo(T rule, MockRequest request) {
+            return hasFault(rule);
+        }
+
+        @Override
+        public ResponsePlan respond(T rule, MockRequest request) {
+            MockResponse response = buildResponse(rule, request, ruleResponseBody(rule, request));
+            if (rule.getFaultType() == FaultType.EMPTY_RESPONSE) {
+                response = MockResponse.builder()
+                        .status(response.getStatus())
+                        .body("")
+                        .matched(true)
+                        .forwarded(false)
+                        .build();
+            }
+            return new ResponsePlan.Fault(rule.getFaultType(), response);
+        }
+    }
+
+    /** 規則動作為轉發（見 {@link #shouldForwardMatchedRule}）。 */
+    private final class ForwardResponder implements Responder<T> {
+        @Override
+        public String mode() {
+            return "FORWARD";
+        }
+
+        @Override
+        public boolean appliesTo(T rule, MockRequest request) {
+            return shouldForwardMatchedRule(rule, request);
+        }
+
+        @Override
+        public ResponsePlan respond(T rule, MockRequest request) {
+            return new ResponsePlan.Forwarded(forwardMatchedRuleAsync(rule, request));
+        }
+    }
+
+    /** 回傳規則設定的回應內容（模板已在共用步驟渲染，協定特有的部分見 {@link #buildResponse}）。 */
+    private final class MockResponder implements Responder<T> {
+        @Override
+        public String mode() {
+            return "MOCK";
+        }
+
+        @Override
+        public boolean appliesTo(T rule, MockRequest request) {
+            return true;
+        }
+
+        @Override
+        public ResponsePlan respond(T rule, MockRequest request) {
+            return new ResponsePlan.Content(buildResponse(rule, request, ruleResponseBody(rule, request)));
+        }
     }
 
     // ==================== 抽象方法：由子類別實作 ====================
@@ -474,7 +619,7 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     /** 查詢候選規則 */
     protected abstract List<T> findCandidateRules(MockRequest request);
 
-    /** 建構回應（含模板渲染等協定特有邏輯） */
+    /** 建構回應（協定特有邏輯；responseBody 已完成模板渲染） */
     protected abstract MockResponse buildResponse(T rule, MockRequest request, String responseBody);
 
     /** 執行轉發 */

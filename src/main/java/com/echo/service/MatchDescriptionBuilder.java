@@ -31,6 +31,26 @@ public class MatchDescriptionBuilder {
         return toChainJsonString(filtered);
     }
 
+    /** 情境狀態不符而略過的規則最多記錄幾筆。 */
+    static final int MAX_SCENARIO_SKIPPED = 20;
+
+    /**
+     * 因情境狀態不符而略過的規則（{@code scenario_state_mismatch}），供處理流程圖顯示；沒有時回傳 null。
+     */
+    public static String toScenarioSkippedJson(List<? extends MatchChainInfo> chain) {
+        if (chain == null || chain.isEmpty()) {
+            return null;
+        }
+        List<? extends MatchChainInfo> skipped = chain.stream()
+                .filter(e -> SCENARIO_STATE_MISMATCH.equals(e.getReason()))
+                .limit(MAX_SCENARIO_SKIPPED)
+                .toList();
+        return skipped.isEmpty() ? null : toChainJsonString(skipped);
+    }
+
+    /** 匹配鏈中「情境狀態不符」的原因代碼。 */
+    public static final String SCENARIO_STATE_MISMATCH = "scenario_state_mismatch";
+
     /**
      * 將匹配鏈轉換為 JSON 字串（保留全部條目）
      */
@@ -67,6 +87,10 @@ public class MatchDescriptionBuilder {
             }
             if (e.isNearMiss()) {
                 sb.append(",\"nearMiss\":true");
+            }
+            if (e.getDetailTree() != null) {
+                // 已是 JSON（由 MatchExplanationJson 產生），直接放入
+                sb.append(",\"detailTree\":").append(e.getDetailTree());
             }
             sb.append("}");
         }

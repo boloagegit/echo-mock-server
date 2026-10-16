@@ -1,0 +1,405 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+
+const root = path.resolve(__dirname, '../../main/resources/static');
+const source = file => fs.readFileSync(path.join(root, file), 'utf8');
+const Vue = {
+  ref: value => ({ value }),
+  computed: get => ({ get value() { return get(); } }),
+  watch() {},
+  nextTick: async callback => callback?.(),
+};
+
+function guardHarness() {
+  const state = { draft: { path: '', conditions: [], body: '' }, open: true, busy: false };
+  const calls = { confirms: 0, discards: 0 };
+  let resolveConfirm;
+  const deps = {
+    readDraft: () => state.draft, isOpen: () => state.open, isBusy: () => state.busy,
+    discard: () => { calls.discards++; state.open = false; },
+    showConfirm: options => {
+      calls.confirms++;
+      calls.options = options;
+      return new Promise(resolve => { resolveConfirm = resolve; });
+    },
+    t: key => key,
+  };
+  const context = vm.createContext({ deps });
+  vm.runInContext(source('composables/useDiscardGuard.js') + '\nthis.guard = useDiscardGuard(deps);', context);
+  context.guard.begin();
+  return { state, calls, guard: context.guard, decide: value => resolveConfirm(value) };
+}
+
+test('unchanged and reverted drafts close without a prompt', async () => {
+  for (const revert of [false, true]) {
+    const h = guardHarness();
+    if (revert) { h.state.draft.path = '/users'; h.state.draft.path = ''; }
+    assert.equal(h.guard.isDirty(), false);
+    assert.equal(await h.guard.requestClose(), true);
+    assert.equal(h.calls.confirms, 0);
+    assert.equal(h.calls.discards, 1);
+  }
+});
+
+test('cancel preserves every unsaved field and declining remains dirty', async () => {
+  const h = guardHarness();
+  h.state.draft = { path: '/users', conditions: [{ type: 'body', value: 'Alice' }], body: '{broken JSON' };
+  const expected = JSON.stringify(h.state.draft);
+  const close = h.guard.requestClose();
+  h.decide(false);
+  assert.equal(await close, false);
+  assert.equal(JSON.stringify(h.state.draft), expected);
+  assert.equal(h.state.open, true);
+  assert.equal(h.guard.isDirty(), true);
+  assert.equal(h.calls.discards, 0);
+  assert.equal(h.calls.options.cancelText, 'confirm.continueEditing');
+});
+
+test('confirmation discards only once and clears its baseline', async () => {
+  const h = guardHarness();
+  h.state.draft.body = 'changed';
+  const first = h.guard.requestClose();
+  const second = h.guard.requestClose();
+  assert.equal(first, second);
+  assert.equal(h.calls.confirms, 1);
+  h.decide(true);
+  assert.equal(await first, true);
+  assert.equal(h.calls.discards, 1);
+  h.state.open = true;
+  assert.equal(h.guard.isDirty(), false);
+});
+
+test('in-flight save blocks closing and a successful save resets the boundary', async () => {
+  const h = guardHarness();
+  h.state.draft.body = 'changed';
+  h.state.busy = true;
+  assert.equal(await h.guard.requestClose(), false);
+  assert.equal(h.calls.confirms, 0);
+  h.state.busy = false;
+  h.guard.begin();
+  assert.equal(h.guard.isDirty(), false);
+  await h.guard.requestClose();
+  assert.equal(h.calls.confirms, 0);
+});
+
+test('a save begun while a prompt is open cannot be discarded', async () => {
+  const h = guardHarness();
+  h.state.draft.path = '/users';
+  const close = h.guard.requestClose();
+  h.state.busy = true;
+  h.decide(true);
+  assert.equal(await close, false);
+  assert.equal(h.calls.discards, 0);
+});
+
+test('object key order is not a modification; array order and invalid documents are', () => {
+  const h = guardHarness();
+  h.state.draft = { body: '', conditions: [], path: '' };
+  assert.equal(h.guard.isDirty(), false);
+  h.state.draft.conditions = [{ value: 'A' }, { value: 'B' }];
+  h.guard.begin();
+  h.state.draft.conditions.reverse();
+  assert.equal(h.guard.isDirty(), true);
+  h.guard.begin();
+  h.state.draft.declarative = '{';
+  assert.equal(h.guard.isDirty(), true);
+});
+
+function appDraftHarness() {
+  const context = vm.createContext({
+    Vue, serializeSseEvents: events => JSON.stringify(events), deserializeSseEvents: body => body ? JSON.parse(body) : [],
+    deps: { t: key => key },
+    form: Vue.ref({ protocol: 'JMS', matchKey: 'ORDER', action: 'MOCK', responseMode: 'new', responseBody: 'OK' }),
+    conditions: Vue.ref([]), editing: Vue.ref(null), sseEvents: Vue.ref([]),
+    newTag: Vue.ref({ key: '', value: '' }), newHeader: Vue.ref({ key: '', value: '' }),
+    previewEditing: Vue.ref(false), previewEditBody: Vue.ref(''), previewResponseBody: Vue.ref(''),
+    ruleApplyText: Vue.ref(''), ruleApplyDraftBaseline: Vue.ref(''),
+    // 簡易模式（沒有進階條件）；進階條件的草稿比較見 match-tree.test.cjs
+    currentMatchSpec: () => null,
+  });
+  vm.runInContext(source('composables/useRuleApply.js') + '\nconst { createDocumentFromForm } = useRuleApply(deps);', context);
+  vm.runInContext(source('composables/useDiscardGuard.js'), context);
+  const app = source('app.js');
+  const normalize = app.slice(app.indexOf('const normalizeDraftText ='), app.indexOf('const ruleSaveInFlight ='));
+  const readDraft = app.slice(app.indexOf('const readRuleDraft ='), app.indexOf('const discardRuleDraft ='));
+  vm.runInContext(normalize + readDraft + `
+    this.guard = useDiscardGuard({readDraft: readRuleDraft, isOpen:()=>true, isBusy:()=>false});
+    guard.begin();
+  `, context);
+  return context;
+}
+
+test('actual app draft comparison distinguishes cleared and JSON-null declarations from no changes', () => {
+  for (const text of ['', 'null']) {
+    const h = appDraftHarness();
+    h.ruleApplyText.value = h.ruleApplyDraftBaseline.value = '{"spec":{"matchKey":"ORDER"}}';
+    h.guard.begin();
+    h.ruleApplyText.value = text;
+    assert.equal(h.guard.isDirty(), true);
+  }
+});
+
+test('actual app comparison follows the JMS queue; replies follow the request, so there is no reply-queue draft', () => {
+  const h = appDraftHarness();
+  h.form.value.matchKey = 'ORDER.V2';
+  assert.equal(h.guard.isDirty(), true, 'changing the queue is an unsaved change');
+  // Mock replies always go to the request's JMSReplyTo; the editor shows that instead of an input that was never saved.
+  const fresh = appDraftHarness();
+  fresh.form.value.replyQueue = 'REPLY.ORDER';
+  assert.equal(fresh.guard.isDirty(), false);
+  assert.ok(!source('components/RuleEditModal.js').includes('v-model="form.replyQueue"'));
+});
+
+test('complete save interval locks both editor bodies and mode controls, including before and after the API response', () => {
+  const app = source('app.js');
+  const declaration = app.slice(app.indexOf('const applyRuleSettings ='), app.indexOf('// === 帳號管理 composable'));
+  assert.ok(declaration.indexOf('ruleSaveInFlight.value = true') < declaration.indexOf('await applyRuleDocument()'));
+  assert.ok(declaration.indexOf('finally { ruleSaveInFlight.value = false; }') > declaration.indexOf('markRuleDraftSaved()'));
+  const index = source('index.html');
+  assert.equal((index.match(/:saving="saving \|\| ruleSaveInFlight \|\| ruleApplySaving \|\| previewSaving"/g) || []).length, 2);
+  assert.match(source('components/RuleEditModal.js'), /class="modal-body rule-editor" :inert="saving" :aria-busy="saving"/);
+  assert.match(source('components/RuleEditModal.js'), /class="rule-editor-mode-switch" :inert="saving"/);
+  assert.match(source('components/RuleApplyModal.js'), /class="modal-body rule-apply-body" :inert="saving" :aria-busy="saving"/);
+  assert.ok(app.includes('wasDirty = wasDirty || ruleDraftGuard.isDirty();'));
+});
+
+test('leaving a dirty rule for response management waits for confirmation and preserves context on cancellation', async () => {
+  for (const confirmed of [false, true]) {
+    let resolveClose;
+    const navigations = [];
+    const context = vm.createContext({
+      closeModal: () => new Promise(resolve => { resolveClose = resolve; }),
+      goToResponse: id => navigations.push(id),
+    });
+    const app = source('app.js');
+    vm.runInContext(app.slice(app.indexOf('const leaveRuleForResponses ='), app.indexOf('const markRuleDraftSaved ='))
+      + '\nthis.leave = leaveRuleForResponses;', context);
+    const pending = context.leave(7);
+    assert.equal(navigations.length, 0);
+    resolveClose(confirmed);
+    await pending;
+    assert.deepEqual(navigations, confirmed ? ['7'] : []);
+  }
+  assert.ok(source('index.html').includes('@go-to-responses="leaveRuleForResponses($event)"'));
+  assert.ok(!source('components/RuleEditModal.js').includes("$emit('close');$emit('go-to-responses'"));
+});
+
+test('pending schema mode switch never resumes into a busy, closed, or different editor session', async () => {
+  for (const stateChange of ['busy', 'closed', 'session', 'typed']) {
+    let resolveSchema;
+    let dirty = false;
+    let rebases = 0;
+    const context = vm.createContext({
+      ruleSaveInFlight: Vue.ref(false), saving: Vue.ref(false), ruleApplySaving: Vue.ref(false), previewSaving: Vue.ref(false),
+      ruleEditorSession: 1, showModal: Vue.ref(true), ruleEditorMode: Vue.ref('form'),
+      ruleDraftGuard: { isDirty: () => dirty },
+      loadRuleApplySchema: () => new Promise(resolve => { resolveSchema = resolve; }),
+      form: Vue.ref({}), conditions: Vue.ref([]), editing: Vue.ref(null), currentRuleResponseBody: () => '',
+      currentMatchSpec: () => null, applyMatchDraft() {},
+      createDocumentFromForm: () => ({ spec: { matchKey: '' } }),
+      ruleApplyText: Vue.ref(''), ruleApplyFormSource: Vue.ref(''), ruleApplyDraftBaseline: Vue.ref(''),
+      setRuleApplyDocument: () => { context.ruleApplyText.value = '{"spec":{}}'; },
+      rememberRuleEditorMode() {}, markRuleDraftSaved: () => rebases++,
+    });
+    const app = source('app.js');
+    vm.runInContext(app.slice(app.indexOf('const changeRuleEditorMode ='), app.indexOf('const applyRuleSettings ='))
+      + '\nthis.changeMode = changeRuleEditorMode;', context);
+    const pending = context.changeMode('declarative');
+    if (stateChange === 'busy') context.ruleSaveInFlight.value = true;
+    if (stateChange === 'closed') context.showModal.value = false;
+    if (stateChange === 'session') context.ruleEditorSession++;
+    if (stateChange === 'typed') dirty = true;
+    resolveSchema(true);
+    await pending;
+    assert.equal(context.ruleEditorMode.value, stateChange === 'typed' ? 'declarative' : 'form');
+    assert.equal(rebases, 0);
+  }
+});
+
+test('unsaved inactive editor and uncommitted auxiliary inputs can remain dirty after saving the form', () => {
+  const h = guardHarness();
+  h.state.draft = { spec: { matchKey: '/saved' }, declarative: '{broken', pendingTag: { key: 'env', value: 'test' } };
+  h.guard.begin({ ...h.state.draft, declarative: null, pendingTag: { key: '', value: '' } });
+  assert.equal(h.guard.isDirty(), true);
+});
+
+test('failed confirmation does not permanently lock closing', async () => {
+  const h = guardHarness();
+  h.state.draft.path = '/users';
+  const first = h.guard.requestClose();
+  h.decide(false);
+  await first;
+  const next = h.guard.requestClose();
+  assert.equal(h.calls.confirms, 2);
+  h.decide(true);
+  assert.equal(await next, true);
+});
+
+function tourHarness() {
+  let finishes = 0;
+  const storage = new Map();
+  const context = vm.createContext({
+    Vue, deps: { t: key => key, onFinish: () => finishes++ },
+    localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) },
+  });
+  vm.runInContext(source('composables/useTour.js') + '\nthis.tour = useTour(deps);', context);
+  return { tour: context.tour, storage, finishes: () => finishes };
+}
+
+test('tour skip invokes context restoration exactly once', () => {
+  const h = tourHarness();
+  h.tour.startTour();
+  h.tour.skipTour();
+  h.tour.skipTour();
+  assert.equal(h.finishes(), 1);
+  assert.equal(h.tour.tourActive.value, false);
+  assert.equal(h.storage.get('echo_help_seen'), '1');
+});
+
+test('finishing every tour step also restores its entry context', () => {
+  const h = tourHarness();
+  h.tour.startTour();
+  for (let i = 0; i < h.tour.tourSteps.value.length; i++) h.tour.nextStep();
+  assert.equal(h.finishes(), 1);
+  assert.equal(h.tour.tourStep.value, 0);
+});
+
+// Rule rows use the shared UiRowMenu, which positions through UiDropdownMenu's viewport-safe helper.
+function rowMenuPosition(trigger, viewport, menu = { width: 184, height: 150 }) {
+  const context = vm.createContext({ trigger, menu, viewport, Vue: {} });
+  vm.runInContext(source('components/UiDropdownMenu.js') + '\nthis.position = dropdownViewportPosition(trigger, menu, viewport);', context);
+  return Object.fromEntries(Object.entries(context.position).map(([k, v]) => [k, typeof v === 'string' && v.endsWith('px') ? parseFloat(v) : v]));
+}
+
+test('lower-edge row menu opens above its trigger, including its last action', () => {
+  const viewport = { width: 1440, height: 900 };
+  const p = rowMenuPosition({ right: 1403, top: 812, bottom: 844 }, viewport);
+  assert.equal(p.top, 658);
+  assert.ok(p.top + 150 <= viewport.height - 8);
+});
+
+test('first-row menu opens directly below its trigger', () => {
+  const p = rowMenuPosition({ right: 1403, top: 199, bottom: 231 }, { width: 1440, height: 900 });
+  assert.equal(p.top, 235);
+  assert.equal(p.left, 1219);
+});
+
+test('narrow and top-edge row menus stay inside the available viewport', () => {
+  const viewport = { width: 390, height: 844 };
+  const p = rowMenuPosition({ right: 120, top: 143, bottom: 175 }, viewport);
+  assert.ok(p.left >= 8);
+  assert.ok(p.left + 184 <= viewport.width - 8);
+  assert.ok(p.top >= 8);
+  assert.equal(source('components/UiRowMenu.js').includes('viewport-safe'), true);
+});
+
+test('narrow rule editor footer keeps its validation hint separate from actions', () => {
+  assert.match(source('style.css'), /@media \(max-width: 576px\)\s*\{\s*\.rule-modal-fullscreen > \.modal-footer \.modal-footer-status \{ flex-basis: 100% \}/);
+});
+
+function formHarness(ok) {
+  const calls = [];
+  const deps = {
+    t: key => key, showToast() {}, showConfirm: async () => true,
+    requireLogin: async () => true, login() {}, loadRules() {}, rulesMarkDirty() {}, responsesMarkDirty() {},
+    rulePreviewCache: { value: {} }, rulePreviewExpanded: { value: {} },
+    responseSseEvents: { value: [] }, renderEditor() {},
+    editFormatted: { value: false }, previewFormatted: { value: false },
+    responseFormFormatted: { value: false }, jmsEnabled: { value: true },
+  };
+  const context = vm.createContext({
+    Vue, deps, console, AbortController, URLSearchParams,
+    localStorage: { getItem: () => null, setItem() {} },
+    parseTags: () => ({}), parseHeaders: () => ({}),
+    apiCall: async (url, options = {}) => {
+      calls.push({ url, options });
+      return { ok, status: ok ? 200 : 409, json: async () => url.includes('target-connections') ? []
+        : { id: 'saved-rule', version: 1, responseId: 5 } };
+    },
+  });
+  // 與 index.html 相同：useRuleForm 需要 match-tree.js 與 utils.js 的 debounce
+  vm.runInContext(source('match-tree.js') + '\nthis.MatchTree = MatchTree;', context);
+  context.debounce = fn => Object.assign((...args) => fn(...args), { cancel() {} });
+  vm.runInContext(source('composables/useRuleForm.js') + '\nthis.form = useRuleForm(deps);', context);
+  return { form: context.form, calls };
+}
+
+test('form save reports success for the guard without altering its API payload', async () => {
+  const h = formHarness(true);
+  await h.form.openCreate();
+  h.form.form.value.matchKey = '/guard-test';
+  h.form.form.value.responseBody = 'OK';
+  assert.equal(await h.form.saveRule(false), true);
+  assert.equal(h.form.showModal.value, true);
+  assert.equal(h.form.form.value.id, 'saved-rule');
+  assert.equal(h.form.saving.value, false);
+  const save = h.calls.find(call => call.options.method === 'POST');
+  assert.equal(save.url, '/api/admin/rules');
+  assert.equal(JSON.parse(save.options.body).responseBody, 'OK');
+});
+
+test('a failed save never reports clean state and retains the draft', async () => {
+  const h = formHarness(false);
+  await h.form.openCreate();
+  h.form.form.value.matchKey = '/guard-test';
+  h.form.form.value.responseBody = 'OK';
+  assert.equal(await h.form.saveRule(false), false);
+  assert.equal(h.form.showModal.value, true);
+  assert.equal(h.form.form.value.responseBody, 'OK');
+  assert.equal(h.form.saving.value, false);
+});
+
+test('all sidebar buttons have permanent names and current-page semantics', () => {
+  const sidebar = source('components/SidebarNav.js');
+  const buttons = sidebar.match(/<button[^>]*class="nav-item"[^>]*>/g);
+  assert.equal(buttons.length, 7);
+  assert.ok(buttons.every(button => button.includes(':aria-label=')));
+  assert.equal(buttons.filter(button => button.includes(':aria-current=')).length, 7);
+  assert.ok(!sidebar.includes("helpSeen ? $emit"));
+  // Preferences and account actions moved into the user menu; each keeps a visible, localized name.
+  const trigger = sidebar.match(/<button[^>]*class="user-trigger"[^>]*>/s)[0];
+  for (const attribute of [':aria-label=', ':aria-expanded=', 'aria-controls="sidebar-user-menu"', 'aria-haspopup="dialog"']) {
+    assert.ok(trigger.includes(attribute), attribute);
+  }
+  // Each item pairs a decorative Echo icon with its visible, localized name.
+  const menuItems = sidebar.match(/<button[^>]*class="user-menu__item[^"]*"[^>]*>\s*<ui-icon name="\w+"><\/ui-icon><span>\{\{t\('sidebar\.\w+'\)\}\}<\/span>/g);
+  assert.equal(menuItems.length, 4);
+  for (const action of ['show-help', 'change-password', 'logout', 'login']) {
+    assert.ok(sidebar.includes("runMenuAction('" + action + "')"), action);
+  }
+  for (const control of ['sidebar.appearance', 'sidebar.density', 'sidebar.language']) {
+    assert.ok(sidebar.includes(':aria-label="t(\'' + control + '\')"'), control);
+  }
+  assert.ok(sidebar.includes('@keydown.esc.prevent="closeUserMenu()"'));
+});
+
+test('condition controls and discard text are localized in both supported languages', () => {
+  const component = source('components/RuleEditModal.js');
+  for (const key of ['conditionTypeLabel', 'conditionFieldLabel', 'conditionOperatorLabel', 'conditionValueLabel', 'removeConditionLabel']) {
+    assert.ok(component.includes("t('modal." + key + "',{index:i+1})"));
+    for (const language of ['en', 'zh-TW']) {
+      assert.ok(JSON.parse(source('i18n/' + language + '.json')).modal[key].includes('{index}'));
+    }
+  }
+  for (const language of ['en', 'zh-TW']) {
+    const confirm = JSON.parse(source('i18n/' + language + '.json')).confirm;
+    for (const key of ['discardRuleTitle', 'discardRuleMessage', 'discardChanges', 'continueEditing']) assert.ok(confirm[key]);
+  }
+});
+
+test('entry resources wire the guard, help flow, save baseline and unload cleanup', () => {
+  const index = source('index.html');
+  assert.ok(index.indexOf('/composables/useDiscardGuard.js') < index.indexOf('/app.js'));
+  assert.ok(index.includes('@start-tour="startTour"'));
+  const app = source('app.js');
+  for (const snippet of ['isBusy: () => ruleSaveInFlight.value', 'const saved = await saveRuleForm(andClose);',
+    'if (saved && saved.conflict) { await resolveRuleSaveConflict(saved.conflict); return; }', 'if (!saved) return;',
+    'let wasDirty = ruleDraftGuard.isDirty();', 'if (e.defaultPrevented) return;',
+    "window.removeEventListener('beforeunload', handleBeforeUnload)"] ) assert.ok(app.includes(snippet));
+  const css = source('style.css');
+  assert.ok(css.includes('color: var(--success-strong)'));
+  assert.ok(css.includes('.settings-danger-zone-header { color: var(--danger-text) }'));
+});

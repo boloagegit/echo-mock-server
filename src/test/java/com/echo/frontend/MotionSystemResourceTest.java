@@ -1,0 +1,80 @@
+package com.echo.frontend;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.core.io.ClassPathResource;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class MotionSystemResourceTest {
+
+    @Test
+    void loadsAndRegistersSharedMotionPrimitivesBeforeTheApplication() throws IOException {
+        String index = resourceText("static/index.html");
+        String application = resourceText("static/app.js");
+
+        assertThat(index)
+                .contains("/components/UiModalTransition.js?v=20260909.1")
+                .contains("/components/UiMotionIcon.js?v=20260909.1");
+        assertThat(index.indexOf("/components/UiModalTransition.js"))
+                .isLessThan(index.indexOf("/app.js"));
+        assertThat(application)
+                .contains("_app.component('ui-modal-transition', UiModalTransition)")
+                .contains("_app.component('ui-motion-icon', UiMotionIcon)");
+    }
+
+    @Test
+    void usesSharedTransitionsForModalModeAndExpandedRowContextChanges() throws IOException {
+        for (String modal : new String[]{
+                "ImportModal", "ConfirmModal", "PriorityHelpModal", "ResponseEditModal",
+                "OpenApiPreviewModal", "RuleEditModal", "ChangePasswordModal",
+                "AccountsPage", "IssuesPage", "SettingsPage"}) {
+            assertThat(resourceText("static/components/" + modal + ".js"))
+                    .contains("<ui-modal-transition>")
+                    .contains("</ui-modal-transition>");
+        }
+        // Mock / forward / fault panels swap in one frame: an out-in transition left a blank frame between them.
+        assertThat(resourceText("static/components/RuleEditModal.js"))
+                .doesNotContain("<Transition name=\"ui-mode-panel-motion\"")
+                .doesNotContain("mode=\"out-in\"");
+        // Issues moved from an expanded row to the shared drawer as well.
+        assertThat(resourceText("static/components/IssuesPage.js")).contains("<ui-detail-drawer class=\"issue-detail-drawer\"");
+        // Rule details moved from an expanded row to the shared drawer, which animates and honours reduced motion.
+        assertThat(resourceText("static/components/UiDetailDrawer.js")).contains("<Transition name=\"ui-drawer-motion\">");
+        assertThat(resourceText("static/components/ResponsesPage.js")).contains("<response-detail");
+        assertThat(resourceText("static/components/StatsPage.js")).contains("<ui-detail-drawer class=\"log-detail-drawer\"");
+        assertThat(resourceText("static/components/AuditPage.js")).contains("<ui-detail-drawer class=\"audit-detail-drawer\"");
+        assertThat(resourceText("static/console.css"))
+                .contains(".ui-drawer-motion-enter-active,")
+                .contains("@media (prefers-reduced-motion: reduce) {\n    .ui-drawer-motion-enter-active,");
+    }
+
+    @Test
+    void keepsStatusIconGeometryStableAndHonorsReducedMotion() throws IOException {
+        String icon = resourceText("static/components/UiMotionIcon.js");
+        String stylesheet = resourceText("static/style.css");
+
+        assertThat(icon)
+                .contains("class=\"ui-motion-icon\"")
+                .contains("<Transition name=\"ui-context-icon\">")
+                .contains(":key=\"icon\"");
+        assertThat(stylesheet)
+                .contains(".ui-motion-icon {")
+                .contains("width: 16px;")
+                .contains("height: 16px;")
+                .contains(".ui-modal-motion-enter-active")
+                .doesNotContain(".ui-mode-panel-motion-enter-active")
+                .contains(".ui-detail-row-motion-enter-active")
+                .contains("@media (prefers-reduced-motion: reduce)")
+                .contains("transition-duration: 0.01ms !important")
+                .doesNotContain("transition: all");
+    }
+
+    private static String resourceText(String path) throws IOException {
+        try (var input = new ClassPathResource(path).getInputStream()) {
+            return new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+}

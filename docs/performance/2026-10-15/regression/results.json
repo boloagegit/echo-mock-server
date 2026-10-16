@@ -1,0 +1,41 @@
+{
+  "environment": {
+    "SERVER_UNDERTOW_THREADS_IO": "1",
+    "java": "Temurin 17.0.20.1 (Gradle toolchain)"
+  },
+  "command": "SERVER_UNDERTOW_THREADS_IO=1 ./gradlew test --no-daemon -PtestForks=1 --tests '*HttpMockIntegrationTest' --tests '*SseForwardingRegressionIntegrationTest' --tests '*UniversalMockControllerTest' --tests '*UniversalMockControllerSseTest'",
+  "suites": [
+    {
+      "name": "com.echo.controller.UniversalMockControllerSseTest",
+      "tests": "17",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "8.298"
+    },
+    {
+      "name": "com.echo.controller.UniversalMockControllerTest",
+      "tests": "18",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "0.19"
+    },
+    {
+      "name": "com.echo.integration.http.HttpMockIntegrationTest",
+      "tests": "16",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "3.628"
+    },
+    {
+      "name": "com.echo.integration.http.SseForwardingRegressionIntegrationTest",
+      "tests": "7",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "2.155"
+    }
+  ]
+}

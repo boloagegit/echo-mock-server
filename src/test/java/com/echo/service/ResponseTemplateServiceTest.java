@@ -8,6 +8,8 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -210,6 +212,56 @@ class ResponseTemplateServiceTest {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render(null, context);
         assertEquals("", result);
+    }
+
+    @Test
+    @DisplayName("模板快取預設使用 16 MiB 權重預算")
+    void shouldUseDefaultTemplateCacheWeightBudget() {
+        assertEquals(16L * 1024 * 1024, templateService.templateCacheMaxWeightBytes());
+    }
+
+    @Test
+    @DisplayName("超過權重預算的模板仍會渲染但不進入快取")
+    void oversizedTemplateShouldRenderWithoutBeingCached() {
+        ResponseTemplateService smallCacheService = new ResponseTemplateService(1);
+        String oversized = "x".repeat(175_000) + "{{request.method}}";
+
+        String result = smallCacheService.render(
+                oversized, buildContext("/test", "POST", null, null, null));
+
+        assertTrue(result.endsWith("POST"));
+        assertEquals(0, smallCacheService.templateCacheEstimatedSize());
+    }
+
+    @Test
+    @DisplayName("模板權重包含來源字元與編譯結構預留")
+    void templateWeightShouldBeConservative() {
+        assertTrue(ResponseTemplateService.estimateTemplateWeight("x".repeat(1_000)) >= 6_000);
+    }
+
+    @Test
+    @DisplayName("共享編譯模板不得混用並行請求上下文")
+    void cachedTemplateShouldKeepConcurrentRequestContextsIsolated() throws Exception {
+        var executor = Executors.newFixedThreadPool(8);
+        try {
+            java.util.List<Callable<Boolean>> tasks = new java.util.ArrayList<>();
+            for (int i = 0; i < 100; i++) {
+                String requestId = "request-" + i;
+                tasks.add(() -> {
+                    var context = buildContext("/test", "POST", Map.of("id", requestId), null, null);
+                    return requestId.equals(templateService.render("{{request.query.id}}", context));
+                });
+            }
+            assertTrue(executor.invokeAll(tasks).stream().allMatch(future -> {
+                try {
+                    return future.get();
+                } catch (Exception e) {
+                    return false;
+                }
+            }));
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     // === Helper ===
@@ -739,5 +791,155 @@ class ResponseTemplateServiceTest {
         assertTrue(result.contains("\"name\":"));
         assertTrue(result.contains("\"email\":"));
         assertTrue(result.contains("\"phone\":"));
+    }
+
+    @Test
+    @DisplayName("renderIfTemplate：沒有模板語法時不建立上下文、原樣回傳")
+    void renderIfTemplateSkipsContextWithoutTemplate() {
+        java.util.concurrent.atomic.AtomicInteger built = new java.util.concurrent.atomic.AtomicInteger();
+
+        String result = ResponseTemplateService.renderIfTemplate(templateService, "{\"plain\":true}", () -> {
+            built.incrementAndGet();
+            return buildContext("/x", "GET", null, null, null);
+        });
+
+        assertEquals("{\"plain\":true}", result);
+        assertEquals(0, built.get());
+        assertNull(ResponseTemplateService.renderIfTemplate(templateService, null, () -> null));
+        assertEquals("{{x}}", ResponseTemplateService.renderIfTemplate(null, "{{x}}", () -> null));
+    }
+
+    @Test
+    @DisplayName("TemplateContext.of 由原始 query string 建立 query")
+    void templateContextParsesQueryString() {
+        var context = ResponseTemplateService.TemplateContext.of("/p", "GET", "a=1&b=x&flag", Map.of("h", "v"), "body");
+
+        assertEquals("1|x|v|body", templateService.render(
+                "{{request.query.a}}|{{request.query.b}}|{{request.headers.h}}|{{request.body}}", context));
+        assertEquals(Map.of("a", "1", "b", "x"), context.query());
+    }
+
+    // ========================================
+    // 同一次渲染只解析一次
+    // ========================================
+
+    @Test
+    @DisplayName("同一內容的多個 xPath / jsonPath 結果與逐一解析時相同")
+    void multiplePathsOnSameBodyGiveSameResults() {
+        String xml = "<o><a>1</a><b x='y'>2</b><c><d>3</d></c></o>";
+        var xmlContext = buildContext("/t", "POST", null, null, xml);
+        assertEquals("1|2|y|3|",
+                templateService.render("{{xPath request.body '//a/text()'}}|{{xPath request.body '/o/b'}}|"
+                        + "{{xPath request.body '//b/@x'}}|{{xPath request.body '//c/d/text()'}}|"
+                        + "{{xPath request.body '//missing/text()'}}", xmlContext));
+
+        String json = "{\"a\":1,\"b\":{\"c\":\"x\"},\"items\":[{\"id\":7},{\"id\":8}]}";
+        var jsonContext = buildContext("/t", "POST", null, null, json);
+        assertEquals("1|x|8|2|",
+                templateService.render("{{jsonPath request.body '$.a'}}|{{jsonPath request.body '$.b.c'}}|"
+                        + "{{jsonPath request.body '$.items[1].id'}}|{{size (jsonPath request.body '$.items')}}|"
+                        + "{{jsonPath request.body '$.nope'}}", jsonContext));
+    }
+
+    @Test
+    @DisplayName("ParsedBodies：相同內容只解析一次，解析失敗也記住")
+    void parsedBodiesParseEachSourceOnce() {
+        var parsed = new ResponseTemplateService.ParsedBodies();
+        String xml = "<o><a>1</a></o>";
+
+        assertSame(parsed.xml(xml), parsed.xml(new String(xml)));
+        assertSame(parsed.json("{\"a\":1}"), parsed.json("{\"a\":1}"));
+        assertNull(parsed.xml("<broken"));
+        assertNull(parsed.xml("<broken"));
+        assertNull(parsed.json("{broken"));
+    }
+
+    @Test
+    @DisplayName("ParsedBodies：只保留最近幾份內容")
+    void parsedBodiesKeepOnlyRecentSources() {
+        var parsed = new ResponseTemplateService.ParsedBodies();
+        var first = parsed.xml("<o>0</o>");
+        for (int i = 1; i <= 4; i++) {
+            parsed.xml("<o>" + i + "</o>");
+        }
+
+        assertNotSame(first, parsed.xml("<o>0</o>"));
+    }
+
+    @Test
+    @DisplayName("解析結果不跨請求：不同請求的內容各自取值")
+    void parsedBodiesAreNotSharedAcrossRenders() {
+        String template = "{{xPath request.body '//id/text()'}}-{{jsonPath request.body '$.id'}}";
+        assertEquals("A-", templateService.render(template, buildContext("/t", "POST", null, null, "<r><id>A</id></r>")));
+        assertEquals("B-", templateService.render(template, buildContext("/t", "POST", null, null, "<r><id>B</id></r>")));
+        assertEquals("-9", templateService.render(template, buildContext("/t", "POST", null, null, "{\"id\":9}")));
+    }
+
+    @Test
+    @DisplayName("多執行緒同時渲染 xPath / jsonPath，各自拿到自己的值")
+    void concurrentRendersWithPathsStayIsolated() throws Exception {
+        var executor = Executors.newFixedThreadPool(8);
+        try {
+            java.util.List<Callable<Boolean>> tasks = new java.util.ArrayList<>();
+            for (int i = 0; i < 400; i++) {
+                String id = "id-" + i;
+                boolean xml = i % 2 == 0;
+                tasks.add(() -> {
+                    String body = xml ? "<r><id>" + id + "</id><n>" + id + "</n></r>"
+                            : "{\"id\":\"" + id + "\",\"n\":\"" + id + "\"}";
+                    String template = xml ? "{{xPath request.body '//id/text()'}}{{xPath request.body '/r/n'}}"
+                            : "{{jsonPath request.body '$.id'}}{{jsonPath request.body '$.n'}}";
+                    return (id + id).equals(templateService.render(template, buildContext("/t", "POST", null, null, body)));
+                });
+            }
+            assertTrue(executor.invokeAll(tasks).stream().allMatch(future -> {
+                try {
+                    return future.get();
+                } catch (Exception e) {
+                    return false;
+                }
+            }));
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    @DisplayName("無效的 XPath 運算式回傳空字串，不影響同一模板的其他欄位")
+    void invalidXPathExpressionReturnsEmpty() {
+        var context = buildContext("/t", "POST", null, null, "<r><id>1</id></r>");
+        assertEquals("[]1", templateService.render("[{{xPath request.body '//['}}]{{xPath request.body '//id/text()'}}", context));
+    }
+
+    @Test
+    @DisplayName("jsonPath append() 不影響同一模板中其他欄位讀到的內容")
+    void jsonPathAppendDoesNotLeakIntoLaterPaths() {
+        var context = buildContext("/t", "POST", null, null, "{\"items\":[{\"id\":7},{\"id\":8}]}");
+
+        String result = templateService.render("{{size (jsonPath request.body '$.items.append(9)')}}|"
+                + "{{size (jsonPath request.body '$.items')}}|{{jsonPath request.body '$.items.length()'}}", context);
+
+        assertEquals("3|2|2", result);
+    }
+
+    @Test
+    @DisplayName("由請求內容組出的長 XPath 不留在執行緒上")
+    void longXPathExpressionsAreNotRetained() throws Exception {
+        var executor = Executors.newSingleThreadExecutor();
+        try {
+            String longPath = "concat('" + "A".repeat(ResponseTemplateService.MAX_CACHED_XPATH_LENGTH) + "', //id/text())";
+            var context = buildContext("/t", "POST", null, Map.of("p", longPath), "<r><id>1</id></r>");
+            var counts = executor.submit(() -> {
+                int before = ResponseTemplateService.compiledXPathCountForCurrentThread();
+                String rendered = templateService.render("{{xPath request.body request.headers.p}}", context);
+                templateService.render("{{xPath request.body '//id/text()'}}", context);
+                return new Object[]{rendered, before, ResponseTemplateService.compiledXPathCountForCurrentThread()};
+            }).get();
+
+            assertTrue(((String) counts[0]).endsWith("A1"));
+            assertEquals((int) counts[1] + 1, (int) counts[2], "only the short expression is kept");
+        } finally {
+            executor.shutdownNow();
+        }
     }
 }

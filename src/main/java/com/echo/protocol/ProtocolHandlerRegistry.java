@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -36,6 +37,23 @@ public class ProtocolHandlerRegistry {
      */
     public List<ProtocolHandler> getAllHandlers() {
         return handlers;
+    }
+
+    /**
+     * 已啟用協定的描述（依處理器注入順序）
+     */
+    public List<ProtocolDescriptor> descriptors() {
+        return handlers.stream()
+                .map(ProtocolHandler::descriptor)
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    /**
+     * 依協定取得描述；協定未啟用時為 empty
+     */
+    public Optional<ProtocolDescriptor> descriptor(Protocol protocol) {
+        return getHandler(protocol).map(ProtocolHandler::descriptor);
     }
 
     /**

@@ -1,0 +1,1 @@
+Round 1 completed. Stopped during WireMock round 2 to replace the asynchronous body collector; incomplete round 2 is excluded. Superseded by native-final and native-wiremock32.

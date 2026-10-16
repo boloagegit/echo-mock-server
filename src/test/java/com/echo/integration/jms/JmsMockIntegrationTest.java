@@ -191,4 +191,32 @@ class JmsMockIntegrationTest extends BaseIntegrationTest {
         assertThat(logMatched(logs.get(0))).isTrue();
         assertThat(logRuleId(logs.get(0))).isEqualTo(xmlRule.getId());
     }
+
+    @Test
+    @DisplayName("JMS 回覆套用共用模板：請求內容與訊息標頭都能帶進回覆")
+    @SuppressWarnings("unchecked")
+    void replyRendersSharedTemplate() {
+        RuleDto rule = createJmsRule("ECHO.REQUEST",
+                "<reply><order>{{xPath request.body '//orderId/text()'}}</order>"
+                        + "<msg>{{request.headers.JMSMessageID}}</msg><q>{{request.headers.JMSDestination}}</q></reply>");
+
+        ResponseEntity<Map> resp = adminClient().postForEntity("/api/admin/rules/" + rule.getId() + "/test",
+                Map.of("body", "<req><orderId>A-1001</orderId></req>", "timeout", 10), Map.class);
+
+        assertThat(resp.getBody()).isNotNull();
+        String body = (String) resp.getBody().get("body");
+        assertThat(body).startsWith("<reply><order>A-1001</order><msg>ID:").endsWith("</msg><q>ECHO.REQUEST</q></reply>");
+    }
+
+    @Test
+    @DisplayName("JMS 回覆沒有模板語法時原樣送出")
+    @SuppressWarnings("unchecked")
+    void replyWithoutTemplateIsUnchanged() {
+        RuleDto rule = createJmsRule("ECHO.REQUEST", "<reply>static {braces} only</reply>");
+
+        ResponseEntity<Map> resp = adminClient().postForEntity("/api/admin/rules/" + rule.getId() + "/test",
+                Map.of("body", "<req/>", "timeout", 10), Map.class);
+
+        assertThat(resp.getBody()).containsEntry("body", "<reply>static {braces} only</reply>");
+    }
 }

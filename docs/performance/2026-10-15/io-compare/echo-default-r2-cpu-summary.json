@@ -1,0 +1,249 @@
+{
+  "execution_samples": 3833,
+  "nearest_recognized_frame": {
+    "Undertow / XNIO": 2225,
+    "Spring other": 399,
+    "Spring Security": 161,
+    "Spring MVC handler lookup": 427,
+    "Spring web other": 240,
+    "Micrometer": 189,
+    "Echo": 182,
+    "JDK / other": 10
+  },
+  "undertow_handle_event_leaf_lines": {
+    "128": 1013,
+    "125": 2,
+    "137": 420
+  },
+  "sampled_threads": [
+    [
+      "XNIO-1 I/O-4",
+      539
+    ],
+    [
+      "XNIO-1 I/O-2",
+      524
+    ],
+    [
+      "XNIO-1 I/O-3",
+      418
+    ],
+    [
+      "XNIO-1 task-10",
+      263
+    ],
+    [
+      "XNIO-1 task-9",
+      248
+    ],
+    [
+      "XNIO-1 task-11",
+      246
+    ],
+    [
+      "XNIO-1 task-13",
+      243
+    ],
+    [
+      "XNIO-1 task-6",
+      225
+    ],
+    [
+      "XNIO-1 task-5",
+      204
+    ],
+    [
+      "XNIO-1 task-12",
+      204
+    ],
+    [
+      "XNIO-1 task-8",
+      163
+    ],
+    [
+      "XNIO-1 task-7",
+      158
+    ],
+    [
+      "XNIO-1 task-3",
+      155
+    ],
+    [
+      "XNIO-1 task-2",
+      137
+    ],
+    [
+      "XNIO-1 I/O-1",
+      95
+    ],
+    [
+      "XNIO-1 task-4",
+      8
+    ],
+    [
+      "scheduling-1",
+      2
+    ],
+    [
+      "Notification Thread",
+      1
+    ]
+  ],
+  "leaf_methods": [
+    [
+      "io.undertow.server.protocol.http.HttpReadListener.handleEvent",
+      1435
+    ],
+    [
+      "java.util.HashMap.getNode",
+      163
+    ],
+    [
+      "java.util.concurrent.locks.LockSupport.parkNanos",
+      100
+    ],
+    [
+      "java.util.HashMap$HashIterator.nextNode",
+      98
+    ],
+    [
+      "io.undertow.util.HttpString.toString",
+      89
+    ],
+    [
+      "java.util.concurrent.ConcurrentHashMap.get",
+      69
+    ],
+    [
+      "java.util.HashMap.putVal",
+      47
+    ],
+    [
+      "io.undertow.util.HttpString.higher",
+      46
+    ],
+    [
+      "java.util.IdentityHashMap.get",
+      44
+    ],
+    [
+      "java.lang.StringLatin1.toLowerCase",
+      40
+    ],
+    [
+      "java.util.HashMap$HashIterator.<init>",
+      40
+    ],
+    [
+      "org.springframework.web.cors.CorsUtils.isPreFlightRequest",
+      36
+    ],
+    [
+      "java.util.Collections$UnmodifiableCollection$1.<init>",
+      35
+    ],
+    [
+      "org.springframework.util.MimeType.isCompatibleWith",
+      29
+    ],
+    [
+      "java.util.TreeMap.getFirstEntry",
+      27
+    ],
+    [
+      "org.springframework.http.server.DefaultPathContainer.createFromUrlPath",
+      26
+    ],
+    [
+      "java.lang.String.hashCode",
+      25
+    ],
+    [
+      "java.util.regex.Matcher.match",
+      23
+    ],
+    [
+      "java.util.HashMap.resize",
+      23
+    ],
+    [
+      "org.springframework.web.servlet.handler.AbstractHandlerMethodMapping.getHandlerInternal",
+      20
+    ],
+    [
+      "java.lang.ThreadLocal$ThreadLocalMap.getEntryAfterMiss",
+      19
+    ],
+    [
+      "jakarta.servlet.http.HttpServletResponseWrapper._getHttpServletResponse",
+      18
+    ],
+    [
+      "java.util.WeakHashMap.get",
+      17
+    ],
+    [
+      "java.util.Arrays$ArrayList.iterator",
+      16
+    ],
+    [
+      "com.echo.diagnostics.TransactionDiagnostics$Trace.safeValue",
+      14
+    ],
+    [
+      "java.lang.StringLatin1.regionMatchesCI",
+      14
+    ],
+    [
+      "org.springframework.core.ReactiveAdapterRegistry.getAdapter",
+      13
+    ],
+    [
+      "io.undertow.util.HttpString.calcHashCode",
+      13
+    ],
+    [
+      "java.lang.StringLatin1.hashCode",
+      13
+    ],
+    [
+      "java.lang.StringLatin1.lastIndexOf",
+      13
+    ],
+    [
+      "ch.qos.logback.classic.Logger.isDebugEnabled",
+      12
+    ],
+    [
+      "java.lang.AbstractStringBuilder.ensureCapacityInternal",
+      12
+    ],
+    [
+      "java.util.regex.Pattern.lambda$and$2",
+      12
+    ],
+    [
+      "org.springframework.web.servlet.mvc.method.annotation.AbstractMessageConverterMethodArgumentResolver.readWithMessageConverters",
+      12
+    ],
+    [
+      "com.echo.diagnostics.TransactionDiagnostics$Trace.event",
+      11
+    ]
+  ],
+  "inclusive_stack_counts_OVERLAP": {
+    "Spring Security": 1501,
+    "Micrometer": 201,
+    "HTTP request adaptation": 100,
+    "MVC handler lookup": 641,
+    "MVC handler introspection": 777,
+    "Echo pipeline": 187,
+    "Match chain formatting": 55,
+    "Echo diagnostics": 39
+  },
+  "allocation_sample_count": 0,
+  "allocation_weight_bytes": 0,
+  "allocation_classes": [],
+  "allocation_leaf_sites": [],
+  "gc_events": []
+}

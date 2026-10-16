@@ -58,6 +58,7 @@ class RequestLogServiceTest {
 
     private void persistMemoryTask(LogTask task) {
         RequestLogService.LogEntry entry = RequestLogService.LogEntry.builder()
+                .diagnosticId(task.getDiagnosticId())
                 .id(RequestLogService.nextMemoryId())
                 .ruleId(task.getRuleId())
                 .protocol(task.getProtocol())
@@ -102,6 +103,44 @@ class RequestLogServiceTest {
         }
 
         @Test
+        void correlationSurvivesDurableHandoffAndIsSearchableWithoutExtraBodies() {
+            service.record(null, Protocol.JMS, null, "DEMO.REQUEST", true, 1, "JMS",
+                    null, null, false, null, null, null, 200, 0, null, null,
+                    List.of(), null, null, java.util.Map.of(), null, null, null, null, "process-123");
+            var filter = RequestLogService.QueryFilter.builder().endpoint("process-123").build();
+            assertThat(service.query(filter).getResults()).singleElement().satisfies(item ->
+                    assertThat(item.getLog().getDiagnosticId()).isEqualTo("process-123"));
+            assertThat(service.querySummary(filter).getResults()).singleElement().satisfies(item ->
+                    assertThat(item.getLog().getDiagnosticId()).isEqualTo("process-123"));
+        }
+
+        @Test
+        void methodAndPathFilterOnlyTheExactRequest() {
+            service.record(null, Protocol.HTTP, "GET", "/refund", false, 1, "127.0.0.1", null, null, null, null, null, null);
+            service.record(null, Protocol.HTTP, "POST", "/refund", false, 1, "127.0.0.1", null, null, null, null, null, null);
+            service.record(null, Protocol.HTTP, "GET", "/refund/7", false, 1, "127.0.0.1", null, null, null, null, null, null);
+
+            var filter = RequestLogService.QueryFilter.builder().method("get").path("/refund").build();
+
+            assertThat(service.querySummary(filter).getResults()).singleElement().satisfies(item -> {
+                assertThat(item.getLog().getMethod()).isEqualTo("GET");
+                assertThat(item.getLog().getEndpoint()).isEqualTo("/refund");
+            });
+        }
+
+        @Test
+        void proxyErrorFitsExistingColumnWithoutTruncatingResponseBody() {
+            when(configService.isRequestLogIncludeBody()).thenReturn(true);
+            when(configService.getRequestLogMaxBodySize()).thenReturn(1000);
+            String error = "e".repeat(300);
+            service.record(null, Protocol.HTTP, "GET", "/error", false, 1, "127.0.0.1",
+                    null, null, 502, error, 502, 0, null, error);
+            var entry = service.getMemoryBuffer().getFirst();
+            assertThat(entry.getProxyError()).hasSize(255);
+            assertThat(entry.getResponseBody()).isEqualTo(error);
+        }
+
+        @Test
         void record_shouldStoreInMemory() {
             service.record("uuid-1", Protocol.HTTP, "GET", "/api", true, 10, "127.0.0.1", null, null, null, null, null, null);
             
@@ -138,6 +177,23 @@ class RequestLogServiceTest {
             assertThat(result.getResults()).singleElement().satisfies(item ->
                     assertThat(item.getLog().getForwardTarget())
                             .hasSize(RequestLog.MAX_FORWARD_TARGET_LENGTH));
+        }
+
+        @Test
+        void querySummary_shouldLimitToTheTimeRange() {
+            java.time.LocalDateTime start = java.time.LocalDateTime.of(2026, 10, 12, 14, 0);
+            long id = 1;
+            for (java.time.LocalDateTime time : List.of(start.minusSeconds(1), start, start.plusMinutes(29),
+                    start.plusMinutes(30))) {
+                service.getMemoryBuffer().add(RequestLogService.LogEntry.builder().id(id++).protocol(Protocol.HTTP)
+                        .endpoint("/" + time.toLocalTime()).matched(true).requestTime(time).build());
+            }
+
+            var result = service.querySummary(RequestLogService.QueryFilter.builder()
+                    .from(start).to(start.plusMinutes(30)).sortDirection("asc").build());
+
+            assertThat(result.getResults()).extracting(item -> item.getLog().getEndpoint())
+                    .containsExactly("/14:00", "/14:29");
         }
 
         @Test
@@ -404,7 +460,7 @@ class RequestLogServiceTest {
                     "EMPTY_RESPONSE", "order-flow", "Started", "Paid",
                     false, false, false };
             when(requestLogRepository.findSummaryPage(isNull(), eq(Protocol.HTTP), eq(true), eq("/api"),
-                    eq(10L), any(Pageable.class)))
+                    eq(10L), isNull(), isNull(), any(Pageable.class)))
                     .thenReturn(new PageImpl<>(Collections.singletonList(row),
                             org.springframework.data.domain.PageRequest.of(1, 2), 5));
 
@@ -426,7 +482,7 @@ class RequestLogServiceTest {
             assertThat(result.getTotalElements()).isEqualTo(5);
             assertThat(result.getTotalPages()).isEqualTo(3);
             verify(requestLogRepository).findSummaryPage(isNull(), eq(Protocol.HTTP), eq(true), eq("/api"),
-                    eq(10L), argThat(pageable -> pageable.getPageNumber() == 1
+                    eq(10L), isNull(), isNull(), argThat(pageable -> pageable.getPageNumber() == 1
                             && pageable.getPageSize() == 2
                             && pageable.getSort().getOrderFor("responseTimeMs").getDirection() == Sort.Direction.ASC));
             verify(requestLogRepository, never()).findSummaryProjections(any());

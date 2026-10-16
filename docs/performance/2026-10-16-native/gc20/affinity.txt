@@ -1,0 +1,1 @@
+pid 220588's current affinity list: 0-3

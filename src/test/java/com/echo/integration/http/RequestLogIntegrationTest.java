@@ -46,6 +46,28 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    @DisplayName("流量概況「看這些請求」：方法與網址完全相同才列出，與統計的筆數一致")
+    void methodAndPathFilterMatchesTheTrafficCount() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Original-Host", "exact.test");
+        restTemplate.exchange("/mock/api/exact-miss", HttpMethod.GET, new HttpEntity<>(headers), String.class);
+        restTemplate.exchange("/mock/api/exact-miss", HttpMethod.POST, new HttpEntity<>("{}", headers), String.class);
+        restTemplate.exchange("/mock/api/exact-miss/more", HttpMethod.GET, new HttpEntity<>(headers), String.class);
+        // 三筆都寫入後再查，避免只查到一部分
+        assertThat(queryLogs("protocol=HTTP&endpoint=/api/exact-miss")).hasSizeGreaterThanOrEqualTo(1);
+        for (int attempt = 0; attempt < 20 && queryLogs("protocol=HTTP&endpoint=/api/exact-miss").size() < 3; attempt++) {
+            try { Thread.sleep(100); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }
+
+        List<Map<String, Object>> logs = queryLogs("protocol=HTTP&matched=false&method=GET&path=/api/exact-miss");
+
+        assertThat(logs).singleElement().satisfies(result -> {
+            Map<String, Object> log = getLogEntry(result);
+            assertThat(log).containsEntry("method", "GET").containsEntry("endpoint", "/api/exact-miss");
+        });
+    }
+
+    @Test
     @DisplayName("10.2a HTTP Mock 請求成功 → 日誌 matched=true")
     void httpMockMatched_logsMatchedTrue() {
         createHttpRule("/api/log-test", "GET", "{\"ok\":true}", "log.test");
@@ -60,6 +82,30 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
         Map<String, Object> log = getLogEntry(logs.get(0));
         assertThat(log.get("matched")).isEqualTo(true);
         assertThat(log.get("protocol")).isEqualTo("HTTP");
+        assertThat((String) log.get("diagnosticId")).matches("[a-f0-9]{8}-[a-z0-9]+");
+    }
+
+    @Test
+    @DisplayName("處理流程圖的資料（候選規則數、模擬延遲）存進紀錄並由詳細資料回傳")
+    @SuppressWarnings("unchecked")
+    void flowDetailsAreStoredAndReturnedWithTheDetail() {
+        createHttpRule("/api/log-flow", "GET", "{\"ok\":true}", "flow.test");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Original-Host", "flow.test");
+        restTemplate.exchange("/mock/api/log-flow", HttpMethod.GET, new HttpEntity<>(headers), String.class);
+
+        List<Map<String, Object>> logs = queryLogs("protocol=HTTP&endpoint=/api/log-flow");
+        assertThat(logs).isNotEmpty();
+        Object id = getLogEntry(logs.get(0)).get("id");
+        ResponseEntity<Map> detail = adminClient().getForEntity("/api/admin/logs/" + id + "/detail", Map.class);
+        assertThat(detail.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<String, Object> body = detail.getBody();
+        assertThat(body.get("candidateCount")).isEqualTo(1);
+        assertThat(body.get("matchedByFallback")).isEqualTo(true);
+        assertThat(body.get("delayMs")).isEqualTo(0);
+        assertThat(body.get("sseEventCount")).isNull();
+        assertThat(body.get("scenarioSkipped")).isNull();
     }
 
     @Test

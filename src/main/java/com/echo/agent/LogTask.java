@@ -50,12 +50,20 @@ public class LogTask {
     private final String scenarioFromState;
     private final String scenarioToState;
 
+    // --- 處理流程資訊 ---
+    private final Integer candidateCount;
+    private final Boolean matchedByFallback;
+    private final Integer delayMs;
+    private final Integer sseEventCount;
+    private final String scenarioSkipped;
+
     // --- 匹配分析上下文 ---
     private final List<CandidateSnapshot> candidates;
     private final String analysisBody;
     private final String queryString;
     private final Map<String, String> headers;
     private final Map<String, Boolean> matchOutcomes;
+    private final String diagnosticId;
 
     private LogTask(
             String ruleId,
@@ -80,11 +88,18 @@ public class LogTask {
             String scenarioName,
             String scenarioFromState,
             String scenarioToState,
+            Integer candidateCount,
+            Boolean matchedByFallback,
+            Integer delayMs,
+            Integer sseEventCount,
+            String scenarioSkipped,
             List<CandidateSnapshot> candidates,
             String analysisBody,
             String queryString,
             Map<String, String> headers,
-            Map<String, Boolean> matchOutcomes) {
+            Map<String, Boolean> matchOutcomes,
+            String diagnosticId) {
+        this.diagnosticId = diagnosticId;
         this.ruleId = ruleId;
         this.protocol = protocol;
         this.method = method;
@@ -107,6 +122,11 @@ public class LogTask {
         this.scenarioName = scenarioName;
         this.scenarioFromState = scenarioFromState;
         this.scenarioToState = scenarioToState;
+        this.candidateCount = candidateCount;
+        this.matchedByFallback = matchedByFallback;
+        this.delayMs = delayMs;
+        this.sseEventCount = sseEventCount;
+        this.scenarioSkipped = scenarioSkipped;
         this.candidates = candidates != null ? List.copyOf(candidates) : List.of();
         this.analysisBody = analysisBody;
         this.queryString = queryString;

@@ -1,0 +1,72 @@
+package com.echo.frontend;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.core.io.ClassPathResource;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import static org.assertj.core.api.Assertions.assertThat;
+
+class SparseStateResourceTest {
+    @Test
+    void bothRulePreviewsUseInlineConditionSummaryAndCompactEmptyBody() throws IOException {
+        // One drawer serves both views: no conditions and empty bodies get a short inline note, tags only render when present.
+        String source = text("components/RuleDetail.js");
+        assertThat(source).contains("<p v-if=\"!conditionGroups.length\" class=\"detail-empty\">{{t('rules.noCondition')}}</p>")
+                .contains("<p v-if=\"!body && shownDetail\" class=\"detail-empty\">{{t('rules.empty')}}</p>")
+                .contains("<template v-if=\"tagEntries.length\">")
+                .doesNotContain("<span class=\"pv-label\"></span>");
+    }
+
+    @Test
+    void editorDistinguishesNoConditionsAndNoSelectedResponse() throws IOException {
+        assertThat(text("components/RuleEditModal.js"))
+                .contains("class=\"cond-builder-actions\"")
+                .contains("v-if=\"!conditions.length\" class=\"sub-info\"")
+                .contains("v-if=\"form.responseId\" class=\"response-picker-heading\"")
+                // The body viewer shows once the selected response has a body or is being edited.
+                .contains("v-show=\"showPreviewViewer\"")
+                .contains("(!!props.previewResponseBody?.length || props.previewEditing)")
+                .contains("$emit('add-condition')");
+        assertThat(text("style.css"))
+                .contains(".rule-editor .response-preview-empty { flex: 0 0 auto; min-height: 0;")
+                .contains(".cond-builder-actions.is-empty");
+    }
+
+    @Test
+    void settingsNotesNeverReserveAnEmptyLabelColumn() throws IOException {
+        assertThat(text("components/SettingsPage.js"))
+                .doesNotContain("<span class=\"settings-label\"></span>")
+                .contains("class=\"settings-inline-note\"")
+                .contains("<div v-if=\"jmsTargets.length\"><span class=\"connection-guidance-label\">");
+    }
+
+    @Test
+    void unusedResponsesKeepNeutralMetadataAndExplicitExpiryWarning() throws IOException {
+        assertThat(text("style.css")).doesNotContain("tr.unused-row .sub-info { color: var(--danger)")
+                .doesNotContain("tr.unused-row td { background: rgba(var(--danger-rgb)");
+        // Unused responses stay neutral in the list; only a near expiry (≤7 days) gets a warning badge.
+        assertThat(text("components/ResponsesPage.js"))
+                .contains("<span v-else class=\"cell-subtle\">{{t('responses.notUsed')}}")
+                .contains("retention(r) != null && retention(r) <= 7\" tone=\"warning\"");
+        assertThat(text("components/ResponseDetail.js")).contains("t('responses.orphanDaysLeft'");
+    }
+
+    @Test
+    void emptyLogBodyUsesTopAlignedMessageWithoutFullHeightInsetPanel() throws IOException {
+        assertThat(text("components/StatsPage.js"))
+                .contains("class=\"pv-body-empty\">{{t('stats.emptyRequestBody')}}")
+                .contains("class=\"pv-body-empty\">{{t('stats.emptyResponseBody')}}");
+        String css = text("style.css");
+        int start = css.indexOf(".pv-body-empty {");
+        String rule = css.substring(start, css.indexOf('}', start));
+        assertThat(rule).contains("padding: var(--space-sm) 0")
+                .doesNotContain("background:")
+                .doesNotContain("min-height:");
+    }
+
+    private static String text(String path) throws IOException {
+        try (var stream = new ClassPathResource("static/" + path).getInputStream()) {
+            return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+}

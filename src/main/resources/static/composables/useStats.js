@@ -24,7 +24,8 @@ const useStats = (deps) => {
     // --- 狀態 ---
     const logs = ref([]);
     const logSummary = ref({});
-    const logFilter = ref({ protocol: '', matched: '', endpoint: '' });
+    // method / path：完全相同的方法與網址（流量概況「看這些請求」）；endpoint 是部分比對的關鍵字
+    const logFilter = ref({ protocol: '', matched: '', endpoint: '', method: '', path: '', from: '', to: '' });
 
     const savedLogSort = JSON.parse(localStorage.getItem('logSort') || 'null');
     const logSort = ref(savedLogSort || { field: 'requestTime', asc: false });
@@ -100,6 +101,11 @@ const useStats = (deps) => {
         if (logFilter.value.matched) { params.set('matched', logFilter.value.matched); }
         const endpoint = (logFilter.value.endpoint || '').trim();
         if (endpoint) { params.set('endpoint', endpoint); }
+        if (logFilter.value.method) { params.set('method', logFilter.value.method); }
+        if (logFilter.value.path) { params.set('path', logFilter.value.path); }
+        // 時間範圍（流量概況點選的格子），伺服器本地時間字串原樣送回
+        if (logFilter.value.from) { params.set('from', logFilter.value.from); }
+        if (logFilter.value.to) { params.set('to', logFilter.value.to); }
         return '/api/admin/logs?' + params.toString();
     };
 
@@ -181,10 +187,7 @@ const useStats = (deps) => {
             }
             return;
         }
-        // 沒有明細可載入
-        if (!item.log.hasRequestBody && !item.log.hasResponseBody && !item.log.hasMatchChain) {
-            return;
-        }
+        // 沒有本文與比對鏈也要載入：「處理流程」需要候選規則數、預設規則、延遲與情境略過等明細
         item._detailLoading = true;
         item._detailError = false;
         try {
@@ -239,18 +242,33 @@ const useStats = (deps) => {
         if (logFilter.value.matched) {
             chips.push({ key: 'matched', label: t('filterChips.status') + (logFilter.value.matched === 'true' ? t('stats.filterMatched') : t('stats.filterUnmatched')) });
         }
+        if (logFilter.value.path) {
+            const method = logFilter.value.method ? logFilter.value.method + ' ' : '';
+            chips.push({ key: 'path', label: t('filterChips.endpoint') + method + logFilter.value.path });
+        }
         if (logFilter.value.endpoint) {
-            chips.push({ key: 'endpoint', label: t('filterChips.endpoint') + logFilter.value.endpoint });
+            chips.push({ key: 'endpoint', label: t('filterChips.keyword') + logFilter.value.endpoint });
+        }
+        if (logFilter.value.from || logFilter.value.to) {
+            const from = logFilter.value.from, to = logFilter.value.to;
+            const withDay = from.substring(0, 10) !== to.substring(0, 10) || to.substring(11, 16) === '00:00';
+            chips.push({ key: 'time', label: t('filterChips.time') + TrafficChart.rangeText(from, to, withDay) });
         }
         return chips;
     });
 
     const removeLogChip = (key) => {
-        logFilter.value[key] = '';
+        if (key === 'time') {
+            logFilter.value = { ...logFilter.value, from: '', to: '' };
+        } else if (key === 'path') {
+            logFilter.value = { ...logFilter.value, method: '', path: '' };
+        } else {
+            logFilter.value[key] = '';
+        }
     };
 
     const clearLogFilters = () => {
-        logFilter.value = { protocol: '', matched: '', endpoint: '' };
+        logFilter.value = { protocol: '', matched: '', endpoint: '', method: '', path: '', from: '', to: '' };
     };
 
     // --- 清理函式（供 onUnmounted 呼叫） ---

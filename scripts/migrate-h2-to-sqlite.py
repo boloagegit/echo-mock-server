@@ -25,12 +25,14 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from contextlib import closing
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_H2_PATH = PROJECT_ROOT / "mockdb"
-DEFAULT_SQLITE_PATH = PROJECT_ROOT / "mockdb.sqlite"
+# Echo 的預設資料庫位置（application.yml：./data/mockdb.sqlite）
+DEFAULT_SQLITE_PATH = PROJECT_ROOT / "data" / "mockdb.sqlite"
 DEFAULT_BACKUP_DIR = PROJECT_ROOT / "backups"
 APPLICATION_TABLES = (
     "responses",
@@ -168,7 +170,8 @@ def sha256_file(path: Path) -> str:
 
 
 def fsync_file(path: Path) -> None:
-    with path.open("rb") as stream:
+    # Windows _commit/FlushFileBuffers needs a writable handle; r+b does not truncate.
+    with path.open("r+b" if sys.platform == "win32" else "rb") as stream:
         os.fsync(stream.fileno())
 
 
@@ -276,6 +279,8 @@ def start_sqlite_app(db_path: Path, log_path: Path, expected: dict[str, int] | N
             "ECHO_CLEANUP_ENABLED": "false",
             "ECHO_JMS_ENABLED": "false",
             "ECHO_REQUEST_LOG_SPOOL_PATH": str(spool_path),
+            # 專案目錄仍有舊 H2 檔、staging SQLite 尚未建立；這正是轉換流程本身，略過升級防呆
+            "SPRING_APPLICATION_JSON": json.dumps({"echo": {"database": {"ignore-legacy-h2": True}}}),
         }
     )
 
@@ -341,7 +346,7 @@ def tail_text(path: Path, lines: int = 30) -> str:
 
 
 def verify_schema(path: Path) -> None:
-    with sqlite3.connect(path) as connection:
+    with closing(sqlite3.connect(path)) as connection:
         tables = {
             row[0]
             for row in connection.execute(
@@ -416,7 +421,7 @@ def validate_report(report: dict) -> dict[str, int]:
 
 
 def verify_sqlite_file(path: Path) -> None:
-    with sqlite3.connect(path) as connection:
+    with closing(sqlite3.connect(path)) as connection:
         integrity = connection.execute("PRAGMA integrity_check").fetchone()
         foreign_key_errors = connection.execute("PRAGMA foreign_key_check").fetchall()
     if not integrity or integrity[0] != "ok":
@@ -427,11 +432,11 @@ def verify_sqlite_file(path: Path) -> None:
 
 def publish_atomic_database(staging: Path, target: Path, candidate: Path) -> None:
     try:
-        with sqlite3.connect(staging, isolation_level=None) as source:
+        with closing(sqlite3.connect(staging, isolation_level=None)) as source:
             source.execute("PRAGMA wal_checkpoint(FULL)").fetchone()
             # VACUUM INTO 會產生一致、壓縮且不依賴 WAL/SHM 的單檔快照。
             source.execute("VACUUM INTO ?", (str(candidate),))
-        with sqlite3.connect(candidate, isolation_level=None) as connection:
+        with closing(sqlite3.connect(candidate, isolation_level=None)) as connection:
             journal_mode = connection.execute("PRAGMA journal_mode").fetchone()
             if not journal_mode or journal_mode[0].lower() != "delete":
                 raise MigrationError("最終 SQLite 快照仍依賴 WAL sidecar")
@@ -545,11 +550,13 @@ def main() -> int:
         print(f"  遷移資料      : {total:,} 筆 / {len(counts)} 張表")
         print(f"  驗證報告      : {final_report}")
         print(f"  H2 回復備份   : {backup}")
-        print("\n啟動 SQLite：")
+        print("\n啟動 Echo（SQLite 已是預設資料庫）：")
+        if sqlite_path.resolve() != DEFAULT_SQLITE_PATH.resolve():
+            print(f"  另需指定資料庫位置：SPRING_DATASOURCE_URL={sqlite_jdbc_url(sqlite_path)}")
         if sys.platform == "win32":
-            print("  PowerShell: $env:SPRING_PROFILES_ACTIVE='sqlite'; .\\gradlew.bat bootRun")
+            print("  PowerShell: .\\gradlew.bat bootRun")
         else:
-            print("  SPRING_PROFILES_ACTIVE=sqlite ./gradlew bootRun")
+            print("  ./gradlew bootRun")
         print("\n原 H2 不會被刪除；確認正式運行穩定前請保留它。")
         return 0
     finally:

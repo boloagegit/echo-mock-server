@@ -14,11 +14,12 @@ import jakarta.persistence.criteria.Root;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/** Builds only active request-log predicates so H2/SQLite can use composite indexes. */
+/** Builds only active request-log predicates so SQLite and external databases can use composite indexes. */
 @Repository
 public class RequestLogSummaryQuery {
 
@@ -41,7 +42,7 @@ public class RequestLogSummaryQuery {
                 log.get("scenarioFromState"), log.get("scenarioToState"),
                 builder.isNotNull(log.get("requestBody")),
                 builder.isNotNull(log.get("responseBody")),
-                builder.isNotNull(log.get("matchChain")));
+                builder.isNotNull(log.get("matchChain")), log.get("diagnosticId"));
         contentQuery.where(predicates(builder, log, filter));
         contentQuery.orderBy(order(builder, log, sortField, ascending));
 
@@ -80,10 +81,23 @@ public class RequestLogSummaryQuery {
                     builder.like(builder.lower(log.get("endpoint")), pattern),
                     builder.like(builder.lower(log.get("targetHost")), pattern),
                     builder.like(builder.lower(log.get("forwardTarget")), pattern),
+                    builder.like(builder.lower(log.get("diagnosticId")), pattern),
                     builder.like(builder.lower(log.get("ruleId")), pattern)));
+        }
+        if (filter.method() != null) {
+            predicates.add(builder.equal(builder.upper(log.get("method")), filter.method().toUpperCase(Locale.ROOT)));
+        }
+        if (filter.path() != null) {
+            predicates.add(builder.equal(log.get("endpoint"), filter.path()));
         }
         if (filter.afterId() != null) {
             predicates.add(builder.greaterThan(log.get("id"), filter.afterId()));
+        }
+        if (filter.from() != null) {
+            predicates.add(builder.greaterThanOrEqualTo(log.get("requestTime"), filter.from()));
+        }
+        if (filter.to() != null) {
+            predicates.add(builder.lessThan(log.get("requestTime"), filter.to()));
         }
         return predicates.toArray(Predicate[]::new);
     }
@@ -104,11 +118,25 @@ public class RequestLogSummaryQuery {
                 row.get(11, Boolean.class), row.get(12, String.class), row.get(13, Number.class),
                 row.get(14, String.class), row.get(15, Number.class), row.get(16, String.class),
                 row.get(17, String.class), row.get(18, String.class), row.get(19, String.class),
-                row.get(20, Boolean.class), row.get(21, Boolean.class), row.get(22, Boolean.class));
+                row.get(20, Boolean.class), row.get(21, Boolean.class), row.get(22, Boolean.class), row.get(23, String.class));
     }
 
+    /** {@code from} 含、{@code to} 不含；null 表示不限。 */
+    /**
+     * {@code keyword} 是部分比對（網址、目標、診斷 ID、規則 ID）；{@code method} 與 {@code path}
+     * 是完全相同（流量概況點「看這些請求」時，列出的筆數要與統計的一致）。
+     */
     public record Filter(String ruleId, Protocol protocol, Boolean matched,
-                         String keyword, Long afterId) {
+                         String keyword, Long afterId, LocalDateTime from, LocalDateTime to,
+                         String method, String path) {
+        public Filter(String ruleId, Protocol protocol, Boolean matched, String keyword, Long afterId,
+                      LocalDateTime from, LocalDateTime to) {
+            this(ruleId, protocol, matched, keyword, afterId, from, to, null, null);
+        }
+
+        public Filter(String ruleId, Protocol protocol, Boolean matched, String keyword, Long afterId) {
+            this(ruleId, protocol, matched, keyword, afterId, null, null);
+        }
     }
 
     public record SummaryRow(
@@ -118,7 +146,7 @@ public class RequestLogSummaryQuery {
             String forwardTarget, Number proxyStatus, String proxyError,
             Number responseStatus, String faultType, String scenarioName,
             String scenarioFromState, String scenarioToState, Boolean hasRequestBody,
-            Boolean hasResponseBody, Boolean hasMatchChain) {
+            Boolean hasResponseBody, Boolean hasMatchChain, String diagnosticId) {
     }
 
     public record Result(List<SummaryRow> rows, long totalElements, int totalPages) {

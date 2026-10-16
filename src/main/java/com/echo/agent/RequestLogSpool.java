@@ -1,7 +1,9 @@
 package com.echo.agent;
 
 import com.echo.entity.Protocol;
+import com.echo.service.RequestLogRejectedException;
 import com.echo.service.RequestLogUnavailableException;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -36,11 +38,14 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -51,7 +56,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 /**
  * Independent SQLite WAL used as the durable hand-off for request logs.
  *
- * <p>Producers wait only for a small group commit to this spool. The main H2/SQLite
+ * <p>Producers wait only for a small group commit to this spool. The main SQLite
  * database is updated by {@link LogAgent}, so slow queries or a temporary main DB
  * outage cannot silently discard accepted request logs.</p>
  */
@@ -65,6 +70,8 @@ public class RequestLogSpool {
     static final long CANDIDATE_CACHE_MAX_BYTES = 16L * 1024 * 1024;
     /** Keep only a small bounded hand-off in heap; the rest of the spool is on disk. */
     static final long DEFAULT_IN_MEMORY_BYTES = 64L * 1024 * 1024;
+    /** {@link #appendAll} waits at most this long for the commits of the tasks it admitted. */
+    static final long APPEND_ALL_COMMIT_WAIT_MILLIS = 60_000;
 
     private static final String CREATE_SPOOL = """
             CREATE TABLE IF NOT EXISTS request_log_spool (
@@ -104,6 +111,13 @@ public class RequestLogSpool {
     private final long retryMillis;
     private final long maxPendingBytes;
     private final long maxInMemoryBytes;
+    /**
+     * {@code FULL} fsyncs every commit. When replies do not wait for their log
+     * ({@code echo.request-log.wait-for-write=false}) {@code NORMAL} is enough: WAL
+     * stays consistent after a crash and only a power or OS failure can lose the
+     * latest commits, which that mode already accepts.
+     */
+    private final String synchronousMode;
     private final Cache<List<CandidateSnapshot>, CandidateSetPayload> candidateSetCache = Caffeine.newBuilder()
             .maximumWeight(CANDIDATE_CACHE_MAX_BYTES)
             .weigher((List<CandidateSnapshot> key, CandidateSetPayload payload) ->
@@ -124,6 +138,33 @@ public class RequestLogSpool {
     private final ReentrantReadWriteLock candidateSetLifecycleLock = new ReentrantReadWriteLock();
 
     private volatile String spoolId;
+    /** 只由寫入執行緒使用：Error 的錯誤訊息最多每 30 秒一次。 */
+    private long lastWriterErrorLogNanos;
+    /** 測試用：每次提交前／提交後執行，用來模擬寫入時發生的錯誤。 */
+    volatile CommitHook beforeCommitForTest = () -> { };
+    volatile CommitHook afterCommitForTest = () -> { };
+    /** 測試用：放棄一批並通知呼叫端之後執行，用來拉長通知與後續步驟之間的時間。 */
+    volatile Runnable afterAbandonNotifiedForTest = () -> { };
+
+    @FunctionalInterface
+    interface CommitHook {
+        void run() throws SQLException;
+    }
+
+    private static final class AbandonedWriteException extends RequestLogUnavailableException {
+        private static final long serialVersionUID = 1L;
+
+        AbandonedWriteException() {
+            super("Request-log write was abandoned after an error and was not written", true);
+        }
+    }
+
+    /**
+     * 放棄的記錄共用同一個例外：記憶體不足時不必再配置。
+     * 不記錄堆疊也不接受附加例外，所以共用不會累積任何狀態。
+     */
+    @SuppressWarnings("StaticAssignmentOfThrowable")
+    private static final RequestLogUnavailableException WRITE_ABANDONED = new AbandonedWriteException();
     private ExecutorService writerExecutor;
     private Connection writerConnection;
 
@@ -136,10 +177,25 @@ public class RequestLogSpool {
             @Value("${echo.request-log.durable.group-commit-ms:2}") long groupCommitMillis,
             @Value("${echo.request-log.durable.queue-offer-timeout-ms:10000}") long queueOfferTimeoutMillis,
             @Value("${echo.request-log.durable.retry-ms:250}") long retryMillis,
-            @Value("${echo.request-log.durable.max-pending-bytes:10737418240}") long maxPendingBytes) {
+            @Value("${echo.request-log.durable.max-pending-bytes:10737418240}") long maxPendingBytes,
+            @Value("${echo.request-log.wait-for-write:false}") boolean waitForWrite) {
         this(objectMapper, spoolPath, queueCapacity, appendBatchSize, groupCommitMillis,
                 queueOfferTimeoutMillis, retryMillis, maxPendingBytes,
-                DEFAULT_IN_MEMORY_BYTES);
+                DEFAULT_IN_MEMORY_BYTES, waitForWrite ? "FULL" : "NORMAL");
+    }
+
+    /** Package-private seam for tests: replies wait for their log ({@code synchronous=FULL}). */
+    RequestLogSpool(
+            ObjectMapper objectMapper,
+            String spoolPath,
+            int queueCapacity,
+            int appendBatchSize,
+            long groupCommitMillis,
+            long queueOfferTimeoutMillis,
+            long retryMillis,
+            long maxPendingBytes) {
+        this(objectMapper, spoolPath, queueCapacity, appendBatchSize, groupCommitMillis,
+                queueOfferTimeoutMillis, retryMillis, maxPendingBytes, DEFAULT_IN_MEMORY_BYTES);
     }
 
     /** Package-private seam for tests that need a smaller heap hand-off budget. */
@@ -153,6 +209,22 @@ public class RequestLogSpool {
             long retryMillis,
             long maxPendingBytes,
             long maxInMemoryBytes) {
+        this(objectMapper, spoolPath, queueCapacity, appendBatchSize, groupCommitMillis,
+                queueOfferTimeoutMillis, retryMillis, maxPendingBytes, maxInMemoryBytes, "FULL");
+    }
+
+    private RequestLogSpool(
+            ObjectMapper objectMapper,
+            String spoolPath,
+            int queueCapacity,
+            int appendBatchSize,
+            long groupCommitMillis,
+            long queueOfferTimeoutMillis,
+            long retryMillis,
+            long maxPendingBytes,
+            long maxInMemoryBytes,
+            String synchronousMode) {
+        this.synchronousMode = synchronousMode;
         this.objectMapper = objectMapper;
         this.spoolPath = Path.of(spoolPath).toAbsolutePath().normalize();
         this.appendQueue = new ArrayBlockingQueue<>(Math.max(1, queueCapacity));
@@ -229,6 +301,62 @@ public class RequestLogSpool {
      * ambiguous timeout in which a caller could retry data that later commits.</p>
      */
     public void append(LogTask task) {
+        await(admit(task));
+    }
+
+    /**
+     * Admits several tasks and waits until the admitted ones are committed (a few
+     * group commits instead of one per task). A task that can never be stored (too
+     * large, not serializable) is rejected and skipped. Admission stops at the first
+     * failure that a later retry may overcome (spool stopping, storage unavailable,
+     * capacity wait timed out); the result says how many tasks, from the start of the
+     * list, were handled, so the caller may retry the rest. Admitted tasks are never
+     * reported for retry: re-sending them could duplicate the ones that did commit.
+     * Their commits are awaited for at most {@link #APPEND_ALL_COMMIT_WAIT_MILLIS};
+     * those not confirmed by then are counted as lost.
+     */
+    public AppendResult appendAll(List<? extends LogTask> tasks) {
+        List<PendingAppend> admitted = new ArrayList<>(tasks.size());
+        int handled = 0;
+        int rejected = 0;
+        for (LogTask task : tasks) {
+            try {
+                admitted.add(admit(task));
+            } catch (RequestLogRejectedException e) {
+                rejected++;
+                log.debug("Request log rejected by the spool: {}", e.getMessage());
+            } catch (RequestLogUnavailableException e) {
+                break;
+            } catch (RuntimeException e) {
+                // Unexpected and specific to this task: retrying it would fail the same way
+                rejected++;
+                log.debug("Request log could not be admitted: {}", e.toString());
+            }
+            handled++;
+        }
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(APPEND_ALL_COMMIT_WAIT_MILLIS);
+        int failedCommits = 0;
+        for (PendingAppend pending : admitted) {
+            try {
+                pending.committed().get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+            } catch (ExecutionException | CancellationException | TimeoutException e) {
+                failedCommits++;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                failedCommits++;
+            }
+        }
+        if (failedCommits > 0) {
+            log.debug("{} of {} request logs were not confirmed as committed", failedCommits, admitted.size());
+        }
+        return new AppendResult(handled, rejected + failedCommits);
+    }
+
+    /** {@code handled} tasks from the start of the list are done; {@code lost} of them were not stored. */
+    public record AppendResult(int handled, int lost) {
+    }
+
+    private PendingAppend admit(LogTask task) {
         PendingAppend pending;
         long reservedPayloadBytes = 0;
         long serializationBytes = 0;
@@ -255,9 +383,9 @@ public class RequestLogSpool {
                 payload = objectMapper.writeValueAsBytes(SpoolTask.from(task));
                 candidateSet = candidateSetFor(task);
             } catch (IOException e) {
-                throw new RequestLogUnavailableException("Cannot serialize request log", e);
+                throw new RequestLogRejectedException("Cannot serialize request log", e);
             } catch (UncheckedIOException e) {
-                throw new RequestLogUnavailableException("Cannot serialize candidate snapshots", e.getCause());
+                throw new RequestLogRejectedException("Cannot serialize candidate snapshots", e.getCause());
             }
             long bytes = (long) payload.length
                     + (candidateSet != null ? candidateSet.payload().length : 0);
@@ -285,7 +413,10 @@ public class RequestLogSpool {
         } finally {
             lifecycleLock.readLock().unlock();
         }
+        return pending;
+    }
 
+    private static void await(PendingAppend pending) {
         try {
             pending.committed().join();
         } catch (CompletionException e) {
@@ -339,6 +470,7 @@ public class RequestLogSpool {
     private long estimateSerializationBytes(LogTask task) {
         long characters = 512;
         characters = addStringLength(characters, task.getRuleId());
+        characters = addStringLength(characters, task.getDiagnosticId());
         characters = addStringLength(characters, task.getMethod());
         characters = addStringLength(characters, task.getEndpoint());
         characters = addStringLength(characters, task.getClientIp());
@@ -352,6 +484,7 @@ public class RequestLogSpool {
         characters = addStringLength(characters, task.getScenarioName());
         characters = addStringLength(characters, task.getScenarioFromState());
         characters = addStringLength(characters, task.getScenarioToState());
+        characters = addStringLength(characters, task.getScenarioSkipped());
         characters = addStringLength(characters, task.getAnalysisBody());
         characters = addStringLength(characters, task.getQueryString());
         for (CandidateSnapshot candidate : task.getCandidates()) {
@@ -361,6 +494,7 @@ public class RequestLogSpool {
             characters = addStringLength(characters, candidate.getBodyCondition());
             characters = addStringLength(characters, candidate.getQueryCondition());
             characters = addStringLength(characters, candidate.getHeaderCondition());
+            characters = addStringLength(characters, candidate.getMatchSpec());
             characters = saturatingAdd(characters, 32);
         }
         for (Map.Entry<String, String> header : task.getHeaders().entrySet()) {
@@ -370,7 +504,7 @@ public class RequestLogSpool {
         characters = saturatingAdd(characters, (long) task.getMatchOutcomes().size() * 64);
         long estimate = saturatingMultiply(characters, 8);
         if (estimate > maxInMemoryBytes) {
-            throw new RequestLogUnavailableException(
+            throw new RequestLogRejectedException(
                     "Request-log payload exceeds the configured in-memory serialization limit");
         }
         return Math.max(1, estimate);
@@ -537,6 +671,40 @@ public class RequestLogSpool {
         }
     }
 
+    /**
+     * 保留最新 {@code keep} 筆時可以略過的最後一個序號：由新到舊數第 {@code keep + 1} 筆的序號；
+     * 筆數不超過 {@code keep} 時回傳 0。
+     */
+    public long sequenceBeforeNewest(int keep) {
+        String sql = "SELECT sequence_id FROM request_log_spool ORDER BY sequence_id DESC LIMIT 1 OFFSET ?";
+        try (Connection connection = openConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, Math.max(0, keep));
+            try (ResultSet row = statement.executeQuery()) {
+                return row.next() ? row.getLong(1) : 0;
+            }
+        } catch (SQLException e) {
+            throw new RequestLogUnavailableException(
+                    "Cannot inspect request-log spool: " + e.getMessage(), e);
+        }
+    }
+
+    /** 序號在 {@code afterExclusive}（不含）到 {@code throughInclusive}（含）之間的筆數。 */
+    public long countBetween(long afterExclusive, long throughInclusive) {
+        String sql = "SELECT COUNT(*) FROM request_log_spool WHERE sequence_id > ? AND sequence_id <= ?";
+        try (Connection connection = openConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, afterExclusive);
+            statement.setLong(2, throughInclusive);
+            try (ResultSet row = statement.executeQuery()) {
+                return row.next() ? row.getLong(1) : 0;
+            }
+        } catch (SQLException e) {
+            throw new RequestLogUnavailableException(
+                    "Cannot inspect request-log spool: " + e.getMessage(), e);
+        }
+    }
+
     public void deleteThrough(long sequence) {
         if (sequence <= 0) {
             return;
@@ -625,6 +793,8 @@ public class RequestLogSpool {
                 state.pendingItems());
     }
 
+    public boolean isStorageUnavailable() { return storageUnavailable.get(); }
+
     public record StatusSnapshot(
             long pendingBytes,
             long pendingByteLimit,
@@ -653,7 +823,7 @@ public class RequestLogSpool {
             }
             try (Connection connection = openConnection(); Statement statement = connection.createStatement()) {
                 statement.execute("PRAGMA journal_mode=WAL");
-                statement.execute("PRAGMA synchronous=FULL");
+                statement.execute("PRAGMA synchronous=" + synchronousMode);
                 statement.execute(CREATE_SPOOL);
                 ensureColumnExists(connection, "request_log_spool", "candidate_set_id", "TEXT");
                 statement.execute(CREATE_CANDIDATE_SETS);
@@ -720,7 +890,7 @@ public class RequestLogSpool {
 
     private void reserveSerialization(long bytes, long deadlineNanos) throws InterruptedException {
         if (bytes <= 0 || bytes > maxInMemoryBytes) {
-            throw new RequestLogUnavailableException(
+            throw new RequestLogRejectedException(
                     "Request-log payload exceeds the configured in-memory serialization limit");
         }
 
@@ -766,10 +936,10 @@ public class RequestLogSpool {
     private void reservePending(
             long bytes, long serializationBytes, long deadlineNanos) throws InterruptedException {
         if (bytes <= 0) {
-            throw new RequestLogUnavailableException("Request-log payload must not be empty");
+            throw new RequestLogRejectedException("Request-log payload must not be empty");
         }
         if (bytes > maxPendingBytes || bytes > maxInMemoryBytes) {
-            throw new RequestLogUnavailableException(
+            throw new RequestLogRejectedException(
                     "Request-log payload exceeds the configured durable or in-memory byte limit");
         }
 
@@ -868,9 +1038,36 @@ public class RequestLogSpool {
                 break;
             }
         }
+        afterRelease();
+    }
+
+    private void afterRelease() {
         updateBackpressureState();
         if (waitingAppenders.get() > 0) {
             signalCapacityAvailable();
+        }
+    }
+
+    /** 記憶體不足時通知可以晚一點：等待中的寫入每 250 ms 會自己再檢查一次。 */
+    private void afterReleaseQuietly() {
+        try {
+            afterRelease();
+        } catch (Error ignored) {
+            // 下一次容量變動時會再更新
+        }
+    }
+
+    /** 釋放這筆保留的容量一次：釋放生效之後才算數，發生 Error 時可以重試。 */
+    private boolean releaseOnce(PendingAppend pending, long pendingBytes, long itemCount, long inFlightBytes) {
+        if (!pending.claimRelease()) {
+            return false;
+        }
+        try {
+            applyRelease(pendingBytes, itemCount, inFlightBytes);
+            return true;
+        } catch (Error e) {
+            pending.unclaimRelease();
+            throw e;
         }
     }
 
@@ -925,6 +1122,17 @@ public class RequestLogSpool {
         if (pendingBytes <= 0 && itemCount <= 0 && inFlightBytes <= 0) {
             return;
         }
+        applyRelease(pendingBytes, itemCount, inFlightBytes);
+        afterRelease();
+    }
+
+    /**
+     * 只做容量的扣減：比較並交換成功後立即返回，所以發生 Error 時一定還沒生效，可以安全重試。
+     */
+    private void applyRelease(long pendingBytes, long itemCount, long inFlightBytes) {
+        if (pendingBytes <= 0 && itemCount <= 0 && inFlightBytes <= 0) {
+            return;
+        }
         while (true) {
             CapacityState current = capacityState.get();
             CapacityState next = new CapacityState(
@@ -933,12 +1141,8 @@ public class RequestLogSpool {
                     subtractAtMost(current.pendingItems(), itemCount),
                     current.serializationBytes());
             if (capacityState.compareAndSet(current, next)) {
-                break;
+                return;
             }
-        }
-        updateBackpressureState();
-        if (waitingAppenders.get() > 0) {
-            signalCapacityAvailable();
         }
     }
 
@@ -1005,10 +1209,18 @@ public class RequestLogSpool {
                         batch.add(next);
                     }
                     commitWithRetry(batch);
-                    batch = new ArrayList<>(appendBatchSize);
+                    batch.clear();
                 } catch (InterruptedException e) {
                     if (running.get()) {
                         Thread.currentThread().interrupt();
+                        break;
+                    }
+                } catch (Error e) {
+                    // 例如 OutOfMemoryError（收集這批時發生，尚未寫入）：這是唯一的寫入執行緒，
+                    // 結束就再也沒有記錄寫得進來，等待中的呼叫端也會一直等。放棄這批，稍後繼續。
+                    abandonUncommitted(batch, e);
+                    batch.clear();
+                    if (!pauseAfterWriterError()) {
                         break;
                     }
                 }
@@ -1021,13 +1233,124 @@ public class RequestLogSpool {
         }
     }
 
+    /**
+     * 放棄一批確定沒有寫入的記錄（發生 Error 時）：換一條新連線，通知呼叫端失敗並釋放保留的容量，
+     * 並清掉「暫時無法寫入」的狀態，讓下一筆記錄重新試探暫存檔（否則所有新記錄都會被拒絕）。
+     * 每筆的結算可以重複執行，記憶體仍不足時重試到完成為止。
+     */
+    private void abandonUncommitted(List<PendingAppend> batch, Error error) {
+        try {
+            rollbackWriterConnection();
+        } catch (Throwable ignored) {
+            // 關閉連線時一併丟棄未提交的資料
+        }
+        // 一定要丟掉這條連線：沿用的話，這批未提交的資料可能跟著下一批一起提交
+        Connection abandoned = writerConnection;
+        writerConnection = null;
+        try {
+            if (abandoned != null) {
+                abandoned.close();
+            }
+        } catch (Throwable ignored) {
+            // 已經不再使用
+        }
+        // 先清狀態再通知：呼叫端一收到失敗就可能馬上送下一筆，那時狀態必須已經清掉
+        storageUnavailable.set(false);
+        failUntilDone(batch);
+        afterAbandonNotifiedForTest.run();
+        try {
+            updateBackpressureState();
+        } catch (Throwable ignored) {
+            // 下一次容量變動時會再更新
+        }
+        logWriterError(error, batch.size());
+    }
+
+    /**
+     * 已寫入的一批：一定回報成功。每一步都可以重複執行（容量的釋放生效之後才標記），
+     * 記憶體仍不足時重試到完成為止；不配置額外的物件，避免已寫入的一批被當成未寫入。
+     */
+    private void settleCommittedUntilDone(List<PendingAppend> batch, Set<String> insertedCandidateSets,
+                                          java.util.concurrent.atomic.AtomicBoolean duplicatesReleased) {
+        while (true) {
+            try {
+                settleCommitted(batch, insertedCandidateSets, duplicatesReleased);
+                return;
+            } catch (Error e) {
+                pauseQuietly();
+            }
+        }
+    }
+
+    private void settleCommitted(List<PendingAppend> batch, Set<String> insertedCandidateSets,
+                                 java.util.concurrent.atomic.AtomicBoolean duplicatesReleased) {
+        if (!duplicatesReleased.get()) {
+            applyRelease(duplicateCandidateBytes(batch, insertedCandidateSets), 0, 0);
+            duplicatesReleased.set(true);
+        }
+        for (PendingAppend pending : batch) {
+            releaseOnce(pending, 0, 0, pending.reservedBytes());
+            pending.committed().complete(null);
+        }
+        afterReleaseQuietly();
+    }
+
+    /** 放棄的一批：通知失敗並釋放容量，重試到完成為止。 */
+    private void failUntilDone(List<PendingAppend> batch) {
+        while (true) {
+            try {
+                failBatch(batch, WRITE_ABANDONED);
+                return;
+            } catch (Error e) {
+                pauseQuietly();
+            }
+        }
+    }
+
+    private void pauseQuietly() {
+        try {
+            TimeUnit.MILLISECONDS.sleep(retryMillis);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private void logWriterError(Error error, int entries) {
+        long now = System.nanoTime();
+        if (lastWriterErrorLogNanos != 0 && now - lastWriterErrorLogNanos < TimeUnit.SECONDS.toNanos(30)) {
+            return;
+        }
+        lastWriterErrorLogNanos = now;
+        try {
+            log.error("Request-log spool writer hit {}; {} entries were not written; the writer keeps running",
+                    error, entries);
+        } catch (Throwable ignored) {
+            // 記錄失敗也不能讓寫入執行緒結束
+        }
+    }
+
+    /** 發生 Error 後稍等再繼續；停止中或被中斷時回傳 false。 */
+    private boolean pauseAfterWriterError() {
+        try {
+            TimeUnit.MILLISECONDS.sleep(retryMillis);
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
     private void commitWithRetry(List<PendingAppend> batch) throws InterruptedException {
         while (running.get()) {
+            boolean committed = false;
+            Set<String> insertedCandidateSets = Set.of();
+            java.util.concurrent.atomic.AtomicBoolean duplicatesReleased = new java.util.concurrent.atomic.AtomicBoolean();
             candidateSetLifecycleLock.readLock().lock();
             try {
+                beforeCommitForTest.run();
                 Connection connection = getWriterConnection();
                 Map<String, CandidateSetPayload> candidateSets = uniqueCandidateSets(batch);
-                Set<String> insertedCandidateSets = persistCandidateSets(connection, candidateSets);
+                insertedCandidateSets = persistCandidateSets(connection, candidateSets);
                 try (PreparedStatement insert = connection.prepareStatement(
                          "INSERT INTO request_log_spool(payload, candidate_set_id, created_at) VALUES (?, ?, ?)")) {
                     for (PendingAppend pending : batch) {
@@ -1043,14 +1366,24 @@ public class RequestLogSpool {
                     insert.executeBatch();
                 }
                 connection.commit();
+                committed = true;
                 storageUnavailable.set(false);
-                releaseDuplicateCandidateReservations(batch, insertedCandidateSets);
-                releaseInFlightReservations(batch);
-                batch.forEach(item -> item.committed().complete(null));
+                afterCommitForTest.run();
+                settleCommitted(batch, insertedCandidateSets, duplicatesReleased);
                 return;
             } catch (CandidateSnapshotCorruptionException e) {
                 rollbackWriterConnection();
                 failBatch(batch, new RequestLogUnavailableException(e.getMessage(), e));
+                return;
+            } catch (Error e) {
+                if (committed) {
+                    // 已經寫入：一定回報成功，不能讓呼叫端重試（會重複）
+                    settleCommittedUntilDone(batch, insertedCandidateSets, duplicatesReleased);
+                    logWriterError(e, 0);
+                } else {
+                    abandonUncommitted(batch, e);
+                    TimeUnit.MILLISECONDS.sleep(retryMillis);
+                }
                 return;
             } catch (SQLException e) {
                 storageUnavailable.set(true);
@@ -1120,8 +1453,8 @@ public class RequestLogSpool {
         return inserted;
     }
 
-    private void releaseDuplicateCandidateReservations(
-            List<PendingAppend> batch, Set<String> insertedCandidateSets) {
+    /** 已在暫存檔中的候選規則快照不必重複保留：回傳可以釋放的位元組。 */
+    private static long duplicateCandidateBytes(List<PendingAppend> batch, Set<String> insertedCandidateSets) {
         Set<String> retained = new java.util.HashSet<>();
         long released = 0;
         for (PendingAppend pending : batch) {
@@ -1135,17 +1468,7 @@ public class RequestLogSpool {
                 released += candidateSet.payload().length;
             }
         }
-        if (released > 0) {
-            releaseReservation(released, 0, 0);
-        }
-    }
-
-    private void releaseInFlightReservations(List<PendingAppend> batch) {
-        long released = 0;
-        for (PendingAppend pending : batch) {
-            released = saturatingAdd(released, pending.reservedBytes());
-        }
-        releaseReservation(0, 0, released);
+        return released;
     }
 
     private Connection getWriterConnection() throws SQLException {
@@ -1154,7 +1477,7 @@ public class RequestLogSpool {
         }
         writerConnection = openConnection();
         try (Statement durability = writerConnection.createStatement()) {
-            durability.execute("PRAGMA synchronous=FULL");
+            durability.execute("PRAGMA synchronous=" + synchronousMode);
         }
         writerConnection.setAutoCommit(false);
         return writerConnection;
@@ -1199,15 +1522,13 @@ public class RequestLogSpool {
         failBatch(pending, failure);
     }
 
+    /** 每筆只結算一次：可以重複執行（例如發生 Error 後重試），不會重複釋放容量。 */
     private void failBatch(List<PendingAppend> batch, RuntimeException failure) {
-        long pendingBytes = 0;
-        long inFlight = 0;
         for (PendingAppend pending : batch) {
-            pendingBytes = saturatingAdd(pendingBytes, pending.reservedBytes());
-            inFlight = saturatingAdd(inFlight, pending.reservedBytes());
+            releaseOnce(pending, pending.reservedBytes(), 1, pending.reservedBytes());
             pending.committed().completeExceptionally(failure);
         }
-        releaseReservation(pendingBytes, batch.size(), inFlight);
+        afterReleaseQuietly();
     }
 
     private static final class PendingAppend {
@@ -1215,6 +1536,8 @@ public class RequestLogSpool {
         private final CandidateSetPayload candidateSet;
         private final long reservedBytes;
         private final CompletableFuture<Void> committed;
+        /** 保留的容量是否已經釋放（只釋放一次）。 */
+        private final java.util.concurrent.atomic.AtomicBoolean released = new java.util.concurrent.atomic.AtomicBoolean();
 
         private PendingAppend(
                 byte[] payload, CandidateSetPayload candidateSet,
@@ -1239,6 +1562,16 @@ public class RequestLogSpool {
 
         CompletableFuture<Void> committed() {
             return committed;
+        }
+
+        /** 第一次呼叫回傳 true：由呼叫者釋放這筆保留的容量。 */
+        boolean claimRelease() {
+            return released.compareAndSet(false, true);
+        }
+
+        /** 釋放沒有生效（發生 Error）時撤回，讓重試再釋放一次。 */
+        void unclaimRelease() {
+            released.set(false);
         }
     }
 
@@ -1303,19 +1636,22 @@ public class RequestLogSpool {
 
     private record CandidateRecord(
             String ruleId, String endpoint, String description, boolean enabled,
-            String bodyCondition, String queryCondition, String headerCondition, int priority) {
+            String bodyCondition, String queryCondition, String headerCondition, int priority,
+            String matchSpec) {
 
+        /** matchSpec 放在最後並可為 null：舊版寫入的紀錄沒有這個欄位，讀回時為 null。 */
         static CandidateRecord from(CandidateSnapshot candidate) {
             return new CandidateRecord(candidate.getRuleId(), candidate.getEndpoint(),
                     candidate.getDescription(), candidate.isEnabled(), candidate.getBodyCondition(),
-                    candidate.getQueryCondition(), candidate.getHeaderCondition(), candidate.getPriority());
+                    candidate.getQueryCondition(), candidate.getHeaderCondition(), candidate.getPriority(),
+                    candidate.getMatchSpec());
         }
 
         CandidateSnapshot toCandidate() {
             return CandidateSnapshot.builder()
                     .ruleId(ruleId).endpoint(endpoint).description(description).enabled(enabled)
                     .bodyCondition(bodyCondition).queryCondition(queryCondition)
-                    .headerCondition(headerCondition).priority(priority).build();
+                    .headerCondition(headerCondition).matchSpec(matchSpec).priority(priority).build();
         }
     }
 
@@ -1340,6 +1676,8 @@ public class RequestLogSpool {
         }
     }
 
+    /** 空欄位不寫入（讀回時為 null），每筆紀錄少佔約百位元組；舊格式的紀錄照常讀取。 */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     private record SpoolTask(
             String ruleId, Protocol protocol, String method, String endpoint, boolean matched,
             int responseTimeMs, Integer matchTimeMs, String clientIp, LocalDateTime requestTime,
@@ -1347,9 +1685,11 @@ public class RequestLogSpool {
             Integer proxyStatus, String proxyError,
             Integer responseStatus, String requestBody, String responseBody,
             String faultType, String scenarioName, String scenarioFromState, String scenarioToState,
+            Integer candidateCount, Boolean matchedByFallback, Integer delayMs, Integer sseEventCount,
+            String scenarioSkipped,
             List<CandidateRecord> candidates, String analysisBody, String queryString,
             Map<String, String> headers, Map<String, Boolean> matchOutcomes,
-            boolean analysisUsesRequestBody) {
+            boolean analysisUsesRequestBody, String diagnosticId) {
 
         static SpoolTask from(LogTask task) {
             boolean analysisUsesRequestBody = task.getRequestBody() != null
@@ -1360,15 +1700,17 @@ public class RequestLogSpool {
                     task.isForwarded(), task.getForwardTarget(), task.getProxyStatus(),
                     task.getProxyError(), task.getResponseStatus(), task.getRequestBody(), task.getResponseBody(),
                     task.getFaultType(), task.getScenarioName(), task.getScenarioFromState(), task.getScenarioToState(),
+                    task.getCandidateCount(), task.getMatchedByFallback(), task.getDelayMs(), task.getSseEventCount(), task.getScenarioSkipped(),
                     null, analysisUsesRequestBody ? null : task.getAnalysisBody(),
                     task.getQueryString(), task.getHeaders(), task.getMatchOutcomes(),
-                    analysisUsesRequestBody);
+                    analysisUsesRequestBody, task.getDiagnosticId());
         }
 
         LogTask toLogTask(List<CandidateRecord> externalCandidates) {
             List<CandidateRecord> restoredCandidates = externalCandidates != null
                     ? externalCandidates : candidates;
             return LogTask.builder()
+                    .diagnosticId(diagnosticId)
                     .ruleId(ruleId).protocol(protocol).method(method).endpoint(endpoint).matched(matched)
                     .responseTimeMs(responseTimeMs).matchTimeMs(matchTimeMs).clientIp(clientIp)
                     .requestTime(requestTime).matchChain(matchChain).targetHost(targetHost)
@@ -1377,6 +1719,8 @@ public class RequestLogSpool {
                     .requestBody(requestBody).responseBody(responseBody)
                     .faultType(faultType).scenarioName(scenarioName)
                     .scenarioFromState(scenarioFromState).scenarioToState(scenarioToState)
+                    .candidateCount(candidateCount).matchedByFallback(matchedByFallback).delayMs(delayMs).sseEventCount(sseEventCount)
+                    .scenarioSkipped(scenarioSkipped)
                     .candidates(restoredCandidates == null ? List.of() : restoredCandidates.stream()
                             .map(CandidateRecord::toCandidate).toList())
                     .analysisBody(analysisUsesRequestBody ? requestBody : analysisBody)

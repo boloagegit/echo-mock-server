@@ -21,29 +21,19 @@
  * @param {Function} deps.loadRules - 載入規則函式（來自 useRules）
  * @param {import('vue').Ref} deps.rules - 規則列表（來自 useRules）
  * @param {import('vue').Ref} deps.rulePreviewCache - 規則預覽快取（來自 useRules）
- * @param {import('vue').Ref} deps.rulePreviewExpanded - 規則預覽展開狀態（來自 useRules）
+ * @param {import('vue').Ref} deps.ruleDetailId - 詳情抽屜目前顯示的規則 ID（來自 useRules）
+ * @param {Function} deps.loadRuleDetail - 重新載入規則詳情（來自 useRules）
  * @param {Function} deps.rulesMarkDirty - 標記規則資料需重新載入（來自 useRules）
  * @param {Function} deps.responsesMarkDirty - 標記回應資料需重新載入（來自 useResponses）
  * @param {import('vue').Ref} deps.responseSseEvents - 回應 SSE 事件（來自 useResponses）
- * @param {Function} deps.renderEditor - 渲染編輯器函式（來自 useEditor）
- * @param {Function} deps.editEditorRef - 編輯器 ref getter（來自 useEditor）
- * @param {import('vue').Ref} deps.editFormatted - 編輯器格式化狀態（來自 useEditor）
- * @param {Function} deps.previewEditorRef - 預覽編輯器 ref getter（來自 useEditor）
- * @param {import('vue').Ref} deps.previewFormatted - 預覽格式化狀態（來自 useEditor）
- * @param {Function} deps.responseFormEditorRef - 回應表單編輯器 ref getter（來自 useEditor）
- * @param {import('vue').Ref} deps.responseFormFormatted - 回應表單格式化狀態（來自 useEditor）
- * @param {Function} deps.detectMode - 偵測內容模式函式（來自 useEditor）
- * @param {Object} deps.editors - 編輯器物件（來自 useEditor）
  * @param {import('vue').Ref} deps.jmsEnabled - JMS 是否啟用（來自 app.js）
  * @returns {Object} 規則表單相關的狀態與方法
  */
 const useRuleForm = (deps) => {
     const { ref, computed, watch } = Vue;
     const { showToast, showConfirm, t, requireLogin, login,
-            loadRules, rulePreviewCache, rulePreviewExpanded, rulesMarkDirty,
-            responsesMarkDirty, responseSseEvents,
-            renderEditor, editEditorRef, editFormatted, previewEditorRef, previewFormatted,
-            responseFormEditorRef, responseFormFormatted } = deps;
+            loadRules, rulePreviewCache, ruleDetailId, loadRuleDetail, rulesMarkDirty, openRuleOrder,
+            responsesMarkDirty, responseSseEvents } = deps;
 
     // --- 工具函式 ---
     const matchAll = (text, keywords) => keywords.every(kw => text.includes(kw));
@@ -68,6 +58,106 @@ const useRuleForm = (deps) => {
     const conditionsExpanded = ref(true);
     const formErrors = ref({});
 
+    // --- 進階條件（matchSpec）---
+    // simple：原本的條件列（存成三個舊欄位）；advanced：樹狀條件（存成 matchSpec），見 match-tree.js
+    const matchMode = ref('simple');
+    const matchTree = ref(MatchTree.group('all', []));
+    const matchError = ref('');
+    // 進階條件無法轉回條件列時，切回簡易模式前先在畫面上確認
+    const matchSwitchPending = ref(false);
+    const matchSources = computed(() => (form.value.protocol === 'JMS' ? ['body'] : ['body', 'query', 'header']));
+    const hasMatchSpecObject = r => !!(r && r.matchSpec && typeof r.matchSpec === 'object');
+    const resetMatchState = (r = null) => {
+        matchError.value = '';
+        matchSwitchPending.value = false;
+        if (hasMatchSpecObject(r)) {
+            try {
+                matchTree.value = MatchTree.fromSpec(r.matchSpec);
+                matchMode.value = 'advanced';
+                return;
+            } catch { /* 格式錯誤時以空的進階條件開啟，儲存時由後端回報 */ }
+        }
+        // 條件列無法完整表示的舊版條件（例如沒有運算子）以進階模式的舊格式片段原樣顯示，儲存時不會遺失或改變
+        if (r && MatchTree.toSimpleRows(r.bodyCondition, r.queryCondition, r.headerCondition) === null) {
+            matchTree.value = MatchTree.fromLegacyStrings(r.bodyCondition, r.queryCondition, r.headerCondition);
+            matchMode.value = 'advanced';
+            return;
+        }
+        matchTree.value = MatchTree.group('all', []);
+        matchMode.value = 'simple';
+    };
+    const serializeSimpleConditions = () => {
+        const join = type => conditions.value.filter(c => c.type === type && c.field && c.value).map(c => c.field + (c.operator || '=') + c.value).join(';') || null;
+        return { bodyCondition: join('body'), queryCondition: join('query'), headerCondition: join('header') };
+    };
+    /** 目前畫面上的進階條件；不是儲存時（例如切換到宣告式編輯）用寬鬆轉換，不讓條件消失。 */
+    const currentMatchSpec = ({ lenient = true } = {}) => (matchMode.value === 'advanced'
+        ? MatchTree.toSpec(matchTree.value, lenient) : null);
+    const setMatchMode = async mode => {
+        if (mode === matchMode.value) { matchSwitchPending.value = false; return; }
+        if (mode === 'advanced') {
+            const strings = serializeSimpleConditions();
+            let tree = MatchTree.fromLegacyStrings(strings.bodyCondition, strings.queryCondition, strings.headerCondition);
+            // 由後端切分，與比對時完全相同；失敗時用本地相同規則的結果
+            const response = await apiCall('/api/admin/rules/match/parse', {
+                method: 'POST', body: JSON.stringify({ protocol: form.value.protocol, ...strings })
+            }, { silent: true });
+            if (response && response.ok) {
+                try { tree = MatchTree.fromSpec((await response.json()).matchSpec); } catch { /* keep local */ }
+            }
+            matchTree.value = tree;
+            matchMode.value = 'advanced';
+            matchSwitchPending.value = false;
+            return;
+        }
+        const strings = MatchTree.toLegacyStrings(matchTree.value);
+        if (!strings || !MatchTree.toSimpleRows(strings.bodyCondition, strings.queryCondition, strings.headerCondition)) {
+            matchSwitchPending.value = true;
+            return;
+        }
+        conditions.value = [];
+        parseConditions(strings);
+        matchMode.value = 'simple';
+        matchError.value = '';
+    };
+    /** 確認後切回簡易模式：進階條件清空（儲存時明確送出清除）。 */
+    const confirmSimpleMatchMode = () => {
+        conditions.value = [];
+        matchTree.value = MatchTree.group('all', []);
+        matchMode.value = 'simple';
+        matchSwitchPending.value = false;
+        matchError.value = '';
+    };
+    const cancelSimpleMatchMode = () => { matchSwitchPending.value = false; };
+    /** 套用宣告式文件轉回表單時的條件。 */
+    const applyMatchDraft = (spec, draftConditions) => {
+        if (spec && typeof spec === 'object') {
+            resetMatchState({ matchSpec: spec });
+            conditions.value = [];
+        } else {
+            resetMatchState(null);
+            conditions.value = draftConditions || [];
+        }
+    };
+    // 編輯時以與儲存相同的規則即時檢查（不寫入資料），錯誤訊息帶 JSON 路徑
+    let matchValidationSeq = 0;
+    const validateMatchNow = async () => {
+        if (matchMode.value !== 'advanced' || !showModal.value) { matchError.value = ''; return; }
+        let spec;
+        try { spec = MatchTree.toSpec(matchTree.value); }
+        catch { matchError.value = t('match.invalidJsonValue'); return; }
+        const seq = ++matchValidationSeq;
+        const response = await apiCall('/api/admin/rules/match/validate', {
+            method: 'POST', body: JSON.stringify({ protocol: form.value.protocol, matchSpec: spec })
+        }, { silent: true });
+        if (seq !== matchValidationSeq || !response || !response.ok) return;
+        try {
+            const result = await response.json();
+            if (seq === matchValidationSeq) matchError.value = result.valid === false ? (result.error || '') : '';
+        } catch { /* 檢查失敗時不顯示錯誤，儲存時仍由後端把關 */ }
+    };
+    const validateMatchDebounced = debounce(validateMatchNow, 400);
+
     // --- Modal 最大化 ---
     const ruleModalMaximized = ref(false);
     const responseModalMaximized = ref(false);
@@ -76,47 +166,6 @@ const useRuleForm = (deps) => {
     const sseEvents = ref([]);
     const addSseEvent = () => { sseEvents.value.push({ event: '', data: '', id: '', delayMs: 0, type: 'normal' }); };
     const removeSseEvent = (index) => { if (sseEvents.value.length > 1) { sseEvents.value.splice(index, 1); } };
-    const buildSsePreview = (events, loopEnabled = false) => {
-        if (!events || !events.length) { return ''; }
-        const lines = [];
-        let terminalEventReached = false;
-        for (let i = 0; i < events.length; i++) {
-            const evt = events[i];
-            if (i > 0) { lines.push(''); }
-            if (evt.delayMs > 0) { lines.push(t('ssePreview.delay', {ms: evt.delayMs})); lines.push(''); }
-            const type = evt.type || 'normal';
-            if (type === 'abort') {
-                lines.push(t('ssePreview.abort'));
-                terminalEventReached = true;
-            }
-            if (type === 'error') { lines.push(t('ssePreview.errorEvent')); }
-            if (type !== 'abort') {
-                const evtName = type === 'error' ? 'error' : (evt.event || 'message');
-                lines.push('event: ' + evtName);
-                const data = evt.data || '';
-                data.split('\n').forEach(line => { lines.push('data: ' + line); });
-                if (evt.id) { lines.push('id: ' + evt.id); }
-                lines.push('');
-            }
-            if (type === 'error') { terminalEventReached = true; }
-            if (terminalEventReached) {
-                const remainingCount = events.length - i - 1;
-                if (remainingCount > 0) { lines.push(t('ssePreview.remainingSkipped', {count: remainingCount})); }
-                break;
-            }
-        }
-        if (loopEnabled && !terminalEventReached) { lines.push(t('ssePreview.loopPlay')); }
-        return lines.join('\n');
-    };
-    const ssePreview = computed(() => {
-        return buildSsePreview(sseEvents.value, Boolean(form.value.sseLoopEnabled));
-    });
-
-    // --- SSE 回應預覽 ---
-    const responseSsePreview = computed(() => {
-        return buildSsePreview(responseSseEvents.value);
-    });
-
     // --- 驗證 ---
     const validateForm = () => {
         const errors = {};
@@ -185,6 +234,7 @@ const useRuleForm = (deps) => {
     const isCatchAll = computed(() => {
         const key = (form.value.matchKey || '').trim();
         if (!key || /^\/?\*{1,3}\/?$/.test(key) || key === '/**') {
+            if (matchMode.value === 'advanced') return !MatchTree.hasConditions(matchTree.value);
             return !conditions.value.some(c => c.field && c.value);
         }
         return false;
@@ -194,6 +244,7 @@ const useRuleForm = (deps) => {
     const showBodyConditionWarning = computed(() => {
         if (form.value.protocol !== 'HTTP') { return false; }
         if (!NO_BODY_METHODS.includes(form.value.method)) { return false; }
+        if (matchMode.value === 'advanced') return MatchTree.usesBody(matchTree.value);
         return conditions.value.some(c => c.type === 'body' && c.field && c.value);
     });
 
@@ -227,7 +278,9 @@ const useRuleForm = (deps) => {
             return jmsTargetConnections.value.some(target => target.enabled && target.defaultConnection);
         }
         if (form.value.sseEnabled && form.value.protocol === 'HTTP') {
-            if (!sseEvents.value.length || !sseEvents.value.some(e => e.data && e.data.trim())) return false;
+            // 與伺服器相同：每個事件都要有資料，延遲是 0–600000 的整數毫秒
+            if (!sseEvents.value.length || !sseEvents.value.every(e => e.data
+                && Number.isInteger(e.delayMs) && e.delayMs >= 0 && e.delayMs <= 600000)) return false;
             if (form.value.responseMode === 'existing' && !form.value.responseId) return false;
         } else if (form.value.responseMode === 'existing') {
             if (!form.value.responseId) return false;
@@ -375,9 +428,8 @@ const useRuleForm = (deps) => {
         const queryConds = conditions.value.filter(c => c.type === 'query' && c.field && c.value);
         const headerConds = conditions.value.filter(c => c.type === 'header' && c.field && c.value);
 
-        // 判斷 body 格式：從原始 bodyCondition 偵測是否為 XPath (// 或 / 開頭)
-        const rawBodyCond = editing.value?.bodyCondition || '';
-        const isXml = rawBodyCond.startsWith('//') || rawBodyCond.startsWith('/');
+        // 判斷 body 格式：條件欄位是 XPath（/ 開頭）時產生 XML
+        const isXml = bodyConds.some(c => c.field.startsWith('/'));
 
         // 產生 Body
         if (bodyConds.length) {
@@ -409,7 +461,7 @@ const useRuleForm = (deps) => {
                 const obj = {};
                 for (const c of bodyConds) {
                     const val = resolveValue(c);
-                    const parts = c.field.split('.');
+                    const parts = c.field.replace(/^\$\./, '').split('.');
                     let cur = obj;
                     for (let i = 0; i < parts.length - 1; i++) {
                         const p = parts[i];
@@ -481,59 +533,53 @@ const useRuleForm = (deps) => {
             const hdrs = { 'Accept': 'text/event-stream', 'X-Original-Host': form.value.targetHost || '' };
             if (testParams.value.headersStr) {
                 testParams.value.headersStr.split(',').forEach(h => {
-                    const [k, v] = h.split(':').map(s => s.trim());
+                    const colon = h.indexOf(':');
+                    const k = h.slice(0, colon).trim(), v = h.slice(colon + 1).trim();
                     if (k && v) { hdrs[k] = v; }
                 });
             }
             const ac = new AbortController();
             testSseAbort.value = ac;
             const startTime = Date.now();
+            let reader;
             try {
-                const r = await fetch(url, { method: 'GET', headers: hdrs, signal: ac.signal });
-                if (!r.ok || !r.body) {
+                const method = form.value.method ? form.value.method.toUpperCase() : 'GET';
+                const options = { method, headers: hdrs, signal: ac.signal };
+                if (method !== 'GET' && method !== 'HEAD') {
+                    options.body = testParams.value.body;
+                    if (!Object.keys(hdrs).some(k => k.toLowerCase() === 'content-type')) hdrs['Content-Type'] = 'application/json';
+                }
+                const r = await fetch(url, options);
+                if (r.status !== 200 || !r.body || !/^text\/event-stream(?:\s*;|$)/i.test(r.headers.get('Content-Type') || '')) {
                     const body = await r.text();
-                    testResult.value = { status: r.status, body: body || 'Request failed', elapsed: Date.now() - startTime };
-                    testLoading.value = false;
+                    if (testSseAbort.value === ac) testResult.value = { status: r.status, body: body || 'Request failed', elapsed: Date.now() - startTime };
                     return;
                 }
-                const reader = r.body.getReader();
+                reader = r.body.getReader();
                 const decoder = new TextDecoder();
-                let buf = '';
-                let curEvent = { event: '', data: '', id: '' };
-                const pushEvent = () => {
-                    if (curEvent.data || curEvent.event || curEvent.id) {
-                        testSseEvents.value.push({ ...curEvent, time: Date.now() - startTime });
+                const parser = createSseParser(event => {
+                    if (testSseAbort.value === ac) testSseEvents.value.push({ ...event, time: Date.now() - startTime });
+                });
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) {
+                        parser.push(decoder.decode());
+                        parser.finish();
+                        break;
                     }
-                    curEvent = { event: '', data: '', id: '' };
-                };
-                const readLoop = async () => {
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) { pushEvent(); break; }
-                        buf += decoder.decode(value, { stream: true });
-                        const lines = buf.split('\n');
-                        buf = lines.pop();
-                        for (const line of lines) {
-                            if (line === '') { pushEvent(); continue; }
-                            if (line.startsWith(':')) { continue; }
-                            const idx = line.indexOf(':');
-                            let field, val;
-                            if (idx === -1) { field = line; val = ''; }
-                            else { field = line.substring(0, idx); val = line.substring(idx + 1).replace(/^ /, ''); }
-                            if (field === 'data') { curEvent.data = curEvent.data ? curEvent.data + '\n' + val : val; }
-                            else if (field === 'event') { curEvent.event = val; }
-                            else if (field === 'id') { curEvent.id = val; }
-                        }
-                    }
-                };
-                await readLoop();
+                    parser.push(decoder.decode(value, { stream: true }));
+                }
             } catch (e) {
-                if (e.name !== 'AbortError') {
+                if (e.name !== 'AbortError' && testSseAbort.value === ac) {
                     testResult.value = { status: 0, body: e.message, elapsed: Date.now() - startTime };
                 }
+            } finally {
+                if (reader) reader.releaseLock();
+                if (testSseAbort.value === ac) {
+                    testSseAbort.value = null;
+                    testLoading.value = false;
+                }
             }
-            testSseAbort.value = null;
-            testLoading.value = false;
         } else {
             try {
                 const payload = { body: testParams.value.body };
@@ -577,6 +623,7 @@ const useRuleForm = (deps) => {
         if (p === 'JMS') form.value.sseEnabled = false;
         loadTargetConnectionsForProtocol();
         conditions.value = [];
+        resetMatchState(null);
         localStorage.setItem('lastProtocol', p);
     };
 
@@ -594,32 +641,10 @@ const useRuleForm = (deps) => {
         responseDropdownOpen.value = false;
     };
 
+    /** 舊版條件字串轉成條件列，拆解規則與後端相同（見 MatchTree.parseLegacyCondition）；無法完整表示時不加入，由 resetMatchState 改用進階模式。 */
     const parseConditions = r => {
-        const parseWithOp = (str) => {
-            for (const op of ['!=', '*=', '~=', '=']) {
-                const idx = str.indexOf(op);
-                if (idx > 0) {
-                    return { field: str.substring(0, idx).trim(), operator: op, value: str.substring(idx + op.length).trim() };
-                }
-            }
-            return null;
-        };
-        if (r.bodyCondition) r.bodyCondition.split(';').forEach(c => {
-            const parsed = parseWithOp(c);
-            if (parsed) {
-                let f = parsed.field;
-                if (f.startsWith('//')) f = f.substring(2);
-                conditions.value.push({ type: 'body', field: f, operator: parsed.operator, value: parsed.value });
-            }
-        });
-        if (r.queryCondition) r.queryCondition.split(';').forEach(c => {
-            const parsed = parseWithOp(c);
-            if (parsed) conditions.value.push({ type: 'query', field: parsed.field, operator: parsed.operator, value: parsed.value });
-        });
-        if (r.headerCondition) r.headerCondition.split(';').forEach(c => {
-            const parsed = parseWithOp(c);
-            if (parsed) conditions.value.push({ type: 'header', field: parsed.field, operator: parsed.operator, value: parsed.value });
-        });
+        const rows = MatchTree.toSimpleRows(r.bodyCondition, r.queryCondition, r.headerCondition);
+        if (rows) conditions.value.push(...rows);
     };
 
     const openCreate = async () => {
@@ -629,6 +654,7 @@ const useRuleForm = (deps) => {
         form.value = resetForm();
         form.value.matchKey = form.value.protocol === 'JMS' ? '*' : '';
         conditions.value = [];
+        resetMatchState(null);
         sseEvents.value = [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }];
         formErrors.value = {};
         catchAllConfirmed.value = false;
@@ -647,6 +673,7 @@ const useRuleForm = (deps) => {
         showCatchAllWarning.value = false;
         sseEvents.value = (r.sseEnabled && r.responseBody) ? deserializeSseEvents(r.responseBody) : [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }];
         parseConditions(r);
+        resetMatchState(r);
         loadTargetConnectionsForProtocol();
         showModal.value = true;
     };
@@ -673,6 +700,7 @@ const useRuleForm = (deps) => {
             faultType: 'NONE'
         };
         conditions.value = [];
+        resetMatchState(null);
         sseEvents.value = [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }];
         formErrors.value = {};
         catchAllConfirmed.value = false;
@@ -692,14 +720,14 @@ const useRuleForm = (deps) => {
         catchAllConfirmed.value = false;
         showCatchAllWarning.value = false;
         resetResponsePreview();
-        if (!r.responseId) {
-            const res = await apiCall(`/api/admin/rules/${r.id}`, {}, { silent: true });
-            if (res && res.ok) { const full = await res.json(); r = full; }
-        }
+        // 一律讀取最新內容與版本：列表上的資料可能已過時，用舊內容存檔會蓋掉別人的修改
+        const res = await apiCall(`/api/admin/rules/${r.id}`, {}, { silent: true });
+        if (res && res.ok) { r = await res.json(); }
         form.value = { ...r, action: r.action || 'MOCK', forwardTargetMode: r.forwardTargetMode || (r.protocol === 'JMS' ? 'DEFAULT_CONNECTION' : 'ORIGINAL_HOST'), responseMode: r.responseId ? 'existing' : 'new' };
         conditions.value = [];
         sseEvents.value = (r.sseEnabled && r.responseBody) ? deserializeSseEvents(r.responseBody) : [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }];
         parseConditions(r);
+        resetMatchState(r);
         if (form.value.responseMode === 'existing') loadResponsePicker(0);
         loadTargetConnectionsForProtocol();
         showModal.value = true;
@@ -721,8 +749,11 @@ const useRuleForm = (deps) => {
         editing.value = null;
         form.value = resetForm();
         conditions.value = [];
+        resetMatchState(null);
         sseEvents.value = [];
         formErrors.value = {};
+        newTag.value = { key: '', value: '' };
+        newHeader.value = { key: '', value: '' };
         catchAllConfirmed.value = false;
         showCatchAllWarning.value = false;
         testExpanded.value = false;
@@ -738,12 +769,13 @@ const useRuleForm = (deps) => {
     const saving = ref(false);
 
     const saveRule = async (andClose = false) => {
-        // SSE 模式：序列化表格資料到 responseBody
+        // SSE 模式：序列化表格資料到 responseBody。使用現有回應時，事件與規則一起送出，
+        // 由後端在同一個交易內改寫該回應（規則存檔失敗時回應也不會被改到）。
+        let existingResponseBody = null;
         if (form.value.action !== 'FORWARD' && form.value.sseEnabled && form.value.protocol === 'HTTP') {
             const serialized = serializeSseEvents(sseEvents.value);
             if (form.value.responseMode === 'existing' && form.value.responseId) {
-                const rr = await apiCall(`/api/admin/responses/${form.value.responseId}`, { method: 'PUT', body: JSON.stringify({ body: serialized }) }, { errorMsg: t('toast.responseSaveFailed') });
-                if (!rr || !rr.ok) { showToast(t('toast.sseSaveFailed'), 'error'); return; }
+                existingResponseBody = serialized;
             } else {
                 form.value.responseBody = serialized;
             }
@@ -756,25 +788,37 @@ const useRuleForm = (deps) => {
             showCatchAllWarning.value = true;
             return;
         }
-        saving.value = true;
-        const bodyConds = conditions.value.filter(c => c.type === 'body' && c.field && c.value).map(c => c.field + (c.operator || '=') + c.value).join(';');
-        const queryConds = conditions.value.filter(c => c.type === 'query' && c.field && c.value).map(c => c.field + (c.operator || '=') + c.value).join(';');
-        const headerConds = conditions.value.filter(c => c.type === 'header' && c.field && c.value).map(c => c.field + (c.operator || '=') + c.value).join(';');
-        form.value.bodyCondition = bodyConds || null;
-        form.value.queryCondition = queryConds || null;
-        form.value.headerCondition = headerConds || null;
-        // 使用現有 Response 時：若正在編輯回應內容，先自動儲存
-        const faulting = form.value.faultType && form.value.faultType !== 'NONE';
-        if (!faulting && form.value.action !== 'FORWARD' && form.value.responseMode === 'existing' && form.value.responseId && previewEditing.value && previewEditBody.value !== previewResponseBody.value) {
-            const resp = selectedResponseSummary.value;
-            const rr = await apiCall(`/api/admin/responses/${form.value.responseId}`, { method: 'PUT', body: JSON.stringify({ description: resp?.description || '', body: previewEditBody.value }) }, { errorMsg: t('toast.responseSaveFailed') });
-            if (!rr || !rr.ok) { saving.value = false; showToast(t('toast.responseSaveFailed'), 'error'); return; }
-            previewResponseBody.value = previewEditBody.value;
-            previewEditing.value = false;
-            renderEditor('preview', previewEditorRef, previewResponseBody.value, true);
-            responsesMarkDirty();
+        let matchSpec = null;
+        if (matchMode.value === 'advanced') {
+            try { matchSpec = MatchTree.toSpec(matchTree.value); }
+            catch {
+                matchError.value = t('match.invalidJsonValue');
+                showToast(t('match.invalidJsonValue'), 'error');
+                return;
+            }
         }
+        saving.value = true;
+        const simple = matchMode.value === 'advanced'
+            ? { bodyCondition: null, queryCondition: null, headerCondition: null }
+            : serializeSimpleConditions();
+        form.value.bodyCondition = simple.bodyCondition;
+        form.value.queryCondition = simple.queryCondition;
+        form.value.headerCondition = simple.headerCondition;
+        // 使用現有 Response 時：正在編輯的回應內容與規則一起送出，在同一個交易內儲存
+        const faulting = form.value.faultType && form.value.faultType !== 'NONE';
+        const previewEdited = !faulting && form.value.action !== 'FORWARD' && form.value.responseMode === 'existing'
+            && form.value.responseId && previewEditing.value && previewEditBody.value !== previewResponseBody.value;
+        if (previewEdited && existingResponseBody === null) existingResponseBody = previewEditBody.value;
         const payload = { ...form.value };
+        delete payload.advancedMatch;
+        if (matchSpec) {
+            payload.matchSpec = matchSpec;
+        } else {
+            // 規則原本使用進階條件、而現在沒有任何條件時要明確清除；未送 matchSpec 時後端會保留原本的進階條件
+            const hadAdvanced = hasMatchSpecObject(editing.value);
+            const noLegacy = !simple.bodyCondition && !simple.queryCondition && !simple.headerCondition;
+            payload.matchSpec = hadAdvanced && noLegacy ? { all: [] } : null;
+        }
         if (faulting) {
             payload.action = 'MOCK';
             payload.responseBody = null;
@@ -798,21 +842,44 @@ const useRuleForm = (deps) => {
                 payload.httpTargetConnectionId = null;
                 if (payload.forwardTargetMode !== 'CONNECTION') payload.jmsTargetConnectionId = null;
             }
-        } else if (payload.responseMode === 'existing') { payload.responseBody = null; }
+        } else if (payload.responseMode === 'existing') {
+            payload.responseBody = existingResponseBody;
+            payload.updateExistingResponse = existingResponseBody !== null;
+        }
         else { payload.responseId = null; }
         delete payload.responseMode;
+        let savedSuccessfully = false;
+        let saveConflict = null;
         try {
             const url = editing.value ? `/api/admin/rules/${editing.value.id}` : '/api/admin/rules';
-            const r = await apiCall(url, { method: editing.value ? 'PUT' : 'POST', body: JSON.stringify(payload) }, { errorMsg: t('toast.ruleSaveFailed') });
+            const r = await apiCall(url, { method: editing.value ? 'PUT' : 'POST', body: JSON.stringify(payload) },
+                { errorMsg: t('toast.ruleSaveFailed'), quietStatuses: [409] });
             if (r && r.ok) {
                 const saved = await r.json();
-                showToast(editing.value ? t('toast.ruleSaveSuccess') : t('toast.ruleCreateSuccess'), 'success');
+                savedSuccessfully = true;
+                if (payload.updateExistingResponse) {
+                    if (previewEdited) { previewResponseBody.value = previewEditBody.value; previewEditing.value = false; }
+                    responsesMarkDirty();
+                }
+                // 有判斷順序的問題時只顯示一則提醒（已包含「已儲存」），否則顯示一般的成功訊息
+                const savedMessage = editing.value ? t('toast.ruleSaveSuccess') : t('toast.ruleCreateSuccess');
+                neverReachedWarning(saved).then(warning => {
+                    if (!warning) { showToast(savedMessage, 'success'); return; }
+                    showToast({ title: warning.title, detail: warning.detail }, 'warning',
+                        openRuleOrder ? { label: t('rules.order.viewOrder'), handler: () => openRuleOrder(warning.ruleId) } : null);
+                });
                 rulesMarkDirty();
                 delete rulePreviewCache.value[saved.id];
-                rulePreviewExpanded.value[saved.id] = false;
+                if (ruleDetailId?.value === saved.id) { loadRuleDetail(saved.id, { force: true }); }
                 if (andClose) { closeModal(); loadRules(true); }
                 else {
                     editing.value = saved;
+                    // 後端會把只用到舊語法的進階條件轉回條件列，畫面跟著儲存結果
+                    form.value.matchSpec = saved.matchSpec ?? null;
+                    form.value.advancedMatch = saved.advancedMatch;
+                    conditions.value = [];
+                    parseConditions(saved);
+                    resetMatchState(saved);
                     form.value.id = saved.id;
                     form.value.version = saved.version;
                     form.value.responseId = saved.responseId;
@@ -821,9 +888,43 @@ const useRuleForm = (deps) => {
                     loadRules(true);
                 }
             }
+            else if (r && r.status === 409 && editing.value) { saveConflict = editing.value.id; }
             else if (r && (r.status === 401 || r.status === 403)) { login(); }
         } catch (e) { showToast(t('toast.ruleSaveFailed'), 'error'); }
         saving.value = false;
+        // 編輯期間規則被別人改過：表單保持原樣，由使用者決定載入最新版本或保留自己的修改
+        if (saveConflict) { return { conflict: saveConflict }; }
+        return savedSuccessfully;
+    };
+
+    /**
+     * 儲存後檢查判斷順序：這條規則永遠輪不到，或它讓其他規則永遠輪不到時，回傳要顯示的提醒（{title, detail, ruleId}）；
+     * 沒有問題或檢查失敗時回傳 null（只是提醒，不影響儲存）。
+     */
+    const neverReachedWarning = async saved => {
+        try {
+            const r = await apiCall('/api/admin/rules/order-issues', {}, { silent: true });
+            if (!r || !r.ok) { return null; }
+            const issues = (await r.json()).issues || {};
+            const own = issues[saved.id];
+            if (own) {
+                const rule = own.byDescription || (own.byRuleId || '').slice(0, 8);
+                return {
+                    title: t('rules.order.savedNeverTitle'),
+                    detail: t(own.type === 'duplicateConditions' ? 'rules.order.savedDuplicate' : 'rules.order.savedEarlierDefault', { rule }),
+                    ruleId: saved.id,
+                };
+            }
+            const blocked = Object.entries(issues).filter(([, issue]) => issue.byRuleId === saved.id);
+            if (!blocked.length) { return null; }
+            const [firstId, first] = blocked[0];
+            const rule = first.description || firstId.slice(0, 8);
+            return blocked.length === 1
+                ? { title: t('rules.order.savedBlocksTitle'), detail: t('rules.order.savedBlocksOther', { rule }), ruleId: firstId }
+                : { title: t('rules.order.savedBlocksManyTitle', { count: blocked.length }), detail: t('rules.order.savedBlocksOthers', { rule }), ruleId: firstId };
+        } catch {
+            return null;
+        }
     };
 
     // --- 回應預覽編輯 ---
@@ -840,12 +941,8 @@ const useRuleForm = (deps) => {
             } catch { previewResponseUsageCount.value = 0; }
             previewEditBody.value = previewResponseBody.value;
             previewEditing.value = true;
-            previewFormatted.value = false;
-            renderEditor('preview', previewEditorRef, previewEditBody.value, false, v => { previewEditBody.value = v; });
         } else {
             previewEditing.value = false;
-            previewFormatted.value = false;
-            renderEditor('preview', previewEditorRef, previewResponseBody.value, true);
         }
     };
 
@@ -861,8 +958,6 @@ const useRuleForm = (deps) => {
                 showToast(t('toast.responseSaveSuccess'), 'success');
                 previewResponseBody.value = previewEditBody.value;
                 previewEditing.value = false;
-                previewFormatted.value = false;
-                renderEditor('preview', previewEditorRef, previewResponseBody.value, true);
                 responsesMarkDirty();
                 rulePreviewCache.value = {};
                 loadResponsePicker(responsePickerPage.value);
@@ -871,8 +966,6 @@ const useRuleForm = (deps) => {
         previewSaving.value = false;
     };
 
-    const togglePreviewFormat = () => { previewFormatted.value = !previewFormatted.value; renderEditor('preview', previewEditorRef, previewEditing.value ? previewEditBody.value : previewResponseBody.value, !previewEditing.value, previewEditing.value ? v => { previewEditBody.value = v; } : undefined); };
-    const toggleEditFormat = () => { editFormatted.value = !editFormatted.value; renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; }); };
 
     let previewLoadSequence = 0;
     const loadSelectedResponse = async id => {
@@ -918,78 +1011,32 @@ const useRuleForm = (deps) => {
         } finally {
             if (sequence === previewLoadSequence && form.value.responseId === id) {
                 previewResponseLoading.value = false;
-                if (!previewResponseLoadFailed.value && form.value.responseMode === 'existing' && !form.value.sseEnabled) {
-                    Vue.nextTick(() => renderEditor('preview', previewEditorRef, previewResponseBody.value, true));
-                }
             }
         }
     };
 
     // --- Watchers ---
     const setupFormWatchers = () => {
+        watch([matchTree, matchMode, () => form.value.protocol], () => {
+            if (matchMode.value === 'advanced') validateMatchDebounced();
+            else { validateMatchDebounced.cancel(); matchError.value = ''; }
+        }, { deep: true });
+
         watch(isCatchAll, val => {
             if (!val) { showCatchAllWarning.value = false; catchAllConfirmed.value = false; }
         });
 
-        watch(showModal, open => {
-            if (open) {
-                Vue.nextTick(() => {
-                    if (form.value.faultType && form.value.faultType !== 'NONE') return;
-                    if (form.value.responseMode === 'new' && !form.value.sseEnabled) {
-                        renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; });
-                    } else if (form.value.responseMode === 'existing' && form.value.responseId && !previewResponseLoading.value && !previewResponseLoadFailed.value) {
-                        renderEditor('preview', previewEditorRef, previewResponseBody.value, !previewEditing.value);
-                    }
-                });
-            }
-        });
-
+        // The response content is a bound ui-code-viewer: it follows form.responseBody / the selected
+        // response by itself, so mode, action and fault switches no longer re-create an editor.
         watch(() => form.value.responseId, (id, oldId) => {
-            previewFormatted.value = false;
             previewEditing.value = false;
             previewEditBody.value = '';
             if (id !== oldId) loadSelectedResponse(id);
         });
 
-        watch(() => form.value.responseMode, mode => {
-            editFormatted.value = false;
-            previewFormatted.value = false;
+        watch(() => form.value.responseMode, () => {
             previewEditing.value = false;
             previewEditBody.value = '';
-            if (form.value.faultType && form.value.faultType !== 'NONE') return;
-            if (mode === 'new') {
-                if (!form.value.sseEnabled) {
-                    renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; });
-                }
-            }
-            else if (mode === 'existing' && form.value.responseId && !previewResponseLoading.value && !previewResponseLoadFailed.value) {
-                Vue.nextTick(() => renderEditor('preview', previewEditorRef, previewResponseBody.value, true));
-            }
-        });
-
-        watch(() => form.value.action, action => {
-            if (action !== 'FORWARD' && (!form.value.faultType || form.value.faultType === 'NONE')) {
-                Vue.nextTick(() => {
-                    if (form.value.responseMode === 'new' && !form.value.sseEnabled) {
-                        renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; });
-                    } else if (form.value.responseMode === 'existing' && form.value.responseId && !previewResponseLoading.value && !previewResponseLoadFailed.value) {
-                        renderEditor('preview', previewEditorRef, previewResponseBody.value, !previewEditing.value);
-                    }
-                });
-            }
-        });
-
-        watch(() => form.value.faultType, (faultType, previousFaultType) => {
-            const faultEnabled = faultType && faultType !== 'NONE';
-            const faultWasEnabled = previousFaultType && previousFaultType !== 'NONE';
-            if (faultEnabled || !faultWasEnabled) return;
-            Vue.nextTick(() => {
-                if (form.value.responseMode === 'new' && !form.value.sseEnabled) {
-                    renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; });
-                } else if (form.value.responseMode === 'existing' && form.value.responseId && !previewResponseLoading.value && !previewResponseLoadFailed.value) {
-                    renderEditor('preview', previewEditorRef, previewResponseBody.value, !previewEditing.value);
-                }
-            });
         });
 
         watch(() => form.value.sseEnabled, (sse, oldSse) => {
@@ -1004,11 +1051,6 @@ const useRuleForm = (deps) => {
                     } else {
                         form.value.responseBody = serialized;
                     }
-                }
-                if (form.value.responseMode === 'new') {
-                    Vue.nextTick(() => renderEditor('edit', editEditorRef, form.value.responseBody, false, v => { form.value.responseBody = v; }));
-                } else if (form.value.responseMode === 'existing' && form.value.responseId && !previewResponseLoading.value && !previewResponseLoadFailed.value) {
-                    Vue.nextTick(() => renderEditor('preview', previewEditorRef, previewResponseBody.value, !previewEditing.value));
                 }
             }
         });
@@ -1031,6 +1073,9 @@ const useRuleForm = (deps) => {
     return {
         // 表單狀態
         showModal, editing, form, conditions, conditionsExpanded, formErrors, saving,
+        // 進階條件
+        matchMode, matchTree, matchError, matchSwitchPending, matchSources,
+        setMatchMode, confirmSimpleMatchMode, cancelSimpleMatchMode, currentMatchSpec, applyMatchDraft,
         httpTargetConnections, loadHttpTargetConnections,
         jmsTargetConnections, loadJmsTargetConnections,
         // 驗證
@@ -1040,7 +1085,7 @@ const useRuleForm = (deps) => {
         // Body condition 警告
         showBodyConditionWarning,
         // SSE 事件
-        sseEvents, addSseEvent, removeSseEvent, ssePreview,
+        sseEvents, addSseEvent, removeSseEvent,
         // 表單操作
         setProtocol, resetForm, openCreate, copyRule, createFromLog, openEdit, closeModal,
         saveRule, parseConditions, onResponseModeChange,
@@ -1061,11 +1106,10 @@ const useRuleForm = (deps) => {
         // 表單輔助
         newTag, addTag, removeTag, newHeader, addHeader, removeHeader,
         // SSE 回應預覽
-        responseSsePreview,
         // Modal 最大化
         ruleModalMaximized, responseModalMaximized,
         // 格式切換
-        togglePreviewFormat, toggleEditFormat,
+
         // watchers
         setupFormWatchers,
         // 回應選擇抽屜關閉

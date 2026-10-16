@@ -1,5 +1,7 @@
 package com.echo.controller;
 
+import com.echo.service.ServeEvent;
+import com.echo.service.ServeEventCaptor;
 import com.echo.entity.HttpRule;
 import com.echo.entity.Protocol;
 import com.echo.pipeline.AbstractMockPipeline;
@@ -13,6 +15,7 @@ import com.echo.service.ResponseTemplateService;
 import com.echo.service.RuleService;
 import net.jqwik.api.*;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -70,7 +73,7 @@ class UniversalMockControllerSseTest {
                 .id("scenario-sse")
                 .matchKey("/scenario")
                 .method("GET")
-                .sseEnabled(false)
+                .sseEnabled(true)
                 .responseId(42L)
                 .httpStatus(200)
                 .scenarioName("checkout")
@@ -83,20 +86,102 @@ class UniversalMockControllerSseTest {
                 isNull(), anyMap())).thenReturn(matched(rule));
         when(pipeline.advanceScenarioState(rule)).thenReturn(
                 new AbstractMockPipeline.ScenarioTransition("checkout", "Started", "Paid", true));
-        when(ruleService.findResponseBodyById(42L)).thenReturn(Optional.of("{\"ok\":true}"));
-        when(templateService.hasTemplate(anyString())).thenReturn(false);
+        when(ruleService.findResponseBodyById(42L)).thenReturn(Optional.of("[{\"data\":\"ok\"}]"));
 
         Object result = scenarioController.handleSseRequest(
                 sseGetRequest("/scenario"), httpServletResponse);
 
-        assertThat(result).isInstanceOf(ResponseEntity.class);
+        assertThat(result).isInstanceOf(SseEmitter.class);
         verify(pipeline).advanceScenarioState(rule);
-        verify(requestLogService).record(
-                eq("scenario-sse"), eq(Protocol.HTTP), eq("GET"), eq("/scenario"), eq(true),
-                anyInt(), eq("127.0.0.1"), anyString(), eq("default"),
-                isNull(), isNull(), eq(200), anyInt(), isNull(), eq("{\"ok\":true}"),
-                ArgumentMatchers.<HttpRule>anyList(), any(ConditionMatcher.PreparedBody.class),
-                isNull(), anyMap(), isNull(), eq("checkout"), eq("Started"), eq("Paid"));
+        ServeEvent served = ServeEventCaptor.single(requestLogService);
+        assertThat(served.getRuleId()).isEqualTo("scenario-sse");
+        assertThat(served.getProtocol()).isEqualTo(Protocol.HTTP);
+        assertThat(served.getMethod()).isEqualTo("GET");
+        assertThat(served.getEndpoint()).isEqualTo("/scenario");
+        assertThat(served.isMatched()).isTrue();
+        assertThat(served.getClientIp()).isEqualTo("127.0.0.1");
+        assertThat(served.getMatchChain()).isNotNull();
+        assertThat(served.getTargetHost()).isEqualTo("default");
+        assertThat(served.getProxyStatus()).isNull();
+        assertThat(served.getProxyError()).isNull();
+        assertThat(served.getResponseStatus()).isEqualTo(200);
+        assertThat(served.getRequestBody()).isNull();
+        assertThat(served.getResponseBody()).isEqualTo("[{\"data\":\"ok\"}]");
+        assertThat(served.getCandidates()).isNotNull();
+        assertThat(served.getPreparedBody()).isNotNull();
+        assertThat(served.getQueryString()).isNull();
+        assertThat(served.getHeaders()).isNotNull();
+        assertThat(served.getFaultType()).isNull();
+        assertThat(served.getScenarioName()).isEqualTo("checkout");
+        assertThat(served.getScenarioFromState()).isEqualTo("Started");
+        assertThat(served.getScenarioToState()).isEqualTo("Paid");
+        assertThat(served.getCandidateCount()).isEqualTo(1);
+        assertThat(served.getSseEventCount()).isEqualTo(1);
+        assertThat(served.getDelayMs()).isZero();
+        scenarioController.shutdown();
+    }
+
+    @AfterEach
+    void tearDown() { controller.shutdown(); }
+
+    @Test
+    void ordinaryAndWildcardAcceptRequestsRetainOriginalPipelineFallback() {
+        HttpMockPipeline pipeline = mock(HttpMockPipeline.class);
+        UniversalMockController fallbackController = new UniversalMockController(
+                ruleService, httpRuleService, requestLogService, templateService, pipeline);
+        when(pipeline.executeAsync(any())).thenReturn(java.util.concurrent.CompletableFuture.completedFuture(
+                com.echo.pipeline.PipelineResult.builder().response(com.echo.pipeline.MockResponse.builder()
+                        .status(202).body("ordinary pipeline").build()).build()));
+        try {
+            for (String accept : java.util.Arrays.asList(null, "*/*", "text/*", "text/event-stream;q=0")) {
+                MockHttpServletRequest request = sseGetRequest("/ordinary");
+                request.setMethod("POST"); request.removeHeader("Accept");
+                if (accept != null) request.addHeader("Accept", accept);
+                Object result = fallbackController.handleSseRequest(request, httpServletResponse, "synthetic body");
+                assertThat(result).isInstanceOf(ResponseEntity.class);
+                assertThat(((ResponseEntity<?>) result).getBody()).isEqualTo("ordinary pipeline");
+            }
+            verify(pipeline, times(4)).executeAsync(any());
+            verify(httpRuleService, never()).findPreparedHttpRules(any(), any(), any());
+        } finally {
+            fallbackController.shutdown();
+        }
+    }
+
+    @Test
+    void normalScenarioRuleWithSseAcceptUsesOrdinaryPipelineOnce() {
+        HttpMockPipeline pipeline = mock(HttpMockPipeline.class);
+        UniversalMockController fallbackController = new UniversalMockController(
+                ruleService, httpRuleService, requestLogService, templateService, pipeline);
+        HttpRule rule = HttpRule.builder().id("scenario-http").matchKey("/scenario")
+                .method("POST").sseEnabled(false).scenarioName("checkout")
+                .requiredScenarioState("Started").newScenarioState("Paid").build();
+        String body = "{\"prompt\":\"synthetic\"}";
+        when(httpRuleService.findPreparedHttpRules("default", "/scenario", "POST")).thenReturn(List.of(rule));
+        when(pipeline.prepareBodyForMatching(any(), anyList())).thenReturn(ConditionMatcher.PreparedBody.rawOnly(body));
+        when(pipeline.matchRule(anyList(), any(ConditionMatcher.PreparedBody.class), isNull(), anyMap()))
+                .thenReturn(matched(rule));
+        when(pipeline.executeAsync(any())).thenReturn(java.util.concurrent.CompletableFuture.completedFuture(
+                com.echo.pipeline.PipelineResult.builder().response(com.echo.pipeline.MockResponse.builder()
+                        .status(202).body("{\"ok\":true}").headers(java.util.Map.of("X-Synthetic", "yes"))
+                        .build()).build()));
+        MockHttpServletRequest request = sseGetRequest("/scenario");
+        request.setMethod("POST");
+        try {
+            Object result = fallbackController.handleSseRequest(request, httpServletResponse, body);
+            assertThat(result).isInstanceOf(ResponseEntity.class);
+            ResponseEntity<?> response = (ResponseEntity<?>) result;
+            assertThat(response.getStatusCode().value()).isEqualTo(202);
+            assertThat(response.getBody()).isEqualTo("{\"ok\":true}");
+            assertThat(response.getHeaders().getFirst("X-Synthetic")).isEqualTo("yes");
+            var captured = org.mockito.ArgumentCaptor.forClass(com.echo.pipeline.MockRequest.class);
+            verify(pipeline, times(1)).executeAsync(captured.capture());
+            assertThat(captured.getValue().getBody()).isEqualTo(body);
+            // The ordinary pipeline owns its transition; the SSE controller cannot advance it twice.
+            verify(pipeline, never()).advanceScenarioState(any());
+        } finally {
+            fallbackController.shutdown();
+        }
     }
 
     private MatchResult<HttpRule> noMatch() {
@@ -252,9 +337,17 @@ class UniversalMockControllerSseTest {
 
         controller.handleSseRequest(sseGetRequest("/events"), httpServletResponse);
 
-        verify(requestLogService).record(eq("sse-7"), eq(Protocol.HTTP), eq("GET"), eq("/events"),
-                eq(true), anyInt(), eq("127.0.0.1"), any(), any(), isNull(), isNull(), eq(200), anyInt(),
-                isNull(), any());
+        ServeEvent served2 = ServeEventCaptor.single(requestLogService);
+        assertThat(served2.getRuleId()).isEqualTo("sse-7");
+        assertThat(served2.getProtocol()).isEqualTo(Protocol.HTTP);
+        assertThat(served2.getMethod()).isEqualTo("GET");
+        assertThat(served2.getEndpoint()).isEqualTo("/events");
+        assertThat(served2.isMatched()).isTrue();
+        assertThat(served2.getClientIp()).isEqualTo("127.0.0.1");
+        assertThat(served2.getProxyStatus()).isNull();
+        assertThat(served2.getProxyError()).isNull();
+        assertThat(served2.getResponseStatus()).isEqualTo(200);
+        assertThat(served2.getRequestBody()).isNull();
     }
 
     @Test
@@ -264,9 +357,19 @@ class UniversalMockControllerSseTest {
 
         controller.handleSseRequest(sseGetRequest("/unknown"), httpServletResponse);
 
-        verify(requestLogService).record(isNull(), eq(Protocol.HTTP), eq("GET"), eq("/unknown"),
-                eq(false), anyInt(), eq("127.0.0.1"), any(), isNull(), isNull(), isNull(), eq(404), anyInt(),
-                isNull(), isNull());
+        ServeEvent served3 = ServeEventCaptor.single(requestLogService);
+        assertThat(served3.getRuleId()).isNull();
+        assertThat(served3.getProtocol()).isEqualTo(Protocol.HTTP);
+        assertThat(served3.getMethod()).isEqualTo("GET");
+        assertThat(served3.getEndpoint()).isEqualTo("/unknown");
+        assertThat(served3.isMatched()).isFalse();
+        assertThat(served3.getClientIp()).isEqualTo("127.0.0.1");
+        assertThat(served3.getTargetHost()).isNull();
+        assertThat(served3.getProxyStatus()).isNull();
+        assertThat(served3.getProxyError()).isNull();
+        assertThat(served3.getResponseStatus()).isEqualTo(404);
+        assertThat(served3.getRequestBody()).isNull();
+        assertThat(served3.getResponseBody()).isNull();
     }
 
     // ===== Property 4: SSE routing correctness =====
@@ -313,6 +416,7 @@ class UniversalMockControllerSseTest {
         } else {
             assertThat(result).isInstanceOf(ResponseEntity.class);
         }
+        ctrl.shutdown();
     }
 
     record SseRoutingInput(boolean sseEnabled, int ruleIndex) {}
@@ -367,9 +471,15 @@ class UniversalMockControllerSseTest {
         // Give background thread time to complete
         Thread.sleep(300);
         // Verify request log was recorded (confirms the method executed)
-        verify(mockLogSvc).record(eq("prop-order"), eq(Protocol.HTTP), any(), any(),
-                eq(true), anyInt(), any(), any(), any(), isNull(), isNull(), eq(200), anyInt(),
-                isNull(), any());
+        ServeEvent served4 = ServeEventCaptor.single(mockLogSvc);
+        assertThat(served4.getRuleId()).isEqualTo("prop-order");
+        assertThat(served4.getProtocol()).isEqualTo(Protocol.HTTP);
+        assertThat(served4.isMatched()).isTrue();
+        assertThat(served4.getProxyStatus()).isNull();
+        assertThat(served4.getProxyError()).isNull();
+        assertThat(served4.getResponseStatus()).isEqualTo(200);
+        assertThat(served4.getRequestBody()).isNull();
+        ctrl.shutdown();
     }
 
     @Provide
@@ -420,6 +530,7 @@ class UniversalMockControllerSseTest {
         } else {
             verify(mockTmplSvc, never()).render(any(), any());
         }
+        ctrl.shutdown();
     }
 
     record TemplateDecisionInput(String data) {}
@@ -459,9 +570,16 @@ class UniversalMockControllerSseTest {
 
         ctrl.handleSseRequest(sseGetRequest(input.path), null);
 
-        verify(mockLogSvc).record(eq(input.ruleId), eq(Protocol.HTTP), eq("GET"), eq(input.path),
-                eq(true), anyInt(), any(), any(), any(), isNull(), isNull(), eq(200), anyInt(),
-                isNull(), any());
+        ServeEvent served5 = ServeEventCaptor.single(mockLogSvc);
+        assertThat(served5.getRuleId()).isEqualTo(input.ruleId);
+        assertThat(served5.getProtocol()).isEqualTo(Protocol.HTTP);
+        assertThat(served5.getMethod()).isEqualTo("GET");
+        assertThat(served5.getEndpoint()).isEqualTo(input.path);
+        assertThat(served5.isMatched()).isTrue();
+        assertThat(served5.getProxyStatus()).isNull();
+        assertThat(served5.getProxyError()).isNull();
+        assertThat(served5.getResponseStatus()).isEqualTo(200);
+        assertThat(served5.getRequestBody()).isNull();
     }
 
     record SseLogInput(String ruleId, String path) {}

@@ -1,5 +1,6 @@
 package com.echo.pipeline;
 
+import com.echo.service.ServeEvent;
 import com.echo.dto.RuleDto;
 import com.echo.entity.BaseRule;
 import com.echo.entity.FaultType;
@@ -128,20 +129,9 @@ class FaultInjectionTest {
             }
 
             @Override
-            protected void recordLog(String ruleId, Protocol protocol, String method,
-                                     String endpoint, boolean matched, int responseTimeMs,
-                                     String clientIp, String matchChainJson, String targetHost,
-                                     boolean forwarded, String forwardTarget,
-                                     Integer proxyStatus, String proxyError,
-                                     Integer responseStatus, Integer matchTimeMs,
-                                     String requestBody, String responseBody,
-                                     List<HttpRule> candidates,
-                                     ConditionMatcher.PreparedBody preparedBody,
-                                     String queryString, Map<String, String> headers,
-                                     String faultType, String scenarioName,
-                                     String scenarioFromState, String scenarioToState) {
-                loggedResponseStatus = responseStatus;
-                loggedFaultType = faultType;
+            protected void publish(ServeEvent event) {
+                loggedResponseStatus = event.getResponseStatus();
+                loggedFaultType = event.getFaultType();
             }
         }
 
