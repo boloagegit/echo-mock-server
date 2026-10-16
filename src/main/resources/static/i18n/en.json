@@ -701,7 +701,7 @@
       "title": "GC events",
       "refresh": "Refresh GC history",
       "hint": "Records each JVM notification even while this page is closed. Refresh is read-only and never requests GC.",
-      "retention": "Showing {shown} events; limits: {capacity} events / {hours} hours. Recorded {total}; removed for capacity {overwritten}; expired {expired}.",
+      "retention": "Showing {shown} events; limits: {capacity} events / {age}. Recorded {total}; removed for capacity {overwritten}; expired {expired}.",
       "recordingSince": "Recording since:",
       "incomplete": "Some observations are unavailable. Notification errors: {failures}. Unsupported collectors:",
       "collector": "Collector",
@@ -718,7 +718,12 @@
       "pools": "Memory pools",
       "previous": "Previous",
       "next": "Next",
-      "interpretation": "Objects still reachable after GC are normal. Young GC does not reclaim the whole heap; compare the same collector and comparable load after warm-up. Concurrent GC duration is not stop-the-world pause time; negative reclaimed bytes mean usage grew during the event. This history is not proof of a leak or protection against OOM. Direct/native memory and process limits also matter."
+      "interpretation": "Objects still reachable after GC are normal. Young GC does not reclaim the whole heap; compare the same collector and comparable load after warm-up. Concurrent GC duration is not stop-the-world pause time; negative reclaimed bytes mean usage grew during the event. This history is not proof of a leak or protection against OOM. Direct/native memory and process limits also matter.",
+      "age": {
+        "hours": "{value} hours",
+        "minutes": "{value} minutes",
+        "seconds": "{value} seconds"
+      }
     },
     "title": "Resource monitoring",
     "manualHint": "Manual snapshots only. Observations aid diagnosis, not a live health guarantee.",

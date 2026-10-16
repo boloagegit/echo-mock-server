@@ -4519,3 +4519,6 @@ select.form-select-sm { height: var(--control-h-sm); min-height: var(--control-h
 .resource-monitoring-details .gc-pool-details summary { display: block; min-height: 0; padding: var(--space-xs); font-size: var(--font-xs) }
 .gc-pool-details dl { font-size: var(--font-xs); min-width: 200px; margin: var(--space-sm) }
 .gc-pool-details dt { overflow-wrap: anywhere }
+
+.memory-source-comparison { margin-top: 1rem; }
+.memory-source-comparison h3 { font-size: 1rem; margin: 0 0 .5rem; }

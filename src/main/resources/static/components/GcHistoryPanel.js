@@ -54,6 +54,11 @@ const GcHistoryPanel = {
       return (value / 1024 ** 2).toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' MiB';
     },
     time(value) { return value == null ? this.t('monitoring.noSample') : new Date(value).toLocaleString(); },
+    retentionAge(seconds) {
+      if (!Number.isFinite(seconds)) return this.t('monitoring.unavailable');
+      const unit = seconds % 3600 === 0 ? 'hours' : seconds % 60 === 0 ? 'minutes' : 'seconds';
+      return this.t('monitoring.gc.age.' + unit, { value: (seconds / (unit === 'hours' ? 3600 : unit === 'minutes' ? 60 : 1)).toLocaleString() });
+    },
     exportHistory() {
       if (!this.history || this.failed || this.busy) return;
       const url = URL.createObjectURL(new Blob([JSON.stringify(this.history, null, 2)], { type: 'application/json' }));
@@ -76,7 +81,7 @@ const GcHistoryPanel = {
       <template v-if="history">
         <p v-if="history.state !== 'AVAILABLE'" role="status">{{t('monitoring.states.' + history.state)}}</p>
         <template v-if="['AVAILABLE', 'PARTIAL'].includes(history.state)">
-          <p class="settings-inline-note">{{t('monitoring.gc.retention', { shown: history.events.length, capacity: history.capacity, total: history.totalEvents, overwritten: history.overwrittenEvents, expired: history.expiredEvents, hours: history.maxAgeSeconds / 3600 })}}</p>
+          <p class="settings-inline-note">{{t('monitoring.gc.retention', { shown: history.events.length, capacity: history.capacity, total: history.totalEvents, overwritten: history.overwrittenEvents, expired: history.expiredEvents, age: retentionAge(history.maxAgeSeconds) })}}</p>
           <p class="settings-inline-note">{{t('monitoring.gc.recordingSince')}} {{time(history.recordingStartedAt)}}</p>
           <p v-if="history.notificationFailures || history.unsupportedCollectors.length" class="resource-monitoring-error">{{t('monitoring.gc.incomplete', { failures: history.notificationFailures })}} {{history.unsupportedCollectors.join(', ')}}</p>
           <label class="gc-collector-filter">{{t('monitoring.gc.collector')}}
