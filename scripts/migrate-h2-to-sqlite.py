@@ -25,6 +25,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from contextlib import closing
 from pathlib import Path
 
 
@@ -169,7 +170,8 @@ def sha256_file(path: Path) -> str:
 
 
 def fsync_file(path: Path) -> None:
-    with path.open("rb") as stream:
+    # Windows _commit/FlushFileBuffers needs a writable handle; r+b does not truncate.
+    with path.open("r+b" if sys.platform == "win32" else "rb") as stream:
         os.fsync(stream.fileno())
 
 
@@ -344,7 +346,7 @@ def tail_text(path: Path, lines: int = 30) -> str:
 
 
 def verify_schema(path: Path) -> None:
-    with sqlite3.connect(path) as connection:
+    with closing(sqlite3.connect(path)) as connection:
         tables = {
             row[0]
             for row in connection.execute(
@@ -419,7 +421,7 @@ def validate_report(report: dict) -> dict[str, int]:
 
 
 def verify_sqlite_file(path: Path) -> None:
-    with sqlite3.connect(path) as connection:
+    with closing(sqlite3.connect(path)) as connection:
         integrity = connection.execute("PRAGMA integrity_check").fetchone()
         foreign_key_errors = connection.execute("PRAGMA foreign_key_check").fetchall()
     if not integrity or integrity[0] != "ok":
@@ -430,11 +432,11 @@ def verify_sqlite_file(path: Path) -> None:
 
 def publish_atomic_database(staging: Path, target: Path, candidate: Path) -> None:
     try:
-        with sqlite3.connect(staging, isolation_level=None) as source:
+        with closing(sqlite3.connect(staging, isolation_level=None)) as source:
             source.execute("PRAGMA wal_checkpoint(FULL)").fetchone()
             # VACUUM INTO 會產生一致、壓縮且不依賴 WAL/SHM 的單檔快照。
             source.execute("VACUUM INTO ?", (str(candidate),))
-        with sqlite3.connect(candidate, isolation_level=None) as connection:
+        with closing(sqlite3.connect(candidate, isolation_level=None)) as connection:
             journal_mode = connection.execute("PRAGMA journal_mode").fetchone()
             if not journal_mode or journal_mode[0].lower() != "delete":
                 raise MigrationError("最終 SQLite 快照仍依賴 WAL sidecar")

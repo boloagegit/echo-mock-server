@@ -2,18 +2,17 @@ package com.echo.repository;
 
 import com.echo.entity.Protocol;
 import com.echo.entity.RequestLog;
-import org.junit.jupiter.api.AfterAll;
+import com.echo.support.SqliteTestDatabaseCleanupListener;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestExecutionListeners;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,6 +21,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
+@TestExecutionListeners(listeners = SqliteTestDatabaseCleanupListener.class,
+        mergeMode = TestExecutionListeners.MergeMode.MERGE_WITH_DEFAULTS)
 @Import(RequestLogSummaryQuery.class)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class RequestLogSummaryQuerySqliteIntegrationTest {
@@ -76,12 +77,5 @@ class RequestLogSummaryQuerySqliteIntegrationTest {
                 .scenarioFromState(statefulFault ? "Started" : null)
                 .scenarioToState(statefulFault ? "Paid" : null)
                 .build();
-    }
-
-    @AfterAll
-    static void cleanupSqliteFiles() throws IOException {
-        Files.deleteIfExists(Path.of(SQLITE_PATH + "-wal"));
-        Files.deleteIfExists(Path.of(SQLITE_PATH + "-shm"));
-        Files.deleteIfExists(SQLITE_PATH);
     }
 }

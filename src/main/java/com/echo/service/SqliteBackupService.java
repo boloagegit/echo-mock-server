@@ -4,6 +4,8 @@ import com.echo.config.SqliteStartupRecovery;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.sqlite.ExtendedCommand;
+import org.sqlite.SQLiteConnection;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
@@ -96,9 +98,12 @@ public class SqliteBackupService implements BackupService {
             // 使用 SQLite Online Backup API（透過 JDBC）
             // 這會產生一個包含所有已 commit 資料的完整一致性快照
             // 比 file copy 安全：file copy 可能漏掉 WAL 中未 checkpoint 的資料
-            try (var conn = dataSource.getConnection();
-                 var stmt = conn.createStatement()) {
-                stmt.executeUpdate("backup to '" + sqliteSqlPath(staging.toAbsolutePath()) + "'");
+            try (var conn = dataSource.getConnection()) {
+                // The driver's BACKUP command parser does not support SQL quote escaping.
+                // Pass the filename directly to the same online-backup implementation.
+                var sqlite = conn.unwrap(SQLiteConnection.class);
+                new ExtendedCommand.BackupCommand("main", staging.toAbsolutePath().toString())
+                        .execute(sqlite.getDatabase());
             }
             if (!SqliteStartupRecovery.isHealthyDatabase(staging)) {
                 throw new IllegalStateException("SQLite backup integrity verification failed");
@@ -184,10 +189,6 @@ public class SqliteBackupService implements BackupService {
     private static String fileName(Path path) {
         Path name = path.getFileName();
         return name != null ? name.toString() : "";
-    }
-
-    static String sqliteSqlPath(Path path) {
-        return path.toString().replace("'", "''");
     }
 
     private static void moveAtomically(Path source, Path target) throws IOException {

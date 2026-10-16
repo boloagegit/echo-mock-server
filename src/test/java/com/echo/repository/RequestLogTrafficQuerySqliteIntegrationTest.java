@@ -2,7 +2,7 @@ package com.echo.repository;
 
 import com.echo.entity.Protocol;
 import com.echo.entity.RequestLog;
-import org.junit.jupiter.api.AfterAll;
+import com.echo.support.SqliteTestDatabaseCleanupListener;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -12,12 +12,11 @@ import org.springframework.data.domain.Sort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestExecutionListeners;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.sql.DataSource;
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -26,6 +25,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
+@TestExecutionListeners(listeners = SqliteTestDatabaseCleanupListener.class,
+        mergeMode = TestExecutionListeners.MergeMode.MERGE_WITH_DEFAULTS)
 @Import({RequestLogTrafficQuery.class, RequestLogSummaryQuery.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class RequestLogTrafficQuerySqliteIntegrationTest {
@@ -135,12 +136,5 @@ class RequestLogTrafficQuerySqliteIntegrationTest {
     private static RequestLog timed(RequestLog log, int responseTimeMs) {
         log.setResponseTimeMs(responseTimeMs);
         return log;
-    }
-
-    @AfterAll
-    static void cleanupSqliteFiles() throws IOException {
-        Files.deleteIfExists(Path.of(SQLITE_PATH + "-wal"));
-        Files.deleteIfExists(Path.of(SQLITE_PATH + "-shm"));
-        Files.deleteIfExists(SQLITE_PATH);
     }
 }

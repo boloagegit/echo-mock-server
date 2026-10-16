@@ -15,6 +15,15 @@ export SERVER_UNDERTOW_THREADS_IO=1
 # 接著執行原本的 Echo 啟動命令。
 ```
 
+Windows 開發機的 PowerShell 寫法：
+
+```powershell
+$env:SERVER_UNDERTOW_THREADS_IO = '1'
+.\gradlew.bat bootRun
+```
+
+Windows 可用來驗證設定是否生效；最終 I/O 數值仍依 Linux 部署環境量測決定。
+
 Docker Compose 可在既有 Echo service 的 `environment` 加入：
 
 ```yaml
@@ -43,5 +52,7 @@ SERVER_UNDERTOW_THREADS_IO: "1"
 unset SERVER_UNDERTOW_THREADS_IO
 # 接著執行原本的 Echo 啟動命令。
 ```
+
+PowerShell 則執行 `Remove-Item Env:SERVER_UNDERTOW_THREADS_IO -ErrorAction SilentlyContinue`，再重啟 Echo。
 
 若同時在 YAML、環境變數與 CLI 設了值，必須移除實際生效的覆寫；CLI 參數的優先順序高於環境變數。

@@ -2,9 +2,9 @@ package com.echo.config;
 
 import com.echo.entity.Scenario;
 import com.echo.repository.ScenarioRepository;
+import com.echo.support.SqliteTestDatabaseCleanupListener;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +15,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestExecutionListeners;
 import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -22,8 +23,6 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -39,6 +38,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
 
 @DataJpaTest
+@TestExecutionListeners(listeners = SqliteTestDatabaseCleanupListener.class,
+        mergeMode = TestExecutionListeners.MergeMode.MERGE_WITH_DEFAULTS)
 @Import({SqliteTransactionConfiguration.class,
         SqliteSerializingTransactionIntegrationTest.MetricsConfiguration.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -286,12 +287,5 @@ class SqliteSerializingTransactionIntegrationTest {
                 throw new AssertionError("Interrupted while waiting for test condition", e);
             }
         }
-    }
-
-    @AfterAll
-    static void cleanupSqliteFiles() throws IOException {
-        Files.deleteIfExists(Path.of(SQLITE_PATH + "-wal"));
-        Files.deleteIfExists(Path.of(SQLITE_PATH + "-shm"));
-        Files.deleteIfExists(SQLITE_PATH);
     }
 }

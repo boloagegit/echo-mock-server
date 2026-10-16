@@ -47,4 +47,13 @@
 ./gradlew jmsApplicationCost -PjmsBenchmarkOutput=/tmp/echo-jms-app
 ```
 
+兩個 JMS probe 都使用 Java／Artemis，可在 Windows 開發機以 PowerShell 執行，輸出放在本機目錄：
+
+```powershell
+.\gradlew.bat jmsForwardingCost '-PjmsBenchmarkOutput=build/jms-forwarding-cost'
+.\gradlew.bat jmsApplicationCost '-PjmsBenchmarkOutput=build/jms-application-cost'
+```
+
+Windows 結果用於開發診斷；部署的效能比較仍在 Linux 上使用相同 JVM、broker 與負載條件重跑。
+
 以 ABBA 比較 cache 0／8，兩者使用相同來源接收策略；它是同版本配置比較，並非舊 commit 與新 commit 的直接比較。來源交易、persistent delivery 及 journal 保留；下游 fixture 非持久化，請求紀錄停用。

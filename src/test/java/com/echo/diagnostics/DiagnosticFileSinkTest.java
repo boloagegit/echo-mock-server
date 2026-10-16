@@ -2,10 +2,12 @@ package com.echo.diagnostics;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import java.io.IOException;
 import java.nio.file.*;
 import java.time.*;
 import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 class DiagnosticFileSinkTest {
     @TempDir Path directory;
@@ -84,14 +86,26 @@ class DiagnosticFileSinkTest {
     }
 
     @Test
-    void symlinkAndConcurrentWriterCannotBypassQuotaOrModifyOtherFiles() throws Exception {
+    void symlinkCannotBypassQuotaOrModifyOtherFiles() throws Exception {
         Path outside = directory.resolve("outside"); Files.writeString(outside, "keep");
         Path logs = directory.resolve("diagnostics"); Files.createDirectory(logs);
-        Files.createSymbolicLink(logs.resolve("transactions-2026-10-01.log"), outside);
+        try {
+            Files.createSymbolicLink(logs.resolve("transactions-2026-10-01.log"), outside);
+        } catch (IOException failure) {
+            // Ordinary Windows accounts may lack the privilege to create symlinks.
+            // Keep the concurrent-writer check independent so it still runs on those machines.
+            assumeFalse(System.getProperty("os.name").startsWith("Windows"),
+                    "Windows symlink creation unavailable: " + failure.getMessage());
+            throw failure;
+        }
         try (var sink = new DiagnosticFileSink(logs, fixed("2026-10-01"), 100, 100, 7)) {
             assertThatThrownBy(() -> sink.accept("bad")).isInstanceOf(DiagnosticFileSink.DiagnosticWriteException.class);
         }
         assertThat(Files.readString(outside)).isEqualTo("keep");
+    }
+
+    @Test
+    void concurrentWriterCannotBypassQuota() throws Exception {
         Path otherLogs = directory.resolve("other");
         try (var first = new DiagnosticFileSink(otherLogs, fixed("2026-10-01"), 100, 100, 7);
              var second = new DiagnosticFileSink(otherLogs, fixed("2026-10-01"), 100, 100, 7)) {

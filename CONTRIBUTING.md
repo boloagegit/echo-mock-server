@@ -6,8 +6,27 @@ Thank you for your interest in contributing! Here's how to get started.
 
 ### Prerequisites
 
-- Java 17+
-- Gradle 8.14+ (or use the included `./gradlew` wrapper)
+- JDK 17 for the Gradle compilation and test toolchain; packaged Echo runs on Java 17 or later
+- The included Gradle wrapper (`gradlew.bat` on Windows, `./gradlew` on Linux); a separate Gradle installation is not required
+
+Windows is a supported development environment; deployment and performance acceptance run on Linux. Ordinary development does not require WSL, Git Bash or Docker. Set the IDE's Gradle JVM to JDK 17 and keep project files in UTF-8. Java compilation explicitly uses UTF-8, including on Windows JDK 17 with a legacy default code page.
+
+### Windows / PowerShell
+
+Use a short local checkout path, such as `C:\src\echo`, and run these commands from the repository root:
+
+```powershell
+java -version
+.\gradlew.bat --version
+.\gradlew.bat dev
+# Stop the server with Ctrl+C before starting another instance or cleaning its files.
+.\gradlew.bat check -PtestForks=2
+.\gradlew.bat bootJar
+```
+
+`native` HTTP acceleration is an Undertow entry point, not a Linux-only executable. Windows development uses the same default transport and mock pipeline as Linux. Set environment variables with `$env:NAME = 'value'`; see the [Windows startup instructions](docs/install.md#start-the-server) and [HTTP transport guide](docs/native-http.md).
+
+Git attributes keep source files and Linux launch scripts on LF, and `.bat` files on CRLF. Keep local databases under the checkout's `data` directory and stop Echo before cleaning or moving files that it has open. Deploy the JAR with Linux-specific configuration; do not copy Windows data paths or the `dev` profile into the deployment.
 
 ### Getting Started
 
@@ -44,7 +63,17 @@ node --test src/test/js/*.test.cjs
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 ```
 
-CI runs the Gradle build. Run the Node.js and Python tests yourself when you change the web console or the scripts. Benchmark and stress scripts are described in [scripts/README.md](scripts/README.md) and [docs/performance.md](docs/performance.md).
+For PowerShell, use `.\gradlew.bat` for the Gradle commands above and expand JavaScript test files explicitly:
+
+```powershell
+$testFiles = @(Get-ChildItem src/test/js/*.test.cjs -File | ForEach-Object { $_.FullName })
+node --test @testFiles
+python -m unittest discover -s scripts/tests -p 'test_*.py'
+```
+
+CI keeps the Linux Gradle builds and container check, and adds a Windows JDK 17 build with Java tests, static analysis, web console tests and Windows script compatibility tests from a checkout path containing spaces. The symlink-specific Java test is skipped only when Windows cannot create a symlink; concurrent-writer protection is checked separately on both systems.
+
+Run the Node.js and Python tests yourself when you change the web console or the scripts. Benchmark and stress scripts are described in [scripts/README.md](scripts/README.md) and [docs/performance.md](docs/performance.md). The native HTTP comparison/soak scripts use Linux `taskset`, cgroup v2 or `/proc`; run those on a Linux test host matching deployment. Windows and WSL timings do not replace Linux deployment measurements.
 
 ## Making Changes
 

@@ -6,8 +6,8 @@ How to run Echo: from a single JAR to Docker, external databases and several ins
 
 ## Prerequisites
 
-- Java 17+
-- Gradle 8.14+ (or use the included wrapper)
+- Java 17+ to run a packaged JAR; install JDK 17 for development and the Gradle toolchain
+- Use the included Gradle wrapper (`gradlew.bat` on Windows, `./gradlew` on Linux)
 
 ## Start the Server
 
@@ -35,14 +35,24 @@ pass normal Spring arguments:
 `SQLITE_TMPDIR` can override the default temporary path. This setting does not
 change the configured database profile.
 
-On a Windows development machine, run the equivalent commands in PowerShell:
+Windows development uses PowerShell and the same application as Linux deployment; WSL, Git Bash and a separate Gradle installation are not needed. Set `JAVA_HOME` and the IDE's Gradle JVM to JDK 17. Run from the repository root, preferably a short local path such as `C:\src\echo`:
 
 ```powershell
 .\gradlew.bat dev
+# Stop with Ctrl+C; the commands below are separate tasks.
 .\gradlew.bat bootRun
-.\gradlew.bat bootJar
-java -jar (Get-ChildItem build\libs\echo-server-*.jar | Select-Object -First 1).FullName
+.\gradlew.bat check -PtestForks=2
+# Stop Echo before clean; Windows locks files still in use.
+.\gradlew.bat clean bootJar
+if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
+$echoJars = @(Get-ChildItem build/libs/echo-server-*.jar -File)
+if ($echoJars.Count -ne 1) { throw 'Expected exactly one packaged Echo JAR' }
+java -jar ($echoJars[0].FullName)
 ```
+
+HTTP acceleration is enabled on Windows too. PowerShell uses `$env:ECHO_HTTP_TRANSPORT = 'servlet'` to switch back, then restart Echo. Remove the override with `Remove-Item Env:ECHO_HTTP_TRANSPORT -ErrorAction SilentlyContinue` before restarting to return to the default. Full limits and compatibility are in [HTTP acceleration](native-http.md).
+
+Windows-built Java bytecode can run on Linux with a compatible Java runtime. Deployment uses the packaged JAR, Linux paths and deployment configuration; keep the local SQLite/Artemis data and `dev` profile out of the deployment. The Linux CI/container checks remain the deployment checks, and performance benchmarks run on Linux. The first Gradle build still needs access to the dependency repositories or an already populated company cache.
 
 ## Database profiles
 

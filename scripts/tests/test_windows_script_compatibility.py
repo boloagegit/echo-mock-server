@@ -1,3 +1,4 @@
+from contextlib import closing
 import importlib.util
 from pathlib import Path
 import tempfile
@@ -100,7 +101,7 @@ class MigrationWindowsCompatibilityTest(unittest.TestCase):
             staging = base / "staging.sqlite"
             target = base / "published.sqlite"
             candidate = base / "candidate.sqlite"
-            with self.migration.sqlite3.connect(staging) as connection:
+            with closing(self.migration.sqlite3.connect(staging)) as connection, connection:
                 connection.execute("CREATE TABLE sample (id INTEGER PRIMARY KEY, value TEXT)")
                 connection.execute("INSERT INTO sample(value) VALUES ('ok')")
 
@@ -111,8 +112,37 @@ class MigrationWindowsCompatibilityTest(unittest.TestCase):
                 self.migration.publish_atomic_database(staging, target, candidate)
 
             self.assertTrue(target.is_file())
-            with self.migration.sqlite3.connect(target) as connection:
+            with closing(self.migration.sqlite3.connect(target)) as connection:
                 self.assertEqual("ok", connection.execute("SELECT value FROM sample").fetchone()[0])
+
+    def test_publish_closes_sqlite_handles_before_renaming_candidate(self):
+        connect = self.migration.sqlite3.connect
+        replace = self.migration.os.replace
+        connections = []
+
+        def tracked_connect(*args, **kwargs):
+            connection = connect(*args, **kwargs)
+            connections.append(connection)
+            return connection
+
+        def replace_after_close(source, target):
+            self.assertTrue(connections)
+            for connection in connections:
+                with self.assertRaises(self.migration.sqlite3.ProgrammingError):
+                    connection.execute("SELECT 1")
+            replace(source, target)
+
+        with tempfile.TemporaryDirectory(prefix="Echo Publish ") as temp_dir:
+            base = Path(temp_dir)
+            staging, target, candidate = (base / name for name in ("staging.sqlite", "target.sqlite", "candidate.sqlite"))
+            with closing(connect(staging)) as connection, connection:
+                connection.execute("CREATE TABLE sample (value TEXT)")
+                connection.execute("INSERT INTO sample VALUES ('kept')")
+            with mock.patch.object(self.migration.sqlite3, "connect", side_effect=tracked_connect), \
+                    mock.patch.object(self.migration.os, "replace", side_effect=replace_after_close):
+                self.migration.publish_atomic_database(staging, target, candidate)
+            with closing(connect(target)) as connection:
+                self.assertEqual("kept", connection.execute("SELECT value FROM sample").fetchone()[0])
 
     def test_windows_termination_falls_back_to_taskkill_for_process_tree(self):
         process = FakeProcess(pid=9876)

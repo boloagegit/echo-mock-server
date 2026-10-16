@@ -10,6 +10,17 @@ java -jar echo-server.jar
 
 ## 共用的行為
 
+Windows 開發與 Linux 部署使用相同的預設加速路徑；這裡的 `native` 指直接使用 Undertow API，不代表 Linux 專用程式，也不要求 WSL。Windows 開發與測試使用 `.\gradlew.bat dev`、`.\gradlew.bat check`。
+
+PowerShell 切回 Servlet 的方式如下，設定僅作用於目前 shell 及其啟動的程序：
+
+```powershell
+$env:ECHO_HTTP_TRANSPORT = 'servlet'
+.\gradlew.bat bootRun
+# 停止 Echo 後，移除覆寫即可在下次啟動恢復預設加速。
+Remove-Item Env:ECHO_HTTP_TRANSPORT -ErrorAction SilentlyContinue
+```
+
 原生路徑共用 `HttpMockPipeline`，包含規則快照、模板、JSON/XML 比對、情境狀態、HTTP 轉送、診斷與請求日誌。CPU／資料庫操作和回應編碼放在有上限的 worker pool；網路讀寫與延遲回應不占用 Servlet worker 等待。
 
 `http.server.requests` 使用 Micrometer Observation，保留 method、uri、status、exception、outcome 標籤。設定 tracing bridge 時，標準 receiver tracing handler 能延續傳入的 trace parent；工作執行緒會開啟並關閉對應 scope。這不代表新增了下游 HTTP client span 或 exporter。預設發行檔沒有加入 tracing exporter。
@@ -41,3 +52,5 @@ TLS、壓縮與 graceful shutdown 使用 Spring Boot 原本的 Undertow 設定�
 可觀察的 metrics：`echo.http.native.requests`、`echo.http.native.active`、`echo.http.native.buffered.bytes`、`echo.http.native.queued`。請求完成、斷線、逾時及容量拒絕皆有釋放驗證；單一清理 callback 失敗不能阻止其他 callback 釋放資源。
 
 效能設定必須依部署量測。四核心比較使用 2 個 I/O、8 個 worker；這不是所有機器的通用最佳值。現行驗證見 [正式整合與驗證](native-http-validation-2026-10-16.md)，比較與持續負載腳本位於 [2026-10-16-native](performance/2026-10-16-native/)，歷史結果見 [效能與穩定性報告](performance-hardening-2026-10-16.md)。
+
+上述比較腳本使用 Linux 的 `taskset` 與 cgroup v2，持續負載腳本讀取 `/proc`；請在 Linux 部署測試機執行。Windows 用來驗證開發與功能，Linux 的吞吐、延遲與資源量測才作為部署效能依據。
