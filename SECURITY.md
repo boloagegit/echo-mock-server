@@ -35,6 +35,6 @@ When deploying Echo Mock Server in production:
 
 1. **Change default credentials** — Replace the default `admin/admin` password via `ECHO_ADMIN_PASSWORD` environment variable
 2. **Set a unique Remember Me key** — Override `ECHO_REMEMBER_ME_KEY` with a random secret
-3. **Disable H2 Console** — Set `spring.h2.console.enabled=false` in production
+3. **Keep optional features off unless you need them** — Self-registration, bulk import/export and issue reporting are off by default; see [docs/configuration.md](docs/configuration.md) and [docs/install.md](docs/install.md#optional-features)
 4. **Use HTTPS** — Deploy behind a reverse proxy (e.g., Nginx) with TLS termination
 5. **Restrict network access** — Echo is designed for internal/testing environments; do not expose to the public internet without proper access controls
