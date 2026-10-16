@@ -101,7 +101,7 @@ taskset -c 0-3 python3 scripts/bench/2026-10-16-hardening/startup/probe.py \
 | 50 ms 延遲 Mock，併發 64 | 1,254 | 1,223 | 1.03× |
 | 壓力後固定回覆，併發 8 | 65,918 | 47,230 | 1.40× |
 
-慢速下游與刻意延遲的處理量受等待時間限制，改善只有約 3–5%。表中的大型規則與 XML 收益也與兩者匹配方式有關，不能全歸因於 HTTP 伺服器。這批資料的 jar SHA 與回歸摘要記錄於 `http-regression.json`；它在後續 WebJars 啟動依賴調整前建置，不能把其記憶體／啟動數字當成調整後的結果。
+慢速下游與刻意延遲的處理量受等待時間限制，改善只有約 3–5%。表中的大型規則與 XML 收益也與兩者匹配方式有關，不能全歸因於 HTTP 伺服器。這批資料的 jar 在後續 WebJars 啟動依賴調整前建置，不能把其記憶體／啟動數字當成調整後的結果。
 
 兩輪 Echo 轉發結束後，active／leased／pending／buffered response bytes 均歸零，沒有容量拒絕或目標轉發失敗。此檢查及短時間測量不能代替長時間 soak。
 
@@ -109,7 +109,7 @@ taskset -c 0-3 python3 scripts/bench/2026-10-16-hardening/startup/probe.py \
 
 ### 相同到達率下的延遲
 
-後續使用已含 WebJars Lite 的最終實驗 jar（SHA 見 `http-regression-final.json`），以 wrk2、64 連線、每階段 30 秒補一組 Echo → WireMock；WireMock 使用 32 container workers。這組只有一次、沒有 ABBA，不能從它證明所有負載的尾端延遲穩定勝出。兩者皆無 HTTP／socket 錯誤。
+後續使用已含 WebJars Lite 的最終實驗 jar，以 wrk2、64 連線、每階段 30 秒補一組 Echo → WireMock；WireMock 使用 32 container workers。這組只有一次、沒有 ABBA，不能從它證明所有負載的尾端延遲穩定勝出。兩者皆無 HTTP／socket 錯誤。
 
 | 目標 req/s | Echo 實際 req/s | WireMock 實際 req/s | Echo P99 ms | WireMock P99 ms | Echo P99.9 ms | WireMock P99.9 ms |
 |---|---:|---:|---:|---:|---:|---:|

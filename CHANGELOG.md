@@ -13,7 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - SQLite online backups now pass destination paths directly to the driver, so paths containing spaces or apostrophes work without the driver's limited command parser. Snapshot integrity checks and atomic publication remain in place.
 
 ### Changed
-- The benchmark scripts moved from `docs/performance/` to `scripts/bench/`, keeping their layout, and the raw measurement files (about 2,300 text and JSON files) were removed from the repository and its history to keep clones small. The performance documents keep the summarized numbers and point to the scripts for reruns; rerun output under `scripts/bench/**/results/` is ignored by git.
+- The benchmark scripts moved from `docs/performance/` to `scripts/bench/`, keeping their layout, and the raw measurement files (about 2,300 text and JSON files) were removed from the repository to keep it small. The performance documents keep the summarized numbers and point to the scripts for reruns; rerun output under `scripts/bench/**/results/` is ignored by git.
 
 ## [v2026.10.16] — 2026-10-16
 
