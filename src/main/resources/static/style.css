@@ -4522,3 +4522,5 @@ select.form-select-sm { height: var(--control-h-sm); min-height: var(--control-h
 
 .memory-source-comparison { margin-top: 1rem; }
 .memory-source-comparison h3 { font-size: 1rem; margin: 0 0 .5rem; }
+.memory-source-comparison th:first-child { width: 55%; white-space: normal; overflow-wrap: anywhere; }
+.memory-source-comparison td { white-space: nowrap; }

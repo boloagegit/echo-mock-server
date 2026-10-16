@@ -71,7 +71,16 @@ test('GC labels exist in both languages and do not promise leak freedom', () => 
   const source = fs.readFileSync(path.resolve(__dirname, '../../main/resources/static/components/GcHistoryPanel.js'), 'utf8');
   for (const locale of ['en', 'zh-TW']) {
     const strings = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../main/resources/static/i18n/' + locale + '.json'), 'utf8'));
-    for (const match of source.matchAll(/t\('monitoring\.gc\.([^']+)'/g)) assert.equal(typeof strings.monitoring.gc[match[1]], 'string', match[1]);
+    for (const match of source.matchAll(/t\('monitoring\.gc\.([^']+)'\s*[,)]/g)) {
+      assert.equal(typeof match[1].split('.').reduce((value, key) => value?.[key], strings.monitoring.gc), 'string', match[1]);
+    }
+    const { instance } = fixture(async () => {});
+    instance.t = (key, params) => key.split('.').reduce((value, name) => value?.[name], strings)?.replace('{value}', params.value);
+    for (const seconds of [60, 61, 86400]) {
+      const text = instance.retentionAge(seconds);
+      assert.equal(typeof text, 'string');
+      assert.doesNotMatch(text, /undefined|NaN|\.\d{3}/);
+    }
   }
   assert.doesNotMatch(source, /setInterval|localStorage|method:\s*['"]POST/);
 });
