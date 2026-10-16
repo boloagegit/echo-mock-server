@@ -125,8 +125,8 @@ dependencies {
     implementation 'org.webjars.npm:fontsource__jetbrains-mono:4.5.11'
 
     // Feign (compileOnly - for MockRedirectClient reference code)
-    compileOnly 'io.github.openfeign:feign-core:13.13'
-    testImplementation 'io.github.openfeign:feign-core:13.13'
+    compileOnly 'io.github.openfeign:feign-core:13.17'
+    testImplementation 'io.github.openfeign:feign-core:13.17'
 
     // Lombok
     compileOnly 'org.projectlombok:lombok'
