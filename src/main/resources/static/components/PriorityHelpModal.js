@@ -14,6 +14,8 @@ const PriorityHelpModal = {
     const { ref, computed, watch, nextTick, onBeforeUnmount, inject } = Vue;
     const t = inject('t');
     const activeTocId = ref('');
+    // A quiet line about the hidden game, only when the server allows it (ECHO_UI_EASTER_EGG).
+    const secretHint = ref(false);
     const helpContentRef = ref(null);
     const helpDialogRef = ref(null);
     const helpOverlayRef = ref(null);
@@ -104,6 +106,7 @@ const PriorityHelpModal = {
 
     watch(() => props.show, (val) => {
       if (val) {
+        secretHint.value = window.EchoEasterEgg?.isEnabled?.() === true;
         previousFocus = document.activeElement;
         document.addEventListener('keydown', handleModalKeydown);
         nextTick(() => {
@@ -184,7 +187,7 @@ const PriorityHelpModal = {
       }
     };
 
-    return { tocItems, helpTabItems, activeTocId, helpContentRef, helpDialogRef, helpOverlayRef, closeButtonRef, scrollTo, setHelpTab, t };
+    return { tocItems, helpTabItems, activeTocId, secretHint, helpContentRef, helpDialogRef, helpOverlayRef, closeButtonRef, scrollTo, setHelpTab, t };
   },
   template: /* html */`
   <ui-modal-transition>
@@ -265,6 +268,7 @@ const PriorityHelpModal = {
               <h3>{{t('help.ruleProtection')}}</h3>
               <p>{{t('help.ruleProtectionDesc')}}</p>
             </div>
+            <p v-if="secretHint" class="sub-info help-secret">{{t('help.secretHint')}}</p>
           </div>
           <!-- HTTP -->
           <div v-if="helpTab==='http'" id="help-panel-http" role="tabpanel" aria-labelledby="help-tab-http">

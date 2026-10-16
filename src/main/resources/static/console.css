@@ -1100,7 +1100,19 @@ html.easter-egg-flash::after {
     30% { opacity: 0.28 }
     100% { opacity: 0 }
 }
+/* The help dialog mentions the game in one quiet line, only when it is enabled. */
+.help-secret { margin-top: var(--space-xl); opacity: 0.8 }
+/* The Echo logo winks now and then (easter-egg.js adds .is-winking): a hint that clicking it does something. */
+.sidebar-brand.is-winking .brand-icon { animation: brand-wink 900ms var(--ease-standard) }
+.sidebar-brand.is-winking .brand-mark::after { animation: brandEcho var(--motion-slow) var(--ease-standard) }
+@keyframes brand-wink {
+    0%, 100% { transform: none }
+    25% { transform: scale(1.18) rotate(-8deg) }
+    50% { transform: scale(0.94) rotate(4deg) }
+    75% { transform: scale(1.04) rotate(-2deg) }
+}
 @media (prefers-reduced-motion: reduce) {
     .echo-strike { transition: none }
     html.easter-egg-flash::after { display: none }
+    .sidebar-brand.is-winking .brand-icon, .sidebar-brand.is-winking .brand-mark::after { animation: none }
 }

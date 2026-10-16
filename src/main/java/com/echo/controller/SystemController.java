@@ -102,7 +102,7 @@ public class SystemController {
     @Value("${echo.ui.accent:teal}")
     private String uiAccent;
 
-    /** 介面彩蛋（↑↑↓↓←→←→AB 小遊戲）；正式環境可用 ECHO_UI_EASTER_EGG=false 關閉。 */
+    /** 介面彩蛋（↑↑↓↓←→←→AB 或連點 Echo 圖示 5 下開小遊戲）；正式環境可用 ECHO_UI_EASTER_EGG=false 關閉。 */
     @Value("${echo.ui.easter-egg:true}")
     private boolean uiEasterEgg;
 

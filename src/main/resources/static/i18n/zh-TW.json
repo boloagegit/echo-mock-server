@@ -1816,6 +1816,7 @@
     "kbNewRule": "新增規則／回應",
     "kbCloseModal": "關閉對話框",
     "kbHint": "輸入框聚焦時快捷鍵不會觸發（Esc 除外）",
+    "secretHint": "小秘密：在任何頁面輸入 ↑ ↑ ↓ ↓ ← → ← → B A，或快速連點左上角的 Echo 圖示 5 下。",
     "httpRequestFlow": "HTTP 請求流程",
     "httpRuleFields": "HTTP 規則欄位",
     "fieldTargetHost": "只用於規則匹配（如 <code>api.example.com</code>），留空匹配全部；不會修改實際轉發主機",
