@@ -131,7 +131,7 @@ Echo 以串流方式讀 XML，條件一判斷完就停止，不讀剩下的內�
 - 嚴格模式（`wait-for-write=true`）與舊版相同：每個回應都等記錄寫入；記錄寫不進去時回 503。
 - 在這組很重的壓測裡，約 4% 的記錄在進入暫存檔前被丟掉（壓測期間約 48 萬筆中丟了約 2 萬筆）。其餘的都進了暫存檔；和舊版一樣，資料庫最後只保留最新的 10,000 筆。
 - 壓測後的程序記憶體與舊版相同（約 1.2 GB）；完整回收後的 heap 較低：約 58 MB，舊版約 175 MB。
-- 詳細行為與設定見 README 的 *Backup and request-log spool boundaries*。
+- 詳細行為與設定見[安裝與部署](install.md#backup-and-request-log-spool-boundaries)的 *Backup and request-log spool boundaries*。
 
 ## 改規則時不卡請求
 
@@ -233,6 +233,7 @@ python3 scripts/bench-vs-wiremock-summary.py ./bench-out
 | `scripts/perf-test-downstream.py` | 轉發測試用的下游服務 |
 | `scripts/stress-test-1600-rules.py`、`stress-test-xml-body.py`、`stress-test-scenario1.py` | 規則數量、XML 大小、單一情境 |
 | `scripts/stress-test-memory.py`、`stress-test-jms-match.py` | 記憶體與 JMS 比對壓力 |
+| `scripts/test-match-scenarios.py` | 比對情境回歸測試（69 個案例） |
 
 ## 歷史結果
 
@@ -281,4 +282,4 @@ python3 scripts/bench-vs-wiremock-summary.py ./bench-out
 
 - 1,600 條規則的比對時間：冷快取 10 ms、熱快取 6 ms；6 條規則時 3 ms。
 - XML 大小：約 1 KB 時 16 ms，約 100 KB 時 35 ms；JSON 維持 4～6 ms。這是當時 DOM 解析的結果，之後已改為串流解析。
-- 更完整的轉發、慢下游隔離與 JMS 量測見 [performance-baseline-2026-08-10.md](performance-baseline-2026-08-10.md) 與 [jms-memory-benchmark-2026-08-22.md](jms-memory-benchmark-2026-08-22.md)。
+- 更完整的轉發、慢下游隔離與 JMS 量測見 [performance-baseline-2026-08-10.md](archive/performance-baseline-2026-08-10.md) 與 [jms-memory-benchmark-2026-08-22.md](archive/jms-memory-benchmark-2026-08-22.md)。

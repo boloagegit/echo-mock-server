@@ -936,4 +936,3 @@ Running 10s test @ http://127.0.0.1:18080/x/small
   171571 requests in 10.01s, 19.14MB read
 Requests/sec:  17136.57
 Transfer/sec:      1.91MB
-

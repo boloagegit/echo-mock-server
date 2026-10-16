@@ -390,4 +390,3 @@ Use jcmd 25522 JFR.dump name=perf to copy recording data to file.
 Stopped recording "perf", 3.2 MB written to:
 
 /workspace/scratch/echo-perf/results/io-compare/echo-io1-r2/profile.jfr
-

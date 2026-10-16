@@ -24,7 +24,7 @@
 
 | 狀態 | 功能 | 說明 |
 |------|------|------|
-| 已完成 | OpenAPI/Swagger 匯入 | 上傳 spec、預覽並產生 mock 規則 |
+| 已完成、預設關閉 | OpenAPI/Swagger 匯入 | 上傳 spec、預覽並產生 mock 規則 |
 | 已完成、預設關閉 | Stateful Scenarios | 狀態機模擬多步驟對話流程 |
 | 已完成 | Fault Injection | connection reset、empty response |
 | 已完成 | Faker 假資料產生 | 內建假名字、地址、email 等產生器 |

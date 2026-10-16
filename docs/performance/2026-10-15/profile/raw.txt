@@ -166,4 +166,3 @@ Use jcmd 21884 JFR.dump name=perf to copy recording data to file.
 Stopped recording "perf", 5.1 MB written to:
 
 /workspace/scratch/echo-perf/results/profile/wiremock-no-journal-r1/profile.jfr
-
