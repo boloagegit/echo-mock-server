@@ -4,7 +4,7 @@
 
 網頁管理介面背後的主要 API。ADMIN 表示只有管理員可用。
 
-**權限。** 寫入（POST、PUT、DELETE）一定要登入。預設有一些唯讀 GET 不用登入：
+**權限。** 寫入（POST、PUT、DELETE）需要登入，例外是登入本身（`/api/auth/**`），以及帳號申請的 `POST /api/admin/builtin-users/forgot-password` 與 `POST /api/admin/builtin-users/register`。預設有一些唯讀 GET 不用登入：
 - `/api/admin/status`
 - 規則查詢：`/api/admin/rules/{id}`、`/rules/page`、`/rules/groups`、`/rules/group`、`/rules/import-template`、`/rules/{id}/audit`、`/rules/{id}/order`（`/rules/export` 仍限 ADMIN）
 - `/api/admin/audit`

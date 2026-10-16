@@ -4,7 +4,7 @@
 
 The main admin API endpoints behind the web console. ADMIN marks administrator-only endpoints.
 
-**Access.** Writes (POST, PUT, DELETE) always need a signed-in user. Some read-only GET endpoints are public by default:
+**Access.** Writes (POST, PUT, DELETE) need a signed-in user, except sign-in itself (`/api/auth/**`) and the account requests `POST /api/admin/builtin-users/forgot-password` and `POST /api/admin/builtin-users/register`. Some read-only GET endpoints are public by default:
 - `/api/admin/status`
 - rule reads: `/api/admin/rules/{id}`, `/rules/page`, `/rules/groups`, `/rules/group`, `/rules/import-template`, `/rules/{id}/audit` and `/rules/{id}/order` (`/rules/export` stays ADMIN-only)
 - `/api/admin/audit`
