@@ -2,7 +2,17 @@
 
 [← 文件目錄](README.md)
 
-網頁管理介面背後的 API。除非標示公開，都需要登入；ADMIN 表示只有管理員可用。
+網頁管理介面背後的主要 API。ADMIN 表示只有管理員可用。
+
+**權限。** 寫入（POST、PUT、DELETE）一定要登入。預設有一些唯讀 GET 不用登入：
+- `/api/admin/status`
+- 規則查詢：`/api/admin/rules/{id}`、`/rules/page`、`/rules/groups`、`/rules/group`、`/rules/import-template`、`/rules/{id}/audit`、`/rules/{id}/order`（`/rules/export` 仍限 ADMIN）
+- `/api/admin/audit`
+- `/api/admin/responses/{id}`、`/responses/{id}/rules`、`/responses/summary`
+
+一次取回全部的 `GET /api/admin/rules`、`GET /api/admin/responses`，以及請求紀錄，都需要登入。實際以 `src/main/java/com/echo/config/SecurityConfig.java` 為準。
+
+**範圍。** 這裡沒有列出全部路徑。管理介面還會用到宣告式規則、狀態機場景、規則順序分析、HTTP 與 JMS 目標連線、資源監控與請求紀錄詳情等 API。
 
 ## 規則管理
 

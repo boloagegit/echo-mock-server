@@ -2,7 +2,7 @@
 
 [← Documentation index](README.md)
 
-Every setting in `application.yml`, and how sign-in and permissions work.
+The main settings in `application.yml`, and how sign-in and permissions work. For every setting, with comments, see [`src/main/resources/application.yml`](../src/main/resources/application.yml).
 
 ## application.yml
 

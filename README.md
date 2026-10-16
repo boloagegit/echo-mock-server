@@ -148,7 +148,7 @@ These numbers apply only to this workload. The full method, bottlenecks and reru
 | [Configuration and authentication](docs/configuration.md) | `application.yml`, LDAP, built-in accounts, roles |
 | [Rules and responses](docs/rules.md) | Priority, conditions, tags, scenarios, templates |
 | [JMS](docs/jms.md) | Embedded broker, ESB forwarding, shared-broker setup |
-| [REST API](docs/api.md) | Every admin endpoint |
+| [REST API](docs/api.md) | The main admin endpoints |
 | [All documentation](docs/README.md) | SSE, monitoring, diagnostics, recovery and more |
 
 ## Contributing

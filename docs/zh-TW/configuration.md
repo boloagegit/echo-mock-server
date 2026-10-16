@@ -2,7 +2,7 @@
 
 [← 文件目錄](README.md)
 
-`application.yml` 的每個設定，以及登入與權限。
+`application.yml` 的主要設定，以及登入與權限。完整設定與說明見 [`src/main/resources/application.yml`](../../src/main/resources/application.yml)。
 
 ## application.yml
 

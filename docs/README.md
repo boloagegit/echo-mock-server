@@ -7,10 +7,10 @@
 | Guide | What you'll find |
 |-------|------------------|
 | [Installation and deployment](install.md) | Run the JAR, Windows, Docker, database profiles, migrating from H2, multi-instance setups, and sending traffic to Echo (direct calls, Nginx, outbound HTTPS) |
-| [Configuration and authentication](configuration.md) | Every `application.yml` setting, auth modes, roles and built-in accounts |
+| [Configuration and authentication](configuration.md) | The main `application.yml` settings, auth modes, roles and built-in accounts |
 | [Rules and matching](rules.md) | Priority, tags, HTTP and JMS rules, condition syntax, `matchSpec`, stateful scenarios and response templates |
 | [JMS](jms.md) | The embedded broker, forwarding to TIBCO EMS or Artemis, and receiving from a shared broker |
-| [REST API](api.md) | Every admin endpoint behind the console |
+| [REST API](api.md) | The main admin endpoints behind the console |
 
 ## Features in depth
 

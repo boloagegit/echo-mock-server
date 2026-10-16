@@ -7,10 +7,10 @@
 | 文件 | 內容 |
 |------|------|
 | [安裝與部署](install.md) | 啟動 JAR、Windows、Docker、資料庫 Profile、從 H2 遷移、多實例部署，以及如何把流量導進 Echo（直接呼叫、Nginx、對外 HTTPS） |
-| [設定與認證](configuration.md) | `application.yml` 所有設定、認證模式、權限與內建帳號 |
+| [設定與認證](configuration.md) | `application.yml` 主要設定、認證模式、權限與內建帳號 |
 | [規則與比對](rules.md) | 優先順序、標籤、HTTP 與 JMS 規則、條件語法、`matchSpec`、狀態機場景與回應模板 |
 | [JMS](jms.md) | 內建 broker、轉發到 TIBCO EMS 或 Artemis、從共用 broker 接收 |
-| [REST API](api.md) | 管理介面背後的所有 API |
+| [REST API](api.md) | 管理介面背後的主要 API |
 
 ## 功能細節（英文）
 

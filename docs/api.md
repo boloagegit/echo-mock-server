@@ -2,7 +2,17 @@
 
 [← Documentation index](README.md)
 
-The admin API behind the web console. Every endpoint needs a signed-in user unless marked public; ADMIN marks administrator-only endpoints.
+The main admin API endpoints behind the web console. ADMIN marks administrator-only endpoints.
+
+**Access.** Writes (POST, PUT, DELETE) always need a signed-in user. Some read-only GET endpoints are public by default:
+- `/api/admin/status`
+- rule reads: `/api/admin/rules/{id}`, `/rules/page`, `/rules/groups`, `/rules/group`, `/rules/import-template`, `/rules/{id}/audit` and `/rules/{id}/order` (`/rules/export` stays ADMIN-only)
+- `/api/admin/audit`
+- `/api/admin/responses/{id}`, `/responses/{id}/rules` and `/responses/summary`
+
+The full lists `GET /api/admin/rules` and `GET /api/admin/responses`, and the request logs, need sign-in. `src/main/java/com/echo/config/SecurityConfig.java` is the authority.
+
+**Coverage.** This page does not list every route. The console also calls endpoints for declarative rules, scenarios, rule-order analysis, HTTP and JMS target connections, resource monitoring, and request-log details.
 
 ## Rule Management
 

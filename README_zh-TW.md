@@ -148,7 +148,7 @@ curl http://localhost:8080/mock/users/1 -H 'X-Original-Host: api.example.com'
 | [設定與認證](docs/zh-TW/configuration.md) | `application.yml`、LDAP、內建帳號、權限 |
 | [規則與回應](docs/zh-TW/rules.md) | 優先順序、條件、標籤、狀態機場景、模板 |
 | [JMS](docs/zh-TW/jms.md) | 內建 broker、ESB 轉發、共用 broker |
-| [REST API](docs/zh-TW/api.md) | 所有管理 API |
+| [REST API](docs/zh-TW/api.md) | 主要管理 API |
 | [全部文件](docs/zh-TW/README.md) | SSE、資源監控、交易診斷、SQLite 復原等 |
 
 ## 參與貢獻
