@@ -2,6 +2,7 @@ package com.echo.config;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -9,7 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /** Explicit bounds for the native adapter, including callbacks waiting to encode a response. */
-final class NativeHttpResources implements AutoCloseable {
+public final class NativeHttpResources implements AutoCloseable {
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(NativeHttpResources.class);
     final ThreadPoolExecutor workers;
     final int maxBodyBytes;
@@ -43,6 +44,13 @@ final class NativeHttpResources implements AutoCloseable {
 
     int active() { return active.get(); }
     long bufferedBytes() { return buffered.get(); }
+
+    /** O(1) counters only; never enumerates requests or their bodies. */
+    public Map<String, Object> resourceMetricsSnapshot() {
+        return Map.of("nativeActive", active.get(), "nativeBufferedBytes", buffered.get(),
+                "nativeQueued", workers.getQueue().size(), "nativeCapacity", maxRequests,
+                "nativeBufferLimitBytes", maxBufferedBytes);
+    }
 
     @Override
     public void close() { workers.shutdownNow(); }

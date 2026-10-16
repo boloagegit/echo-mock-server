@@ -7,6 +7,7 @@ import com.echo.diagnostics.TransactionDiagnostics;
 import com.echo.config.CacheConfig;
 import com.echo.config.JmsProperties;
 import com.echo.config.MonitoringProperties;
+import com.echo.config.NativeHttpResources;
 import com.echo.config.SqliteSerializingJpaTransactionManager;
 import com.echo.config.SqliteRecoveryEnvironmentPostProcessor;
 import com.echo.controller.UniversalMockController;
@@ -52,6 +53,12 @@ public class ResourceMonitoringService {
     private final ObjectProvider<LogAgent> logAgent;
     private final JmsProperties jmsProperties;
     private TransactionDiagnostics diagnostics;
+    private ObjectProvider<NativeHttpResources> nativeHttp;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setNativeHttp(ObjectProvider<NativeHttpResources> nativeHttp) {
+        this.nativeHttp = nativeHttp;
+    }
 
     @org.springframework.beans.factory.annotation.Autowired
     public void setDiagnostics(TransactionDiagnostics diagnostics) { this.diagnostics = diagnostics; }
@@ -193,8 +200,16 @@ public class ResourceMonitoringService {
     }
 
     protected Map<String, Object> http() {
+        Map<String, Object> values = new LinkedHashMap<>();
         HttpOutboundForwarder forwarder = http.getIfAvailable();
-        return forwarder == null ? Map.of() : forwarder.resourceMetricsSnapshot();
+        if (forwarder != null) {
+            values.putAll(forwarder.resourceMetricsSnapshot());
+        }
+        NativeHttpResources nativeResources = nativeHttp == null ? null : nativeHttp.getIfAvailable();
+        if (nativeResources != null) {
+            values.putAll(nativeResources.resourceMetricsSnapshot());
+        }
+        return values;
     }
 
     protected Map<String, Object> database() {

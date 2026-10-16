@@ -5,7 +5,7 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
-/** Controls only the resource snapshot feature, never resource safety limits. */
+/** Controls resource observations, never resource safety limits. */
 @Component
 @ConfigurationProperties(prefix = "echo.monitoring")
 @Getter
@@ -13,6 +13,9 @@ import org.springframework.stereotype.Component;
 public class MonitoringProperties {
     private boolean enabled = true;
     private boolean jvmEnabled = true;
+    private boolean gcEnabled = true;
+    private int gcHistoryCapacity = 512;
+    private long gcHistoryMaxAgeSeconds = 86400;
     private boolean cachesEnabled = true;
     private boolean schedulerEnabled = true;
     private boolean jmsEnabled = true;

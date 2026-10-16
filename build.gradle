@@ -217,6 +217,15 @@ tasks.register('dockerDiagnosticFixtureJar', Jar) {
     }
 }
 
+// Standalone Windows/Linux load fixture; no Docker or application packaging dependency.
+tasks.register('memoryObservationFixtureJar', Jar) {
+    dependsOn testClasses
+    archiveFileName = 'echo-memory-observation-fixture.jar'
+    from(sourceSets.test.output) {
+        include 'com/echo/diagnostics/MemoryObservationFixture*.class'
+    }
+}
+
 jacocoTestReport {
     dependsOn test
     reports {

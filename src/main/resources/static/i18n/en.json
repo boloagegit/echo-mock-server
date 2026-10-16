@@ -138,7 +138,7 @@
     "thUpdated": "Last Updated",
     "thActions": "Actions",
     "noCondition": "Default match",
-    "sseStream": "SSE Stream",
+    "sseStream": "SSE stream",
     "forward": "Forward",
     "targetPrefix": "Source host: ",
     "isProtected": "Protected",
@@ -377,7 +377,6 @@
     "pvTargetHost": "Source host",
     "conditionCountSummary": "{count} conditions",
     "tagCountSummary": "{count} tags",
-    "sseStream": "SSE stream",
     "sseEventCount": "{count} events",
     "sseTotal": "{duration} total",
     "sseLoops": "Loops",
@@ -698,6 +697,29 @@
     "changesTitle": "Changes"
   },
   "monitoring": {
+    "gc": {
+      "title": "GC events",
+      "refresh": "Refresh GC history",
+      "hint": "Records each JVM notification even while this page is closed. Refresh is read-only and never requests GC.",
+      "retention": "Showing {shown} events; limits: {capacity} events / {hours} hours. Recorded {total}; removed for capacity {overwritten}; expired {expired}.",
+      "recordingSince": "Recording since:",
+      "incomplete": "Some observations are unavailable. Notification errors: {failures}. Unsupported collectors:",
+      "collector": "Collector",
+      "allCollectors": "All collectors",
+      "afterTrend": "Heap used after each GC",
+      "scale": "Vertical scale: 0 –",
+      "empty": "No GC events for this selection yet. This does not indicate a leak.",
+      "time": "Completed at",
+      "kind": "Collector / action / cause",
+      "duration": "GC duration",
+      "before": "Heap before",
+      "after": "Heap after",
+      "reclaimed": "Net reclaimed",
+      "pools": "Memory pools",
+      "previous": "Previous",
+      "next": "Next",
+      "interpretation": "Objects still reachable after GC are normal. Young GC does not reclaim the whole heap; compare the same collector and comparable load after warm-up. Concurrent GC duration is not stop-the-world pause time; negative reclaimed bytes mean usage grew during the event. This history is not proof of a leak or protection against OOM. Direct/native memory and process limits also matter."
+    },
     "title": "Resource monitoring",
     "manualHint": "Manual snapshots only. Observations aid diagnosis, not a live health guarantee.",
     "export": "Export snapshot",
@@ -724,8 +746,19 @@
     "noMetricsInColumn": "No metrics in this category.",
     "noCacheRequests": "No queries yet",
     "cacheHitRateSource": "Rule cache hit rates come from service information, which may be sampled separately",
-    "columns": { "current": "Current usage and processing", "cumulative": "Since process start", "limits": "Limits, configuration and times" },
-    "links": { "jvm": "Memory and GC", "jms": "JMS monitoring", "http": "HTTP monitoring", "database": "Database and writes", "requestLog": "Write monitoring", "storage": "Data and backups" },
+    "columns": {
+      "current": "Current usage and processing",
+      "cumulative": "Since process start",
+      "limits": "Limits, configuration and times"
+    },
+    "links": {
+      "jvm": "Memory and GC",
+      "jms": "JMS monitoring",
+      "http": "HTTP monitoring",
+      "database": "Database and writes",
+      "requestLog": "Write monitoring",
+      "storage": "Data and backups"
+    },
     "detailNotes": {
       "memory": "Heap includes objects awaiting collection; one snapshot cannot establish a leak. Committed non-heap is not a limit. Buffers exclude some process and SQLite memory. Cumulative GC time is not the longest pause.",
       "cache": "Weights estimate capacity, not exact heap. Rule cache entries are query keys, not the total number of rules.",
@@ -781,6 +814,11 @@
       "http": "Completions include error responses. Partial pool totals do not cover all pools."
     },
     "metrics": {
+      "nativeActive": "Native HTTP active requests",
+      "nativeBufferedBytes": "Native HTTP reserved buffers",
+      "nativeQueued": "Native HTTP queued tasks",
+      "nativeCapacity": "Native HTTP request limit",
+      "nativeBufferLimitBytes": "Native HTTP buffer budget",
       "heapUsedBytes": "Heap used",
       "heapMaxBytes": "Heap maximum",
       "nonHeapUsedBytes": "Non-heap used",
@@ -869,11 +907,25 @@
       "diagnosticRetainedLimitBytes": "Diagnostic retention byte limit",
       "dataFreeBytes": "Data filesystem free",
       "backupFreeBytes": "Backup filesystem free"
+    },
+    "sources": {
+      "title": "Possible sources of memory growth",
+      "hint": "Compare these counters with the GC trend to narrow down candidates. Counts and reservations are not exact retained heap sizes; growth does not by itself prove a leak. Use the page refresh to collect another resource snapshot.",
+      "period": "Comparison: {from} → {to}. These snapshots are independent of GC events.",
+      "firstSample": "No earlier snapshot from this process. Refresh the page data later to compare.",
+      "source": "Resource / metric",
+      "change": "Change since previous snapshot"
     }
   },
   "settings": {
     "title": "Settings",
-    "tabs": { "overview": "Overview", "monitoring": "Resources", "connections": "Forwarding connections", "data": "Data and backups", "service": "Service settings" },
+    "tabs": {
+      "overview": "Overview",
+      "monitoring": "Resources",
+      "connections": "Forwarding connections",
+      "data": "Data and backups",
+      "service": "Service settings"
+    },
     "manualRefreshHint": "Updated on entry and explicit refresh; no automatic polling.",
     "configurationAndMonitoring": "Configuration and monitoring",
     "databaseConnectionDetails": "Database connection settings",

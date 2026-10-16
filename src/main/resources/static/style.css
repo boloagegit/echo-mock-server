@@ -4500,3 +4500,22 @@ select.form-select-sm { height: var(--control-h-sm); min-height: var(--control-h
     .sse-ed-search { flex: 1 1 100% }
     .sse-ed-tool-buttons { flex-wrap: wrap; margin-left: 0 }
 }
+
+/* GC history: bounded chart and paged event detail. */
+.gc-history { margin-top: var(--space-lg); padding-top: var(--space-md); border-top: 1px solid var(--border) }
+.gc-history-toolbar { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; margin-block: var(--space-sm) }
+.gc-history-toolbar h3 { margin: 0 auto 0 0; font-size: var(--font-sm) }
+.gc-collector-filter { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; font-size: var(--font-sm) }
+.gc-collector-filter select { max-width: 100%; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-control); padding: var(--space-xs) }
+.gc-chart { margin: var(--space-md) 0; font-size: var(--font-xs); color: var(--muted) }
+.gc-chart svg { display: block; width: 100%; max-height: 220px }
+.gc-chart-axis { stroke: var(--border) }
+.gc-chart-line { stroke: var(--primary); stroke-width: 2 }
+.gc-chart-dot { fill: var(--primary) }
+.gc-chart-times { display: flex; justify-content: space-between; gap: var(--space-sm) }
+.gc-table-scroll { overflow-x: auto }
+.settings-workspace .gc-events-table { min-width: 1000px; table-layout: auto; font-variant-numeric: tabular-nums }
+.gc-events-table small { display: block; color: var(--muted); max-width: 300px; overflow-wrap: anywhere }
+.resource-monitoring-details .gc-pool-details summary { display: block; min-height: 0; padding: var(--space-xs); font-size: var(--font-xs) }
+.gc-pool-details dl { font-size: var(--font-xs); min-width: 200px; margin: var(--space-sm) }
+.gc-pool-details dt { overflow-wrap: anywhere }

@@ -4,7 +4,6 @@ on:
   push:
     branches: [main, master]
   pull_request:
-    branches: [main, master]
 
 # Cancel in-progress jobs when a new commit is pushed to the same branch/PR
 concurrency:
@@ -113,6 +112,9 @@ jobs:
 
       - name: Windows script compatibility tests
         run: python -m unittest discover -s scripts/tests -p test_windows_script_compatibility.py
+
+      - name: Memory observation analyzer tests
+        run: python -m unittest discover -s scripts/tests -p test_memory_observability.py
 
       - name: Build, test and analyze from a path containing spaces
         run: .\gradlew.bat build jacocoTestReport -PtestForks=2 --no-daemon

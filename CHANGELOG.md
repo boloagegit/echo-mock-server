@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [Unreleased]
 
 ### Added
+- ADMIN-only per-GC history and post-GC heap chart in Settings, retaining at most 512 events / 24 hours by default with idle housekeeping and explicit eviction/expiry counts. Reads never force GC. Resource-counter comparisons help narrow possible sources of growth; an isolated Windows/Linux HTTP/JMS observation harness checks heap, native memory, threads and cleanup, with opt-in class histograms for further investigation.
 - Windows development now has a JDK 17 CI build from a checkout path containing spaces, alongside the existing Linux deployment checks. Java source compilation explicitly uses UTF-8; checkout line endings, TLS test tools, SQLite backup paths and symlink test privileges account for Windows. SQLite integration tests close their Spring-managed connection pools before deleting temporary databases. PowerShell development/configuration examples are documented, while deployment performance tools explicitly require Linux.
 - SQLite migration and crash-check scripts explicitly close their database connections, releasing Windows file handles before publishing or cleaning up database files. Migration opens files with the write access Windows requires to flush data to disk before publication.
 - SQLite online backups now pass destination paths directly to the driver, so paths containing spaces or apostrophes work without the driver's limited command parser. Snapshot integrity checks and atomic publication remain in place.

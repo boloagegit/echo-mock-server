@@ -18,6 +18,7 @@
 |-------|------------------|
 | [SSE mocks](sse-mock.md) | The Server-Sent Events contract, event sequences and playback |
 | [Resource monitoring](resource-monitoring.md) | Resource snapshots and JMS policy diagnostics in Settings |
+| [GC history and memory observations](gc-observability.md) | Per-GC results, bounded history and repeatable HTTP/JMS load-idle tests |
 | [Transaction diagnostics](transaction-diagnostics.md) | Bounded per-transaction diagnostics for hard-to-reproduce problems |
 | [SQLite recovery](sqlite-recovery.md) | How Echo checks and recovers a SQLite database at startup |
 
