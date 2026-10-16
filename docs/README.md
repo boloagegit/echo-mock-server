@@ -29,6 +29,10 @@
 | [HTTP acceleration](native-http.md) | Default native transport, limits, compatibility and rollback (Traditional Chinese) |
 | [Native HTTP validation](native-http-validation-2026-10-16.md) | Current comparisons, latency, lifecycle checks and evidence (Traditional Chinese) |
 | [JMS performance and correctness](jms-performance-and-correctness.md) | Session reuse, reply isolation and transaction behavior (Traditional Chinese) |
+| [HTTP I/O tuning](http-io-tuning.md) | I/O and worker thread settings, and when changing them helps (Traditional Chinese) |
+| [Performance and startup hardening](performance-hardening-2026-10-16.md) | JMS session reuse, a 15% shorter startup, and earlier HTTP experiments (Traditional Chinese) |
+| [Native HTTP experiment](native-http-performance-2026-10-15.md) | The 2026-10-15 prototype compared with WireMock (Traditional Chinese) |
+| [HTTP performance investigation](performance-investigation-2026-10-15.md) | CPU sampling, I/O threads and overload recovery from 2026-10-15 (Traditional Chinese) |
 | [Container resilience validation](container-resilience-validation.md) | The JMS XML pressure, restart and storage harness |
 | [Container endurance validation](container-endurance-validation.md) | The 8-hour and 24-hour endurance runs |
 | [Archive](archive/README.md) | Older benchmarks and engineering notes |

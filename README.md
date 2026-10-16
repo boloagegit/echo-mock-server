@@ -20,7 +20,7 @@ Echo stands in for the services your application talks to during development and
 - **See why a request matched.** Every logged request shows its processing flow and the full match chain: which rules were candidates, and which condition passed or failed.
 - **Built for teams.** It has logins (built-in accounts or LDAP) with admin and user roles, an audit trail, tags for bulk enable and disable, and rule protection and retention. Several instances can share one database.
 - **Fits a locked-down network.** Ship one JAR, start it with `java -jar`, and keep the data in SQLite. The UI assets are bundled through WebJars, so no CDN is needed.
-- **Measured, not guessed.** The benchmarks against WireMock are published with their method and scripts, and they show where WireMock is faster too. See [Performance](#performance).
+- **Measured, not guessed.** The benchmarks against WireMock are published with their method, scripts and raw results, including the cases where Echo gains little, such as slow downstreams. See [Performance](#performance).
 
 ## Quick start
 
@@ -132,9 +132,9 @@ HTTP/1.1 acceleration is enabled by default. The 2026-10-16 comparison used Java
 | One of 2,000 path rules, 8 connections | 50,866 | 4,965 |
 | Forwarding to a 50 ms downstream, 64 connections | 1,243 | 1,185 |
 
-Slow downstream calls and deliberate delays gain much less than simple responses. These are workload-specific measurements, not a promise that every request is faster. See the [validation report](docs/native-http-validation-2026-10-16.md) for the full matrix, latency, errors and rerun scripts, and [performance history](docs/performance.md) for earlier comparisons.
+Slow downstream calls and deliberate delays gain much less than simple responses. These are workload-specific measurements, not a promise that every request is faster. See the [validation report](docs/native-http-validation-2026-10-16.md) for the full matrix, latency, errors and rerun scripts, and [performance history](docs/performance.md) for earlier comparisons. These reports are in Traditional Chinese.
 
-The [HTTP acceleration guide](docs/native-http.md) covers capacity limits, compatibility and switching back with `ECHO_HTTP_TRANSPORT=servlet`. [JMS resource reuse](docs/jms-performance-and-correctness.md) and [startup measurements](docs/performance-hardening-2026-10-16.md) are documented separately.
+The [HTTP acceleration guide](docs/native-http.md) covers capacity limits, compatibility and switching back with `ECHO_HTTP_TRANSPORT=servlet`. [JMS resource reuse](docs/jms-performance-and-correctness.md) and [startup measurements](docs/performance-hardening-2026-10-16.md) are documented separately (also in Traditional Chinese).
 
 ## Documentation
 
