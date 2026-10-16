@@ -4,7 +4,7 @@ const ResourceMonitoringPanel = {
   emits: ['loading', 'snapshot', 'navigate'],
   inject: ['t'],
   data() {
-    return { snapshot: null, busy: false, failed: false, requestVersion: 0, requestController: null, disposed: false, openDetails: {} };
+    return { snapshot: null, previousSnapshot: null, busy: false, failed: false, requestVersion: 0, requestController: null, disposed: false, openDetails: {} };
   },
   mounted() { this.loadSnapshot(); },
   beforeUnmount() {
@@ -12,17 +12,34 @@ const ResourceMonitoringPanel = {
     this.requestVersion++;
     this.requestController?.abort();
     this.snapshot = null;
+    this.previousSnapshot = null;
     this.$emit('loading', false);
   },
   watch: { refreshToken() { this.loadSnapshot(); } },
   computed: {
+    memorySources() {
+      const fields = {
+        caches: ['httpRulesEntries', 'jmsRulesEntries', 'body_entries', 'body_weightedSize', 'template_entries', 'template_weightedSize'],
+        http: ['nativeBufferedBytes', 'bufferedBytes'],
+        jms: ['reservedBytes', 'listenerActive', 'forwardActive'],
+        requestLog: ['queueItems', 'queueBytes', 'inFlightBytes'],
+        applicationLog: ['queueUsed', 'diagnosticQueueUsed'],
+        scheduler: ['waitingTasks'],
+        jvm: ['directBytes', 'nonHeapUsedBytes', 'threads'],
+      };
+      return Object.entries(fields).flatMap(([group, metrics]) => metrics.map(key => {
+        const current = this.sourceValue(this.snapshot, group, key);
+        const previous = this.sourceValue(this.previousSnapshot, group, key);
+        return { group, key, current, delta: current == null || previous == null ? null : current - previous };
+      }));
+    },
     groups() {
       const fields = {
         jvm: ['heapUsedBytes', 'heapMaxBytes', 'nonHeapUsedBytes', 'nonHeapCommittedBytes', 'directBytes', 'mappedBytes', 'threads', 'uptimeSeconds', 'gcCount', 'gcTimeMs'],
         caches: ['httpRulesEntries', 'httpRulesEvictions', 'jmsRulesEntries', 'jmsRulesEvictions', 'body_entries', 'body_weightedSize', 'body_maximumWeight', 'body_evictionCount', 'template_entries', 'template_weightedSize', 'template_maximumWeight', 'template_evictionCount'],
         scheduler: ['waitingTasks', 'activeWorkers', 'workerCapacity'],
         jms: ['listenerActive', 'listenerExits', 'replySent', 'replyFailures', 'lastListenerExit', 'forwardActive', 'forwardExits', 'forwardFailures', 'receiveTimeouts', 'invalidReplies', 'cleanupFailures', 'lastForwardExit', 'reservedBytes', 'maximumBytes', 'waitingThreads', 'processingRunning', 'maxDeliveryAttempts'],
-        http: ['activeForwards', 'completedForwards', 'cancelledForwards', 'rejectedForwards', 'poolLeased', 'poolPending', 'poolIdle', 'poolCapacity', 'bufferedBytes', 'bufferLimitBytes'],
+        http: ['nativeActive', 'nativeBufferedBytes', 'nativeQueued', 'nativeCapacity', 'nativeBufferLimitBytes', 'activeForwards', 'completedForwards', 'cancelledForwards', 'rejectedForwards', 'poolLeased', 'poolPending', 'poolIdle', 'poolCapacity', 'bufferedBytes', 'bufferLimitBytes'],
         database: ['poolActive', 'poolIdle', 'poolTotal', 'poolWaiting', 'writerWaiting', 'writerActive'],
         requestLog: ['queueItems', 'processed', 'dropped', 'queueBytes', 'capacityBytes', 'inFlightBytes', 'byteLimit', 'waitingProducers', 'backpressureActive', 'storageUnavailable', 'consumerRunning'],
         applicationLog: ['queueUsed', 'queueCapacity', 'started', 'diagnosticEnabled', 'diagnosticRunning',
@@ -58,7 +75,7 @@ const ResourceMonitoringPanel = {
         caches: ['body_maximumWeight', 'template_maximumWeight'],
         scheduler: ['workerCapacity'],
         jms: ['maximumBytes', 'maxDeliveryAttempts', 'lastListenerExit', 'lastForwardExit'],
-        http: ['poolCapacity', 'bufferLimitBytes'],
+        http: ['nativeCapacity', 'nativeBufferLimitBytes', 'poolCapacity', 'bufferLimitBytes'],
         requestLog: ['capacityBytes', 'byteLimit'],
         applicationLog: ['queueCapacity', 'diagnosticQueueCapacity', 'diagnosticDailyLimitBytes', 'diagnosticRetainedLimitBytes'],
       };
@@ -94,6 +111,15 @@ const ResourceMonitoringPanel = {
     },
   },
   methods: {
+    sourceValue(snapshot, group, key) {
+      const section = snapshot?.sections?.[group];
+      const value = section?.values?.[key];
+      return this.hasValues(section) && Number.isFinite(value) && value >= 0 ? value : null;
+    },
+    formatDelta(key, value) {
+      if (value == null) return this.t('monitoring.unavailable');
+      return (value > 0 ? '+' : value < 0 ? '−' : '') + this.formatMetric(key, Math.abs(value));
+    },
     hasValues(section) { return section && ['AVAILABLE', 'PARTIAL'].includes(section.state); },
     toggleDetails(key, event) { this.openDetails[key] = event.target.open; },
     navigateToDetail(key) {
@@ -138,10 +164,16 @@ const ResourceMonitoringPanel = {
       try {
         const response = await fetch('/api/admin/resources', { headers: { Accept: 'application/json' }, cache: 'no-store', signal: controller.signal });
         if (this.disposed || version !== this.requestVersion) return;
-        if (response.status === 401 || response.status === 403) this.snapshot = null;
+        if (response.status === 401 || response.status === 403) {
+          this.snapshot = null;
+          this.previousSnapshot = null;
+        }
         if (!response.ok) throw new Error('snapshot-unavailable');
         const data = await response.json();
         if (this.disposed || version !== this.requestVersion) return;
+        // Two bounded snapshots only. A process restart cannot be compared to its predecessor.
+        this.previousSnapshot = data.processStartedAt && data.processStartedAt === this.snapshot?.processStartedAt
+          ? this.snapshot : null;
         this.snapshot = data;
         this.failed = false;
       } catch {
@@ -242,6 +274,19 @@ const ResourceMonitoringPanel = {
                 </section>
               </div>
               <p v-if="detail.key === 'cache'" class="settings-inline-note">{{t('monitoring.cacheHitRateSource')}} · HTTP {{cacheHitRate('httpRules')}} · JMS {{cacheHitRate('jmsRules')}}</p>
+              <gc-history-panel v-if="detail.key === 'memory'" :refresh-token="refreshToken"></gc-history-panel>
+              <section v-if="detail.key === 'memory'" class="memory-source-comparison">
+                <h3>{{t('monitoring.sources.title')}}</h3>
+                <p class="settings-inline-note">{{t('monitoring.sources.hint')}}</p>
+                <p class="settings-inline-note">{{previousSnapshot ? t('monitoring.sources.period', { from: collectedTime(previousSnapshot.collectedAt), to: collectedTime(snapshot.collectedAt) }) : t('monitoring.sources.firstSample')}}</p>
+                <table class="settings-table">
+                  <thead><tr><th scope="col">{{t('monitoring.sources.source')}}</th><th scope="col">{{t('monitoring.currentValues')}}</th><th scope="col">{{t('monitoring.sources.change')}}</th></tr></thead>
+                  <tbody><tr v-for="row in memorySources" :key="row.group + ':' + row.key">
+                    <th scope="row">{{t('monitoring.groups.' + row.group)}} · {{t('monitoring.metrics.' + row.key)}}</th>
+                    <td>{{formatMetric(row.key, row.current)}}</td><td>{{formatDelta(row.key, row.delta)}}</td>
+                  </tr></tbody>
+                </table>
+              </section>
             </div>
             <p v-if="openDetails[detail.key]" class="settings-section-note">{{t('monitoring.detailNotes.' + detail.key)}}</p>
           </details>

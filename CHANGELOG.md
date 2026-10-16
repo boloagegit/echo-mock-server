@@ -6,12 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
-## [v2026.10.16] — 2026-10-16
-
 ### Added
+- ADMIN-only per-GC history and post-GC heap chart in Settings, retaining at most 512 events / 24 hours by default with idle housekeeping and explicit eviction/expiry counts. Reads never force GC. Resource-counter comparisons help narrow possible sources of growth; an isolated Windows/Linux HTTP/JMS observation harness checks heap, native memory, threads and cleanup, with opt-in class histograms for further investigation.
 - Windows development now has a JDK 17 CI build from a checkout path containing spaces, alongside the existing Linux deployment checks. Java source compilation explicitly uses UTF-8; checkout line endings, TLS test tools, SQLite backup paths and symlink test privileges account for Windows. SQLite integration tests close their Spring-managed connection pools before deleting temporary databases. PowerShell development/configuration examples are documented, while deployment performance tools explicitly require Linux.
 - SQLite migration and crash-check scripts explicitly close their database connections, releasing Windows file handles before publishing or cleaning up database files. Migration opens files with the write access Windows requires to flush data to disk before publication.
 - SQLite online backups now pass destination paths directly to the driver, so paths containing spaces or apostrophes work without the driver's limited command parser. Snapshot integrity checks and atomic publication remain in place.
+
+## [v2026.10.16] — 2026-10-16
+
+### Added
 - Native HTTP/1.1 acceleration is enabled by default, sharing the existing mock pipeline while retaining Servlet handling for special requests and custom extensions. Configurable defaults bound request/response bodies to 10 MiB, active requests to 512 and estimated buffering to 128 MiB. Set `ECHO_HTTP_TRANSPORT=servlet` and restart to switch back; TLS, compression, observations and graceful shutdown remain supported.
 - JMS forwarding reuses up to 8 idle sessions per target by default (`echo.jms.forward.session-cache-size=0` disables reuse), while keeping temporary reply queues and consumers independent for every request. Source transactions and redelivery semantics are unchanged.
 - Startup uses WebJars Lite metadata instead of a full classpath scan, preserving versionless asset URLs. Reproducible HTTP/JMS, startup, capacity and recovery measurements are included under `docs/performance/`.

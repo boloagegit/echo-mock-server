@@ -697,6 +697,7 @@ _app.component('change-password-modal', ChangePasswordModal);
 _app.component('responses-page', ResponsesPage);
 _app.component('accounts-page', AccountsPage);
 _app.component('settings-page', SettingsPage);
+_app.component('gc-history-panel', GcHistoryPanel);
 _app.component('resource-monitoring-panel', ResourceMonitoringPanel);
 _app.component('connection-targets-table', ConnectionTargetsTable);
 _app.component('priority-help-modal', PriorityHelpModal);

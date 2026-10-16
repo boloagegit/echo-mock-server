@@ -56,9 +56,34 @@ test('permission loss clears sensitive snapshot', async () => {
   for (const status of [401, 403]) {
     const state = fixture(async () => ({ ok: false, status }));
     state.instance.snapshot = { sections: { jvm: { values: { heapUsedBytes: 123 } } } };
+    state.instance.previousSnapshot = { collectedAt: 'old' };
     await state.instance.loadSnapshot();
     assert.equal(state.instance.snapshot, null);
+    assert.equal(state.instance.previousSnapshot, null);
     assert.equal(state.instance.failed, true);
+  }
+});
+
+test('source comparison keeps only the previous same-process snapshot and resets after restart', async () => {
+  const samples = ['a', 'a', 'a', 'b'].map((processStartedAt, i) => ({ processStartedAt, collectedAt: String(i),
+    sections: { http: { state: 'AVAILABLE', values: { nativeBufferedBytes: i * 1024 } } } }));
+  const state = fixture(async () => ({ ok: true, status: 200, json: async () => samples.shift() }));
+  await state.instance.loadSnapshot();
+  assert.equal(state.instance.previousSnapshot, null);
+  await state.instance.loadSnapshot();
+  const row = state.instance.memorySources.find(r => r.key === 'nativeBufferedBytes');
+  assert.equal(row.current, 1024);
+  assert.equal(row.delta, 1024);
+  assert.equal(state.instance.formatDelta(row.key, row.delta), '+1 KiB');
+  assert.equal(state.instance.formatDelta(row.key, -1024), '−1 KiB');
+  assert.equal(state.instance.memorySources.find(r => r.key === 'reservedBytes').delta, null);
+  await state.instance.loadSnapshot();
+  assert.equal(state.instance.previousSnapshot.collectedAt, '1');
+  await state.instance.loadSnapshot();
+  assert.equal(state.instance.previousSnapshot, null);
+  assert.equal(state.instance.memorySources.find(r => r.key === 'nativeBufferedBytes').delta, null);
+  for (const sample of [null, { sections: { http: { state: 'FAILED', values: { nativeBufferedBytes: 0 } } } }]) {
+    assert.equal(state.instance.sourceValue(sample, 'http', 'nativeBufferedBytes'), null);
   }
 });
 
@@ -114,10 +139,10 @@ test('compact overview has six groups; details retain all nine sections and ever
   const sections = instance.detailGroups.flatMap(group => group.sections);
   assert.equal(sections.length, 9);
   assert.equal(new Set(sections.map(group => group.key)).size, 9);
-  assert.equal(sections.reduce((count, group) => count + group.metrics.length, 0), 89);
+  assert.equal(sections.reduce((count, group) => count + group.metrics.length, 0), 94);
   const displayed = instance.detailGroups.flatMap(group => group.columns.flatMap(column => column.sections.flatMap(section => section.metrics.map(metric => section.key + ':' + metric))));
-  assert.equal(displayed.length, 89);
-  assert.equal(new Set(displayed).size, 89);
+  assert.equal(displayed.length, 94);
+  assert.equal(new Set(displayed).size, 94);
   const applicationLog = sections.find(section => section.key === 'applicationLog');
   const diagnosticMetrics = applicationLog.metrics.filter(key => key.startsWith('diagnostic'));
   assert.equal(diagnosticMetrics.length, 15);

@@ -3,7 +3,8 @@
 Resource snapshots are available to administrators in Settings and at
 `GET /api/admin/resources`. The endpoint sends `Cache-Control: no-store`.
 Settings loads once on entry, then only on explicit refresh or retry. There is
-no polling, trend history, automatic recovery, or per-request telemetry store.
+no periodic snapshot polling, automatic recovery, or per-request telemetry store.
+Memory & GC additionally offers bounded, event-driven [GC history](gc-observability.md).
 Supplemental transaction file-log counters are described in
 [Transaction file diagnostics](transaction-diagnostics.md); their switches are
 independent of resource snapshot collection and durable Request Log policy.
@@ -21,6 +22,8 @@ echo:
   monitoring:
     enabled: true                 # false disables all new resource collectors
     jvm-enabled: true
+    gc-enabled: true              # event notifications, independent of page refresh
+    gc-history-capacity: 512       # 16..4096 recent events, process-local
     caches-enabled: true
     scheduler-enabled: true
     jms-enabled: true             # also disables the new JMS event counters
@@ -102,7 +105,8 @@ omissions and byte budgets; it does not read diagnostic file contents.
 
 The same monitoring component remains mounted when switching Settings tabs.
 Opening a disclosure or following an overview detail link does not collect
-another snapshot. Collapsing details reduces visual/DOM complexity, not backend
+another resource snapshot. Opening Memory & GC also loads its separate GC event
+history once; its own refresh and the page refresh update that history. Collapsing details reduces visual/DOM complexity, not backend
 collection cost. Counter details show the process start time. Cache hit rates
 come from the separate legacy status response, not the resource snapshot.
 Collection state describes availability, not a health verdict. Zero temporary

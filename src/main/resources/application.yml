@@ -88,6 +88,10 @@ echo:
   monitoring:
     enabled: true
     jvm-enabled: true
+    # JVM notifications are retained even while the admin page is closed. No forced GC or disk writes.
+    gc-enabled: true
+    gc-history-capacity: 512 # 16..4096 events; oldest events are overwritten, cleared on restart
+    gc-history-max-age-seconds: 86400 # Also expire after 24h; idle housekeeping runs every minute
     caches-enabled: true
     scheduler-enabled: true
     jms-enabled: true

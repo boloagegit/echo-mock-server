@@ -18,6 +18,7 @@
 |------|------|
 | [SSE 模擬](../sse-mock.md) | Server-Sent Events 的契約、事件序列與播放方式 |
 | [資源監控](../resource-monitoring.md) | 設定頁的資源快照與 JMS 政策診斷 |
+| [GC 紀錄與記憶體觀察](gc-observability.md) | 每次 GC 結果、容量上限與可重複的 HTTP／JMS 負載／閒置測試 |
 | [交易診斷](../transaction-diagnostics.md) | 用來追難以重現問題的有限交易診斷 |
 | [SQLite 復原](../sqlite-recovery.md) | Echo 啟動時如何檢查與復原 SQLite |
 
