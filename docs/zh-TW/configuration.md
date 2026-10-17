@@ -67,8 +67,6 @@ echo:
     max-body-size: 65536        # body 記錄上限 (bytes)
   audit:
     retention-days: 30          # 修訂紀錄保留天數
-  scheduling:
-    pool-size: 4                # 背景工作（同步、清除、備份）的執行緒數，與 HTTP 計時分開
   cleanup:
     enabled: true               # 啟用定時清除
     cron: "0 0 3 * * *"         # 每天凌晨 3 點執行

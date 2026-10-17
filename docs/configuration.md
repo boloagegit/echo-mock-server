@@ -71,8 +71,6 @@ echo:
     max-body-size: 65536        # Body log size limit (bytes)
   audit:
     retention-days: 30          # Audit log retention days
-  scheduling:
-    pool-size: 4                # Threads for background jobs (sync, cleanup, backup); separate from HTTP timers
   cleanup:
     enabled: true               # Enable scheduled cleanup
     cron: "0 0 3 * * *"         # Daily at 3 AM
