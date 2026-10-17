@@ -214,3 +214,30 @@ test('an entry older than the loaded history still shows in the timeline, after 
   assert.equal(history.items.length, 2, 'the cached history is not modified');
   assert.equal(shown(old, { loading: true, items: [], total: 0 }).items.length, 0, 'nothing is merged while loading');
 });
+
+test('a failed history load is tried again when the item is reopened', async () => {
+  let fail = true, calls = 0;
+  const audit = auditFixture(async () => {
+    calls++;
+    return fail ? { ok: false } : { ok: true, json: async () => ({ results: [{ id: 1 }], totalElements: 1, totalPages: 1 }) };
+  });
+  await audit.loadTargetHistory('r-1');
+  assert.equal(audit.targetHistory.value['r-1'].failed, true);
+  fail = false;
+  await audit.loadTargetHistory('r-1');
+  assert.equal(audit.targetHistory.value['r-1'].failed, false);
+  await audit.loadTargetHistory('r-1');
+  assert.equal(calls, 2, 'a successful load is not fetched again');
+});
+
+test('a tag that only changes type is shown as a before/after value, not an empty tag row', () => {
+  const audit = auditFixture();
+  const result = audit.getAuditChanges({ action: 'UPDATE',
+    beforeJson: JSON.stringify({ tags: '{"priority":1}' }), afterJson: JSON.stringify({ tags: '{"priority":"1"}' }) });
+  const tags = result.changes.find(c => c.label === '標籤');
+  assert.notEqual(tags.kind, 'tags');
+  assert.equal(tags.beforeText, '{"priority":1}');
+  assert.equal(tags.afterText, '{"priority":"1"}');
+  const row = audit.describeAuditRow({ action: 'UPDATE', summary: { changes: [{ f: 'tags', b: '{"priority":1}', a: '{"priority":"1"}' }], changeCount: 1 } });
+  assert.ok(!JSON.stringify(row).includes('"kind":"tags"'), 'the list row falls back as well');
+});

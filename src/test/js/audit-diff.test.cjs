@@ -42,3 +42,14 @@ test('very large text or too many differences fall back to showing both versions
   assert.equal(AuditDiff.lines(a, b, { maxEdits: 20 }).tooLarge, true);
   assert.equal(AuditDiff.lines(a, b).tooLarge, false);
 });
+
+test('very long content keeps showing only the changed blocks when the full text is asked for', () => {
+  const lines = Array.from({ length: AuditDiff.MAX_FULL_LINES + 10 }, (_, i) => String(i));
+  const changed = lines.slice(); changed[100] = 'x';
+  const full = AuditDiff.lines(lines.join('\n'), changed.join('\n'), { context: Infinity });
+  assert.equal(full.lineCount, AuditDiff.MAX_FULL_LINES + 11);
+  assert.ok(full.hunks.reduce((n, h) => n + h.lines.length, 0) < 100, 'only the changed block is rendered');
+  const small = AuditDiff.lines('a\nb', 'a\nc', { context: Infinity });
+  assert.equal(small.lineCount, 3);
+  assert.equal(small.hunks[0].lines.length, 3);
+});

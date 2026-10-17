@@ -161,6 +161,10 @@ const AuditPage = {
       }
       return this._diffCache.get(key);
     },
+    /** 太多行的內容不提供「顯示全文」，避免一次畫出幾十萬行。 */
+    canShowFullDiff(diff) {
+      return diff.lineCount <= AuditDiff.MAX_FULL_LINES;
+    },
     toggleFullDiff(log, change) {
       const key = log.id + ':' + change.label;
       this.fullDiff = { ...this.fullDiff, [key]: !this.fullDiff[key] };
@@ -381,7 +385,7 @@ const AuditPage = {
                           <div class="ac-block-label ac-diff__head">
                             <span>{{c.label}}</span>
                             <span class="ac-diff__count">{{t('audit.lineDelta', {add: diffOf(shownLog, c).added, del: diffOf(shownLog, c).removed})}}</span>
-                            <ui-button variant="quiet" size="compact" class="ac-diff__toggle" :aria-pressed="!!fullDiff[shownLog.id + ':' + c.label]" @click="toggleFullDiff(shownLog, c)">{{fullDiff[shownLog.id + ':' + c.label] ? t('audit.diffChangedOnly') : t('audit.diffShowAll')}}</ui-button>
+                            <ui-button v-if="canShowFullDiff(diffOf(shownLog, c))" variant="quiet" size="compact" class="ac-diff__toggle" :aria-pressed="!!fullDiff[shownLog.id + ':' + c.label]" @click="toggleFullDiff(shownLog, c)">{{fullDiff[shownLog.id + ':' + c.label] ? t('audit.diffChangedOnly') : t('audit.diffShowAll')}}</ui-button>
                             <ui-button variant="quiet" size="compact" :aria-label="t('audit.copyAfter')" :title="t('audit.copyAfter')" @click="$emit('clip-copy', c.afterText)"><i class="bi bi-clipboard" aria-hidden="true"></i></ui-button>
                           </div>
                           <div class="ac-diff__body" role="table" :aria-label="c.label">

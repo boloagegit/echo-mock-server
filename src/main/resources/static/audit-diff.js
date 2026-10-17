@@ -8,6 +8,8 @@
 const AuditDiff = (() => {
     const MAX_CHARS = 200000;
     const MAX_EDITS = 2000;
+    /** 「顯示全文」最多畫幾行；更長的內容只顯示有變更的區塊，避免一次產生太多元素。 */
+    const MAX_FULL_LINES = 5000;
 
     const splitLines = (text) => (text === null || text === undefined || text === '') ? [] : String(text).split('\n');
 
@@ -49,12 +51,12 @@ const AuditDiff = (() => {
 
     /**
      * 比對兩段文字。
-     * @returns {{tooLarge:boolean, added:number, removed:number, hunks:Array<{lines:Array<{type:string,text:string,oldNo:?number,newNo:?number}>}>}}
-     *   context 為 Infinity 時只有一個區塊，包含全文。
+     * @returns {{tooLarge:boolean, added:number, removed:number, lineCount:number, hunks:Array<{lines:Array<{type:string,text:string,oldNo:?number,newNo:?number}>}>}}
+     *   context 為 Infinity 時只有一個區塊，包含全文；超過 MAX_FULL_LINES 行時仍只回傳有變更的區塊。
      */
     const lines = (before, after, options = {}) => {
         const maxChars = options.maxChars ?? MAX_CHARS;
-        const context = options.context ?? 3;
+        let context = options.context ?? 3;
         const beforeText = before ?? '', afterText = after ?? '';
         if (String(beforeText).length > maxChars || String(afterText).length > maxChars) {
             return { tooLarge: true, added: 0, removed: 0, hunks: [] };
@@ -68,7 +70,11 @@ const AuditDiff = (() => {
             if (op.type === '-') { oldNo++; removed++; return { ...op, oldNo, newNo: null }; }
             newNo++; added++; return { ...op, oldNo: null, newNo };
         });
-        if (context === Infinity) { return { tooLarge: false, added, removed, hunks: numbered.length ? [{ lines: numbered }] : [] }; }
+        const lineCount = numbered.length;
+        if (context === Infinity) {
+            if (lineCount <= MAX_FULL_LINES) { return { tooLarge: false, added, removed, lineCount, hunks: lineCount ? [{ lines: numbered }] : [] }; }
+            context = 3;
+        }
 
         // 留下有變更的行與前後 context 行，相連的合成同一區塊。
         const keep = new Array(numbered.length).fill(false);
@@ -83,8 +89,8 @@ const AuditDiff = (() => {
             if (!current) { current = { lines: [] }; hunks.push(current); }
             current.lines.push(line);
         });
-        return { tooLarge: false, added, removed, hunks };
+        return { tooLarge: false, added, removed, lineCount, hunks };
     };
 
-    return { lines, MAX_CHARS };
+    return { lines, MAX_CHARS, MAX_FULL_LINES };
 })();

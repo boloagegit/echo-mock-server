@@ -157,9 +157,11 @@ const useAudit = (deps) => {
         reloadAuditFromFirstPage();
     });
 
-    /** 載入某個規則／回應最近的修訂記錄；同一次列表載入內只抓一次。 */
+    /** 載入某個規則／回應最近的修訂記錄；同一次列表載入內成功一次就不再重抓。 */
     const loadTargetHistory = async (ruleId) => {
-        if (!ruleId || targetHistory.value[ruleId]) { return; }
+        const cached = targetHistory.value[ruleId];
+        // 載入中或已成功的不重抓；上次失敗的重新打開時再試一次。
+        if (!ruleId || (cached && !cached.failed)) { return; }
         // 列表重新載入會清空時間軸；那之前發出的請求晚回來時不寫回，避免舊結果蓋掉新的。
         const generation = historyGeneration;
         targetHistory.value = { ...targetHistory.value, [ruleId]: { loading: true, items: [], total: 0, failed: false } };
@@ -270,8 +272,9 @@ const useAudit = (deps) => {
                         if (key === 'tags') {
                             // 兩邊都能解析成 key=value 才列加減；格式不對時照一般欄位顯示前後的值。
                             const bt = tagPairs(bv), at = tagPairs(av);
-                            if (bt && at) {
-                                changes.push({ label: fieldLabel(key), kind: 'tags', added: at.filter(x => !bt.includes(x)), removed: bt.filter(x => !at.includes(x)) });
+                            const pairs = bt && at && tagChange(bt, at);
+                            if (pairs) {
+                                changes.push({ label: fieldLabel(key), kind: 'tags', ...pairs });
                                 continue;
                             }
                         }
@@ -352,6 +355,12 @@ const useAudit = (deps) => {
         return null;
     };
 
+    /** 新增與移除的標籤；兩邊顯示成一樣的文字（例如 1 改成 "1"）時回傳 null，改用前後值顯示。 */
+    const tagChange = (before, after) => {
+        const added = after.filter(x => !before.includes(x)), removed = before.filter(x => !after.includes(x));
+        return added.length || removed.length ? { added, removed } : null;
+    };
+
     const listChange = (c) => {
         const label = fieldLabel(c.f);
         if (c.long) {
@@ -359,9 +368,8 @@ const useAudit = (deps) => {
         }
         if (c.f === 'tags') {
             const before = tagPairs(c.b), after = tagPairs(c.a);
-            if (before && after) {
-                return { label, kind: 'tags', added: after.filter(x => !before.includes(x)), removed: before.filter(x => !after.includes(x)) };
-            }
+            const pairs = before && after && tagChange(before, after);
+            if (pairs) { return { label, kind: 'tags', ...pairs }; }
         }
         return {
             label, kind: 'value',

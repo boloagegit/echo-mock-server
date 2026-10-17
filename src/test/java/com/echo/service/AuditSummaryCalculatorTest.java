@@ -137,10 +137,25 @@ class AuditSummaryCalculatorTest {
         assertThat(result.name()).isNull();
     }
 
+    /** 與前端 audit-diff.js 的逐行比對相同（數值由前端算出對照），列表與明細的行數才一致。 */
     @Test
-    void lineDelta_ignoresMovedLines() {
-        assertThat(AuditSummaryCalculator.lineDelta("a\nb\nc", "c\na\nb")).containsExactly(0, 0);
+    void lineDelta_matchesTheDetailLineDiff() {
+        assertThat(AuditSummaryCalculator.lineDelta("a\nb\nc", "c\na\nb")).containsExactly(1, 1);
         assertThat(AuditSummaryCalculator.lineDelta("a\nb", "a\nB\nc")).containsExactly(2, 1);
         assertThat(AuditSummaryCalculator.lineDelta(null, "a")).containsExactly(1, 0);
+        assertThat(AuditSummaryCalculator.lineDelta("x\ny\nz\nw", "w\nz\ny\nx")).containsExactly(3, 3);
+        assertThat(AuditSummaryCalculator.lineDelta("1\n2\n3\n4\n5", "1\n3\n2\n4\n6\n5")).containsExactly(2, 1);
+        assertThat(AuditSummaryCalculator.lineDelta("same\nlines", "same\nlines")).containsExactly(0, 0);
+    }
+
+    @Test
+    void lineDelta_tooManyEditsFallsBackToAnEstimate() {
+        StringBuilder before = new StringBuilder();
+        StringBuilder after = new StringBuilder();
+        for (int i = 0; i < 3000; i++) {
+            before.append("old").append(i).append('\n');
+            after.append("new").append(i).append('\n');
+        }
+        assertThat(AuditSummaryCalculator.lineDelta(before.toString(), after.toString())).containsExactly(3000, 3000);
     }
 }

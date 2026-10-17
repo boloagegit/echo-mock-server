@@ -61,8 +61,8 @@ class LongContentResourceTest {
                 .doesNotContain("bodySearch");
         // Long audit values (before / after, single values, unreadable raw data) use it too.
         assertThat(text("components/AuditPage.js"))
-                .contains("<ui-code-viewer :value=\"String(c.before ?? '')\"")
-                .contains("<ui-code-viewer :value=\"String(c.after ?? '')\"")
+                .contains("<ui-code-viewer :value=\"String(c.beforeText ?? c.before ?? '')\"")
+                .contains("<ui-code-viewer :value=\"String(c.afterText ?? c.after ?? '')\"")
                 .contains("<ui-code-viewer :value=\"String(c.value ?? '')\"")
                 .contains("<ui-code-viewer :value=\"String(detail.raw ?? '')\"")
                 .doesNotContain("<pre");
