@@ -40,15 +40,18 @@ public interface HttpRuleRepository extends JpaRepository<HttpRule, String> {
     @Query("SELECT COUNT(r) FROM HttpRule r WHERE r.responseId IS NOT NULL AND r.responseId NOT IN (SELECT resp.id FROM Response resp)")
     long countOrphanRules();
 
-    /** 批次啟用/停用 */
+    /**
+     * 批次啟用/停用。已經是目標狀態的規則不更新（版本與更新時間不變），回傳實際改變的筆數；
+     * 重複的同一個操作因此不會讓正在編輯這條規則的人遇到假的版本衝突，也不會觸發規則重建。
+     */
     @Modifying
-    @Query("UPDATE HttpRule r SET r.enabled = :enabled, r.updatedAt = :updatedAt, r.updatedBy = :updatedBy, r.version = COALESCE(r.version, 0) + 1 WHERE r.id IN :ids")
+    @Query("UPDATE HttpRule r SET r.enabled = :enabled, r.updatedAt = :updatedAt, r.updatedBy = :updatedBy, r.version = COALESCE(r.version, 0) + 1 WHERE r.id IN :ids AND (r.enabled IS NULL OR r.enabled <> :enabled)")
     int updateEnabledByIds(@Param("ids") List<String> ids, @Param("enabled") boolean enabled,
                            @Param("updatedAt") LocalDateTime updatedAt, @Param("updatedBy") String updatedBy);
 
-    /** 批次更新保護狀態 */
+    /** 批次更新保護狀態；已經是目標狀態的規則不更新，回傳實際改變的筆數。 */
     @Modifying
-    @Query("UPDATE HttpRule r SET r.isProtected = :isProtected, r.updatedAt = :updatedAt, r.updatedBy = :updatedBy, r.version = COALESCE(r.version, 0) + 1 WHERE r.id IN :ids")
+    @Query("UPDATE HttpRule r SET r.isProtected = :isProtected, r.updatedAt = :updatedAt, r.updatedBy = :updatedBy, r.version = COALESCE(r.version, 0) + 1 WHERE r.id IN :ids AND (r.isProtected IS NULL OR r.isProtected <> :isProtected)")
     int updateProtectedByIds(@Param("ids") List<String> ids, @Param("isProtected") boolean isProtected,
                              @Param("updatedAt") LocalDateTime updatedAt, @Param("updatedBy") String updatedBy);
 

@@ -4,9 +4,14 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
+// utils.js 的共用小工具（元件在瀏覽器中直接取用全域函式）。
+const utilsContext = { Vue: { ref: v => ({ value: v }), computed: fn => ({ get value() { return fn(); } }), watch() {}, reactive: v => v } };
+vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../../main/resources/static/utils.js'), 'utf8') + '\nthis.createInFlight = createInFlight;', utilsContext);
+const { createInFlight } = utilsContext;
+
 function fixture(name, props = {}, api = async () => ({ ok: true, json: async () => [] })) {
   const events = [], calls = [];
-  const sandbox = { Date, fmtSize: value => String(value), window: { confirm: () => true },
+  const sandbox = { Date, fmtSize: value => String(value), window: { confirm: () => true }, createInFlight,
     apiCall: async (...args) => { calls.push(args); return api(...args); } };
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../../main/resources/static/components/' + name + '.js'), 'utf8') + '\nthis.component = ' + name, sandbox);
   const component = sandbox.component;
@@ -14,6 +19,7 @@ function fixture(name, props = {}, api = async () => ({ ok: true, json: async ()
     $emit: (...args) => events.push(args), $nextTick: fn => fn(), $refs: {} };
   for (const [key, method] of Object.entries(component.methods)) instance[key] = method.bind(instance);
   for (const [key, getter] of Object.entries(component.computed || {})) Object.defineProperty(instance, key, { get: getter.bind(instance) });
+  if (component.created) component.created.call(instance);
   return { instance, component, calls, events, sandbox };
 }
 

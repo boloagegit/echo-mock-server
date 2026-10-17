@@ -6,6 +6,7 @@ import com.echo.entity.Response;
 import com.echo.protocol.ProtocolHandlerRegistry;
 import com.echo.repository.ResponseRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.benmanes.caffeine.cache.Cache;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -88,10 +90,12 @@ public class RuleService {
     // ==================== 批次操作 ====================
 
     /**
-     * 批次更新規則的啟用狀態
+     * 批次更新規則的啟用狀態。只有實際改變的規則才更新、記錄修訂並觸發規則重建；
+     * 全部都已是目標狀態時（例如連按兩下）什麼都不做，回傳 0。
      */
     @Transactional
-    @CacheEvict(cacheNames = { CacheConfig.HTTP_RULES_CACHE, CacheConfig.JMS_RULES_CACHE }, allEntries = true)
+    @CacheEvict(cacheNames = { CacheConfig.HTTP_RULES_CACHE, CacheConfig.JMS_RULES_CACHE }, allEntries = true,
+            condition = "#result > 0")
     public int updateEnabled(List<String> ids, boolean enabled) {
         if (ids.isEmpty()) {
             return 0;
@@ -105,10 +109,17 @@ public class RuleService {
                 List<String> afterJsonList = new ArrayList<>();
                 
                 for (BaseRule rule : rules) {
+                    if (Objects.equals(rule.getEnabled(), enabled)) {
+                        continue;
+                    }
                     try {
-                        beforeJsonList.add(objectMapper.writeValueAsString(rule));
-                        rule.setEnabled(enabled);
-                        afterJsonList.add(objectMapper.writeValueAsString(rule));
+                        // 不改動受管理的實體：改了會在下面的批次 UPDATE 前先被寫回資料庫，
+                        // 使 UPDATE 以為沒有變更而不觸發規則重建。
+                        String beforeJson = objectMapper.writeValueAsString(rule);
+                        ObjectNode after = (ObjectNode) objectMapper.readTree(beforeJson);
+                        after.put("enabled", enabled);
+                        beforeJsonList.add(beforeJson);
+                        afterJsonList.add(objectMapper.writeValueAsString(after));
                     } catch (Exception e) {
                         log.warn("Failed to serialize rule {}: {}", rule.getId(), e.getMessage());
                     }
@@ -129,8 +140,10 @@ public class RuleService {
         return count;
     }
 
+    /** 批次更新保護狀態；已經是目標狀態的規則不更新，沒有實際變更時不清快取也不通知其他節點。 */
     @Transactional
-    @CacheEvict(cacheNames = { CacheConfig.HTTP_RULES_CACHE, CacheConfig.JMS_RULES_CACHE }, allEntries = true)
+    @CacheEvict(cacheNames = { CacheConfig.HTTP_RULES_CACHE, CacheConfig.JMS_RULES_CACHE }, allEntries = true,
+            condition = "#result > 0")
     public int updateProtected(List<String> ids, boolean isProtected) {
         if (ids.isEmpty()) {
             return 0;
@@ -146,7 +159,8 @@ public class RuleService {
      * 展延單一規則
      */
     @Transactional
-    @CacheEvict(cacheNames = { CacheConfig.HTTP_RULES_CACHE, CacheConfig.JMS_RULES_CACHE }, allEntries = true)
+    @CacheEvict(cacheNames = { CacheConfig.HTTP_RULES_CACHE, CacheConfig.JMS_RULES_CACHE }, allEntries = true,
+            condition = "#result")
     public boolean extendRule(String id) {
         return extendRules(List.of(id)) > 0;
     }
@@ -155,7 +169,8 @@ public class RuleService {
      * 批次展延規則
      */
     @Transactional
-    @CacheEvict(cacheNames = { CacheConfig.HTTP_RULES_CACHE, CacheConfig.JMS_RULES_CACHE }, allEntries = true)
+    @CacheEvict(cacheNames = { CacheConfig.HTTP_RULES_CACHE, CacheConfig.JMS_RULES_CACHE }, allEntries = true,
+            condition = "#result > 0")
     public int extendRules(List<String> ids) {
         if (ids.isEmpty()) {
             return 0;

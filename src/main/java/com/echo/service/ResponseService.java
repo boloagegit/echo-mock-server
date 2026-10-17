@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Objects;
 import java.util.Map;
 import java.util.Optional;
 
@@ -142,11 +143,20 @@ public class ResponseService {
         validateSseContent(response);
         log.info("Saving response: {}", response.getDescription());
         boolean existing = response.getId() != null;
+        // 只改描述或內容完全沒變（例如重複送出）時，不必清內容快取，也不必通知其他節點。
+        boolean contentChanged = existing && contentChanged(response);
         Response saved = responseRepository.save(response);
-        if (existing) {
+        if (contentChanged) {
             bodiesChanged(List.of(saved.getId()));
         }
         return saved;
+    }
+
+    private boolean contentChanged(Response response) {
+        return responseRepository.findById(response.getId())
+                .map(current -> !Objects.equals(current.getBody(), response.getBody())
+                        || !Objects.equals(Response.normalizeContentType(current.getContentType()), response.getContentType()))
+                .orElse(true);
     }
 
     private void validateSseContent(Response response) {

@@ -18,6 +18,10 @@ const SettingsPage = {
     'delete-orphan-responses',
   ],
   inject: ['t'],
+  created() {
+    // 非響應式：只用來擋重複點擊，不需要觸發畫面更新。
+    this.inFlight = createInFlight();
+  },
   data() {
     return {
       agents: [],
@@ -242,9 +246,12 @@ const SettingsPage = {
         }
       } finally { this.httpTargetSaving = false; }
     },
-    async makeDefaultHttpTarget(target) {
-      const res = await apiCall('/api/admin/http-target-connections/' + target.id + '/default', { method: 'PUT' });
-      if (res && res.ok) { await this.loadHttpTargets(); this.notify(this.t('settings.httpTargetDefaultChanged')); }
+    // 設為預設的請求處理中時忽略重複點擊（選單在重新載入前仍可再點）。
+    makeDefaultHttpTarget(target) {
+      return this.inFlight.run('http-default:' + target.id, async () => {
+        const res = await apiCall('/api/admin/http-target-connections/' + target.id + '/default', { method: 'PUT' });
+        if (res && res.ok) { await this.loadHttpTargets(); this.notify(this.t('settings.httpTargetDefaultChanged')); }
+      });
     },
     onHttpTargetEnabledChange() {
       if (!this.httpTargetForm.enabled) this.httpTargetForm.defaultConnection = false;
@@ -341,14 +348,16 @@ const SettingsPage = {
         this.jmsTargetSaving = false;
       }
     },
-    async makeDefaultJmsTarget(target) {
-      const res = await apiCall('/api/admin/jms-target-connections/' + target.id + '/default', { method: 'PUT' });
-      if (res && res.ok) {
-        await this.loadJmsTargets();
-        this.notify(this.t(this.yamlJmsTargetConfigured
-          ? 'settings.jmsTargetFallbackDefaultChanged'
-          : 'settings.jmsTargetDefaultChanged'));
-      }
+    makeDefaultJmsTarget(target) {
+      return this.inFlight.run('jms-default:' + target.id, async () => {
+        const res = await apiCall('/api/admin/jms-target-connections/' + target.id + '/default', { method: 'PUT' });
+        if (res && res.ok) {
+          await this.loadJmsTargets();
+          this.notify(this.t(this.yamlJmsTargetConfigured
+            ? 'settings.jmsTargetFallbackDefaultChanged'
+            : 'settings.jmsTargetDefaultChanged'));
+        }
+      });
     },
     jmsTargetDisplayName(target) {
       return target?.legacy ? (target.name || this.t('settings.jmsApplicationTarget')) : (target?.name || '—');

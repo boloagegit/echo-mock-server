@@ -1,6 +1,5 @@
 package com.echo.controller;
 
-import com.echo.config.CacheConfig;
 import com.echo.core.match.InvalidMatchSpecException;
 import com.echo.core.match.LegacyConditions;
 import com.echo.core.match.MatchSpecCodec;
@@ -10,7 +9,6 @@ import com.echo.dto.RulePageDto;
 import com.echo.entity.Protocol;
 import com.echo.protocol.ProtocolDescriptor;
 import com.echo.protocol.ProtocolHandlerRegistry;
-import com.echo.service.CacheInvalidationService;
 import com.echo.service.MatchSpecs;
 import com.echo.service.RuleAuditService;
 import com.echo.service.RuleEditService;
@@ -18,7 +16,6 @@ import com.echo.service.RuleQueryService;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -56,7 +53,6 @@ public class RuleController {
     private final ProtocolHandlerRegistry protocolHandlerRegistry;
     private final RuleEditService ruleEditService;
     private final Optional<RuleAuditService> ruleAuditService;
-    private final Optional<CacheInvalidationService> cacheInvalidationService;
 
     @Value("${server.port:8080}")
     private int serverPort;
@@ -234,7 +230,6 @@ public class RuleController {
     // ========== 批次刪除 ==========
 
     @DeleteMapping("/rules/batch")
-    @CacheEvict(cacheNames = { CacheConfig.HTTP_RULES_CACHE, CacheConfig.JMS_RULES_CACHE }, allEntries = true)
     public ResponseEntity<?> deleteRules(@RequestBody List<String> ids) {
         int deleted = 0;
         for (String id : ids) {
@@ -245,20 +240,20 @@ public class RuleController {
                 deleted++;
             }
         }
+        // 沒有刪到任何規則（例如重複送出）就不重建規則、也不通知其他節點。
         if (deleted > 0) {
-            cacheInvalidationService.ifPresent(CacheInvalidationService::publishInvalidation);
+            ruleEditService.allRulesChanged();
         }
         return ResponseEntity.ok(Map.of("deleted", deleted));
     }
 
     @DeleteMapping("/rules/all")
-    @CacheEvict(cacheNames = { CacheConfig.HTTP_RULES_CACHE, CacheConfig.JMS_RULES_CACHE }, allEntries = true)
     public ResponseEntity<?> deleteAllRules() {
         int count = protocolHandlerRegistry.getAllHandlers().stream()
                 .mapToInt(h -> h.deleteAll())
                 .sum();
         if (count > 0) {
-            cacheInvalidationService.ifPresent(CacheInvalidationService::publishInvalidation);
+            ruleEditService.allRulesChanged();
         }
         return ResponseEntity.ok(Map.of("deleted", count));
     }

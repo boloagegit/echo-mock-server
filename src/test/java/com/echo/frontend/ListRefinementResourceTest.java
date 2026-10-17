@@ -414,7 +414,7 @@ class ListRefinementResourceTest {
         assertThat(text("components/SettingsPage.js"))
                 .contains("$emit('delete-all-rules', status.ruleCount)");
         assertThat(text("composables/useRules.js"))
-                .contains("const deleteAllRules = async (knownCount = null) =>")
+                .contains("const deleteAllRules = (knownCount = null) => inFlight.run('all', async () =>")
                 .contains("knownCount != null && Number.isFinite(Number(knownCount)) ? Number(knownCount) : ruleTotalElements.value");
     }
 

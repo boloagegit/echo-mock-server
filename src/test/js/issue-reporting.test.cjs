@@ -3,6 +3,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+// utils.js 的共用小工具；只取需要的函式，不覆蓋測試替身（例如 apiCall）。
+const utilsHelper = name => {
+  const holder = { Vue: { ref: v => ({ value: v }), computed: fn => ({ get value() { return fn(); } }), watch() {}, reactive: v => v } };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../main/resources/static/utils.js'), 'utf8') + '\nthis.__helper = ' + name + ';', holder);
+  return holder.__helper;
+};
 
 const staticRoot = path.resolve(__dirname, '../../main/resources/static');
 const source = file => fs.readFileSync(path.join(staticRoot, file), 'utf8');
@@ -102,7 +108,7 @@ function issuesHarness(enabled, respond) {
       results: [{ id: 'existing-report' }], totalElements: 1, totalPages: 1, openCount: 1,
     }) };
   };
-  const context = vm.createContext({ Vue: h.Vue, deps, apiCall, URLSearchParams, AbortController, console });
+  const context = vm.createContext({ Vue: h.Vue, deps, apiCall, createInFlight: utilsHelper('createInFlight'), URLSearchParams, AbortController, console });
   vm.runInContext(source('composables/useIssues.js') + '\nthis.issues = useIssues(deps);', context);
   return { ...h, deps, calls, issues: context.issues, loginChecks: () => loginChecks };
 }

@@ -118,7 +118,7 @@ class AdminControllersTest {
         ReflectionTestUtils.setField(system, "bulkImportExportEnabled", true);
         ReflectionTestUtils.setField(system, "scenariosEnabled", true);
         rules = new RuleController(ruleQueryService, protocolHandlerRegistry, ruleEditService,
-                Optional.of(ruleAuditService), Optional.empty());
+                Optional.of(ruleAuditService));
         ruleState = new RuleStateController(ruleService, ruleEditService);
         importExport = new ImportExportController(protocolHandlerRegistry, ruleEditService, responseService,
                 Optional.of(ruleAuditService), excelImportService, openApiImportService);

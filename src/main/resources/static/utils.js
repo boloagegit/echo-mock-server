@@ -201,6 +201,19 @@ const createSseParser = onEvent => {
         finish() { line = ''; data = []; event = ''; }
     };
 };
+/**
+ * 同一個項目的寫入動作（啟用、刪除、展延…）還在處理中時，忽略重複觸發，例如連按兩下。
+ * 確認對話框也算在處理中，所以重複點擊不會疊出第二個動作。key 以動作加項目 ID 組成。
+ */
+const createInFlight = () => {
+    const pending = new Set();
+    const run = async (key, task) => {
+        if (pending.has(key)) { return undefined; }
+        pending.add(key);
+        try { return await task(); } finally { pending.delete(key); }
+    };
+    return { run, isPending: key => pending.has(key) };
+};
 let _showToast = null;
 let _t = null;
 const apiCall = async (url, opt = {}, config = {}) => {

@@ -1643,7 +1643,8 @@
     "scenarioResetAllSuccess": "All scenarios reset to Started",
     "scenarioResetFailed": "Failed to reset scenario",
     "ruleEnabledNamed": "Enabled “{name}”",
-    "ruleDisabledNamed": "Disabled “{name}”"
+    "ruleDisabledNamed": "Disabled “{name}”",
+    "responseConflict": "This response was just changed by someone else, so your changes were not saved. Reopen it to see the latest version before editing."
   },
   "validation": {
     "matchKeyRequired": "Please enter a Match Key",

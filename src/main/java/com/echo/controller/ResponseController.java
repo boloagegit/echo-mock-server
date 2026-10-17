@@ -8,6 +8,7 @@ import com.echo.service.RuleAuditService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -83,9 +84,16 @@ public class ResponseController {
     }
 
     @PutMapping("/responses/{id}")
-    public ResponseEntity<Response> updateResponse(@PathVariable Long id, @RequestBody Response response) {
+    public ResponseEntity<?> updateResponse(@PathVariable Long id, @RequestBody Response response) {
         return responseService.findById(id)
                 .map(existing -> {
+                    // 送來的版本與目前不同，表示編輯期間回應已被改過：拒絕，避免把別人的修改蓋掉。
+                    // 沒送版本的呼叫端（舊腳本）維持以目前版本更新。
+                    if (response.getVersion() != null && !response.getVersion().equals(existing.getVersion())) {
+                        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                                "error", "OPTIMISTIC_LOCK_CONFLICT",
+                                "currentVersion", existing.getVersion()));
+                    }
                     Response before = Response.builder().id(existing.getId()).description(existing.getDescription())
                             .contentType(existing.getContentType()).body(existing.getBody()).build();
                     response.setId(id);
@@ -93,7 +101,14 @@ public class ResponseController {
                     // 沒送的欄位沿用原本的值（只改內容時不會清掉描述或類型）
                     if (response.getDescription() == null) response.setDescription(existing.getDescription());
                     if (response.getContentType() == null) response.setContentType(existing.getContentType());
-                    Response saved = responseService.save(response);
+                    Response saved;
+                    try {
+                        saved = responseService.save(response);
+                    } catch (ObjectOptimisticLockingFailureException e) {
+                        // 讀取版本後、寫入前剛好有人存檔
+                        return ResponseEntity.status(HttpStatus.CONFLICT)
+                                .body(Map.of("error", "OPTIMISTIC_LOCK_CONFLICT"));
+                    }
                     ruleAuditService.ifPresent(s -> s.logResponseUpdate(before, saved));
                     return ResponseEntity.ok(saved);
                 })

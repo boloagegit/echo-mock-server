@@ -254,7 +254,9 @@ const useRules = (deps) => {
     });
 
     // --- CRUD ---
-    const deleteRule = async id => {
+    // 同一條規則的動作（或同一個批次動作）處理中時忽略重複點擊。
+    const inFlight = createInFlight();
+    const deleteRule = id => inFlight.run('delete:' + id, async () => {
         if (!await requireLogin()) { return; }
         if (!await showConfirm({ title: t('confirm.deleteRule'), message: t('confirm.deleteRuleMsg'), confirmText: t('confirm.delete'), danger: true })) { return; }
         const backup = [...rules.value];
@@ -269,20 +271,20 @@ const useRules = (deps) => {
             rules.value = backup;
             if (r && (r.status === 401 || r.status === 403)) { login(); }
         }
-    };
+    });
 
-    const extendRule = async id => {
+    const extendRule = id => inFlight.run('extend:' + id, async () => {
         if (!await requireLogin()) return;
         if (!await showConfirm({ title: t('confirm.extendRule'), message: t('confirm.extendRuleMsg') })) return;
         const r = await apiCall(`/api/admin/rules/${id}/extend`, { method: 'PUT' }, { errorMsg: t('toast.ruleExtendFailed') });
         if (r && r.ok) { showToast(t('toast.ruleExtendSuccess'), 'success'); markDirty(); loadRules(true); }
-    };
+    });
 
     /**
      * 切換啟用狀態：立即生效，並在通知中提供「復原」。
      * 這是可逆操作，所以不再逐次確認；刪除等不可逆操作仍會確認。
      */
-    const toggleEnabled = async (rule, { offerUndo = true } = {}) => {
+    const toggleEnabled = (rule, { offerUndo = true } = {}) => inFlight.run('toggle:' + rule.id, async () => {
         if (!await requireLogin()) return;
         const newEnabled = rule.enabled === false;
         const action = newEnabled ? 'enable' : 'disable';
@@ -296,7 +298,7 @@ const useRules = (deps) => {
             markDirty();
             if (ruleDetailId.value === rule.id && rulePreviewCache.value[rule.id]) { rulePreviewCache.value[rule.id].enabled = newEnabled; }
         }
-    };
+    });
 
     const toggleSelectAll = e => { selectedRules.value = e.target.checked ? pagedRules.value.map(r => r.id) : [] };
 
@@ -398,14 +400,16 @@ const useRules = (deps) => {
     };
 
     // --- 批次操作 ---
-    const batchProtect = async (protect) => {
+    const batchProtect = (protect) => inFlight.run('batch', async () => {
         if (!await requireLogin()) return;
         const url = protect ? '/api/admin/rules/batch/protect' : '/api/admin/rules/batch/unprotect';
+        // 後端只回報實際改變的筆數（原本就已保護的不算），通知顯示選取的數量。
+        const count = selectedRules.value.length;
         const r = await apiCall(url, { method: 'PUT', body: JSON.stringify(selectedRules.value) }, { errorMsg: t('toast.batchOperationFailed') });
-        if (r && r.ok) { const d = await r.json(); showToast(protect ? t('toast.batchProtected', {count: d.updated}) : t('toast.batchUnprotected', {count: d.updated}), 'success'); selectedRules.value = []; markDirty(); loadRules(true); }
-    };
+        if (r && r.ok) { showToast(protect ? t('toast.batchProtected', {count}) : t('toast.batchUnprotected', {count}), 'success'); selectedRules.value = []; markDirty(); loadRules(true); }
+    });
 
-    const deleteSelectedRules = async () => {
+    const deleteSelectedRules = () => inFlight.run('batch', async () => {
         if (!await requireLogin()) return;
         const protectedCount = rules.value.filter(r => selectedRules.value.includes(r.id) && r.isProtected).length;
         const msg = protectedCount
@@ -414,15 +418,15 @@ const useRules = (deps) => {
         if (!await showConfirm({ title: t('confirm.batchDeleteRules'), message: msg, confirmText: t('confirm.delete'), danger: true })) return;
         const r = await apiCall('/api/admin/rules/batch', { method: 'DELETE', body: JSON.stringify(selectedRules.value) }, { errorMsg: t('toast.batchDeleteFailed') });
         if (r && r.ok) { const d = await r.json(); showToast(t('toast.batchDeleteSuccess', {count: d.deleted}), 'success'); selectedRules.value = []; markDirty(); loadRules(true); }
-    };
+    });
 
-    const deleteAllRules = async (knownCount = null) => {
+    const deleteAllRules = (knownCount = null) => inFlight.run('all', async () => {
         if (!await requireLogin()) return;
         const count = knownCount != null && Number.isFinite(Number(knownCount)) ? Number(knownCount) : ruleTotalElements.value;
         if (!await showConfirm({ title: t('confirm.deleteAllRules'), message: t('confirm.deleteAllRulesMsg', {count}), confirmText: t('confirm.deleteAll'), danger: true, requireInput: String(count), inputLabel: t('confirm.deleteAllRulesInputLabel', {count}) })) return;
         const r = await apiCall('/api/admin/rules/all', { method: 'DELETE' }, { errorMsg: t('toast.deleteAllRulesFailed') });
         if (r && r.ok) { const d = await r.json(); showToast(t('toast.deleteAllRulesSuccess', {count: d.deleted}), 'success'); markDirty(); loadRules(true); }
-    };
+    });
 
     // --- 詳情抽屜 ---
     const ruleDetailId = ref(null);
