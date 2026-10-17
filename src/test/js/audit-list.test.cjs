@@ -164,3 +164,33 @@ test('detail changes show tags as added/removed pairs and keep the raw text for 
   assert.equal(body.beforeText, '');
   assert.equal(body.afterText, 'line1\nline2');
 });
+
+test('line diffs and copy use the stored text, and unreadable tags fall back to before/after values', () => {
+  const audit = auditFixture();
+  const result = audit.getAuditChanges({ action: 'UPDATE',
+    beforeJson: JSON.stringify({ body: '{"id":1}', tags: 'not-json' }),
+    afterJson: JSON.stringify({ body: '{"id":1,"name":"Alice","tier":"VIP","plan":"gold","region":"north"}', tags: '{"env":"SIT"}' }) });
+  const body = result.changes.find(c => c.label === '回應內容');
+  assert.equal(body.beforeText, '{"id":1}');
+  assert.equal(body.afterText, '{"id":1,"name":"Alice","tier":"VIP","plan":"gold","region":"north"}');
+  const tags = result.changes.find(c => c.label === '標籤');
+  assert.notEqual(tags.kind, 'tags');
+  assert.equal(tags.before, 'not-json');
+});
+
+test('a history response that arrives after the list was reloaded is ignored', async () => {
+  let releaseHistory;
+  const audit = auditFixture(async url => {
+    if (url.includes('size=8')) {
+      await new Promise(r => { releaseHistory = r; });
+      return { ok: true, json: async () => ({ results: [{ id: 1 }], totalElements: 1, totalPages: 1 }) };
+    }
+    return { ok: true, json: async () => ({ results: [], totalElements: 0, totalPages: 0 }) };
+  });
+  const pending = audit.loadTargetHistory('r-1');
+  await new Promise(r => setTimeout(r, 0));
+  await audit.loadAudit(true);
+  releaseHistory();
+  await pending;
+  assert.equal(audit.targetHistory.value['r-1'], undefined, 'the stale result was not written back');
+});

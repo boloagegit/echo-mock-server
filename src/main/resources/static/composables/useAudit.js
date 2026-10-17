@@ -28,6 +28,7 @@ const useAudit = (deps) => {
     // 單一規則／回應的最近記錄（詳細面板下方的時間軸），以 ruleId 為鍵。
     const targetHistory = ref({});
     const TARGET_HISTORY_SIZE = 8;
+    let historyGeneration = 0;
     const savedAuditSort = JSON.parse(localStorage.getItem('auditSort') || 'null');
     const auditSort = ref(savedAuditSort || { field: 'timestamp', asc: false });
     const auditPage = ref(1);
@@ -116,6 +117,7 @@ const useAudit = (deps) => {
                 const data = await r.json();
                 if (requestId !== listRequestSequence) { return false; }
                 auditLogs.value = hydrateCachedDetails(data.results || []);
+                historyGeneration++;
                 targetHistory.value = {};
                 auditTotalElements.value = Number(data.totalElements || 0);
                 auditToday.value = typeof data.today === 'string' ? data.today : '';
@@ -158,6 +160,8 @@ const useAudit = (deps) => {
     /** 載入某個規則／回應最近的修訂記錄；同一次列表載入內只抓一次。 */
     const loadTargetHistory = async (ruleId) => {
         if (!ruleId || targetHistory.value[ruleId]) { return; }
+        // 列表重新載入會清空時間軸；那之前發出的請求晚回來時不寫回，避免舊結果蓋掉新的。
+        const generation = historyGeneration;
         targetHistory.value = { ...targetHistory.value, [ruleId]: { loading: true, items: [], total: 0, failed: false } };
         const params = new URLSearchParams({ page: '0', size: String(TARGET_HISTORY_SIZE), sort: 'timestamp', direction: 'desc', ruleId });
         let entry = { loading: false, items: [], total: 0, failed: true };
@@ -168,7 +172,9 @@ const useAudit = (deps) => {
                 entry = { loading: false, items: data.results || [], total: Number(data.totalElements || 0), failed: false };
             }
         } finally {
-            targetHistory.value = { ...targetHistory.value, [ruleId]: entry };
+            if (generation === historyGeneration) {
+                targetHistory.value = { ...targetHistory.value, [ruleId]: entry };
+            }
         }
     };
 
@@ -262,14 +268,18 @@ const useAudit = (deps) => {
                     if (isEmpty(bv) && isEmpty(av)) { continue; }
                     if (JSON.stringify(bv) !== JSON.stringify(av)) {
                         if (key === 'tags') {
-                            const bt = tagPairs(bv) || [], at = tagPairs(av) || [];
-                            changes.push({ label: fieldLabel(key), kind: 'tags', added: at.filter(x => !bt.includes(x)), removed: bt.filter(x => !at.includes(x)) });
-                            continue;
+                            // 兩邊都能解析成 key=value 才列加減；格式不對時照一般欄位顯示前後的值。
+                            const bt = tagPairs(bv), at = tagPairs(av);
+                            if (bt && at) {
+                                changes.push({ label: fieldLabel(key), kind: 'tags', added: at.filter(x => !bt.includes(x)), removed: bt.filter(x => !at.includes(x)) });
+                                continue;
+                            }
                         }
                         const b = formatFieldValue(key, bv), a = formatFieldValue(key, av);
-                        // beforeText/afterText 是逐行比對用的原文；沒有值時為空字串，不是「(空)」。
+                        // beforeText/afterText 是逐行比對與複製用的原文（存下來的字串，不是排版後的樣子）；沒有值時為空字串。
+                        const raw = (v, shown) => isEmpty(v) ? '' : (typeof v === 'string' ? v : shown);
                         changes.push({ label: fieldLabel(key), before: b, after: a, long: isLong(b) || isLong(a),
-                            beforeText: isEmpty(bv) ? '' : b, afterText: isEmpty(av) ? '' : a });
+                            beforeText: raw(bv, b), afterText: raw(av, a) });
                     }
                 }
                 return { type: 'update', changes };
