@@ -194,3 +194,23 @@ test('a history response that arrives after the list was reloaded is ignored', a
   await pending;
   assert.equal(audit.targetHistory.value['r-1'], undefined, 'the stale result was not written back');
 });
+
+test('an entry older than the loaded history still shows in the timeline, after a gap', () => {
+  const context = { heldDetailMixin: () => ({}), shortId: x => x, fmtTime: x => x };
+  vm.runInNewContext(fs.readFileSync(path.join(root, 'components/AuditPage.js'), 'utf8') + '\nthis.AuditPage = AuditPage;', context);
+  const shown = (log, history) => context.AuditPage.computed.shownHistory.call({ shownLog: log, targetHistory: { 'r-1': history } });
+  const items = [
+    { id: 9, ruleId: 'r-1', timestamp: '2026-03-01T10:00:00' },
+    { id: 8, ruleId: 'r-1', timestamp: '2026-03-01T09:00:00' },
+  ];
+  const history = { loading: false, failed: false, total: 20, items };
+
+  assert.equal(shown(items[0], history), history, 'an entry already in the timeline changes nothing');
+  const old = { id: 2, ruleId: 'r-1', timestamp: '2026-02-01T08:00:00' };
+  const merged = shown(old, history);
+  assert.deepEqual(Array.from(merged.items, e => e.id), [9, 8, 2]);
+  assert.equal(merged.items[2]._gapBefore, true);
+  assert.equal(merged.total, 20);
+  assert.equal(history.items.length, 2, 'the cached history is not modified');
+  assert.equal(shown(old, { loading: true, items: [], total: 0 }).items.length, 0, 'nothing is merged while loading');
+});

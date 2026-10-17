@@ -840,6 +840,7 @@
 .audit-history__list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none }
 .audit-history__item { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 6px 0; font-size: var(--font-sm) }
 .audit-history__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transform: translateY(-1px) }
+.audit-history__gap { padding: 0 0 0 3px; color: var(--text-subtle); line-height: 1 }
 .audit-history__item.is-current { font-weight: var(--font-weight-semibold) }
 .audit-history__item.is-current .audit-history__dot { background: var(--primary); box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.18) }
 .audit-history__current { margin-inline-start: 4px; color: var(--text-subtle); font-size: var(--font-xs); font-weight: var(--font-weight-regular) }

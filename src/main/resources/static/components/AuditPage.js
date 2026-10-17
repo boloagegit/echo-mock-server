@@ -98,9 +98,14 @@ const AuditPage = {
     selectedLog() {
       return this.selectedIndex >= 0 ? this.pagedAudit[this.selectedIndex] : null;
     },
+    /** 時間軸只抓最新幾筆；打開的是更舊的記錄時把它補進去，並在前面標出中間略過的部分。 */
     shownHistory() {
-      const id = this.shownLog?.ruleId;
-      return id ? (this.targetHistory?.[id] || null) : null;
+      const log = this.shownLog;
+      const history = log?.ruleId ? (this.targetHistory?.[log.ruleId] || null) : null;
+      if (!history || history.loading || history.failed || history.items.some(e => e.id === log.id)) { return history; }
+      const items = history.items.filter(e => String(e.timestamp || '') >= String(log.timestamp || ''));
+      const older = history.items.slice(items.length);
+      return { ...history, items: [...items, { ...log, _gapBefore: items.length > 0 }, ...older] };
     },
     groupedByDay() {
       return this.auditSort.field === 'timestamp';
@@ -396,11 +401,11 @@ const AuditPage = {
                           <div class="ac-block-diff">
                             <div class="ac-block-panel ac-block-before">
                               <div class="ac-block-title">{{t('audit.beforeChange')}}</div>
-                              <ui-code-viewer :value="String(c.before ?? '')" :label="c.label + ' · ' + t('audit.beforeChange')" :max-height="260" @copy="$emit('clip-copy', $event)"></ui-code-viewer>
+                              <ui-code-viewer :value="String(c.beforeText ?? c.before ?? '')" :label="c.label + ' · ' + t('audit.beforeChange')" :max-height="260" @copy="$emit('clip-copy', $event)"></ui-code-viewer>
                             </div>
                             <div class="ac-block-panel ac-block-after">
                               <div class="ac-block-title">{{t('audit.afterChange')}}</div>
-                              <ui-code-viewer :value="String(c.after ?? '')" :label="c.label + ' · ' + t('audit.afterChange')" :max-height="260" @copy="$emit('clip-copy', $event)"></ui-code-viewer>
+                              <ui-code-viewer :value="String(c.afterText ?? c.after ?? '')" :label="c.label + ' · ' + t('audit.afterChange')" :max-height="260" @copy="$emit('clip-copy', $event)"></ui-code-viewer>
                             </div>
                           </div>
                         </div>
@@ -433,11 +438,14 @@ const AuditPage = {
           <div v-if="!shownHistory || shownHistory.loading" class="audit-no-change">{{t('common.loading')}}</div>
           <div v-else-if="shownHistory.failed" class="audit-no-change">{{t('audit.historyLoadFailed')}}</div>
           <ol v-else class="audit-history__list">
-            <li v-for="entry in shownHistory.items" :key="entry.id" class="audit-history__item" :class="{'is-current': entry.id === shownLog.id}" :aria-current="entry.id === shownLog.id ? 'true' : null">
+            <template v-for="entry in shownHistory.items" :key="entry.id">
+            <li v-if="entry._gapBefore" class="audit-history__gap" aria-hidden="true">⋯</li>
+            <li class="audit-history__item" :class="{'is-current': entry.id === shownLog.id}" :aria-current="entry.id === shownLog.id ? 'true' : null">
               <span class="audit-history__dot" aria-hidden="true"></span>
               <span class="audit-history__what">{{historyEntryLabel(entry)}}<span v-if="entry.id === shownLog.id" class="audit-history__current">{{t('audit.currentEntry')}}</span></span>
               <span class="audit-history__when cell-subtle"><span class="detail-mono">{{fmtTime(entry.timestamp)}}</span> · {{entry.operator}}</span>
             </li>
+            </template>
           </ol>
           <ui-button v-if="shownHistory && shownHistory.total > shownHistory.items.length && auditFilter.ruleId !== shownLog.ruleId" variant="ghost" size="compact" class="audit-history__more"
             @click="$emit('filter-audit-target', shownLog.ruleId)">{{t('audit.showAllHistory', {count: shownHistory.total})}}</ui-button>
