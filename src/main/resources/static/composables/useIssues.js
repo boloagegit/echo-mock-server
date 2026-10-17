@@ -157,7 +157,10 @@ const useIssues = (deps) => {
         return false;
     };
 
-    const resolveIssue = async (id) => {
+    // 同一個問題的動作處理中時忽略重複點擊。
+    const inFlight = createInFlight();
+
+    const resolveIssue = (id) => inFlight.run('resolve:' + id, async () => {
         if (!issueReportingEnabled.value) { return false; }
         if (!await requireLogin()) { return false; }
         if (!await showConfirm({ title: t('issues.confirmResolve'), message: t('issues.confirmResolveMsg') })) { return false; }
@@ -169,9 +172,9 @@ const useIssues = (deps) => {
         }
         if (r) { showToast(t('issues.resolveFailed'), 'error'); }
         return false;
-    };
+    });
 
-    const reopenIssue = async (id) => {
+    const reopenIssue = (id) => inFlight.run('reopen:' + id, async () => {
         if (!issueReportingEnabled.value) { return false; }
         if (!await requireLogin()) { return false; }
         const r = await apiCall(`/api/admin/issues/${id}/reopen`, { method: 'PUT' }, { silent: true });
@@ -182,9 +185,9 @@ const useIssues = (deps) => {
         }
         if (r) { showToast(t('issues.reopenFailed'), 'error'); }
         return false;
-    };
+    });
 
-    const deleteIssue = async (id) => {
+    const deleteIssue = (id) => inFlight.run('delete:' + id, async () => {
         if (!issueReportingEnabled.value) { return false; }
         if (!await requireLogin()) { return false; }
         if (!await showConfirm({ title: t('issues.confirmDelete'), message: t('issues.confirmDeleteMsg'), confirmText: t('issues.delete'), danger: true })) { return false; }
@@ -196,7 +199,7 @@ const useIssues = (deps) => {
         }
         if (r) { showToast(t('issues.deleteFailed'), 'error'); }
         return false;
-    };
+    });
 
     return {
         issues,

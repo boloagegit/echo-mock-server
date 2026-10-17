@@ -158,6 +158,8 @@ const useResponses = (deps) => {
             if (res && res.ok) {
                 const data = await res.json();
                 responseForm.value.body = data.body || '';
+                // 存檔時帶回這個版本；編輯期間別人存過檔，伺服器會拒絕而不是蓋掉對方的修改。
+                responseForm.value.version = data.version ?? null;
                 if (responseForm.value.contentType === 'sse') {
                     responseSseEvents.value = deserializeSseEvents(data.body);
                 } else {
@@ -172,6 +174,9 @@ const useResponses = (deps) => {
         showResponseModal.value = true;
     };
 
+    // 同一個回應的動作（或同一個批次動作）處理中時忽略重複點擊。
+    const inFlight = createInFlight();
+
     const saveResponse = async () => {
         if (deps.loading.value.responseSave) return;
         const payload = { description: responseForm.value.description, contentType: responseForm.value.contentType === 'sse' ? 'SSE' : null };
@@ -180,10 +185,12 @@ const useResponses = (deps) => {
         } else {
             payload.body = responseForm.value.body;
         }
+        if (editingResponse.value && responseForm.value.version != null) { payload.version = responseForm.value.version; }
         const url = editingResponse.value ? `/api/admin/responses/${editingResponse.value.id}` : '/api/admin/responses';
         deps.loading.value.responseSave = true;
         try {
-            const r = await apiCall(url, { method: editingResponse.value ? 'PUT' : 'POST', body: JSON.stringify(payload) }, { errorMsg: t('toast.responseSaveFailed') });
+            const r = await apiCall(url, { method: editingResponse.value ? 'PUT' : 'POST', body: JSON.stringify(payload) }, { errorMsg: t('toast.responseSaveFailed'), quietStatuses: [409] });
+            if (r && r.status === 409) { showToast(t('toast.responseConflict'), 'error'); return; }
             if (r && r.ok) {
                 showToast(editingResponse.value ? t('toast.responseSaveSuccess') : t('toast.responseCreateSuccess'), 'success');
                 showResponseModal.value = false;
@@ -196,7 +203,7 @@ const useResponses = (deps) => {
         }
     };
 
-    const deleteResponse = async (id, usageCount) => {
+    const deleteResponse = (id, usageCount) => inFlight.run('delete:' + id, async () => {
         const msg = usageCount > 0 ? t('confirm.deleteResponseUsedMsg', {count: usageCount}) : t('confirm.deleteResponseMsg');
         if (!await showConfirm({ title: t('confirm.deleteResponse'), message: msg, confirmText: t('confirm.delete'), danger: true })) return;
         const r = await apiCall(`/api/admin/responses/${id}`, { method: 'DELETE' }, { errorMsg: t('toast.responseDeleteFailed') });
@@ -208,7 +215,7 @@ const useResponses = (deps) => {
             loadResponseSummary(true);
             if (d.deletedRules > 0 && deps.onRulesDirty) { deps.onRulesDirty(); }
         }
-    };
+    });
 
     // --- 詳情抽屜：回應內容與引用規則 ---
     const responseDetailId = ref(null);
@@ -256,7 +263,7 @@ const useResponses = (deps) => {
         if (r && r.ok) { const data = await r.json(); const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'responses.json'; a.click(); }
     };
 
-    const importResponses = async (e) => {
+    const importResponses = (e) => inFlight.run('import', async () => {
         if (!await requireLogin()) return;
         const file = e.target.files[0]; if (!file) return;
         const text = await file.text();
@@ -267,9 +274,9 @@ const useResponses = (deps) => {
             if (r && r.ok) { const d = await r.json(); showToast(t('toast.responseImportSuccess', {count: d.imported}), 'success'); markDirty(); loadResponseSummary(true); }
         } catch (err) { showToast(t('toast.responseFileFormatError'), 'error'); }
         e.target.value = '';
-    };
+    });
 
-    const deleteSelectedResponses = async () => {
+    const deleteSelectedResponses = () => inFlight.run('batch', async () => {
         if (!await requireLogin()) return;
         const linkedRules = selectedResponses.value.reduce((sum, id) => {
             const r = responseSummary.value.find(rs => rs.id === id);
@@ -288,9 +295,9 @@ const useResponses = (deps) => {
             loadResponseSummary(true);
             if (d.deletedRules > 0 && deps.onRulesDirty) { deps.onRulesDirty(); }
         }
-    };
+    });
 
-    const deleteAllResponses = async () => {
+    const deleteAllResponses = () => inFlight.run('all', async () => {
         if (!await requireLogin()) return;
         const count = responseTotalElements.value;
         if (!await showConfirm({ title: t('confirm.deleteAllResponses'), message: t('confirm.deleteAllResponsesMsg', {count}), confirmText: t('confirm.deleteAll'), danger: true, requireInput: 'DELETE', inputLabel: t('confirm.deleteAllResponsesInputLabel') })) return;
@@ -301,7 +308,7 @@ const useResponses = (deps) => {
             if (deps.onRulesDirty) { deps.onRulesDirty(); }
             loadResponseSummary(true);
         }
-    };
+    });
 
     // --- 導航 ---
     const goToResponse = (id) => {
@@ -337,15 +344,15 @@ const useResponses = (deps) => {
     const clearResponseFilters = () => { responseFilter.value = ''; responseUsageFilter.value = ''; responseContentTypeFilter.value = ''; };
 
     // --- 展延回應 ---
-    const extendResponse = async (id) => {
+    const extendResponse = (id) => inFlight.run('extend:' + id, async () => {
         if (!await requireLogin()) { return; }
         if (!await showConfirm({ title: t('confirm.extendResponse'), message: t('confirm.extendResponseMsg') })) { return; }
         const r = await apiCall(`/api/admin/responses/${id}/extend`, { method: 'PUT' }, { errorMsg: t('toast.responseExtendFailed') });
         if (r && r.ok) { showToast(t('toast.responseExtendSuccess'), 'success'); markDirty(); loadResponseSummary(true); }
-    };
+    });
 
     // --- 清除孤兒回應 ---
-    const deleteOrphanResponses = async () => {
+    const deleteOrphanResponses = () => inFlight.run('orphans', async () => {
         if (!await requireLogin()) { return; }
         // 先查詢孤兒回應數量
         const countRes = await apiCall('/api/admin/responses/orphan-count', {}, { silent: true });
@@ -363,7 +370,7 @@ const useResponses = (deps) => {
             markDirty();
             loadResponseSummary(true);
         }
-    };
+    });
 
     return {
         responseSummary,

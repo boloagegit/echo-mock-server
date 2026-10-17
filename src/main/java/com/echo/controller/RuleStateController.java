@@ -68,18 +68,23 @@ public class RuleStateController {
         return ResponseEntity.ok(Map.of("updated", updated));
     }
 
+    // 已經是目標狀態時更新筆數為 0，但規則存在，仍回成功（重複操作不算錯誤）。
     @PutMapping("/rules/{id}/protect")
     public ResponseEntity<?> protectRule(@PathVariable String id) {
-        return ruleService.updateProtected(List.of(id), true) > 0
-                ? ResponseEntity.ok(Map.of("success", true))
-                : ResponseEntity.notFound().build();
+        if (ruleEditService.findDto(id).isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        ruleService.updateProtected(List.of(id), true);
+        return ResponseEntity.ok(Map.of("success", true));
     }
 
     @PutMapping("/rules/{id}/unprotect")
     public ResponseEntity<?> unprotectRule(@PathVariable String id) {
-        return ruleService.updateProtected(List.of(id), false) > 0
-                ? ResponseEntity.ok(Map.of("success", true))
-                : ResponseEntity.notFound().build();
+        if (ruleEditService.findDto(id).isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        ruleService.updateProtected(List.of(id), false);
+        return ResponseEntity.ok(Map.of("success", true));
     }
 
     @PutMapping("/rules/{id}/extend")

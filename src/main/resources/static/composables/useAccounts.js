@@ -70,7 +70,9 @@ const useAccounts = (deps) => {
     };
 
     /** 通用 API 操作：登入檢查 → 可選確認 → 呼叫 → toast → reload */
-    const exec = async (url, opts, successKey, failKey, confirm) => {
+    const inFlight = createInFlight();
+    // 同一個帳號的同一個動作處理中時忽略重複點擊（以網址區分）。
+    const exec = (url, opts, successKey, failKey, confirm) => inFlight.run(url, async () => {
         if (!await requireLogin()) { return null; }
         if (confirm && !await showConfirm(confirm)) { return null; }
         const r = await apiCall(url, opts, { silent: true });
@@ -84,7 +86,7 @@ const useAccounts = (deps) => {
             if (r.status === 401 || r.status === 403) { login(); }
         }
         return null;
-    };
+    });
 
     const loadAccounts = async () => {
         const requestId = ++listRequestSequence;
@@ -159,7 +161,8 @@ const useAccounts = (deps) => {
         return !!r;
     };
 
-    const resetPassword = async (account) => {
+    // 連按會產生兩組臨時密碼，畫面上先顯示的那組會失效，所以處理中忽略重複點擊。
+    const resetPassword = (account) => inFlight.run('reset:' + account.id, async () => {
         if (!await requireLogin()) { return null; }
         if (!await showConfirm({
             title: t('confirm.resetPasswordTitle'),
@@ -178,7 +181,7 @@ const useAccounts = (deps) => {
             if (r.status === 401 || r.status === 403) { login(); }
         }
         return null;
-    };
+    });
 
     return {
         accounts, searchKeyword, roleFilter, enabledFilter, resetFilter,

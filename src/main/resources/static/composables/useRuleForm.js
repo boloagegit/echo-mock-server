@@ -953,8 +953,12 @@ const useRuleForm = (deps) => {
         try {
             const resp = selectedResponseSummary.value;
             const payload = { description: resp?.description || '', body: previewEditBody.value };
-            const r = await apiCall(`/api/admin/responses/${rid}`, { method: 'PUT', body: JSON.stringify(payload) }, { errorMsg: t('toast.responseSaveFailed') });
+            if (resp?.version != null) { payload.version = resp.version; }
+            const r = await apiCall(`/api/admin/responses/${rid}`, { method: 'PUT', body: JSON.stringify(payload) }, { errorMsg: t('toast.responseSaveFailed'), quietStatuses: [409] });
+            if (r && r.status === 409) { showToast(t('toast.responseConflict'), 'error'); return; }
             if (r && r.ok) {
+                const saved = await r.json().catch(() => null);
+                if (saved && resp) { resp.version = saved.version; }
                 showToast(t('toast.responseSaveSuccess'), 'success');
                 previewResponseBody.value = previewEditBody.value;
                 previewEditing.value = false;
@@ -963,7 +967,7 @@ const useRuleForm = (deps) => {
                 loadResponsePicker(responsePickerPage.value);
             }
         } catch { showToast(t('toast.responseSaveFailed'), 'error'); }
-        previewSaving.value = false;
+        finally { previewSaving.value = false; }
     };
 
 
@@ -993,6 +997,7 @@ const useRuleForm = (deps) => {
             selectedResponseSummary.value = {
                 id: data.id,
                 description: data.description || '',
+                version: data.version ?? null,
                 bodySize: Number(data.bodySize || 0),
                 contentType: data.contentType,
                 usageCount: Array.isArray(rules) ? rules.length : 0,

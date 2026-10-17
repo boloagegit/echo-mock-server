@@ -1643,7 +1643,8 @@
     "scenarioResetAllSuccess": "全部情境已重置為 Started（初始）",
     "scenarioResetFailed": "情境重置失敗",
     "ruleEnabledNamed": "已啟用「{name}」",
-    "ruleDisabledNamed": "已停用「{name}」"
+    "ruleDisabledNamed": "已停用「{name}」",
+    "responseConflict": "這個回應剛被別人改過，所以這次沒有儲存。請重新開啟，確認最新內容後再修改。"
   },
   "validation": {
     "matchKeyRequired": "請輸入匹配鍵",

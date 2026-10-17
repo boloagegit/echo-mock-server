@@ -65,6 +65,7 @@ class RuleServiceTest {
 
         doReturn(List.of(rule)).when(protocolHandlerRegistry).findAllByIds(List.of(ruleId));
         when(objectMapper.writeValueAsString(any())).thenReturn("{\"id\":\"test-rule-id\",\"enabled\":true}");
+        when(objectMapper.readTree(anyString())).thenReturn(new ObjectMapper().readTree("{\"id\":\"test-rule-id\",\"enabled\":true}"));
         when(protocolHandlerRegistry.updateEnabled(anyList(), anyBoolean())).thenReturn(1);
 
         ruleService.updateEnabled(List.of(ruleId), false);
@@ -72,6 +73,22 @@ class RuleServiceTest {
         verify(ruleAuditService).logBatchUpdate(anyList(), anyList());
         verify(protocolHandlerRegistry).findAllByIds(List.of(ruleId));
         verify(protocolHandlerRegistry).updateEnabled(List.of(ruleId), false);
+        // 記錄修訂時不可改動受管理的實體，否則會在批次 UPDATE 前被寫回資料庫
+        assertThat(rule.getEnabled()).isTrue();
+    }
+
+    @Test
+    void updateEnabled_skipsAuditAndSyncForRulesAlreadyInThatState() throws Exception {
+        RuleService ruleService = new RuleService(protocolHandlerRegistry, responseRepository, responseBodyCache,
+                cacheConfig, Optional.of(cacheInvalidationService), Optional.of(ruleAuditService), objectMapper);
+        HttpRule rule = HttpRule.builder().id("already-off").method("GET").matchKey("/off").enabled(false).build();
+        doReturn(List.of(rule)).when(protocolHandlerRegistry).findAllByIds(List.of("already-off"));
+        when(protocolHandlerRegistry.updateEnabled(anyList(), anyBoolean())).thenReturn(0);
+
+        assertThat(ruleService.updateEnabled(List.of("already-off"), false)).isZero();
+
+        verify(ruleAuditService, never()).logBatchUpdate(anyList(), anyList());
+        verify(cacheInvalidationService, never()).publishInvalidation();
     }
 
     @Test
