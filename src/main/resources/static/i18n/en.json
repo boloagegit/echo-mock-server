@@ -662,7 +662,7 @@
     "refresh": "Refresh",
     "truncatedWarning": "Audit logs are retained for {days} days and auto-cleaned. Showing the most recent {count} records.",
     "searchOperator": "Search operator",
-    "searchContent": "Search rule/response ID",
+    "searchContent": "Search path, name, queue or ID",
     "clearAll": "Clear All",
     "actionCreate": "Created",
     "actionUpdate": "Updated",
@@ -694,7 +694,17 @@
     "emptyFilterResult": "No audit logs match these filters",
     "openRule": "Open rule",
     "openResponse": "Open response",
-    "changesTitle": "Changes"
+    "changesTitle": "Changes",
+    "thChanges": "What changed",
+    "typeFilter": "Item type filter",
+    "changedTo": "changed to",
+    "lineDelta": "+{add} −{del} lines",
+    "contentChanged": "content changed",
+    "moreFields": "+{count} more",
+    "factStatus": "Status {status}",
+    "factDisabled": "Disabled",
+    "dayToday": "Today · {date}",
+    "dayYesterday": "Yesterday · {date}"
   },
   "monitoring": {
     "gc": {
@@ -1743,7 +1753,8 @@
     "faultEmptyResponse": "Empty Response",
     "targetOriginalHost": "Use X-Original-Host",
     "targetDefaultConnection": "Default Connection",
-    "targetSavedConnection": "Selected Connection"
+    "targetSavedConnection": "Selected Connection",
+    "none": "(none)"
   },
   "filterChips": {
     "protocol": "Protocol: ",

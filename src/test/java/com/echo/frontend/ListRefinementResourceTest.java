@@ -593,9 +593,9 @@ class ListRefinementResourceTest {
                 .contains("t('responses.noVisibleLinkedRules')");
         // Audit rows expose selection; the change diff opens in the shared drawer with its own heading.
         assertThat(text("components/AuditPage.js"))
-                .contains(":aria-selected=\"selectedAudit===log.id ? 'true' : 'false'\"")
+                .contains(":aria-selected=\"selectedAudit===row.log.id ? 'true' : 'false'\"")
                 .contains("<ui-detail-drawer class=\"audit-detail-drawer\"")
-                .contains("{{auditActionLabel(log.action)}}")
+                .contains("{{auditActionLabel(row.log.action)}}")
                 .contains("t('audit.changesTitle')")
                 .doesNotContain("colspan");
         assertThat(text("composables/useAudit.js"))
@@ -732,7 +732,7 @@ class ListRefinementResourceTest {
     void unconditionalRulesArePresentedAsIntentionalDefaultMatches() throws IOException {
         assertThat(text("i18n/zh-TW.json")).contains("\"noCondition\": \"預設匹配\"");
         assertThat(text("i18n/en.json")).contains("\"noCondition\": \"Default match\"");
-        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261013.6");
+        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261016.1");
     }
 
     @Test

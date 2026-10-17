@@ -79,7 +79,7 @@ Rule responses include durable `createdBy` and `updatedBy` metadata. Existing ro
 | GET | /api/admin/logs/traffic | Traffic overview of the retained request logs (authenticated; `range=1h\|24h\|7d`): per-bar counts of mock responses, forwards, unmatched requests and failed forwards, estimated response times and the most often unmatched requests. Counted in the database and shared for 5 seconds, so concurrent viewers trigger one computation |
 | DELETE | /api/admin/logs/all | Delete all request logs (ADMIN) |
 | GET | /api/admin/rules/{id}/audit | Audit logs for a rule |
-| GET | /api/admin/audit | All audit logs |
+| GET | /api/admin/audit | Audit logs. With `page`, returns one page of summaries without the before/after snapshots: `keyword` matches the rule or response ID, path, queue name or description; `type=RULE\|RESPONSE`; `action`, `operator`, `size`, `sort`, `direction`. Each summary carries `targetName`, `targetProtocol` and a small `summary` of what changed. `detailId={id}` returns one log with its snapshots |
 | DELETE | /api/admin/audit/all | Delete all audit logs (ADMIN) |
 
 ## System Management

@@ -22,8 +22,9 @@ const AuditPage = {
     getAuditChanges: Function,
     getAuditChangeCount: Function,
     getAuditTarget: Function,
-    getAuditDescription: Function,
-    getAuditProtocol: Function
+    getAuditProtocol: Function,
+    describeAuditRow: Function,
+    auditToday: String
   },
   emits: [
     'load-audit', 'update:selectedAudit', 'update:auditFilter',
@@ -33,6 +34,41 @@ const AuditPage = {
     'go-to-rule', 'go-to-response', 'toggle-audit-detail', 'clip-copy'
   ],
   inject: ['t'],
+  components: {
+    // 一列修訂記錄「改了什麼」的精簡列表；寬螢幕放在自己的欄位，窄螢幕放在名稱下方。
+    'audit-change-summary': {
+      props: { row: Object },
+      inject: ['t'],
+      methods: {
+        changeTitle(c) {
+          if (c.kind !== 'value') return c.label;
+          const none = this.t('auditValues.none');
+          return c.label + ': ' + (c.before === null ? none : c.before) + ' → ' + (c.after === null ? none : c.after);
+        }
+      },
+      template: /* html */`
+        <span class="audit-change-summary">
+          <template v-for="(c, i) in row.changes" :key="i">
+            <span class="audit-change" :class="'is-' + c.kind" :title="changeTitle(c)">
+              <span class="audit-change__label">{{c.label}}</span>
+              <template v-if="c.kind==='value'">
+                <span class="audit-change__old" :class="{'is-empty': c.before===null}">{{c.before===null ? t('auditValues.none') : c.before}}</span>
+                <i class="bi bi-arrow-right audit-change__arrow" aria-hidden="true"></i><span class="visually-hidden">{{t('audit.changedTo')}}</span>
+                <span class="audit-change__new" :class="{'is-empty': c.after===null}">{{c.after===null ? t('auditValues.none') : c.after}}</span>
+              </template>
+              <template v-else-if="c.kind==='tags'">
+                <span v-for="tag in c.added" :key="'+'+tag" class="audit-change__new">+{{tag}}</span>
+                <span v-for="tag in c.removed" :key="'-'+tag" class="audit-change__old">−{{tag}}</span>
+              </template>
+              <span v-else-if="c.kind==='lines'" class="audit-change__lines">{{t('audit.lineDelta', {add: c.add, del: c.del})}}</span>
+              <span v-else class="audit-change__lines">{{t('audit.contentChanged')}}</span>
+            </span>
+          </template>
+          <span v-if="row.more" class="audit-change-more">{{t('audit.moreFields', {count: row.more})}}</span>
+          <span v-if="row.facts.length" class="audit-change-facts">{{row.facts.join(' · ')}}</span>
+        </span>`
+    }
+  },
   mixins: [heldDetailMixin(function () {
     const log = this.selectedLog;
     return { open: !!log, key: log?.id, ready: !log?._detailLoading, value: log };
@@ -42,13 +78,36 @@ const AuditPage = {
       return this.held.value;
     },
     hasAuditFilters() {
-      return Boolean(this.auditFilter.action || this.auditFilter.operator || this.auditFilter.keyword);
+      return Boolean(this.auditFilter.action || this.auditFilter.operator || this.auditFilter.keyword || this.auditFilter.type);
     },
     selectedIndex() {
       return this.pagedAudit.findIndex(log => log.id === this.selectedAudit);
     },
     selectedLog() {
       return this.selectedIndex >= 0 ? this.pagedAudit[this.selectedIndex] : null;
+    },
+    groupedByDay() {
+      return this.auditSort.field === 'timestamp';
+    },
+    /** 列表內容：依日期分段（依時間排序時），每列附上顯示用摘要。 */
+    auditRows() {
+      const rows = [];
+      let day = null;
+      for (const log of this.pagedAudit) {
+        const key = String(log.timestamp || '').substring(0, 10);
+        if (this.groupedByDay && key && key !== day) {
+          day = key;
+          rows.push({ key: 'day-' + key, day: key, label: this.dayLabel(key) });
+        }
+        rows.push({ key: log.id, log, view: this.describeAuditRow(log) });
+      }
+      return rows;
+    },
+    typeFilterOptions() {
+      return [
+        { value: 'RULE', label: this.t('audit.typeRule') },
+        { value: 'RESPONSE', label: this.t('audit.typeResponse') },
+      ];
     },
     actionFilterOptions() {
       return [
@@ -60,6 +119,19 @@ const AuditPage = {
   },
   methods: {
     shortId, fmtTime,
+    /** 修訂時間是伺服器時區，所以「今天／昨天」以伺服器日期判斷；不知道時只顯示日期。 */
+    dayLabel(key) {
+      const today = this.auditToday;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(today || '')) return key;
+      const [y, m, d] = today.split('-').map(Number);
+      const prev = new Date(Date.UTC(y, m - 1, d - 1)).toISOString().substring(0, 10);
+      if (key === today) return this.t('audit.dayToday', {date: key});
+      if (key === prev) return this.t('audit.dayYesterday', {date: key});
+      return key;
+    },
+    rowTime(log) {
+      return this.groupedByDay ? String(log.timestamp || '').substring(11, 16) : fmtTime(log.timestamp);
+    },
     auditActionLabel(action) {
       return ({
         CREATE: this.t('audit.actionCreate'),
@@ -81,7 +153,8 @@ const AuditPage = {
       return this.isResponse(log) ? '#' + log.ruleId.replace('response-', '') : shortId(log.ruleId);
     },
     targetName(log) {
-      return (log.beforeJson || log.afterJson) ? this.getAuditTarget(log) : this.targetType(log);
+      if (log.targetName) return log.targetName;
+      return (log.beforeJson || log.afterJson) ? this.getAuditTarget(log) : this.describeAuditRow(log).name;
     },
     openTarget(log) {
       if (this.isResponse(log)) this.$emit('go-to-response', log.ruleId);
@@ -146,6 +219,8 @@ const AuditPage = {
           :submit-mode="true"
           @search="$emit('update:auditFilter', {...auditFilter, operator:$event})"
         ></workspace-search-field>
+        <ui-toggle-group :model-value="auditFilter.type" :options="typeFilterOptions" :aria-label="t('audit.typeFilter')"
+          @update:model-value="$emit('update:auditFilter', {...auditFilter, type:$event})"></ui-toggle-group>
         <ui-toggle-group :model-value="auditFilter.action" :options="actionFilterOptions" :aria-label="t('audit.actionFilter')"
           @update:model-value="$emit('update:auditFilter', {...auditFilter, action:$event})"></ui-toggle-group>
       </div>
@@ -162,37 +237,50 @@ const AuditPage = {
           <div v-if="loading.audit && !auditLogs.length" class="list-skeleton" role="status" :aria-label="t('common.loading')">
             <div v-for="i in 8" :key="'sk-audit-'+i" class="list-skeleton__row"><span class="sk sk-w-15p"></span><span class="sk sk-w-38"></span><span class="sk sk-w-40p"></span></div>
           </div>
-          <table v-else-if="pagedAudit.length" class="data-table audit-table">
+          <table v-else-if="pagedAudit.length" class="data-table audit-table" :class="{'is-grouped': groupedByDay}">
             <thead><tr>
               <th class="col-time" :aria-sort="sortState('timestamp')"><ui-table-sort-header :label="t('audit.thTime')" :active="auditSort.field==='timestamp'" :ascending="auditSort.asc" @toggle="$emit('toggle-audit-sort','timestamp')"></ui-table-sort-header></th>
               <th class="col-action" :aria-sort="sortState('action')"><ui-table-sort-header :label="t('audit.thAction')" :active="auditSort.field==='action'" :ascending="auditSort.asc" @toggle="$emit('toggle-audit-sort','action')"></ui-table-sort-header></th>
               <th class="col-target">{{t('audit.thTarget')}}</th>
+              <th class="col-changes">{{t('audit.thChanges')}}</th>
               <th class="col-operator" :aria-sort="sortState('operator')"><ui-table-sort-header :label="t('audit.thOperator')" :active="auditSort.field==='operator'" :ascending="auditSort.asc" @toggle="$emit('toggle-audit-sort','operator')"></ui-table-sort-header></th>
               <th class="col-actions"><span class="visually-hidden">{{t('audit.thActions')}}</span></th>
             </tr></thead>
             <tbody>
-              <tr v-for="log in pagedAudit" :key="log.id" data-detail-row tabindex="0"
-                :class="{'is-selected': selectedAudit===log.id}" :aria-selected="selectedAudit===log.id ? 'true' : 'false'"
-                @click="$emit('toggle-audit-detail', log)" @keydown="onRowKeydown($event, log)">
-                <td class="col-time cell-mono cell-subtle" :title="fmtTime(log.timestamp,false)">{{fmtTime(log.timestamp)}}</td>
-                <td class="col-action">
-                  <span class="audit-action">
-                    <ui-badge class="badge" :class="'badge-'+log.action?.toLowerCase()">{{auditActionLabel(log.action)}}</ui-badge>
-                    <span v-if="getAuditChangeCount(log)" class="cell-subtle">{{getAuditChangeCount(log)}}</span>
-                  </span>
-                </td>
-                <td class="col-target">
-                  <span class="record-name">
-                    <span class="record-name__title">{{targetName(log)}}</span>
-                    <span class="record-name__id">{{targetType(log)}} · {{targetId(log)}}</span>
-                    <span v-if="getAuditDescription(log)" class="rule-desc">{{getAuditDescription(log)}}</span>
-                  </span>
-                </td>
-                <td class="col-operator cell-subtle">{{log.operator}}</td>
-                <td class="col-actions" @click.stop @dblclick.stop>
-                  <span class="row-actions"><ui-row-menu :items="auditMenuItems(log)" :label="t('common.moreActions') + ' ' + targetName(log)" @select="handleAuditMenu($event, log)"></ui-row-menu></span>
-                </td>
-              </tr>
+              <template v-for="row in auditRows" :key="row.key">
+                <tr v-if="row.day" class="audit-day-row">
+                  <td class="col-time"><span class="audit-day-row__label">{{row.label}}</span></td>
+                  <td class="col-action"></td>
+                  <td class="col-target"><span class="audit-day-row__label is-narrow">{{row.label}}</span></td>
+                  <td class="col-changes"></td><td class="col-operator"></td><td class="col-actions"></td>
+                </tr>
+                <tr v-else data-detail-row tabindex="0"
+                  :class="{'is-selected': selectedAudit===row.log.id}" :aria-selected="selectedAudit===row.log.id ? 'true' : 'false'"
+                  @click="$emit('toggle-audit-detail', row.log)" @keydown="onRowKeydown($event, row.log)">
+                  <td class="col-time cell-mono cell-subtle" :title="fmtTime(row.log.timestamp,false)">{{rowTime(row.log)}}</td>
+                  <td class="col-action"><ui-badge class="badge" :class="'badge-'+row.log.action?.toLowerCase()">{{auditActionLabel(row.log.action)}}</ui-badge></td>
+                  <td class="col-target">
+                    <div class="audit-target">
+                      <div class="audit-target__top">
+                        <span class="cell-mono cell-subtle" :title="fmtTime(row.log.timestamp,false)">{{rowTime(row.log)}}</span>
+                        <ui-badge class="badge" :class="'badge-'+row.log.action?.toLowerCase()">{{auditActionLabel(row.log.action)}}</ui-badge>
+                        <span class="audit-target__operator cell-subtle">{{row.log.operator}}</span>
+                      </div>
+                      <span class="audit-target__name" :class="{'is-deleted': row.log.action==='DELETE', 'is-unnamed': !row.view.named}">{{row.view.name}}</span>
+                      <span class="audit-target__meta">
+                        <span v-if="row.view.protocol" class="audit-proto" :class="'is-' + row.view.protocol.toLowerCase()">{{row.view.protocolLabel}}</span>
+                        <span class="audit-target__meta-text">{{row.view.meta.join(' · ')}}</span>
+                      </span>
+                      <audit-change-summary class="audit-target__changes" :row="row.view"></audit-change-summary>
+                    </div>
+                  </td>
+                  <td class="col-changes"><audit-change-summary :row="row.view"></audit-change-summary></td>
+                  <td class="col-operator cell-subtle">{{row.log.operator}}</td>
+                  <td class="col-actions" @click.stop @dblclick.stop>
+                    <span class="row-actions"><ui-row-menu :items="auditMenuItems(row.log)" :label="t('common.moreActions') + ' ' + row.view.name" @select="handleAuditMenu($event, row.log)"></ui-row-menu></span>
+                  </td>
+                </tr>
+              </template>
             </tbody>
           </table>
           <ui-load-state v-else kind="empty" :has-action="hasAuditFilters" :icon="hasAuditFilters ? 'bi-search' : 'bi-journal-text'"

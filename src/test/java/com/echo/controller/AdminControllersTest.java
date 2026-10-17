@@ -36,6 +36,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -620,11 +621,12 @@ class AdminControllersTest {
                 .results(List.of()).page(0).size(20).totalElements(0).totalPages(0).build();
         when(ruleAuditService.queryAuditSummary(any())).thenReturn(result);
 
-        var response = audit.queryAuditLogs("UPDATE", "admin", "uuid", 0, 20,
+        var response = audit.queryAuditLogs("UPDATE", "admin", "uuid", "RESPONSE", 0, 20,
                 "timestamp", "desc");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isSameAs(result);
+        verify(ruleAuditService).queryAuditSummary(argThat(filter -> "RESPONSE".equals(filter.getTargetType())));
     }
 
     @Test

@@ -41,6 +41,10 @@ public class RuleAuditService {
 
     private final RuleAuditLogRepository repository;
     private final SystemConfigService configService;
+    private static final Set<String> TARGET_TYPES = Set.of("RULE", "RESPONSE");
+    private static final int BACKFILL_BATCH_SIZE = 50;
+    private static final int BACKFILL_BATCHES_PER_RUN = 10;
+
     private final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -74,14 +78,8 @@ public class RuleAuditService {
             }
             var node = objectMapper.readTree(afterJson);
             String ruleId = node.has("id") ? node.get("id").asText() : null;
-            RuleAuditLog audit = RuleAuditLog.builder()
-                    .ruleId(ruleId)
-                    .action(Action.UPDATE)
-                    .beforeJson(beforeJson)
-                    .afterJson(afterJson)
-                    .operator(getCurrentUser())
-                    .timestamp(LocalDateTime.now())
-                    .build();
+            RuleAuditLog audit = newAudit(ruleId, Action.UPDATE, beforeJson, afterJson,
+                    getCurrentUser(), LocalDateTime.now());
             repository.save(audit);
             log.debug("Audit log: UPDATE rule {} by {}", audit.getRuleId(), audit.getOperator());
         } catch (Exception e) {
@@ -101,14 +99,8 @@ public class RuleAuditService {
                 }
                 var node = objectMapper.readTree(afterJsonList.get(i));
                 String ruleId = node.has("id") ? node.get("id").asText() : null;
-                audits.add(RuleAuditLog.builder()
-                        .ruleId(ruleId)
-                        .action(Action.UPDATE)
-                        .beforeJson(beforeJsonList.get(i))
-                        .afterJson(afterJsonList.get(i))
-                        .operator(operator)
-                        .timestamp(now)
-                        .build());
+                audits.add(newAudit(ruleId, Action.UPDATE, beforeJsonList.get(i), afterJsonList.get(i),
+                        operator, now));
             }
             if (!audits.isEmpty()) {
                 repository.saveAll(audits);
@@ -148,14 +140,9 @@ public class RuleAuditService {
                         after != null ? after.getId() : (before != null ? before.getId() : null));
                 return;
             }
-            RuleAuditLog audit = RuleAuditLog.builder()
-                    .ruleId(after != null ? "response-" + after.getId() : "response-" + before.getId())
-                    .action(action)
-                    .beforeJson(beforeJson)
-                    .afterJson(afterJson)
-                    .operator(getCurrentUser())
-                    .timestamp(LocalDateTime.now())
-                    .build();
+            RuleAuditLog audit = newAudit(
+                    after != null ? "response-" + after.getId() : "response-" + before.getId(),
+                    action, beforeJson, afterJson, getCurrentUser(), LocalDateTime.now());
             repository.save(audit);
             log.debug("Audit log: {} response {} by {}", action, audit.getRuleId(), audit.getOperator());
         } catch (Exception e) {
@@ -172,18 +159,39 @@ public class RuleAuditService {
                         after != null ? after.getId() : (before != null ? before.getId() : null));
                 return;
             }
-            RuleAuditLog audit = RuleAuditLog.builder()
-                    .ruleId(after != null ? after.getId() : before.getId())
-                    .action(action)
-                    .beforeJson(beforeJson)
-                    .afterJson(afterJson)
-                    .operator(getCurrentUser())
-                    .timestamp(LocalDateTime.now())
-                    .build();
+            RuleAuditLog audit = newAudit(after != null ? after.getId() : before.getId(),
+                    action, beforeJson, afterJson, getCurrentUser(), LocalDateTime.now());
             repository.save(audit);
             log.debug("Audit log: {} rule {} by {}", action, audit.getRuleId(), audit.getOperator());
         } catch (Exception e) {
             log.warn("Failed to create audit log: {}", e.getMessage());
+        }
+    }
+
+    /** 建立修訂記錄，同時算好列表摘要，列表就不必讀取前後快照。 */
+    private RuleAuditLog newAudit(String ruleId, Action action, String beforeJson, String afterJson,
+                                  String operator, LocalDateTime timestamp) {
+        AuditSummaryCalculator.Result summary = summarize(ruleId, action, beforeJson, afterJson);
+        return RuleAuditLog.builder()
+                .ruleId(ruleId)
+                .action(action)
+                .beforeJson(beforeJson)
+                .afterJson(afterJson)
+                .operator(operator)
+                .timestamp(timestamp)
+                .targetProtocol(summary.protocol())
+                .targetName(summary.name())
+                .targetDescription(summary.description())
+                .summary(summary.summary())
+                .build();
+    }
+
+    private AuditSummaryCalculator.Result summarize(String ruleId, Action action, String beforeJson, String afterJson) {
+        try {
+            return AuditSummaryCalculator.compute(objectMapper, ruleId, action, beforeJson, afterJson);
+        } catch (RuntimeException e) {
+            log.debug("Audit summary skipped for {}: {}", ruleId, e.getMessage());
+            return AuditSummaryCalculator.Result.EMPTY;
         }
     }
 
@@ -244,7 +252,8 @@ public class RuleAuditService {
 
         Page<Object[]> resultPage = repository.findSummaryPage(
                 filter.getAction(), normalizeFilter(filter.getOperator()),
-                normalizeFilter(filter.getKeyword()), PageRequest.of(pageNumber, pageSize, sort));
+                normalizeFilter(filter.getKeyword()), normalizeTargetType(filter.getTargetType()),
+                PageRequest.of(pageNumber, pageSize, sort));
 
         return AuditQueryResult.builder()
                 .results(resultPage.getContent().stream().map(this::mapAuditSummaryRow).toList())
@@ -252,6 +261,7 @@ public class RuleAuditService {
                 .size(pageSize)
                 .totalElements(resultPage.getTotalElements())
                 .totalPages(resultPage.getTotalPages())
+                .today(java.time.LocalDate.now().toString())
                 .build();
     }
 
@@ -270,16 +280,109 @@ public class RuleAuditService {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
+    private String normalizeTargetType(String value) {
+        String type = normalizeFilter(value);
+        if (type == null) {
+            return null;
+        }
+        type = type.toUpperCase(java.util.Locale.ROOT);
+        if (!TARGET_TYPES.contains(type)) {
+            throw new IllegalArgumentException("type must be RULE or RESPONSE");
+        }
+        return type;
+    }
+
     private AuditSummary mapAuditSummaryRow(Object[] row) {
+        long id = ((Number) row[0]).longValue();
+        String protocol = (String) row[7];
+        String name = (String) row[8];
+        String description = (String) row[9];
+        String summary = (String) row[10];
+        if (summary == null) {
+            // 舊資料：這一筆現在補算並存回去，之後就不必再算。
+            AuditSummaryCalculator.Result filled = fillSummary(id);
+            if (filled != null) {
+                protocol = filled.protocol();
+                name = filled.name();
+                description = filled.description();
+                summary = filled.summary();
+            }
+        }
         return AuditSummary.builder()
-                .id(((Number) row[0]).longValue())
+                .id(id)
                 .ruleId((String) row[1])
                 .action((RuleAuditLog.Action) row[2])
                 .operator((String) row[3])
                 .timestamp((LocalDateTime) row[4])
                 .hasBeforeJson(Boolean.TRUE.equals(row[5]))
                 .hasAfterJson(Boolean.TRUE.equals(row[6]))
+                .targetProtocol(protocol)
+                .targetName(name)
+                .targetDescription(description)
+                .summary(parseSummary(summary))
                 .build();
+    }
+
+    private JsonNode parseSummary(String summary) {
+        if (summary == null) {
+            return null;
+        }
+        try {
+            return objectMapper.readTree(summary);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 補算一筆舊資料的列表摘要；一次只載入一筆快照，避免大型回應內容同時佔用記憶體。 */
+    AuditSummaryCalculator.Result fillSummary(long id) {
+        try {
+            RuleAuditLog audit = repository.findById(id).orElse(null);
+            if (audit == null) {
+                return null;
+            }
+            if (audit.getSummary() != null) {
+                return new AuditSummaryCalculator.Result(audit.getTargetProtocol(), audit.getTargetName(),
+                        audit.getTargetDescription(), audit.getSummary());
+            }
+            AuditSummaryCalculator.Result result = summarize(audit.getRuleId(), audit.getAction(),
+                    audit.getBeforeJson(), audit.getAfterJson());
+            repository.fillSummary(id, result.protocol(), result.name(), result.description(), result.summary());
+            return result;
+        } catch (RuntimeException e) {
+            log.warn("Failed to fill audit summary {}: {}", id, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 背景補算升級前的修訂記錄摘要，讓用名稱搜尋也找得到舊資料。
+     * 每輪最多處理 {@value #BACKFILL_BATCHES_PER_RUN} 批、每批 {@value #BACKFILL_BATCH_SIZE} 筆，
+     * 而且一次只載入一筆，不會在啟動時一口氣掃過整張表。
+     */
+    @Scheduled(initialDelayString = "${echo.audit.summary-backfill-initial-delay-ms:30000}",
+            fixedDelayString = "${echo.audit.summary-backfill-delay-ms:60000}")
+    public void backfillSummaries() {
+        int filled = 0;
+        for (int batch = 0; batch < BACKFILL_BATCHES_PER_RUN; batch++) {
+            List<Long> ids = repository.findIdsWithoutSummary(PageRequest.of(0, BACKFILL_BATCH_SIZE));
+            if (ids.isEmpty()) {
+                break;
+            }
+            int before = filled;
+            for (Long id : ids) {
+                if (fillSummary(id) != null) {
+                    filled++;
+                }
+            }
+            if (filled == before) {
+                // 這一批全部失敗，下一輪再試，避免在同一輪反覆讀同樣的資料。
+                break;
+            }
+        }
+        if (filled > 0) {
+            log.info("Filled list summaries for {} older audit logs", filled);
+        }
     }
 
     /** Maps Object[] from findSummaryByRuleId/findAllSummary: [id, ruleId, action, operator, timestamp] */
@@ -299,6 +402,7 @@ public class RuleAuditService {
         private RuleAuditLog.Action action;
         private String operator;
         private String keyword;
+        private String targetType;
         private Integer page;
         private Integer size;
         private String sortField;
@@ -315,6 +419,10 @@ public class RuleAuditService {
         private LocalDateTime timestamp;
         private boolean hasBeforeJson;
         private boolean hasAfterJson;
+        private String targetProtocol;
+        private String targetName;
+        private String targetDescription;
+        private JsonNode summary;
     }
 
     @Getter
@@ -325,6 +433,8 @@ public class RuleAuditService {
         private int size;
         private long totalElements;
         private int totalPages;
+        /** 伺服器今天的日期；修訂時間是伺服器時區，前端用它判斷「今天／昨天」。 */
+        private String today;
     }
 
     @Transactional

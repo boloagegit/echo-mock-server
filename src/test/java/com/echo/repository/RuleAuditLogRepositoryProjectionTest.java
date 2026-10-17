@@ -28,12 +28,12 @@ class RuleAuditLogRepositoryProjectionTest {
                 largeJson, largeJson, "bob", LocalDateTime.now()));
         repository.flush();
 
-        Page<Object[]> page = repository.findSummaryPage(RuleAuditLog.Action.CREATE, "ALI", "RULE-ONE",
+        Page<Object[]> page = repository.findSummaryPage(RuleAuditLog.Action.CREATE, "ALI", "RULE-ONE", null,
                 PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "timestamp")));
 
         assertThat(page.getTotalElements()).isEqualTo(1);
         assertThat(page.getContent()).singleElement().satisfies(row -> {
-            assertThat(row).hasSize(7);
+            assertThat(row).hasSize(11);
             assertThat(Arrays.asList(row)).doesNotContain(largeJson);
             assertThat(row[0]).isEqualTo(first.getId());
             assertThat(row[5]).isEqualTo(false);

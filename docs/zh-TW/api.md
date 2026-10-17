@@ -73,7 +73,7 @@
 | GET | /api/admin/logs/summary | 請求紀錄摘要（需登入） |
 | DELETE | /api/admin/logs/all | 刪除全部請求紀錄 (ADMIN) |
 | GET | /api/admin/rules/{id}/audit | 單筆規則修訂紀錄 |
-| GET | /api/admin/audit | 全部修訂紀錄 |
+| GET | /api/admin/audit | 修訂紀錄。帶 `page` 時回傳一頁摘要，不含修改前後的完整內容：`keyword` 比對規則或回應 ID、路徑、佇列名稱與說明；`type=RULE\|RESPONSE`；另有 `action`、`operator`、`size`、`sort`、`direction`。每筆摘要附 `targetName`、`targetProtocol` 與「改了什麼」的 `summary`。`detailId={id}` 回傳單筆完整內容 |
 | DELETE | /api/admin/audit/all | 刪除全部修訂紀錄 (ADMIN) |
 
 ## 系統管理

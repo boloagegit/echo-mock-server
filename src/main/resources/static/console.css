@@ -751,12 +751,60 @@
 .ui-button .spin { animation-delay: 150ms }
 
 /* ===== Audit list and change drawer ===== */
-.audit-table .col-time { width: 124px }
-.audit-table .col-action { width: 132px }
-.audit-table .col-operator { width: 140px }
+.audit-table .col-time { width: 112px }
+.audit-table.is-grouped .col-time { width: 72px }
+.audit-table .col-action { width: 76px }
+.audit-table .col-target { width: 38% }
+.audit-table .col-operator { width: 120px }
 .audit-table .col-actions { width: 56px }
-.audit-action { display: inline-flex; align-items: center; gap: var(--space-sm) }
-@container (max-width: 760px) { .audit-table .col-operator { display: none } .audit-table .rule-desc { display: none } }
+/* 每列兩行：名稱一行、說明一行；「改了什麼」可以換行。 */
+.audit-table td { height: auto; padding-block: 8px }
+.audit-table td.col-changes { white-space: normal }
+/* 日期列每一欄都有格子，欄位隱藏時表格寬度才不會亂；文字從第一格延伸出去。 */
+.audit-table .audit-day-row td { height: auto; padding-block: 6px; background: var(--table-head); color: var(--text-subtle); font-size: var(--font-xs); font-weight: var(--font-weight-semibold); overflow: visible }
+.audit-table .audit-day-row td.col-time { position: relative; z-index: 1 }
+.audit-day-row__label.is-narrow { display: none }
+.audit-target { display: flex; flex-direction: column; gap: 2px; min-width: 0 }
+.audit-target .audit-target__top,
+.audit-target .audit-target__changes { display: none }
+.audit-target__name { overflow: hidden; text-overflow: ellipsis; color: var(--text); font-weight: var(--font-weight-medium) }
+.audit-target__name.is-deleted { color: var(--text-subtle); text-decoration: line-through }
+.audit-target__name.is-unnamed { color: var(--text-subtle); font-family: var(--font-mono); font-size: var(--font-xs) }
+.audit-target__meta { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--text-subtle); font-size: var(--font-xs) }
+.audit-target__meta-text { min-width: 0; overflow: hidden; text-overflow: ellipsis }
+.audit-proto { flex: none; padding: 0 5px; border-radius: 4px; background: color-mix(in srgb, var(--method-post) 12%, transparent); color: var(--method-post); font-size: 11px; font-weight: var(--font-weight-semibold); letter-spacing: 0.02em }
+.audit-proto.is-jms { background: color-mix(in srgb, var(--method-put) 14%, transparent); color: var(--method-put) }
+.audit-proto.is-response { background: var(--surface-neutral-soft); color: var(--muted) }
+.audit-change-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0 }
+.audit-change { display: inline-flex; align-items: baseline; gap: 4px; max-width: 100%; padding: 1px 7px; border-radius: 5px; background: var(--surface-neutral-soft); color: var(--text); font-size: var(--font-xs); white-space: nowrap; overflow: hidden }
+.audit-change__label { flex: none; color: var(--text-subtle) }
+.audit-change__old,
+.audit-change__new { min-width: 0; overflow: hidden; text-overflow: ellipsis }
+.audit-change__old { color: var(--danger-text) }
+.audit-change__new { color: var(--success) }
+.audit-change__old.is-empty,
+.audit-change__new.is-empty { color: var(--text-subtle) }
+.audit-change__arrow { flex: none; color: var(--text-subtle); font-size: 10px }
+.audit-change-more,
+.audit-change-facts { color: var(--text-subtle); font-size: var(--font-xs) }
+/* 中等寬度：「改了什麼」移到名稱下方。 */
+@container (max-width: 900px) {
+    .audit-table .col-changes { display: none }
+    .audit-table .col-target { width: auto }
+    .audit-target .audit-target__changes { display: flex; margin-top: 4px }
+}
+/* 手機寬度：每列變成一張卡片，時間、操作與操作者放在最上面一行。 */
+@container (max-width: 600px) {
+    .audit-table thead,
+    .audit-table .col-time,
+    .audit-table .col-action,
+    .audit-table .col-operator { display: none }
+    .audit-table td.col-target { padding-block: 10px }
+    .audit-target .audit-target__top { display: flex; align-items: center; gap: 8px; margin-bottom: 2px }
+    .audit-day-row__label.is-narrow { display: inline }
+    .audit-target__operator { margin-inline-start: auto }
+    .audit-table tbody tr.is-selected > td.col-target { box-shadow: inset 3px 0 0 var(--primary) }
+}
 .audit-detail-drawer .ac-list { display: flex; flex-direction: column; gap: 8px }
 /* In the narrow drawer, before and after stack so long values keep the full width. */
 .audit-detail-drawer .ac-block-diff { flex-direction: column }
