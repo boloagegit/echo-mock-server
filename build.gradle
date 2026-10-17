@@ -75,7 +75,7 @@ dependencies {
     // Data & Persistence
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.hibernate.orm:hibernate-community-dialects'
-    implementation 'org.xerial:sqlite-jdbc:3.53.2.1'
+    implementation 'org.xerial:sqlite-jdbc:3.53.4.0'
     runtimeOnly 'org.postgresql:postgresql'
     runtimeOnly 'com.mysql:mysql-connector-j'
     runtimeOnly 'org.mariadb.jdbc:mariadb-java-client'
@@ -149,12 +149,12 @@ dependencies {
     // Offline H2-to-SQLite migration tool (see sourceSets.h2Migration)
     h2MigrationImplementation 'com.fasterxml.jackson.core:jackson-databind'
     h2MigrationRuntimeOnly 'com.h2database:h2'
-    h2MigrationRuntimeOnly 'org.xerial:sqlite-jdbc:3.53.2.1'
+    h2MigrationRuntimeOnly 'org.xerial:sqlite-jdbc:3.53.4.0'
     h2MigrationTestImplementation 'org.junit.jupiter:junit-jupiter'
     h2MigrationTestImplementation 'org.assertj:assertj-core'
     h2MigrationTestRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     h2MigrationTestRuntimeOnly 'com.h2database:h2'
-    h2MigrationTestRuntimeOnly 'org.xerial:sqlite-jdbc:3.53.2.1'
+    h2MigrationTestRuntimeOnly 'org.xerial:sqlite-jdbc:3.53.4.0'
 }
 
 tasks.named('test') {
