@@ -28,7 +28,7 @@ class RuleAuditLogRepositoryProjectionTest {
                 largeJson, largeJson, "bob", LocalDateTime.now()));
         repository.flush();
 
-        Page<Object[]> page = repository.findSummaryPage(RuleAuditLog.Action.CREATE, "ALI", "RULE-ONE", null,
+        Page<Object[]> page = repository.findSummaryPage(RuleAuditLog.Action.CREATE, "ALI", "RULE-ONE", null, null,
                 PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "timestamp")));
 
         assertThat(page.getTotalElements()).isEqualTo(1);

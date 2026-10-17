@@ -41,6 +41,8 @@ final class AuditSummaryCalculator {
     private static final int LONG_VALUE_LENGTH = 80;
     /** 超過這個大小的內容不逐行計數，只標示「內容已變更」。 */
     private static final int MAX_LINE_COUNT_CHARS = 200_000;
+    /** 逐行比對最多找幾個增刪，與前端 audit-diff.js 的 MAX_EDITS 一致。 */
+    private static final int MAX_EDITS = 2000;
 
     /** 摘要無法計算（快照不是 JSON）時存入的值，避免背景補算一再重試同一筆。 */
     static final String EMPTY_SUMMARY = "{}";
@@ -167,25 +169,69 @@ final class AuditSummaryCalculator {
     }
 
     /**
-     * 估算新增與刪除的行數：把行當成可重複的集合來比，移動位置的行不算變更。
-     * 一般編輯的結果與逐行比對相同，而且只需線性時間。
+     * 新增與刪除的行數，與明細畫面的逐行比對（Myers 最少編輯）相同：先略過頭尾相同的行，再找最少的增刪。
+     * 差異超過 {@link #MAX_EDITS} 時明細改顯示前後全文、不顯示行數，這裡改用不看順序的估算，避免花太多時間。
      */
     static int[] lineDelta(String before, String after) {
-        Map<String, Integer> remaining = new HashMap<>();
-        if (before != null) {
-            for (String line : before.split("\n", -1)) {
-                remaining.merge(line, 1, Integer::sum);
+        String[] a = before == null ? new String[0] : before.split("\n", -1);
+        String[] b = after == null ? new String[0] : after.split("\n", -1);
+        int start = 0;
+        while (start < a.length && start < b.length && a[start].equals(b[start])) {
+            start++;
+        }
+        int endA = a.length;
+        int endB = b.length;
+        while (endA > start && endB > start && a[endA - 1].equals(b[endB - 1])) {
+            endA--;
+            endB--;
+        }
+        int n = endA - start;
+        int m = endB - start;
+        int edits = editDistance(a, b, start, n, m);
+        if (edits < 0) {
+            return unorderedDelta(a, b, start, endA, endB);
+        }
+        // 最少編輯數 = 新增 + 刪除，且新增 − 刪除 = 兩邊行數差。
+        int added = (edits + m - n) >>> 1;
+        return new int[] {added, edits - added};
+    }
+
+    /** Myers 演算法只算最少的增刪行數（不需還原路徑）；超過上限回傳 -1。 */
+    private static int editDistance(String[] a, String[] b, int start, int n, int m) {
+        int max = Math.min(n + m, MAX_EDITS);
+        int offset = max + 1;
+        int[] v = new int[2 * max + 3];
+        for (int d = 0; d <= max; d++) {
+            for (int k = -d; k <= d; k += 2) {
+                int x = (k == -d || (k != d && v[offset + k - 1] < v[offset + k + 1]))
+                        ? v[offset + k + 1] : v[offset + k - 1] + 1;
+                int y = x - k;
+                while (x < n && y < m && a[start + x].equals(b[start + y])) {
+                    x++;
+                    y++;
+                }
+                v[offset + k] = x;
+                if (x >= n && y >= m) {
+                    return d;
+                }
             }
         }
+        return -1;
+    }
+
+    /** 差異太多時的估算：把行當成可重複的集合來比，只需線性時間。 */
+    private static int[] unorderedDelta(String[] a, String[] b, int start, int endA, int endB) {
+        Map<String, Integer> remaining = new HashMap<>();
+        for (int i = start; i < endA; i++) {
+            remaining.merge(a[i], 1, Integer::sum);
+        }
         int added = 0;
-        if (after != null) {
-            for (String line : after.split("\n", -1)) {
-                Integer left = remaining.get(line);
-                if (left == null || left == 0) {
-                    added++;
-                } else {
-                    remaining.put(line, left - 1);
-                }
+        for (int i = start; i < endB; i++) {
+            Integer left = remaining.get(b[i]);
+            if (left == null || left == 0) {
+                added++;
+            } else {
+                remaining.put(b[i], left - 1);
             }
         }
         int deleted = 0;

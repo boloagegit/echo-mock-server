@@ -42,7 +42,7 @@ class RuleAuditLogRepositorySqliteTest {
                 .timestamp(LocalDateTime.now())
                 .build());
 
-        Page<Object[]> page = repository.findSummaryPage(RuleAuditLog.Action.UPDATE, "ADMIN", "SQLITE", null,
+        Page<Object[]> page = repository.findSummaryPage(RuleAuditLog.Action.UPDATE, "ADMIN", "SQLITE", null, null,
                 PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "timestamp")));
 
         assertThat(page.getTotalElements()).isEqualTo(1);
@@ -76,14 +76,18 @@ class RuleAuditLogRepositorySqliteTest {
                 .build());
         PageRequest page = PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "timestamp"));
 
-        assertThat(repository.findSummaryPage(null, null, "USERS/1", null, page).getContent())
+        assertThat(repository.findSummaryPage(null, null, "USERS/1", null, null, page).getContent())
                 .extracting(row -> row[0]).containsExactly(rule.getId());
-        assertThat(repository.findSummaryPage(null, null, "取得", null, page).getContent())
+        assertThat(repository.findSummaryPage(null, null, "取得", null, null, page).getContent())
                 .extracting(row -> row[0]).containsExactly(rule.getId());
-        assertThat(repository.findSummaryPage(null, null, null, "RESPONSE", page).getContent())
+        assertThat(repository.findSummaryPage(null, null, null, "RESPONSE", null, page).getContent())
                 .extracting(row -> row[0]).containsExactly(response.getId());
-        assertThat(repository.findSummaryPage(null, null, null, "RULE", page).getContent())
+        assertThat(repository.findSummaryPage(null, null, null, "RULE", null, page).getContent())
                 .extracting(row -> row[0]).containsExactlyInAnyOrder(rule.getId(), legacy.getId());
+
+        assertThat(repository.findSummaryPage(null, null, null, null, "response-9", page).getContent())
+                .extracting(row -> row[0]).containsExactly(response.getId());
+        assertThat(repository.findSummaryPage(null, null, null, null, "response-", page).getContent()).isEmpty();
 
         assertThat(repository.findIdsWithoutSummary(page)).containsExactly(legacy.getId());
         assertThat(repository.fillSummary(legacy.getId(), "HTTP", "/legacy", null, "{}")).isEqualTo(1);

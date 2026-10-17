@@ -817,6 +817,35 @@
 /* The wide drawer has room to compare before and after side by side. */
 .audit-detail-drawer.is-wide .ac-block-diff { flex-direction: row }
 .audit-detail-drawer.is-wide .ac-block-panel + .ac-block-panel { border-top: 0; border-left: 1px solid var(--border) }
+/* 標籤只列出加了什麼、拿掉什麼。 */
+.audit-detail-drawer .ac-tags { display: flex; flex-wrap: wrap; gap: 4px 8px }
+.audit-detail-drawer .ac-tags .ac-val { padding: 0 6px; border-radius: 4px; text-decoration: none }
+.audit-detail-drawer .ac-tags .ac-after { background: rgba(var(--success-rgb), 0.1) }
+.audit-detail-drawer .ac-tags .ac-before { background: rgba(var(--danger-rgb), 0.1) }
+/* 長內容只顯示有變的行，像程式碼比對一樣以紅綠標示。 */
+.ac-diff__head { display: flex; align-items: center; gap: var(--space-sm) }
+.ac-diff__head > span:first-child { flex: 1; min-width: 0 }
+.ac-diff__count { color: var(--text-subtle); font-family: var(--font-mono); font-size: var(--font-xs); font-weight: var(--font-weight-regular) }
+.ac-diff__body { max-height: 420px; overflow: auto; font-family: var(--font-mono); font-size: var(--font-xs); line-height: 1.55 }
+.ac-diff__line { display: grid; grid-template-columns: 3.2em 3.2em 1.4em minmax(0, 1fr); min-width: max-content }
+.ac-diff__no { padding-inline-end: 6px; color: var(--text-subtle); text-align: end; user-select: none }
+.ac-diff__sign { text-align: center; user-select: none }
+.ac-diff__text { padding-inline-end: 12px; white-space: pre }
+.ac-diff__line.is-add { background: rgba(var(--success-rgb), 0.1) }
+.ac-diff__line.is-add .ac-diff__sign { color: var(--success) }
+.ac-diff__line.is-del { background: rgba(var(--danger-rgb), 0.1) }
+.ac-diff__line.is-del .ac-diff__sign { color: var(--danger-text) }
+.ac-diff__gap { padding: 2px 0 2px 7.8em; background: var(--surface-neutral-soft); color: var(--text-subtle) }
+/* 同一個項目的最近記錄。 */
+.audit-history__list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none }
+.audit-history__item { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 6px 0; font-size: var(--font-sm) }
+.audit-history__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transform: translateY(-1px) }
+.audit-history__gap { padding: 0 0 0 3px; color: var(--text-subtle); line-height: 1 }
+.audit-history__item.is-current { font-weight: var(--font-weight-semibold) }
+.audit-history__item.is-current .audit-history__dot { background: var(--primary); box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.18) }
+.audit-history__current { margin-inline-start: 4px; color: var(--text-subtle); font-size: var(--font-xs); font-weight: var(--font-weight-regular) }
+.audit-history__when { font-size: var(--font-xs); white-space: nowrap }
+.audit-history__more { margin-top: 4px }
 .help-tooltip.is-warning { color: var(--warning-text) }
 
 /* Nothing contentful paints before the app is ready, so a reload swaps old page → finished page. */

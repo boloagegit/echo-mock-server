@@ -704,7 +704,17 @@
     "factStatus": "Status {status}",
     "factDisabled": "Disabled",
     "dayToday": "Today · {date}",
-    "dayYesterday": "Yesterday · {date}"
+    "dayYesterday": "Yesterday · {date}",
+    "historyTitle": "History of this item",
+    "showAllHistory": "Show all {count}",
+    "currentEntry": " (viewing)",
+    "historyLoadFailed": "Could not load the history of this item.",
+    "diffChangedOnly": "Changed lines only",
+    "diffShowAll": "Show full text",
+    "copyAfter": "Copy new content",
+    "lineAdded": "added",
+    "lineRemoved": "removed",
+    "filterThisItem": "Only this item"
   },
   "monitoring": {
     "gc": {
@@ -1769,7 +1779,8 @@
     "operator": "Operator: ",
     "search": "Search: ",
     "type": "Type: ",
-    "role": "Role: "
+    "role": "Role: ",
+    "target": "Item: "
   },
   "ssePreview": {
     "delay": "--- Delay {ms}ms ---",

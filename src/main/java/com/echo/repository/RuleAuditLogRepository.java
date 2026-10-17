@@ -31,7 +31,7 @@ public interface RuleAuditLogRepository extends JpaRepository<RuleAuditLog, Long
     /**
      * 後台列表用的摘要分頁查詢。beforeJson / afterJson 只用來判斷是否存在，
      * 不會被投影到結果中，避免一般瀏覽修訂記錄時載入大量 LOB。
-     * 關鍵字比對規則／回應 ID、對象名稱與說明；targetType 為 RULE 或 RESPONSE。
+     * 關鍵字比對規則／回應 ID、對象名稱與說明；targetType 為 RULE 或 RESPONSE；ruleId 只看單一對象。
      */
     @Query(value = "SELECT a.id, a.ruleId, a.action, a.operator, a.timestamp, " +
                    "CASE WHEN a.beforeJson IS NOT NULL THEN true ELSE false END, " +
@@ -43,6 +43,7 @@ public interface RuleAuditLogRepository extends JpaRepository<RuleAuditLog, Long
                                    @Param("operator") String operator,
                                    @Param("keyword") String keyword,
                                    @Param("targetType") String targetType,
+                                   @Param("ruleId") String ruleId,
                                    Pageable pageable);
 
     String SUMMARY_FILTER =
@@ -51,6 +52,7 @@ public interface RuleAuditLogRepository extends JpaRepository<RuleAuditLog, Long
             "(:keyword IS NULL OR LOWER(a.ruleId) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
             "  OR LOWER(a.targetName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
             "  OR LOWER(a.targetDescription) LIKE LOWER(CONCAT('%', :keyword, '%'))) AND " +
+            "(:ruleId IS NULL OR a.ruleId = :ruleId) AND " +
             "(:targetType IS NULL " +
             "  OR (:targetType = 'RESPONSE' AND a.ruleId LIKE 'response-%') " +
             "  OR (:targetType = 'RULE' AND a.ruleId NOT LIKE 'response-%'))";

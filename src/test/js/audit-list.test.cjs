@@ -124,3 +124,120 @@ test('today and yesterday follow the server date that came with the list, not th
   assert.equal(label('2026-02-27'), '2026-02-27');
   assert.equal(context.AuditPage.methods.dayLabel.call({ auditToday: '', t }, '2026-03-01'), '2026-03-01');
 });
+
+test('a single item can be filtered exactly, and its recent history loads once per list load', async () => {
+  const urls = [];
+  const audit = auditFixture(async url => {
+    urls.push(url);
+    if (url.includes('size=8')) {
+      return { ok: true, json: async () => ({ results: [{ id: 3, action: 'UPDATE', summary: { changeCount: 2 } }], totalElements: 12, totalPages: 2 }) };
+    }
+    return { ok: true, json: async () => ({ results: [{ id: 3, ruleId: 'response-12', targetName: '使用者回應' }], totalElements: 1, totalPages: 1 }) };
+  });
+
+  audit.filterAuditTarget('response-12');
+  await audit.loadAudit(true);
+  assert.match(urls[0], /[?&]ruleId=response-12(&|$)/);
+  assert.deepEqual(Array.from(audit.auditFilterChips.value, c => ({ ...c })), [{ key: 'ruleId', label: 'filterChips.target使用者回應' }]);
+
+  await audit.loadTargetHistory('response-12');
+  await audit.loadTargetHistory('response-12');
+  assert.equal(urls.filter(u => u.includes('size=8')).length, 1);
+  assert.match(urls[1], /ruleId=response-12/);
+  assert.equal(audit.targetHistory.value['response-12'].total, 12);
+  assert.equal(audit.targetHistory.value['response-12'].items[0].summary.changeCount, 2);
+});
+
+test('detail changes show tags as added/removed pairs and keep the raw text for line diffs', () => {
+  const audit = auditFixture();
+  const result = audit.getAuditChanges({ action: 'UPDATE',
+    beforeJson: JSON.stringify({ tags: '{"env":"SIT","team":"a"}', description: '', body: null }),
+    afterJson: JSON.stringify({ tags: '{"env":"UAT","team":"a"}', description: null, body: 'line1\nline2' }) });
+
+  assert.equal(result.type, 'update');
+  const tags = result.changes.find(c => c.kind === 'tags');
+  assert.deepEqual(Array.from(tags.added), ['env=UAT']);
+  assert.deepEqual(Array.from(tags.removed), ['env=SIT']);
+  assert.equal(result.changes.some(c => c.label === 'auditFields.description'), false);
+  const body = result.changes.find(c => c.label === '回應內容');
+  assert.equal(body.long, true);
+  assert.equal(body.beforeText, '');
+  assert.equal(body.afterText, 'line1\nline2');
+});
+
+test('line diffs and copy use the stored text, and unreadable tags fall back to before/after values', () => {
+  const audit = auditFixture();
+  const result = audit.getAuditChanges({ action: 'UPDATE',
+    beforeJson: JSON.stringify({ body: '{"id":1}', tags: 'not-json' }),
+    afterJson: JSON.stringify({ body: '{"id":1,"name":"Alice","tier":"VIP","plan":"gold","region":"north"}', tags: '{"env":"SIT"}' }) });
+  const body = result.changes.find(c => c.label === '回應內容');
+  assert.equal(body.beforeText, '{"id":1}');
+  assert.equal(body.afterText, '{"id":1,"name":"Alice","tier":"VIP","plan":"gold","region":"north"}');
+  const tags = result.changes.find(c => c.label === '標籤');
+  assert.notEqual(tags.kind, 'tags');
+  assert.equal(tags.before, 'not-json');
+});
+
+test('a history response that arrives after the list was reloaded is ignored', async () => {
+  let releaseHistory;
+  const audit = auditFixture(async url => {
+    if (url.includes('size=8')) {
+      await new Promise(r => { releaseHistory = r; });
+      return { ok: true, json: async () => ({ results: [{ id: 1 }], totalElements: 1, totalPages: 1 }) };
+    }
+    return { ok: true, json: async () => ({ results: [], totalElements: 0, totalPages: 0 }) };
+  });
+  const pending = audit.loadTargetHistory('r-1');
+  await new Promise(r => setTimeout(r, 0));
+  await audit.loadAudit(true);
+  releaseHistory();
+  await pending;
+  assert.equal(audit.targetHistory.value['r-1'], undefined, 'the stale result was not written back');
+});
+
+test('an entry older than the loaded history still shows in the timeline, after a gap', () => {
+  const context = { heldDetailMixin: () => ({}), shortId: x => x, fmtTime: x => x };
+  vm.runInNewContext(fs.readFileSync(path.join(root, 'components/AuditPage.js'), 'utf8') + '\nthis.AuditPage = AuditPage;', context);
+  const shown = (log, history) => context.AuditPage.computed.shownHistory.call({ shownLog: log, targetHistory: { 'r-1': history } });
+  const items = [
+    { id: 9, ruleId: 'r-1', timestamp: '2026-03-01T10:00:00' },
+    { id: 8, ruleId: 'r-1', timestamp: '2026-03-01T09:00:00' },
+  ];
+  const history = { loading: false, failed: false, total: 20, items };
+
+  assert.equal(shown(items[0], history), history, 'an entry already in the timeline changes nothing');
+  const old = { id: 2, ruleId: 'r-1', timestamp: '2026-02-01T08:00:00' };
+  const merged = shown(old, history);
+  assert.deepEqual(Array.from(merged.items, e => e.id), [9, 8, 2]);
+  assert.equal(merged.items[2]._gapBefore, true);
+  assert.equal(merged.total, 20);
+  assert.equal(history.items.length, 2, 'the cached history is not modified');
+  assert.equal(shown(old, { loading: true, items: [], total: 0 }).items.length, 0, 'nothing is merged while loading');
+});
+
+test('a failed history load is tried again when the item is reopened', async () => {
+  let fail = true, calls = 0;
+  const audit = auditFixture(async () => {
+    calls++;
+    return fail ? { ok: false } : { ok: true, json: async () => ({ results: [{ id: 1 }], totalElements: 1, totalPages: 1 }) };
+  });
+  await audit.loadTargetHistory('r-1');
+  assert.equal(audit.targetHistory.value['r-1'].failed, true);
+  fail = false;
+  await audit.loadTargetHistory('r-1');
+  assert.equal(audit.targetHistory.value['r-1'].failed, false);
+  await audit.loadTargetHistory('r-1');
+  assert.equal(calls, 2, 'a successful load is not fetched again');
+});
+
+test('a tag that only changes type is shown as a before/after value, not an empty tag row', () => {
+  const audit = auditFixture();
+  const result = audit.getAuditChanges({ action: 'UPDATE',
+    beforeJson: JSON.stringify({ tags: '{"priority":1}' }), afterJson: JSON.stringify({ tags: '{"priority":"1"}' }) });
+  const tags = result.changes.find(c => c.label === '標籤');
+  assert.notEqual(tags.kind, 'tags');
+  assert.equal(tags.beforeText, '{"priority":1}');
+  assert.equal(tags.afterText, '{"priority":"1"}');
+  const row = audit.describeAuditRow({ action: 'UPDATE', summary: { changes: [{ f: 'tags', b: '{"priority":1}', a: '{"priority":"1"}' }], changeCount: 1 } });
+  assert.ok(!JSON.stringify(row).includes('"kind":"tags"'), 'the list row falls back as well');
+});

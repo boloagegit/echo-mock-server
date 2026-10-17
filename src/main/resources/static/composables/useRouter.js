@@ -104,6 +104,7 @@ const useRouter = (deps) => {
             if (auditFilter.value.operator) params.set('operator', auditFilter.value.operator);
             if (auditFilter.value.keyword) params.set('keyword', auditFilter.value.keyword);
             if (auditFilter.value.type) params.set('type', auditFilter.value.type);
+            if (auditFilter.value.ruleId) params.set('ruleId', auditFilter.value.ruleId);
         }
         const qs = params.toString();
         const newHash = qs ? `${path}?${qs}` : path;
@@ -150,6 +151,7 @@ const useRouter = (deps) => {
             auditFilter.value.operator = params.get('operator') || '';
             auditFilter.value.keyword = params.get('keyword') || '';
             auditFilter.value.type = ['RULE', 'RESPONSE'].includes(params.get('type')) ? params.get('type') : '';
+            auditFilter.value.ruleId = params.get('ruleId') || '';
         }
         // Settings loads its own status; every other page loads here, once.
         const target = page.value;

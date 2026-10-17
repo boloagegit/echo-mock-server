@@ -24,7 +24,11 @@ const useAudit = (deps) => {
     // --- 狀態 ---
     const auditLogs = ref([]);
     const selectedAudit = ref(null);
-    const auditFilter = ref({ action: '', operator: '', keyword: '', type: '' });
+    const auditFilter = ref({ action: '', operator: '', keyword: '', type: '', ruleId: '' });
+    // 單一規則／回應的最近記錄（詳細面板下方的時間軸），以 ruleId 為鍵。
+    const targetHistory = ref({});
+    const TARGET_HISTORY_SIZE = 8;
+    let historyGeneration = 0;
     const savedAuditSort = JSON.parse(localStorage.getItem('auditSort') || 'null');
     const auditSort = ref(savedAuditSort || { field: 'timestamp', asc: false });
     const auditPage = ref(1);
@@ -87,6 +91,7 @@ const useAudit = (deps) => {
         if (operator) { params.set('operator', operator); }
         if (keyword) { params.set('keyword', keyword); }
         if (auditFilter.value.type) { params.set('type', auditFilter.value.type); }
+        if (auditFilter.value.ruleId) { params.set('ruleId', auditFilter.value.ruleId); }
         return '/api/admin/audit?' + params.toString();
     };
 
@@ -112,6 +117,8 @@ const useAudit = (deps) => {
                 const data = await r.json();
                 if (requestId !== listRequestSequence) { return false; }
                 auditLogs.value = hydrateCachedDetails(data.results || []);
+                historyGeneration++;
+                targetHistory.value = {};
                 auditTotalElements.value = Number(data.totalElements || 0);
                 auditToday.value = typeof data.today === 'string' ? data.today : '';
                 serverTotalPages.value = Number(data.totalPages || 0);
@@ -149,6 +156,34 @@ const useAudit = (deps) => {
         localStorage.setItem('auditPageSize', auditPageSize.value);
         reloadAuditFromFirstPage();
     });
+
+    /** 載入某個規則／回應最近的修訂記錄；同一次列表載入內成功一次就不再重抓。 */
+    const loadTargetHistory = async (ruleId) => {
+        const cached = targetHistory.value[ruleId];
+        // 載入中或已成功的不重抓；上次失敗的重新打開時再試一次。
+        if (!ruleId || (cached && !cached.failed)) { return; }
+        // 列表重新載入會清空時間軸；那之前發出的請求晚回來時不寫回，避免舊結果蓋掉新的。
+        const generation = historyGeneration;
+        targetHistory.value = { ...targetHistory.value, [ruleId]: { loading: true, items: [], total: 0, failed: false } };
+        const params = new URLSearchParams({ page: '0', size: String(TARGET_HISTORY_SIZE), sort: 'timestamp', direction: 'desc', ruleId });
+        let entry = { loading: false, items: [], total: 0, failed: true };
+        try {
+            const r = await apiCall('/api/admin/audit?' + params.toString(), {}, { silent: true });
+            if (r && r.ok) {
+                const data = await r.json();
+                entry = { loading: false, items: data.results || [], total: Number(data.totalElements || 0), failed: false };
+            }
+        } finally {
+            if (generation === historyGeneration) {
+                targetHistory.value = { ...targetHistory.value, [ruleId]: entry };
+            }
+        }
+    };
+
+    /** 只看某一個規則或回應的全部修訂記錄。 */
+    const filterAuditTarget = (ruleId) => {
+        auditFilter.value = { action: '', operator: '', keyword: '', type: '', ruleId: ruleId || '' };
+    };
 
     const toggleAuditDetail = async (log) => {
         if (selectedAudit.value === log.id) {
@@ -228,12 +263,26 @@ const useAudit = (deps) => {
             if (log.action === 'UPDATE' && before && after) {
                 const changes = [];
                 const allKeys = new Set([...Object.keys(before), ...Object.keys(after)]);
+                const isEmpty = (v) => v === null || v === undefined || v === '';
                 for (const key of allKeys) {
                     if (AUDIT_HIDDEN_FIELDS.has(key)) { continue; }
                     const bv = before[key], av = after[key];
+                    if (isEmpty(bv) && isEmpty(av)) { continue; }
                     if (JSON.stringify(bv) !== JSON.stringify(av)) {
+                        if (key === 'tags') {
+                            // 兩邊都能解析成 key=value 才列加減；格式不對時照一般欄位顯示前後的值。
+                            const bt = tagPairs(bv), at = tagPairs(av);
+                            const pairs = bt && at && tagChange(bt, at);
+                            if (pairs) {
+                                changes.push({ label: fieldLabel(key), kind: 'tags', ...pairs });
+                                continue;
+                            }
+                        }
                         const b = formatFieldValue(key, bv), a = formatFieldValue(key, av);
-                        changes.push({ label: fieldLabel(key), before: b, after: a, long: isLong(b) || isLong(a) });
+                        // beforeText/afterText 是逐行比對與複製用的原文（存下來的字串，不是排版後的樣子）；沒有值時為空字串。
+                        const raw = (v, shown) => isEmpty(v) ? '' : (typeof v === 'string' ? v : shown);
+                        changes.push({ label: fieldLabel(key), before: b, after: a, long: isLong(b) || isLong(a),
+                            beforeText: raw(bv, b), afterText: raw(av, a) });
                     }
                 }
                 return { type: 'update', changes };
@@ -306,6 +355,12 @@ const useAudit = (deps) => {
         return null;
     };
 
+    /** 新增與移除的標籤；兩邊顯示成一樣的文字（例如 1 改成 "1"）時回傳 null，改用前後值顯示。 */
+    const tagChange = (before, after) => {
+        const added = after.filter(x => !before.includes(x)), removed = before.filter(x => !after.includes(x));
+        return added.length || removed.length ? { added, removed } : null;
+    };
+
     const listChange = (c) => {
         const label = fieldLabel(c.f);
         if (c.long) {
@@ -313,9 +368,8 @@ const useAudit = (deps) => {
         }
         if (c.f === 'tags') {
             const before = tagPairs(c.b), after = tagPairs(c.a);
-            if (before && after) {
-                return { label, kind: 'tags', added: after.filter(x => !before.includes(x)), removed: before.filter(x => !after.includes(x)) };
-            }
+            const pairs = before && after && tagChange(before, after);
+            if (pairs) { return { label, kind: 'tags', ...pairs }; }
         }
         return {
             label, kind: 'value',
@@ -372,6 +426,12 @@ const useAudit = (deps) => {
         }
         if (auditFilter.value.operator) chips.push({ key: 'operator', label: t('filterChips.operator') + auditFilter.value.operator });
         if (auditFilter.value.keyword) chips.push({ key: 'keyword', label: t('filterChips.keyword') + auditFilter.value.keyword });
+        if (auditFilter.value.ruleId) {
+            const id = auditFilter.value.ruleId;
+            const named = auditLogs.value.find(log => log.ruleId === id && log.targetName);
+            const fallback = id.startsWith('response-') ? t('audit.typeResponse') + ' #' + id.replace('response-', '') : shortId(id);
+            chips.push({ key: 'ruleId', label: t('filterChips.target') + (named ? named.targetName : fallback) });
+        }
         if (auditFilter.value.type) {
             const typeLabel = auditFilter.value.type === 'RESPONSE' ? t('audit.typeResponse') : t('audit.typeRule');
             chips.push({ key: 'type', label: t('filterChips.type') + typeLabel });
@@ -381,7 +441,7 @@ const useAudit = (deps) => {
 
     const removeAuditChip = (key) => { auditFilter.value[key] = ''; };
 
-    const clearAuditFilters = () => { auditFilter.value = { action: '', operator: '', keyword: '', type: '' }; };
+    const clearAuditFilters = () => { auditFilter.value = { action: '', operator: '', keyword: '', type: '', ruleId: '' }; };
 
     return {
         auditLogs,
@@ -414,6 +474,9 @@ const useAudit = (deps) => {
         getAuditProtocol,
         getAuditChangeCount,
         describeAuditRow,
+        targetHistory,
+        loadTargetHistory,
+        filterAuditTarget,
         escapeHtml,
         auditFilterChips,
         removeAuditChip,
