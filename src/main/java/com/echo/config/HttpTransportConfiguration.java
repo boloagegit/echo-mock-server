@@ -6,6 +6,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import jakarta.servlet.ServletContext;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.web.embedded.undertow.UndertowServletWebServerFactory;
@@ -39,7 +40,10 @@ public final class HttpTransportConfiguration {
             return new NativeHttpResources(workers, maxRequests, maxBodyBytes, maxBufferedBytes);
         }
 
-        @Bean(destroyMethod = "shutdownNow")
+        // 不當預設候選：否則 Spring Boot 看到已有 ScheduledExecutorService／Executor，就不建立自己的
+        // 排程器與 applicationTaskExecutor，所有 @Scheduled 工作都會跑在這組計時執行緒上。
+        // 只給下面的原生 HTTP 入口指名使用。
+        @Bean(destroyMethod = "shutdownNow", defaultCandidate = false)
         ScheduledThreadPoolExecutor nativeHttpScheduler() {
             var scheduler = new ScheduledThreadPoolExecutor(8, runnable -> {
                 var thread = new Thread(runnable, "native-http-timer");
@@ -61,7 +65,7 @@ public final class HttpTransportConfiguration {
                 ObjectProvider<ServletContext> servletContexts,
                 Environment environment,
                 NativeHttpResources resources,
-                ScheduledThreadPoolExecutor nativeHttpScheduler,
+                @Qualifier("nativeHttpScheduler") ScheduledThreadPoolExecutor nativeHttpScheduler,
                 @Value("${echo.http.request-timeout-ms:40000}") long timeoutMs) {
             if (timeoutMs < 1) throw new IllegalArgumentException("HTTP request timeout must be positive");
             return factory -> factory.addDeploymentInfoCustomizers(info -> info.addInitialHandlerChainWrapper(next ->

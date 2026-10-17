@@ -23,6 +23,13 @@ spring:
         use-last-modified: true
   application:
     name: echo
+  # 背景排程（快取同步、清理、備份）用 Spring Boot 自己的排程執行緒，與原生 HTTP 計時器分開。
+  # 多於一條執行緒，夜間備份才不會擋住每 5 秒一次的快取同步。
+  task:
+    scheduling:
+      thread-name-prefix: echo-scheduled-
+      pool:
+        size: ${ECHO_SCHEDULING_POOL_SIZE:4}
 
   autoconfigure:
     exclude:
