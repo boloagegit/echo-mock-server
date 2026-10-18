@@ -20,7 +20,7 @@ Echo stands in for the services your application talks to during development and
 - **See why a request matched.** Every logged request shows its processing flow and the full match chain: which rules were candidates, and which condition passed or failed.
 - **Built for teams.** It has logins (built-in accounts or LDAP) with admin and user roles, an audit trail, tags for bulk enable and disable, and rule protection and retention. Several instances can share one database.
 - **Fits a locked-down network.** Ship one JAR, start it with `java -jar`, and keep the data in SQLite. The UI assets are bundled through WebJars, so no CDN is needed.
-- **Measured, not guessed.** The benchmarks against WireMock are published with their method, scripts and summarized results, including the cases where Echo gains little, such as slow downstreams. See [Performance](#performance).
+- **Measured HTTP performance.** In the published tests, fixed-response throughput is about 1.9× WireMock 3.13.2's, and throughput with 2,000 path rules is about 10.2×. Slow downstreams gain much less. See [Performance](#performance) for test conditions, methods and limits.
 
 ## Quick start
 
@@ -136,7 +136,7 @@ Slow downstream calls and deliberate delays gain much less than simple responses
 
 The [HTTP acceleration guide](docs/native-http.md) covers capacity limits, compatibility and switching back with `ECHO_HTTP_TRANSPORT=servlet`. [JMS resource reuse](docs/jms-performance-and-correctness.md) and [startup measurements](docs/performance-hardening-2026-10-16.md) are documented separately (also in Traditional Chinese).
 
-The [Artemis large-message validation](docs/artemis-large-message-validation-2026-10-18.md) compares a provider upgrade with a 512 MiB heap and request recording enabled, including old/new client interoperability, latency and mixed-load observation. Its results apply to Artemis paths; TIBCO EMS is not benchmarked.
+With a 512 MiB heap, 128 KiB padding and request recording enabled, upgrading Artemis from 2.40 to 2.57 improves mean JMS mock throughput by 91.9% and forwarding by 20.4% across four fresh JVMs. This compares Echo before and after the upgrade. The [existing validation report](docs/artemis-large-message-validation-2026-10-18.md) includes interoperability, latency and ten-minute mixed-load observations, including the thread-count warning and its analysis. These results apply to Artemis paths; TIBCO EMS is not benchmarked.
 
 ## Documentation
 

@@ -20,7 +20,7 @@
 - **看得出為什麼命中。** 每筆請求紀錄都有處理流程和完整的比對過程：哪些規則是候選、哪個條件通過或沒通過。
 - **給團隊用的。** 有登入（內建帳號或 LDAP）與管理者／一般使用者權限，也有修訂紀錄。規則可以用標籤批次啟用或停用，也可以保護、設定保留期限。多台實例可以共用同一個資料庫。
 - **適合封閉內網。** 只要一個 JAR，用 `java -jar` 啟動，資料存在 SQLite。前端資源透過 WebJars 打包，不需要 CDN。
-- **效能有實測。** 與 WireMock 的比較連同測試方法、腳本與結果摘要一起公開，Echo 進步有限的情境（例如慢下游）也照實列出，見[效能](#效能)。
+- **效能有實測。** 公開 HTTP 測試中，Echo 固定回應吞吐約為 WireMock 3.13.2 的 1.9 倍，2,000 條路徑規則情境約 10.2 倍；慢下游改善較小。測試條件、方法與限制見[效能](#效能)。
 
 ## 快速開始
 
@@ -136,7 +136,7 @@ HTTP/1.1 加速已預設開啟。2026-10-16 比較使用 Java 21、共用四核�
 
 [HTTP 加速說明](docs/native-http.md)包含容量上限、相容性與 `ECHO_HTTP_TRANSPORT=servlet` 切回方式；另有 [JMS 資源重用](docs/jms-performance-and-correctness.md)與[啟動量測](docs/performance-hardening-2026-10-16.md)。
 
-[Artemis 大訊息驗證](docs/zh-TW/artemis-large-message-validation-2026-10-18.md)以 512 MiB heap、開啟請求紀錄比較 provider 升級，包含新舊 client 互通、延遲與混合流量觀察。結果適用於 Artemis 路徑，未實測 TIBCO EMS。
+另以 512 MiB heap、128 KiB padding、開啟請求紀錄，四個新 JVM 比較 Artemis 2.40→2.57 升級，JMS 模擬平均吞吐提升 91.9%、轉發提升 20.4%，比較對象為升級前後的 Echo。[既有驗證報告](docs/zh-TW/artemis-large-message-validation-2026-10-18.md)保留互通、延遲與十分鐘混合觀察結果，包含執行緒數警報及原因分析。結果適用於 Artemis 路徑，未實測 TIBCO EMS。
 
 ## 文件
 
