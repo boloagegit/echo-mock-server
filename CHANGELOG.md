@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - SQLite online backups now pass destination paths directly to the driver, so paths containing spaces or apostrophes work without the driver's limited command parser. Snapshot integrity checks and atomic publication remain in place.
 
 ### Fixed
+- Health probes return JSON for plain curl/Kubernetes requests with missing or wildcard `Accept` headers, while preserving the original binary fallback for other routes and honoring explicit response formats.
 - JMS target factory creation and connection retirement no longer hold the map shared by all outbound profiles. A stalled provider affects its own target without blocking unrelated new targets; active-use retirement, independent reply queues and existing source transaction/provider retry policies are preserved.
 - SQLite backup housekeeping runs independently of backup success. Completed backups have age, byte and file-count limits (defaults: 7 days, 10 GiB, 100 files), while retaining the latest verified recovery point. Admission checks preserve a 512 MiB free-space reserve and refuse copies that cannot fit safely; backup and cleanup operations do not overlap.
 - Concurrent readers of an expired HTTP/JMS rule snapshot no longer trigger another database rebuild after a fresh snapshot has already been installed. The rebuild slot rechecks freshness and still hands off changes arriving during that check; a deterministic race test reproduces the previous extra build.

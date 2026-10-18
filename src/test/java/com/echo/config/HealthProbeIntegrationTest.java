@@ -3,6 +3,12 @@ package com.echo.config;
 import com.echo.integration.base.BaseIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthContributorRegistry;
@@ -50,6 +56,25 @@ class HealthProbeIntegrationTest extends BaseIntegrationTest {
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(context.containsBean("jmsHealthContributor")).isFalse();
         assertThat(context.containsBean("jmsHealthIndicator")).isFalse();
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"*/*", "application/json"})
+    void plainHttpClientsCanReadProbesWithoutSpringAddingAnAcceptHeader(String accept) throws Exception {
+        try (var client = HttpClients.createDefault()) {
+            for (String probe : new String[]{"liveness", "readiness"}) {
+                var request = new HttpGet(restTemplate.getRootUri() + "/actuator/health/" + probe);
+                if (accept != null) {
+                    request.setHeader("Accept", accept);
+                }
+                client.execute(request, response -> {
+                    assertThat(response.getCode()).as("%s with Accept=%s", probe, accept).isEqualTo(200);
+                    assertThat(EntityUtils.toString(response.getEntity())).isEqualTo("{\"status\":\"UP\"}");
+                    return null;
+                });
+            }
+        }
     }
 
     @Test
