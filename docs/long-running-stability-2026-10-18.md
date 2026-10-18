@@ -190,3 +190,7 @@ Add `--backup-maintenance` to the observer to copy SQLite every 15 seconds, prun
 2. **Change:** the scheduled job waits interruptibly for maintenance and creates the verified copy after acquiring the same lock. Manual duplicates still fail immediately and housekeeping still skips an active copy. No executor or retry queue is added.
 3. **Validation:** a deterministic real-SQLite test holds housekeeping, verifies that the scheduled copy waits, releases it and checks a healthy published snapshot. A second test interrupts the waiter and proves that a later copy still works. Both tests fail before the fix.
 4. **Cost and limits:** a waiting scheduled copy occupies one background scheduler thread. It does not hold a JDBC connection while waiting or block the HTTP/JMS worker pools. It waits as long as ongoing maintenance takes; shutdown can interrupt the wait, and physical storage failures remain explicit failures.
+
+## Final observation and WireMock baseline
+
+The `f9a60fc` production artifact completed 180,000 verified HTTP/JMS requests over thirty measured minutes, 66 administrative cycles and 132 real JMS shared-response rewrite checks. All seven resource thresholds passed; 138 verified backups completed with no maintenance-lock collision. See the [HTTP throughput, memory and lifecycle comparison with WireMock](wiremock-comparison-2026-10-18.md) for the separate matched HTTP run, logging-policy caveats and original resource flags.
