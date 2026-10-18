@@ -33,6 +33,6 @@ EXPOSE 8080 61616
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
     CMD curl --fail --silent --show-error --header 'Accept: application/json' \
-        http://localhost:8080/api/admin/status || exit 1
+        http://localhost:8080/actuator/health/readiness || exit 1
 
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]

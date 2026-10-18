@@ -109,11 +109,20 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
         assertThat(request("<req/>").body()).isEqualTo("<reply>again</reply>");
 
         esb.stop();
-        waitUntil(() -> jmsConnectionManager.listenerState() == JmsConnectionManager.ListenerState.RECONNECTING, 10_000);
-        esb = startEsb();
+        try {
+            waitUntil(() -> jmsConnectionManager.listenerState() == JmsConnectionManager.ListenerState.RECONNECTING, 10_000);
+            assertThat(restTemplate.getForEntity("/actuator/health/readiness", String.class).getStatusCode().value())
+                    .isEqualTo(503);
+            assertThat(restTemplate.getForEntity("/actuator/health/liveness", String.class).getStatusCode().value())
+                    .isEqualTo(200);
+        } finally {
+            esb = startEsb();
+        }
         waitUntilReceiving();
 
         assertThat(request("<req/>").body()).isEqualTo("<reply>again</reply>");
+        assertThat(restTemplate.getForEntity("/actuator/health/readiness", String.class).getStatusCode().value())
+                .isEqualTo(200);
     }
 
     @Test

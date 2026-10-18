@@ -204,6 +204,21 @@ Environment variables:
 JVM options are set in the Dockerfile (default `-Xms256m -Xmx512m`, with a heap dump and process exit on OOM). Override by adding `JAVA_OPTS` to docker-compose.yml `environment`.
 For production `java -jar` deployments, also pass `-XX:+HeapDumpOnOutOfMemoryError -XX:+ExitOnOutOfMemoryError` so that an out-of-memory error leaves a heap dump showing its cause.
 
+## Health probes and recovery
+
+Use `GET /actuator/health/liveness` to check process availability, and `GET /actuator/health/readiness` to check whether Echo can serve with its database, disk and JMS source listener available. Both endpoints are anonymous and return only status. Configure restart decisions against liveness; use readiness for traffic routing. An external broker outage makes readiness return 503 while liveness remains 200, so a reconnect does not create a restart loop. After broker recovery, readiness returns 200 without restarting Echo.
+
+Docker's health check uses readiness. `restart: unless-stopped` restarts an exited process, including configured OOM/corruption exits; **Docker Compose does not restart a running container solely because it is unhealthy**. A deployment that must restart an unresponsive process needs a supervisor/orchestrator that checks liveness with a timeout and consecutive-failure threshold. Do not use readiness failures alone as the restart trigger. The application does not force-close transactions merely because a probe fails.
+
+The container runs Java as PID 1, so stop signals reach the JVM. Compose allows 60 seconds for shutdown; deployments with longer transactions or large shutdown backups should choose an appropriate grace period. Abrupt termination can still interrupt a backup, and the admission-space check cannot reserve space against other processes. Keep the scheduled verified snapshots and test recovery; a shutdown backup is not a replacement for them. Configure the writable data mount with enough space for live data, spool, broker data, logs, a new snapshot and retained snapshots. See [backup limits and health settings](configuration.md#health-probes).
+
+```bash
+curl --fail http://localhost:8080/actuator/health/liveness
+curl --fail http://localhost:8080/actuator/health/readiness
+```
+
+On Windows/PowerShell, use `Invoke-RestMethod http://localhost:8080/actuator/health/readiness`. Development uses the same endpoints and filesystem APIs; no Linux shell or Docker is required.
+
 ## Optional Features
 
 The following user-facing features are intentionally disabled by default and can be enabled per deployment:

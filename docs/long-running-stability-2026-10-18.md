@@ -151,3 +151,28 @@ Use longer runs and deployment-like traffic for small or workload-specific leaks
 
 Raw measurement output belongs outside the source repository; benchmark helper
 scripts under `scripts/bench` remain available for deployment measurements.
+
+## Further operating fixes on the same branch
+
+### JMS target isolation
+
+1. **Original problem:** factory creation and retirement of idle/superseded clients held the map lock shared by all named targets. A stalled provider could block a healthy target's first request.
+2. **Change:** reserve a use before publishing a client; stop admission and detach old clients under the map lock; create/retire resources under the individual lifecycle afterward. Published-client monitors and provider calls never run under the map lock. No extra executor, forced interruption, ACK/transaction change or retry-policy change.
+3. **Observed result:** three controlled stalls (factory creation, idle eviction, superseded-client close) exceeded a two-second acceptance window before the fix. All now let an unrelated target reply while the other provider is still held. The focused JMS run completed 273 tests, zero failures, six skips, including real Artemis transactions, forwarding, reply isolation and cleanup.
+4. **Cost and limits:** factory creation is lazy per client; retirement still waits for active users. The affected target can still wait for its provider, and the source listener pool is not partitioned per target. These stalls validate Echo's locking, not a licensed EMS installation or normal throughput.
+
+### Backup retention through failures
+
+1. **Original problem:** expiry ran only after a successful new backup, with no byte/count budget. A full destination could prevent both copying and the cleanup needed to free space.
+2. **Change:** independent hourly housekeeping, serialized maintenance and pre-copy size/free-space checks. Defaults: 7 days, 10 GiB, 100 completed files, 512 MiB free reserve. Preserve the newest verified healthy copy even if expired; a newer corrupt file cannot displace it. If none can be verified, preserve existing recovery material. Exclude unrelated files, directories and symlinks.
+3. **Observed result:** 14 retention/capacity tests plus the original three backup tests cover unavailable storage, injected low space and recovery, byte/count pruning, corrupt backups, concurrent calls and Windows-compatible paths. Online backup, integrity/foreign-key checks and atomic publication remain.
+4. **Cost and limits:** capacity may shorten history; a copy that cannot fit while preserving the last valid backup is refused. Verification adds maintenance I/O. Admission checks do not reserve disk against other processes or database growth; completed-file limits exclude unrelated files and crash-left partial files. A verified published backup stays successful if subsequent pruning fails.
+
+### Liveness and readiness
+
+1. **Original problem:** container checks used the management statistics endpoint, which returned 200 while JMS reconnected and performed DB statistics work for a process check.
+2. **Change:** standard Actuator liveness checks application availability; readiness adds DB, free disk space and the existing JMS source listener. Only these two GET probes allow anonymous status-only access. The built-in JMS connection-test indicator is disabled. Docker uses readiness, runs Java as PID 1 and Compose allows 60 seconds for shutdown. CI supports manual branch runs and a container stop/restart smoke test before opening a PR.
+3. **Observed result:** stopping a real external Artemis source yields readiness 503 and liveness 200. Restart restores readiness 200 and correct JMS replies. Tests cover routing, status-only output, disabled JMS and DB failure mapping. The local full JDK 17 build passed 2,177 tests with zero failures and six skips, plus static analysis.
+4. **Cost and limits:** readiness uses datasource timeouts; liveness does not depend on DB/ESB availability. Listener state cannot diagnose every blocked operation. Compose restarts exited containers, not running unhealthy ones; automatic restart of an unresponsive process needs a supervisor checking liveness. Probes do not force-close transactions.
+
+Add `--backup-maintenance` to the observer to copy SQLite every 15 seconds, prune independently to three completed files / 256 MiB, verify retained inventories and check both probes at idle. No completed backups/pruning or any backup failure makes the observation fail. This remains a finite regression window; use deployment-like 24–72-hour runs for extended acceptance.

@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main, master]
   pull_request:
@@ -130,7 +131,7 @@ jobs:
           retention-days: 14
 
   docker-build-test:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -152,3 +153,28 @@ jobs:
 
       - name: Build Docker image (test only)
         run: docker build -t echo-mock-server:test .
+
+      - name: Verify container probes, signal delivery and restart
+        run: |
+          container_name=echo-runtime-smoke
+          trap 'docker logs "$container_name"; docker rm -f "$container_name" >/dev/null' EXIT
+          docker run -d --name "$container_name" echo-mock-server:test
+          wait_ready() {
+            for attempt in $(seq 1 45); do
+              if docker exec "$container_name" curl --fail --silent \
+                http://localhost:8080/actuator/health/readiness >/dev/null; then
+                return 0
+              fi
+              sleep 1
+            done
+            return 1
+          }
+          wait_ready
+          test "$(docker exec "$container_name" cat /proc/1/comm)" = java
+          docker exec "$container_name" curl --fail --silent \
+            http://localhost:8080/actuator/health/liveness
+          docker stop --time 20 "$container_name"
+          exit_code=$(docker inspect --format '{{.State.ExitCode}}' "$container_name")
+          test "$exit_code" = 0 || test "$exit_code" = 143
+          docker start "$container_name"
+          wait_ready

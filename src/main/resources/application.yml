@@ -229,6 +229,10 @@ echo:
     cron: "0 0 3 * * *"       # 每天凌晨 3 點執行
     path: ./backups           # 備份目錄
     retention-days: 7         # 備份保留天數
+    max-total-bytes: ${ECHO_BACKUP_MAX_TOTAL_BYTES:10737418240} # 已完成備份最多 10 GiB
+    max-files: ${ECHO_BACKUP_MAX_FILES:100} # 防止大量小型備份累積；至少保留最後一份驗證有效的備份
+    min-free-bytes: ${ECHO_BACKUP_MIN_FREE_BYTES:536870912} # 開始複製前預留 512 MiB
+    housekeeping-interval-ms: ${ECHO_BACKUP_HOUSEKEEPING_INTERVAL_MS:3600000} # 每小時獨立清理
     on-shutdown: true         # 應用關閉時備份
   agent:
     log:
@@ -247,6 +251,30 @@ echo:
     url: ldap://ldap.example.com:389
     base-dn: dc=example,dc=com
     user-pattern: uid={0},ou=users
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+      group:
+        # 下游／資料庫故障只影響 readiness，不讓外部故障造成無限重啟。
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db,diskSpace,jmsSource
+  health:
+    # 只觀察既有 listener，不讓探針另外連線到 TIBCO／Artemis。
+    jms:
+      enabled: false
+    diskspace:
+      path: ${ECHO_HEALTH_STORAGE_PATH:.}
+      threshold: ${ECHO_HEALTH_MIN_FREE_BYTES:536870912}
 
 logging:
   file:

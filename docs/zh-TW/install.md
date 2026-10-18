@@ -182,6 +182,21 @@ docker compose down
 JVM 參數在 Dockerfile 中設定（預設 `-Xms256m -Xmx512m`，OOM 時保留 heap dump 並退出），可透過 docker-compose.yml 的 `environment` 加入 `JAVA_OPTS` 覆蓋。
 若產線直接用 `java -jar` 啟動，請同樣加上 `-XX:+HeapDumpOnOutOfMemoryError -XX:+ExitOnOutOfMemoryError`，記憶體不足時才會留下 heap dump 供查明原因。
 
+## 健康檢查與恢復
+
+用 `GET /actuator/health/liveness` 檢查程序存活，用 `GET /actuator/health/readiness` 檢查 Echo 是否具備可用的資料庫、磁碟空間與 JMS 來源 listener。兩者可匿名讀取，只回傳狀態。重啟應依據 liveness，流量導入依據 readiness。外部 broker 中斷時 readiness 回 503，liveness 保持 200，避免重新連線期間反覆重啟；broker 恢復後，Echo 不必重啟就能回到 readiness 200。
+
+Docker 健康檢查使用 readiness。`restart: unless-stopped` 會重啟已退出的程序，包括已設定的 OOM／資料庫損壞退出；**Docker Compose 不會僅因容器被標記 unhealthy 就重啟仍在執行的程序**。若部署要求程序無回應時自動重啟，需要由監管程序／編排平台以 liveness、逾時與連續失敗門檻判斷。不要只因 readiness 失敗就重啟；應用程式也不會因探針失敗而強制中斷交易。
+
+容器直接以 Java 作為 PID 1，停止訊號會送到 JVM；Compose 預留 60 秒關閉。若交易或關閉時備份需要更久，應調整寬限時間。強制終止仍可能中斷備份，而開始複製前的空間檢查無法替其他程序保留磁碟額度。仍需保留排程產生且驗證有效的快照並實測復原，不能只依賴關閉時備份。資料掛載點應容納主資料庫、spool、broker 資料、日誌、新快照及保留快照，見[備份限制與健康設定](configuration.md#健康檢查)。
+
+```bash
+curl --fail http://localhost:8080/actuator/health/liveness
+curl --fail http://localhost:8080/actuator/health/readiness
+```
+
+Windows／PowerShell 可使用 `Invoke-RestMethod http://localhost:8080/actuator/health/readiness`。開發使用相同端點與檔案系統 API，不需要 Linux shell 或 Docker。
+
 ## 選用功能
 
 以下使用者功能預設關閉，可依部署需求開啟：

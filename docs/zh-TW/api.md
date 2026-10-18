@@ -78,6 +78,8 @@
 
 ## 系統管理
 
+匿名維運探針：`GET /actuator/health/liveness` 檢查程序存活，`GET /actuator/health/readiness` 另外檢查 DB、磁碟空間與既有 JMS 來源 listener。只回傳 `status`，無法服務時 readiness 回 503。其他 Actuator 路徑仍須登入，見[設定](configuration.md#健康檢查)。
+
 | Method | Path | 說明 |
 |--------|------|------|
 | GET | /api/admin/status | 系統狀態（含 JVM、DB、統計） |

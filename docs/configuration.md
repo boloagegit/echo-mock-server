@@ -82,6 +82,10 @@ echo:
     cron: "0 0 3 * * *"         # Daily at 3 AM
     path: ./backups             # Backup directory
     retention-days: 7           # Backup retention days
+    max-total-bytes: 10737418240 # 10 GiB across completed Echo backups
+    max-files: 100              # Maximum retained completed backups
+    min-free-bytes: 536870912   # Leave 512 MiB free when admitting a copy
+    housekeeping-interval-ms: 3600000 # Independent cleanup every hour
     on-shutdown: true           # Backup on application shutdown
   builtin-account:
     self-registration: false    # Set to true to allow self-registration
@@ -93,6 +97,16 @@ echo:
 ```
 
 The backup settings above apply only to local SQLite files. External database profiles set application backup to false; use the DBA or platform backup service for those databases.
+
+Backup housekeeping runs independently of successful backups, starting after 60 seconds and then hourly. Age, byte and file-count limits may shorten history, but cleanup preserves the newest backup that passes SQLite integrity and foreign-key verification, even if it is older than the retention period. A newer corrupt file does not replace that recovery point. If no copy can be verified, existing files are preserved. Only regular files with Echo's dated backup names are eligible; unrelated files, symlinks and directories are not deleted.
+
+Before copying, Echo estimates the snapshot size from SQLite page metadata and checks both the backup capacity and usable space. It refuses a copy that cannot fit while preserving the last verified backup and the free-space reserve. The default environment variables are `ECHO_BACKUP_MAX_TOTAL_BYTES=10737418240`, `ECHO_BACKUP_MAX_FILES=100`, `ECHO_BACKUP_MIN_FREE_BYTES=536870912` and `ECHO_BACKUP_HOUSEKEEPING_INTERVAL_MS=3600000`. Concurrent backup/housekeeping operations do not overlap. These are admission checks: database growth, other writers and files left by a killed process can still consume space after the check. The completed-file budget does not include unrelated files or crash-left partial files. A backup that has already been verified and published remains successful if subsequent housekeeping fails; the independent job retries cleanup.
+
+## Health probes
+
+Anonymous `GET /actuator/health/liveness` and `GET /actuator/health/readiness` return only status. Liveness checks application availability without SQL or broker connection tests. Readiness also checks the database, free disk space and whether the existing JMS listener is receiving; disabled JMS is healthy. A source reconnect returns HTTP 503 from readiness while liveness stays HTTP 200, then readiness returns 200 after recovery. Probes do not open extra TIBCO/Artemis connections or alter transactions, ACK or retry settings. Other Actuator paths retain authentication.
+
+`ECHO_HEALTH_STORAGE_PATH` defaults to `.` and `ECHO_HEALTH_MIN_FREE_BYTES` to 536870912 (512 MiB). Point the path at the filesystem holding Echo's writable data if it is a separate mount. Readiness database checks use the configured datasource timeouts; liveness remains independent. Listener state does not prove that every downstream target is responsive or detect every blocked in-flight request. Configure a supervisor's restart probe to use **liveness**, and traffic routing to use **readiness**; see [deployment](install.md#health-probes-and-recovery).
 
 ## HTTP acceleration
 

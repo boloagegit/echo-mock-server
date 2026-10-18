@@ -128,6 +128,7 @@ class Observation:
         self.expired_events = 0
         self.http_stall_connections = 0
         self.checkpoints = []
+        self.backup_checks = []
         self.histogram_baseline = None
         self.echo = self.downstream = None
         self.base = ""
@@ -285,6 +286,22 @@ class Observation:
         broker = self.api("/state", base=self.downstream_base)
         if broker["failed"] or sorted(broker["queues"]) != ["OBS.TARGET"]:
             raise AssertionError("Downstream failure or temporary queue retention")
+        if self.args.backup_maintenance:
+            # Publishing can briefly precede pruning. Require a converged retained inventory,
+            # rather than rejecting the small publication/cleanup window as a capacity leak.
+            deadline = time.monotonic() + 10
+            while True:
+                files = self.api("/api/admin/backup/status")["files"]
+                total = sum(file["size"] for file in files)
+                if 0 < len(files) <= 3 and total <= 256 * MIB:
+                    break
+                if time.monotonic() >= deadline:
+                    raise AssertionError("Verified backup inventory did not converge within its limits")
+                time.sleep(.2)
+            for probe in ("liveness", "readiness"):
+                if self.api("/actuator/health/" + probe) != {"status": "UP"}:
+                    raise AssertionError("Health probe failed after resource drain: " + probe)
+            self.backup_checks.append({"phase": phase, "files": len(files), "bytes": total})
         before = self.cursor
         command = subprocess.run([self.jcmd, str(self.echo.pid), "GC.run"], capture_output=True, text=True, timeout=30, check=True)
         (self.output / f"{phase}-explicit-gc.txt").write_text(command.stdout, encoding="utf-8")
@@ -330,6 +347,7 @@ class Observation:
                   "heapMiB": self.args.heap_mib, "payloadBytes": self.args.payload_bytes,
                   "warmupSecondsPerCycle": self.args.warmup_seconds, "warmupCycles": self.args.warmup_cycles,
                   "httpStallProbesEnabled": self.args.http_stalls,
+                  "backupMaintenanceEnabled": self.args.backup_maintenance,
                   "classHistograms": self.args.class_histograms,
                   "histogramCaveat": "Shallow sizes by class, including unreachable objects; growth suggests candidates, not retaining owners or leak proof",
                   "gcInterventions": "Only after natural idle and resource drain; never during load",
@@ -359,7 +377,12 @@ class Observation:
                                 "-XX:+UseG1GC", "-XX:NativeMemoryTracking=summary", "-Xlog:gc*:file=gc.log:time,uptime,level,tags",
                                 "-jar", str(self.args.jar.resolve()), "--server.address=127.0.0.1", f"--server.port={http_port}",
                                 "--echo.http.transport=native", "--server.undertow.threads.io=2", "--server.undertow.threads.worker=8",
-                                "--echo.backup.enabled=false", "--echo.cleanup.enabled=false", "--echo.jms.enabled=true",
+                                f"--echo.backup.enabled={str(self.args.backup_maintenance).lower()}",
+                                *(["--echo.backup.cron=*/15 * * * * *", "--echo.backup.on-shutdown=false",
+                                   "--echo.backup.housekeeping-initial-delay-ms=1000",
+                                   "--echo.backup.housekeeping-interval-ms=1000", "--echo.backup.max-files=3",
+                                   f"--echo.backup.max-total-bytes={256 * MIB}"] if self.args.backup_maintenance else []),
+                                "--echo.cleanup.enabled=false", "--echo.jms.enabled=true",
                                 "--echo.monitoring.gc-history-max-age-seconds=60",
                                 f"--echo.http.request-timeout-ms={8000 if self.args.http_stalls else 40000}",
                                 f"--echo.jms.port={source_port}", "--echo.jms.concurrency=2-4", "--echo.jms.target.enabled=true",
@@ -396,6 +419,15 @@ class Observation:
                         stop(self.downstream)
                         if (work / "gc.log").exists():
                             shutil.copy2(work / "gc.log", self.output / "jvm-gc.log")
+            if self.args.backup_maintenance:
+                log = (self.output / "echo.log").read_text(encoding="utf-8", errors="replace")
+                result["backupMaintenance"] = {"checkpoints": self.backup_checks,
+                        "completed": log.count("SQLite backup completed:"),
+                        "pruned": log.count("Deleted SQLite backup:"),
+                        "failed": log.count("SQLite backup failed")}
+                if (result["backupMaintenance"]["failed"] or not result["backupMaintenance"]["completed"]
+                        or not result["backupMaintenance"]["pruned"]):
+                    raise AssertionError("Backup/retention did not complete successfully alongside traffic")
             result["growth"] = assess_resources(self.checkpoints, self.args)
             if not self.expired_events:
                 raise AssertionError("No GC history expiry observed; lengthen the run to exercise housekeeping")
@@ -433,11 +465,15 @@ def main():
                         help="Inspect class counts/sizes at idle checkpoints in the disposable JVM; adds pauses, not a throughput benchmark")
     parser.add_argument("--http-stalls", action="store_true",
                         help="Mix eight stalled uploads into each load cycle and require server-side recovery before closing the clients")
+    parser.add_argument("--backup-maintenance", action="store_true",
+                        help="Copy SQLite every 15 seconds, independently prune to 3 files / 256 MiB, and verify probes at idle")
     args = parser.parse_args()
     if args.cycles < 3 or min(args.seconds, args.warmup_seconds, args.warmup_cycles, args.idle_seconds) < 1 or args.heap_mib < 256 or min(args.allowed_growth_mib, args.allowed_native_growth_mib) < 0:
         parser.error("Need >=3 cycles, positive durations, >=256 MiB heap, and nonnegative growth allowance")
     if args.http_stalls and args.seconds < 10:
         parser.error("--http-stalls needs >=10-second load cycles for the eight-second request deadline")
+    if args.backup_maintenance and args.cycles * args.seconds < 90:
+        parser.error("--backup-maintenance needs >=90 seconds of measured load to exercise retention")
     return Observation(args).run()
 
 
