@@ -14,6 +14,7 @@ services:
       - TZ=Asia/Taipei
     volumes:
       - echo-data:/app/data
+      - echo-backups:/app/backups
     healthcheck:
       test: ["CMD", "curl", "-f", "-H", "Accept: application/json", "http://localhost:8080/actuator/health/readiness"]
       interval: 30s
@@ -25,3 +26,4 @@ services:
 
 volumes:
   echo-data:
+  echo-backups:

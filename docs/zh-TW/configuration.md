@@ -102,7 +102,7 @@ echo:
 
 匿名 `GET /actuator/health/liveness` 與 `GET /actuator/health/readiness` 只回傳狀態。liveness 檢查應用程式是否存活，不執行 SQL 或 broker 連線測試；readiness 另外檢查資料庫、磁碟空間與既有 JMS listener 是否收訊，停用 JMS 時視為正常。來源重新連線期間 readiness 回 HTTP 503，liveness 保持 HTTP 200；恢復後 readiness 回 200。探針不另開 TIBCO／Artemis 連線，也不改動交易、ACK 或重試設定。其他 Actuator 路徑仍須登入。
 
-`ECHO_HEALTH_STORAGE_PATH` 預設 `.`，`ECHO_HEALTH_MIN_FREE_BYTES` 預設 536870912（512 MiB）；若可寫入資料位於獨立掛載點，請將檢查路徑指向該檔案系統。readiness 的資料庫檢查沿用 datasource 逾時設定；liveness 不依賴資料庫。listener 狀態無法證明每個下游目標都正常，也無法辨識所有處理中請求卡住的情況。監管程序應以 **liveness** 判斷重啟，以 **readiness** 決定是否導入流量，見[部署說明](install.md#健康檢查與恢復)。
+`ECHO_HEALTH_STORAGE_PATH` 在 JAR 部署預設 `.`，Docker 映像預設 `/app/data`；`ECHO_HEALTH_MIN_FREE_BYTES` 預設 536870912（512 MiB）。若可寫入資料位於獨立掛載點，請將檢查路徑指向該檔案系統。readiness 的資料庫檢查沿用 datasource 逾時設定；liveness 不依賴資料庫。listener 狀態無法證明每個下游目標都正常，也無法辨識所有處理中請求卡住的情況。監管程序應以 **liveness** 判斷重啟，以 **readiness** 決定是否導入流量，見[部署說明](install.md#健康檢查與恢復)。
 
 ## HTTP 加速
 

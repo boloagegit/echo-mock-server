@@ -212,6 +212,8 @@ Docker's health check uses readiness. `restart: unless-stopped` restarts an exit
 
 The container runs Java as PID 1, so stop signals reach the JVM. Compose allows 60 seconds for shutdown; deployments with longer transactions or large shutdown backups should choose an appropriate grace period. Abrupt termination can still interrupt a backup, and the admission-space check cannot reserve space against other processes. Keep the scheduled verified snapshots and test recovery; a shutdown backup is not a replacement for them. Configure the writable data mount with enough space for live data, spool, broker data, logs, a new snapshot and retained snapshots. See [backup limits and health settings](configuration.md#health-probes).
 
+Compose keeps `/app/data` in `echo-data` and `/app/backups` in `echo-backups`, so database and backup files survive container recreation. The image creates both paths with write access for its non-root user, and readiness checks `/app/data` free space. Existing containers that kept backups only in their writable layer should export `/app/backups` before recreation and import the files into the backup volume. `docker compose down --volumes` deletes these volumes and must not be used to upgrade a deployment whose data should be retained.
+
 ```bash
 curl --fail http://localhost:8080/actuator/health/liveness
 curl --fail http://localhost:8080/actuator/health/readiness

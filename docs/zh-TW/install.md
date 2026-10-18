@@ -190,6 +190,8 @@ Docker 健康檢查使用 readiness。`restart: unless-stopped` 會重啟已退�
 
 容器直接以 Java 作為 PID 1，停止訊號會送到 JVM；Compose 預留 60 秒關閉。若交易或關閉時備份需要更久，應調整寬限時間。強制終止仍可能中斷備份，而開始複製前的空間檢查無法替其他程序保留磁碟額度。仍需保留排程產生且驗證有效的快照並實測復原，不能只依賴關閉時備份。資料掛載點應容納主資料庫、spool、broker 資料、日誌、新快照及保留快照，見[備份限制與健康設定](configuration.md#健康檢查)。
 
+Compose 將 `/app/data` 放在 `echo-data`、`/app/backups` 放在 `echo-backups`，容器重建後兩者仍保留。映像會建立這兩個目錄並授予非 root 使用者寫入權，readiness 檢查 `/app/data` 的剩餘空間。既有容器若只把備份放在容器可寫層，重建前應先匯出 `/app/backups`，再匯入備份 volume。`docker compose down --volumes` 會刪除這些 volume，不可用於需要保留資料的部署升級。
+
 ```bash
 curl --fail http://localhost:8080/actuator/health/liveness
 curl --fail http://localhost:8080/actuator/health/readiness
