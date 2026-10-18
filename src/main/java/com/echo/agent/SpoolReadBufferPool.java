@@ -26,6 +26,12 @@ final class SpoolReadBufferPool extends RecyclerPool.BoundedPoolBase<BufferRecyc
         return new ReadBufferRecycler();
     }
 
+    @Serial
+    private Object readResolve() {
+        // BoundedPoolBase intentionally does not serialize its queue/capacity.
+        return new SpoolReadBufferPool();
+    }
+
     private static final class ReadBufferRecycler extends BufferRecycler {
         @Override
         protected int charBufferLength(int index) {

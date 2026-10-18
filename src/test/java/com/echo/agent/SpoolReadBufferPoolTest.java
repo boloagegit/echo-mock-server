@@ -3,6 +3,10 @@ package com.echo.agent;
 import com.fasterxml.jackson.core.util.BufferRecycler;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,5 +45,21 @@ class SpoolReadBufferPoolTest {
                 .hasSizeLessThanOrEqualTo(SpoolReadBufferPool.MAX_RETAINED_BYTE_BUFFER)
                 .isNotSameAs(largeBytes);
         next.releaseToPool();
+    }
+
+    @Test
+    void serializedPoolRestoresAnEmptyUsableBoundedQueue() throws Exception {
+        var original = new SpoolReadBufferPool();
+        original.acquireAndLinkPooled().releaseToPool();
+        var bytes = new ByteArrayOutputStream();
+        try (var output = new ObjectOutputStream(bytes)) {
+            output.writeObject(original);
+        }
+        try (var input = new ObjectInputStream(new ByteArrayInputStream(bytes.toByteArray()))) {
+            var restored = (SpoolReadBufferPool) input.readObject();
+            assertThat(restored.pooledCount()).isZero();
+            restored.acquireAndLinkPooled().releaseToPool();
+            assertThat(restored.pooledCount()).isEqualTo(1);
+        }
     }
 }
