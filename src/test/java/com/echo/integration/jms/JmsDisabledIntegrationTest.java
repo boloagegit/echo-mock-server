@@ -2,13 +2,15 @@ package com.echo.integration.jms;
 
 import com.echo.dto.RuleDto;
 import com.echo.entity.Protocol;
-import com.echo.service.JmsRuleService;
+import com.echo.jms.JmsConnectionManager;
+import com.echo.jms.MockJmsListener;
+import org.apache.activemq.artemis.core.server.embedded.EmbeddedActiveMQ;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.context.ApplicationContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.ActiveProfiles;
@@ -22,8 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * JMS 停用時建立 JMS 規則被拒絕的整合測試
  * <p>
  * 需要獨立的 Spring Context（echo.jms.enabled=false）。
- * 使用 @MockitoBean 提供 JmsRuleService 以避免因 JmsProtocolHandler
- * 不存在而導致 context 啟動失敗（JmsRuleService 對其有硬依賴）。
+ * 使用真正的服務與 Spring Boot 自動配置，確認停用時沒有內建 broker，HTTP 仍可使用。
  * <p>
  * 此時 ProtocolHandlerRegistry 不包含 JMS handler，
  * 因此 validateProtocolEnabled(JMS) 會拋出 IllegalArgumentException → 400。
@@ -36,13 +37,35 @@ class JmsDisabledIntegrationTest {
     @Autowired
     private TestRestTemplate restTemplate;
 
-    /** Mock JmsRuleService 以避免 context 啟動失敗 */
-    @MockitoBean
-    @SuppressWarnings("unused")
-    private JmsRuleService jmsRuleService;
+    @Autowired
+    private ApplicationContext context;
 
     private TestRestTemplate adminClient() {
         return restTemplate.withBasicAuth("admin", "admin");
+    }
+
+    @Test
+    @DisplayName("JMS 停用時不啟動內建 broker 與 listener")
+    void disabledJmsDoesNotStartEmbeddedBrokerOrListener() {
+        assertThat(context.getBeansOfType(EmbeddedActiveMQ.class)).isEmpty();
+        assertThat(context.getBeansOfType(JmsConnectionManager.class)).isEmpty();
+        assertThat(context.getBeansOfType(MockJmsListener.class)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("JMS 停用時 HTTP 模擬與 readiness 仍正常")
+    void httpMockAndReadinessRemainAvailable() {
+        RuleDto dto = RuleDto.builder()
+                .protocol(Protocol.HTTP).method("GET").matchKey("/jms-disabled/http")
+                .status(200).responseBody("http-without-jms").build();
+
+        assertThat(adminClient().postForEntity("/api/admin/rules", dto, RuleDto.class).getStatusCode())
+                .isEqualTo(HttpStatus.CREATED);
+        ResponseEntity<String> response = restTemplate.getForEntity("/mock/jms-disabled/http", String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo("http-without-jms");
+        assertThat(restTemplate.getForEntity("/actuator/health/readiness", String.class).getStatusCode())
+                .isEqualTo(HttpStatus.OK);
     }
 
     @Test

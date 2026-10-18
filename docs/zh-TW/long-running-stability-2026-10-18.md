@@ -155,3 +155,10 @@ JDK 17 執行整合測試與 `check`，Windows 也需通過。依 [GC 觀察指�
 ## 最終觀察與 WireMock 基準
 
 `f9a60fc` 功能產物完成三十分鐘有效流量、180,000 筆正確 HTTP／JMS 請求、66 輪管理操作與 132 次真實 JMS 共用回應改寫核對。七項資源門檻全部通過，138 次備份沒有維護鎖衝突。另見 [WireMock 速度、記憶體與穩定性對照](wiremock-comparison-2026-10-18.md)，包含獨立 HTTP 對照、紀錄政策差異與原始資源旗標。
+
+## 停用 JMS 與內建 broker 啟動
+
+1. **原本問題**：`echo.jms.enabled=false` 雖停用 Echo 的 listener 與 handler，Spring Boot 的獨立 Artemis 自動配置仍會啟動閒置 broker。打包後依預設啟動的 HTTP 程序，顯示 JMS 停用卻仍有 9 條 broker 相關執行緒。
+2. **怎麼改善**：在原有設定將 `spring.artemis.embedded.enabled` 綁到 `${echo.jms.enabled:false}`，使用 Boot 既有的 broker 開關。不增加每筆請求工作或執行緒池，也不改 ACK、交易、重試與轉發政策。
+3. **實測效果**：新增的整合檢查在修正前因 `EmbeddedActiveMQ` 仍存在而失敗。修正後停用時沒有 broker／listener，HTTP 模擬與 readiness 正常，建立 JMS 規則仍被拒絕。24 項針對性測試涵蓋停用、內建收發、外部 Artemis 回覆／重連與交易失敗重送；本機 JDK 17 完整檢查通過 2,190 項、零失敗、6 項略過及 SpotBugs。
+4. **代價與限制**：只在 JMS 停用時節省資源；啟用內建或外部來源時沿用既有設定與行為，不能當成 JMS 吞吐提升或 EMS 實機驗證。先前 WireMock 對照仍保留修正前數字。執行證據留在 Git 外的 `echo-results-review-20261018`，不加入圖片、JAR 或 JVM 原始傾印。

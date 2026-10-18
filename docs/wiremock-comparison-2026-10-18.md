@@ -4,6 +4,8 @@
 
 The measured Echo production source is `f9a60fc82cc4200a6d66e159e344251c919f3714`; WireMock standalone is **3.13.2**. All observations use Linux/JDK 17 on one host with a four-core CPU quota. These synthetic workloads do not establish deployment capacity or permanent leak freedom.
 
+Follow-up inspection found that `echo.jms.enabled=false` stopped Echo's JMS handling but Spring Boot still started an idle embedded Artemis broker. The tables retain the original pre-fix measurements, including that overhead. The [subsequent fix](long-running-stability-2026-10-18.md#disabled-jms-and-embedded-broker-startup) has separate validation; these are not measurements of the corrected artifact.
+
 ## HTTP throughput
 
 Both products use G1, a 1 GiB heap, four equivalent rules and HTTP/1.1 loopback. Each case has five seconds of warm-up and ten seconds of measurement. Each product/logging mode uses two fresh JVMs in alternating order. Every received status/body is validated; there are no content or socket errors. P99 is the mean of run-level P99 values, not a percentile of merged samples.
@@ -30,13 +32,13 @@ Echo has higher throughput in these five cases, but its c16 fixed-response and f
 | xml16k-c16 | 16,266 | 2,658 | 6.12× | 6.490 | 30.657 |
 | forward16k-c16 | 6,416 | 1,819 | 3.53× | 10.723 | 32.479 |
 
-Echo uses its existing default asynchronous SQLite logging and 1,000/s writer cap. WireMock uses an in-memory journal with `--max-request-journal-entries 10000`, with text notifier logging disabled. Persistence and queueing guarantees differ. Echo reports approximately 2.26 million dropped entries per run; that counter combines retention skips and possible handoff-pressure eviction. This is not a complete-record-persistence throughput comparison.
+Echo uses its existing default asynchronous SQLite logging and 1,000/s writer cap. WireMock uses an in-memory journal with `--max-request-journal-entries 10000`, with text notifier logging disabled. Persistence and queueing guarantees differ. Echo reports approximately 2.26 million dropped entries per run. Reviewing the warning totals separates 2,211,662 / 2,236,567 retention skips from 46,362 / 28,912 handoff drops. Allowing records to be dropped under overload is the default design tradeoff to bound memory and prioritize responses; it is not a response-correctness failure. This is not a complete-record-persistence throughput comparison.
 
 In this WireMock version, `AbstractRequestJournal.removeOldEntries()` calls `getAllKeys().count()`, traversing its `ConcurrentLinkedDeque` for each request. This confirms an additional bounded-journal cost, not its complete measured causal contribution or behavior under every WireMock configuration.
 
 ## Matched HTTP memory and 30-minute stability
 
-Both compared processes run HTTP only, with JMS and backups disabled. Each receives 100 req/s over four connections and five equivalent rules: fixed, variable-query template, 16 KiB XML matching, real 16 KiB forwarding and a 10 ms delay, 20% each. Both use Java 17/G1/1 GiB heap/NMT summary and retain 10,000 entries. After 120 seconds of warm-up, six five-minute segments stop both generators for 15-second idle/drain and diagnostic-GC checkpoints.
+Both compared processes receive HTTP traffic only, with JMS handling and backups disabled. Echo nevertheless started the idle embedded broker described above; WireMock has no broker. Each receives 100 req/s over four connections and five equivalent rules: fixed, variable-query template, 16 KiB XML matching, real 16 KiB forwarding and a 10 ms delay, 20% each. Both use Java 17/G1/1 GiB heap/NMT summary and retain 10,000 entries. After 120 seconds of warm-up, six five-minute segments stop both generators for 15-second idle/drain and diagnostic-GC checkpoints.
 
 Both compared processes run concurrently. A separate 100 req/s Echo HTTP/JMS acceptance ran on the same host during most of this observation and finished before its final segment ended. This is paced stability observation below capacity, with no overlap with peak-throughput testing.
 
@@ -62,6 +64,8 @@ Both compared processes run concurrently. A separate 100 req/s Echo HTTP/JMS acc
 Both products completed 180,000 measured requests and seven response-rewrite probes without body errors, OOM or unexpected exits. Echo passed all five resource thresholds. WireMock flagged only RSS: it grew 484.9 MiB in the first five-minute segment and only 8.9 MiB over the following twenty-five minutes, without matching post-GC heap or NMT-committed growth. This is more consistent with resident-page warm-up than ongoing retained-object accumulation; it does not establish leak freedom or change the original RSS flag to a pass.
 
 Post-GC heap and RSS measure different things. RSS includes resident heap pages, classes, JIT, stacks and native allocation; GC does not necessarily return those pages to the OS. Seven checkpoints and per-GC raw logs remain in the measurement artifacts. Natural pauses include startup and warm-up and are separated from seven idle diagnostic collections. The first incomplete comparison rejected warm-up pacing; its failure is retained. The retry applies the same pacing gate only to measured load and preserves warm-up diagnostics.
+
+The comparison harnesses deleted their temporary data directories before stopping the JVMs. Echo consequently emitted SQLite spool warnings during teardown, after measurement. Those warnings are a harness lifecycle defect, not evidence of storage failure during load. The original error scan checked `ERROR`/OOM and did not capture these `WARN` lines; future runs must stop the JVM before deleting its data and inspect warnings as well. This comparison does not validate graceful draining at shutdown.
 
 ## Separate HTTP/JMS operating acceptance
 

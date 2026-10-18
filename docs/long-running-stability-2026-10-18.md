@@ -194,3 +194,10 @@ Add `--backup-maintenance` to the observer to copy SQLite every 15 seconds, prun
 ## Final observation and WireMock baseline
 
 The `f9a60fc` production artifact completed 180,000 verified HTTP/JMS requests over thirty measured minutes, 66 administrative cycles and 132 real JMS shared-response rewrite checks. All seven resource thresholds passed; 138 verified backups completed with no maintenance-lock collision. See the [HTTP throughput, memory and lifecycle comparison with WireMock](wiremock-comparison-2026-10-18.md) for the separate matched HTTP run, logging-policy caveats and original resource flags.
+
+## Disabled JMS and embedded broker startup
+
+1. **Original problem:** `echo.jms.enabled=false` disabled Echo's listeners and handlers, but Boot's independent Artemis auto-configuration still started an idle embedded broker. The packaged-default HTTP run had nine broker-related threads despite reporting JMS disabled.
+2. **Change:** bind `spring.artemis.embedded.enabled` to `${echo.jms.enabled:false}` in the existing application configuration. This uses Boot's supported broker switch; no per-request work, executor, ACK, transaction, retry or forwarding-policy change is introduced.
+3. **Validation:** a new integration assertion failed before the fix because `EmbeddedActiveMQ` was present. After the fix, disabled JMS has no broker/listener, HTTP mocks and readiness work, and JMS rule creation remains rejected. Twenty-four focused tests cover that behavior, embedded request handling, external Artemis replies/reconnection and rollback redelivery. The full local JDK 17 check passes 2,190 tests with zero failures and six skips, including SpotBugs.
+4. **Cost and limits:** resource savings apply when JMS is disabled. Enabled embedded and external-source modes keep their existing configuration and behavior; this is not a JMS throughput improvement or actual EMS validation. The older WireMock comparison retains its pre-fix resource and throughput measurements. Runtime evidence is kept outside Git in `echo-results-review-20261018`; no images, JARs or raw JVM dumps are added to the repository.

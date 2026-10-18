@@ -4,6 +4,8 @@
 
 測量的 Echo 功能程式版本為 `f9a60fc82cc4200a6d66e159e344251c919f3714`，WireMock standalone **3.13.2**。所有測試在 Linux／JDK 17 執行，同一台主機的 CPU quota 為 4 核心。以下是特定合成負載的觀察，不是正式容量或全年不洩漏的保證。
 
+後續檢查發現，`echo.jms.enabled=false` 雖停止 Echo 的 JMS 處理，Spring Boot 仍會啟動閒置的內建 Artemis broker。以下表格保留修正前的原始數字，包含這項額外成本。[後續修正](long-running-stability-2026-10-18.md#停用-jms-與內建-broker-啟動)另有驗證，不能把這些表格當成修正後產物的成績。
+
 ## HTTP 速度
 
 雙方相同 G1、1 GiB heap、四條等價規則、HTTP/1.1 loopback。每情境暖機 5 秒、量測 10 秒，每產品／紀錄模式各兩個全新 JVM，以交替順序執行。每個收到的狀態與本文都驗證，沒有內容或 socket 錯誤。P99 為兩輪 P99 的平均，不是合併樣本的 P99。
@@ -30,13 +32,13 @@ Echo 在這五個情境的吞吐較高，但固定回應（c16）與轉發的 P9
 | xml16k-c16 | 16,266 | 2,658 | 6.12× | 6.490 | 30.657 |
 | forward16k-c16 | 6,416 | 1,819 | 3.53× | 10.723 | 32.479 |
 
-Echo 使用既有預設的非同步 SQLite 紀錄與 1,000/s 寫入上限；WireMock 為記憶體 journal、設定 `--max-request-journal-entries 10000`、關閉純文字 notifier。持久性與排隊政策不同。Echo 的 `dropped` 每輪約 226 萬，混合保留範圍淘汰與可能的 handoff 壓力丟棄，不能解讀為每筆完整落地的吞吐。這組僅代表各自既有的有上限策略。
+Echo 使用既有預設的非同步 SQLite 紀錄與 1,000/s 寫入上限；WireMock 為記憶體 journal、設定 `--max-request-journal-entries 10000`、關閉純文字 notifier。持久性與排隊政策不同。Echo 的 `dropped` 每輪約 226 萬；核對警告總數，可分出兩輪各 2,211,662／2,236,567 筆保留範圍淘汰，以及 46,362／28,912 筆 handoff 丟棄。過載時允許丟棄紀錄是預設的設計取捨，用來限制記憶體並優先維持回應，不代表回應內容錯誤。這組不能解讀為每筆完整落地的吞吐。
 
 WireMock 此版本在 `AbstractRequestJournal.removeOldEntries()` 以 `getAllKeys().count()` 逐筆遍歷 `ConcurrentLinkedDeque`，是有上限 journal 額外成本的可確認來源；不是已量出的完整因果占比，也不能泛化成 WireMock 所有設定。
 
 ## HTTP 記憶體與 30 分鐘穩定性
 
-兩個被比較的程序都只跑 HTTP，JMS、備份均停用。雙方各 100 req/s、四條連線、五條等價規則，固定、變動 query 模板、16 KiB XML 條件、16 KiB 真實轉發、10 ms 延遲各 20%。雙方都使用 JDK 17／G1／1 GiB heap／NMT summary，保留 10,000 筆紀錄。暖機 120 秒後，六段各五分鐘，段間停兩邊流量、閒置 15 秒後診斷 GC。
+兩個被比較的程序都只有 HTTP 流量，JMS 處理與備份均停用；Echo 仍啟動了上述閒置內建 broker，WireMock 則沒有 broker。雙方各 100 req/s、四條連線、五條等價規則，固定、變動 query 模板、16 KiB XML 條件、16 KiB 真實轉發、10 ms 延遲各 20%。雙方都使用 JDK 17／G1／1 GiB heap／NMT summary，保留 10,000 筆紀錄。暖機 120 秒後，六段各五分鐘，段間停兩邊流量、閒置 15 秒後診斷 GC。
 
 兩個被比較的程序同機並行；大部分時段另有獨立 100 req/s Echo HTTP＋JMS 驗收，該驗收在本對照最後一段結束前已完成；這是固定低於容量的穩定性觀察，與最高速度測試沒有重疊。
 
@@ -62,6 +64,8 @@ WireMock 此版本在 `AbstractRequestJournal.removeOldEntries()` 以 `getAllKey
 兩邊各完成 180,000 筆正式請求及 7 輪改寫回應核對，無回應內容錯誤、OOM 或非預期退出。Echo 五項資源門檻全數通過；WireMock 僅 RSS 被標記。WireMock 第一個五分鐘的 RSS 增加 484.9 MiB，之後二十五分鐘僅增加 8.9 MiB，GC 後 heap 與 NMT committed 沒有同步成長。這較符合 JVM 保留頁面逐步駐留的現象，不能直接判定洩漏，也不把原始 RSS 旗標改成通過。
 
 GC 後 heap 與 RSS 是不同指標。RSS 也包括已駐留的 JVM heap 頁面、類別、JIT、執行緒與 native 分配，GC 不一定立即歸還給 OS。完整七個檢查點與逐次 GC 原始檔保留在測量產物；自然 GC 統計包含啟動與暖機，與七次閒置診斷 GC 分開計數。最早一次對照因暖機排程門檻而未進正式流量，原始失敗保留；重跑只把同一速率門檻套在正式流量，並完整保存暖機延遲。
+
+對照工具在停止 JVM 前先刪除暫存資料目錄，讓 Echo 在量測完成後的收尾階段出現 SQLite spool 警告。這是測試工具的生命週期缺陷，不能視為負載期間的儲存故障。原本只掃描 `ERROR`／OOM，沒有納入這些 `WARN`；後續須先停 JVM 再刪資料，並檢查警告。本組不作為正常關閉時紀錄排空的驗證。
 
 ## 獨立 HTTP＋JMS 維運驗收
 

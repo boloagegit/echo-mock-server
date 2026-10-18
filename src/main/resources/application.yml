@@ -65,6 +65,9 @@ spring:
   # Artemis - 由 echo.jms 設定控制，此區塊保留供 Spring Boot 自動配置
   artemis:
     mode: embedded
+    embedded:
+      # Boot 仍會自動配置 Artemis；只停用 Echo 的 listener 不會阻止內建 broker 啟動。
+      enabled: ${echo.jms.enabled:false}
 
 # Echo 自訂配置
 echo:
