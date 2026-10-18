@@ -43,9 +43,18 @@ TLS、壓縮與 graceful shutdown 使用 Spring Boot 原本的 Undertow 設定�
 | `echo.http.native.max-requests` | 512 | 含延遲與轉送在內的進行中請求上限 |
 | `echo.http.native.max-body-bytes` | 10485760 | 單筆 request／response 的編碼 bytes 上限 |
 | `echo.http.native.max-buffered-bytes` | 134217728 | adapter 為讀取、解碼與編碼保留的估計總容量 |
-| `echo.http.request-timeout-ms` | 40000 | 讀取 body 與等待非同步 pipeline／延遲回應的逾時 |
+| `echo.http.request-timeout-ms` | 40000 | 從接收請求至回應傳送完成的總期限，包含上傳、排隊、pipeline 與延遲 |
 
 容量不足回 503，request 過大回 413，response 過大回 502，非同步回應逾時回 504。尚未讀完的 HTTP/1 request 拒絕後關閉連線，不為了重用連線而等待惡意或卡住的上傳。Servlet fallback 使用原本的 Servlet／轉送限制，不共用原生 admission 計數。
+
+本文使用 Undertow 非阻塞接收：等待上傳資料時不占用應用工作執行緒。期限使用該連線的
+I/O 執行緒計時，並持續到回應送完；客戶端停止讀取，也會釋放名額與緩衝。尚未送出回應且
+本文已完整收到時，逾時回 504；本文未收完或回應已送出一部分時，逾時關閉連線。
+過期排隊工作會移出佇列，已開始的任意 CPU／資料庫操作無法安全地強制中斷。
+極慢的一般下載須調整總期限；明確要求 SSE 的請求仍走原有 Servlet 路徑。
+
+資源監控新增 `nativeWorkerActive` 與 `nativeWorkerCapacity`，用來確認實際忙碌的工作
+執行緒。不能只看 `nativeActive` 或緩衝歸零，就推論所有工作已結束。
 
 緩衝容量是 adapter 的保守預留，不是整個 JVM heap 的硬上限：規則、pipeline 產生的字串、日誌、TLS、資料庫與下游 client 仍有各自的記憶體需求。這個逾時也不是對同步 CPU／資料庫工作的強制中斷。
 

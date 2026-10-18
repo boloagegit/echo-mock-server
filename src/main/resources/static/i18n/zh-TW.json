@@ -931,7 +931,9 @@
       "diagnosticRetainedBytes": "診斷檔案留存量",
       "diagnosticRetainedLimitBytes": "診斷總留存上限",
       "dataFreeBytes": "資料磁碟可用空間",
-      "backupFreeBytes": "備份磁碟可用空間"
+      "backupFreeBytes": "備份磁碟可用空間",
+      "nativeWorkerActive": "HTTP 加速忙碌工作執行緒",
+      "nativeWorkerCapacity": "HTTP 加速工作執行緒上限"
     },
     "sources": {
       "title": "記憶體累積來源對照",

@@ -68,7 +68,9 @@ do not configure an unlimited external archive unintentionally.
 The existing resource snapshot shows non-heap and direct/mapped buffer memory,
 threads, HTTP/JMS active operations, pending work and request-log buffering. It now
 also exposes `nativeActive`, `nativeBufferedBytes`, `nativeQueued`, `nativeCapacity`
-and `nativeBufferLimitBytes` for the default HTTP transport. These counters expose
+and `nativeBufferLimitBytes` for the default HTTP transport. `nativeWorkerActive`
+and `nativeWorkerCapacity` show actual busy workers and their configured limit;
+draining admission counters alone does not prove that blocking work has exited. These counters expose
 reservations, not a precise object-size calculation. Native memory, thread stacks,
 SQLite and container/process limits can cause failure even when heap is stable.
 No finite history can prove the absence of a leak; rising comparable baselines
@@ -109,6 +111,15 @@ must be new. Defaults: 384 MiB heap, 60-second warm-up, 10 cycles of 60-second l
 and 15-second natural idle, 100 total HTTP/JMS requests/second, 16 KiB payloads.
 The disposable Echo uses 60-second GC-history retention to exercise expiry; the
 sampler archives events every two seconds and fails on lost unread events or no expiry.
+
+Add `--http-stalls` to hold eight incomplete HTTP uploads open during each measured
+load cycle (two chunked, six declared-length), alongside the normal HTTP/JMS traffic.
+This mode uses an eight-second request deadline, so cycles must last at least ten
+seconds. Before closing the test clients, it requires the server to close them and
+all native HTTP workers, buffers and queues to drain. The summary records
+`httpStallConnectionsRecovered`. This distinguishes real recovery from merely
+returning admission leases while a worker is still blocked. For example, append
+`--http-stalls --warmup-cycles 6 --warmup-seconds 15` to either platform's command.
 When testing reconnect cycles, use `--warmup-cycles 6 --warmup-seconds 15` (or
 longer for the deployment's pool sizes) to exercise lazy broker network workers
 before the baseline. Each warm-up result is preserved; do not raise growth limits

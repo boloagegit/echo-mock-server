@@ -49,6 +49,7 @@ public final class NativeHttpResources implements AutoCloseable {
     public Map<String, Object> resourceMetricsSnapshot() {
         return Map.of("nativeActive", active.get(), "nativeBufferedBytes", buffered.get(),
                 "nativeQueued", workers.getQueue().size(), "nativeCapacity", maxRequests,
+                "nativeWorkerActive", workers.getActiveCount(), "nativeWorkerCapacity", workers.getCorePoolSize(),
                 "nativeBufferLimitBytes", maxBufferedBytes);
     }
 

@@ -931,7 +931,9 @@
       "diagnosticRetainedBytes": "Diagnostic retained bytes",
       "diagnosticRetainedLimitBytes": "Diagnostic retention byte limit",
       "dataFreeBytes": "Data filesystem free",
-      "backupFreeBytes": "Backup filesystem free"
+      "backupFreeBytes": "Backup filesystem free",
+      "nativeWorkerActive": "Native HTTP busy workers",
+      "nativeWorkerCapacity": "Native HTTP worker limit"
     },
     "sources": {
       "title": "Possible sources of memory growth",

@@ -90,6 +90,13 @@ python3 scripts/test-memory-observability.py \
 若要測試反覆重連，可用 `--warmup-cycles 6 --warmup-seconds 15`，讓 broker 延後建立的
 網路執行緒在基準點之前也經歷重連；實際暖機長度須依部署的 pool 大小調整。
 所有暖機結果都會保存。若數量仍增加，應看執行緒清單與 NMT 類別，不應直接放寬門檻。
+
+加上 `--http-stalls`，可在每輪正常 HTTP／JMS 負載期間保持 8 條不完整上傳（2 條 chunked、
+6 條有宣告長度）。這個模式將請求期限設為 8 秒，因此每輪負載至少要 10 秒。
+工具會在自行關閉客戶端之前，確認伺服器已關閉停滯連線，且實際工作執行緒、名額、緩衝與
+佇列均歸零；`httpStallConnectionsRecovered` 記錄恢復的連線數。
+監控新增 `nativeWorkerActive` 與 `nativeWorkerCapacity`，避免名額已歸還、執行緒仍卡住卻被判成通過。
+例如在上述指令後加上 `--http-stalls --warmup-cycles 6 --warmup-seconds 15`。
 預設 Heap 384 MiB、暖機 60 秒，再跑 10 輪「負載 60 秒 → 自然閒置 15 秒」，
 HTTP／JMS 合計每秒 100 筆，資料大小 16 KiB。`--cycles 60 --seconds 300` 可延長到約五小時；
 長時間驗收應使用接近正式部署的 Linux 規格與實際流量。

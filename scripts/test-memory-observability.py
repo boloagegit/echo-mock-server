@@ -84,7 +84,7 @@ def assess_resources(checkpoints, args):
 
 def assert_drained(resources):
     expected = {"jms": ["listenerActive", "forwardActive", "reservedBytes", "waitingThreads", "cleanupFailures", "replyFailures", "forwardFailures"],
-                "http": ["nativeActive", "nativeBufferedBytes", "nativeQueued", "activeForwards", "poolLeased", "poolPending", "bufferedBytes"],
+                "http": ["nativeActive", "nativeBufferedBytes", "nativeQueued", "nativeWorkerActive", "activeForwards", "poolLeased", "poolPending", "bufferedBytes"],
                 "requestLog": ["queueItems", "queueBytes", "inFlightBytes", "waitingProducers", "dropped"],
                 "scheduler": ["waitingTasks", "activeWorkers"], "database": ["poolActive", "poolWaiting", "writerWaiting", "writerActive"]}
     for section, keys in expected.items():
@@ -126,6 +126,7 @@ class Observation:
         self.started = None
         self.events = 0
         self.expired_events = 0
+        self.http_stall_connections = 0
         self.checkpoints = []
         self.histogram_baseline = None
         self.echo = self.downstream = None
@@ -189,7 +190,53 @@ class Observation:
             stream.write(json.dumps(row) + "\n")
         return row, history["events"]
 
+    def open_http_stalls(self):
+        """Only the harness-owned Echo; mix declared and chunked incomplete uploads."""
+        sockets = []
+        try:
+            for index in range(8):
+                peer = socket.create_connection(("127.0.0.1", int(self.base.rsplit(":", 1)[1])), timeout=5)
+                sockets.append(peer)
+                # Two unknown-length bodies reserve 80 MiB of the existing 128 MiB budget;
+                # the other six declare small bodies. No payload or memory limits are weakened.
+                framing = "Transfer-Encoding: chunked\r\n\r\n100\r\nx" if index < 2 else "Content-Length: 256\r\n\r\nx"
+                peer.sendall(("POST /mock/observe/stall HTTP/1.1\r\nHost: localhost\r\n"
+                              "Content-Type: text/plain\r\n" + framing).encode("ascii"))
+            return sockets
+        except BaseException:
+            for peer in sockets:
+                peer.close()
+            raise
+
+    def verify_http_stalls_recovered(self, peers, phase):
+        # Verify worker recovery BEFORE closing local sockets. Closing them first would hide
+        # the original defect: lease counters drained while blocking reads still held workers.
+        row, _ = self.sample(phase + "-stall-recovery")
+        values = row["resources"]["sections"]["http"]["values"]
+        for key in ["nativeActive", "nativeBufferedBytes", "nativeQueued", "nativeWorkerActive"]:
+            if values.get(key) != 0:
+                raise AssertionError(f"HTTP stalled upload retained {key}={values.get(key)}")
+        for peer in peers:
+            peer.settimeout(.2)
+            try:
+                if peer.recv(1):
+                    raise AssertionError("Expected incomplete upload to close without an HTTP response")
+            except ConnectionResetError:
+                pass  # Both FIN and RST terminate the incomplete HTTP/1 request safely.
+        self.http_stall_connections += len(peers)
+
     def load(self, work, seconds, phase):
+        peers = self.open_http_stalls() if self.args.http_stalls and not phase.startswith("warmup") else []
+        try:
+            result = self.load_client(work, seconds, phase)
+            if peers:
+                self.verify_http_stalls_recovered(peers, phase)
+            return result
+        finally:
+            for peer in peers:
+                peer.close()
+
+    def load_client(self, work, seconds, phase):
         with (self.output / f"{phase}-load.log").open("w", encoding="utf-8") as log:
             client = subprocess.Popen(self.fixture("load", self.base, self.jms, seconds, self.args.rate, self.args.payload_bytes),
                                       cwd=work, env=self.env, stdout=log, stderr=subprocess.STDOUT)
@@ -282,6 +329,7 @@ class Observation:
                   "secondsPerCycle": self.args.seconds, "idleSeconds": self.args.idle_seconds, "rate": self.args.rate,
                   "heapMiB": self.args.heap_mib, "payloadBytes": self.args.payload_bytes,
                   "warmupSecondsPerCycle": self.args.warmup_seconds, "warmupCycles": self.args.warmup_cycles,
+                  "httpStallProbesEnabled": self.args.http_stalls,
                   "classHistograms": self.args.class_histograms,
                   "histogramCaveat": "Shallow sizes by class, including unreachable objects; growth suggests candidates, not retaining owners or leak proof",
                   "gcInterventions": "Only after natural idle and resource drain; never during load",
@@ -313,6 +361,7 @@ class Observation:
                                 "--echo.http.transport=native", "--server.undertow.threads.io=2", "--server.undertow.threads.worker=8",
                                 "--echo.backup.enabled=false", "--echo.cleanup.enabled=false", "--echo.jms.enabled=true",
                                 "--echo.monitoring.gc-history-max-age-seconds=60",
+                                f"--echo.http.request-timeout-ms={8000 if self.args.http_stalls else 40000}",
                                 f"--echo.jms.port={source_port}", "--echo.jms.concurrency=2-4", "--echo.jms.target.enabled=true",
                                 "--echo.jms.target.type=artemis", f"--echo.jms.target.server-url=tcp://127.0.0.1:{downstream_jms}",
                                 "--echo.jms.target.username=", "--echo.jms.target.password=", "--echo.jms.target.queue=OBS.TARGET",
@@ -356,6 +405,7 @@ class Observation:
         finally:
             result["gcEventsArchived"] = self.events
             result["gcEventsExpired"] = self.expired_events
+            result["httpStallConnectionsRecovered"] = self.http_stall_connections
             result["checkpoints"] = self.checkpoints
             (self.output / "summary.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
         print(json.dumps({key: value for key, value in result.items() if key not in ("checkpoints", "traffic", "warmup")}, indent=2), flush=True)
@@ -381,9 +431,13 @@ def main():
     parser.add_argument("--allowed-native-growth-mib", type=int, default=128)
     parser.add_argument("--class-histograms", action="store_true",
                         help="Inspect class counts/sizes at idle checkpoints in the disposable JVM; adds pauses, not a throughput benchmark")
+    parser.add_argument("--http-stalls", action="store_true",
+                        help="Mix eight stalled uploads into each load cycle and require server-side recovery before closing the clients")
     args = parser.parse_args()
     if args.cycles < 3 or min(args.seconds, args.warmup_seconds, args.warmup_cycles, args.idle_seconds) < 1 or args.heap_mib < 256 or min(args.allowed_growth_mib, args.allowed_native_growth_mib) < 0:
         parser.error("Need >=3 cycles, positive durations, >=256 MiB heap, and nonnegative growth allowance")
+    if args.http_stalls and args.seconds < 10:
+        parser.error("--http-stalls needs >=10-second load cycles for the eight-second request deadline")
     return Observation(args).run()
 
 

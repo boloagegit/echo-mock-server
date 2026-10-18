@@ -39,7 +39,7 @@ const ResourceMonitoringPanel = {
         caches: ['httpRulesEntries', 'httpRulesEvictions', 'jmsRulesEntries', 'jmsRulesEvictions', 'body_entries', 'body_weightedSize', 'body_maximumWeight', 'body_evictionCount', 'template_entries', 'template_weightedSize', 'template_maximumWeight', 'template_evictionCount'],
         scheduler: ['waitingTasks', 'activeWorkers', 'workerCapacity'],
         jms: ['listenerActive', 'listenerExits', 'replySent', 'replyFailures', 'lastListenerExit', 'forwardActive', 'forwardExits', 'forwardFailures', 'receiveTimeouts', 'invalidReplies', 'cleanupFailures', 'lastForwardExit', 'reservedBytes', 'maximumBytes', 'waitingThreads', 'processingRunning', 'maxDeliveryAttempts'],
-        http: ['nativeActive', 'nativeBufferedBytes', 'nativeQueued', 'nativeCapacity', 'nativeBufferLimitBytes', 'activeForwards', 'completedForwards', 'cancelledForwards', 'rejectedForwards', 'poolLeased', 'poolPending', 'poolIdle', 'poolCapacity', 'bufferedBytes', 'bufferLimitBytes'],
+        http: ['nativeActive', 'nativeBufferedBytes', 'nativeQueued', 'nativeWorkerActive', 'nativeWorkerCapacity', 'nativeCapacity', 'nativeBufferLimitBytes', 'activeForwards', 'completedForwards', 'cancelledForwards', 'rejectedForwards', 'poolLeased', 'poolPending', 'poolIdle', 'poolCapacity', 'bufferedBytes', 'bufferLimitBytes'],
         database: ['poolActive', 'poolIdle', 'poolTotal', 'poolWaiting', 'writerWaiting', 'writerActive'],
         requestLog: ['queueItems', 'processed', 'dropped', 'queueBytes', 'capacityBytes', 'inFlightBytes', 'byteLimit', 'waitingProducers', 'backpressureActive', 'storageUnavailable', 'consumerRunning'],
         applicationLog: ['queueUsed', 'queueCapacity', 'started', 'diagnosticEnabled', 'diagnosticRunning',
@@ -75,7 +75,7 @@ const ResourceMonitoringPanel = {
         caches: ['body_maximumWeight', 'template_maximumWeight'],
         scheduler: ['workerCapacity'],
         jms: ['maximumBytes', 'maxDeliveryAttempts', 'lastListenerExit', 'lastForwardExit'],
-        http: ['nativeCapacity', 'nativeBufferLimitBytes', 'poolCapacity', 'bufferLimitBytes'],
+        http: ['nativeWorkerCapacity', 'nativeCapacity', 'nativeBufferLimitBytes', 'poolCapacity', 'bufferLimitBytes'],
         requestLog: ['capacityBytes', 'byteLimit'],
         applicationLog: ['queueCapacity', 'diagnosticQueueCapacity', 'diagnosticDailyLimitBytes', 'diagnosticRetainedLimitBytes'],
       };
