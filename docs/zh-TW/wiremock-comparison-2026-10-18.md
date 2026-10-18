@@ -2,6 +2,8 @@
 
 [English](../wiremock-comparison-2026-10-18.md)
 
+較新產物的 HTTP 對照與 512 MiB 大訊息觀察，見[容量與 framework 檢視](capacity-and-framework-review-2026-10-18.md)；負載與紀錄保證不同，需分開解讀。
+
 測量的 Echo 功能程式版本為 `f9a60fc82cc4200a6d66e159e344251c919f3714`，WireMock standalone **3.13.2**。所有測試在 Linux／JDK 17 執行，同一台主機的 CPU quota 為 4 核心。以下是特定合成負載的觀察，不是正式容量或全年不洩漏的保證。
 
 後續檢查發現，`echo.jms.enabled=false` 雖停止 Echo 的 JMS 處理，Spring Boot 仍會啟動閒置的內建 Artemis broker。以下表格保留修正前的原始數字，包含這項額外成本。[後續修正](long-running-stability-2026-10-18.md#停用-jms-與內建-broker-啟動)另有驗證，不能把這些表格當成修正後產物的成績。

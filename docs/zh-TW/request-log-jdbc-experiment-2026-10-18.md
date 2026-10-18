@@ -2,6 +2,8 @@
 
 [English](../request-log-jdbc-experiment-2026-10-18.md)
 
+後續：[512 MiB 容量、大訊息、寫入限速與 framework 成本](capacity-and-framework-review-2026-10-18.md)。
+
 本輪只比較暫存紀錄搬進主資料庫的寫入成本。規則、回應、系統設定與紀錄查詢繼續使用 Spring Data JPA，既有 SQLite spool 不變。
 
 1. **原本問題**：`RequestLogBatchWriter` 使用 JPA `saveAll` 搭配自增 ID；傳入一整批實體，不代表底層一定使用 JDBC 批次，還有 Hibernate 管理實體的成本。

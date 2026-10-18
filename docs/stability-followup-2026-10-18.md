@@ -4,6 +4,8 @@
 
 Subsequent experiment: [SQLite request-log JDBC insert comparison](request-log-jdbc-experiment-2026-10-18.md).
 
+The [large-message capacity review](capacity-and-framework-review-2026-10-18.md) documents a subsequent continuous-write backup defect, its correction, and 512 MiB retention tests.
+
 Implementation: `97aa408`, with disk-retry boundary correction `517578e`, on `codex/long-running-stability`; no PR or merge.
 This round checks failure boundaries and resource recovery, using a ten-minute sustained test.
 JMS providers, source listener configuration, ACK, transactions and retry policy are unchanged.

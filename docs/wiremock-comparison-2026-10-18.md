@@ -2,6 +2,8 @@
 
 [繁體中文](zh-TW/wiremock-comparison-2026-10-18.md)
 
+Newer-artifact HTTP results and 512 MiB large-message observations are in the [capacity and framework review](capacity-and-framework-review-2026-10-18.md). Keep their workloads and recording guarantees separate from this report.
+
 The measured Echo production source is `f9a60fc82cc4200a6d66e159e344251c919f3714`; WireMock standalone is **3.13.2**. All observations use Linux/JDK 17 on one host with a four-core CPU quota. These synthetic workloads do not establish deployment capacity or permanent leak freedom.
 
 Follow-up inspection found that `echo.jms.enabled=false` stopped Echo's JMS handling but Spring Boot still started an idle embedded Artemis broker. The tables retain the original pre-fix measurements, including that overhead. The [subsequent fix](long-running-stability-2026-10-18.md#disabled-jms-and-embedded-broker-startup) has separate validation; these are not measurements of the corrected artifact.

@@ -2,6 +2,8 @@
 
 [繁體中文](zh-TW/request-log-jdbc-experiment-2026-10-18.md)
 
+Follow-up: [512 MiB capacity, large messages, rate ceilings and framework costs](capacity-and-framework-review-2026-10-18.md).
+
 This experiment compares only the durable consumer's main-database inserts. Rules, responses,
 configuration and request-log queries retain Spring Data JPA. The existing SQLite spool is unchanged.
 

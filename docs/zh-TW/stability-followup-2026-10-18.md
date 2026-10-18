@@ -4,6 +4,8 @@
 
 後續實驗：[SQLite 請求紀錄 JDBC 寫入比較](request-log-jdbc-experiment-2026-10-18.md)。
 
+[大訊息容量檢視](capacity-and-framework-review-2026-10-18.md) 補充後來發現的持續寫入備份問題、修正與 512 MiB 保留量驗證。
+
 本輪功能提交為 `97aa408`，磁碟重試邊界修正為 `517578e`；均在 `codex/long-running-stability`，未開 PR 或合併。
 目標是維持原有功能，查清故障影響、限制資源累積，並以連續 10 分鐘取代更長的觀察。
 本輪沒有修改 JMS provider、來源 listener 配置、ACK、交易或重試政策。
