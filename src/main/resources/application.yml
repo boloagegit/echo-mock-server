@@ -147,6 +147,8 @@ echo:
     concurrency: "10-30"     # JMS listener 並發數 (min-max)，可用環境變數 ECHO_JMS_CONCURRENCY 覆蓋
     forward:
       session-cache-size: 8       # 每個目標版本最多保留的 idle Session；0 停用快取。回覆 Queue 每筆獨立。
+      # 預設保留 provider 的連線／重試／failover 政策；開啟前需驗證實際 ESB 故障行為。
+      bounded-waits-enabled: ${ECHO_JMS_FORWARD_BOUNDED_WAITS_ENABLED:false}
     queue: ECHO.REQUEST      # Echo 監聽的 Source Queue（外部服務送訊息到此 Queue）
     source:
       # 從哪裡接收 JMS：embedded（內建 Artemis，預設）| artemis | tibco（外部共用 broker，例如 ESB）

@@ -44,11 +44,13 @@ public final class JmsTargetForwarder {
     private volatile Connection targetConnection;
     private volatile String activeTargetKey;
     private int sessionCacheSize;
+    private boolean boundedWaitsEnabled;
 
     /** Configured once by Spring, or explicitly by standalone clients before their first use. */
     @Autowired
     public void configureResources(JmsProperties properties) {
         sessionCacheSize = properties.getForward().getSessionCacheSize();
+        boundedWaitsEnabled = properties.getForward().isBoundedWaitsEnabled();
     }
 
     @Autowired
@@ -325,15 +327,16 @@ public final class JmsTargetForwarder {
 
     private ConnectionFactory createFactory(JmsProperties.Target target) throws Exception {
         String type = target.getType();
-        ConnectionFactory factory = factoryProviders.stream()
+        JmsTargetFactoryProvider provider = factoryProviders.stream()
                 .filter(p -> p.supports(type))
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException(
                         "Unsupported JMS target type: " + type +
                         ". Supported: " + factoryProviders.stream()
                                 .map(p -> p.getClass().getSimpleName())
-                                .toList()))
-                .createOutbound(target);
+                                .toList()));
+        ConnectionFactory factory = boundedWaitsEnabled
+                ? provider.createOutbound(target) : provider.create(target);
         return sessionCacheSize == 0 ? factory : new CachedJmsConnectionFactory(factory, sessionCacheSize);
     }
 

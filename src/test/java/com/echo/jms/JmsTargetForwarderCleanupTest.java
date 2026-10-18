@@ -326,7 +326,7 @@ class JmsTargetForwarderCleanupTest {
             target.setTimeoutSeconds(1);
             JmsTargetFactoryProvider provider = mock(JmsTargetFactoryProvider.class);
             when(provider.supports("artemis")).thenReturn(true);
-            when(provider.createOutbound(any())).thenReturn(factory);
+            when(provider.create(any())).thenReturn(factory);
             when(factory.createConnection()).thenReturn(connection);
             when(connection.createSession(false, Session.AUTO_ACKNOWLEDGE)).thenReturn(exchange.session);
             forwarder = route.createForwarder(props, List.of(provider), metrics);

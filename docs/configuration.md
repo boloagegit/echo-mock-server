@@ -36,6 +36,7 @@ echo:
     enabled: false              # Set to true to enable JMS
     forward:
       session-cache-size: 8     # Idle outbound sessions per target; 0 disables reuse
+      bounded-waits-enabled: false # Preserve provider retry/failover policy; opt in only after ESB fault testing
     credential-key: ${ECHO_JMS_CREDENTIAL_KEY} # Encrypts stored forwarding credentials
     port: 61616                 # Artemis listen port
     queue: ECHO.REQUEST         # Queue to listen on

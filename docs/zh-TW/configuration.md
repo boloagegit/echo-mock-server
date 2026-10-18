@@ -36,6 +36,7 @@ echo:
     enabled: false              # 設為 true 啟用 JMS
     forward:
       session-cache-size: 8     # 每個轉送目標保留的 idle Session；0 停用重用
+      bounded-waits-enabled: false # 保留 provider 重試／failover；實際 ESB 故障驗證後才考慮開啟
     credential-key: ${ECHO_JMS_CREDENTIAL_KEY} # 資料庫內轉發密碼的加密金鑰
     port: 61616                 # Artemis 監聽埠
     queue: ECHO.REQUEST         # 監聽的 Queue

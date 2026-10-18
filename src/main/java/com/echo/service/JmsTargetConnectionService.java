@@ -207,7 +207,9 @@ public class JmsTargetConnectionService {
             } else {
                 target = toTarget(findEntity(parseId(id)));
             }
-            ConnectionFactory factory = findProvider(target.getType()).createOutbound(target);
+            JmsTargetFactoryProvider provider = findProvider(target.getType());
+            ConnectionFactory factory = jmsProperties.getForward().isBoundedWaitsEnabled()
+                    ? provider.createOutbound(target) : provider.create(target);
             try (Connection connection = factory.createConnection()) {
                 connection.start();
             } finally {

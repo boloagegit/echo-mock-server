@@ -31,6 +31,7 @@ class JmsConnectDeadlineIntegrationTest {
         try (var peer = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
             var accepted = executor.submit(peer::accept);
             var properties = new JmsProperties();
+            properties.getForward().setBoundedWaitsEnabled(true);
             var target = properties.getTarget();
             target.setEnabled(true);
             target.setType("artemis");
