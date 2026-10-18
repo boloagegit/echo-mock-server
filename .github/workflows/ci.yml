@@ -134,6 +134,7 @@ jobs:
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
@@ -161,7 +162,7 @@ jobs:
           docker run -d --name "$container_name" echo-mock-server:test
           wait_ready() {
             for attempt in $(seq 1 45); do
-              if docker exec "$container_name" curl --fail --silent \
+              if docker exec "$container_name" curl --fail --silent --connect-timeout 1 --max-time 2 \
                 http://localhost:8080/actuator/health/readiness >/dev/null; then
                 return 0
               fi
@@ -171,7 +172,7 @@ jobs:
           }
           wait_ready
           test "$(docker exec "$container_name" cat /proc/1/comm)" = java
-          docker exec "$container_name" curl --fail --silent \
+          docker exec "$container_name" curl --fail --silent --connect-timeout 1 --max-time 2 \
             http://localhost:8080/actuator/health/liveness
           docker stop --time 20 "$container_name"
           exit_code=$(docker inspect --format '{{.State.ExitCode}}' "$container_name")
