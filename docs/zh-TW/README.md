@@ -26,6 +26,7 @@
 
 | 文件 | 內容 |
 |------|------|
+| [長期運作穩定性](long-running-stability-2026-10-18.md) | 停滯連線回收、JMS 下游期限、分批清理與實測代價 |
 | [效能總覽](../performance.md) | 與 WireMock 比較、請求記錄模式、已知瓶頸與重跑方法 |
 | [HTTP 加速](../native-http.md) | 預設原生入口、容量上限、相容性與切回方式 |
 | [原生 HTTP 驗證](../native-http-validation-2026-10-16.md) | 現行比較、延遲、生命週期檢查與證據 |

@@ -26,6 +26,7 @@
 
 | Document | What you'll find |
 |----------|------------------|
+| [Long-running stability](long-running-stability-2026-10-18.md) | Stalled-client recovery, JMS downstream limits, bounded cleanup and measured costs |
 | [Performance](performance.md) | Echo vs WireMock, request-log modes, known bottlenecks and how to rerun the benchmarks (Traditional Chinese) |
 | [HTTP acceleration](native-http.md) | Default native transport, limits, compatibility and rollback (Traditional Chinese) |
 | [Native HTTP validation](native-http-validation-2026-10-16.md) | Current comparisons, latency, lifecycle checks and evidence (Traditional Chinese) |

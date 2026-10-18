@@ -28,12 +28,15 @@ class CleanupServiceTest {
     @Mock private ResponseRepository responseRepository;
     @Mock private CacheManager cacheManager;
     @Mock private ScenarioService scenarioService;
+    @Mock private org.springframework.transaction.PlatformTransactionManager transactionManager;
 
     private CleanupService cleanupService;
 
     @BeforeEach
     void setUp() {
-        cleanupService = new CleanupService(protocolRegistry, responseRepository, cacheManager, scenarioService, java.util.Optional.empty());
+        cleanupService = new CleanupService(protocolRegistry, responseRepository, cacheManager, scenarioService, java.util.Optional.empty(), transactionManager);
+        when(transactionManager.getTransaction(any())).thenAnswer(invocation -> new org.springframework.transaction.support.SimpleTransactionStatus());
+        when(responseRepository.findMaximumId()).thenReturn(2L);
         ReflectionTestUtils.setField(cleanupService, "ruleRetentionDays", 180);
         ReflectionTestUtils.setField(cleanupService, "responseRetentionDays", 90);
     }
@@ -41,7 +44,7 @@ class CleanupServiceTest {
     @Test
     void cleanup_shouldPassCorrectCutoffDates() {
         when(protocolRegistry.deleteExpiredRules(any())).thenReturn(0);
-        when(responseRepository.findOrphanResponseIds(any())).thenReturn(List.of());
+        when(responseRepository.findOrphanResponseIds(any(), anyLong(), anyLong(), any())).thenReturn(List.of());
 
         LocalDateTime before = LocalDateTime.now();
         cleanupService.cleanup();
@@ -52,7 +55,7 @@ class CleanupServiceTest {
                 before.minusDays(180).minusSeconds(1), before.minusDays(180).plusSeconds(1));
 
         ArgumentCaptor<LocalDateTime> responseCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
-        verify(responseRepository).findOrphanResponseIds(responseCaptor.capture());
+        verify(responseRepository).findOrphanResponseIds(responseCaptor.capture(), anyLong(), anyLong(), any());
         assertThat(responseCaptor.getValue()).isBetween(
                 before.minusDays(90).minusSeconds(1), before.minusDays(90).plusSeconds(1));
     }
