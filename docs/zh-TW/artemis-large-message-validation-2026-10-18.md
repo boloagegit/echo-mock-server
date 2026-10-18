@@ -64,6 +64,8 @@ P99 是兩輪 percentile 的平均，並非合併所有請求後重算。每版�
 
 **原始結果 `passed=false`：七個成長門檻有六個通過。** 執行緒分鐘統計為 186→190.5（+4.5），超過原門檻 +4，未更改門檻或結果。前後 thread dump 顯示 Artemis server worker 20→25、remoting 10→11、paging 4→5、client flow-control 5→6，JMS listener 數相同。這與池逐步暖機相符，但不能證明永久安全。前一輪 2.40 觀察也因執行緒 +5 未過；不同單次觀察不能用來精確歸因。
 
+進一步核對凍結的 2.57 JAR：server worker／paging／client flow-control 預設上限分別為 30／5／10，Echo 沒有覆寫這些設定；結束快照分別為 25／5／6。這些池與 remoting 中新出現的 worker，快照均停在 executor 等待任務的 `TIMED_WAITING`／`ThreadPoolExecutor.getTask`，沒有卡在訊息 callback。逐一比較 thread ID，另確認 4 條舊 remoting worker 及原本 4 條 paging worker 已退出；JMS listener 維持 30→30。remoting 使用閒置 60 秒回收的 cached executor，沒有固定的小上限。這些證據支持正常擴池／回收，說明單看總執行緒 +4 警報不足以判定洩漏；也沒有證明所有池都有硬上限或未來一定持平，原始未過門檻結果保留。
+
 自然 GC 後 heap 分鐘統計成長 5.05 MiB，低於 24 MiB 門檻；native committed 成長 0.21 MiB、direct 0.025 MiB、RSS 13.20 MiB。有限窗口通過不等於完全沒有成長。停流、清空與查詢後的一次診斷 GC，heap 為 104.48 MiB，**程序 RSS 為 1,100.07 MiB**。
 
 ## 代價、適用範圍與來源
