@@ -4,6 +4,7 @@ import com.echo.entity.RequestLog;
 import com.echo.entity.RequestLogCheckpoint;
 import com.echo.repository.RequestLogCheckpointRepository;
 import com.echo.repository.RequestLogRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,11 +20,17 @@ public class RequestLogBatchWriter {
     private final RequestLogRepository requestLogRepository;
     private final RequestLogCheckpointRepository checkpointRepository;
     private long estimatedRecordCount = -1;
+    private RequestLogJdbcBatchInsert jdbcBatchInsert;
 
     public RequestLogBatchWriter(RequestLogRepository requestLogRepository,
                                  RequestLogCheckpointRepository checkpointRepository) {
         this.requestLogRepository = requestLogRepository;
         this.checkpointRepository = checkpointRepository;
+    }
+
+    @Autowired(required = false)
+    synchronized void setJdbcBatchInsert(RequestLogJdbcBatchInsert jdbcBatchInsert) {
+        this.jdbcBatchInsert = jdbcBatchInsert;
     }
 
     @Transactional(readOnly = true)
@@ -40,7 +47,9 @@ public class RequestLogBatchWriter {
     @Transactional
     public synchronized void persist(String spoolId, long lastSequence,
                                      List<RequestLog> logs, int maxRecords) {
-        requestLogRepository.saveAll(logs);
+        if (jdbcBatchInsert == null || !jdbcBatchInsert.insertNew(logs)) {
+            requestLogRepository.saveAll(logs);
+        }
         checkpointRepository.save(RequestLogCheckpoint.builder()
                 .spoolId(spoolId)
                 .lastSequence(lastSequence)

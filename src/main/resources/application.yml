@@ -205,6 +205,8 @@ echo:
   stats:
     retention-days: 7  # 統計資料保留天數
   request-log:
+    # SQLite：新紀錄使用 JDBC 批次寫入；false 切回 JPA。其他資料庫保留 JPA。
+    jdbc-batch-enabled: ${ECHO_REQUEST_LOG_JDBC_BATCH_ENABLED:true}
     enabled: ${ECHO_REQUEST_LOG_ENABLED:true} # false 時完全停止新增請求記錄，供隔離核心效能壓測
     store: database    # memory 或 database
     max-records: 10000 # 最大記錄數
