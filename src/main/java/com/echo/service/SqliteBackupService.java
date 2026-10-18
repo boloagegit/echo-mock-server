@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.sqlite.ExtendedCommand;
 import org.sqlite.SQLiteConnection;
+import org.sqlite.SQLiteConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
@@ -177,7 +178,7 @@ public class SqliteBackupService implements BackupService {
             // 使用 SQLite Online Backup API（透過 JDBC）
             // 這會產生一個包含所有已 commit 資料的完整一致性快照
             // 比 file copy 安全：file copy 可能漏掉 WAL 中未 checkpoint 的資料
-            try (var conn = dataSource.getConnection()) {
+            try (var conn = dataSource.getConnection(); var snapshot = ReadSnapshot.open(conn)) {
                 long expectedBytes = snapshotBytes(conn);
                 if (expectedBytes > maxTotalBytes) {
                     throw new IOException("SQLite snapshot exceeds echo.backup.max-total-bytes");
@@ -297,6 +298,51 @@ public class SqliteBackupService implements BackupService {
 
     private static long snapshotBytes(Connection connection) throws SQLException {
         return Math.multiplyExact(pragma(connection, "page_count"), pragma(connection, "page_size"));
+    }
+
+    /**
+     * Pin the source WAL snapshot: otherwise another connection's commit restarts
+     * the online backup and continuous request logging can prevent completion.
+     * DEFERRED keeps writers running even when the pool normally uses IMMEDIATE.
+     * This owns a freshly borrowed connection, never a caller's transaction.
+     */
+    private record ReadSnapshot(Connection connection, SQLiteConnection sqlite,
+                                SQLiteConfig.TransactionMode previousMode,
+                                boolean previousAutoCommit) implements AutoCloseable {
+        static ReadSnapshot open(Connection connection) throws SQLException {
+            var sqlite = connection.unwrap(SQLiteConnection.class);
+            var snapshot = new ReadSnapshot(connection, sqlite,
+                    sqlite.getConnectionConfig().getTransactionMode(), connection.getAutoCommit());
+            try {
+                // A pool configured with autoCommit=false may already have opened
+                // an empty transaction. End it before selecting the read-only mode.
+                if (!connection.getAutoCommit()) connection.setAutoCommit(true);
+                sqlite.getConnectionConfig().setTransactionMode(SQLiteConfig.TransactionMode.DEFERRED);
+                connection.setAutoCommit(false);
+                try (var statement = connection.createStatement();
+                     var rows = statement.executeQuery("SELECT COUNT(*) FROM sqlite_schema")) {
+                    if (!rows.next()) throw new SQLException("Cannot establish SQLite read snapshot");
+                }
+                return snapshot;
+            } catch (SQLException | RuntimeException failure) {
+                try { snapshot.close(); }
+                catch (SQLException restoreFailure) { failure.addSuppressed(restoreFailure); }
+                throw failure;
+            }
+        }
+
+        @Override
+        public void close() throws SQLException {
+            try {
+                if (!connection.getAutoCommit()) connection.rollback();
+            } finally {
+                try { connection.setAutoCommit(true); }
+                finally {
+                    sqlite.getConnectionConfig().setTransactionMode(previousMode);
+                    connection.setAutoCommit(previousAutoCommit);
+                }
+            }
+        }
     }
 
     private static long pragma(Connection connection, String name) throws SQLException {
