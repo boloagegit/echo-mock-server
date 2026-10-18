@@ -18,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 /** Opt-in real SQLite spool read cost. Not an HTTP/JMS throughput benchmark or a test gate. */
 public final class RequestLogSpoolReadCostProbe {
     private static final int BATCH_SIZE = 50;
+    private static final long READ_BYTE_LIMIT = 32L * 1024 * 1024;
     private static volatile long blackhole;
 
     private RequestLogSpoolReadCostProbe() { }
@@ -57,7 +58,8 @@ public final class RequestLogSpoolReadCostProbe {
                     if (!spool.appendAll(tasks).equals(new RequestLogSpool.AppendResult(BATCH_SIZE, 0))) {
                         throw new AssertionError("Seed not committed");
                     }
-                    var read = spool.readAfter(0, BATCH_SIZE, 16L * 1024 * 1024);
+                    var read = spool.readAfter(0, BATCH_SIZE, READ_BYTE_LIMIT);
+                    if (read.size() != BATCH_SIZE) throw new AssertionError("Seed exceeds probe's read byte limit");
                     for (int i = 0; i < tasks.size(); i++) {
                         LogTask actual = read.get(i).task();
                         if (!body.equals(actual.getRequestBody()) || !body.equals(actual.getResponseBody())
@@ -98,7 +100,7 @@ public final class RequestLogSpoolReadCostProbe {
         long start = System.nanoTime();
         long rows = 0;
         do {
-            var batch = spool.readAfter(0, BATCH_SIZE, 16L * 1024 * 1024);
+            var batch = spool.readAfter(0, BATCH_SIZE, READ_BYTE_LIMIT);
             if (batch.size() != BATCH_SIZE) throw new AssertionError("Missing spool rows");
             blackhole = batch.get(BATCH_SIZE - 1).sequence();
             rows += batch.size();
