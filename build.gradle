@@ -180,6 +180,18 @@ tasks.register('requestLogWriteCost', JavaExec) {
     jvmArgs '-Xms512m', '-Xmx512m', '-XX:+UseG1GC'
 }
 
+// Opt-in real SQLite spool read comparison; never part of unit-test gates.
+tasks.register('requestLogSpoolReadCost', JavaExec) {
+    dependsOn testClasses
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.echo.agent.RequestLogSpoolReadCostProbe'
+    args providers.gradleProperty('spoolReadCostOutput').getOrElse('artifacts/spool-read-cost'),
+            providers.gradleProperty('spoolReadCostWarmupSeconds').getOrElse('5'),
+            providers.gradleProperty('spoolReadCostMeasureSeconds').getOrElse('8')
+    jvmArgs '-Xms512m', '-Xmx512m', '-XX:+UseG1GC'
+}
+
 // Opt-in, short real-JMS/file-output A/B measurement; never part of unit-test gates.
 tasks.register('jmsApplicationCost', JavaExec) {
     dependsOn testClasses

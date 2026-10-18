@@ -5,6 +5,7 @@ import com.echo.service.RequestLogRejectedException;
 import com.echo.service.RequestLogUnavailableException;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import jakarta.annotation.PostConstruct;
@@ -104,6 +105,7 @@ public class RequestLogSpool {
     });
 
     private final ObjectMapper objectMapper;
+    private final ObjectReader spoolTaskReader;
     private final Path spoolPath;
     private final ArrayBlockingQueue<PendingAppend> appendQueue;
     private final int appendBatchSize;
@@ -234,6 +236,10 @@ public class RequestLogSpool {
             String synchronousMode) {
         this.synchronousMode = synchronousMode;
         this.objectMapper = objectMapper;
+        // Preserve the application's modules, constraints and JSON settings;
+        // only spool reads use this bounded recycler. Never mutate the shared mapper.
+        this.spoolTaskReader = objectMapper.readerFor(SpoolTask.class).with(
+                objectMapper.getFactory().copy().setRecyclerPool(new SpoolReadBufferPool()));
         this.spoolPath = Path.of(spoolPath).toAbsolutePath().normalize();
         this.appendQueue = new ArrayBlockingQueue<>(Math.max(1, queueCapacity));
         this.appendBatchSize = Math.max(1, appendBatchSize);
@@ -608,7 +614,7 @@ public class RequestLogSpool {
                             throw new CandidateSnapshotCorruptionException(
                                     "Request-log payload length changed for sequence " + sequenceId);
                         }
-                        SpoolTask stored = objectMapper.readValue(payload, SpoolTask.class);
+                        SpoolTask stored = spoolTaskReader.readValue(payload);
                         List<CandidateRecord> candidates = candidateSetId == null ? null
                                 : loadCandidateSet(connection, candidateSetId, candidateCache);
                         result.add(new SpoolEntry(sequenceId, stored.toLogTask(candidates), payload.length));

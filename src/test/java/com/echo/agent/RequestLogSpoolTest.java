@@ -8,6 +8,7 @@ import com.echo.service.RequestLogUnavailableException;
 import com.echo.service.SystemConfigService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.StreamReadConstraints;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -141,6 +143,80 @@ class RequestLogSpoolTest {
         spool.start();
         assertThat(spool.readAfter(0, 10)).singleElement().satisfies(entry ->
                 assertThat(entry.task().getDiagnosticId()).isEqualTo("process-123"));
+    }
+
+    @Test
+    void longEscapedUnicodeBodiesSurviveRestartAndKeepTheExistingJsonFormat() throws Exception {
+        Path path = tempDir.resolve("long-bodies.sqlite");
+        spool = createSpool(path, 64 * 1024 * 1024);
+        spool.start();
+        var bodies = new ArrayList<String>();
+        String pattern = "金融測試😀\n\"quoted\"\\tab\t";
+        for (int length : new int[]{1_024, 65_536, 65_550, 131_072, 262_144}) {
+            String body = pattern.repeat(length / pattern.length() + 1).substring(0, length);
+            // Avoid ending this fixture in half a surrogate pair.
+            if (Character.isHighSurrogate(body.charAt(body.length() - 1))) body += "\uDE00";
+            bodies.add(body);
+            spool.append(taskBuilder("long", "/body/" + bodies.size())
+                    .requestBody(body).responseBody("response:" + body).analysisBody(body).build());
+        }
+        spool.stop();
+        var mapper = new ObjectMapper().findAndRegisterModules();
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + path);
+             Statement query = connection.createStatement();
+             ResultSet rows = query.executeQuery("SELECT payload FROM request_log_spool ORDER BY sequence_id")) {
+            for (String body : bodies) {
+                assertThat(rows.next()).isTrue();
+                var json = mapper.readTree(rows.getBytes(1));
+                assertThat(json.get("requestBody").textValue()).isEqualTo(body);
+                assertThat(json.get("responseBody").textValue()).isEqualTo("response:" + body);
+                assertThat(json.get("analysisUsesRequestBody").booleanValue()).isTrue();
+            }
+        }
+        spool = createSpool(path, 64 * 1024 * 1024);
+        spool.start();
+        var restored = spool.readAfter(0, 10);
+        assertThat(restored).hasSize(bodies.size());
+        for (int i = 0; i < bodies.size(); i++) {
+            assertThat(restored.get(i).task().getRequestBody()).isEqualTo(bodies.get(i));
+            assertThat(restored.get(i).task().getResponseBody()).isEqualTo("response:" + bodies.get(i));
+            assertThat(restored.get(i).task().getAnalysisBody()).isEqualTo(bodies.get(i));
+        }
+    }
+
+    @Test
+    void invalidUtf8RemainsCorruptAndIsNotSilentlyReplacedOrDeleted() throws Exception {
+        Path path = tempDir.resolve("invalid-utf8.sqlite");
+        spool = createSpool(path, 16 * 1024 * 1024);
+        spool.start();
+        spool.append(minimalTask("invalid-utf8"));
+        byte[] payload = "{\"requestBody\":\"x\"}".getBytes(StandardCharsets.UTF_8);
+        payload[16] = (byte) 0xFF;
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + path);
+             PreparedStatement update = connection.prepareStatement("UPDATE request_log_spool SET payload = ?")) {
+            update.setBytes(1, payload);
+            update.executeUpdate();
+        }
+        assertThatThrownBy(() -> spool.readAfter(0, 10))
+                .isInstanceOfSatisfying(RequestLogSpool.UnrecoverableSpoolEntryException.class,
+                        failure -> assertThat(failure.kind()).isEqualTo(
+                                RequestLogSpool.UnrecoverableSpoolEntryException.Kind.CORRUPT));
+        assertThat(spool.countBetween(0, Long.MAX_VALUE)).isEqualTo(1);
+    }
+
+    @Test
+    void largerReadBufferStillEnforcesTheConfiguredJsonStringLimit() {
+        var mapper = new ObjectMapper().findAndRegisterModules();
+        mapper.getFactory().setStreamReadConstraints(StreamReadConstraints.builder()
+                .maxStringLength(1_000).build());
+        spool = new RequestLogSpool(mapper, tempDir.resolve("string-limit.sqlite").toString(),
+                256, 32, 2, 2_000, 25, 16 * 1024 * 1024);
+        spool.start();
+        spool.append(taskBuilder("long", "/limit").requestBody("x".repeat(2_000)).build());
+        assertThatThrownBy(() -> spool.readAfter(0, 10))
+                .isInstanceOfSatisfying(RequestLogSpool.UnrecoverableSpoolEntryException.class,
+                        failure -> assertThat(failure.kind()).isEqualTo(
+                                RequestLogSpool.UnrecoverableSpoolEntryException.Kind.CORRUPT));
     }
 
     @Test
