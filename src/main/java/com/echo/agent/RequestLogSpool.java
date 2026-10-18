@@ -571,60 +571,69 @@ public class RequestLogSpool {
             long byteBudget = maxBytes <= 0 ? 1 : maxBytes;
             long loadedBytes = 0;
             try (ResultSet rows = statement.executeQuery()) {
-                while (rows.next()) {
-                    long sequenceId = rows.getLong(1);
-                    String candidateSetId = rows.getString(2);
-                    long payloadBytes = rows.getLong(3);
-                    if (rows.wasNull() || payloadBytes < 0) {
-                        throw unrecoverable(sequenceId,
-                                UnrecoverableSpoolEntryException.Kind.CORRUPT,
-                                0, byteBudget,
-                                "Missing or invalid request-log payload length", null);
-                    }
-                    long candidateBytes = 0;
-                    if (candidateSetId != null) {
-                        candidateBytes = rows.getLong(4);
-                        if (rows.wasNull() || candidateBytes < 0) {
+                // Do not prepare a payload query for an empty/idle poll.
+                if (!rows.next()) {
+                    return result;
+                }
+                // Reuse one statement within this read snapshot, while checking each
+                // row's byte budget before loading its BLOB.
+                try (PreparedStatement payloadQuery = connection.prepareStatement(
+                        "SELECT payload FROM request_log_spool WHERE sequence_id = ?")) {
+                    do {
+                        long sequenceId = rows.getLong(1);
+                        String candidateSetId = rows.getString(2);
+                        long payloadBytes = rows.getLong(3);
+                        if (rows.wasNull() || payloadBytes < 0) {
                             throw unrecoverable(sequenceId,
                                     UnrecoverableSpoolEntryException.Kind.CORRUPT,
-                                    payloadBytes, byteBudget,
-                                    "Missing candidate snapshot set: " + candidateSetId, null);
+                                    0, byteBudget,
+                                    "Missing or invalid request-log payload length", null);
                         }
-                    }
-                    long rowBytes = saturatingAdd(payloadBytes, candidateBytes);
-                    long remainingBytes = byteBudget - loadedBytes;
-                    if (rowBytes > remainingBytes) {
-                        if (result.isEmpty()) {
+                        long candidateBytes = 0;
+                        if (candidateSetId != null) {
+                            candidateBytes = rows.getLong(4);
+                            if (rows.wasNull() || candidateBytes < 0) {
+                                throw unrecoverable(sequenceId,
+                                        UnrecoverableSpoolEntryException.Kind.CORRUPT,
+                                        payloadBytes, byteBudget,
+                                        "Missing candidate snapshot set: " + candidateSetId, null);
+                            }
+                        }
+                        long rowBytes = saturatingAdd(payloadBytes, candidateBytes);
+                        long remainingBytes = byteBudget - loadedBytes;
+                        if (rowBytes > remainingBytes) {
+                            if (result.isEmpty()) {
+                                throw unrecoverable(sequenceId,
+                                        UnrecoverableSpoolEntryException.Kind.OVERSIZED,
+                                        rowBytes, byteBudget,
+                                        "Request-log spool head row exceeds the read byte limit", null);
+                            }
+                            break;
+                        }
+                        if (payloadBytes > Integer.MAX_VALUE) {
                             throw unrecoverable(sequenceId,
                                     UnrecoverableSpoolEntryException.Kind.OVERSIZED,
                                     rowBytes, byteBudget,
-                                    "Request-log spool head row exceeds the read byte limit", null);
+                                    "Request-log spool payload cannot be represented in memory", null);
                         }
-                        break;
-                    }
-                    if (payloadBytes > Integer.MAX_VALUE) {
-                        throw unrecoverable(sequenceId,
-                                UnrecoverableSpoolEntryException.Kind.OVERSIZED,
-                                rowBytes, byteBudget,
-                                "Request-log spool payload cannot be represented in memory", null);
-                    }
-                    try {
-                        byte[] payload = readPayload(connection, sequenceId);
-                        if (payload.length != payloadBytes) {
-                            throw new CandidateSnapshotCorruptionException(
-                                    "Request-log payload length changed for sequence " + sequenceId);
+                        try {
+                            byte[] payload = readPayload(payloadQuery, sequenceId);
+                            if (payload.length != payloadBytes) {
+                                throw new CandidateSnapshotCorruptionException(
+                                        "Request-log payload length changed for sequence " + sequenceId);
+                            }
+                            SpoolTask stored = spoolTaskReader.readValue(payload);
+                            List<CandidateRecord> candidates = candidateSetId == null ? null
+                                    : loadCandidateSet(connection, candidateSetId, candidateCache);
+                            result.add(new SpoolEntry(sequenceId, stored.toLogTask(candidates), payload.length));
+                            loadedBytes = saturatingAdd(loadedBytes, rowBytes);
+                        } catch (CandidateSnapshotCorruptionException | IOException e) {
+                            throw unrecoverable(sequenceId,
+                                    UnrecoverableSpoolEntryException.Kind.CORRUPT,
+                                    rowBytes, byteBudget,
+                                    "Cannot decode request-log spool head row", e);
                         }
-                        SpoolTask stored = spoolTaskReader.readValue(payload);
-                        List<CandidateRecord> candidates = candidateSetId == null ? null
-                                : loadCandidateSet(connection, candidateSetId, candidateCache);
-                        result.add(new SpoolEntry(sequenceId, stored.toLogTask(candidates), payload.length));
-                        loadedBytes = saturatingAdd(loadedBytes, rowBytes);
-                    } catch (CandidateSnapshotCorruptionException | IOException e) {
-                        throw unrecoverable(sequenceId,
-                                UnrecoverableSpoolEntryException.Kind.CORRUPT,
-                                rowBytes, byteBudget,
-                                "Cannot decode request-log spool head row", e);
-                    }
+                    } while (rows.next());
                 }
             }
             return result;
@@ -635,20 +644,18 @@ public class RequestLogSpool {
         }
     }
 
-    private byte[] readPayload(Connection connection, long sequenceId) throws SQLException, IOException {
-        try (PreparedStatement payloadQuery = connection.prepareStatement(
-                "SELECT payload FROM request_log_spool WHERE sequence_id = ?")) {
-            payloadQuery.setLong(1, sequenceId);
-            try (ResultSet payloadRow = payloadQuery.executeQuery()) {
-                if (!payloadRow.next()) {
-                    throw new IOException("Missing request-log spool row: " + sequenceId);
-                }
-                byte[] payload = payloadRow.getBytes(1);
-                if (payload == null) {
-                    throw new IOException("Null request-log spool payload: " + sequenceId);
-                }
-                return payload;
+    private byte[] readPayload(PreparedStatement payloadQuery, long sequenceId)
+            throws SQLException, IOException {
+        payloadQuery.setLong(1, sequenceId);
+        try (ResultSet payloadRow = payloadQuery.executeQuery()) {
+            if (!payloadRow.next()) {
+                throw new IOException("Missing request-log spool row: " + sequenceId);
             }
+            byte[] payload = payloadRow.getBytes(1);
+            if (payload == null) {
+                throw new IOException("Null request-log spool payload: " + sequenceId);
+            }
+            return payload;
         }
     }
 
