@@ -36,6 +36,17 @@ Echo 使用既有預設的非同步 SQLite 紀錄與 1,000/s 寫入上限；Wire
 
 WireMock 此版本在 `AbstractRequestJournal.removeOldEntries()` 以 `getAllKeys().count()` 逐筆遍歷 `ConcurrentLinkedDeque`，是有上限 journal 額外成本的可確認來源；不是已量出的完整因果占比，也不能泛化成 WireMock 所有設定。
 
+### 追加檢查：固定回應受暖機時間影響
+
+另以修正 broker 啟動的 `cdf00cb` 與 WireMock 3.13.2 對照：同一主機、Java 17／G1／1 GiB heap、關閉紀錄、16 條連線，四個全新 JVM 依 Echo／WireMock／WireMock／Echo 執行。每輪先暖機 5 秒、量測 10 秒，再增加 30 秒流量，最後量測 10 秒。兩邊都開啟 GC／safepoint 紀錄；同一 JVM 前後階段沒有修改 HTTP 實作。
+
+| 階段 | Echo req/s | WireMock req/s | Echo 各輪 P99 平均 ms | WireMock 各輪 P99 平均 ms |
+|---|---:|---:|---:|---:|
+| 累積約 5 秒流量後 | 76,343 | 52,457 | 7.880 | 5.292 |
+| 累積約 45 秒流量後 | 75,018 | 56,649 | 1.666 | 4.420 |
+
+兩輪的 P99 變化方向一致；所有收到的狀態與本文正確，socket 錯誤為零。Echo 前段各 10 秒的 GC 總暫停為 163.4／175.2 ms，後段為 21.3／20.0 ms。這支持暖機時間是先前 fixed-c16 數字的影響因素之一，還沒有拆開 JIT、GC 與 CPU 排程各自的成本。只測一種固定回應、每產品兩個 JVM，不能證明已完全暖機，也沒有解決轉發／JMS 的尾端延遲。原始表格保留；追加原始資料放在 Git 外的 `echo-results-review-20261018/tail-latency`。
+
 ## HTTP 記憶體與 30 分鐘穩定性
 
 兩個被比較的程序都只有 HTTP 流量，JMS 處理與備份均停用；Echo 仍啟動了上述閒置內建 broker，WireMock 則沒有 broker。雙方各 100 req/s、四條連線、五條等價規則，固定、變動 query 模板、16 KiB XML 條件、16 KiB 真實轉發、10 ms 延遲各 20%。雙方都使用 JDK 17／G1／1 GiB heap／NMT summary，保留 10,000 筆紀錄。暖機 120 秒後，六段各五分鐘，段間停兩邊流量、閒置 15 秒後診斷 GC。

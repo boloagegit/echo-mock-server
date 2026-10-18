@@ -36,6 +36,17 @@ Echo uses its existing default asynchronous SQLite logging and 1,000/s writer ca
 
 In this WireMock version, `AbstractRequestJournal.removeOldEntries()` calls `getAllKeys().count()`, traversing its `ConcurrentLinkedDeque` for each request. This confirms an additional bounded-journal cost, not its complete measured causal contribution or behavior under every WireMock configuration.
 
+### Follow-up: fixed-response warm-up sensitivity
+
+The broker-startup fix at `cdf00cb` was separately compared with WireMock 3.13.2 on the same host, Java 17/G1/1 GiB heap, recording disabled and 16 connections. Four fresh JVMs ran Echo/WireMock/WireMock/Echo. Each received five seconds of warm-up, a ten-second early measurement, thirty additional seconds of load, then a ten-second late measurement. GC/safepoint logs were enabled equally; no HTTP implementation change was made between the early and late phases.
+
+| Phase | Echo req/s | WireMock req/s | Echo mean run P99 ms | WireMock mean run P99 ms |
+|---|---:|---:|---:|---:|
+| After 5 seconds of load | 76,343 | 52,457 | 7.880 | 5.292 |
+| After approximately 45 seconds of load | 75,018 | 56,649 | 1.666 | 4.420 |
+
+Both samples showed the same direction of P99 change; all received bodies/statuses were correct with zero socket errors. Echo's total GC pauses during the early ten-second windows were 163.4 / 175.2 ms, versus 21.3 / 20.0 ms in the late windows. This supports warm-up sensitivity as a contributor to the earlier fixed-c16 result, without isolating JIT, GC and CPU scheduling costs. Only one fixed response and two JVMs per product were checked; these observations neither prove complete warm-up convergence nor resolve forwarding/JMS tail latency. The original tables are retained. Raw follow-up data is outside Git under `echo-results-review-20261018/tail-latency`.
+
 ## Matched HTTP memory and 30-minute stability
 
 Both compared processes receive HTTP traffic only, with JMS handling and backups disabled. Echo nevertheless started the idle embedded broker described above; WireMock has no broker. Each receives 100 req/s over four connections and five equivalent rules: fixed, variable-query template, 16 KiB XML matching, real 16 KiB forwarding and a 10 ms delay, 20% each. Both use Java 17/G1/1 GiB heap/NMT summary and retain 10,000 entries. After 120 seconds of warm-up, six five-minute segments stop both generators for 15-second idle/drain and diagnostic-GC checkpoints.
