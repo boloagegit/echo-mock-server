@@ -429,6 +429,7 @@ class Observation:
                   "classHistograms": self.args.class_histograms,
                   "histogramCaveat": "Shallow sizes by class, including unreachable objects; growth suggests candidates, not retaining owners or leak proof",
                   "continuous": self.args.continuous,
+                  "httpProtocol": "HTTP/1.1",
                   "downstreamTcpNoDelay": not self.args.downstream_nagle,
                   "gcInterventions": "None" if self.args.continuous else "Only after natural idle and resource drain; never during load",
                   "limitation": "Finite regression observation, not proof of leak freedom or a production throughput benchmark"}

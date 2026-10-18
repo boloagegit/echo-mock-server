@@ -142,7 +142,9 @@ public final class MemoryObservationFixture {
             throw new IllegalArgumentException("Invalid bounded workload");
         }
         var executor = Executors.newFixedThreadPool(4);
-        var http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+        // Avoid h2c Upgrade requests: this workload must exercise the native HTTP/1.1 path.
+        var http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5))
+                .version(HttpClient.Version.HTTP_1_1).build();
         long start = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
         int requestsPerWorker = Math.max(1, seconds * rate / 4);
         String padding = "x".repeat(bytes);
