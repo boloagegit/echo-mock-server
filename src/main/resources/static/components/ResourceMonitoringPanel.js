@@ -39,9 +39,12 @@ const ResourceMonitoringPanel = {
         caches: ['httpRulesEntries', 'httpRulesEvictions', 'jmsRulesEntries', 'jmsRulesEvictions', 'body_entries', 'body_weightedSize', 'body_maximumWeight', 'body_evictionCount', 'template_entries', 'template_weightedSize', 'template_maximumWeight', 'template_evictionCount'],
         scheduler: ['waitingTasks', 'activeWorkers', 'workerCapacity'],
         jms: ['listenerActive', 'listenerExits', 'replySent', 'replyFailures', 'lastListenerExit', 'forwardActive', 'forwardExits', 'forwardFailures', 'receiveTimeouts', 'invalidReplies', 'cleanupFailures', 'lastForwardExit', 'reservedBytes', 'maximumBytes', 'waitingThreads', 'processingRunning', 'maxDeliveryAttempts'],
-        http: ['nativeActive', 'nativeBufferedBytes', 'nativeQueued', 'nativeWorkerActive', 'nativeWorkerCapacity', 'nativeCapacity', 'nativeBufferLimitBytes', 'activeForwards', 'completedForwards', 'cancelledForwards', 'rejectedForwards', 'poolLeased', 'poolPending', 'poolIdle', 'poolCapacity', 'bufferedBytes', 'bufferLimitBytes'],
+        http: ['nativeActive', 'nativeBufferedBytes', 'nativeQueued', 'nativeWorkerActive', 'nativeWorkerThreads', 'nativeWorkerCapacity', 'nativeCapacity', 'nativeBufferLimitBytes', 'activeForwards', 'completedForwards', 'cancelledForwards', 'rejectedForwards', 'poolLeased', 'poolPending', 'poolIdle', 'poolCapacity', 'bufferedBytes', 'bufferLimitBytes'],
         database: ['poolActive', 'poolIdle', 'poolTotal', 'poolWaiting', 'writerWaiting', 'writerActive'],
-        requestLog: ['queueItems', 'processed', 'dropped', 'queueBytes', 'capacityBytes', 'inFlightBytes', 'byteLimit', 'waitingProducers', 'backpressureActive', 'storageUnavailable', 'consumerRunning'],
+        requestLog: ['queueItems', 'processed', 'dropped', 'retentionSkipped', 'bufferOverflowDropped',
+          'writeNotConfirmed', 'otherDropped', 'storageRetries', 'queueBytes', 'capacityBytes', 'inFlightBytes',
+          'byteLimit', 'waitingProducers', 'backpressureActive', 'storageUnavailable', 'consumerRunning',
+          'diskReserveBytes', 'diskUsableBytes', 'diskSpaceBlocked', 'diskSpaceProbeFailures'],
         applicationLog: ['queueUsed', 'queueCapacity', 'started', 'diagnosticEnabled', 'diagnosticRunning',
           'diagnosticDetailed', 'diagnosticFileWriteAttempted', 'diagnosticFileAvailable', 'diagnosticQueueUsed', 'diagnosticQueueCapacity',
           'diagnosticDropped', 'diagnosticSinkFailures', 'diagnosticRateLimited', 'diagnosticBudgetDropped',
@@ -67,7 +70,8 @@ const ResourceMonitoringPanel = {
         caches: ['httpRulesEvictions', 'jmsRulesEvictions', 'body_evictionCount', 'template_evictionCount'],
         jms: ['listenerExits', 'replySent', 'replyFailures', 'forwardExits', 'forwardFailures', 'receiveTimeouts', 'invalidReplies', 'cleanupFailures'],
         http: ['completedForwards', 'cancelledForwards', 'rejectedForwards'],
-        requestLog: ['processed', 'dropped'],
+        requestLog: ['processed', 'dropped', 'retentionSkipped', 'bufferOverflowDropped', 'writeNotConfirmed',
+          'otherDropped', 'storageRetries', 'diskSpaceProbeFailures'],
         applicationLog: ['diagnosticDropped', 'diagnosticSinkFailures', 'diagnosticRateLimited', 'diagnosticBudgetDropped'],
       };
       const limits = {
@@ -76,7 +80,7 @@ const ResourceMonitoringPanel = {
         scheduler: ['workerCapacity'],
         jms: ['maximumBytes', 'maxDeliveryAttempts', 'lastListenerExit', 'lastForwardExit'],
         http: ['nativeWorkerCapacity', 'nativeCapacity', 'nativeBufferLimitBytes', 'poolCapacity', 'bufferLimitBytes'],
-        requestLog: ['capacityBytes', 'byteLimit'],
+        requestLog: ['capacityBytes', 'byteLimit', 'diskReserveBytes'],
         applicationLog: ['queueCapacity', 'diagnosticQueueCapacity', 'diagnosticDailyLimitBytes', 'diagnosticRetainedLimitBytes'],
       };
       return [
@@ -274,6 +278,7 @@ const ResourceMonitoringPanel = {
                 </section>
               </div>
               <p v-if="detail.key === 'cache'" class="settings-inline-note">{{t('monitoring.cacheHitRateSource')}} · HTTP {{cacheHitRate('httpRules')}} · JMS {{cacheHitRate('jmsRules')}}</p>
+              <p v-if="detail.key === 'database'" class="settings-inline-note">{{t('monitoring.requestLogCountersHint')}}</p>
               <gc-history-panel v-if="detail.key === 'memory'" :refresh-token="refreshToken"></gc-history-panel>
               <section v-if="detail.key === 'memory'" class="memory-source-comparison">
                 <h3>{{t('monitoring.sources.title')}}</h3>

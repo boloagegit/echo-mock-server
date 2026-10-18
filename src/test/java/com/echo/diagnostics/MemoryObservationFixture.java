@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -39,14 +40,56 @@ public final class MemoryObservationFixture {
     public static void main(String[] args) throws Exception {
         if (args.length == 3 && args[0].equals("downstream")) {
             downstream(Integer.parseInt(args[1]), Integer.parseInt(args[2]));
+        } else if (args.length == 2 && args[0].equals("http-downstream")) {
+            var server = httpEcho(Integer.parseInt(args[1]));
+            try { new CountDownLatch(1).await(); } finally { server.stop(0); }
+        } else if (args.length == 5 && args[0].equals("http-benchmark")) {
+            benchmarkHttp(args[1], Integer.parseInt(args[2]), Integer.parseInt(args[3]), Integer.parseInt(args[4]));
         } else if (args.length == 6 && args[0].equals("load")) {
             load(args[1], args[2], Integer.parseInt(args[3]), Integer.parseInt(args[4]), Integer.parseInt(args[5]));
         } else if (args.length == 6 && args[0].equals("jms-benchmark")) {
             benchmarkJms(args[1], args[2], Integer.parseInt(args[3]), Integer.parseInt(args[4]), Integer.parseInt(args[5]));
         } else {
             throw new IllegalArgumentException("downstream <http-port> <jms-port> | load <http-url> <jms-url> <seconds> <rate> <bytes>"
-                    + " | jms-benchmark <jms-url> <mock|forward> <seconds> <concurrency> <bytes>");
+                    + " | jms-benchmark <jms-url> <mock|forward> <seconds> <concurrency> <bytes>"
+                    + " | http-downstream <port> | http-benchmark <url> <seconds> <rate> <bytes>");
         }
+    }
+
+    private static HttpServer httpEcho(int port) throws Exception {
+        var server = HttpServer.create(new InetSocketAddress(InetAddress.getByAddress(new byte[]{127, 0, 0, 1}), port), 0);
+        server.createContext("/observe/forward", exchange -> {
+            byte[] body = exchange.getRequestBody().readAllBytes();
+            exchange.sendResponseHeaders(200, body.length);
+            try (var out = exchange.getResponseBody()) { out.write(body); }
+        });
+        server.start();
+        return server;
+    }
+
+    /** Paced HTTP/1.1 POST probe; validates bytes and keeps downstream delay separate from Echo cost. */
+    private static void benchmarkHttp(String url, int seconds, int rate, int bytes) throws Exception {
+        if (seconds < 1 || seconds > 300 || rate < 1 || rate > 1000 || bytes < 1 || bytes > 1024 * 1024) {
+            throw new IllegalArgumentException("Invalid bounded HTTP probe");
+        }
+        var client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5))
+                .version(HttpClient.Version.HTTP_1_1).build();
+        String body = "x".repeat(bytes);
+        var histogram = new Histogram(TimeUnit.SECONDS.toNanos(60), 3);
+        long start = System.nanoTime();
+        for (int i = 0; i < (seconds + 5) * rate; i++) {
+            pace(start + (long) i * TimeUnit.SECONDS.toNanos(1) / rate);
+            var request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(10))
+                    .POST(HttpRequest.BodyPublishers.ofString(body)).build();
+            long before = System.nanoTime();
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (response.statusCode() != 200 || !body.equals(response.body())) {
+                throw new AssertionError("HTTP probe response mismatch: " + response.statusCode());
+            }
+            if (i >= 5 * rate) histogram.recordValue(System.nanoTime() - before);
+        }
+        System.out.println("PERF_HTTP " + JSON.writeValueAsString(Map.of("latencyMs", latencySummary(histogram),
+                "seconds", seconds, "requestedRate", rate, "warmupSeconds", 5)));
     }
 
     private static void downstream(int httpPort, int jmsPort) throws Exception {
@@ -108,10 +151,11 @@ public final class MemoryObservationFixture {
             latencies.put(scenario, new ConcurrentHistogram(TimeUnit.SECONDS.toNanos(60), 3));
         }
         List<Future<Long>> jobs = new ArrayList<>();
+        var completedJobs = new ExecutorCompletionService<Long>(executor);
         try {
             for (int worker = 0; worker < 4; worker++) {
                 final int id = worker;
-                jobs.add(executor.submit(() -> {
+                jobs.add(completedJobs.submit(() -> {
                     if (id < 2) {
                         for (int i = 0; i < requestsPerWorker; i++) {
                             pace(start + (long) i * TimeUnit.SECONDS.toNanos(seconds) / requestsPerWorker);
@@ -174,7 +218,11 @@ public final class MemoryObservationFixture {
                 }));
             }
             long completed = 0;
-            for (var job : jobs) { completed += job.get(seconds + 60L, TimeUnit.SECONDS); }
+            for (int i = 0; i < jobs.size(); i++) {
+                var job = completedJobs.poll(seconds + 60L, TimeUnit.SECONDS);
+                if (job == null) throw new AssertionError("Load worker exceeded its deadline");
+                completed += job.get();
+            }
             if (latencies.values().stream().mapToLong(Histogram::getTotalCount).sum() != completed) {
                 throw new AssertionError("Missing per-scenario latency samples");
             }

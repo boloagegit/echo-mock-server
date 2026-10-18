@@ -139,16 +139,23 @@ test('compact overview has six groups; details retain all nine sections and ever
   const sections = instance.detailGroups.flatMap(group => group.sections);
   assert.equal(sections.length, 9);
   assert.equal(new Set(sections.map(group => group.key)).size, 9);
-  assert.equal(sections.reduce((count, group) => count + group.metrics.length, 0), 96);
+  const metricCount = instance.groups.reduce((count, group) => count + group.metrics.length, 0);
+  assert.ok(metricCount >= 96);
+  assert.equal(sections.reduce((count, group) => count + group.metrics.length, 0), metricCount);
   const displayed = instance.detailGroups.flatMap(group => group.columns.flatMap(column => column.sections.flatMap(section => section.metrics.map(metric => section.key + ':' + metric))));
-  assert.equal(displayed.length, 96);
-  assert.equal(new Set(displayed).size, 96);
+  assert.equal(displayed.length, metricCount);
+  assert.equal(new Set(displayed).size, metricCount);
+  const logMetrics = ['retentionSkipped', 'bufferOverflowDropped', 'writeNotConfirmed', 'otherDropped',
+    'storageRetries', 'diskSpaceBlocked', 'diskReserveBytes', 'diskUsableBytes', 'diskSpaceProbeFailures'];
+  for (const metric of logMetrics) assert.ok(displayed.includes('requestLog:' + metric));
   const applicationLog = sections.find(section => section.key === 'applicationLog');
   const diagnosticMetrics = applicationLog.metrics.filter(key => key.startsWith('diagnostic'));
   assert.equal(diagnosticMetrics.length, 15);
   for (const locale of ['en', 'zh-TW']) {
     const messages = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../main/resources/static/i18n/' + locale + '.json'), 'utf8'));
     for (const metric of diagnosticMetrics) assert.equal(typeof messages.monitoring.metrics[metric], 'string', metric);
+    for (const metric of logMetrics) assert.equal(typeof messages.monitoring.metrics[metric], 'string', metric);
+    assert.equal(typeof messages.monitoring.requestLogCountersHint, 'string');
   }
   for (const summary of instance.summaries) {
     const detail = sections.find(group => group.key === summary.key);

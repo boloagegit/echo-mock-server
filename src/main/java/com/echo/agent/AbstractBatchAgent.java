@@ -29,6 +29,8 @@ public abstract class AbstractBatchAgent<T> implements EchoAgent {
     private volatile AgentStatus status = AgentStatus.STOPPED;
     private final AtomicLong processedCount = new AtomicLong();
     private final AtomicLong droppedCount = new AtomicLong();
+    private final AtomicLong retentionSkippedCount = new AtomicLong();
+    private final AtomicLong otherDroppedCount = new AtomicLong();
     private final AtomicLong droppedSinceLastWarning = new AtomicLong();
     private final AtomicLong lastDropWarningNanos = new AtomicLong();
 
@@ -51,6 +53,8 @@ public abstract class AbstractBatchAgent<T> implements EchoAgent {
                 .queueSize(queue.size())
                 .processedCount(processedCount.get())
                 .droppedCount(droppedCount.get())
+                .retentionSkippedCount(retentionSkippedCount.get())
+                .otherDroppedCount(otherDroppedCount.get())
                 .build();
     }
 
@@ -236,10 +240,12 @@ public abstract class AbstractBatchAgent<T> implements EchoAgent {
 
     /** Counts items a durable consumer skipped on purpose (already logged by the caller). */
     protected final void recordSkipped(long itemCount) {
+        retentionSkippedCount.addAndGet(itemCount);
         droppedCount.addAndGet(itemCount);
     }
 
     private void recordDropped(String reason) {
+        otherDroppedCount.incrementAndGet();
         long total = droppedCount.incrementAndGet();
         droppedSinceLastWarning.incrementAndGet();
         long now = System.nanoTime();
@@ -258,6 +264,7 @@ public abstract class AbstractBatchAgent<T> implements EchoAgent {
             return;
         }
         queue.clear();
+        otherDroppedCount.addAndGet(discarded);
         droppedCount.addAndGet(discarded);
         log.warn("Agent {} discarded {} queued tasks because {}", getName(), discarded, reason);
     }

@@ -1,9 +1,13 @@
 package com.echo.integration.jms;
 
 import com.echo.dto.RuleDto;
+import com.echo.dto.JmsTargetConnectionDto;
 import com.echo.entity.Protocol;
 import com.echo.integration.base.BaseIntegrationTest;
 import com.echo.jms.JmsConnectionManager;
+import com.echo.jms.JmsTargetForwarder;
+import com.echo.jms.JmsRuntimeMetrics;
+import com.echo.repository.JmsTargetConnectionRepository;
 import jakarta.jms.Connection;
 import jakarta.jms.Message;
 import jakarta.jms.MessageConsumer;
@@ -20,6 +24,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
+import org.springframework.jms.config.JmsListenerEndpointRegistry;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
@@ -32,6 +38,13 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -40,6 +53,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 從外部 broker（模擬公司 ESB）接收 JMS 請求：Echo 不啟動內建 Artemis，
  * 監聽外部 broker 上的 queue，並把回覆送到訊息的 JMSReplyTo。
  */
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
 
     private static final String QUEUE = "ESB.ECHO.IN";
@@ -60,11 +74,12 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
         registry.add("echo.jms.source.reconnect-interval-ms", () -> "200");
         registry.add("echo.jms.queue", () -> QUEUE);
         registry.add("echo.jms.port", () -> String.valueOf(UNUSED_EMBEDDED_PORT));
-        registry.add("echo.jms.concurrency", () -> "2-4");
+        registry.add("echo.jms.concurrency", () -> "2-2");
     }
 
     @AfterAll
-    static void stopEsb() throws Exception {
+    static void stopEsb(@Autowired JmsListenerEndpointRegistry listeners) throws Exception {
+        listeners.stop();
         if (esb != null) {
             esb.stop();
         }
@@ -169,6 +184,111 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
         });
 
         assertThat(reply.body()).isEqualTo("<reply><corr>TXN-7</corr><branch>TPE</branch><amount>42</amount></reply>");
+    }
+
+    @Test
+    @DisplayName("一個慢 JMS 目標等待回覆時，另一目標與 HTTP 仍可處理")
+    void oneSlowTargetLeavesCapacityForHealthyJmsAndHttp() throws Exception {
+        exerciseSlowTarget(1);
+    }
+
+    @Test
+    @DisplayName("同一來源的兩個 listener 都等待慢目標時，JMS 排隊並在目標恢復後正確完成")
+    void saturatedSharedListenersRetainAndRecoverQueuedRequests() throws Exception {
+        exerciseSlowTarget(2);
+    }
+
+    private void exerciseSlowTarget(int blockedRequests) throws Exception {
+        var senders = Executors.newFixedThreadPool(blockedRequests + 1);
+        var release = new CountDownLatch(1);
+        var received = new CountDownLatch(blockedRequests);
+        var failure = new AtomicReference<Throwable>();
+        var targetIds = new ArrayList<String>();
+        try (var factory = new ActiveMQConnectionFactory(esbUrl());
+             var downstream = factory.createConnection()) {
+            downstream.start();
+            var sessions = new ArrayList<Session>();
+            try {
+                // Each JMS session has exactly one callback thread, including its reply producer.
+                for (int i = 0; i < blockedRequests + 1; i++) {
+                    boolean slow = i < blockedRequests;
+                    var session = downstream.createSession(false, Session.AUTO_ACKNOWLEDGE);
+                    sessions.add(session);
+                    var consumer = session.createConsumer(session.createQueue(slow ? "TEST.SLOW" : "TEST.HEALTHY"));
+                    var producer = session.createProducer(null);
+                    consumer.setMessageListener(message -> {
+                        try {
+                            if (slow) {
+                                received.countDown();
+                                if (!release.await(15, TimeUnit.SECONDS)) {
+                                    throw new AssertionError("test did not release the slow target");
+                                }
+                            }
+                            TextMessage reply = session.createTextMessage(slow ? "slow-reply" : "healthy-reply");
+                            reply.setJMSCorrelationID(message.getJMSMessageID());
+                            producer.send(message.getJMSReplyTo(), reply);
+                        } catch (Throwable error) {
+                            failure.compareAndSet(null, error);
+                        }
+                    });
+                }
+                for (String mode : List.of("slow", "healthy")) {
+                    var response = adminClient().postForEntity("/api/admin/jms-target-connections", Map.of(
+                            "name", "isolation-" + mode, "providerType", "artemis", "serverUrl", esbUrl(),
+                            "queueName", "TEST." + mode.toUpperCase(java.util.Locale.ROOT),
+                            "timeoutSeconds", 10, "enabled", true), JmsTargetConnectionDto.class);
+                    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+                    assertThat(response.getBody()).isNotNull();
+                    String id = response.getBody().id();
+                    targetIds.add(id);
+                    var rule = adminClient().postForEntity("/api/admin/rules", Map.of(
+                            "protocol", "JMS", "matchKey", QUEUE, "bodyCondition", "//ServiceName=" + mode,
+                            "action", "FORWARD", "forwardTargetMode", "CONNECTION", "jmsTargetConnectionId", id),
+                            RuleDto.class);
+                    assertThat(rule.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+                }
+                createHttpRule("/jms-isolation/http", "GET", "http-healthy");
+                waitUntilReceiving();
+                var slowReplies = new ArrayList<java.util.concurrent.Future<Reply>>();
+                for (int i = 0; i < blockedRequests; i++) {
+                    slowReplies.add(senders.submit(() -> request("<Request><ServiceName>slow</ServiceName></Request>")));
+                }
+                assertThat(received.await(10, TimeUnit.SECONDS)).as("all slow forwards are waiting").isTrue();
+                var healthy = senders.submit(() -> request("<Request><ServiceName>healthy</ServiceName></Request>"));
+                long httpStart = System.nanoTime();
+                assertThat(restTemplate.getForObject("/mock/jms-isolation/http", String.class)).isEqualTo("http-healthy");
+                assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - httpStart)).isLessThan(2_000);
+                if (blockedRequests == 2) {
+                    // This is the existing shared-pool boundary, not a provider/map-lock failure.
+                    assertThatThrownBy(() -> healthy.get(300, TimeUnit.MILLISECONDS)).isInstanceOf(TimeoutException.class);
+                } else {
+                    assertReply(healthy.get(5, TimeUnit.SECONDS), "healthy-reply");
+                }
+                release.countDown();
+                for (var reply : slowReplies) assertReply(reply.get(10, TimeUnit.SECONDS), "slow-reply");
+                assertReply(healthy.get(10, TimeUnit.SECONDS), "healthy-reply");
+                assertThat(failure.get()).isNull();
+                waitUntil(() -> ((Number) context.getBean(JmsRuntimeMetrics.class).snapshot().get("listenerActive"))
+                        .intValue() == 0, 5_000);
+                assertThat(esb.getActiveMQServer().locateQueue(QUEUE).getMessageCount()).isZero();
+            } finally {
+                release.countDown();
+                senders.shutdown();
+                if (!senders.awaitTermination(15, TimeUnit.SECONDS)) senders.shutdownNow();
+                for (Session session : sessions) session.close();
+            }
+        } finally {
+            release.countDown();
+            senders.shutdownNow();
+            adminClient().delete("/api/admin/rules/all");
+            for (String id : targetIds) context.getBean(JmsTargetForwarder.class).evict(Long.valueOf(id));
+            context.getBean(JmsTargetConnectionRepository.class).deleteAll();
+        }
+    }
+
+    private static void assertReply(Reply reply, String expected) {
+        assertThat(reply.body()).isEqualTo(expected);
+        assertThat(reply.correlationId()).isEqualTo(reply.requestId());
     }
 
     private record Reply(String requestId, String correlationId, String body) {

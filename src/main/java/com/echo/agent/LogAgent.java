@@ -24,6 +24,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ExecutorService;
@@ -32,6 +33,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Supplier;
 
@@ -76,6 +78,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     private final int durableBatchSize;
     private final AtomicBoolean analysisShedUntilQueueDrained = new AtomicBoolean(false);
     private final AtomicBoolean durableConsumerRunning = new AtomicBoolean(false);
+    private final AtomicLong storageRetryCount = new AtomicLong();
     private final Semaphore durableWorkAvailable = new Semaphore(0);
     private ExecutorService durableConsumerExecutor;
     /** 不等記錄寫入就回應時的暫存區；嚴格模式（等寫入才回應）或 memory 模式為 null。 */
@@ -255,6 +258,10 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
         return durableSpool != null && durableSpool.isStorageUnavailable();
     }
 
+    public Map<String, Object> diskReserveMetrics() {
+        return durableSpool == null ? Map.of() : durableSpool.diskReserveMetrics();
+    }
+
     @Override
     public AgentStats getStats() {
         AgentStats base = super.getStats();
@@ -263,10 +270,19 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
         }
         RequestLogSpool.StatusSnapshot durable = durableSpool.statusSnapshot();
         long buffered = handoff == null ? 0 : handoff.size();
+        long overflow = handoff == null ? 0 : handoff.overflowDroppedCount();
+        long unconfirmed = handoff == null ? 0 : handoff.writeNotConfirmedCount();
+        long retention = base.getRetentionSkippedCount();
+        long totalDropped = base.getDroppedCount() + (handoff == null ? 0 : handoff.droppedCount());
         return AgentStats.builder()
                 .queueSize((int) Math.min(Integer.MAX_VALUE, durable.pendingItems() + buffered))
                 .processedCount(base.getProcessedCount())
-                .droppedCount(base.getDroppedCount() + (handoff == null ? 0 : handoff.droppedCount()))
+                .droppedCount(totalDropped)
+                .retentionSkippedCount(retention)
+                .bufferOverflowDroppedCount(overflow)
+                .writeNotConfirmedCount(unconfirmed)
+                .otherDroppedCount(base.getOtherDroppedCount() + (handoff == null ? 0 : handoff.otherDroppedCount()))
+                .storageRetryCount(storageRetryCount.get() + durableSpool.getStorageRetryCount())
                 .queueBytes(durable.pendingBytes())
                 .queueCapacityBytes(durable.pendingByteLimit())
                 // 暫存區（等待寫入的記錄）與暫存檔的序列化資料都在記憶體中
@@ -541,6 +557,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 durableConsumerRunning.set(false);
                 break;
             } catch (Exception | Error e) {
+                storageRetryCount.incrementAndGet();
                 // Error（例如 OutOfMemoryError）也不能讓這個唯一的寫入執行緒結束，否則從此不再有新的請求記錄。
                 // 從資料庫重新讀取已確認的進度（逐筆重寫可能已前進一部分）；未寫入的資料留在暫存檔，稍後重試
                 checkpoint = null;

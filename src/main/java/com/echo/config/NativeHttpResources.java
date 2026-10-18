@@ -3,6 +3,7 @@ package com.echo.config;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.time.Duration;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -20,17 +21,23 @@ public final class NativeHttpResources implements AutoCloseable {
     private final AtomicLong buffered = new AtomicLong();
 
     NativeHttpResources(int threads, int maxRequests, int maxBodyBytes, long maxBufferedBytes) {
+        this(threads, maxRequests, maxBodyBytes, maxBufferedBytes, Duration.ofSeconds(60));
+    }
+
+    NativeHttpResources(int threads, int maxRequests, int maxBodyBytes, long maxBufferedBytes, Duration idleTimeout) {
         if (threads < 1 || maxRequests < 1 || maxBodyBytes < 1 || maxBodyBytes == Integer.MAX_VALUE
                 || maxBufferedBytes < 1) throw new IllegalArgumentException("Native HTTP limits must be positive and finite");
         this.maxRequests = maxRequests;
         this.maxBodyBytes = maxBodyBytes;
         this.maxBufferedBytes = maxBufferedBytes;
-        workers = new ThreadPoolExecutor(threads, threads, 0, TimeUnit.MILLISECONDS,
+        if (idleTimeout.isNegative()) throw new IllegalArgumentException("Native HTTP worker idle timeout must not be negative");
+        workers = new ThreadPoolExecutor(threads, threads, idleTimeout.toNanos(), TimeUnit.NANOSECONDS,
                 new ArrayBlockingQueue<>(maxRequests), runnable -> {
                     Thread thread = new Thread(runnable, "native-http-worker");
                     thread.setDaemon(true);
                     return thread;
                 }, new ThreadPoolExecutor.AbortPolicy());
+        workers.allowCoreThreadTimeOut(!idleTimeout.isZero());
     }
 
     Lease acquire() {
@@ -50,6 +57,7 @@ public final class NativeHttpResources implements AutoCloseable {
         return Map.of("nativeActive", active.get(), "nativeBufferedBytes", buffered.get(),
                 "nativeQueued", workers.getQueue().size(), "nativeCapacity", maxRequests,
                 "nativeWorkerActive", workers.getActiveCount(), "nativeWorkerCapacity", workers.getCorePoolSize(),
+                "nativeWorkerThreads", workers.getPoolSize(),
                 "nativeBufferLimitBytes", maxBufferedBytes);
     }
 

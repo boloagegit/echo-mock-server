@@ -36,8 +36,10 @@ public final class HttpTransportConfiguration {
                 @Value("${echo.http.native.workers:${server.undertow.threads.worker:32}}") int workers,
                 @Value("${echo.http.native.max-requests:512}") int maxRequests,
                 @Value("${echo.http.native.max-body-bytes:10485760}") int maxBodyBytes,
-                @Value("${echo.http.native.max-buffered-bytes:134217728}") long maxBufferedBytes) {
-            return new NativeHttpResources(workers, maxRequests, maxBodyBytes, maxBufferedBytes);
+                @Value("${echo.http.native.max-buffered-bytes:134217728}") long maxBufferedBytes,
+                @Value("${echo.http.native.worker-idle-timeout-seconds:60}") long workerIdleSeconds) {
+            return new NativeHttpResources(workers, maxRequests, maxBodyBytes, maxBufferedBytes,
+                    java.time.Duration.ofSeconds(workerIdleSeconds));
         }
 
         // 不當預設候選：否則 Spring Boot 看到已有 ScheduledExecutorService／Executor，就不建立自己的

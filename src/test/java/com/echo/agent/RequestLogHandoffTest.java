@@ -103,6 +103,8 @@ class RequestLogHandoffTest {
         assertThat(written).containsExactly("/first", "/16", "/17", "/18", "/19", "/20", "/21", "/22",
                 "/23", "/24");
         assertThat(handoff.droppedCount()).isEqualTo(16);
+        assertThat(handoff.overflowDroppedCount()).isEqualTo(16);
+        assertThat(handoff.writeNotConfirmedCount()).isZero();
     }
 
     @Test
@@ -191,6 +193,9 @@ class RequestLogHandoffTest {
         assertThat(handoff.awaitIdle(5_000)).isTrue();
         assertThat(written).containsExactly("/0", "/2", "/3");
         assertThat(handoff.droppedCount()).isEqualTo(1);
+        assertThat(handoff.writeNotConfirmedCount()).isEqualTo(1);
+        assertThat(handoff.overflowDroppedCount()).isZero();
+        assertThat(handoff.otherDroppedCount()).isZero();
         assertThat(calls).hasValue(3);
     }
 

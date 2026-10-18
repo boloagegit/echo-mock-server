@@ -187,6 +187,9 @@ echo:
     # native：有容量上限的 HTTP/1.1 加速路徑；特殊請求仍走 Servlet。詳見 docs/native-http.md。
     # 預設啟用；設 ECHO_HTTP_TRANSPORT=servlet 並重啟可切回原入口。
     transport: ${ECHO_HTTP_TRANSPORT:native}
+    native:
+      # 只回收閒置工作執行緒，忙碌工作不受影響；0 保留原本不回收的行為。
+      worker-idle-timeout-seconds: ${ECHO_HTTP_NATIVE_WORKER_IDLE_TIMEOUT_SECONDS:60}
     # HTTP request 的總時間預算；連線設定的 pool + connect + read 必須小於此值
     request-timeout-ms: ${ECHO_HTTP_REQUEST_TIMEOUT_MS:40000}
     forward:
@@ -220,6 +223,8 @@ echo:
       queue-offer-timeout-ms: ${ECHO_REQUEST_LOG_SPOOL_OFFER_TIMEOUT_MS:10000}
       retry-ms: ${ECHO_REQUEST_LOG_SPOOL_RETRY_MS:250}
       max-pending-bytes: ${ECHO_REQUEST_LOG_SPOOL_MAX_PENDING_BYTES:10737418240}
+      # 在暫存檔所在磁碟預留 512 MiB；只由背景 writer 每秒檢查，0 可停用。
+      min-free-bytes: ${ECHO_REQUEST_LOG_SPOOL_MIN_FREE_BYTES:536870912}
   audit:
     retention-days: 30  # 審計記錄保留天數
   cleanup:
