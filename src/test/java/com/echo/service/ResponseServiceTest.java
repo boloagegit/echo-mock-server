@@ -202,6 +202,30 @@ class ResponseServiceTest {
     }
 
     @Test
+    void save_sameManagedInstanceCannotUseItsMutatedContentAsTheOldValue() {
+        Response managed = Response.builder().id(7L).body("already-mutated").build();
+        when(responseRepository.findById(7L)).thenReturn(Optional.of(managed));
+        when(responseRepository.save(managed)).thenReturn(managed);
+
+        responseService.save(managed);
+
+        verify(responseBodyCache).invalidateAll(List.of(7L));
+        verify(cacheInvalidationService).publishResponsesChanged(List.of(7L));
+    }
+
+    @Test
+    void save_detachedMetadataOnlyUpdatePreservesTheWarmBodyCache() {
+        Response current = Response.builder().id(7L).description("old name").body("same body").build();
+        Response update = Response.builder().id(7L).description("new name").body("same body").build();
+        when(responseRepository.findById(7L)).thenReturn(Optional.of(current));
+        when(responseRepository.save(update)).thenReturn(update);
+
+        responseService.save(update);
+
+        verifyNoInteractions(responseBodyCache, cacheInvalidationService);
+    }
+
+    @Test
     void deleteWithRules_notifiesBodyAndRuleChanges() {
         when(protocolHandlerRegistry.deleteByResponseId(9L)).thenReturn(2);
 

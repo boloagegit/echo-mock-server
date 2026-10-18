@@ -53,6 +53,11 @@ def histogram_growth(baseline, current):
     return sorted(rows, key=lambda row: (-row["byteGrowth"], row["class"]))[:30]
 
 
+def background_task_failures(log):
+    return [line for line in log.splitlines()
+            if " ERROR " in line and "Unexpected error occurred in scheduled task" in line]
+
+
 def assess_growth(values, allowance):
     """Compare equivalent post-warmup, post-idle-GC samples; insufficient data is not a pass."""
     if len(values) < 4:
@@ -127,6 +132,7 @@ class Observation:
         self.events = 0
         self.expired_events = 0
         self.http_stall_connections = 0
+        self.warmup_http_stall_connections = 0
         self.checkpoints = []
         self.backup_checks = []
         self.histogram_baseline = None
@@ -224,10 +230,14 @@ class Observation:
                     raise AssertionError("Expected incomplete upload to close without an HTTP response")
             except ConnectionResetError:
                 pass  # Both FIN and RST terminate the incomplete HTTP/1 request safely.
-        self.http_stall_connections += len(peers)
+        if phase.startswith("warmup"):
+            self.warmup_http_stall_connections += len(peers)
+        else:
+            self.http_stall_connections += len(peers)
 
     def load(self, work, seconds, phase):
-        peers = self.open_http_stalls() if self.args.http_stalls and not phase.startswith("warmup") else []
+        # Warm the same bounded worker paths before establishing the resource baseline.
+        peers = self.open_http_stalls() if self.args.http_stalls else []
         try:
             result = self.load_client(work, seconds, phase)
             if peers:
@@ -419,8 +429,9 @@ class Observation:
                         stop(self.downstream)
                         if (work / "gc.log").exists():
                             shutil.copy2(work / "gc.log", self.output / "jvm-gc.log")
+            log = (self.output / "echo.log").read_text(encoding="utf-8", errors="replace")
+            result["backgroundTaskFailures"] = background_task_failures(log)
             if self.args.backup_maintenance:
-                log = (self.output / "echo.log").read_text(encoding="utf-8", errors="replace")
                 result["backupMaintenance"] = {"checkpoints": self.backup_checks,
                         "completed": log.count("SQLite backup completed:"),
                         "pruned": log.count("Deleted SQLite backup:"),
@@ -429,6 +440,8 @@ class Observation:
                         or not result["backupMaintenance"]["pruned"]):
                     raise AssertionError("Backup/retention did not complete successfully alongside traffic")
             result["growth"] = assess_resources(self.checkpoints, self.args)
+            if result["backgroundTaskFailures"]:
+                raise AssertionError("A background scheduled task failed; see echo.log")
             if not self.expired_events:
                 raise AssertionError("No GC history expiry observed; lengthen the run to exercise housekeeping")
             result["passed"] = all(series["status"] == "no-growth-detected-in-window" for series in result["growth"].values())
@@ -438,6 +451,7 @@ class Observation:
             result["gcEventsArchived"] = self.events
             result["gcEventsExpired"] = self.expired_events
             result["httpStallConnectionsRecovered"] = self.http_stall_connections
+            result["warmupHttpStallConnectionsRecovered"] = self.warmup_http_stall_connections
             result["checkpoints"] = self.checkpoints
             (self.output / "summary.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
         print(json.dumps({key: value for key, value in result.items() if key not in ("checkpoints", "traffic", "warmup")}, indent=2), flush=True)
@@ -470,8 +484,8 @@ def main():
     args = parser.parse_args()
     if args.cycles < 3 or min(args.seconds, args.warmup_seconds, args.warmup_cycles, args.idle_seconds) < 1 or args.heap_mib < 256 or min(args.allowed_growth_mib, args.allowed_native_growth_mib) < 0:
         parser.error("Need >=3 cycles, positive durations, >=256 MiB heap, and nonnegative growth allowance")
-    if args.http_stalls and args.seconds < 10:
-        parser.error("--http-stalls needs >=10-second load cycles for the eight-second request deadline")
+    if args.http_stalls and min(args.seconds, args.warmup_seconds) < 10:
+        parser.error("--http-stalls needs >=10-second measured and warm-up cycles for the eight-second request deadline")
     if args.backup_maintenance and args.cycles * args.seconds < 90:
         parser.error("--backup-maintenance needs >=90 seconds of measured load to exercise retention")
     return Observation(args).run()

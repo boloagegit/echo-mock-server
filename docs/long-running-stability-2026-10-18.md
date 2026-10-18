@@ -176,3 +176,17 @@ scripts under `scripts/bench` remain available for deployment measurements.
 4. **Cost and limits:** readiness uses datasource timeouts; liveness does not depend on DB/ESB availability. Listener state cannot diagnose every blocked operation. Compose restarts exited containers, not running unhealthy ones; automatic restart of an unresponsive process needs a supervisor checking liveness. Probes do not force-close transactions.
 
 Add `--backup-maintenance` to the observer to copy SQLite every 15 seconds, prune independently to three completed files / 256 MiB, verify retained inventories and check both probes at idle. No completed backups/pruning or any backup failure makes the observation fail. This remains a finite regression window; use deployment-like 24–72-hour runs for extended acceptance.
+
+### Warm shared-response rewrites
+
+1. **Original problem:** after a response had been used, editing its existing body through a rule saved the new database value but HTTP and JMS could keep replying with the old cached value. JPA returned the same already-mutated entity during the old-value comparison. This was also reproduced on the original `main`.
+2. **Change:** conservatively invalidate when the comparison returns the same entity instance. Keep the existing pre/post-commit invalidation and cross-instance notification. Detached metadata-only edits still skip body invalidation; request processing gains no extra database read.
+3. **Validation:** regressions first failed for two HTTP rules sharing a warm body, clearing that body, and a real Artemis JMS reply sharing it with HTTP. The same checks now pass; SSE validation, atomic rollback and optimistic-conflict tests remain part of acceptance.
+4. **Cost and limits:** re-saving a managed entity can clear its body cache even if its content ultimately stayed the same, so the next use reloads it. This is an administrative write cost, not a per-request check. Actual TIBCO EMS remains unverified.
+
+### Scheduled backup versus housekeeping
+
+1. **Original problem:** the 30-minute mixed observation recorded three scheduled copies rejected because independent housekeeping held the maintenance lock. Subsequent ticks recovered, but a daily schedule could lose that recovery point.
+2. **Change:** the scheduled job waits interruptibly for maintenance and creates the verified copy after acquiring the same lock. Manual duplicates still fail immediately and housekeeping still skips an active copy. No executor or retry queue is added.
+3. **Validation:** a deterministic real-SQLite test holds housekeeping, verifies that the scheduled copy waits, releases it and checks a healthy published snapshot. A second test interrupts the waiter and proves that a later copy still works. Both tests fail before the fix.
+4. **Cost and limits:** a waiting scheduled copy occupies one background scheduler thread. It does not hold a JDBC connection while waiting or block the HTTP/JMS worker pools. It waits as long as ongoing maintenance takes; shutdown can interrupt the wait, and physical storage failures remain explicit failures.

@@ -112,12 +112,14 @@ and 15-second natural idle, 100 total HTTP/JMS requests/second, 16 KiB payloads.
 The disposable Echo uses 60-second GC-history retention to exercise expiry; the
 sampler archives events every two seconds and fails on lost unread events or no expiry.
 
-Add `--http-stalls` to hold eight incomplete HTTP uploads open during each measured
+Add `--http-stalls` to hold eight incomplete HTTP uploads open during each warm-up and measured
 load cycle (two chunked, six declared-length), alongside the normal HTTP/JMS traffic.
 This mode uses an eight-second request deadline, so cycles must last at least ten
-seconds. Before closing the test clients, it requires the server to close them and
+seconds, including warm-up cycles. This starts the same bounded HTTP workers before
+the baseline. Before closing the test clients, it requires the server to close them and
 all native HTTP workers, buffers and queues to drain. The summary records
-`httpStallConnectionsRecovered`. This distinguishes real recovery from merely
+`httpStallConnectionsRecovered`; warm-up recoveries are counted separately in
+`warmupHttpStallConnectionsRecovered`. This distinguishes real recovery from merely
 returning admission leases while a worker is still blocked. For example, append
 `--http-stalls --warmup-cycles 6 --warmup-seconds 15` to either platform's command.
 When testing reconnect cycles, use `--warmup-cycles 6 --warmup-seconds 15` (or
@@ -131,9 +133,17 @@ Add `--backup-maintenance` to run SQLite backups every 15 seconds and independen
 housekeeping every second alongside traffic. The disposable instance retains at most
 three completed backups / 256 MiB. At idle the observer checks the retained inventory
 and both health probes, then requires successful backup and pruning activity with no
-backup failures. Use at least 90 seconds of measured load. Backup logs and inventory
+backup failures. An unexpected scheduled-task error also fails the observation,
+including a busy rejection before the backup's own failure logger. Use at least 90 seconds of measured load. Backup logs and inventory
 checkpoints are included in the output; the production defaults are unchanged by this
 test option.
+
+Each load result also includes `latencyMs` for fixed/template/delayed/forwarded HTTP
+and mocked/forwarded JMS. The caller times the actual request/reply, checks body and
+correlation, and records successful samples in bounded HdrHistogram instances with
+three significant digits. Counts must equal completed requests. Warm-up timings are
+separate. These fixed-rate observations describe response times under that workload,
+not maximum capacity; NMT, idle GC and class inspection remain enabled as selected.
 
 The test checks exact HTTP responses, JMS reply content/correlation, cleared
 request/buffer/writer counters, and downstream temporary-queue cleanup. It archives

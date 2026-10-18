@@ -8,6 +8,18 @@ SPEC.loader.exec_module(MODULE)
 
 
 class MemoryObservationTest(unittest.TestCase):
+    def test_scheduled_busy_rejection_is_reported_even_without_a_backup_failed_message(self):
+        line = "2026-10-18 05:39:45.000 ERROR [echo-scheduled-3] TaskUtils : Unexpected error occurred in scheduled task"
+        log = line + "\njava.lang.IllegalStateException: housekeeping is already running\n"
+        self.assertEqual([line], MODULE.background_task_failures(log))
+        self.assertNotIn("SQLite backup failed", log)
+
+    def test_scheduled_error_scan_preserves_each_failure_and_ignores_normal_progress(self):
+        errors = ["time ERROR [scheduler] Unexpected error occurred in scheduled task"] * 2
+        log = "\n".join(["time INFO SQLite backup completed: one.sqlite", *errors,
+                         "time DEBUG Unexpected error occurred in scheduled task"])
+        self.assertEqual(errors, MODULE.background_task_failures(log))
+
     def test_histogram_growth_reports_sizes_counts_and_new_classes(self):
         baseline = MODULE.parse_histogram("1: 10 100 [B (java.base@17)\n 2: 2 40 com.echo.Example\n 3: 1 20 com.echo.Example")
         current = MODULE.parse_histogram("1: 25 400 [B (java.base@17)\n 2: 2 40 com.echo.Example\n 3: 1 50 com.echo.NewType")

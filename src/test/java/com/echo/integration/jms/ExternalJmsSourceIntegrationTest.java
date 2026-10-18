@@ -1,5 +1,7 @@
 package com.echo.integration.jms;
 
+import com.echo.dto.RuleDto;
+import com.echo.entity.Protocol;
 import com.echo.integration.base.BaseIntegrationTest;
 import com.echo.jms.JmsConnectionManager;
 import jakarta.jms.Connection;
@@ -19,6 +21,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -99,6 +104,32 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
 
         assertThat(reply.body()).isEqualTo("<reply>from-echo</reply>");
         assertThat(reply.correlationId()).isEqualTo(reply.requestId());
+    }
+
+    @Test
+    @DisplayName("改寫已快取的共用回應後，真實 JMS 與 HTTP 下一筆請求都取得新內容")
+    void rewritingAWarmResponseUpdatesRealJmsAndHttpReplies() throws Exception {
+        RuleDto rule = createJmsRule(QUEUE, "before");
+        RuleDto shared = RuleDto.builder().protocol(Protocol.HTTP).method("GET")
+                .matchKey("/external-jms/shared-response").status(200).responseId(rule.getResponseId()).build();
+        assertThat(adminClient().postForEntity("/api/admin/rules", shared, RuleDto.class).getStatusCode())
+                .isEqualTo(HttpStatus.CREATED);
+        waitUntilReceiving();
+        assertThat(request("<req/>").body()).isEqualTo("before");
+        assertThat(restTemplate.getForObject("/mock/external-jms/shared-response", String.class)).isEqualTo("before");
+
+        var saved = adminClient().exchange("/api/admin/rules/" + rule.getId(), HttpMethod.PUT,
+                new HttpEntity<>(Map.of("protocol", "JMS", "matchKey", QUEUE,
+                        "version", rule.getVersion(), "responseId", rule.getResponseId(),
+                        "responseBody", "after", "updateExistingResponse", true)), RuleDto.class);
+
+        assertThat(saved.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(saved.getBody()).isNotNull();
+        assertThat(saved.getBody().getResponseId()).isEqualTo(rule.getResponseId());
+        Reply reply = request("<req/>");
+        assertThat(reply.body()).isEqualTo("after");
+        assertThat(reply.correlationId()).isEqualTo(reply.requestId());
+        assertThat(restTemplate.getForObject("/mock/external-jms/shared-response", String.class)).isEqualTo("after");
     }
 
     @Test

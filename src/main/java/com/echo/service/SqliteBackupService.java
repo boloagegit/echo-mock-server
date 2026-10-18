@@ -106,7 +106,20 @@ public class SqliteBackupService implements BackupService {
 
     @Scheduled(cron = "${echo.backup.cron:0 0 3 * * *}")
     public void scheduledBackup() {
-        backup("scheduled");
+        // Do not lose a daily recovery point just because housekeeping is running.
+        // Waiting is confined to this background job and can be cancelled at shutdown.
+        try {
+            maintenanceLock.lockInterruptibly();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.info("Scheduled SQLite backup interrupted while waiting for maintenance");
+            return;
+        }
+        try {
+            createBackup("scheduled");
+        } finally {
+            maintenanceLock.unlock();
+        }
     }
 
     /** Expiry and capacity cleanup must keep working even while creating new backups fails. */
@@ -140,6 +153,14 @@ public class SqliteBackupService implements BackupService {
         if (!maintenanceLock.tryLock()) {
             throw new IllegalStateException("A SQLite backup or backup housekeeping operation is already running");
         }
+        try {
+            return createBackup(trigger);
+        } finally {
+            maintenanceLock.unlock();
+        }
+    }
+
+    private String createBackup(String trigger) {
         Path staging = null;
         try {
             Path dir = Paths.get(backupPath);
@@ -198,8 +219,6 @@ public class SqliteBackupService implements BackupService {
             deleteQuietly(staging);
             log.error("SQLite backup failed", e);
             throw new RuntimeException("Backup failed: " + e.getMessage(), e);
-        } finally {
-            maintenanceLock.unlock();
         }
     }
 
