@@ -43,6 +43,44 @@ class RequestLogDiskReserveTest {
     }
 
     @Test
+    void lowReserveMustNotDeclareAnAlreadyAttemptedBatchUnwritten() {
+        var free = new AtomicLong(4096);
+        var clock = new AtomicLong();
+        var reserve = new RequestLogDiskReserve(1024, free::get, clock::get);
+        var spool = new RequestLogSpool(new ObjectMapper().findAndRegisterModules(),
+                directory.resolve("retry-reserve.sqlite").toString(), 10, 10, 1, 1000, 25, 1024 * 1024);
+        var attempts = new AtomicInteger();
+        spool.setDiskReserve(reserve);
+        spool.beforeCommitForTest = () -> {
+            if (attempts.incrementAndGet() == 1) {
+                free.set(0);
+                clock.set(TimeUnit.SECONDS.toNanos(2));
+                throw new java.sql.SQLException("write outcome must follow the existing retry policy");
+            }
+        };
+        spool.start();
+        try {
+            // SQL failures are conservatively treated as uncertain. Low space must not
+            // turn that outcome into a definitive "not written" signal to strict callers.
+            spool.append(task("/attempted"));
+            assertThat(attempts).hasValue(2);
+            assertThat(spool.readAfter(0, 10)).extracting(entry -> entry.task().getEndpoint())
+                    .containsExactly("/attempted");
+            assertThat(spool.isStorageUnavailable()).isTrue();
+            assertThatThrownBy(() -> spool.append(task("/new")))
+                    .isInstanceOf(RequestLogUnavailableException.class);
+            free.set(4096);
+            clock.set(TimeUnit.SECONDS.toNanos(4));
+            await().atMost(2, TimeUnit.SECONDS).until(() -> !spool.isStorageUnavailable());
+            spool.append(task("/recovered"));
+            assertThat(spool.readAfter(0, 10)).extracting(entry -> entry.task().getEndpoint())
+                    .containsExactly("/attempted", "/recovered");
+        } finally {
+            spool.stop();
+        }
+    }
+
+    @Test
     void cachesDiskChecksAndFailsClosedWhenSpaceCannotBeRead() {
         var calls = new AtomicInteger();
         var clock = new AtomicLong();

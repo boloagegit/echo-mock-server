@@ -1361,10 +1361,12 @@ public class RequestLogSpool {
     }
 
     private void commitWithRetry(List<PendingAppend> batch) throws InterruptedException {
+        boolean attemptedSql = false;
         while (running.get()) {
-            if (diskReserve != null && !diskReserve.refresh()) {
-                // Nothing from this batch has reached SQLite. A definitive failure is safe:
-                // strict callers may retry; the asynchronous mode keeps its bounded drop policy.
+            if (diskReserve != null && !diskReserve.refresh() && !attemptedSql) {
+                // Only an unattempted batch can be rejected as definitively unwritten.
+                // After a SQL failure, preserve the existing uncertain-outcome retry policy;
+                // low space must not cause strict callers to retry an already attempted write.
                 var unavailable = new RequestLogUnavailableException(
                         "Request-log disk reserve reached; append was not written");
                 failBatch(batch, unavailable);
@@ -1376,6 +1378,7 @@ public class RequestLogSpool {
             java.util.concurrent.atomic.AtomicBoolean duplicatesReleased = new java.util.concurrent.atomic.AtomicBoolean();
             candidateSetLifecycleLock.readLock().lock();
             try {
+                attemptedSql = true;
                 beforeCommitForTest.run();
                 Connection connection = getWriterConnection();
                 Map<String, CandidateSetPayload> candidateSets = uniqueCandidateSets(batch);
