@@ -22,6 +22,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -29,6 +30,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 /** Provider calls may stall, but must never hold the map shared by unrelated targets. */
 @ExtendWith(MockitoExtension.class)
@@ -107,11 +109,26 @@ class JmsTargetIsolationTest {
         }
     }
 
+    @Test
+    void factoryInitializationFailureCanRetryWithoutLeakingAnActiveUse() throws Exception {
+        try (Fixture fixture = new Fixture()) {
+            Connection connection = fixture.target("7", "db:7:0", "recovered");
+            String url = fixture.targets.get("7").getServerUrl();
+            fixture.initializationFailures.put(url, new Exception("temporary factory initialization failure"));
+
+            assertThat(fixture.forward("7")).contains("temporary factory initialization failure");
+            assertThat(fixture.forward("7")).isEqualTo("recovered");
+            fixture.forwarder.evict(7L);
+            verify(connection).close();
+        }
+    }
+
     private static final class Fixture implements AutoCloseable {
         private final JmsTargetConnectionService service = mock(JmsTargetConnectionService.class);
         private final JmsTargetFactoryProvider provider = mock(JmsTargetFactoryProvider.class);
         private final Map<String, ConnectionFactory> factories = new HashMap<>();
         private final Map<String, ConnectionFactory> factoriesByUrl = new HashMap<>();
+        private final Map<String, Exception> initializationFailures = new ConcurrentHashMap<>();
         private final Map<String, JmsProperties.Target> targets = new HashMap<>();
         private final CountDownLatch release = new CountDownLatch(1);
         private final ExecutorService workers = Executors.newFixedThreadPool(2);
@@ -119,8 +136,14 @@ class JmsTargetIsolationTest {
 
         private Fixture() throws Exception {
             when(provider.supports("tibco")).thenReturn(true);
-            when(provider.create(any())).thenAnswer(call -> factoriesByUrl.get(
-                    ((JmsProperties.Target) call.getArgument(0)).getServerUrl()));
+            when(provider.create(any())).thenAnswer(call -> {
+                String url = ((JmsProperties.Target) call.getArgument(0)).getServerUrl();
+                Exception failure = initializationFailures.remove(url);
+                if (failure != null) {
+                    throw failure;
+                }
+                return factoriesByUrl.get(url);
+            });
             forwarder = new JmsTargetForwarder(service, List.of(provider));
             forwarder.configureResources(new JmsProperties());
         }

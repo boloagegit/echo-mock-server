@@ -2,6 +2,7 @@ package com.echo.config;
 
 import com.echo.integration.base.BaseIntegrationTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthContributorRegistry;
@@ -10,6 +11,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.http.HttpStatus;
 
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -18,6 +20,22 @@ class HealthProbeIntegrationTest extends BaseIntegrationTest {
     private HealthContributorRegistry contributors;
     @Autowired
     private ApplicationContext context;
+
+    @BeforeEach
+    void waitForTheAsynchronouslyStartedSourceListener() throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (true) {
+            var response = restTemplate.getForEntity("/actuator/health/readiness", String.class);
+            if (response.getStatusCode() == HttpStatus.OK) {
+                return;
+            }
+            if (System.nanoTime() >= deadline) {
+                assertThat(response.getStatusCode()).as("initial readiness: %s", response.getBody())
+                        .isEqualTo(HttpStatus.OK);
+            }
+            Thread.sleep(50);
+        }
+    }
 
     @Test
     void anonymousProbesExposeOnlyStatusAndOtherActuatorPathsStayProtected() {

@@ -21,7 +21,7 @@ export ECHO_TEST_PASSWORD='your-local-password'
 | `stress-test-vs-wiremock.py` | Echo vs a separately running WireMock instance; reports RPS, latency, and errors |
 | `bench-2000-jms.py` | JMS matching with 2,000 rules (ServiceName + CustId conditions) |
 | `stress-test-jms-match.py` | JMS matching with 2,000 rules and 20-field XML body |
-| `test-memory-observability.py` | Isolated Windows/Linux HTTP/JMS load-idle cycles, GC archive and resource-growth checks; `--http-stalls` verifies recovery during stalled uploads; see [guide](../docs/gc-observability.md) |
+| `test-memory-observability.py` | Isolated Windows/Linux HTTP/JMS load-idle cycles, GC archive and resource-growth checks; `--http-stalls` verifies stalled uploads and `--backup-maintenance` exercises concurrent backup/retention; see [guide](../docs/gc-observability.md) |
 | `stress-test-memory.py` | Worst-case memory usage test |
 | `stress-test-cache-isolation.py` | Verify HTTP/JMS cache isolation after split |
 | `check-xml-condition-changes.py` | Read-only report of rules whose XML body conditions behave differently after the HTTP/JMS XML unification (relative paths such as `Order/Status`, and `==` on XML); `--json` for machine-readable output |

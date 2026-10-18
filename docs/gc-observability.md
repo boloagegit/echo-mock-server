@@ -127,6 +127,14 @@ to hide an unexplained increase. Inspect the saved thread dumps and NMT categori
 Increasing `--cycles 60 --seconds 300` extends coverage to roughly five hours;
 run longer in a Linux test environment matching deployment and realistic traffic.
 
+Add `--backup-maintenance` to run SQLite backups every 15 seconds and independent
+housekeeping every second alongside traffic. The disposable instance retains at most
+three completed backups / 256 MiB. At idle the observer checks the retained inventory
+and both health probes, then requires successful backup and pruning activity with no
+backup failures. Use at least 90 seconds of measured load. Backup logs and inventory
+checkpoints are included in the output; the production defaults are unchanged by this
+test option.
+
 The test checks exact HTTP responses, JMS reply content/correlation, cleared
 request/buffer/writer counters, and downstream temporary-queue cleanup. It archives
 natural GC notifications throughout. **Explicit GC occurs only after natural idle
