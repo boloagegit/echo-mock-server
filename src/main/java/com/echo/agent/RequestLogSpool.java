@@ -48,6 +48,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -167,6 +168,13 @@ public class RequestLogSpool {
     private static final RequestLogUnavailableException WRITE_ABANDONED = new AbandonedWriteException();
     private ExecutorService writerExecutor;
     private Connection writerConnection;
+    private RequestLogDiskReserve diskReserve;
+    private final AtomicLong storageRetryCount = new AtomicLong();
+
+    @Autowired(required = false)
+    public void setDiskReserve(RequestLogDiskReserve diskReserve) {
+        this.diskReserve = diskReserve;
+    }
 
     @Autowired
     public RequestLogSpool(
@@ -368,7 +376,7 @@ public class RequestLogSpool {
             if (!running.get()) {
                 throw new RequestLogUnavailableException("Request-log spool is not running");
             }
-            if (storageUnavailable.get()) {
+            if (isStorageUnavailable()) {
                 throw new RequestLogUnavailableException(
                         "Request-log storage is temporarily unavailable and recovering");
             }
@@ -793,7 +801,15 @@ public class RequestLogSpool {
                 state.pendingItems());
     }
 
-    public boolean isStorageUnavailable() { return storageUnavailable.get(); }
+    public boolean isStorageUnavailable() {
+        return storageUnavailable.get() || (diskReserve != null && diskReserve.blocked());
+    }
+
+    public Map<String, Object> diskReserveMetrics() {
+        return diskReserve == null ? Map.of() : diskReserve.metrics();
+    }
+
+    public long getStorageRetryCount() { return storageRetryCount.get(); }
 
     public record StatusSnapshot(
             long pendingBytes,
@@ -1081,7 +1097,7 @@ public class RequestLogSpool {
             throw new RequestLogUnavailableException(
                     "Request-log spool is stopping before queueing the task");
         }
-        if (storageUnavailable.get()) {
+        if (isStorageUnavailable()) {
             throw new RequestLogUnavailableException(
                     "Request-log storage is temporarily unavailable and recovering");
         }
@@ -1096,7 +1112,7 @@ public class RequestLogSpool {
         updateBackpressureState();
         try {
             while (running.get()) {
-                if (storageUnavailable.get()) {
+                if (isStorageUnavailable()) {
                     throw new RequestLogUnavailableException(
                             "Request-log storage is temporarily unavailable and recovering");
                 }
@@ -1163,10 +1179,10 @@ public class RequestLogSpool {
         long pending = state.pendingBytes();
         long inMemory = state.inMemoryBytes();
         boolean currentlyActive = backpressureActive.get();
-        if (!currentlyActive && (storageUnavailable.get() || waitingAppenders.get() > 0
+        if (!currentlyActive && (isStorageUnavailable() || waitingAppenders.get() > 0
                 || pending >= highWatermark || inMemory >= maxInMemoryBytes)) {
             backpressureActive.set(true);
-        } else if (currentlyActive && !storageUnavailable.get() && waitingAppenders.get() == 0
+        } else if (currentlyActive && !isStorageUnavailable() && waitingAppenders.get() == 0
                 && pending <= lowWatermark && inMemory < maxInMemoryBytes) {
             backpressureActive.set(false);
         }
@@ -1191,6 +1207,10 @@ public class RequestLogSpool {
         try {
             while (running.get() || !appendQueue.isEmpty()) {
                 try {
+                    if (diskReserve != null) {
+                        diskReserve.refresh();
+                        updateBackpressureState();
+                    }
                     PendingAppend first = appendQueue.poll(250, TimeUnit.MILLISECONDS);
                     if (first == null) {
                         continue;
@@ -1341,12 +1361,24 @@ public class RequestLogSpool {
     }
 
     private void commitWithRetry(List<PendingAppend> batch) throws InterruptedException {
+        boolean attemptedSql = false;
         while (running.get()) {
+            if (diskReserve != null && !diskReserve.refresh() && !attemptedSql) {
+                // Only an unattempted batch can be rejected as definitively unwritten.
+                // After a SQL failure, preserve the existing uncertain-outcome retry policy;
+                // low space must not cause strict callers to retry an already attempted write.
+                var unavailable = new RequestLogUnavailableException(
+                        "Request-log disk reserve reached; append was not written");
+                failBatch(batch, unavailable);
+                failPending(unavailable);
+                return;
+            }
             boolean committed = false;
             Set<String> insertedCandidateSets = Set.of();
             java.util.concurrent.atomic.AtomicBoolean duplicatesReleased = new java.util.concurrent.atomic.AtomicBoolean();
             candidateSetLifecycleLock.readLock().lock();
             try {
+                attemptedSql = true;
                 beforeCommitForTest.run();
                 Connection connection = getWriterConnection();
                 Map<String, CandidateSetPayload> candidateSets = uniqueCandidateSets(batch);
@@ -1386,6 +1418,7 @@ public class RequestLogSpool {
                 }
                 return;
             } catch (SQLException e) {
+                storageRetryCount.incrementAndGet();
                 storageUnavailable.set(true);
                 updateBackpressureState();
                 rollbackWriterConnection();

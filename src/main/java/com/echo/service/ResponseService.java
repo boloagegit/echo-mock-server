@@ -143,7 +143,9 @@ public class ResponseService {
         validateSseContent(response);
         log.info("Saving response: {}", response.getDescription());
         boolean existing = response.getId() != null;
-        // 只改描述或內容完全沒變（例如重複送出）時，不必清內容快取，也不必通知其他節點。
+        // Detached metadata-only updates can retain the cache. A managed entity may
+        // already have been mutated in this transaction, so its current contents
+        // cannot be used as an old-value snapshot; invalidate conservatively.
         boolean contentChanged = existing && contentChanged(response);
         Response saved = responseRepository.save(response);
         if (contentChanged) {
@@ -154,7 +156,7 @@ public class ResponseService {
 
     private boolean contentChanged(Response response) {
         return responseRepository.findById(response.getId())
-                .map(current -> !Objects.equals(current.getBody(), response.getBody())
+                .map(current -> current == response || !Objects.equals(current.getBody(), response.getBody())
                         || !Objects.equals(Response.normalizeContentType(current.getContentType()), response.getContentType()))
                 .orElse(true);
     }

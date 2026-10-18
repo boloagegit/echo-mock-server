@@ -4,6 +4,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.core.Ordered;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.accept.ContentNegotiationStrategy;
+import org.springframework.web.context.request.ServletWebRequest;
+import org.mockito.ArgumentCaptor;
 import org.springframework.web.servlet.config.annotation.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,19 +51,37 @@ class WebMvcConfigTest {
     }
 
     @Test
-    void configureContentNegotiation_shouldSetDefaults() {
+    void configureContentNegotiation_shouldSetDefaults() throws Exception {
         WebMvcConfig config = new WebMvcConfig();
         ContentNegotiationConfigurer configurer = mock(ContentNegotiationConfigurer.class);
         when(configurer.favorParameter(anyBoolean())).thenReturn(configurer);
         when(configurer.ignoreAcceptHeader(anyBoolean())).thenReturn(configurer);
-        when(configurer.defaultContentType(any(MediaType.class))).thenReturn(configurer);
+        when(configurer.defaultContentTypeStrategy(any())).thenReturn(configurer);
         when(configurer.mediaType(anyString(), any(MediaType.class))).thenReturn(configurer);
 
         config.configureContentNegotiation(configurer);
 
         verify(configurer).favorParameter(false);
         verify(configurer).ignoreAcceptHeader(false);
-        verify(configurer).defaultContentType(MediaType.APPLICATION_OCTET_STREAM);
+        var strategy = ArgumentCaptor.forClass(ContentNegotiationStrategy.class);
+        verify(configurer).defaultContentTypeStrategy(strategy.capture());
+
+        var mock = new MockHttpServletRequest();
+        mock.setServletPath("/mock/actuator/health/liveness");
+        assertThat(strategy.getValue().resolveMediaTypes(new ServletWebRequest(mock)))
+                .containsExactly(MediaType.APPLICATION_OCTET_STREAM);
+
+        var contextualProbe = new MockHttpServletRequest();
+        contextualProbe.setContextPath("/echo");
+        contextualProbe.setServletPath("/actuator/health/readiness");
+        assertThat(strategy.getValue().resolveMediaTypes(new ServletWebRequest(contextualProbe)))
+                .containsExactly(MediaType.APPLICATION_JSON);
+
+        var prefixedServletProbe = new MockHttpServletRequest();
+        prefixedServletProbe.setServletPath("/api");
+        prefixedServletProbe.setPathInfo("/actuator/health/liveness");
+        assertThat(strategy.getValue().resolveMediaTypes(new ServletWebRequest(prefixedServletProbe)))
+                .containsExactly(MediaType.APPLICATION_JSON);
     }
 
     @Test

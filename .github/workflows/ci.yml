@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main, master]
   pull_request:
@@ -130,9 +131,10 @@ jobs:
           retention-days: 14
 
   docker-build-test:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
@@ -152,3 +154,45 @@ jobs:
 
       - name: Build Docker image (test only)
         run: docker build -t echo-mock-server:test .
+
+      - name: Verify container probes, stop signals and persistent backups after recreation
+        run: |
+          container_name=echo-runtime-smoke
+          cleanup() {
+            docker logs "$container_name" || true
+            docker rm -f "$container_name" >/dev/null 2>&1 || true
+            docker volume rm "$container_name-data" "$container_name-backups" >/dev/null
+          }
+          trap cleanup EXIT
+          docker volume create "$container_name-data"
+          docker volume create "$container_name-backups"
+          start_container() {
+            docker run -d --name "$container_name" \
+              --mount "type=volume,source=$container_name-data,target=/app/data" \
+              --mount "type=volume,source=$container_name-backups,target=/app/backups" \
+              echo-mock-server:test
+          }
+          start_container
+          wait_ready() {
+            for attempt in $(seq 1 45); do
+              if docker exec "$container_name" curl --fail --silent --connect-timeout 1 --max-time 2 \
+                http://localhost:8080/actuator/health/readiness >/dev/null; then
+                return 0
+              fi
+              sleep 1
+            done
+            return 1
+          }
+          wait_ready
+          test "$(docker exec "$container_name" cat /proc/1/comm)" = java
+          docker exec "$container_name" curl --fail --silent --connect-timeout 1 --max-time 2 \
+            http://localhost:8080/actuator/health/liveness
+          docker stop --time 20 "$container_name"
+          exit_code=$(docker inspect --format '{{.State.ExitCode}}' "$container_name")
+          test "$exit_code" = 0 || test "$exit_code" = 143
+          docker logs "$container_name"
+          docker rm "$container_name"
+          start_container
+          wait_ready
+          docker exec "$container_name" sh -c \
+            'test -f /app/data/mockdb.sqlite; set -- /app/backups/echo-*.sqlite; test -f "$1"'

@@ -2,6 +2,7 @@ package com.echo.repository;
 
 import com.echo.entity.Response;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -36,11 +37,24 @@ public interface ResponseRepository extends JpaRepository<Response, Long> {
     /** 搜尋（描述包含關鍵字） */
     List<Response> findByDescriptionContainingIgnoreCase(String keyword);
 
-    /** 查詢過期且未被任何規則引用的 Response ID（以 extendedAt 或 updatedAt 為基準） */
-    @Query("SELECT r.id FROM Response r WHERE COALESCE(r.extendedAt, r.updatedAt) < :cutoff " +
-           "AND r.id NOT IN (SELECT DISTINCT h.responseId FROM HttpRule h WHERE h.responseId IS NOT NULL) " +
-           "AND r.id NOT IN (SELECT DISTINCT j.responseId FROM JmsRule j WHERE j.responseId IS NOT NULL)")
-    List<Long> findOrphanResponseIds(@Param("cutoff") LocalDateTime cutoff);
+    String EXPIRED_ORPHAN = "COALESCE(r.extendedAt, r.updatedAt) < :cutoff " +
+            "AND NOT EXISTS (SELECT h.id FROM HttpRule h WHERE h.responseId = r.id) " +
+            "AND NOT EXISTS (SELECT j.id FROM JmsRule j WHERE j.responseId = r.id)";
+
+    /** A finite run boundary: rows created after cleanup starts belong to the next run. */
+    @Query("SELECT COALESCE(MAX(r.id), 0) FROM Response r")
+    long findMaximumId();
+
+    /** Keyset page of IDs only; never materializes response bodies. */
+    @Query("SELECT r.id FROM Response r WHERE r.id > :after AND r.id <= :through AND " +
+            EXPIRED_ORPHAN + " ORDER BY r.id")
+    List<Long> findOrphanResponseIds(@Param("cutoff") LocalDateTime cutoff,
+                                   @Param("after") long after, @Param("through") long through, Pageable page);
+
+    /** Recheck age and references when deleting, including rows changed since selection. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("DELETE FROM Response r WHERE r.id IN :ids AND " + EXPIRED_ORPHAN)
+    int deleteExpiredOrphans(@Param("ids") Collection<Long> ids, @Param("cutoff") LocalDateTime cutoff);
 
     /** 查詢所有未被任何規則引用的 Response ID（不考慮時間，用於一鍵清除） */
     @Query("SELECT r.id FROM Response r " +

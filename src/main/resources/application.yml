@@ -65,6 +65,9 @@ spring:
   # Artemis - 由 echo.jms 設定控制，此區塊保留供 Spring Boot 自動配置
   artemis:
     mode: embedded
+    embedded:
+      # Boot 仍會自動配置 Artemis；只停用 Echo 的 listener 不會阻止內建 broker 啟動。
+      enabled: ${echo.jms.enabled:false}
 
 # Echo 自訂配置
 echo:
@@ -147,6 +150,8 @@ echo:
     concurrency: "10-30"     # JMS listener 並發數 (min-max)，可用環境變數 ECHO_JMS_CONCURRENCY 覆蓋
     forward:
       session-cache-size: 8       # 每個目標版本最多保留的 idle Session；0 停用快取。回覆 Queue 每筆獨立。
+      # 預設保留 provider 的連線／重試／failover 政策；開啟前需驗證實際 ESB 故障行為。
+      bounded-waits-enabled: ${ECHO_JMS_FORWARD_BOUNDED_WAITS_ENABLED:false}
     queue: ECHO.REQUEST      # Echo 監聽的 Source Queue（外部服務送訊息到此 Queue）
     source:
       # 從哪裡接收 JMS：embedded（內建 Artemis，預設）| artemis | tibco（外部共用 broker，例如 ESB）
@@ -182,6 +187,9 @@ echo:
     # native：有容量上限的 HTTP/1.1 加速路徑；特殊請求仍走 Servlet。詳見 docs/native-http.md。
     # 預設啟用；設 ECHO_HTTP_TRANSPORT=servlet 並重啟可切回原入口。
     transport: ${ECHO_HTTP_TRANSPORT:native}
+    native:
+      # 只回收閒置工作執行緒，忙碌工作不受影響；0 保留原本不回收的行為。
+      worker-idle-timeout-seconds: ${ECHO_HTTP_NATIVE_WORKER_IDLE_TIMEOUT_SECONDS:60}
     # HTTP request 的總時間預算；連線設定的 pool + connect + read 必須小於此值
     request-timeout-ms: ${ECHO_HTTP_REQUEST_TIMEOUT_MS:40000}
     forward:
@@ -197,6 +205,8 @@ echo:
   stats:
     retention-days: 7  # 統計資料保留天數
   request-log:
+    # SQLite：新紀錄使用 JDBC 批次寫入；false 切回 JPA。其他資料庫保留 JPA。
+    jdbc-batch-enabled: ${ECHO_REQUEST_LOG_JDBC_BATCH_ENABLED:true}
     enabled: ${ECHO_REQUEST_LOG_ENABLED:true} # false 時完全停止新增請求記錄，供隔離核心效能壓測
     store: database    # memory 或 database
     max-records: 10000 # 最大記錄數
@@ -215,6 +225,8 @@ echo:
       queue-offer-timeout-ms: ${ECHO_REQUEST_LOG_SPOOL_OFFER_TIMEOUT_MS:10000}
       retry-ms: ${ECHO_REQUEST_LOG_SPOOL_RETRY_MS:250}
       max-pending-bytes: ${ECHO_REQUEST_LOG_SPOOL_MAX_PENDING_BYTES:10737418240}
+      # 在暫存檔所在磁碟預留 512 MiB；只由背景 writer 每秒檢查，0 可停用。
+      min-free-bytes: ${ECHO_REQUEST_LOG_SPOOL_MIN_FREE_BYTES:536870912}
   audit:
     retention-days: 30  # 審計記錄保留天數
   cleanup:
@@ -227,6 +239,10 @@ echo:
     cron: "0 0 3 * * *"       # 每天凌晨 3 點執行
     path: ./backups           # 備份目錄
     retention-days: 7         # 備份保留天數
+    max-total-bytes: ${ECHO_BACKUP_MAX_TOTAL_BYTES:10737418240} # 已完成備份最多 10 GiB
+    max-files: ${ECHO_BACKUP_MAX_FILES:100} # 防止大量小型備份累積；至少保留最後一份驗證有效的備份
+    min-free-bytes: ${ECHO_BACKUP_MIN_FREE_BYTES:536870912} # 開始複製前預留 512 MiB
+    housekeeping-interval-ms: ${ECHO_BACKUP_HOUSEKEEPING_INTERVAL_MS:3600000} # 每小時獨立清理
     on-shutdown: true         # 應用關閉時備份
   agent:
     log:
@@ -245,6 +261,30 @@ echo:
     url: ldap://ldap.example.com:389
     base-dn: dc=example,dc=com
     user-pattern: uid={0},ou=users
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+      group:
+        # 下游／資料庫故障只影響 readiness，不讓外部故障造成無限重啟。
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db,diskSpace,jmsSource
+  health:
+    # 只觀察既有 listener，不讓探針另外連線到 TIBCO／Artemis。
+    jms:
+      enabled: false
+    diskspace:
+      path: ${ECHO_HEALTH_STORAGE_PATH:.}
+      threshold: ${ECHO_HEALTH_MIN_FREE_BYTES:536870912}
 
 logging:
   file:

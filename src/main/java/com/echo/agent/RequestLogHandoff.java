@@ -53,6 +53,8 @@ final class RequestLogHandoff {
     private boolean writeFailureLogged;
 
     private final AtomicLong dropped = new AtomicLong();
+    private final AtomicLong overflowDropped = new AtomicLong();
+    private final AtomicLong otherDropped = new AtomicLong();
     private final AtomicLong lost = new AtomicLong();
     private final AtomicLong written = new AtomicLong();
     private long droppedAtLastWarning;
@@ -91,6 +93,7 @@ final class RequestLogHandoff {
             if (!running || size > maxBytes) {
                 // 單筆就超過上限的不保留，也不為它丟掉其他記錄
                 dropped.incrementAndGet();
+                otherDropped.incrementAndGet();
                 droppedAny = true;
             } else {
                 entries.addLast(new Entry(task, size));
@@ -110,6 +113,7 @@ final class RequestLogHandoff {
     /** 計入因其他原因（例如建立記錄失敗）沒有放進暫存區的記錄。 */
     void countDropped() {
         dropped.incrementAndGet();
+        otherDropped.incrementAndGet();
         warnAboutDrops(false);
     }
 
@@ -144,6 +148,7 @@ final class RequestLogHandoff {
         }
         if (left > 0) {
             dropped.addAndGet(left);
+            otherDropped.addAndGet(left);
             log.warn("Request-log hand-off stopped with {} entries not yet written; they are dropped", left);
         }
         if (writer != null) {
@@ -155,6 +160,10 @@ final class RequestLogHandoff {
     long droppedCount() {
         return dropped.get() + lost.get();
     }
+
+    long overflowDroppedCount() { return overflowDropped.get(); }
+    long otherDroppedCount() { return otherDropped.get(); }
+    long writeNotConfirmedCount() { return lost.get(); }
 
     long writtenCount() {
         return written.get();
@@ -193,6 +202,7 @@ final class RequestLogHandoff {
         while (!entries.isEmpty() && (entries.size() + inFlight > maxEntries || bytes > maxBytes)) {
             bytes -= entries.removeFirst().bytes();
             dropped.incrementAndGet();
+            overflowDropped.incrementAndGet();
             droppedAny = true;
         }
         return droppedAny;
@@ -274,6 +284,7 @@ final class RequestLogHandoff {
             inFlight = 0;
             if (closed) {
                 dropped.addAndGet(batch.size() - handled);
+                otherDropped.addAndGet(batch.size() - handled);
                 droppedAfterStop = batch.size() > handled;
             } else {
                 for (int i = batch.size() - 1; i >= handled; i--) {

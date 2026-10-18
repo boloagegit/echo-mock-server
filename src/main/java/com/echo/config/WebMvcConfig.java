@@ -1,5 +1,6 @@
 package com.echo.config;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
@@ -19,12 +20,16 @@ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
 import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+import java.util.List;
+
 /**
  * Web MVC Configuration.
  * Configures static resource handling and view controllers.
  */
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
+    private static final List<MediaType> PROBE_DEFAULT_MEDIA_TYPES = List.of(MediaType.APPLICATION_JSON);
+    private static final List<MediaType> BINARY_DEFAULT_MEDIA_TYPES = List.of(MediaType.APPLICATION_OCTET_STREAM);
 
     @Override
     public void addViewControllers(ViewControllerRegistry registry) {
@@ -50,7 +55,20 @@ public class WebMvcConfig implements WebMvcConfigurer {
         configurer
             .favorParameter(false)
             .ignoreAcceptHeader(false)
-            .defaultContentType(MediaType.APPLICATION_OCTET_STREAM)
+            .defaultContentTypeStrategy(request -> {
+                HttpServletRequest servlet = request.getNativeRequest(HttpServletRequest.class);
+                String path = null;
+                if (servlet != null) {
+                    // Path info handles a prefixed DispatcherServlet; servlet path excludes
+                    // the context path for the normal '/' mapping. Do not read/parse a body.
+                    path = servlet.getPathInfo() != null ? servlet.getPathInfo() : servlet.getServletPath();
+                }
+                boolean probe = "/actuator/health/liveness".equals(path)
+                        || "/actuator/health/readiness".equals(path);
+                // A plain curl/kube probe sends */* (or no Accept). Keep every other
+                // endpoint's original binary fallback and honor explicit Accept headers.
+                return probe ? PROBE_DEFAULT_MEDIA_TYPES : BINARY_DEFAULT_MEDIA_TYPES;
+            })
             .mediaType("css", MediaType.valueOf("text/css"))
             .mediaType("js", MediaType.valueOf("application/javascript"))
             .mediaType("html", MediaType.TEXT_HTML);

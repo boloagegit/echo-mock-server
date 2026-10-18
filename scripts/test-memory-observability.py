@@ -53,6 +53,11 @@ def histogram_growth(baseline, current):
     return sorted(rows, key=lambda row: (-row["byteGrowth"], row["class"]))[:30]
 
 
+def background_task_failures(log):
+    return [line for line in log.splitlines()
+            if " ERROR " in line and "Unexpected error occurred in scheduled task" in line]
+
+
 def assess_growth(values, allowance):
     """Compare equivalent post-warmup, post-idle-GC samples; insufficient data is not a pass."""
     if len(values) < 4:
@@ -82,9 +87,9 @@ def assess_resources(checkpoints, args):
             for key, (values, limit) in series.items()}
 
 
-def assert_drained(resources):
+def assert_drained(resources, allow_log_drops=False):
     expected = {"jms": ["listenerActive", "forwardActive", "reservedBytes", "waitingThreads", "cleanupFailures", "replyFailures", "forwardFailures"],
-                "http": ["nativeActive", "nativeBufferedBytes", "nativeQueued", "activeForwards", "poolLeased", "poolPending", "bufferedBytes"],
+                "http": ["nativeActive", "nativeBufferedBytes", "nativeQueued", "nativeWorkerActive", "activeForwards", "poolLeased", "poolPending", "bufferedBytes"],
                 "requestLog": ["queueItems", "queueBytes", "inFlightBytes", "waitingProducers", "dropped"],
                 "scheduler": ["waitingTasks", "activeWorkers"], "database": ["poolActive", "poolWaiting", "writerWaiting", "writerActive"]}
     for section, keys in expected.items():
@@ -92,11 +97,40 @@ def assert_drained(resources):
         if data["state"] not in ("AVAILABLE", "PARTIAL"):
             raise AssertionError(f"Missing observations: {section}")
         for key in keys:
+            if allow_log_drops and section == "requestLog" and key == "dropped":
+                continue
             if data["values"].get(key) != 0:
                 raise AssertionError(f"Resource did not drain: {section}.{key}={data['values'].get(key)}")
     logs = resources["sections"]["requestLog"]["values"]
     if not logs.get("consumerRunning") or logs.get("storageUnavailable") or logs.get("backpressureActive"):
         raise AssertionError("Request log persistence is unhealthy")
+
+
+def assess_continuous_resources(samples, gc_events, native_samples, args):
+    """One-minute medians under uninterrupted load; no post-full-GC samples are invented."""
+    def medians(points):
+        buckets = {}
+        for elapsed, value in points:
+            if not isinstance(value, (int, float)) or value < 0:
+                return []
+            buckets.setdefault(int(elapsed // 60), []).append(value)
+        return [statistics.median(buckets[key]) for key in sorted(buckets)]
+
+    heap_points = ([(event["loadElapsedSeconds"], event["heapAfterBytes"]) for event in gc_events]
+                   if all(event["heapCoverageComplete"] for event in gc_events) else [])
+    series = {"naturalGcHeap": (medians(heap_points), args.allowed_growth_mib * MIB),
+              "nativeCommitted": ([point["bytes"] for point in native_samples], args.allowed_native_growth_mib * MIB)}
+    for metric, allowance in [("directBytes", 8 * MIB), ("nonHeapUsedBytes", 16 * MIB), ("threads", 4)]:
+        series[metric] = (medians([(row["loadElapsedSeconds"], row["resources"]["sections"]["jvm"]["values"].get(metric))
+                                  for row in samples]), allowance)
+    if samples and "VmRSS" in samples[0]["process"]:
+        for key, process_key, scale, allowance in [("rss", "VmRSS", 1024, args.allowed_native_growth_mib * MIB),
+                                                    ("fileDescriptors", "fdCount", 1, 8)]:
+            series[key] = (medians([(row["loadElapsedSeconds"], row["process"][process_key] * scale)
+                                    for row in samples]), allowance)
+    return {key: dict(assess_growth(values, limit), values=values,
+                     unit="count" if key in ("threads", "fileDescriptors") else "bytes")
+            for key, (values, limit) in series.items()}
 
 
 def free_port():
@@ -126,8 +160,18 @@ class Observation:
         self.started = None
         self.events = 0
         self.expired_events = 0
+        self.http_stall_connections = 0
+        self.warmup_http_stall_connections = 0
         self.checkpoints = []
+        self.backup_checks = []
         self.histogram_baseline = None
+        self.last_gc_event = None
+        self.load_started = None
+        self.continuous_samples = []
+        self.continuous_gc_events = []
+        self.continuous_native_samples = []
+        self.next_native_sample = 0
+        self.next_health_sample = 0
         self.echo = self.downstream = None
         self.base = ""
         self.env = {key: value for key, value in os.environ.items() if not key.startswith(("ECHO_", "SPRING_"))}
@@ -143,7 +187,10 @@ class Observation:
             return json.loads(payload) if payload else None
 
     def fixture(self, *args):
-        return [self.java, "-Xmx192m", f"-Dloader.path={self.args.fixture.resolve()}", f"-Dloader.main={MAIN}",
+        # Avoid the fixture's JDK HttpServer adding Nagle/delayed-ACK latency to the product measurement.
+        tcp_options = (["-Dsun.net.httpserver.nodelay=true"]
+                       if args and args[0] == "downstream" and not self.args.downstream_nagle else [])
+        return [self.java, "-Xmx192m", *tcp_options, f"-Dloader.path={self.args.fixture.resolve()}", f"-Dloader.main={MAIN}",
                 "-cp", str(self.args.jar.resolve()), "org.springframework.boot.loader.launch.PropertiesLauncher", *map(str, args)]
 
     def ready(self, process, base, path):
@@ -176,6 +223,9 @@ class Observation:
         if history["hasMore"]:
             raise AssertionError("GC rate exceeded this sampler's page budget; increase sampling frequency")
         resources = self.api("/api/admin/resources")
+        for event in history["events"]:
+            if event["heapCoverageComplete"]:
+                self.last_gc_event = event
         process = {}
         if sys.platform == "linux":
             for line in Path(f"/proc/{self.echo.pid}/status").read_text().splitlines():
@@ -185,11 +235,86 @@ class Observation:
             process["fdCount"] = len(list(Path(f"/proc/{self.echo.pid}/fd").iterdir()))
         row = {"phase": phase, "time": dt.datetime.now(dt.timezone.utc).isoformat(),
                "gcCursor": self.cursor, "resources": resources, "process": process}
+        if self.args.continuous and re.fullmatch(r"cycle-\d+", phase):
+            elapsed = time.monotonic() - self.load_started
+            row["loadElapsedSeconds"] = elapsed
+            if elapsed >= self.next_health_sample:
+                for probe in ("liveness", "readiness"):
+                    if self.api("/actuator/health/" + probe) != {"status": "UP"}:
+                        raise AssertionError("Health probe failed during continuous load: " + probe)
+                self.next_health_sample = elapsed + 10
+            self.continuous_samples.append(row)
+            for event in history["events"]:
+                if event["cause"] == "Diagnostic Command":
+                    raise AssertionError("A diagnostic GC occurred during continuous load")
+                self.continuous_gc_events.append(dict(event, loadElapsedSeconds=elapsed))
+            if elapsed >= self.next_native_sample:
+                native = subprocess.run([self.jcmd, str(self.echo.pid), "VM.native_memory", "summary", "scale=KB"],
+                                        capture_output=True, text=True, timeout=20, check=True)
+                committed = re.search(r"Total: reserved=\d+KB, committed=(\d+)KB", native.stdout)
+                if not committed:
+                    raise AssertionError("Native memory summary unavailable during load")
+                (self.output / f"continuous-native-{len(self.continuous_native_samples):03d}.txt").write_text(
+                        native.stdout, encoding="utf-8")
+                self.continuous_native_samples.append({"elapsedSeconds": elapsed, "bytes": int(committed.group(1)) * 1024})
+                self.next_native_sample = elapsed + 60
         with (self.output / "resources.ndjson").open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(row) + "\n")
         return row, history["events"]
 
+    def open_http_stalls(self):
+        """Only the harness-owned Echo; mix declared and chunked incomplete uploads."""
+        sockets = []
+        try:
+            for index in range(8):
+                peer = socket.create_connection(("127.0.0.1", int(self.base.rsplit(":", 1)[1])), timeout=5)
+                sockets.append(peer)
+                # Two unknown-length bodies reserve 80 MiB of the existing 128 MiB budget;
+                # the other six declare small bodies. No payload or memory limits are weakened.
+                framing = "Transfer-Encoding: chunked\r\n\r\n100\r\nx" if index < 2 else "Content-Length: 256\r\n\r\nx"
+                peer.sendall(("POST /mock/observe/stall HTTP/1.1\r\nHost: localhost\r\n"
+                              "Content-Type: text/plain\r\n" + framing).encode("ascii"))
+            return sockets
+        except BaseException:
+            for peer in sockets:
+                peer.close()
+            raise
+
+    def verify_http_stalls_recovered(self, peers, phase):
+        # Verify worker recovery BEFORE closing local sockets. Closing them first would hide
+        # the original defect: lease counters drained while blocking reads still held workers.
+        row, _ = self.sample(phase + "-stall-recovery")
+        values = row["resources"]["sections"]["http"]["values"]
+        for key in ["nativeActive", "nativeBufferedBytes", "nativeQueued", "nativeWorkerActive"]:
+            if values.get(key) != 0:
+                raise AssertionError(f"HTTP stalled upload retained {key}={values.get(key)}")
+        for peer in peers:
+            peer.settimeout(.2)
+            try:
+                if peer.recv(1):
+                    raise AssertionError("Expected incomplete upload to close without an HTTP response")
+            except ConnectionResetError:
+                pass  # Both FIN and RST terminate the incomplete HTTP/1 request safely.
+        if phase.startswith("warmup"):
+            self.warmup_http_stall_connections += len(peers)
+        else:
+            self.http_stall_connections += len(peers)
+
     def load(self, work, seconds, phase):
+        # Warm the same bounded worker paths before establishing the resource baseline.
+        peers = self.open_http_stalls() if self.args.http_stalls else []
+        try:
+            result = self.load_client(work, seconds, phase)
+            if peers:
+                self.verify_http_stalls_recovered(peers, phase)
+            return result
+        finally:
+            for peer in peers:
+                peer.close()
+
+    def load_client(self, work, seconds, phase):
+        if self.args.continuous and not phase.startswith("warmup"):
+            self.load_started = time.monotonic()
         with (self.output / f"{phase}-load.log").open("w", encoding="utf-8") as log:
             client = subprocess.Popen(self.fixture("load", self.base, self.jms, seconds, self.args.rate, self.args.payload_bytes),
                                       cwd=work, env=self.env, stdout=log, stderr=subprocess.STDOUT)
@@ -224,7 +349,7 @@ class Observation:
         clean_samples = 0
         while clean_samples < 2:
             try:
-                assert_drained(row["resources"])
+                assert_drained(row["resources"], allow_log_drops=self.args.continuous)
                 clean_samples += 1
             except AssertionError:
                 clean_samples = 0
@@ -238,20 +363,37 @@ class Observation:
         broker = self.api("/state", base=self.downstream_base)
         if broker["failed"] or sorted(broker["queues"]) != ["OBS.TARGET"]:
             raise AssertionError("Downstream failure or temporary queue retention")
-        before = self.cursor
-        command = subprocess.run([self.jcmd, str(self.echo.pid), "GC.run"], capture_output=True, text=True, timeout=30, check=True)
-        (self.output / f"{phase}-explicit-gc.txt").write_text(command.stdout, encoding="utf-8")
-        deadline = time.monotonic() + 10
-        checkpoint_event = None
-        while time.monotonic() < deadline:
-            row, events = self.sample(phase + "-post-gc")
-            candidates = [event for event in events if event["sequence"] > before and event["cause"] == "Diagnostic Command"]
-            if candidates:
-                checkpoint_event = max(candidates, key=lambda event: event["sequence"])
-                break
-            time.sleep(.1)
+        if self.args.backup_maintenance:
+            # Publishing can briefly precede pruning. Require a converged retained inventory,
+            # rather than rejecting the small publication/cleanup window as a capacity leak.
+            deadline = time.monotonic() + 10
+            while True:
+                files = self.api("/api/admin/backup/status")["files"]
+                total = sum(file["size"] for file in files)
+                if 0 < len(files) <= 3 and total <= 256 * MIB:
+                    break
+                if time.monotonic() >= deadline:
+                    raise AssertionError("Verified backup inventory did not converge within its limits")
+                time.sleep(.2)
+            for probe in ("liveness", "readiness"):
+                if self.api("/actuator/health/" + probe) != {"status": "UP"}:
+                    raise AssertionError("Health probe failed after resource drain: " + probe)
+            self.backup_checks.append({"phase": phase, "files": len(files), "bytes": total})
+        checkpoint_event = self.last_gc_event if self.args.continuous else None
+        if not self.args.continuous:
+            before = self.cursor
+            command = subprocess.run([self.jcmd, str(self.echo.pid), "GC.run"], capture_output=True, text=True, timeout=30, check=True)
+            (self.output / f"{phase}-explicit-gc.txt").write_text(command.stdout, encoding="utf-8")
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                row, events = self.sample(phase + "-post-gc")
+                candidates = [event for event in events if event["sequence"] > before and event["cause"] == "Diagnostic Command"]
+                if candidates:
+                    checkpoint_event = max(candidates, key=lambda event: event["sequence"])
+                    break
+                time.sleep(.1)
         if not checkpoint_event or not checkpoint_event["heapCoverageComplete"]:
-            raise AssertionError("No complete explicit-GC notification; cannot compare retained heap")
+            raise AssertionError("No complete GC notification; cannot compare observed heap")
         nmt = subprocess.run([self.jcmd, str(self.echo.pid), "VM.native_memory", "summary", "scale=KB"],
                              capture_output=True, text=True, timeout=20, check=True)
         (self.output / f"{phase}-native-memory.txt").write_text(nmt.stdout, encoding="utf-8")
@@ -282,9 +424,14 @@ class Observation:
                   "secondsPerCycle": self.args.seconds, "idleSeconds": self.args.idle_seconds, "rate": self.args.rate,
                   "heapMiB": self.args.heap_mib, "payloadBytes": self.args.payload_bytes,
                   "warmupSecondsPerCycle": self.args.warmup_seconds, "warmupCycles": self.args.warmup_cycles,
+                  "httpStallProbesEnabled": self.args.http_stalls,
+                  "backupMaintenanceEnabled": self.args.backup_maintenance,
                   "classHistograms": self.args.class_histograms,
                   "histogramCaveat": "Shallow sizes by class, including unreachable objects; growth suggests candidates, not retaining owners or leak proof",
-                  "gcInterventions": "Only after natural idle and resource drain; never during load",
+                  "continuous": self.args.continuous,
+                  "httpProtocol": "HTTP/1.1",
+                  "downstreamTcpNoDelay": not self.args.downstream_nagle,
+                  "gcInterventions": "None" if self.args.continuous else "Only after natural idle and resource drain; never during load",
                   "limitation": "Finite regression observation, not proof of leak freedom or a production throughput benchmark"}
         try:
             if not Path(self.java).is_file() or not Path(self.jcmd).is_file():
@@ -311,8 +458,14 @@ class Observation:
                                 "-XX:+UseG1GC", "-XX:NativeMemoryTracking=summary", "-Xlog:gc*:file=gc.log:time,uptime,level,tags",
                                 "-jar", str(self.args.jar.resolve()), "--server.address=127.0.0.1", f"--server.port={http_port}",
                                 "--echo.http.transport=native", "--server.undertow.threads.io=2", "--server.undertow.threads.worker=8",
-                                "--echo.backup.enabled=false", "--echo.cleanup.enabled=false", "--echo.jms.enabled=true",
+                                f"--echo.backup.enabled={str(self.args.backup_maintenance).lower()}",
+                                *(["--echo.backup.cron=*/15 * * * * *", "--echo.backup.on-shutdown=false",
+                                   "--echo.backup.housekeeping-initial-delay-ms=1000",
+                                   "--echo.backup.housekeeping-interval-ms=1000", "--echo.backup.max-files=3",
+                                   f"--echo.backup.max-total-bytes={256 * MIB}"] if self.args.backup_maintenance else []),
+                                "--echo.cleanup.enabled=false", "--echo.jms.enabled=true",
                                 "--echo.monitoring.gc-history-max-age-seconds=60",
+                                f"--echo.http.request-timeout-ms={8000 if self.args.http_stalls else 40000}",
                                 f"--echo.jms.port={source_port}", "--echo.jms.concurrency=2-4", "--echo.jms.target.enabled=true",
                                 "--echo.jms.target.type=artemis", f"--echo.jms.target.server-url=tcp://127.0.0.1:{downstream_jms}",
                                 "--echo.jms.target.username=", "--echo.jms.target.password=", "--echo.jms.target.queue=OBS.TARGET",
@@ -341,13 +494,38 @@ class Observation:
                             name = f"cycle-{cycle + 1:03d}"
                             result["traffic"].append(self.load(work, self.args.seconds, name))
                             point = self.checkpoint(name)
-                            print(f"{name}: retained heap {point['heapAfterBytes'] / MIB:.2f} MiB; GC events {self.events}", flush=True)
+                            label = "latest natural-GC heap" if self.args.continuous else "retained heap"
+                            print(f"{name}: {label} {point['heapAfterBytes'] / MIB:.2f} MiB; GC events {self.events}", flush=True)
                     finally:
                         stop(self.echo)
                         stop(self.downstream)
                         if (work / "gc.log").exists():
                             shutil.copy2(work / "gc.log", self.output / "jvm-gc.log")
-            result["growth"] = assess_resources(self.checkpoints, self.args)
+            log = (self.output / "echo.log").read_text(encoding="utf-8", errors="replace")
+            result["backgroundTaskFailures"] = background_task_failures(log)
+            errors = [line for line in log.splitlines() if re.search(r"\bERROR\b|OutOfMemoryError", line)]
+            result["errorLogCount"] = len(errors)
+            result["errorLogSamples"] = errors[:20]
+            if errors:
+                raise AssertionError("Echo logged errors or OOM during observation; see echo.log")
+            if self.args.backup_maintenance:
+                result["backupMaintenance"] = {"checkpoints": self.backup_checks,
+                        "completed": log.count("SQLite backup completed:"),
+                        "pruned": log.count("Deleted SQLite backup:"),
+                        "failed": log.count("SQLite backup failed")}
+                if (result["backupMaintenance"]["failed"] or not result["backupMaintenance"]["completed"]
+                        or not result["backupMaintenance"]["pruned"]):
+                    raise AssertionError("Backup/retention did not complete successfully alongside traffic")
+            result["growth"] = (assess_continuous_resources(self.continuous_samples, self.continuous_gc_events,
+                                                          self.continuous_native_samples, self.args)
+                                if self.args.continuous else assess_resources(self.checkpoints, self.args))
+            if self.args.continuous:
+                result["naturalGcMeasuredCount"] = len(self.continuous_gc_events)
+                result["continuousNativeSamples"] = self.continuous_native_samples
+                result["requestLogDroppedObserved"] = self.checkpoints[-1]["resources"]["sections"]["requestLog"]["values"]["dropped"]
+                result["methodNote"] = "Minute medians during load; natural young GC may leave old-generation garbage. Best-effort log drops are reported, not treated as response failures."
+            if result["backgroundTaskFailures"]:
+                raise AssertionError("A background scheduled task failed; see echo.log")
             if not self.expired_events:
                 raise AssertionError("No GC history expiry observed; lengthen the run to exercise housekeeping")
             result["passed"] = all(series["status"] == "no-growth-detected-in-window" for series in result["growth"].values())
@@ -356,6 +534,8 @@ class Observation:
         finally:
             result["gcEventsArchived"] = self.events
             result["gcEventsExpired"] = self.expired_events
+            result["httpStallConnectionsRecovered"] = self.http_stall_connections
+            result["warmupHttpStallConnectionsRecovered"] = self.warmup_http_stall_connections
             result["checkpoints"] = self.checkpoints
             (self.output / "summary.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
         print(json.dumps({key: value for key, value in result.items() if key not in ("checkpoints", "traffic", "warmup")}, indent=2), flush=True)
@@ -369,6 +549,10 @@ def main():
     parser.add_argument("--output", required=True, type=Path, help="New output directory; existing paths are never overwritten")
     parser.add_argument("--java", default="java")
     parser.add_argument("--cycles", type=int, default=10)
+    parser.add_argument("--continuous", action="store_true",
+                        help="One uninterrupted load segment; no diagnostic GC, assess minute medians and natural GC")
+    parser.add_argument("--downstream-nagle", action="store_true",
+                        help="Keep the test JDK HTTP server's default Nagle behavior to reproduce older measurements")
     parser.add_argument("--seconds", type=int, default=60)
     parser.add_argument("--idle-seconds", type=int, default=15)
     parser.add_argument("--warmup-seconds", type=int, default=60)
@@ -381,9 +565,19 @@ def main():
     parser.add_argument("--allowed-native-growth-mib", type=int, default=128)
     parser.add_argument("--class-histograms", action="store_true",
                         help="Inspect class counts/sizes at idle checkpoints in the disposable JVM; adds pauses, not a throughput benchmark")
+    parser.add_argument("--http-stalls", action="store_true",
+                        help="Mix eight stalled uploads into each load cycle and require server-side recovery before closing the clients")
+    parser.add_argument("--backup-maintenance", action="store_true",
+                        help="Copy SQLite every 15 seconds, independently prune to 3 files / 256 MiB, and verify probes at idle")
     args = parser.parse_args()
-    if args.cycles < 3 or min(args.seconds, args.warmup_seconds, args.warmup_cycles, args.idle_seconds) < 1 or args.heap_mib < 256 or min(args.allowed_growth_mib, args.allowed_native_growth_mib) < 0:
-        parser.error("Need >=3 cycles, positive durations, >=256 MiB heap, and nonnegative growth allowance")
+    if args.cycles < (1 if args.continuous else 3) or min(args.seconds, args.warmup_seconds, args.warmup_cycles, args.idle_seconds) < 1 or args.heap_mib < 256 or min(args.allowed_growth_mib, args.allowed_native_growth_mib) < 0:
+        parser.error("Need >=3 cycles (1 with --continuous), positive durations, >=256 MiB heap, and nonnegative growth allowance")
+    if args.continuous and (args.cycles != 1 or args.seconds < 240):
+        parser.error("--continuous requires --cycles 1 and >=240 seconds for trend observations")
+    if args.http_stalls and min(args.seconds, args.warmup_seconds) < 10:
+        parser.error("--http-stalls needs >=10-second measured and warm-up cycles for the eight-second request deadline")
+    if args.backup_maintenance and args.cycles * args.seconds < 90:
+        parser.error("--backup-maintenance needs >=90 seconds of measured load to exercise retention")
     return Observation(args).run()
 
 

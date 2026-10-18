@@ -90,12 +90,32 @@ python3 scripts/test-memory-observability.py \
 若要測試反覆重連，可用 `--warmup-cycles 6 --warmup-seconds 15`，讓 broker 延後建立的
 網路執行緒在基準點之前也經歷重連；實際暖機長度須依部署的 pool 大小調整。
 所有暖機結果都會保存。若數量仍增加，應看執行緒清單與 NMT 類別，不應直接放寬門檻。
+
+加上 `--http-stalls`，可在暖機及每輪正常 HTTP／JMS 負載期間保持 8 條不完整上傳（2 條 chunked、
+6 條有宣告長度）。這個模式將請求期限設為 8 秒，因此暖機與量測每輪至少要 10 秒，
+讓相同的固定 HTTP 工作者在基準點之前先啟動。
+工具會在自行關閉客戶端之前，確認伺服器已關閉停滯連線，且實際工作執行緒、名額、緩衝與
+佇列均歸零；`httpStallConnectionsRecovered` 記錄量測期間恢復的連線數，
+暖機則另計於 `warmupHttpStallConnectionsRecovered`。
+監控新增 `nativeWorkerActive` 與 `nativeWorkerCapacity`，避免名額已歸還、執行緒仍卡住卻被判成通過。
+例如在上述指令後加上 `--http-stalls --warmup-cycles 6 --warmup-seconds 15`。
 預設 Heap 384 MiB、暖機 60 秒，再跑 10 輪「負載 60 秒 → 自然閒置 15 秒」，
 HTTP／JMS 合計每秒 100 筆，資料大小 16 KiB。`--cycles 60 --seconds 300` 可延長到約五小時；
 長時間驗收應使用接近正式部署的 Linux 規格與實際流量。
 
+加上 `--backup-maintenance`，可同時每 15 秒備份 SQLite、每秒獨立清理；獨立測試實例最多保留
+3 份已完成備份／256 MiB。每輪閒置檢查保留容量及兩個健康探針，最後要求確實完成備份與清理、
+且沒有備份失敗；排程工作未預期報錯也會使測試失敗，包括尚未進入備份失敗日誌前的忙碌拒絕。
+至少執行 90 秒量測負載。輸出包含備份日誌與每輪保留容量，這個測試選項不會
+改變正式部署的預設設定。
+
+每輪負載結果另有 `latencyMs`，分別記錄固定／模板／延遲／轉發 HTTP，以及模擬／轉發 JMS。
+客戶端量測實際收送時間、核對內容與 correlation，再以三位有效數字、容量固定的 HdrHistogram
+保存成功樣本；樣本數必須等於完成請求數，暖機另計。這是該固定負載下的回應時間，不能當作
+最大容量；NMT、閒置 GC 與類別檢查仍依測試選項開啟。
+
 每輪核對 HTTP 回應、JMS 內容與 correlation ID，並確認請求、緩衝、寫入工作歸零，
-下游沒有殘留暫時 Queue。全程保存自然 GC 紀錄。**只有在停止負載、自然等待且確認工作
+下游沒有殘留暫時 Queue。全程保存自然 GC 紀錄。預設分輪模式**只有在停止負載、自然等待且確認工作
 清空後，才由測試工具觸發 GC**，用來比較相同條件下仍被保留的 Heap；負載期間不強制回收。
 測試 JVM 會開啟 Native Memory Tracking，不能把這輪數字當成正式吞吐基準。
 
@@ -105,6 +125,16 @@ Heap 24 MiB、direct 8 MiB、non-heap 16 MiB、NMT committed／RSS 128 MiB、4 �
 8 個 Linux 檔案描述符。Heap／原生記憶體允許量可透過參數設定。這些是回歸測試門檻，
 不是通用安全上限；快取與連線池正常保留是預期行為，低於門檻的小量洩漏仍需要更長的測試。
 RSS 與檔案描述符只在 Linux 採集，NMT 則兩個平台都能使用。
+
+如需連續 10 分鐘、不要求 GC 的觀察，在指令加上
+`--continuous --cycles 1 --seconds 600 --rate 200 --warmup-cycles 6 --warmup-seconds 15`，
+可同時保留 `--http-stalls --backup-maintenance`。此模式基準、負載與結束都不要求 GC，
+七項資源改比負載期間的一分鐘視窗，NMT 每分鐘採樣；至少需 240 秒且資料涵蓋完整。
+自然 Young GC 後 Heap 不等於完整存活量。預設非同步記錄的丟棄會明列，仍要求工作排空，
+不把記錄取捨當成業務回應失敗；所有回應仍逐筆核對，ERROR／OOM 使測試失敗。
+負載產生器明確使用 HTTP/1.1，避免自動升級走到 Servlet；測試用 HTTP 下游預設開啟
+`TCP_NODELAY`。`--downstream-nagle` 可保留先前下游設定作診斷，
+不會改 Echo 的轉發設定。詳見 [追加驗證報告](stability-followup-2026-10-18.md)。
 
 若要進一步找出內容種類，可加上 `--class-histograms`，在閒置觀察點收集各 Java 類別的
 物件數與本身大小，輸出 `*-classes.txt`，並在 `classGrowthSuspects` 列出相較基準增加最多的
@@ -116,5 +146,5 @@ RSS 與檔案描述符只在 Linux 採集，NMT 則兩個平台都能使用。
 請用 CI artifact 保存期限或測試環境的清理工作移除舊 run 目錄。
 
 回應錯誤、GC 資料不完整、服務重啟、未讀資料被覆蓋、資源未釋放，或不足四個觀察點，
-都不能算通過。`no-growth-detected-in-window` 只代表這段測試沒有超出宣告的門檻，
+都不能算通過（連續模式以至少四個有數據的視窗取代四個閒置觀察點）。`no-growth-detected-in-window` 只代表這段測試沒有超出宣告的門檻，
 不代表永遠沒有洩漏。分析器另有刻意逐輪增加的模擬資料測試，確認它確實會拒絕持續增長。

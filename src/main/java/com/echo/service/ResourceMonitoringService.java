@@ -238,6 +238,11 @@ public class ResourceMonitoringService {
         values.put("queueItems", stats.getQueueSize());
         values.put("processed", stats.getProcessedCount());
         values.put("dropped", stats.getDroppedCount());
+        values.put("retentionSkipped", stats.getRetentionSkippedCount());
+        values.put("bufferOverflowDropped", stats.getBufferOverflowDroppedCount());
+        values.put("writeNotConfirmed", stats.getWriteNotConfirmedCount());
+        values.put("otherDropped", stats.getOtherDroppedCount());
+        values.put("storageRetries", stats.getStorageRetryCount());
         if (agent.isDurableMode()) {
             values.put("queueBytes", stats.getQueueBytes());
             values.put("capacityBytes", stats.getQueueCapacityBytes());
@@ -247,6 +252,7 @@ public class ResourceMonitoringService {
             values.put("backpressureActive", stats.isBackpressureActive());
             values.put("storageUnavailable", agent.isStorageUnavailable());
             values.put("consumerRunning", agent.isDurableConsumerRunning());
+            values.putAll(agent.diskReserveMetrics());
         }
         return values;
     }

@@ -3,10 +3,57 @@ package com.echo.config;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.atomic.AtomicInteger;
+import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class NativeHttpResourcesTest {
+    @Test
+    void workersRetireAtIdleAndNewRequestsStillRunWithinTheSameCapacity() throws Exception {
+        try (var resources = new NativeHttpResources(2, 2, 1024, 4096, Duration.ofMillis(50))) {
+            assertThat(resources.workers.submit(() -> "before").get(2, TimeUnit.SECONDS)).isEqualTo("before");
+            org.awaitility.Awaitility.await().atMost(2, TimeUnit.SECONDS)
+                    .until(() -> resources.workers.getPoolSize() == 0);
+            var first = resources.acquire();
+            var second = resources.acquire();
+            assertThat(resources.acquire()).isNull();
+            assertThat(resources.workers.submit(() -> "after").get(2, TimeUnit.SECONDS)).isEqualTo("after");
+            first.close();
+            second.close();
+            assertThat(resources.active()).isZero();
+            assertThat(resources.resourceMetricsSnapshot()).containsEntry("nativeWorkerCapacity", 2);
+        }
+    }
+
+    @Test
+    void idleTimeoutDoesNotInterruptRunningWork() throws Exception {
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var finished = new CountDownLatch(1);
+        try (var resources = new NativeHttpResources(1, 2, 1024, 4096, Duration.ofMillis(50))) {
+            try {
+                var request = resources.workers.submit(() -> {
+                    entered.countDown();
+                    try {
+                        if (!release.await(2, TimeUnit.SECONDS)) throw new IllegalStateException("test release timed out");
+                        return "completed";
+                    } finally {
+                        finished.countDown();
+                    }
+                });
+                assertThat(entered.await(2, TimeUnit.SECONDS)).isTrue();
+                assertThat(finished.await(150, TimeUnit.MILLISECONDS)).isFalse();
+                assertThat(resources.workers.getPoolSize()).isEqualTo(1);
+                release.countDown();
+                assertThat(request.get(2, TimeUnit.SECONDS)).isEqualTo("completed");
+            } finally {
+                release.countDown();
+            }
+        }
+    }
+
     @Test
     void cleanupFailureCannotLeakOtherReservationsOrCallbacksAndCloseIsIdempotent() {
         try (var resources = new NativeHttpResources(1, 2, 1024, 4096)) {

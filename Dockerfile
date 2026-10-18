@@ -17,7 +17,7 @@ RUN useradd -m -s /bin/bash echo
 COPY build/libs/echo-server-*.jar app.jar
 
 # 資料目錄
-RUN mkdir -p /app/data && chown -R echo:echo /app
+RUN mkdir -p /app/data /app/backups && chown -R echo:echo /app
 
 USER echo
 
@@ -27,12 +27,13 @@ ENV JAVA_OPTS="-Xms256m -Xmx512m \
     -XX:+ExitOnOutOfMemoryError \
     -XX:HeapDumpPath=/tmp/heapdump.hprof \
     -Xlog:gc*:file=/tmp/gc.log:time,uptime,level,tags:filecount=5,filesize=10m" \
-    TZ=Asia/Taipei
+    TZ=Asia/Taipei \
+    ECHO_HEALTH_STORAGE_PATH=/app/data
 
 EXPOSE 8080 61616
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
     CMD curl --fail --silent --show-error --header 'Accept: application/json' \
-        http://localhost:8080/api/admin/status || exit 1
+        http://localhost:8080/actuator/health/readiness || exit 1
 
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]

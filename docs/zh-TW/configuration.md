@@ -36,6 +36,7 @@ echo:
     enabled: false              # 設為 true 啟用 JMS
     forward:
       session-cache-size: 8     # 每個轉送目標保留的 idle Session；0 停用重用
+      bounded-waits-enabled: false # 保留 provider 重試／failover；實際 ESB 故障驗證後才考慮開啟
     credential-key: ${ECHO_JMS_CREDENTIAL_KEY} # 資料庫內轉發密碼的加密金鑰
     port: 61616                 # Artemis 監聽埠
     queue: ECHO.REQUEST         # 監聽的 Queue
@@ -77,6 +78,10 @@ echo:
     cron: "0 0 3 * * *"         # 每天凌晨 3 點執行
     path: ./backups             # 備份目錄
     retention-days: 7           # 備份保留天數
+    max-total-bytes: 10737418240 # 已完成的 Echo 備份合計最多 10 GiB
+    max-files: 100              # 最多保留的已完成備份數
+    min-free-bytes: 536870912   # 開始複製前預留 512 MiB
+    housekeeping-interval-ms: 3600000 # 每小時獨立清理
     on-shutdown: true           # 應用關閉時備份
   builtin-account:
     self-registration: false    # 設為 true 允許自助註冊
@@ -88,6 +93,16 @@ echo:
 ```
 
 上面的備份設定只適用於本機 SQLite 檔案。外部資料庫 profile 會將應用程式備份關閉，請使用 DBA 或平台備份服務。
+
+備份清理不再依賴新備份成功：啟動 60 秒後開始，每小時獨立執行。保留天數、總容量與檔案數限制可能縮短歷史，但會保留最新一份通過 SQLite 完整性與外鍵驗證的備份，即使它已超過保留天數；更新但損壞的檔案不會取代這個復原點。若沒有任何檔案可驗證，會保留現有檔案。只有符合 Echo 日期命名的普通備份檔可被清理，不刪除其他檔案、符號連結或目錄。
+
+複製前會用 SQLite 的頁數與頁面大小估計快照容量，檢查備份總額度及磁碟可用空間；若無法同時保留最後有效備份與剩餘空間，便明確拒絕新備份。環境變數預設為 `ECHO_BACKUP_MAX_TOTAL_BYTES=10737418240`、`ECHO_BACKUP_MAX_FILES=100`、`ECHO_BACKUP_MIN_FREE_BYTES=536870912`、`ECHO_BACKUP_HOUSEKEEPING_INTERVAL_MS=3600000`。備份與清理不重疊執行；排程備份會等待維護完成，等待可中斷且不先占 JDBC 連線。手動重複請求立即回報忙碌，清理則跳過正在製作的備份。這是開始複製前的檢查，之後資料庫成長、其他程序寫入及程序被強制結束留下的暫存檔仍可能消耗空間；已完成備份的容量限制不包含其他檔案與殘留暫存檔。已驗證並發布的備份，不會因後續清理失敗而回報備份失敗；獨立排程會重試清理。
+
+## 健康檢查
+
+匿名 `GET /actuator/health/liveness` 與 `GET /actuator/health/readiness` 只回傳狀態。liveness 檢查應用程式是否存活，不執行 SQL 或 broker 連線測試；readiness 另外檢查資料庫、磁碟空間與既有 JMS listener 是否收訊，停用 JMS 時視為正常。來源重新連線期間 readiness 回 HTTP 503，liveness 保持 HTTP 200；恢復後 readiness 回 200。探針不另開 TIBCO／Artemis 連線，也不改動交易、ACK 或重試設定。其他 Actuator 路徑仍須登入。
+
+`ECHO_HEALTH_STORAGE_PATH` 在 JAR 部署預設 `.`，Docker 映像預設 `/app/data`；`ECHO_HEALTH_MIN_FREE_BYTES` 預設 536870912（512 MiB）。若可寫入資料位於獨立掛載點，請將檢查路徑指向該檔案系統。readiness 的資料庫檢查沿用 datasource 逾時設定；liveness 不依賴資料庫。listener 狀態無法證明每個下游目標都正常，也無法辨識所有處理中請求卡住的情況。監管程序應以 **liveness** 判斷重啟，以 **readiness** 決定是否導入流量，見[部署說明](install.md#健康檢查與恢復)。
 
 ## HTTP 加速
 

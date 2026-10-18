@@ -84,6 +84,8 @@ Rule responses include durable `createdBy` and `updatedBy` metadata. Existing ro
 
 ## System Management
 
+Anonymous operational probes: `GET /actuator/health/liveness` checks process availability, and `GET /actuator/health/readiness` also checks DB, free disk space and the existing JMS source listener. Responses contain only `status`; unhealthy readiness returns 503. Other Actuator endpoints retain authentication. See [configuration](configuration.md#health-probes).
+
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | /api/admin/status | System status (JVM, DB, statistics) |

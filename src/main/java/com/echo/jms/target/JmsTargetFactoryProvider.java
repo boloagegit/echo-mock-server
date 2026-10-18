@@ -14,4 +14,9 @@ public interface JmsTargetFactoryProvider {
 
     /** 建立對應的 ConnectionFactory */
     ConnectionFactory create(JmsProperties.Target target) throws Exception;
+
+    /** Outbound-specific limits. Source listener reconnection settings retain their own policy. */
+    default ConnectionFactory createOutbound(JmsProperties.Target target) throws Exception {
+        return create(target);
+    }
 }

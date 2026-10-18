@@ -15,6 +15,38 @@
 
 ## 來源交易與慢速工作
 
+### 下游連線與 broker 呼叫期限
+
+預設 `echo.jms.forward.bounded-waits-enabled=false`：轉發及管理頁連線測試沿用 provider
+原本的連線、重試與 failover 設定。既有 `timeout-seconds` 仍只限制等待回覆，不能保證
+連線或 send 不會長時間阻塞。這個預設不以提早失敗換取執行緒釋放。
+
+明確設定 `echo.jms.forward.bounded-waits-enabled=true`（環境變數
+`ECHO_JMS_FORWARD_BOUNDED_WAITS_ENABLED=true`）並重新啟動，轉發與管理頁連線測試才使用
+provider 的 `createOutbound`。以下限制只適用於此模式；不論是否開啟，來源接收仍使用原有的
+`create`，不套用轉發的重試限制。來源 ACK、交易與重送設定不變。
+
+Artemis 轉發將 TCP connect、broker call 與 failover call 等待限制在目標的
+`timeout-seconds` 以內；原本更短的限制會保留。連線與 broker call 不再接受無限等待。
+轉發 client 不在 provider 內反覆初始連線／重連，失敗後由既有 forwarder 在下一次請求重建。
+因此 URI 中較長的 outbound timeout／retry 設定會被這些限制收斂。Artemis transport 的
+TCP 設定名稱是 `connect-timeout-millis`。
+
+這是故障處理政策，不是正常 JMS 吞吐的加速開關。原本可等待重連／failover 後成功的同一筆
+請求可能提早回覆錯誤；既有 listener 對轉發錯誤回覆正常結束來源交易，不會自動保留該筆訊息
+重送。開啟前須用實際 ESB、JMS client 及高可用設定驗證，Artemis 測試不能代替 EMS 實機驗收。
+
+`timeout-seconds` 仍是回覆等待的最大時間；各階段與清理各有期限，整段轉發不保證在單一
+`timeout-seconds` 內結束。連線、send 或 ACK 失敗也不代表下游一定未收到請求，仍須保留冪等處理。
+
+TIBCO EMS 使用每個 factory 的 `setConnAttempt*`／`setReconnAttempt*` 限制連線嘗試，
+不修改會影響所有連線的全域 request timeout。這些設定是每次嘗試的上限；多地址、failover
+及 send/ACK 的完整等待仍受 EMS client／broker 設定影響。此環境沒有授權的 EMS client，
+只能驗證反射 API 設定接縫，不能宣稱已完成 EMS 實機故障或傳送期限驗證。
+
+自訂 provider 可以覆寫 `createOutbound` 實作供應商的期限；預設仍委派給 `create`，
+因此不會自動替任意第三方 provider 增加可中斷 I/O 的能力。
+
 來源 broker 的 transaction、listener 並發、記憶體額度、Scenario、記錄與回覆流程保持原有契約。這次不把訊息交給背景執行緒後提早 ACK，也沒有加入新的 source rollback／重送條件。
 
 評估過以容量拒絕保留立即 Mock 的處理餘裕，但完整壓測顯示：低上限會使正常併發反覆重送、拉高 P99，甚至超過客戶端等待時間。因此這個原型已移除，沒有留下新的 `work.enabled` 設定、例外、跨 pipeline 的資源 scope 或 UI counter。失敗數據保留在 [補強報告](performance-hardening-2026-10-16.md)。

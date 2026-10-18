@@ -9,6 +9,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -223,6 +224,52 @@ class RuleSnapshotCacheTest {
             TimeUnit.MILLISECONDS.sleep(10);
         }
         assertThat(cache.get("k")).isEqualTo("v2");
+    }
+
+    @Test
+    @DisplayName("延遲讀者看到舊快照過期：新快照已裝好時不再重複建立")
+    void delayedExpiredReaderDoesNotRebuildAnAlreadyFreshSnapshot() throws Exception {
+        var pausedReader = new AtomicReference<Thread>();
+        var pauseOnce = new AtomicBoolean(true);
+        var observedOldSnapshot = new CountDownLatch(1);
+        var resumeReader = new CountDownLatch(1);
+        var builds = new AtomicInteger();
+        var cache = new RuleSnapshotCache<String, String>("test", key -> "v" + builds.incrementAndGet(),
+                builderThread, TimeUnit.MINUTES.toNanos(10), 2_000, () -> {
+                    long now = clock.get();
+                    // get() reads its snapshot before asking the clock. Hold that reader while
+                    // another request refreshes the snapshot and releases the rebuild slot.
+                    if (Thread.currentThread() == pausedReader.get() && pauseOnce.compareAndSet(true, false)) {
+                        observedOldSnapshot.countDown();
+                        try {
+                            assertThat(resumeReader.await(5, TimeUnit.SECONDS)).isTrue();
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            throw new IllegalStateException(e);
+                        }
+                    }
+                    return now;
+                });
+        assertThat(cache.get("k")).isEqualTo("v1");
+        clock.addAndGet(TimeUnit.MINUTES.toNanos(11));
+        try {
+            Future<String> delayed = callers.submit(() -> {
+                pausedReader.set(Thread.currentThread());
+                return cache.get("k");
+            });
+            assertThat(observedOldSnapshot.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(cache.get("k")).isEqualTo("v1");
+            builderThread.submit(() -> { }).get(5, TimeUnit.SECONDS);
+            assertThat(cache.get("k")).isEqualTo("v2");
+
+            resumeReader.countDown();
+            assertThat(delayed.get(5, TimeUnit.SECONDS)).isEqualTo("v1");
+            builderThread.submit(() -> { }).get(5, TimeUnit.SECONDS);
+            assertThat(builds).hasValue(2);
+            assertThat(cache.get("k")).isEqualTo("v2");
+        } finally {
+            resumeReader.countDown();
+        }
     }
 
     @Test

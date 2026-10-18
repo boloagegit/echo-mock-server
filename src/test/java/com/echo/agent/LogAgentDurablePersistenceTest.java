@@ -169,6 +169,8 @@ class LogAgentDurablePersistenceTest {
         assertThat(persisted).containsExactly("/before", "/after");
         awaitSpoolEmpty();
         assertThat(agent.getStats().getDroppedCount()).isEqualTo(1);
+        assertThat(agent.getStats().getOtherDroppedCount()).isEqualTo(1);
+        assertThat(agent.getStats().getRetentionSkippedCount()).isZero();
     }
 
     @Test
@@ -192,6 +194,7 @@ class LogAgentDurablePersistenceTest {
 
         assertThat(delivered.await(5, TimeUnit.SECONDS)).isTrue();
         assertThat(agent.getStats().getDroppedCount()).isZero();
+        assertThat(agent.getStats().getStorageRetryCount()).isGreaterThanOrEqualTo(2);
     }
 
     @Test
@@ -224,6 +227,9 @@ class LogAgentDurablePersistenceTest {
         assertThat(emptyCheckpoints).containsExactly(seventh);
         awaitSpoolEmpty();
         assertThat(agent.getStats().getDroppedCount()).isEqualTo(7);
+        assertThat(agent.getStats().getRetentionSkippedCount()).isEqualTo(7);
+        assertThat(agent.getStats().getBufferOverflowDroppedCount()).isZero();
+        assertThat(agent.getStats().getOtherDroppedCount()).isZero();
     }
 
     @Test

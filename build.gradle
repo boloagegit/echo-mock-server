@@ -140,6 +140,7 @@ dependencies {
     testImplementation 'io.micrometer:micrometer-tracing-bridge-brave'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation 'org.hdrhistogram:HdrHistogram:2.2.2'
     testImplementation 'com.unboundid:unboundid-ldapsdk:7.0.5'
     testImplementation 'net.jqwik:jqwik:1.10.1'
     // Architecture boundary rules (see docs/design/engine-extensibility.md)
@@ -164,6 +165,19 @@ tasks.named('test') {
     // 用一半的核心：Spring context 啟動很吃 CPU，全部核心反而互相拖慢。-PtestForks=1 可改回單一 JVM。
     maxParallelForks = providers.gradleProperty('testForks').map { it as int }
             .getOrElse(Math.max(1, Runtime.runtime.availableProcessors().intdiv(2)))
+}
+
+// Opt-in SQLite main-DB writer comparison; never part of unit-test gates.
+tasks.register('requestLogWriteCost', JavaExec) {
+    dependsOn testClasses
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.echo.service.RequestLogWriteCostProbe'
+    args providers.gradleProperty('requestLogCostOutput').getOrElse('artifacts/request-log-cost'),
+            providers.gradleProperty('requestLogCostMode').getOrElse('jpa'),
+            providers.gradleProperty('requestLogCostWarmupSeconds').getOrElse('8'),
+            providers.gradleProperty('requestLogCostMeasureSeconds').getOrElse('15')
+    jvmArgs '-Xms512m', '-Xmx512m', '-XX:+UseG1GC'
 }
 
 // Opt-in, short real-JMS/file-output A/B measurement; never part of unit-test gates.

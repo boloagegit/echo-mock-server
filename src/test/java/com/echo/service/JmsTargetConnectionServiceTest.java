@@ -225,6 +225,22 @@ class JmsTargetConnectionServiceTest {
         assertThat(result.elapsedMs()).isNotNegative();
         verify(connection).start();
         verify(connection).close();
+        verify(provider, never()).createOutbound(any());
+    }
+
+    @Test
+    void connectionTestUsesBoundedWaitingOnlyWhenExplicitlyEnabled() throws Exception {
+        properties.getForward().setBoundedWaitsEnabled(true);
+        when(repository.findById(2L)).thenReturn(Optional.of(entity(2L, true, true)));
+        when(provider.supports("artemis")).thenReturn(true);
+        when(provider.createOutbound(any())).thenReturn(factory);
+        when(factory.createConnection()).thenReturn(connection);
+
+        assertThat(service.test("2").success()).isTrue();
+
+        verify(provider, never()).create(any());
+        verify(connection).start();
+        verify(connection).close();
     }
 
     private static JmsTargetConnectionRequest request(Long version, String name,

@@ -3,10 +3,12 @@ package com.echo.config;
 import com.echo.jms.target.ArtemisFactoryProvider;
 import com.echo.jms.target.TibcoFactoryProvider;
 import jakarta.jms.ConnectionFactory;
+import org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.jms.connection.CachingConnectionFactory;
 
 import java.util.List;
+import java.util.Objects;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -32,6 +34,21 @@ class ExternalJmsSourceConfigTest {
         JmsProperties properties = properties(" Artemis ", "tcp://esb:61616");
 
         assertThat(config.jmsConnectionFactory(properties, List.of(new ArtemisFactoryProvider()))).isNotNull();
+    }
+
+    @Test
+    void outboundOptInNeverOverridesSourceRetryOrCallSettings() throws Exception {
+        JmsProperties properties = properties("artemis",
+                "tcp://esb:61616?callTimeout=9000&reconnectAttempts=20");
+        properties.getForward().setBoundedWaitsEnabled(true);
+        var caching = (CachingConnectionFactory) config.jmsConnectionFactory(properties,
+                List.of(new ArtemisFactoryProvider()));
+        try (var source = (ActiveMQConnectionFactory) Objects.requireNonNull(caching.getTargetConnectionFactory())) {
+            assertThat(source.getCallTimeout()).isEqualTo(9000);
+            assertThat(source.getReconnectAttempts()).isEqualTo(20);
+        } finally {
+            caching.destroy();
+        }
     }
 
     @Test

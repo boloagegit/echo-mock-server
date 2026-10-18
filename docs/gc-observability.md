@@ -68,7 +68,9 @@ do not configure an unlimited external archive unintentionally.
 The existing resource snapshot shows non-heap and direct/mapped buffer memory,
 threads, HTTP/JMS active operations, pending work and request-log buffering. It now
 also exposes `nativeActive`, `nativeBufferedBytes`, `nativeQueued`, `nativeCapacity`
-and `nativeBufferLimitBytes` for the default HTTP transport. These counters expose
+and `nativeBufferLimitBytes` for the default HTTP transport. `nativeWorkerActive`
+and `nativeWorkerCapacity` show actual busy workers and their configured limit;
+draining admission counters alone does not prove that blocking work has exited. These counters expose
 reservations, not a precise object-size calculation. Native memory, thread stacks,
 SQLite and container/process limits can cause failure even when heap is stable.
 No finite history can prove the absence of a leak; rising comparable baselines
@@ -109,6 +111,17 @@ must be new. Defaults: 384 MiB heap, 60-second warm-up, 10 cycles of 60-second l
 and 15-second natural idle, 100 total HTTP/JMS requests/second, 16 KiB payloads.
 The disposable Echo uses 60-second GC-history retention to exercise expiry; the
 sampler archives events every two seconds and fails on lost unread events or no expiry.
+
+Add `--http-stalls` to hold eight incomplete HTTP uploads open during each warm-up and measured
+load cycle (two chunked, six declared-length), alongside the normal HTTP/JMS traffic.
+This mode uses an eight-second request deadline, so cycles must last at least ten
+seconds, including warm-up cycles. This starts the same bounded HTTP workers before
+the baseline. Before closing the test clients, it requires the server to close them and
+all native HTTP workers, buffers and queues to drain. The summary records
+`httpStallConnectionsRecovered`; warm-up recoveries are counted separately in
+`warmupHttpStallConnectionsRecovered`. This distinguishes real recovery from merely
+returning admission leases while a worker is still blocked. For example, append
+`--http-stalls --warmup-cycles 6 --warmup-seconds 15` to either platform's command.
 When testing reconnect cycles, use `--warmup-cycles 6 --warmup-seconds 15` (or
 longer for the deployment's pool sizes) to exercise lazy broker network workers
 before the baseline. Each warm-up result is preserved; do not raise growth limits
@@ -116,9 +129,25 @@ to hide an unexplained increase. Inspect the saved thread dumps and NMT categori
 Increasing `--cycles 60 --seconds 300` extends coverage to roughly five hours;
 run longer in a Linux test environment matching deployment and realistic traffic.
 
+Add `--backup-maintenance` to run SQLite backups every 15 seconds and independent
+housekeeping every second alongside traffic. The disposable instance retains at most
+three completed backups / 256 MiB. At idle the observer checks the retained inventory
+and both health probes, then requires successful backup and pruning activity with no
+backup failures. An unexpected scheduled-task error also fails the observation,
+including a busy rejection before the backup's own failure logger. Use at least 90 seconds of measured load. Backup logs and inventory
+checkpoints are included in the output; the production defaults are unchanged by this
+test option.
+
+Each load result also includes `latencyMs` for fixed/template/delayed/forwarded HTTP
+and mocked/forwarded JMS. The caller times the actual request/reply, checks body and
+correlation, and records successful samples in bounded HdrHistogram instances with
+three significant digits. Counts must equal completed requests. Warm-up timings are
+separate. These fixed-rate observations describe response times under that workload,
+not maximum capacity; NMT, idle GC and class inspection remain enabled as selected.
+
 The test checks exact HTTP responses, JMS reply content/correlation, cleared
 request/buffer/writer counters, and downstream temporary-queue cleanup. It archives
-natural GC notifications throughout. **Explicit GC occurs only after natural idle
+natural GC notifications throughout. In the default cyclic mode, **explicit GC occurs only after natural idle
 and verified drain**, to compare retained heap at equivalent checkpoints; it is
 never used to keep the service alive during load. Native Memory Tracking is enabled
 for this disposable JVM, so this is not a production throughput benchmark.
@@ -131,6 +160,18 @@ are 24 MiB retained heap, 8 MiB direct, 16 MiB non-heap, 128 MiB NMT committed/R
 These are regression tripwires, not universal safe limits. Stable cache/pool
 retention is expected; small leaks below these allowances require longer runs.
 RSS and file descriptors are collected only on Linux; NMT works on both platforms.
+
+For ten uninterrupted minutes without requesting GC, add
+`--continuous --cycles 1 --seconds 600 --rate 200 --warmup-cycles 6 --warmup-seconds 15`.
+It can also use `--http-stalls --backup-maintenance`. Baseline, load and final checkpoints
+never request GC. Seven resource series use minute windows during load, with minute NMT
+samples; at least 240 seconds and complete coverage are required. Natural young-GC heap
+is not fully retained heap. Best-effort log drops are reported rather than treated as
+business-response failures; all work must still drain and every response is verified.
+ERROR/OOM logs fail the run. The generator explicitly uses HTTP/1.1 to avoid upgrade
+requests taking the Servlet path. The test HTTP backend enables `TCP_NODELAY` by default;
+`--downstream-nagle` reproduces its earlier setting without changing Echo forwarding.
+See the [follow-up report](stability-followup-2026-10-18.md).
 
 Add `--class-histograms` to collect class instance counts and shallow byte sizes at
 idle checkpoints, plus the 30 largest positive class-size changes from baseline in
@@ -145,7 +186,8 @@ Observation output is a finite test artifact: use CI artifact retention or remov
 old run directories as part of the test environment's housekeeping.
 
 A failed workload, missing GC coverage, restarted process, unread overwritten
-events, undrained resources or fewer than four checkpoints cannot produce a pass.
+events, undrained resources or fewer than four checkpoints cannot produce a pass
+(continuous mode requires at least four populated windows instead of idle checkpoints).
 `no-growth-detected-in-window` means only that the finite test stayed within its
 declared allowances. The regression tests include a deliberately increasing data
 series to check that the analyzer actually rejects retained-memory growth.

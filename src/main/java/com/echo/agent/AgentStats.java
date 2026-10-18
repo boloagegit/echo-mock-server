@@ -13,6 +13,13 @@ public class AgentStats {
     private final int queueSize;
     private final long processedCount;
     private final long droppedCount;
+    private final long retentionSkippedCount;
+    private final long bufferOverflowDroppedCount;
+    /** Known failed or unconfirmed hand-off writes; not proof that a late commit cannot exist. */
+    private final long writeNotConfirmedCount;
+    private final long otherDroppedCount;
+    /** Retry attempts, not dropped-record counts. */
+    private final long storageRetryCount;
     /** Serialized durable backlog bytes, when the agent has one. */
     private final long queueBytes;
     /** Configured durable backlog byte limit, when the agent has one. */

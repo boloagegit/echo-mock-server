@@ -82,6 +82,9 @@ public class JmsProperties {
     @Getter
     public static class Forward {
         private int sessionCacheSize = 8;
+        /** Opt-in failure policy; false preserves provider connection/retry/failover settings. */
+        @Setter
+        private boolean boundedWaitsEnabled = false;
 
         public void setSessionCacheSize(int value) {
             if (value < 0 || value > 256) throw new IllegalArgumentException("JMS session-cache-size must be 0..256");

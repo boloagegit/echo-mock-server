@@ -12,7 +12,7 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.observation.ObservationRegistry;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
-import io.undertow.io.UndertowInputStream;
+import io.undertow.io.Receiver;
 import io.undertow.util.Headers;
 import io.undertow.util.HttpString;
 import io.undertow.util.AttachmentKey;
@@ -23,8 +23,6 @@ import org.xnio.IoUtils;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
-import java.io.IOException;
-import java.io.ByteArrayOutputStream;
 import java.util.HashMap;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -35,7 +33,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.TimeoutException;
 import org.springframework.util.function.SingletonSupplier;
 
 /**
@@ -53,6 +50,7 @@ final class NativeMockHttpHandler implements HttpHandler {
     private final NativeHttpResources resources;
     private final long timeoutMs;
     private static final AttachmentKey<NativeHttpResources.Lease> LEASE = AttachmentKey.create(NativeHttpResources.Lease.class);
+    private static final AttachmentKey<NativeHttpDeadline> DEADLINE = AttachmentKey.create(NativeHttpDeadline.class);
     private static final AttachmentKey<CloseWatch> CLOSE_WATCH = AttachmentKey.create(CloseWatch.class);
 
     private static final class CloseWatch {
@@ -121,6 +119,7 @@ final class NativeMockHttpHandler implements HttpHandler {
         exchange.putAttachment(LEASE, lease);
         lease.onClose(() -> observation.stop(!exchange.isComplete()));
         watchConnection(exchange, lease);
+        exchange.putAttachment(DEADLINE, new NativeHttpDeadline(exchange, lease, timeoutMs));
         Charset bodyCharset = charset;
         long contentLength = exchange.getRequestContentLength();
         if (contentLength > resources.maxBodyBytes) {
@@ -135,38 +134,25 @@ final class NativeMockHttpHandler implements HttpHandler {
             fail(exchange, 503, "Native HTTP buffer capacity exhausted");
             return;
         }
-        exchange.dispatch(command -> submit(exchange, command), () -> {
-            if (lease.closed()) return;
-            ScheduledFuture<?> bodyDeadline = null;
-            try {
-                // Bodyless requests must not allocate InputStream.readAllBytes' 8 KiB scratch buffer.
-                if (exchange.isRequestComplete()) {
-                    execute(exchange, null);
-                    return;
-                }
-                bodyDeadline = scheduler.schedule(() -> {
-                    // An incomplete upload cannot safely reuse this HTTP/1 connection.
-                    NativeHttpObservation.error(exchange, new TimeoutException("HTTP request body timeout"));
-                    IoUtils.safeClose(exchange.getConnection());
-                }, timeoutMs, TimeUnit.MILLISECONDS);
-                ScheduledFuture<?> deadline = bodyDeadline;
-                lease.onClose(() -> deadline.cancel(false));
-                byte[] bytes = readBody(exchange);
-                bodyDeadline.cancel(false);
-                if (bytes.length > resources.maxBodyBytes) {
-                    fail(exchange, 413, "Request body exceeds native HTTP limit");
-                    return;
-                }
-                if (!lease.closed()) execute(exchange, bytes.length == 0 ? null : new String(bytes, bodyCharset));
-            } catch (io.undertow.server.RequestTooBigException tooLarge) {
-                fail(exchange, 413, "Request body exceeds native HTTP limit");
-            } catch (IOException error) {
-                NativeHttpObservation.error(exchange, error);
-                fail(exchange, 400, "Invalid request body");
-            } finally {
-                if (bodyDeadline != null) bodyDeadline.cancel(false);
-            }
-        });
+        if (exchange.isRequestComplete()) {
+            dispatch(exchange, () -> execute(exchange, null));
+            return;
+        }
+        // Undertow's non-blocking receiver waits on channel readiness, not an application
+        // worker. Both declared and chunked bodies use the same finite allocation limit.
+        Receiver receiver = exchange.getRequestReceiver();
+        receiver.setMaxBufferSize(resources.maxBodyBytes);
+        receiver.receiveFullBytes((ex, bytes) -> dispatch(ex,
+                () -> execute(ex, bytes.length == 0 ? null : new String(bytes, bodyCharset))),
+                (ex, error) -> {
+                    NativeHttpObservation.error(ex, error);
+                    if (error instanceof Receiver.RequestToLargeException
+                            || error instanceof io.undertow.server.RequestTooBigException) {
+                        fail(ex, 413, "Request body exceeds native HTTP limit");
+                    } else {
+                        fail(ex, 400, "Invalid request body");
+                    }
+                });
     }
 
     private static boolean eligible(HttpServerExchange exchange) {
@@ -204,30 +190,22 @@ final class NativeMockHttpHandler implements HttpHandler {
         return true;
     }
 
-    private byte[] readBody(HttpServerExchange exchange) throws IOException {
-        if (exchange.getRequestContentLength() >= 0) {
-            try (var input = new UndertowInputStream(exchange)) {
-                return input.readNBytes(resources.maxBodyBytes + 1);
-            }
+    private void dispatch(HttpServerExchange exchange, Runnable work) {
+        if (available(exchange)) {
+            exchange.dispatch(command -> submit(exchange, command), work);
         }
-        // An unknown-length upload must stop at the bound without closing/draining a blocking
-        // InputStream. UndertowInputStream.close() drains the remainder, which can wait forever
-        // on a sender that deliberately never finishes. The rejection closes the connection.
-        var channel = exchange.getRequestChannel();
-        var body = new ByteArrayOutputStream(Math.min(8192, resources.maxBodyBytes + 1));
-        var buffer = ByteBuffer.allocate(Math.min(8192, resources.maxBodyBytes + 1));
-        while (body.size() <= resources.maxBodyBytes) {
-            buffer.clear();
-            buffer.limit(Math.min(buffer.capacity(), resources.maxBodyBytes + 1 - body.size()));
-            int read = org.xnio.channels.Channels.readBlocking(channel, buffer, timeoutMs, TimeUnit.MILLISECONDS);
-            if (read < 0) break;
-            if (read == 0) throw new IOException("Request body read timeout");
-            body.write(buffer.array(), 0, read);
-        }
-        return body.toByteArray();
+    }
+
+    private static boolean available(HttpServerExchange exchange) {
+        var lease = exchange.getAttachment(LEASE);
+        var deadline = exchange.getAttachment(DEADLINE);
+        return (lease == null || !lease.closed()) && (deadline == null || !deadline.expired());
     }
 
     private void execute(HttpServerExchange exchange, String body) {
+        if (!available(exchange)) {
+            return;
+        }
         Trace trace = services.obtain().diagnostics().begin("HTTP");
         var headers = new HashMap<String, String>();
         exchange.getRequestHeaders().forEach(h -> headers.put(h.getHeaderName().toString(), h.getFirst()));
@@ -261,31 +239,24 @@ final class NativeMockHttpHandler implements HttpHandler {
     private void await(HttpServerExchange exchange, CompletableFuture<PipelineResult> future, Trace trace) {
         AtomicBoolean terminal = new AtomicBoolean();
         AtomicReference<ScheduledFuture<?>> delay = new AtomicReference<>();
-        AtomicReference<ScheduledFuture<?>> timeout = new AtomicReference<>();
         Runnable cleanup = () -> {
             terminal.set(true);
-            cancel(delay); cancel(timeout);
+            cancel(delay);
             if (!future.isDone()) future.cancel(true);
         };
         exchange.addExchangeCompleteListener((ex, nextListener) -> {
             try { cleanup.run(); } finally { nextListener.proceed(); }
         });
         exchange.getAttachment(LEASE).onClose(cleanup);
-        timeout.set(scheduler.schedule(() -> {
-            if (terminal.compareAndSet(false, true)) {
-                cleanup.run();
-                NativeHttpObservation.error(exchange, new TimeoutException("HTTP request timeout"));
-                trace.end("HTTP_TIMEOUT");
-                exchange.getIoThread().execute(() -> write(exchange, MockResponse.builder()
-                        .status(504).body("Request timeout").build()));
-            }
-        }, timeoutMs, TimeUnit.MILLISECONDS));
-        if (terminal.get()) cancel(timeout);
         future.whenComplete((result, error) -> {
-            if (terminal.get()) return;
+            if (terminal.get() || !available(exchange)) {
+                return;
+            }
             // Encoding a multi-megabyte body must not hold an inbound or outbound I/O thread.
             submit(exchange, () -> {
-                if (terminal.get()) return;
+                if (terminal.get() || !available(exchange)) {
+                    return;
+                }
                 EncodedResponse encoded = error == null ? encodeResult(exchange, result) : null;
                 if (error == null && encoded == null) { cleanup.run(); return; }
                 Runnable finish = () -> {
@@ -345,8 +316,9 @@ final class NativeMockHttpHandler implements HttpHandler {
     }
 
     private static void write(HttpServerExchange exchange, MockResponse response, EncodedResponse encoded) {
-        var lease = exchange.getAttachment(LEASE);
-        if (lease != null && lease.closed()) return;
+        if (!available(exchange)) {
+            return;
+        }
         exchange.setStatusCode(response.getStatus());
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, encoded.contentType());
         // Match the current MVC adapter's default Content-Type followed by additional rule headers.
@@ -378,17 +350,46 @@ final class NativeMockHttpHandler implements HttpHandler {
         return encoded;
     }
 
+    private final class Work implements Runnable {
+        private final HttpServerExchange exchange;
+        private Runnable command;
+        private volatile boolean started;
+
+        private Work(HttpServerExchange exchange, Runnable command) {
+            this.exchange = exchange;
+            this.command = command;
+        }
+
+        @Override
+        public void run() {
+            started = true;
+            Runnable task = command;
+            command = null; // Cleanup must not retain an uploaded byte array until a slow response ends.
+            if (!available(exchange)) {
+                return;
+            }
+            try (var scope = NativeHttpObservation.scope(exchange)) { task.run(); }
+            catch (RuntimeException failure) {
+                NativeHttpObservation.error(exchange, failure);
+                fail(exchange, 500, "Pipeline error");
+            }
+        }
+
+        private void removeIfQueued() {
+            if (!started && resources.workers.remove(this)) {
+                command = null;
+            }
+        }
+    }
+
     private void submit(HttpServerExchange exchange, Runnable command) {
+        var work = new Work(exchange, command);
         try {
-            resources.workers.execute(() -> {
-                var lease = exchange.getAttachment(LEASE);
-                if (lease != null && lease.closed()) return;
-                try (var scope = NativeHttpObservation.scope(exchange)) { command.run(); }
-                catch (RuntimeException failure) {
-                    NativeHttpObservation.error(exchange, failure);
-                    fail(exchange, 500, "Pipeline error");
-                }
-            });
+            resources.workers.execute(work);
+            var lease = exchange.getAttachment(LEASE);
+            if (lease != null) {
+                lease.onClose(work::removeIfQueued);
+            }
         } catch (RejectedExecutionException rejected) {
             fail(exchange, 503, "Native HTTP worker capacity exhausted");
         }

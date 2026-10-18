@@ -60,6 +60,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // 完全開放
                 .requestMatchers("/webjars/**", "/login.html", "/*.css", "/*.js", "/composables/*.js", "/favicon.svg", "/favicon.ico", "/i18n/**", "/components/**", "/api/auth/**").permitAll()
+                .requestMatchers(HttpMethod.GET,
+                        "/actuator/health/liveness", "/actuator/health/readiness").permitAll()
                 // 忘記密碼、自助註冊 — 公開（必須在 builtin-users/** 之前）
                 .requestMatchers("/api/admin/builtin-users/forgot-password", "/api/admin/builtin-users/register").permitAll()
                 // 內建帳號管理 — 僅 ADMIN
