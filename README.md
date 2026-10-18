@@ -136,6 +136,8 @@ Slow downstream calls and deliberate delays gain much less than simple responses
 
 The [HTTP acceleration guide](docs/native-http.md) covers capacity limits, compatibility and switching back with `ECHO_HTTP_TRANSPORT=servlet`. [JMS resource reuse](docs/jms-performance-and-correctness.md) and [startup measurements](docs/performance-hardening-2026-10-16.md) are documented separately (also in Traditional Chinese).
 
+The [Artemis large-message validation](docs/artemis-large-message-validation-2026-10-18.md) compares a provider upgrade with a 512 MiB heap and request recording enabled, including old/new client interoperability, latency and mixed-load observation. Its results apply to Artemis paths; TIBCO EMS is not benchmarked.
+
 ## Documentation
 
 | Guide | Covers |

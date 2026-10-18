@@ -136,6 +136,8 @@ HTTP/1.1 加速已預設開啟。2026-10-16 比較使用 Java 21、共用四核�
 
 [HTTP 加速說明](docs/native-http.md)包含容量上限、相容性與 `ECHO_HTTP_TRANSPORT=servlet` 切回方式；另有 [JMS 資源重用](docs/jms-performance-and-correctness.md)與[啟動量測](docs/performance-hardening-2026-10-16.md)。
 
+[Artemis 大訊息驗證](docs/zh-TW/artemis-large-message-validation-2026-10-18.md)以 512 MiB heap、開啟請求紀錄比較 provider 升級，包含新舊 client 互通、延遲與混合流量觀察。結果適用於 Artemis 路徑，未實測 TIBCO EMS。
+
 ## 文件
 
 | 文件 | 內容 |

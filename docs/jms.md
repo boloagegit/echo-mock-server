@@ -20,7 +20,7 @@ System Settings separates **Overview**, **Resource Monitoring**, **Forward Conne
 [Transaction diagnostics](transaction-diagnostics.md) adds bounded anomaly-only file summaries
 and Request Log correlation IDs. See the linked guide for configuration, quotas and evidence limits.
 
-For Artemis Core clients that send XML, configure the sender URL as `tcp://echo-host:61616?minLargeMessageSize=524288`. Text payloads up to roughly 256 KB then use the regular-message path instead of creating one large-message file per request, while larger messages still spill to disk to protect the heap. This is a **sender-side** connection setting, not an Echo `application.yml` property.
+Artemis large-message reads use the official bulk-copy fix; see the [upgrade validation](artemis-large-message-validation-2026-10-18.md). Keep the client's default 100 KiB encoded-size threshold as the starting point. Raising the sender URL's `minLargeMessageSize`, for example to `524288`, can reduce large-message file I/O but holds more message bodies in memory. Measure payload size and concurrency before making that tradeoff, especially with a small heap. The upgrade does not require changing this **sender-side** setting; it is not an Echo `application.yml` property.
 
 ## Forwarding resource reuse
 

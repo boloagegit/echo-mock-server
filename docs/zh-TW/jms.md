@@ -20,7 +20,7 @@ Echo 可作為 JMS Proxy，在開發環境攔截 JMS 訊息：
 [交易診斷](../transaction-diagnostics.md)提供有容量限制的異常摘要與請求紀錄關聯 ID。
 設定方式、留存限制與證據判讀集中於該文件，正常請求不新增診斷檔案日誌。
 
-使用 Artemis Core client 傳送 XML 時，建議在發送端連線 URL 設定 `tcp://echo-host:61616?minLargeMessageSize=524288`。這會讓約 256KB 以內的文字訊息走一般訊息路徑，避免中型 XML 每筆建立 large-message 檔案；更大的訊息仍會落盤保護 heap。此參數必須設在**發送端**，不是 Echo 的 `application.yml`。
+Artemis 大訊息讀取已採用官方批次複製修正，見[升級驗證](artemis-large-message-validation-2026-10-18.md)。先保留 client 預設的編碼後 100 KiB 門檻。提高發送端 URL 的 `minLargeMessageSize`（例如 `524288`）可減少大訊息檔案 I/O，但更多訊息本文會留在記憶體，尤其小 heap 必須先依本文大小與併發量實測。套用這次升級不需要更改門檻；這是**發送端**設定，不是 Echo 的 `application.yml`。
 
 ## 轉送資源重用
 
