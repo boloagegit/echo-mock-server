@@ -20,6 +20,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -98,10 +99,11 @@ public final class JmsTargetForwarder {
         targetConnection = null;
         closeFactory();
         activeTargetKey = null;
+        List<TargetClient> selected;
         synchronized (selectedTargetClients) {
-            selectedTargetClients.values().forEach(TargetClient::close);
-            selectedTargetClients.clear();
+            selected = detachSelectedClients("", null);
         }
+        selected.forEach(TargetClient::close);
     }
 
     /**
@@ -415,8 +417,9 @@ public final class JmsTargetForwarder {
         synchronized (selectedTargetClients) {
             // A late cleanup failure must not retire a replacement for the same profile.
             selectedTargetClients.remove(cacheKey, client.owner);
-            client.owner.retire();
+            client.owner.stopAccepting();
         }
+        client.owner.retire();
     }
 
     private String exchangeSelected(String body, Message originalMessage,
@@ -439,65 +442,104 @@ public final class JmsTargetForwarder {
         while (true) {
             TargetClient current = selectedTargetClients.get(resolved.cacheKey());
             TargetClientUse currentUse = current == null ? null : current.tryUse();
-            if (currentUse != null) return currentUse;
-            synchronized (selectedTargetClients) {
-                current = selectedTargetClients.get(resolved.cacheKey());
-                currentUse = current == null ? null : current.tryUse();
-                if (currentUse != null) return currentUse;
-                retireSupersededClients(resolved.cacheKey());
-                TargetClient created = new TargetClient(createFactory(resolved.target()));
-                selectedTargetClients.put(resolved.cacheKey(), created);
-                log.info("Selected outbound JMS connection: {}", resolved.name());
-                return created.tryUse();
+            if (currentUse != null) {
+                return currentUse;
             }
+            List<TargetClient> retired;
+            TargetClientUse createdUse;
+            synchronized (selectedTargetClients) {
+                // Never take a published client's monitor or call a provider under this lock.
+                // Its connection creation/close may wait for an unavailable broker.
+                if (selectedTargetClients.get(resolved.cacheKey()) != current) {
+                    continue;
+                }
+                retired = detachSupersededClients(resolved.cacheKey());
+                if (current != null) {
+                    current.stopAccepting();
+                    retired.add(current);
+                }
+                TargetClient created = new TargetClient(() -> createFactory(resolved.target()));
+                createdUse = created.tryUse(); // Not published yet; no other thread can hold this monitor.
+                selectedTargetClients.put(resolved.cacheKey(), created);
+            }
+            retired.forEach(TargetClient::retire);
+            log.info("Selected outbound JMS connection: {}", resolved.name());
+            return createdUse;
         }
     }
 
-    private void retireSupersededClients(String cacheKey) {
+    /** Called only with the map lock held; detaches clients without provider calls or client monitors. */
+    private List<TargetClient> detachSupersededClients(String cacheKey) {
         int versionSeparator = cacheKey.lastIndexOf(':');
-        if (versionSeparator <= 0) return;
+        if (versionSeparator <= 0) {
+            return new ArrayList<>();
+        }
         String profilePrefix = cacheKey.substring(0, versionSeparator + 1);
+        return detachSelectedClients(profilePrefix, cacheKey);
+    }
+
+    private List<TargetClient> detachSelectedClients(String prefix, String keepKey) {
+        List<TargetClient> detached = new ArrayList<>();
         selectedTargetClients.entrySet().removeIf(entry -> {
-            boolean superseded = !entry.getKey().equals(cacheKey)
-                    && entry.getKey().startsWith(profilePrefix);
-            if (superseded) entry.getValue().retire();
-            return superseded;
+            boolean remove = entry.getKey().startsWith(prefix) && !entry.getKey().equals(keepKey);
+            if (remove) {
+                entry.getValue().stopAccepting();
+                detached.add(entry.getValue());
+            }
+            return remove;
         });
+        return detached;
     }
 
     /** Stops new work on a changed/deleted profile and closes it after active forwards finish. */
     public void evict(Long connectionId) {
-        if (connectionId == null) return;
-        String prefix = "db:" + connectionId + ":";
-        synchronized (selectedTargetClients) {
-            selectedTargetClients.entrySet().removeIf(entry -> {
-                boolean selected = entry.getKey().startsWith(prefix);
-                if (selected) entry.getValue().retire();
-                return selected;
-            });
+        if (connectionId == null) {
+            return;
         }
+        String prefix = "db:" + connectionId + ":";
+        List<TargetClient> retired;
+        synchronized (selectedTargetClients) {
+            retired = detachSelectedClients(prefix, null);
+        }
+        retired.forEach(TargetClient::retire);
+    }
+
+    @FunctionalInterface
+    private interface FactorySupplier {
+        ConnectionFactory create() throws Exception;
     }
 
     private static final class TargetClient {
-        private final ConnectionFactory factory;
+        private final FactorySupplier factorySupplier;
+        private ConnectionFactory factory;
         private Connection connection;
         private int users;
-        private boolean retired;
+        private volatile boolean retired;
         private boolean closed;
 
-        private TargetClient(ConnectionFactory factory) {
-            this.factory = factory;
+        private TargetClient(FactorySupplier factorySupplier) {
+            this.factorySupplier = factorySupplier;
+        }
+
+        /** Non-blocking admission stop, safe while holding the shared map lock. */
+        private void stopAccepting() {
+            retired = true;
         }
 
         private synchronized TargetClientUse tryUse() {
-            if (retired || closed) return null;
+            if (retired || closed) {
+                return null;
+            }
             users++;
             return new TargetClientUse(this);
         }
 
-        private synchronized Connection connection() throws JMSException {
+        private synchronized Connection connection() throws Exception {
             if (closed) {
                 throw new JMSException("Outbound JMS connection is no longer active");
+            }
+            if (factory == null) {
+                factory = factorySupplier.create();
             }
             if (connection == null) {
                 Connection created = factory.createConnection();
@@ -564,7 +606,7 @@ public final class JmsTargetForwarder {
             this.owner = owner;
         }
 
-        private Connection connection() throws JMSException {
+        private Connection connection() throws Exception {
             return owner.connection();
         }
 
