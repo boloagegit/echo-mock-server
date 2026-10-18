@@ -193,6 +193,18 @@ public final class RuleSnapshotCache<K, V> {
         if (!slot.queued.compareAndSet(false, true)) {
             return;
         }
+        // A reader can hold an expired snapshot while another rebuild finishes. Recheck
+        // after claiming the slot so that stale decision cannot rebuild an already fresh value.
+        Built<V> latest = slot.current;
+        if (latest != null && latest.generation >= changes.get() && now - latest.builtAt < maxAgeNanos) {
+            slot.queued.set(false);
+            // A change may have observed our claimed slot and left scheduling to us. Hand
+            // it off after releasing the slot, just as the completed-build path does below.
+            if (latest.generation < changes.get()) {
+                requestRebuild(key, slot, nanoTime.getAsLong());
+            }
+            return;
+        }
         long sinceFailure = now - slot.lastFailureAt;
         Executor target = slot.lastFailureAt != 0 && sinceFailure < FAILURE_BACKOFF_NANOS
                 ? CompletableFuture.delayedExecutor(FAILURE_BACKOFF_NANOS - sinceFailure, TimeUnit.NANOSECONDS,

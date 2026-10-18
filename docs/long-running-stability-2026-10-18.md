@@ -104,6 +104,21 @@ See [JMS contracts](jms-performance-and-correctness.md) for the provider distinc
    response-cleanup memory and shorter continuous writer ownership. Rule/Scenario
    cleanup still uses its existing operations.
 
+## 5. Redundant rule-snapshot rebuilds
+
+1. **Original problem:** Windows CI exposed a reader keeping an expired snapshot
+   while another reader completed its rebuild. The delayed reader could then claim
+   the released rebuild slot and perform an unnecessary third database build.
+2. **Change:** recheck the latest snapshot after claiming the rebuild slot. Release
+   an unnecessary claim and hand off any generation change arriving during the check.
+   Normal fresh reads keep their existing path.
+3. **Measured effect:** a deterministic two-reader regression test fails before the
+   fix (three builds) and passes afterward (two: initial plus required refresh).
+   This is a race-specific reduction, not a general throughput measurement.
+4. **Costs and limits:** a claimed rebuild performs an extra freshness check; normal
+   reads do not. Stale-while-rebuilding behavior, change generations, update waits and
+   failure backoff remain the existing contract.
+
 ## Load/idle observation
 
 A Linux/JDK 17 run completed ten 60-second measured cycles (60,000 verified HTTP/JMS
