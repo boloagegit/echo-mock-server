@@ -2,6 +2,8 @@
 
 [English](../long-running-stability-2026-10-18.md)
 
+追加驗證：見 [連續 10 分鐘、磁碟保護與閒置資源回收](stability-followup-2026-10-18.md)。
+
 目標是慢客戶端或下游故障時仍能服務，工作結束後資源能回到基準。有限次測試無法證明
 永遠沒有洩漏。以下以 Linux／JDK 17 比較 main `3ede241` 與本次實作；Windows CI 驗證功能相容性。
 

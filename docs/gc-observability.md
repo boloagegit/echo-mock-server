@@ -147,7 +147,7 @@ not maximum capacity; NMT, idle GC and class inspection remain enabled as select
 
 The test checks exact HTTP responses, JMS reply content/correlation, cleared
 request/buffer/writer counters, and downstream temporary-queue cleanup. It archives
-natural GC notifications throughout. **Explicit GC occurs only after natural idle
+natural GC notifications throughout. In the default cyclic mode, **explicit GC occurs only after natural idle
 and verified drain**, to compare retained heap at equivalent checkpoints; it is
 never used to keep the service alive during load. Native Memory Tracking is enabled
 for this disposable JVM, so this is not a production throughput benchmark.
@@ -160,6 +160,18 @@ are 24 MiB retained heap, 8 MiB direct, 16 MiB non-heap, 128 MiB NMT committed/R
 These are regression tripwires, not universal safe limits. Stable cache/pool
 retention is expected; small leaks below these allowances require longer runs.
 RSS and file descriptors are collected only on Linux; NMT works on both platforms.
+
+For ten uninterrupted minutes without requesting GC, add
+`--continuous --cycles 1 --seconds 600 --rate 200 --warmup-cycles 6 --warmup-seconds 15`.
+It can also use `--http-stalls --backup-maintenance`. Baseline, load and final checkpoints
+never request GC. Seven resource series use minute windows during load, with minute NMT
+samples; at least 240 seconds and complete coverage are required. Natural young-GC heap
+is not fully retained heap. Best-effort log drops are reported rather than treated as
+business-response failures; all work must still drain and every response is verified.
+ERROR/OOM logs fail the run. The generator explicitly uses HTTP/1.1 to avoid upgrade
+requests taking the Servlet path. The test HTTP backend enables `TCP_NODELAY` by default;
+`--downstream-nagle` reproduces its earlier setting without changing Echo forwarding.
+See the [follow-up report](stability-followup-2026-10-18.md).
 
 Add `--class-histograms` to collect class instance counts and shallow byte sizes at
 idle checkpoints, plus the 30 largest positive class-size changes from baseline in
@@ -174,7 +186,8 @@ Observation output is a finite test artifact: use CI artifact retention or remov
 old run directories as part of the test environment's housekeeping.
 
 A failed workload, missing GC coverage, restarted process, unread overwritten
-events, undrained resources or fewer than four checkpoints cannot produce a pass.
+events, undrained resources or fewer than four checkpoints cannot produce a pass
+(continuous mode requires at least four populated windows instead of idle checkpoints).
 `no-growth-detected-in-window` means only that the finite test stayed within its
 declared allowances. The regression tests include a deliberately increasing data
 series to check that the analyzer actually rejects retained-memory growth.

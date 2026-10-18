@@ -2,6 +2,8 @@
 
 [繁體中文](zh-TW/long-running-stability-2026-10-18.md)
 
+Follow-up: [continuous ten-minute load, disk reserve and idle resource recovery](stability-followup-2026-10-18.md).
+
 The acceptance goal is sustained service under slow clients and downstream failures,
 with resources returning to their baseline after work ends. A finite observation
 does not prove leak freedom. Linux/JDK 17 measurements below compare main `3ede241`

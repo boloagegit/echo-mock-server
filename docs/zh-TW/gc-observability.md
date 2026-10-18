@@ -115,7 +115,7 @@ HTTP／JMS 合計每秒 100 筆，資料大小 16 KiB。`--cycles 60 --seconds 3
 最大容量；NMT、閒置 GC 與類別檢查仍依測試選項開啟。
 
 每輪核對 HTTP 回應、JMS 內容與 correlation ID，並確認請求、緩衝、寫入工作歸零，
-下游沒有殘留暫時 Queue。全程保存自然 GC 紀錄。**只有在停止負載、自然等待且確認工作
+下游沒有殘留暫時 Queue。全程保存自然 GC 紀錄。預設分輪模式**只有在停止負載、自然等待且確認工作
 清空後，才由測試工具觸發 GC**，用來比較相同條件下仍被保留的 Heap；負載期間不強制回收。
 測試 JVM 會開啟 Native Memory Tracking，不能把這輪數字當成正式吞吐基準。
 
@@ -125,6 +125,16 @@ Heap 24 MiB、direct 8 MiB、non-heap 16 MiB、NMT committed／RSS 128 MiB、4 �
 8 個 Linux 檔案描述符。Heap／原生記憶體允許量可透過參數設定。這些是回歸測試門檻，
 不是通用安全上限；快取與連線池正常保留是預期行為，低於門檻的小量洩漏仍需要更長的測試。
 RSS 與檔案描述符只在 Linux 採集，NMT 則兩個平台都能使用。
+
+如需連續 10 分鐘、不要求 GC 的觀察，在指令加上
+`--continuous --cycles 1 --seconds 600 --rate 200 --warmup-cycles 6 --warmup-seconds 15`，
+可同時保留 `--http-stalls --backup-maintenance`。此模式基準、負載與結束都不要求 GC，
+七項資源改比負載期間的一分鐘視窗，NMT 每分鐘採樣；至少需 240 秒且資料涵蓋完整。
+自然 Young GC 後 Heap 不等於完整存活量。預設非同步記錄的丟棄會明列，仍要求工作排空，
+不把記錄取捨當成業務回應失敗；所有回應仍逐筆核對，ERROR／OOM 使測試失敗。
+負載產生器明確使用 HTTP/1.1，避免自動升級走到 Servlet；測試用 HTTP 下游預設開啟
+`TCP_NODELAY`。`--downstream-nagle` 可保留先前下游設定作診斷，
+不會改 Echo 的轉發設定。詳見 [追加驗證報告](stability-followup-2026-10-18.md)。
 
 若要進一步找出內容種類，可加上 `--class-histograms`，在閒置觀察點收集各 Java 類別的
 物件數與本身大小，輸出 `*-classes.txt`，並在 `classGrowthSuspects` 列出相較基準增加最多的
@@ -136,5 +146,5 @@ RSS 與檔案描述符只在 Linux 採集，NMT 則兩個平台都能使用。
 請用 CI artifact 保存期限或測試環境的清理工作移除舊 run 目錄。
 
 回應錯誤、GC 資料不完整、服務重啟、未讀資料被覆蓋、資源未釋放，或不足四個觀察點，
-都不能算通過。`no-growth-detected-in-window` 只代表這段測試沒有超出宣告的門檻，
+都不能算通過（連續模式以至少四個有數據的視窗取代四個閒置觀察點）。`no-growth-detected-in-window` 只代表這段測試沒有超出宣告的門檻，
 不代表永遠沒有洩漏。分析器另有刻意逐輪增加的模擬資料測試，確認它確實會拒絕持續增長。
