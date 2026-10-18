@@ -333,7 +333,7 @@ public final class JmsTargetForwarder {
                         ". Supported: " + factoryProviders.stream()
                                 .map(p -> p.getClass().getSimpleName())
                                 .toList()))
-                .create(target);
+                .createOutbound(target);
         return sessionCacheSize == 0 ? factory : new CachedJmsConnectionFactory(factory, sessionCacheSize);
     }
 

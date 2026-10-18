@@ -216,7 +216,7 @@ class JmsTargetConnectionServiceTest {
         JmsTargetConnection entity = entity(2L, true, true);
         when(repository.findById(2L)).thenReturn(Optional.of(entity));
         when(provider.supports("artemis")).thenReturn(true);
-        when(provider.create(any())).thenReturn(factory);
+        when(provider.createOutbound(any())).thenReturn(factory);
         when(factory.createConnection()).thenReturn(connection);
 
         var result = service.test("2");

@@ -136,7 +136,7 @@ class JmsTransactionDiagnosticsTest {
             TextMessage response = mock(TextMessage.class);
             JmsTargetFactoryProvider provider = mock(JmsTargetFactoryProvider.class);
             when(provider.supports(anyString())).thenReturn(true);
-            when(provider.create(any())).thenReturn(factory);
+            when(provider.createOutbound(any())).thenReturn(factory);
             when(factory.createConnection()).thenReturn(connection);
             when(connection.createSession(false, Session.AUTO_ACKNOWLEDGE)).thenReturn(session);
             when(session.createQueue("TARGET.REQUEST")).thenReturn(destination);

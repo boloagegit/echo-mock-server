@@ -45,4 +45,34 @@ public class TibcoFactoryProvider implements JmsTargetFactoryProvider {
                     "TIBCO EMS client library (tibjms.jar) not found. Place it in libs/ directory.", e);
         }
     }
+
+    @Override
+    public ConnectionFactory createOutbound(JmsProperties.Target target) throws Exception {
+        ConnectionFactory factory = create(target);
+        try {
+            configureOutboundAttempts(factory, target.getTimeoutSeconds() * 1000);
+            return factory;
+        } catch (Exception failure) {
+            if (factory instanceof AutoCloseable closeable) {
+                try {
+                    closeable.close();
+                } catch (Exception closeFailure) {
+                    failure.addSuppressed(closeFailure);
+                }
+            }
+            throw failure;
+        }
+    }
+
+    // EMS exposes these per-factory controls. Avoid changing Tibjms' process-wide
+    // request timeout, which would also alter the source broker and other factories.
+    static void configureOutboundAttempts(Object factory, int timeoutMs) throws ReflectiveOperationException {
+        Class<?> type = factory.getClass();
+        type.getMethod("setConnAttemptCount", int.class).invoke(factory, 1);
+        type.getMethod("setConnAttemptDelay", int.class).invoke(factory, 0);
+        type.getMethod("setConnAttemptTimeout", int.class).invoke(factory, timeoutMs);
+        type.getMethod("setReconnAttemptCount", int.class).invoke(factory, 1);
+        type.getMethod("setReconnAttemptDelay", int.class).invoke(factory, 0);
+        type.getMethod("setReconnAttemptTimeout", int.class).invoke(factory, timeoutMs);
+    }
 }

@@ -42,7 +42,7 @@ class JmsTargetForwarderSelectionTest {
                 new JmsTargetConnectionService.ResolvedTarget(
                         "db:7:0", "Selected", selected, false));
         when(provider.supports("artemis")).thenReturn(true);
-        when(provider.create(any())).thenReturn(factory);
+        when(provider.createOutbound(any())).thenReturn(factory);
         when(factory.createConnection()).thenReturn(connection);
         when(connection.createSession(false, jakarta.jms.Session.AUTO_ACKNOWLEDGE))
                 .thenThrow(new JMSException("selected unavailable"));
@@ -67,7 +67,7 @@ class JmsTargetForwarderSelectionTest {
         JmsProperties.Target second = target("tcp://second:61616");
 
         when(provider.supports("artemis")).thenReturn(true);
-        when(provider.create(any())).thenReturn(firstFactory, secondFactory);
+        when(provider.createOutbound(any())).thenReturn(firstFactory, secondFactory);
         when(firstFactory.createConnection()).thenReturn(firstConnection);
         when(secondFactory.createConnection()).thenReturn(secondConnection);
         when(firstConnection.createSession(false, jakarta.jms.Session.AUTO_ACKNOWLEDGE))
@@ -85,7 +85,7 @@ class JmsTargetForwarderSelectionTest {
         assertThat(forwarder.forward("request-1", null)).contains("<error>");
         assertThat(forwarder.forward("request-2", null)).contains("<error>");
 
-        verify(provider, times(2)).create(any());
+        verify(provider, times(2)).createOutbound(any());
         verify(firstConnection).close();
         verify(secondConnection).close();
     }
@@ -104,7 +104,7 @@ class JmsTargetForwarderSelectionTest {
                 new JmsTargetConnectionService.ResolvedTarget(
                         "db:7:0", "Selected", selected, false));
         when(provider.supports("artemis")).thenReturn(true);
-        when(provider.create(any())).thenReturn(firstFactory, secondFactory);
+        when(provider.createOutbound(any())).thenReturn(firstFactory, secondFactory);
         when(firstFactory.createConnection()).thenReturn(firstConnection);
         when(secondFactory.createConnection()).thenReturn(secondConnection);
         stubSuccessfulExchange(firstConnection, "first", null, null);
@@ -116,7 +116,7 @@ class JmsTargetForwarderSelectionTest {
         forwarder.evict(7L);
         verify(firstConnection).close();
         assertThat(forwarder.forward("request-2", null, "7", false)).isEqualTo("second");
-        verify(provider, times(2)).create(any());
+        verify(provider, times(2)).createOutbound(any());
 
         forwarder.cleanup();
         verify(secondConnection).close();
@@ -136,7 +136,7 @@ class JmsTargetForwarderSelectionTest {
                 new JmsTargetConnectionService.ResolvedTarget(
                         "db:7:0", "Selected", selected, false));
         when(provider.supports("artemis")).thenReturn(true);
-        when(provider.create(any())).thenReturn(factory);
+        when(provider.createOutbound(any())).thenReturn(factory);
         when(factory.createConnection()).thenReturn(connection);
         stubSuccessfulExchange(connection, "ok", receiving, release);
 

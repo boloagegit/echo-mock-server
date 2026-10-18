@@ -43,7 +43,7 @@ class JmsMonitoringLifecycleTest {
         producer = mock(MessageProducer.class);
         request = mock(Message.class);
         when(provider.supports("artemis")).thenReturn(true);
-        when(provider.create(any())).thenReturn(factory);
+        when(provider.createOutbound(any())).thenReturn(factory);
         when(factory.createConnection()).thenReturn(connection);
         when(connection.createSession(false, Session.AUTO_ACKNOWLEDGE)).thenReturn(session);
         when(session.createTemporaryQueue()).thenReturn(replyQueue);

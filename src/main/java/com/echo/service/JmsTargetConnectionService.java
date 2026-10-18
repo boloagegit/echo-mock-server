@@ -207,7 +207,7 @@ public class JmsTargetConnectionService {
             } else {
                 target = toTarget(findEntity(parseId(id)));
             }
-            ConnectionFactory factory = findProvider(target.getType()).create(target);
+            ConnectionFactory factory = findProvider(target.getType()).createOutbound(target);
             try (Connection connection = factory.createConnection()) {
                 connection.start();
             } finally {
