@@ -2,6 +2,8 @@
 
 [繁體中文](zh-TW/stability-followup-2026-10-18.md) · [Previous work](long-running-stability-2026-10-18.md)
 
+Subsequent experiment: [SQLite request-log JDBC insert comparison](request-log-jdbc-experiment-2026-10-18.md).
+
 Implementation: `97aa408`, with disk-retry boundary correction `517578e`, on `codex/long-running-stability`; no PR or merge.
 This round checks failure boundaries and resource recovery, using a ten-minute sustained test.
 JMS providers, source listener configuration, ACK, transactions and retry policy are unchanged.
