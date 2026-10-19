@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-壓力測試：1600 條規則下的匹配效能
+Stress test: matching performance under 1600 rules
 
-測試策略：
-  - 建立 1580 條不同 path 的噪音規則（模擬大量規則的 DB/快取壓力）
-  - 建立 20 條同 path 候選規則（模擬匹配鏈遍歷壓力）
-  - 其中 1 條是目標規則（全條件 + 模板渲染）
-  - 分別測試 cold cache 和 warm cache 的匹配時間
+Test strategy:
+  - Create 1580 noise rules for different path (simulating DB/cache pressure for a large number of rules)
+  - Create 20 candidate rules with the same path (simulate matching chain traversal pressure)
+  - 1 of them is a target rule (full conditional + template rendering)
+  - Test the matching time of cold cache and warm cache respectively
 
-用法：python3 scripts/stress-test-1600-rules.py [BASE_URL]
+Usage: python3 scripts/stress-test-1600-rules.py [BASE_URL]
 """
 
 import json
@@ -28,7 +28,7 @@ AUTH = base64.b64encode(
 HOST = "stress.api.test"
 
 NOISE_COUNT = 1580
-CANDIDATE_COUNT = 19  # 同 path 候選（不含目標規則）
+CANDIDATE_COUNT = 19  # Same as path candidate (excluding target rules)
 TOTAL = NOISE_COUNT + CANDIDATE_COUNT + 1
 
 
@@ -66,7 +66,7 @@ def mock_request(path, method, headers, body=None):
 
 
 def wait_for_log(endpoint_filter, timeout=15):
-    """等待日誌寫入並回傳最新一筆"""
+    """Wait for the log to be written and return the latest one"""
     for _ in range(timeout):
         time.sleep(1)
         _, logs = api("GET", f"/api/admin/logs?matched=true&protocol=HTTP&endpoint={endpoint_filter}")
@@ -84,11 +84,11 @@ print(f"同 path 候選：{CANDIDATE_COUNT} 條 + 1 目標規則")
 print("=" * 50)
 print()
 
-# --- 批次建立噪音規則 ---
+# --- Batch creation noise rules ---
 print(f"[1/3] 批次建立 {NOISE_COUNT} 條噪音規則...")
 start_time = time.time()
 
-# 用 import-batch API 批次建立
+# Created with import-batch API batch
 BATCH_SIZE = 100
 for batch_start in range(0, NOISE_COUNT, BATCH_SIZE):
     batch_end = min(batch_start + BATCH_SIZE, NOISE_COUNT)
@@ -116,7 +116,7 @@ for batch_start in range(0, NOISE_COUNT, BATCH_SIZE):
 noise_time = time.time() - start_time
 print(f"\n  完成 ({noise_time:.1f}s)")
 
-# --- 建立同 path 候選規則 ---
+# --- Create the same candidate rule as path ---
 print(f"\n[2/3] 建立 {CANDIDATE_COUNT} 條同 path 候選規則...")
 
 for i in range(CANDIDATE_COUNT):
@@ -147,7 +147,7 @@ for i in range(CANDIDATE_COUNT):
 
 print(f"  完成")
 
-# --- 建立目標規則 ---
+# --- Create target rules ---
 print(f"\n[3/3] 建立目標規則（全條件 + 模板渲染）...")
 
 template_body = json.dumps({
@@ -179,22 +179,22 @@ status, target_rule = api("POST", "/api/admin/rules", {
 target_id = target_rule.get("id", "?") if isinstance(target_rule, dict) else "?"
 print(f"  ID: {target_id}")
 
-# --- 確認規則總數 ---
+# --- Confirm the total number of rules ---
 _, status_resp = api("GET", "/api/admin/status")
 rule_count = status_resp.get("ruleCount", "?") if isinstance(status_resp, dict) else "?"
 print(f"\n  目前規則總數：{rule_count}")
 
-# --- 清除日誌 ---
+# --- Clear log ---
 api("DELETE", "/api/admin/logs/all")
 
-# === 測試 1：Cold Cache ===
+# === Test 1: Cold Cache ===
 print()
 print("=" * 50)
 print("  測試 1：Cold Cache（清除快取後首次請求）")
 print("=" * 50)
 
-# 清除快取 — 透過修改任一規則觸發 @CacheEvict
-# 用 disable/enable 目標規則來清快取
+# Clear cache - triggered by modifying any rule @CacheEvict
+# Clear cache using disable/enable target rule
 api("PUT", f"/api/admin/rules/{target_id}/disable")
 api("PUT", f"/api/admin/rules/{target_id}/enable")
 time.sleep(0.5)
@@ -250,7 +250,7 @@ else:
     cold_match = "?"
     cold_response = "?"
 
-# === 測試 2：Warm Cache ===
+# === Test 2: Warm Cache ===
 api("DELETE", "/api/admin/logs/all")
 time.sleep(0.5)
 
@@ -279,7 +279,7 @@ else:
     warm_match = "?"
     warm_response = "?"
 
-# === 測試 3：連續 10 次取平均 ===
+# === Test 3: Average 10 consecutive times ===
 api("DELETE", "/api/admin/logs/all")
 time.sleep(0.5)
 
@@ -298,7 +298,7 @@ for i in range(10):
     curl_times.append(e * 1000)
     time.sleep(0.05)
 
-# 等日誌全部寫入
+# Wait for all logs to be written
 time.sleep(12)
 
 _, logs = api("GET", "/api/admin/logs?matched=true&protocol=HTTP")
@@ -336,7 +336,7 @@ if curl_times:
     print(f"    最小:  {min(curl_times):.1f}")
     print(f"    最大:  {max(curl_times):.1f}")
 
-# === 總結 ===
+# === Summary ===
 print()
 print("=" * 50)
 print("  總結")
@@ -349,7 +349,7 @@ if match_times:
     print(f"  10 次平均匹配:     {sum(match_times)/len(match_times):.1f} ms")
 print("=" * 50)
 
-# --- 清理 ---
+# --- Cleanup ---
 print()
 print("清理測試規則...")
 api("DELETE", "/api/admin/rules/all")

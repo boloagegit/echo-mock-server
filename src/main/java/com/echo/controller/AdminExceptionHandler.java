@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.HashMap;
 import java.util.Map;
 
-/** 管理後台 API 的錯誤回應：輸入不正確時回 400 與錯誤訊息。只套用在下列 controller，不影響 mock 請求。 */
+/** Error response from the management background API: 400 and error message will be returned when the input is incorrect. It only applies to the following controller and does not affect the mock request. */
 @RestControllerAdvice(assignableTypes = {
         SystemController.class,
         RuleController.class,

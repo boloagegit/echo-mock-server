@@ -12,9 +12,9 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * JMS 訊息處理的全域記憶體預算。
+ * Global memory budget for JMS message processing.
  * <p>
- * 正常流量只需一次加減計數；超載時 listener 等待，讓尚未派送的訊息留在 Artemis queue。
+ * Normal traffic only increments and decrements a counter; during overload, listeners wait and leave undelivered messages in the Artemis queue.
  */
 @Component
 public final class JmsMessageMemoryBudget implements AutoCloseable {
@@ -93,7 +93,7 @@ public final class JmsMessageMemoryBudget implements AutoCloseable {
                             + " bytes, exceeding the processing budget of " + maximumBytes + " bytes");
         }
 
-        // 已有訊息在等時不允許新訊息一直插隊，避免大訊息飢餓。
+        // Do not let new messages bypass existing waiters, preventing starvation of large messages.
         if (running.get() && waitingThreads.get() == 0 && tryReserve(estimatedBytes)) {
             return new Reservation(this, estimatedBytes);
         }

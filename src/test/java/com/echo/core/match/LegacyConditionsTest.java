@@ -14,7 +14,7 @@ class LegacyConditionsTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    /** 與前端 match-tree.js 共用的案例（src/test/js/match-tree.test.cjs 讀同一個檔案）。 */
+    /** Case shared with front-end match-tree.js (src/test/js/match-tree.test.cjs reads the same file). */
     @Test
     void splitsConditionsLikeTheSharedFixture() throws Exception {
         JsonNode fixture;

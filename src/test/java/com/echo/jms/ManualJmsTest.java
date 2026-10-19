@@ -25,7 +25,7 @@ public class ManualJmsTest {
                 MessageProducer producer = session.createProducer(requestQueue);
                 MessageConsumer consumer = session.createConsumer(replyQueue);
                 
-                // 無匹配規則的請求
+                // Request without matching rules
                 String xml = "<request><serviceName>UnknownService</serviceName></request>";
                 System.out.println("--- 無匹配規則測試 ---");
                 System.out.println("Sent: " + xml);

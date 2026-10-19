@@ -70,7 +70,7 @@ class RequestLogSpoolTest {
         List<RequestLogSpool.SpoolEntry> all = spool.readAfter(0, 100);
         long third = all.get(2).sequence();
 
-        // 保留最新 5 筆：可略過到第 3 筆
+        // Retaining the newest 5 records allows skipping through the third record.
         assertThat(spool.sequenceBeforeNewest(5)).isEqualTo(third);
         assertThat(spool.sequenceBeforeNewest(8)).isZero();
         assertThat(spool.sequenceBeforeNewest(100)).isZero();
@@ -472,7 +472,7 @@ class RequestLogSpoolTest {
         spool.start();
         spool.stop();
 
-        // 不是單筆的問題：回報沒處理任何一筆，由呼叫端稍後重試
+        // This is not a record-specific rejection: report that no records were processed so the caller can retry later.
         assertThat(spool.appendAll(List.of(task("rule-1", "/a"))))
                 .isEqualTo(new RequestLogSpool.AppendResult(0, 0));
     }
@@ -934,7 +934,7 @@ class RequestLogSpoolTest {
                     throw new OutOfMemoryError("simulated");
                 }
             };
-            // 呼叫端收到失敗後，寫入執行緒先停一下：狀態若還沒清掉，下一筆一定會被擋（以前偶爾發生）
+            // Pause the writer after notifying the caller of failure; if its state has not been cleared, the next record will be blocked, reproducing the former intermittent failure.
             spool.afterAbandonNotifiedForTest = () -> {
                 try {
                     Thread.sleep(200);

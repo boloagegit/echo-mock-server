@@ -43,9 +43,9 @@ public class RuleQueryService {
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("updatedAt", "createdAt", "priority");
 
     private final EntityManager entityManager;
-    /** 已啟用的協定；每個協定的規則 entity 與搜尋欄位由其 {@link ProtocolDescriptor} 提供。 */
+    /** Enabled protocols; each protocol's rules entity and search fields are provided by its {@link ProtocolDescriptor}. */
     private final ProtocolHandlerRegistry protocols;
-    /** 「輪不到」篩選用；只有查詢資料的測試設定沒有這個 bean。 */
+    /** Used for unreachable-rule filtering; query-only test configurations do not provide this bean. */
     private final Optional<RuleOrderService> ruleOrder;
 
     @Value("${echo.cleanup.rule-retention-days:180}")
@@ -162,7 +162,7 @@ public class RuleQueryService {
                 .orElseThrow(() -> new IllegalStateException("No protocol for rule type " + entityType.getName()));
     }
 
-    /** 查詢指定的協定；未指定時為所有已啟用協定。指定的協定未啟用時沒有結果。 */
+    /** Query the specified protocol; if not specified, all enabled protocols. No results if the specified contract is not enabled. */
     private List<ProtocolDescriptor> protocolsFor(Protocol requested) {
         return protocols.descriptors().stream()
                 .filter(protocol -> requested == null || protocol.id() == requested)
@@ -289,7 +289,7 @@ public class RuleQueryService {
         return result.toArray(Predicate[]::new);
     }
 
-    /** 「輪不到」篩選時只看這些規則；沒有篩選時為 null。 */
+    /** Restrict unreachable-rule filtering to these rules; null when the filter is absent. */
     private Set<String> onlyIds(RuleQuery query) {
         if (!Boolean.TRUE.equals(query.unreachable())) {
             return null;
@@ -297,7 +297,7 @@ public class RuleQueryService {
         return ruleOrder.map(order -> order.issues().issues().keySet()).orElse(Set.of());
     }
 
-    /** id 在集合中；分段組成多個 IN，避免部分資料庫單一 IN 清單的數量上限。 */
+    /** id is in the collection; segmented to form multiple IN to avoid the upper limit on the number of single IN lists in some databases. */
     private static Predicate idIn(CriteriaBuilder cb, Root<?> root, Set<String> ids) {
         if (ids.isEmpty()) {
             return cb.disjunction();
@@ -328,7 +328,7 @@ public class RuleQueryService {
     }
 
     private String normalizeSortField(String field) {
-        // Set.of(...).contains(null) 會丟出例外；沒有指定排序（API 直接呼叫）時用預設值
+        // Set.of(...).contains(null) will throw an exception; when no sorting is specified (API direct call), the default value is used
         return field != null && ALLOWED_SORT_FIELDS.contains(field) ? field : "updatedAt";
     }
 
@@ -379,7 +379,7 @@ public class RuleQueryService {
 
     public enum RuleMode { MOCK, FORWARD, FAULT }
 
-    /** @param unreachable 只看一定輪不到的規則（見 {@link RuleOrderService}） */
+    /** @param unreachable Select only definitely unreachable rules; see {@link RuleOrderService}. */
     public record RuleQuery(Protocol protocol, Boolean enabled, Boolean isProtected,
                             String keyword, int page, int size, String sortField,
                             String direction, RuleMode mode, Boolean expiring, Boolean unreachable) {

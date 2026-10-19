@@ -12,18 +12,18 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * 規則基底類別
+ * Rule Base Class
  * <p>
- * 定義所有模擬規則的共用屬性，包含：
+ * Defines properties common to all simulation rules, including:
  * <ul>
- *   <li>匹配條件（bodyCondition）</li>
- *   <li>回應設定（responseId）</li>
- *   <li>執行參數（delayMs, priority, enabled）</li>
- *   <li>中繼資料（tags, description）</li>
+ *   <li>matching condition (bodyCondition)</li>
+ *   <li>response setting (responseId)</li>
+ *   <li>execution parameters (delayMs, priority, enabled)</li>
+ *   <li>relay data (tags, description)</li>
  * </ul>
  * 
- * @see HttpRule HTTP 協定規則實作
- * @see JmsRule JMS 協定規則實作
+ * @see HttpRule implementation for HTTP protocol rules.
+ * @see JmsRule implementation for JMS protocol rules.
  */
 @MappedSuperclass
 @Data
@@ -32,91 +32,91 @@ import java.util.UUID;
 @AllArgsConstructor
 public abstract class BaseRule {
 
-    /** 規則唯一識別碼 (UUID) */
+    /** Rule unique identification code (UUID) */
     @Id
     @Column(length = 36)
     private String id;
 
-    /** 樂觀鎖版本號 */
+    /** Optimistic locking version number */
     @Version
     private Long version;
 
     /**
-     * Body 匹配條件
-     * <p>格式：field=value;field2=value2
-     * <p>支援 JSONPath 或 XPath 表達式
+     * Body matching conditions
+     * <p>format: field=value; field2=value2
+     * <p>supports JSONPath or XPath expressions
      */
     @Column(length = Length.LONG32)
     private String bodyCondition;
 
     /**
-     * 結構化匹配條件（JSON，見 {@code com.echo.core.match.MatchSpecCodec}）
-     * <p>只有無法用舊版條件字串表達的條件（{@code any}、{@code not}、exists、數值比較等）才會寫入；
-     * 有值時以它為準，舊版三個條件欄位為 null。
+     * Structured matching condition (JSON, see {@code com.echo.core.match.MatchSpecCodec})
+     * <p>will only be written if conditions that cannot be expressed by the old version of condition strings ({@code any}, {@code not}, exists, numerical comparison, etc.);
+     * When there is a value, it shall prevail. The three condition fields in the old version are null.
      */
     @Column(length = Length.LONG32)
     private String matchSpec;
 
     /**
-     * 關聯的回應 ID
-     * <p>必須設定，指向 Response 表的回應內容
+     * Associated response ID
+     * <p>must be set, pointing to the response content of the Response table
      */
     @Column(name = "response_id")
     private Long responseId;
 
-    /** 回應延遲時間（毫秒） */
+    /** Response delay time (milliseconds) */
     @Column(nullable = false)
     private Long delayMs;
 
-    /** 最大回應延遲時間（毫秒），設定後啟用隨機延遲範圍 */
+    /** Maximum response delay time (milliseconds), enable random delay range after setting */
     private Long maxDelayMs;
 
-    /** 規則描述說明 */
+    /** Rule description */
     private String description;
 
     /** 
-     * 優先順序
-     * <p>數字越大優先順序越高，相同優先順序時依條件精確度排序
+     * Priority
+     * <p>The larger the number, the higher the priority. If the priority is the same, the order is based on the accuracy of the conditions.
      */
     @Column(nullable = false)
     private Integer priority;
 
-    /** 是否啟用此規則 */
+    /** Whether to enable this rule */
     @Column(nullable = false)
     @lombok.Builder.Default
     private Boolean enabled = true;
 
-    /** 是否保護此規則（不被自動清除） */
+    /** Whether to protect this rule (not to be automatically cleared) */
     @Column(name = "is_protected", nullable = false)
     @lombok.Builder.Default
     private Boolean isProtected = false;
 
     /** 
-     * 標籤（JSON 格式）
-     * <p>用於規則分類與篩選，例如：{"env":"prod","team":"payment"}
+     * Label (JSON format)
+     * <p>is used for rule classification and filtering, for example: {"env":"prod","team":"payment"}
      */
     @Column(length = Length.LONG32)
     private String tags;
 
-    /** 建立時間 */
+    /** Creation time */
     @Column(updatable = false)
     private LocalDateTime createdAt;
 
-    /** 最後更新時間 */
+    /** Last updated */
     private LocalDateTime updatedAt;
 
-    /** 建立規則的帳號；舊資料可能為空。 */
+    /** Account for creating rules; old data may be empty. */
     private String createdBy;
 
-    /** 最後修改規則的帳號；舊資料可能為空。 */
+    /** The account that last modified the rules; the old information may be empty. */
     private String updatedBy;
 
-    /** 展延時間（用於計算自動清除日期） */
+    /** Extension time (used to calculate automatic purge date) */
     private LocalDateTime extendedAt;
 
     /**
-     * 故障注入類型
-     * <p>匹配成功後根據此欄位決定回應行為
+     * Fault injection type
+     * <p>determines the response behavior based on this field after successful matching
      * @see FaultType
      */
     @Enumerated(EnumType.STRING)
@@ -124,13 +124,13 @@ public abstract class BaseRule {
     @lombok.Builder.Default
     private FaultType faultType = FaultType.NONE;
 
-    /** Scenario 名稱（用於狀態機匹配） */
+    /** Scenario name (for state machine matching) */
     private String scenarioName;
 
-    /** 匹配前提：Scenario 必須處於此狀態才能匹配 */
+    /** Matching prerequisite: Scenario must be in this state to match */
     private String requiredScenarioState;
 
-    /** 匹配成功後將 Scenario 狀態轉移為此值 */
+    /** After successful matching, transfer the Scenario status to this value */
     private String newScenarioState;
 
     @PrePersist
@@ -161,6 +161,6 @@ public abstract class BaseRule {
         updatedAt = LocalDateTime.now();
     }
 
-    /** 取得規則協定類型 */
+    /** Get the rule's protocol type. */
     public abstract Protocol getProtocol();
 }

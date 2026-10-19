@@ -18,20 +18,20 @@ public interface RuleAuditLogRepository extends JpaRepository<RuleAuditLog, Long
 
     List<RuleAuditLog> findAllByOrderByTimestampDesc(Pageable pageable);
 
-    /** 摘要投影：排除 beforeJson/afterJson LOB 欄位，減少 heap 負載 */
+    /** Summary projection: exclude beforeJson/afterJson LOB fields, reduce heap load */
     @Query("SELECT a.id, a.ruleId, a.action, a.operator, a.timestamp " +
            "FROM RuleAuditLog a WHERE a.ruleId = :ruleId ORDER BY a.timestamp DESC")
     List<Object[]> findSummaryByRuleId(@Param("ruleId") String ruleId, Pageable pageable);
 
-    /** 摘要投影：排除 beforeJson/afterJson LOB 欄位，減少 heap 負載 */
+    /** Summary projection: exclude beforeJson/afterJson LOB fields, reduce heap load */
     @Query("SELECT a.id, a.ruleId, a.action, a.operator, a.timestamp " +
            "FROM RuleAuditLog a ORDER BY a.timestamp DESC")
     List<Object[]> findAllSummary(Pageable pageable);
 
     /**
-     * 後台列表用的摘要分頁查詢。beforeJson / afterJson 只用來判斷是否存在，
-     * 不會被投影到結果中，避免一般瀏覽修訂記錄時載入大量 LOB。
-     * 關鍵字比對規則／回應 ID、對象名稱與說明；targetType 為 RULE 或 RESPONSE；ruleId 只看單一對象。
+     * Summary paging query for background list. beforeJson / afterJson is only used to determine whether it exists.
+     * will not be projected into the results to avoid loading a large number of LOB when browsing revision records.
+     * Keyword comparison rule/response ID, object name and description; targetType is RULE or RESPONSE; ruleId only looks at a single object.
      */
     @Query(value = "SELECT a.id, a.ruleId, a.action, a.operator, a.timestamp, " +
                    "CASE WHEN a.beforeJson IS NOT NULL THEN true ELSE false END, " +
@@ -57,11 +57,11 @@ public interface RuleAuditLogRepository extends JpaRepository<RuleAuditLog, Long
             "  OR (:targetType = 'RESPONSE' AND a.ruleId LIKE 'response-%') " +
             "  OR (:targetType = 'RULE' AND a.ruleId NOT LIKE 'response-%'))";
 
-    /** 尚未計算列表摘要的舊資料 ID，由舊到新；只取 ID，不載入快照。 */
+    /** The old data ID that has not yet calculated the list summary, from old to new; only ID is taken, and the snapshot is not loaded. */
     @Query("SELECT a.id FROM RuleAuditLog a WHERE a.summary IS NULL ORDER BY a.id")
     List<Long> findIdsWithoutSummary(Pageable pageable);
 
-    /** 只寫入摘要欄位；已有摘要（例如另一台實例先補好）就不覆寫。 */
+    /** Only write the summary field; existing summary (for example, another instance has completed it first) will not be overridden. */
     @Modifying(clearAutomatically = true)
     @Transactional
     @Query("UPDATE RuleAuditLog a SET a.targetProtocol = :protocol, a.targetName = :name, " +

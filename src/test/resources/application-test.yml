@@ -1,4 +1,4 @@
-# 資料庫：沿用預設 SQLite，測試資料庫位置見 src/test/resources/config/application.properties
+# Database: Use the default SQLite. For the test database location, see src/test/resources/config/application.properties.
 spring:
   jpa:
     hibernate:

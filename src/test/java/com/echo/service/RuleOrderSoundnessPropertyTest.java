@@ -22,8 +22,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * 被判定「一定輪不到」的規則，用實際的候選查詢與挑選邏輯（{@link HttpRuleSnapshot}、{@link RuleSelector}）
- * 跑過各種請求，都不會被選中。
+ * For every rule classified as definitely unreachable, use actual candidate lookup and selection ({@link HttpRuleSnapshot}, {@link RuleSelector})
+ * After running through various requests, none will be selected.
  */
 class RuleOrderSoundnessPropertyTest {
 
@@ -53,7 +53,7 @@ class RuleOrderSoundnessPropertyTest {
                     List<HttpRule> candidates = snapshot.candidates(host, method).stream()
                             .filter(rule -> matchesPath(rule.getMatchKey(), path)).toList();
                     for (String body : BODIES) {
-                        // 情境狀態兩種都試：受情境限制的規則可能通過也可能被略過
+                        // Situation status tries both: Situation-bound rules may pass or be ignored
                         for (boolean gateOpen : List.of(true, false)) {
                             HttpRule chosen = select(candidates, body, gateOpen);
                             if (chosen != null) {

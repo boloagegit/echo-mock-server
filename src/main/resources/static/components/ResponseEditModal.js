@@ -1,9 +1,9 @@
 /**
- * ResponseEditModal - 回應編輯 Modal
+ * ResponseEditModal - Response editor Modal
  *
- * 用於建立或編輯共用回應內容，支援一般文字與 SSE 事件兩種模式。
- * 一般文字使用共用的 ui-code-viewer（可編輯），工具列與抽屜相同；格式化只改變顯示，存檔永遠是原文。
- * SSE 事件使用與規則編輯器相同的 sse-events-editor（回應沒有循環設定，放大用視窗本身的全螢幕）。
+ * Used to create or edit shared response content, supporting two modes: normal text and SSE event.
+ * Common text uses ui-code-viewer (editable), the toolbar is the same as the drawer; formatting only changes the display, and the save will always be the original text.
+ * The SSE event uses the same sse-events-editor as the rule editor (response has no loop settings, zooms in to the full screen of the window itself).
  */
 const ResponseEditModal = {
   props: {
@@ -35,7 +35,7 @@ const ResponseEditModal = {
         { value: 'sse', label: this.t('modal.responseTypeSse'), icon: 'bi-broadcast' },
       ];
     },
-    /** 第一個還沒填好的事件（沒有資料或延遲不對），-1 表示都可以存。 */
+    /** The first event that has not been filled in (no data or wrong delay), -1 means it can be saved. */
     firstInvalidSse() {
       return this.sseEvents.findIndex(event => !event?.data || !SseEvents.delayValid(event.delayMs));
     },
@@ -50,7 +50,7 @@ const ResponseEditModal = {
       immediate: true,
       handler(open) {
         if (open) {
-          // 每次打開都從乾淨的狀態開始：上一次沒存成的錯誤提示與放大狀態不帶過來
+          // Each time you open it, it starts from a clean state: the error message and zoom state that were not saved last time are not brought over.
           this.attemptedSave = false;
           this.sseExpanded = false;
           this.activateDialog();
@@ -130,7 +130,7 @@ const ResponseEditModal = {
     async requestSave() {
       this.attemptedSave = true;
       if (this.form.contentType === 'sse') {
-        // 「整串貼上」還開著：先套用（看不懂就不存），等套用後的事件傳回來再檢查
+        // If bulk paste is still open, apply it first and stop on invalid input; wait for the updated events before validating.
         if (this.$refs.sseEditor && !this.$refs.sseEditor.commitPending()) return;
         await this.$nextTick();
         if (!this.sseEvents.length || this.firstInvalidSse >= 0) {
@@ -140,8 +140,8 @@ const ResponseEditModal = {
       }
       this.$emit('save');
     },
-    // 新增與刪除改同一個陣列（與規則編輯器相同）：編輯器才分得出「新增／刪除」與「整串替換」，
-    // 新增時展開新的事件，刪除時保留搜尋與展開中的鄰近事件
+    // Adding and deleting the same array (same as the rule editor): The editor can distinguish between "add/delete" and "whole string replacement".
+    // Expand new events when adding, keep searching and expanding nearby events when deleting
     addSseEvent() {
       this.sseEvents.push(SseEvents.blank());
     },

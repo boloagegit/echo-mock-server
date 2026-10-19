@@ -19,8 +19,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 規則快照必須與原本逐次查詢的結果完全一致，且大小不隨用戶端輸入（host、method、endpoint 值）成長。
- * 原本的篩選邏輯以 {@link #legacyHttpCandidates} 與 {@link #legacyBucket} 原樣保留作為標準答案。
+ * The rule snapshot must be completely consistent with the original sequential query results, and the size does not grow with the user input (host, method, endpoint values).
+ * The original filtering logic left {@link #legacyHttpCandidates} and {@link #legacyBucket} as standard answers.
  */
 class RuleSnapshotTest {
 
@@ -36,7 +36,7 @@ class RuleSnapshotTest {
                                          @ForAll("requestMethods") String method) {
         HttpRuleSnapshot snapshot = new HttpRuleSnapshot(rules, HttpRuleService.HTTP_RULE_ORDER, null);
 
-        // 先用其他請求填入快取，確認共用 key 不會讓結果互相污染
+        // Fill the cache with other requests first to make sure that sharing key will not contaminate the results with each other
         snapshot.candidates("unlisted.example", "PATCH");
         snapshot.candidates(host, "OPTIONS");
 
@@ -56,7 +56,7 @@ class RuleSnapshotTest {
             snapshot.candidates("api.example.com", "X" + i);
         }
 
-        // (2 種 host key) × (GET、POST、未列出 3 種 method key) 的上限，實際只用到其中幾個
+        // The upper limit of (2 types host key) × (GET, POST, 3 types method key) not listed, only a few of them are actually used
         assertThat(snapshot.candidateSetCount()).isLessThanOrEqualTo(6);
     }
 
@@ -100,7 +100,7 @@ class RuleSnapshotTest {
                 .build();
     }
 
-    /** 原 HttpProtocolHandler.findByHostAndMethod 的 Java 篩選 + HttpRuleService 的排序。 */
+    /** Java filtering of original HttpProtocolHandler.findByHostAndMethod + sorting of HttpRuleService. */
     private static List<HttpRule> legacyHttpCandidates(List<HttpRule> rules, String targetHost, String method) {
         List<HttpRule> result = new ArrayList<>();
         for (HttpRule rule : rules) {
@@ -175,7 +175,7 @@ class RuleSnapshotTest {
                 .bodyCondition(bodyCondition).enabled(true).priority(0).createdAt(BASE).build();
     }
 
-    /** 原 JmsRuleService.findBucketedJmsRules + bodyConditionMatchesEndpoint。 */
+    /** Original JmsRuleService.findBucketedJmsRules + bodyConditionMatchesEndpoint. */
     private static List<JmsRule> legacyBucket(List<JmsRule> rules, String endpointField, String endpointValue) {
         if (endpointValue == null || endpointValue.isBlank()) {
             return rules;
@@ -216,7 +216,7 @@ class RuleSnapshotTest {
         return true;
     }
 
-    // ==================== 記憶體 ====================
+    // ==================== Memory ====================
 
     @Test
     void conditionRegistryReleasesConditionsWhenSnapshotIsGone() throws Exception {

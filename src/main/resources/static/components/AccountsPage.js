@@ -1,8 +1,8 @@
 /**
- * AccountsPage - 帳號管理頁面
+ * AccountsPage - Account management page
  *
- * 內建帳號清單，使用共用列表語言：工具列搜尋與篩選、資料列、右側詳情抽屜與列選單。
- * 忘記密碼以警示標記顯示；重設密碼後以 Modal 顯示臨時密碼（僅一次）。
+ * Built-in accounts use the shared list layout: toolbar search and filters, rows, a right-side detail drawer, and row menus.
+ * Forgot password is displayed with a warning mark; after resetting the password, the temporary password is displayed as Modal (only once).
  */
 const AccountsPage = {
   props: {

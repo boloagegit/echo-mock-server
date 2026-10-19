@@ -10,7 +10,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Smoke Test：確認 Application Context 正常啟動、基本 API 可用
+ * Smoke Test: Confirm that Application Context starts normally and basic API is available
  */
 class SmokeIntegrationTest extends BaseIntegrationTest {
 
@@ -25,23 +25,23 @@ class SmokeIntegrationTest extends BaseIntegrationTest {
         Map<String, Object> body = response.getBody();
         assertThat(body).isNotNull();
 
-        // 驗證必要欄位存在
+        // Verify required fields exist
         assertThat(body).containsKey("serverPort");
         assertThat(body).containsKey("jmsEnabled");
         assertThat(body).containsKey("isLoggedIn");
         assertThat(body).containsKey("version");
         assertThat(body).containsKey("envLabel");
 
-        // 驗證 JMS 在 test profile 下啟用
+        // Verify JMS is enabled under test profile
         assertThat(body.get("jmsEnabled")).isEqualTo(true);
 
-        // 驗證 envLabel 為 TEST（application-test.yml 設定）
+        // Verify envLabel as TEST (application-test.yml setting)
         assertThat(body.get("envLabel")).isEqualTo("TEST");
 
-        // 未認證時 isLoggedIn 應為 false
+        // isLoggedIn should be false when not authenticated
         assertThat(body.get("isLoggedIn")).isEqualTo(false);
 
-        // version 應存在（dev 或實際版本號）
+        // version should exist (dev or actual version number)
         assertThat(body.get("version")).isNotNull();
     }
 

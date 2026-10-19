@@ -1,12 +1,12 @@
 /**
- * UiDetailDrawer - 列表詳情的右側抽屜
+ * UiDetailDrawer - Right drawer of list details
  *
- * 所有列表頁共用：點選一列即在右側開啟詳情，列表仍可操作。
- * - Esc 關閉並把焦點還給開啟前的元素（通常是該列）
- * - ↑／↓（或 k／j）切換上一筆／下一筆，由頁面決定實際資料
- * - 有對話框開啟或焦點在輸入框時不攔截按鍵
- * - 點抽屜以外的地方即收合；點其他列則直接切換（列由頁面處理）
- * - 「加寬檢視」讓長內容有更多空間，偏好記在這個瀏覽器
+ * Common to all list pages: Click a column to open details on the right, and the list is still operable.
+ * - Esc Closes and returns focus to the element before opening (usually the column)
+ * - ↑/↓ (or k/j) switches to the previous/next item, and the actual data is determined by the page
+ * - Keystrokes are not intercepted when a dialog box is open or the focus is on an input box
+ * - Click outside the drawer to collapse it; click on other columns to switch directly (columns are handled by the page)
+ * - "Wide View" allows more space for long content, the preference is recorded in this browser
  */
 const UiDetailDrawer = {
   inject: ['t'],

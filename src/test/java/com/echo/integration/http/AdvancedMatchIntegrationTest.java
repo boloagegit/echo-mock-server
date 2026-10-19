@@ -19,7 +19,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 結構化條件（matchSpec）從 API 建立、比對、編輯保留，到 v2 宣告式文件的完整流程。 */
+/** The complete process of structured conditions (matchSpec) from API creation, comparison, editing and retention to v2 declarative file. */
 class AdvancedMatchIntegrationTest extends BaseIntegrationTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();

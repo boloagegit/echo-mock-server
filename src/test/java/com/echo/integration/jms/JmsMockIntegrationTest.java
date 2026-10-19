@@ -18,16 +18,16 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * JMS 訊息匹配整合測試
+ * JMS message matching integration test
  */
 class JmsMockIntegrationTest extends BaseIntegrationTest {
 
     @BeforeEach
     void ensureCleanState() {
-        // 使用 exchange 確保 DELETE 請求帶認證且成功
+        // Use exchange to ensure that the DELETE request is authenticated and successful
         adminClient().exchange("/api/admin/rules/all",
                 org.springframework.http.HttpMethod.DELETE, null, Map.class);
-        // 清除日誌避免 limit=100 累積問題
+        // Clear logs to avoid limit=100 accumulation issues
         adminClient().exchange("/api/admin/logs/all",
                 org.springframework.http.HttpMethod.DELETE, null, Void.class);
         cacheManager.getCacheNames().forEach(name -> {
@@ -48,7 +48,7 @@ class JmsMockIntegrationTest extends BaseIntegrationTest {
     }
 
     /**
-     * 取得目前 JMS 日誌數量
+     * Get the current JMS log number
      */
     @SuppressWarnings("unchecked")
     private int currentJmsLogCount() {
@@ -61,7 +61,7 @@ class JmsMockIntegrationTest extends BaseIntegrationTest {
     }
 
     /**
-     * 等待新的 JMS 日誌出現（基於發送前的日誌數量）
+     * Waiting for new JMS logs to appear (based on the number of logs before sending)
      */
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> pollNewLogs(int prevCount, int maxMs)

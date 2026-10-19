@@ -27,7 +27,7 @@ x-echo-common: &echo-common
   restart: unless-stopped
 
 services:
-  # 預設資料庫：不指定 profile 與 URL，驗證 application.yml 的預設值（/app/data/mockdb.sqlite）
+  # Default database: do not specify profile and URL, verify the default value of application.yml (/app/data/mockdb.sqlite)
   echo-sqlite:
     <<: *echo-common
     profiles: ["sqlite"]

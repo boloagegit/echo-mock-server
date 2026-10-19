@@ -15,8 +15,8 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * {@link RuleSelector} 必須與原本 HTTP／JMS 兩份選擇迴圈完全一致；
- * 兩份原始迴圈以 {@link #legacyHttp} 與 {@link #legacyJms} 原樣保留作為標準答案。
+ * {@link RuleSelector} must be completely consistent with the original two selection loops HTTP/JMS;
+ * The two original loops keep {@link #legacyHttp} and {@link #legacyJms} as standard answers.
  */
 class RuleSelectorTest {
 
@@ -104,12 +104,12 @@ class RuleSelectorTest {
                 });
     }
 
-    // ==================== 原始迴圈（標準答案） ====================
+    // ==================== Original cycle (standard answer) ====================
 
     private record Legacy(Rule selected, List<Rule> rejected, List<Integer> evaluated) {
     }
 
-    /** 原 AbstractMockPipeline.matchRule。 */
+    /** Formerly AbstractMockPipeline.matchRule. */
     private static Legacy legacyHttp(List<Rule> candidates) {
         Rule matched = null;
         Rule fallbackRule = null;
@@ -139,7 +139,7 @@ class RuleSelectorTest {
         return new Legacy(matched, rejected, evaluated);
     }
 
-    /** 原 JmsMockPipeline.matchRule（三層 fallback）。 */
+    /** Original JmsMockPipeline.matchRule (three-layer fallback). */
     private static Legacy legacyJms(List<Rule> candidates) {
         Rule matched = null;
         Rule noConditionRule = null;

@@ -32,10 +32,10 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * JmsMockPipeline 單元測試
+ * JmsMockPipeline unit test
  * <p>
- * 驗證 JMS 協定 pipeline 的各項行為：匹配回應、JMS 轉發（成功與失敗）、
- * 無匹配處理、shouldForward 決策、日誌記錄。
+ * Verify various behaviors of JMS protocol pipeline: matching response, JMS forwarding (success and failure),
+ * No match processing, shouldForward decision, logging.
  */
 @ExtendWith(MockitoExtension.class)
 class JmsMockPipelineTest {
@@ -43,7 +43,7 @@ class JmsMockPipelineTest {
     @Mock
     private ConditionMatcher conditionMatcher;
 
-    /** 規則條件的 body 需求由真的 ConditionMatcher 編譯（mock 不會回傳可用的條件物件）。 */
+    /** Rule condition body requires compilation by real ConditionMatcher (mock does not return available condition objects). */
     private static final ConditionMatcher REAL_MATCHER = new ConditionMatcher();
 
     @Mock

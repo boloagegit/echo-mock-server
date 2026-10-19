@@ -9,7 +9,7 @@ import java.nio.charset.StandardCharsets;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 登入卡片：環境橫條讓使用者在登入前分辨部署環境，頁尾顯示版本與主機。
+ * Login card: The environment bar allows users to identify the deployment environment before logging in, and the version and host are displayed at the end of the page.
  */
 class LoginEnvironmentResourceTest {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

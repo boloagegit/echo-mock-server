@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-快取隔離效能驗證：確認 HTTP/JMS 快取分離後，修改規則不會影響另一協定的快取命中率
+Cache isolation performance verification: Confirm that after the HTTP/JMS cache is separated, modifying the rules will not affect the cache hit rate of another protocol
 
-測試情境：
-  1. 建立多條 HTTP 規則（不同 path）+ 多條 JMS 規則
-  2. 持續發送 HTTP mock 請求（模擬正常流量）
-  3. 同時不斷修改 JMS 規則（模擬頻繁異動）
-  4. 測量 HTTP 請求的延遲是否受 JMS 規則異動影響
+Test situation:
+  1. Create multiple HTTP rules (different path) + multiple JMS rules
+  2. Continue to send HTTP mock requests (simulating normal traffic)
+  3. Constantly modify the JMS rules at the same time (simulating frequent changes)
+  4. Measure whether the delay of the HTTP request is affected by the JMS rule change
 
-預期結果：
-  - 修改 JMS 規則不應導致 HTTP 快取失效
-  - HTTP 請求延遲在 JMS 異動期間應保持穩定
+Expected result:
+  - Modifying the JMS rule should not invalidate the HTTP cache
+  - HTTP request latency should remain stable while JMS rules change.
 
-用法：python3 scripts/stress-test-cache-isolation.py [BASE_URL] [DURATION_SEC] [CONCURRENCY]
+Usage: python3 scripts/stress-test-cache-isolation.py [BASE_URL] [DURATION_SEC] [CONCURRENCY]
 """
 
 import json
@@ -33,10 +33,10 @@ AUTH = base64.b64encode(
 ).decode()
 HOST = "cache-iso.api.test"
 
-HTTP_PATH_COUNT = 20       # 建立幾條不同 path 的 HTTP 規則
-JMS_RULE_COUNT = 10        # JMS 規則數量
-MODIFY_INTERVAL = 0.1      # JMS 規則修改間隔（秒）
-WARMUP_REQUESTS = 3        # 每個 path 的 warm-up 次數
+HTTP_PATH_COUNT = 20       # Create several HTTP rules with different path
+JMS_RULE_COUNT = 10        # JMS number of rules
+MODIFY_INTERVAL = 0.1      # JMS rule modification interval (seconds)
+WARMUP_REQUESTS = 3        # warm-up times for each path
 
 
 def api(method, path, data=None):
@@ -59,7 +59,7 @@ def api(method, path, data=None):
 
 
 def mock_request(path, body=None, headers=None):
-    """發送 mock 請求，回傳 (status, latency_ms)"""
+    """Send mock request, return (status, latency_ms)"""
     url = f"{BASE_URL}/mock{path}"
     body_bytes = body.encode() if body else None
     req = urllib.request.Request(url, data=body_bytes, method="POST" if body else "GET")
@@ -77,10 +77,10 @@ def mock_request(path, body=None, headers=None):
         return 0, (time.time() - start) * 1000
 
 
-# ========== Phase 1: 建立規則 ==========
+# ========== Phase 1: Create rules ==========
 
 def setup_rules():
-    """建立 HTTP 和 JMS 規則"""
+    """Create HTTP and JMS rules"""
     http_rules = []
     jms_rule_ids = []
 
@@ -118,7 +118,7 @@ def setup_rules():
 # ========== Phase 2: Warm up ==========
 
 def warmup(http_rules):
-    """預熱 HTTP 快取"""
+    """Warming up HTTP cache"""
     print(f"  預熱 HTTP 快取（{WARMUP_REQUESTS} 次/path）...")
     headers = {"X-Original-Host": HOST}
     for rule in http_rules:
@@ -128,10 +128,10 @@ def warmup(http_rules):
     time.sleep(0.5)
 
 
-# ========== Phase 3: 基準測試（無異動） ==========
+# ========== Phase 3: Benchmark test (no changes) ==========
 
 def run_http_traffic(paths, duration, label, stop_event=None):
-    """並發發送 HTTP mock 請求，收集延遲"""
+    """Concurrently sending HTTP mock requests, collection delay"""
     latencies = []
     errors = 0
     lock = threading.Lock()
@@ -172,7 +172,7 @@ def run_http_traffic(paths, duration, label, stop_event=None):
 
 
 def compute_stats(latencies, duration):
-    """計算延遲統計"""
+    """Calculating latency statistics"""
     if not latencies:
         return {"total": 0, "rps": 0, "avg": 0, "p50": 0, "p95": 0, "p99": 0, "min": 0, "max": 0}
     latencies.sort()
@@ -198,20 +198,20 @@ def print_stats(label, stats):
     print(f"      min: {stats['min']:.1f}  max: {stats['max']:.1f}")
 
 
-# ========== Phase 4: 異動測試 ==========
+# ========== Phase 4: Change test ==========
 
 def jms_modifier(jms_rule_ids, stop_event, modify_count_ref):
-    """持續修改 JMS 規則"""
+    """Continuous modification of JMS rules"""
     count = 0
     while not stop_event.is_set():
         for rid in jms_rule_ids:
             if stop_event.is_set():
                 break
-            # 讀取現有規則
+            # Reading existing rules
             status, rule = api("GET", f"/api/admin/rules/{rid}")
             if status != 200 or not rule:
                 continue
-            # 修改 description 觸發 cache evict
+            # Modify description to trigger cache evict
             rule["description"] = f"Modified at {time.time():.3f} count={count}"
             api("PUT", f"/api/admin/rules/{rid}", rule)
             count += 1
@@ -220,7 +220,7 @@ def jms_modifier(jms_rule_ids, stop_event, modify_count_ref):
 
 
 def http_modifier(http_rules, stop_event, modify_count_ref):
-    """持續修改 HTTP 規則（用於對照組）"""
+    """Continuously modify the HTTP rule (for the control group)"""
     count = 0
     while not stop_event.is_set():
         for rule in http_rules:
@@ -248,13 +248,13 @@ print(f"  持續: {DURATION}s / 並發: {CONCURRENCY} threads")
 print(f"  HTTP 規則: {HTTP_PATH_COUNT} 條 / JMS 規則: {JMS_RULE_COUNT} 條")
 print("=" * 70)
 
-# 清理
+# Cleanup
 api("DELETE", "/api/admin/rules/all")
 api("DELETE", "/api/admin/responses/orphans")
 api("DELETE", "/api/admin/logs/all")
 time.sleep(0.5)
 
-# 建立規則
+# Create rules
 http_rules, jms_rule_ids = setup_rules()
 paths = [r.get("matchKey", "") for r in http_rules]
 
@@ -262,10 +262,10 @@ if not paths:
     print("  ❌ 無法建立 HTTP 規則，中止測試")
     sys.exit(1)
 
-# 預熱
+# Preheating
 warmup(http_rules)
 
-# --- 測試 A: 基準（無任何異動）---
+# --- Test A: Baseline (no changes) ---
 print(f"\n{'─' * 70}")
 print(f"  測試 A: 基準測試（無異動，純 HTTP 流量 {DURATION}s）")
 sys.stdout.write("  測試中...")
@@ -276,10 +276,10 @@ stats_a = compute_stats(lat_a, DURATION)
 print(" 完成")
 print_stats("A: 基準（無異動）", stats_a)
 
-# 重新預熱
+# Reheat
 warmup(http_rules)
 
-# --- 測試 B: JMS 異動（應不影響 HTTP 快取）---
+# --- Test B: JMS rule changes should not affect the HTTP cache. ---
 print(f"\n{'─' * 70}")
 print(f"  測試 B: JMS 規則持續異動 + HTTP 流量 ({DURATION}s)")
 sys.stdout.write("  測試中...")
@@ -301,10 +301,10 @@ print(" 完成")
 print_stats("B: JMS 異動中", stats_b)
 print(f"    JMS 規則修改次數: {jms_modify_count[0] if jms_modify_count else 0}")
 
-# 重新預熱
+# Reheat
 warmup(http_rules)
 
-# --- 測試 C: HTTP 異動（對照組，應影響 HTTP 快取）---
+# --- Test C: HTTP rule changes, the control case, should affect the HTTP cache. ---
 print(f"\n{'─' * 70}")
 print(f"  測試 C: HTTP 規則持續異動 + HTTP 流量 ({DURATION}s)（對照組）")
 sys.stdout.write("  測試中...")
@@ -326,7 +326,7 @@ print(" 完成")
 print_stats("C: HTTP 異動中（對照組）", stats_c)
 print(f"    HTTP 規則修改次數: {http_modify_count[0] if http_modify_count else 0}")
 
-# ========== 總結 ==========
+# ========== Summary ==========
 print()
 print("=" * 70)
 print("  總結比較")
@@ -336,7 +336,7 @@ print(f"  {'─'*30} {'─'*8} {'─'*8} {'─'*8} {'─'*8} {'─'*8}")
 for label, s in [("A: 基準（無異動）", stats_a), ("B: JMS 異動中", stats_b), ("C: HTTP 異動中（對照）", stats_c)]:
     print(f"  {label:<30} {s['rps']:>7,.0f} {s['avg']:>7.1f}ms {s['p50']:>7.1f}ms {s['p95']:>7.1f}ms {s['p99']:>7.1f}ms")
 
-# 計算影響比例
+# Calculate impact ratio
 if stats_a["avg"] > 0:
     b_impact = ((stats_b["avg"] - stats_a["avg"]) / stats_a["avg"]) * 100
     c_impact = ((stats_c["avg"] - stats_a["avg"]) / stats_a["avg"]) * 100
@@ -357,7 +357,7 @@ if stats_a["rps"] > 0:
 
 print("=" * 70)
 
-# 清理
+# Cleanup
 api("DELETE", "/api/admin/rules/all")
 api("DELETE", "/api/admin/responses/orphans")
 api("DELETE", "/api/admin/logs/all")

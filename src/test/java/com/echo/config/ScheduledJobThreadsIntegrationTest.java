@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 背景排程不可借用原生 HTTP 的計時執行緒。 */
+/** The background schedule cannot borrow the timing thread of the native HTTP. */
 class ScheduledJobThreadsIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
@@ -30,7 +30,7 @@ class ScheduledJobThreadsIntegrationTest extends BaseIntegrationTest {
         assertThat(registrar).isNotNull();
         assertThat(scheduledProcessor.getScheduledTasks()).isNotEmpty();
 
-        // 走 @Scheduled 實際使用的同一個排程入口，確認落在哪條執行緒。
+        // Go to the same schedule entry actually used by @Scheduled to confirm which execution thread it falls on.
         CompletableFuture<String> thread = new CompletableFuture<>();
         registrar.getScheduler().schedule(() -> thread.complete(Thread.currentThread().getName()), Instant.now());
 
@@ -39,7 +39,7 @@ class ScheduledJobThreadsIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void asyncWorkKeepsSpringBootsOwnExecutor() {
-        // 排程器與原生 HTTP 計時器都不是預設候選，Boot 才會照常建立 @Async 用的執行緒池。
+        // Neither the scheduler nor the native HTTP timer is a default candidate, so Boot will create the thread pool used by @Async as usual.
         assertThat(context.containsBean("applicationTaskExecutor")).isTrue();
         assertThat(context.getBean("applicationTaskExecutor")).isInstanceOf(ThreadPoolTaskExecutor.class);
     }

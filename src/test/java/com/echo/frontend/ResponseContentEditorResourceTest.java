@@ -7,8 +7,8 @@ import java.nio.charset.StandardCharsets;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 回應內容編輯：規則編輯器與回應對話框共用抽屜的 ui-code-viewer；格式化只改變顯示（存檔是原文），
- * 內容可放大到整個編輯區，選擇回應的清單換頁時不會變空白。
+ * Response content editing: Rule editor and response dialog box share drawer ui-code-viewer; formatting only changes the display (the save is the original text),
+ * The content can be enlarged to the entire editing area, and the list of selected responses will not become blank when the page is changed.
  */
 class ResponseContentEditorResourceTest {
     @Test

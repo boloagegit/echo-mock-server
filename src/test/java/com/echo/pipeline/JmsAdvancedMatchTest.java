@@ -23,7 +23,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** JMS 規則的結構化條件：簡單 XPath 也走串流掃描（不建立 DOM），並依條件選擇規則。 */
+/** Structured conditions of the JMS rule: Simple XPath also performs stream scanning (DOM is not created), and selects rules based on the conditions. */
 class JmsAdvancedMatchTest {
 
     private static final String SPEC = """
@@ -62,7 +62,7 @@ class JmsAdvancedMatchTest {
         assertThat(respond("<Order><Amount>5</Amount><Vip/></Order>")).isEqualTo("<big/>");
         assertThat(respond("<Order><Amount>5</Amount></Order>")).isEqualTo("<default/>");
 
-        // 串流掃描不會呼叫完整解析
+        // Stream scan does not call full parsing
         verify(conditionMatcher, never()).prepareBody(anyString());
     }
 

@@ -31,10 +31,10 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * AbstractMockPipeline 單元測試
+ * AbstractMockPipeline unit test
  * <p>
- * 使用具體測試子類別 (TestPipeline) 驗證 Template Method 主流程、
- * 共用方法 (resolveResponseBody, applyDelay, recordLog) 及錯誤處理。
+ * Use the concrete TestPipeline subclass to verify the Template Method flow,
+ * Shared methods (resolveResponseBody, applyDelay, recordLog) and error handling.
  */
 @ExtendWith(MockitoExtension.class)
 class AbstractMockPipelineTest {
@@ -56,8 +56,8 @@ class AbstractMockPipelineTest {
     // ==================== Test Subclass ====================
 
     /**
-     * 具體測試子類別，繼承 AbstractMockPipeline<HttpRule>，
-     * 所有抽象方法以可控行為實作。
+     * Concrete test subclass extending AbstractMockPipeline<HttpRule>,
+     * All abstract methods are implemented with controlled behavior.
      */
     static class TestPipeline extends AbstractMockPipeline<HttpRule> {
 
@@ -67,7 +67,7 @@ class AbstractMockPipelineTest {
         boolean shouldForwardResult = false;
         MockResponse handleNoMatchResult;
 
-        // 追蹤呼叫順序
+        // Trace call sequence
         final List<String> callOrder = new ArrayList<>();
 
         TestPipeline(ConditionMatcher conditionMatcher,
@@ -184,11 +184,11 @@ class AbstractMockPipelineTest {
             assertThat(result.isMatched()).isTrue();
             assertThat(result.getRuleId()).isEqualTo("rule-1");
 
-            // 驗證呼叫順序
+            // Verify call sequence
             assertThat(pipeline.callOrder).containsExactly(
                     "findCandidateRules", "buildResponse");
 
-            // 驗證 recordLog 被呼叫
+            // Verify recordLog was called
             ServeEvent served = ServeEventCaptor.single(requestLogService);
             assertThat(served.getRuleId()).isEqualTo("rule-1");
             assertThat(served.getProtocol()).isEqualTo(Protocol.HTTP);
@@ -201,7 +201,7 @@ class AbstractMockPipelineTest {
             assertThat(served.getResponseStatus()).isEqualTo(200);
             assertThat(served.getRequestBody()).isEqualTo("{\"key\":\"value\"}");
             assertThat(served.getResponseBody()).isEqualTo("OK");
-            // 處理流程圖用：候選數與規則的模擬延遲（延遲在記錄之後才執行，不含在處理時間內）
+            // Processing flow chart: simulation delay of candidate number and rules (delay is executed after recording, not included in processing time)
             assertThat(served.getCandidateCount()).isEqualTo(1);
             assertThat(served.getMatchedByFallback()).isFalse();
             assertThat(served.getDelayMs()).isEqualTo(100);
@@ -338,7 +338,7 @@ class AbstractMockPipelineTest {
             pipeline.applyDelay(50);
             long elapsed = System.currentTimeMillis() - before;
 
-            // 至少等了 30ms（允許一些計時誤差）
+            // Waited at least 30ms (allow for some timing error)
             assertThat(elapsed).isGreaterThanOrEqualTo(30);
         }
 
@@ -411,7 +411,7 @@ class AbstractMockPipelineTest {
         }
     }
 
-    // ==================== 5. PipelineResult 正確性 ====================
+    // ==================== 5. PipelineResult Correctness ====================
 
     @Nested
     @DisplayName("PipelineResult 包含正確值")
@@ -472,7 +472,7 @@ class AbstractMockPipelineTest {
         @Test
         @DisplayName("findCandidateRules 拋出例外時回傳 500 error response")
         void findCandidateRulesThrowsReturns500() {
-            // 建立一個會在 findCandidateRules 拋出例外的 pipeline
+            // Create a pipeline that will throw an exception at findCandidateRules
             TestPipeline errorPipeline = new TestPipeline(conditionMatcher, ruleService, requestLogService, scenarioService) {
                 @Override
                 protected List<HttpRule> findCandidateRules(MockRequest request) {

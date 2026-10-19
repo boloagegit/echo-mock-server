@@ -757,10 +757,10 @@
 .audit-table .col-target { width: 38% }
 .audit-table .col-operator { width: 120px }
 .audit-table .col-actions { width: 56px }
-/* 每列兩行：名稱一行、說明一行；「改了什麼」可以換行。 */
+/* Each column has two lines: one line for name and one line for description; "What has been changed" can be changed to another line. */
 .audit-table td { height: auto; padding-block: 8px }
 .audit-table td.col-changes { white-space: normal }
-/* 日期列每一欄都有格子，欄位隱藏時表格寬度才不會亂；文字從第一格延伸出去。 */
+/* Each column of the date column has a grid. When the column is hidden, the table width will not be messed up; the text extends from the first grid. */
 .audit-table .audit-day-row td { height: auto; padding-block: 6px; background: var(--table-head); color: var(--text-subtle); font-size: var(--font-xs); font-weight: var(--font-weight-semibold); overflow: visible }
 .audit-table .audit-day-row td.col-time { position: relative; z-index: 1 }
 .audit-day-row__label.is-narrow { display: none }
@@ -787,13 +787,13 @@
 .audit-change__arrow { flex: none; color: var(--text-subtle); font-size: 10px }
 .audit-change-more,
 .audit-change-facts { color: var(--text-subtle); font-size: var(--font-xs) }
-/* 中等寬度：「改了什麼」移到名稱下方。 */
+/* Medium width: "What changed" moved below the name. */
 @container (max-width: 900px) {
     .audit-table .col-changes { display: none }
     .audit-table .col-target { width: auto }
     .audit-target .audit-target__changes { display: flex; margin-top: 4px }
 }
-/* 手機寬度：每列變成一張卡片，時間、操作與操作者放在最上面一行。 */
+/* Mobile phone width: Each column becomes a card, and the time, operation and operator are placed on the top row. */
 @container (max-width: 600px) {
     .audit-table thead,
     .audit-table .col-time,
@@ -817,12 +817,12 @@
 /* The wide drawer has room to compare before and after side by side. */
 .audit-detail-drawer.is-wide .ac-block-diff { flex-direction: row }
 .audit-detail-drawer.is-wide .ac-block-panel + .ac-block-panel { border-top: 0; border-left: 1px solid var(--border) }
-/* 標籤只列出加了什麼、拿掉什麼。 */
+/* The label only lists what was added and what was removed. */
 .audit-detail-drawer .ac-tags { display: flex; flex-wrap: wrap; gap: 4px 8px }
 .audit-detail-drawer .ac-tags .ac-val { padding: 0 6px; border-radius: 4px; text-decoration: none }
 .audit-detail-drawer .ac-tags .ac-after { background: rgba(var(--success-rgb), 0.1) }
 .audit-detail-drawer .ac-tags .ac-before { background: rgba(var(--danger-rgb), 0.1) }
-/* 長內容只顯示有變的行，像程式碼比對一樣以紅綠標示。 */
+/* Long content only displays changed lines, highlighted in red and green like code comparison. */
 .ac-diff__head { display: flex; align-items: center; gap: var(--space-sm) }
 .ac-diff__head > span:first-child { flex: 1; min-width: 0 }
 .ac-diff__count { color: var(--text-subtle); font-family: var(--font-mono); font-size: var(--font-xs); font-weight: var(--font-weight-regular) }
@@ -836,7 +836,7 @@
 .ac-diff__line.is-del { background: rgba(var(--danger-rgb), 0.1) }
 .ac-diff__line.is-del .ac-diff__sign { color: var(--danger-text) }
 .ac-diff__gap { padding: 2px 0 2px 7.8em; background: var(--surface-neutral-soft); color: var(--text-subtle) }
-/* 同一個項目的最近記錄。 */
+/* The most recent record for the same project. */
 .audit-history__list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none }
 .audit-history__item { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 6px 0; font-size: var(--font-sm) }
 .audit-history__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transform: translateY(-1px) }

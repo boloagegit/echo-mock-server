@@ -57,7 +57,7 @@ class CacheInvalidationServiceTest {
         cacheManager = new CommitAwareCaffeineCacheManager(CacheConfig.HTTP_RULES_CACHE, CacheConfig.JMS_RULES_CACHE,
                 CacheConfig.HTTP_TARGET_DEFAULT_CACHE, CacheConfig.HTTP_TARGET_RESOLVED_CACHE);
         bodies = Caffeine.newBuilder().build();
-        // 以記憶體中的清單模擬 cache_events；「已提交」的事件才放進 table。
+        // Simulate cache_events with a list in memory; only "submitted" events are put into table.
         lenient().when(eventRepository.save(any(CacheEvent.class))).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(eventRepository.findMaxId()).thenAnswer(inv ->
                 table.stream().mapToLong(CacheEvent::getId).boxed().max(Long::compare).orElse(null));
@@ -89,7 +89,7 @@ class CacheInvalidationServiceTest {
         return created;
     }
 
-    // ========== 發布 ==========
+    // ========== Release ==========
 
     @Test
     void publishInvalidation_shouldSaveGlobalEvent() {
@@ -140,7 +140,7 @@ class CacheInvalidationServiceTest {
         assertThat(savedTypes()).containsExactly("HTTP_RULE_CHANGED", "RULE_CHANGED");
     }
 
-    // ========== 輪詢 ==========
+    // ========== Polling ==========
 
     @Test
     void globalEvent_shouldClearBothRuleCaches() {
@@ -248,7 +248,7 @@ class CacheInvalidationServiceTest {
 
     @Test
     void clockSkew_shouldNotHideEvents() {
-        // 舊做法用時間比較：發布端時鐘較慢時事件會被略過。依編號讀取不受影響。
+        // Old way of using time comparison: events are skipped when publisher clock is slow. Reading by number is not affected.
         fillCaches();
         CacheEvent event = new CacheEvent("HTTP_RULE_CHANGED");
         event.setId(1L);
@@ -262,7 +262,7 @@ class CacheInvalidationServiceTest {
 
     @Test
     void eventCommittedLateWithSmallerId_shouldStillBeApplied() {
-        // 交易 A 先拿到編號 1 但較晚提交；交易 B 拿到 2 先提交。
+        // Transaction A gets number 1 first but submits it later; transaction B gets number 2 and submits it first.
         commit(2, "JMS_RULE_CHANGED");
         service.checkForInvalidation();
         fillCaches();
@@ -315,7 +315,7 @@ class CacheInvalidationServiceTest {
     void gapTooLargeToTrack_shouldClearEverythingOnceLateCommitsHadTime() {
         commit(1, "JMS_RULE_CHANGED");
         service.checkForInvalidation();
-        // 編號 2–200 還沒出現（可能有交易尚未提交），201 先出現：空缺太大，無法逐一等待
+        // Numbers 2–200 have not appeared yet (there may be transactions that have not yet been submitted), 201 appeared first: the vacancies are too large to wait one by one.
         commit(201, "JMS_RULE_CHANGED");
         service.checkForInvalidation();
         commit(2, "HTTP_RULE_CHANGED");
@@ -329,7 +329,7 @@ class CacheInvalidationServiceTest {
         assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).as("after the wait").isFalse();
         assertThat(cached(CacheConfig.JMS_RULES_CACHE)).isFalse();
 
-        // 只清一次
+        // Clear only once
         fillCaches();
         clock.addAndGet(TimeUnit.SECONDS.toNanos(5));
         service.checkForInvalidation();
@@ -342,7 +342,7 @@ class CacheInvalidationServiceTest {
         service.checkForInvalidation();
         commit(201, "JMS_RULE_CHANGED");
         service.checkForInvalidation();
-        // 一分鐘後又一個大空缺：第一次清空的時間不能被往後推
+        // Another big gap after one minute: the first clearing time cannot be pushed back
         clock.addAndGet(TimeUnit.MINUTES.toNanos(1));
         commit(401, "JMS_RULE_CHANGED");
         service.checkForInvalidation();
@@ -352,7 +352,7 @@ class CacheInvalidationServiceTest {
         service.checkForInvalidation();
         assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).as("first gap's wait is over").isFalse();
 
-        // 第二個空缺的等待結束時再清一次
+        // Clear again when the wait for the second vacancy ends
         fillCaches();
         clock.addAndGet(TimeUnit.MINUTES.toNanos(1));
         service.checkForInvalidation();
@@ -361,7 +361,7 @@ class CacheInvalidationServiceTest {
 
     @Test
     void eventCommittedLateBelowTheStartingPoint_shouldBeCoveredAfterTheWait() {
-        // 另一台主機的交易拿到編號 5 但還沒提交，6 先提交；這台主機此時啟動
+        // The transaction of another host got the number 5 but has not been submitted yet, 6 is submitted first; this host starts at this time
         commit(6, "JMS_RULE_CHANGED");
         service.start();
         service.checkForInvalidation();
@@ -405,7 +405,7 @@ class CacheInvalidationServiceTest {
         assertThat(cached(CacheConfig.JMS_RULES_CACHE)).isFalse();
         assertThat(bodies.estimatedSize()).isZero();
 
-        // 重新對齊後，新的事件照常處理
+        // After realignment, new events are processed as usual
         fillCaches();
         commit(2, "JMS_RULE_CHANGED");
         service.checkForInvalidation();
@@ -442,7 +442,7 @@ class CacheInvalidationServiceTest {
 
     @Test
     void longOutage_shouldClearEverythingOnRecovery() {
-        // 停太久時事件可能已被清理，無法知道漏了什麼。
+        // When paused for too long, the event may have been cleaned up, and there is no way to know what was missed.
         clock.addAndGet(TimeUnit.MINUTES.toNanos(6));
         fillCaches();
 
@@ -453,13 +453,13 @@ class CacheInvalidationServiceTest {
         assertThat(bodies.estimatedSize()).isZero();
     }
 
-    // ========== 本機發出的事件 ==========
+    // ========== Events emitted by this machine ==========
 
     @Test
     void ownEvents_shouldNotClearLocalCachesAgain() {
         AtomicLong ids = new AtomicLong();
         saveCommits(ids);
-        // 本機變更時已清過本機快取；之後重新建立的快取不必因為讀回自己的事件再清一次
+        // The local cache has been cleared when the local machine changes; caches that are re-established later do not need to be cleared again because of reading back their own events.
         service.publishInvalidation(Protocol.HTTP);
         service.publishResponsesChanged(List.of(1L));
         fillCaches();
@@ -469,7 +469,7 @@ class CacheInvalidationServiceTest {
         assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).isTrue();
         assertThat(bodies.getIfPresent(1L)).isNotNull();
 
-        // 其他實例的事件照常清除
+        // Events for other instances are cleared as usual
         commit(ids.incrementAndGet(), "HTTP_RULE_CHANGED");
         service.checkForInvalidation();
         assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).isFalse();
@@ -480,13 +480,13 @@ class CacheInvalidationServiceTest {
         fillCaches();
         TransactionSynchronizationManager.initSynchronization();
 
-        // 讀回自己的事件時不再清除，所以發出時就清本機的回應內容與轉送連線快取（不必靠呼叫端）
+        // It is no longer cleared when reading back its own events, so the local response content and forwarding connection cache are cleared when sending out (no need to rely on the caller)
         service.publishResponsesChanged(List.of(1L));
         service.publishHttpTargetsChanged();
         assertThat(bodies.getIfPresent(1L)).isNull();
         assertThat(cached(CacheConfig.HTTP_TARGET_RESOLVED_CACHE)).isFalse();
 
-        // 提交前另一個請求放回舊資料：提交後再清一次
+        // Another request recaches old data before commit; invalidate again after commit.
         bodies.put(1L, "old");
         commitSynchronizations();
         assertThat(bodies.getIfPresent(1L)).isNull();
@@ -499,7 +499,7 @@ class CacheInvalidationServiceTest {
 
         service.publishInvalidation();
 
-        // 規則快取由變更處清除；這裡再清會讓規則快照多重建一次
+        // The rule cache is cleared from the change location; clearing it here will cause the rule snapshot to be rebuilt one more time
         assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).isTrue();
         assertThat(cached(CacheConfig.JMS_RULES_CACHE)).isTrue();
     }
@@ -515,7 +515,7 @@ class CacheInvalidationServiceTest {
         });
         TransactionSynchronizationManager.initSynchronization();
         service.publishInvalidation(Protocol.HTTP);
-        // 本機交易回滾：SQLite 可能把編號 2 再給另一個實例的事件
+        // Native transaction rollback: SQLite event that may give number 2 to another instance
         var synchronizations = TransactionSynchronizationManager.getSynchronizations();
         TransactionSynchronizationManager.clearSynchronization();
         org.springframework.transaction.support.TransactionSynchronizationUtils.invokeAfterCompletion(
@@ -533,14 +533,14 @@ class CacheInvalidationServiceTest {
         commit(1, "JMS_RULE_CHANGED");
         commit(2, "JMS_RULE_CHANGED");
         service.checkForInvalidation();
-        // 本機發出編號 3 但交易回滾，沒有提交
+        // This machine issued number 3 but the transaction was rolled back and not committed.
         when(eventRepository.save(any(CacheEvent.class))).thenAnswer(inv -> {
             CacheEvent saved = inv.getArgument(0);
             saved.setId(3L);
             return saved;
         });
         service.publishInvalidation(Protocol.HTTP);
-        // 事件表清空後編號從頭開始：之後其他實例的編號 3 不能被當成本機事件略過
+        // Numbering starts from the beginning after the event table is cleared: number 3 of other instances after that cannot be ignored as a local event
         table.clear();
         service.checkForInvalidation();
         commit(1, "JMS_RULE_CHANGED");
@@ -553,7 +553,7 @@ class CacheInvalidationServiceTest {
         assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).isFalse();
     }
 
-    // ========== 全部清空的記錄 ==========
+    // ========== All cleared records ==========
 
     @Test
     void scheduledClearAfterStartup_shouldBeLoggedAsSuch() {
@@ -579,7 +579,7 @@ class CacheInvalidationServiceTest {
         assertThat(logged).containsExactly("Cleared all local caches: an event id gap was too large to track");
     }
 
-    // ========== 清理 ==========
+    // ========== Cleanup ==========
 
     @Test
     void cleanup_shouldKeepNewestEvent() {
@@ -606,7 +606,7 @@ class CacheInvalidationServiceTest {
         return captor.getAllValues().stream().map(CacheEvent::getEventType).toList();
     }
 
-    /** 寫入事件即視為已提交，編號依序遞增。 */
+    /** Writing events are considered submitted, and the numbers are increased sequentially. */
     private void saveCommits(AtomicLong ids) {
         when(eventRepository.save(any(CacheEvent.class))).thenAnswer(inv -> {
             CacheEvent saved = inv.getArgument(0);

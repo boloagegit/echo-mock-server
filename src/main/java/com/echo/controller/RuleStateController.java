@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 規則的狀態：啟用／停用、保護、延長保存期限，可針對單一規則、多條規則或同一個標籤的規則。
+ * Rule status: enable/disable, protect, extend retention period, can be for a single rule, multiple rules or rules for the same label.
  */
 @RestController
 @RequestMapping(value = "/api/admin", produces = "application/json")
@@ -68,7 +68,7 @@ public class RuleStateController {
         return ResponseEntity.ok(Map.of("updated", updated));
     }
 
-    // 已經是目標狀態時更新筆數為 0，但規則存在，仍回成功（重複操作不算錯誤）。
+    // When the target state is already reached, the number of updates is 0, but the rule exists and the operation is still successful (repeated operations are not considered errors).
     @PutMapping("/rules/{id}/protect")
     public ResponseEntity<?> protectRule(@PathVariable String id) {
         if (ruleEditService.findDto(id).isEmpty()) {

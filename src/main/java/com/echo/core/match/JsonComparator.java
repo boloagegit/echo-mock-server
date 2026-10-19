@@ -6,14 +6,14 @@ import java.util.Arrays;
 import java.util.Map;
 
 /**
- * {@code equalToJson} 使用的 JSON 結構比較。
+ * Comparison of the JSON structure used by {@code equalToJson}.
  * <p>
- * 數值以數學值比較（{@code 1} 等於 {@code 1.0}）；{@code ignoreExtraElements} 只放寬物件欄位，
- * 陣列長度仍需相同；不計順序比較時，陣列最多 {@value #MAX_UNORDERED_ELEMENTS} 個元素。
+ * Values are compared mathematically ({@code 1} is equal to {@code 1.0}); {@code ignoreExtraElements} only widens the object field,
+ * The array lengths still need to be the same; the array can have up to {@value #MAX_UNORDERED_ELEMENTS} elements, not counting sequential comparisons.
  */
 final class JsonComparator {
 
-    /** 不計順序比較的陣列元素上限；超過時視為不符合，避免大型 body 造成 O(n²) 以上的成本。 */
+    /** The upper limit of array elements is not included in the sequential comparison; when it is exceeded, it is considered as non-compliance to avoid the cost of O(n²) caused by large body. */
     static final int MAX_UNORDERED_ELEMENTS = 256;
 
     private JsonComparator() {
@@ -59,8 +59,8 @@ final class JsonComparator {
     }
 
     /**
-     * 以二分圖最大匹配（Kuhn 演算法）配對元素。寬鬆比較下「符合」不是等價關係，貪婪配對會誤判，
-     * 回溯則可能指數爆炸；最大匹配在多項式時間內給出正確答案。
+     * Pair elements using bipartite graph maximum matching (Kuhn algorithm). "Consistent" under loose comparison is not an equivalence relationship, and greedy matching will lead to misjudgment.
+     * Backtracking may explode exponentially; maximum matching gives the correct answer in polynomial time.
      */
     private static boolean matchesUnordered(JsonNode expected, JsonNode actual, boolean ignoreExtraElements) {
         int size = expected.size();

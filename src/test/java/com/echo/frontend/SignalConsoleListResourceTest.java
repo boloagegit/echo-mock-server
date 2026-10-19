@@ -7,7 +7,7 @@ import java.nio.charset.StandardCharsets;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Signal Console 列表契約：方法色碼、條件色彩、列操作與詳情抽屜的鍵盤行為。
+ * Signal Console List contract: method color coding, conditional coloring, column operations and keyboard behavior of the details drawer.
  */
 class SignalConsoleListResourceTest {
     @Test

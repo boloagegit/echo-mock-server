@@ -8,19 +8,19 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
 /**
- * JMS 協定模擬規則
+ * JMS protocol simulation rules
  * <p>
- * 定義 JMS 訊息的匹配條件與回應設定：
+ * Define matching conditions and response settings for JMS message:
  * <ul>
- *   <li>匹配條件：queueName + correlationIdPattern + bodyCondition</li>
- *   <li>回應設定：responseBody/responseId + delayMs</li>
+ *   <li>matching conditions: queueName + correlationIdPattern + bodyCondition</li>
+ *   <li>response setting: responseBody/responseId + delayMs</li>
  * </ul>
  * 
- * <h3>Queue 名稱匹配</h3>
+ * <h3>Queue-name matching</h3>
  * <ul>
- *   <li>精確匹配：ORDER.REQUEST</li>
- *   <li>萬用字元：ORDER.* 匹配 ORDER.CREATE, ORDER.UPDATE 等</li>
- *   <li>全部匹配：* 匹配所有 Queue</li>
+ *   <li>exactly matches: ORDER.REQUEST</li>
+ *   <li>wildcard: ORDER.* matches ORDER.CREATE, ORDER.UPDATE, etc.</li>
+ *   <li>Catch-all: * matches every queue.</li>
  * </ul>
  */
 @Entity
@@ -51,15 +51,15 @@ public class JmsRule extends BaseRule {
     private String jmsTargetConnectionId;
 
     /** 
-     * Queue 名稱匹配模式
-     * <p>支援萬用字元 * 匹配任意字串
+     * Queue name matching pattern
+     * <p>Supports the wildcard * to match any string.
      */
     @Column(nullable = false)
     private String queueName;
 
     /** 
-     * Correlation ID 匹配模式
-     * <p>用於 Request-Reply 模式的訊息關聯
+     * Correlation ID matching pattern
+     * <p>Message correlation for request-reply.
      */
     private String correlationIdPattern;
 
@@ -79,8 +79,8 @@ public class JmsRule extends BaseRule {
     }
 
     /**
-     * 取得條件字串（向後相容）
-     * @return bodyCondition 值
+     * Get condition string (backwards compatible)
+     * @return bodyCondition value
      */
     @Transient
     public String getCondition() {
@@ -88,8 +88,8 @@ public class JmsRule extends BaseRule {
     }
 
     /**
-     * 取得匹配鍵值（向後相容）
-     * @return queueName 值
+     * Get matching key value (backwards compatible)
+     * @return queueName value
      */
     @Transient
     public String getMatchKey() {

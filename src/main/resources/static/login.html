@@ -10,18 +10,18 @@
     <script src="/ui-accent.js?v=20261006.1"></script>
     <link rel="stylesheet" href="/webjars/bootstrap-icons/font/bootstrap-icons.min.css">
     <style>
-        /* 登入頁專用衍生變數（基於 theme.css 共用變數） */
+        /* Login page-specific derived variables (based on theme.css shared variables) */
         :root{--input-bg:var(--bg);--login-shadow:rgba(0,0,0,0.24);--footer-bg:rgba(var(--muted-rgb),0.08);--logo-outer:var(--primary);--login-focus:0 0 0 2px rgba(var(--primary-rgb),0.42);--motion-fast:120ms;--motion-slow:240ms;--ease-standard:cubic-bezier(0.2,0,0,1)}
         :root[data-theme="light"]{--input-bg:var(--bg);--login-shadow:rgba(29,35,45,0.14);--footer-bg:rgba(var(--muted-rgb),0.07)}
         *{box-sizing:border-box;margin:0;padding:0}
         body{background:var(--bg);color:var(--text);font-family:var(--font-ui);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1.5rem;position:relative;overflow:hidden}
         
-        /* 登入卡片 */
+        /* Login card */
         .login-card{background:var(--card);border:1px solid var(--border);border-radius:12px;width:100%;max-width:400px;overflow:hidden;position:relative;z-index:1;box-shadow:0 24px 56px -22px var(--login-shadow)}
-        /* 沒有環境標籤時，以細主色線標示部署環境 */
+        /* When there is no environment label, the deployment environment is marked with a thin main color line */
         .login-card:not(.has-env){box-shadow:inset 0 3px 0 var(--primary),0 24px 56px -22px var(--login-shadow)}
 
-        /* 環境橫條：一眼分辨 SIT / UAT 等部署環境 */
+        /* Environment bar: Identify deployment environments such as SIT / UAT at a glance */
         .login-env{display:flex;align-items:center;gap:0.5rem;padding:0.625rem 1.75rem;background:var(--primary);color:var(--on-primary);font-size:13px;font-weight:600;letter-spacing:0.02em}
         .login-env[hidden]{display:none}
         .login-env i{font-size:14px;line-height:1}
@@ -67,12 +67,12 @@
         .login-footer p{margin:0}
         .login-meta{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:Consolas,'SFMono-Regular',Menlo,monospace;font-size:11.5px}
         
-        /* 忘記密碼連結 */
+        /* Forgot password link */
         .forgot-link,.forgot-back{padding:0;border:0;background:transparent;font-family:inherit;color:var(--primary);font-size:13px;text-decoration:none;cursor:pointer;transition:opacity 0.15s}
         .forgot-link:hover{opacity:0.8}
         .forgot-link:focus-visible,.forgot-back:focus-visible,.btn:focus-visible{outline:0;box-shadow:var(--login-focus)}
 
-        /* 忘記密碼表單 */
+        /* Forgot password form */
         .forgot-section{display:none}
         .forgot-section.active{display:block}
         .forgot-title{font-size:1.1rem;font-weight:600;margin-bottom:1rem;color:var(--text);text-align:center}
@@ -82,16 +82,16 @@
         .btn-secondary{background:var(--card);border:1px solid var(--border);color:var(--text);margin-top:0.5rem}
         .btn-secondary:hover{border-color:var(--border2);background:var(--hover)}
 
-        /* LDAP 提示 */
+        /* LDAP prompt */
         .ldap-hint{display:none;color:var(--muted);font-size:12px;text-align:center;margin-top:0.75rem}
 
-        /* 註冊表單 */
+        /* Registration form */
         .register-section{display:none}
         .register-section.active{display:block}
         .register-error{padding:0.875rem 1rem;border-radius:6px;font-size:13px;background:rgba(var(--danger-rgb),0.08);border:1px solid rgba(var(--danger-rgb),0.25);color:var(--danger);margin-bottom:1rem;text-align:center}
         .register-link{display:none;margin-top:0.5rem}
 
-        /* 響應式 */
+        /* Responsive */
         @media(max-width:480px){.login-card{border-radius:10px;margin:0 0.25rem}.login-env,.login-footer{padding-inline:1.25rem}.login-header{padding:1.5rem 1.25rem 0}.login-body{padding:1.25rem 1.25rem 1.5rem}}
         @media(prefers-reduced-motion:reduce){.login-logo .login-mark{transition-duration:.01ms}.login-logo:hover::after{animation:none}}
     </style>
@@ -144,7 +144,7 @@
                 <div class="register-link" id="register-link"><button type="button" class="btn btn-secondary"><i class="bi bi-person-plus"></i> <span data-i18n="login.register">申請帳號</span></button></div>
             </form>
 
-            <!-- 忘記密碼表單 -->
+            <!-- Forgot password form -->
             <div id="forgot-section" class="forgot-section">
                 <div class="forgot-title" data-i18n="login.forgotPasswordTitle">忘記密碼</div>
                 <div id="forgot-success" class="forgot-success" style="display:none">
@@ -169,7 +169,7 @@
                 </div>
             </div>
 
-            <!-- 自助註冊表單 -->
+            <!-- Self-service registration form -->
             <div id="register-section" class="register-section">
                 <div class="forgot-title" data-i18n="login.registerTitle">申請帳號</div>
                 <div id="register-success" class="forgot-success" style="display:none">
@@ -362,7 +362,7 @@
             registerBack.addEventListener('click', showLoginFromRegister);
             registerBackSuccess.addEventListener('click', showLoginFromRegister);
 
-            // 錯誤碼對應翻譯（使用已載入的 locale 訊息）
+            // Error code corresponding translation (using the loaded locale message)
             var registerErrorMessages = {
                 'zh-TW': {
                     'USERNAME_EXISTS': '帳號已存在',

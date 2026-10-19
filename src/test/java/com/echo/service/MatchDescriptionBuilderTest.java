@@ -9,9 +9,9 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * MatchDescriptionBuilder 單元測試。
+ * MatchDescriptionBuilder unit test.
  *
- * <p>驗證 toMatchChainJson、escapeJson。
+ * <p>Verification toMatchChainJson, escapeJson.
  */
 class MatchDescriptionBuilderTest {
 

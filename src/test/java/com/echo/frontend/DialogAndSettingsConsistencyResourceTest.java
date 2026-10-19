@@ -7,8 +7,8 @@ import java.nio.charset.StandardCharsets;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 設定頁與對話框沿用列表頁的語言：標題列對齊、頁籤位置與工具列相同、卡片內只有次要動作，
- * 對話框沒有裝飾圖示、取消為中性、表單可用 Ctrl／⌘+Enter 儲存且不會因點背景而關閉。
+ * The settings page and dialog box follow the language of the list page: the title bar is aligned, the tab position is the same as the toolbar, and there are only secondary actions in the card.
+ * The dialog box has no decorative icon, cancel it to neutral, and the form can be saved. Ctrl／⌘+Enter will not be closed by clicking on the background.
  */
 class DialogAndSettingsConsistencyResourceTest {
     @Test

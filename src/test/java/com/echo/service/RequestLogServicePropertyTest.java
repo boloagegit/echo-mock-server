@@ -20,11 +20,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * RequestLogService 屬性測試（Property 9, 10）。
+ * RequestLogService attribute test (Property 9, 10).
  * <p>
  * Feature: agent-framework-log-agent
  * <p>
- * 驗證 record() 委派給 LogAgent，以及 LogAgent 不可用時不進行同步寫入。
+ * Verify that record() is delegated to LogAgent, and no synchronous writes occur when LogAgent is unavailable.
  */
 class RequestLogServicePropertyTest {
 
@@ -60,8 +60,8 @@ class RequestLogServicePropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 9: record() delegates to LogAgent
      * <p>
-     * 呼叫 record() 時，若 LogAgent 可用且狀態為 RUNNING，
-     * LogAgent.submit() 被呼叫，且 LogTask 欄位值正確。
+     * When calling record(), if LogAgent is available and the status is RUNNING,
+     * LogAgent.submit() is called, and the LogTask field value is correct.
      * <p>
      * **Validates: Requirements 6.1**
      */
@@ -109,8 +109,8 @@ class RequestLogServicePropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 9: record() delegates to LogAgent
      * <p>
-     * 呼叫 record() 時，若 LogAgent 可用且狀態為 RUNNING，
-     * 不應直接寫入 memory buffer 或 database。
+     * When calling record(), if LogAgent is available and the status is RUNNING,
+     * memory buffer or database should not be written directly.
      * <p>
      * **Validates: Requirements 6.1**
      */
@@ -136,9 +136,9 @@ class RequestLogServicePropertyTest {
         service.record("rule-1", protocol, null, "/api/test", true, responseTimeMs,
                 "127.0.0.1", null, null, null, null, null, null, null, null);
 
-        // Assert — memory buffer 應為空（LogAgent 處理寫入）
+        // Assert — memory buffer should be empty (LogAgent handles writing)
         assertThat(service.count()).isEqualTo(0);
-        // database 不應被直接寫入
+        // database should not be written directly
         verify(repo, never()).save(any(RequestLog.class));
     }
 
@@ -147,7 +147,7 @@ class RequestLogServicePropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 10: Drop when agent unavailable
      * <p>
-     * LogAgent 為 null（provider 回傳 null）時，record() 不得同步寫入 memory 或 database。
+     * When LogAgent is null (provider returns null), record() must not be written to memory or database simultaneously.
      * <p>
      * **Validates: Requirements 6.4**
      */
@@ -167,7 +167,7 @@ class RequestLogServicePropertyTest {
         RequestLogService service = createService(
                 repo, configService, protocolHandlerRegistry, emptyProvider());
 
-        // Act — 寫入 recordCount 筆
+        // Act: write recordCount records.
         for (int i = 0; i < recordCount; i++) {
             int index = i;
             assertThatThrownBy(() -> service.record("rule-" + index, Protocol.HTTP, null,
@@ -183,7 +183,7 @@ class RequestLogServicePropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 10: Drop when agent rejects
      * <p>
-     * LogAgent 拒絕任務時，record() 不得同步寫入 memory buffer。
+     * When LogAgent rejects the task, record() must not write memory buffer simultaneously.
      * <p>
      * **Validates: Requirements 6.4**
      */
@@ -222,7 +222,7 @@ class RequestLogServicePropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 10: Database fallback is forbidden
      * <p>
-     * LogAgent 不可用時，database 模式也不得由請求執行緒直接寫入 DB。
+     * When LogAgent is unavailable, the database mode must not be directly written to DB by the requesting thread.
      * <p>
      * **Validates: Requirements 6.4**
      */

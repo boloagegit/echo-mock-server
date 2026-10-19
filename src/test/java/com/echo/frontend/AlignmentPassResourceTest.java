@@ -7,8 +7,8 @@ import java.nio.charset.StandardCharsets;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 對齊微調：側欄與頁首同一條中線、共用左緣、表頭與資料同邊、分頁列等高，以及手機寬的版面修正。
- * 只驗證排版契約；這些規則不改變任何操作或資料流程。
+ * Alignment fine-tuning: the side column and the page header share the same center line, share the left edge, the table header and the data are on the same edge, the paging columns are of equal height, and the layout is corrected for mobile phone width.
+ * Only validating typesetting contracts; these rules do not change any operations or data flow.
  */
 class AlignmentPassResourceTest {
     @Test

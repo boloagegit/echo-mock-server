@@ -17,7 +17,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 規則快照的路徑索引查到的候選，與「取出 host + method 的全部候選再逐條比對路徑」完全相同，順序也相同。
+ * The candidates found in the path index of the rule snapshot are exactly the same as "taking out all the candidates of host + method and comparing the paths one by one", and the order is also the same.
  */
 class HttpRuleSnapshotPathIndexPropertyTest {
 

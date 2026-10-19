@@ -35,15 +35,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
 
 /**
- * Cache 同步服務 - 多實例環境下同步 cache 失效
- * 僅在 Database 模式啟用
+ * Synchronize cache invalidation across application instances.
+ * Only enabled in Database mode
  *
- * <p>變更時在 {@code cache_events} 寫一筆事件，與資料變更在同一個交易內提交；
- * 各實例依事件編號（不是時間）往後讀，所以不受各台時鐘差異影響。
- * 編號較小的事件可能因交易較晚提交而晚出現，跳過的編號會再等 {@link #GAP_WAIT_NANOS}。</p>
+ * <p>Write a {@code cache_events} event in the same transaction as each data change;
+ * instances read events in increasing ID order rather than timestamp order, so clock differences between hosts do not matter.
+ * Lower-numbered events may appear later if their transactions commit later; wait {@link #GAP_WAIT_NANOS} for gaps.</p>
  *
- * <p>本機發出的事件在變更時已清過本機快取（提交後再清一次），讀回時只推進進度、不再清除，
- * 否則每次變更都會讓本機的規則快照多重建一次。</p>
+ * <p>Local events already invalidated the local cache when changed, with another invalidation after commit; reading them back advances only the checkpoint,
+ * avoiding an extra local rule-snapshot rebuild for each change.</p>
  */
 @Service
 @ConditionalOnProperty(name = "echo.storage.mode", havingValue = "database", matchIfMissing = true)
@@ -52,26 +52,26 @@ import java.util.function.LongSupplier;
 public class CacheInvalidationService {
 
     private static final String EVENT_ALL = "RULE_CHANGED";
-    /** 協定事件為「協定名稱 + 此字尾」，見 {@link ProtocolDescriptor#cacheEventType(Protocol)}。 */
+    /** Protocol event type: protocol name plus this suffix; see {@link ProtocolDescriptor#cacheEventType(Protocol)}. */
     private static final String PROTOCOL_EVENT_SUFFIX = "_RULE_CHANGED";
-    /** 單一回應內容變更：前綴 + 回應 ID。 */
+    /** Single response content change: prefix + response ID. */
     static final String RESPONSE_EVENT_PREFIX = "RESPONSE_CHANGED:";
-    /** 多筆或全部回應內容變更。 */
+    /** Multiple or all response content changes. */
     static final String EVENT_ALL_RESPONSES = "RESPONSES_CHANGED";
-    /** HTTP 轉送連線設定變更。 */
+    /** HTTP forwarding connection setting changes. */
     static final String EVENT_HTTP_TARGETS = "HTTP_TARGET_CHANGED";
 
-    /** 一次變更超過這麼多筆回應時，改發一筆「全部回應」事件。 */
+    /** Above this many changed responses, emit one all-responses event instead of individual events. */
     static final int MAX_RESPONSE_EVENTS = 50;
-    /** 一次輪詢最多讀幾筆新事件；其餘下一輪再讀。 */
+    /** Maximum new events read per poll; leave the remainder for the next poll. */
     static final int PAGE_SIZE = 500;
-    /** 跳過的編號最多再等多久（等待較晚提交的交易）。 */
+    /** Maximum wait for missing event IDs from transactions that may commit later. */
     static final long GAP_WAIT_NANOS = TimeUnit.MINUTES.toNanos(2);
-    /** 一次跳號超過這個數量時視為序號本身的跳躍（例如資料庫重啟），不逐一等待。 */
+    /** Treat gaps larger than this as sequence jumps, for example after a database restart, without waiting for each ID. */
     static final int MAX_GAP_RUN = 100;
-    /** 同時等待的跳號上限。 */
+    /** Maximum missing event IDs tracked concurrently. */
     static final int MAX_GAPS = 1000;
-    /** 超過這麼久沒有成功輪詢時，事件可能已被清掉，恢復後清空所有快取。 */
+    /** After polling has failed this long, old events may have been pruned; invalidate all caches upon recovery. */
     static final long STALE_AFTER_NANOS = TimeUnit.MINUTES.toNanos(5);
     private static final long FAILURE_LOG_INTERVAL_NANOS = TimeUnit.MINUTES.toNanos(1);
     private static final int IN_CHUNK = 500;
@@ -82,21 +82,21 @@ public class CacheInvalidationService {
 
     private final CacheEventRepository eventRepository;
     private final CacheManager cacheManager;
-    /** 各協定的事件類型與規則快取名稱由其 {@link ProtocolDescriptor} 提供。 */
+    /** Each {@link ProtocolDescriptor} supplies its protocol's event type and rule-cache name. */
     private final ProtocolHandlerRegistry protocols;
     private final Cache<Long, String> responseBodyCache;
     private final LongSupplier nanoTime;
 
-    /** 本機發出的事件編號 → 發出時間；讀回時跳過。交易回滾的編號不會出現，過一段時間後丟掉。 */
+    /** Locally emitted event ID to emission time; skip these on readback. Rolled-back IDs never appear and expire from this map. */
     private final Map<Long, Long> ownEvents = new ConcurrentHashMap<>();
 
-    /** 已處理到的最大事件編號；null 表示啟動時讀不到資料庫，下次成功時重新對齊。 */
+    /** Highest processed event ID; null if the database was unavailable at startup, to realign after the next successful read. */
     private Long cursor;
-    /** 比 cursor 小但尚未出現的編號 → 放棄等待的時間點。 */
+    /** Missing IDs below the cursor, mapped to their wait deadlines. */
     private final TreeMap<Long, Long> gaps = new TreeMap<>();
     /**
-     * 無法逐一追蹤的編號空缺：到 {@code fullClearAt}（nanoTime）整個清空一次；等待期間又出現的空缺
-     * 不延後這次清空，而是在 {@code laterClearAt} 再清一次，不會一直被往後推。
+     * Gaps too large to track individually trigger a full invalidation at {@code fullClearAt} (nanoTime); further gaps during this wait
+     * do not postpone that deadline, but schedule another invalidation at {@code laterClearAt} so clearing cannot be deferred forever.
      */
     private boolean fullClearPending;
     private long fullClearAt;
@@ -124,8 +124,8 @@ public class CacheInvalidationService {
     }
 
     /**
-     * 啟動時從目前最大的事件編號開始；之前的事件與剛啟動、還是空的快取無關。
-     * 但編號較小的交易可能還沒提交（之後才出現、又小於起點），所以等晚提交的時間過後再整個清空一次。
+     * Start at the current maximum event ID; older events cannot affect this newly started, empty cache.
+     * Lower-numbered transactions may still be uncommitted and appear later below the starting checkpoint, so invalidate everything again after the late-commit grace period.
      */
     @PostConstruct
     synchronized void start() {
@@ -138,17 +138,17 @@ public class CacheInvalidationService {
         }
     }
 
-    /** 發布全域 cache 失效事件（清除所有規則快取） */
+    /** Publish global cache invalidation event (clear all rule caches) */
     public void publishInvalidation() {
         publish(EVENT_ALL);
     }
 
-    /** 發布協定級別 cache 失效事件 */
+    /** Publishing protocol level cache invalidation event */
     public void publishInvalidation(Protocol protocol) {
         publish(ProtocolDescriptor.cacheEventType(protocol));
     }
 
-    /** 這些回應的內容已變更或刪除，其他實例要丟掉快取中的內容。 */
+    /** These responses changed or were deleted; other instances must evict their cached bodies. */
     public void publishResponsesChanged(Collection<Long> responseIds) {
         Set<Long> ids = new LinkedHashSet<>(responseIds);
         ids.remove(null);
@@ -159,22 +159,22 @@ public class CacheInvalidationService {
         ids.forEach(id -> publish(RESPONSE_EVENT_PREFIX + id));
     }
 
-    /** 全部回應都可能變更（例如全部刪除）。 */
+    /** All responses may have changed, for example after deleting all responses. */
     public void publishAllResponsesChanged() {
         publish(EVENT_ALL_RESPONSES);
     }
 
-    /** HTTP 轉送連線設定已變更。 */
+    /** HTTP Forwarding connection settings have been changed. */
     public void publishHttpTargetsChanged() {
         publish(EVENT_HTTP_TARGETS);
     }
 
     /**
-     * 同一個交易內相同的事件只寫一筆，交易提交時一起生效。
+     * Write each event once per transaction, taking effect only when the transaction commits.
      *
-     * <p>讀回本機發出的事件時不再清除，所以規則以外的本機快取（回應內容、轉送連線）在這裡清除，
-     * 提交後再清一次，不依賴各呼叫端。規則快取由變更處自行清除（{@code @CacheEvict} 等），
-     * 這裡不再清，否則規則快照會多重建一次。</p>
+     * <p>Local events are not invalidated again during readback, so invalidate non-rule local caches, such as response bodies and forwarding connections, here.
+     * Invalidate again after commit without relying on callers. Rule-change code handles rule-cache invalidation through {@code @CacheEvict} and similar mechanisms,
+     * do not clear rule caches again here, which would cause an extra snapshot rebuild.</p>
      */
     private void publish(String eventType) {
         if (AfterCommit.firstInTransaction(new PublishedEvent(this, eventType))) {
@@ -194,8 +194,8 @@ public class CacheInvalidationService {
     }
 
     /**
-     * 交易沒有提交時忘掉這個編號：資料庫可能把它再給其他實例的事件（例如 SQLite 回滾後重用最大的 rowid），
-     * 留著會把別人的事件當成自己的而略過。
+     * Forget the ID if its transaction did not commit; the database may reuse it for another instance's event, such as SQLite reusing the highest rowid after rollback.
+     * Retaining it could misclassify and ignore another instance's event as a local event.
      */
     private void forgetIfRolledBack(Long id) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
@@ -217,7 +217,7 @@ public class CacheInvalidationService {
     private record LocalChange(CacheInvalidationService owner, String eventType) {
     }
 
-    /** 定期檢查是否有新事件 */
+    /** Check regularly for new events */
     @Scheduled(fixedRateString = "${echo.cache.sync-interval-ms:5000}")
     public synchronized void checkForInvalidation() {
         long now = nanoTime.getAsLong();
@@ -251,7 +251,7 @@ public class CacheInvalidationService {
         if (events.isEmpty()) {
             Long max = maxEventId();
             if (max < cursor) {
-                // 事件表清空後編號從頭開始（例如 SQLite 或舊版 MySQL），已無法分辨哪些看過。
+                // After event-table cleanup, IDs may restart, as in SQLite or older MySQL versions, making previous progress ambiguous.
                 realign("cache event ids restarted");
             }
             expireGaps(now);
@@ -300,7 +300,7 @@ public class CacheInvalidationService {
         }
         long deadline = now + GAP_WAIT_NANOS;
         if (missing > MAX_GAP_RUN || gaps.size() + missing > MAX_GAPS) {
-            // 太多編號無法逐一等待：等晚提交的交易也該完成了，再整個清空一次，不留下永遠跳過的事件
+            // The gap is too large to track individually; invalidate everything after late commits should have finished so no event is skipped permanently.
             scheduleFullClear(deadline, "an event id gap was too large to track");
             return;
         }
@@ -338,7 +338,7 @@ public class CacheInvalidationService {
         }
     }
 
-    /** 交易回滾的本機事件編號永遠不會出現；超過等待時間後丟掉，不會一直累積。 */
+    /** A rolled-back local event never appears; discard its ID after the wait deadline to keep tracking bounded. */
     private void expireOwnEvents(long now) {
         ownEvents.values().removeIf(sentAt -> now - sentAt > 2 * GAP_WAIT_NANOS);
     }
@@ -352,15 +352,15 @@ public class CacheInvalidationService {
         }
     }
 
-    /** 無法確定漏了哪些事件時：清空所有快取，從目前最大的編號重新開始。 */
+    /** If missed events cannot be identified, invalidate all caches and restart at the current maximum ID. */
     private void realign(String reason) {
         Long max = maxEventId();
         gaps.clear();
-        // 編號可能已重新開始，記下的本機編號可能撞到其他實例的新事件；全部清空後不再需要
+        // IDs may have restarted and recorded local IDs may now identify other instances' events; discard them after a full invalidation.
         ownEvents.clear();
         fullClearPending = false;
         cursor = max;
-        // 同啟動：比 max 小、還沒提交的事件之後才會出現，等待時間過後再清一次
+        // As at startup, uncommitted events below max may appear later; schedule another invalidation after the grace period.
         scheduleFullClear(nanoTime.getAsLong() + GAP_WAIT_NANOS, REALIGN_WINDOW);
         Changes all = new Changes();
         all.markEverything(protocols.descriptors());
@@ -387,7 +387,7 @@ public class CacheInvalidationService {
         }
     }
 
-    /** 一輪輪詢中要清除的快取。 */
+    /** Caches to invalidate during one poll. */
     private static final class Changes {
         private final Set<String> caches = new HashSet<>();
         private final Set<Long> responseIds = new HashSet<>();
@@ -427,8 +427,8 @@ public class CacheInvalidationService {
     }
 
     /**
-     * 協定事件只清除該協定的規則快取（本實例未啟用該協定時不需清除）；
-     * {@code RULE_CHANGED} 或無法辨識的事件清除所有已啟用協定的規則快取。
+     * A protocol event invalidates only that protocol's rule cache; do nothing if this instance has the protocol disabled.
+     * {@code RULE_CHANGED} or an unknown event invalidates rule caches for every enabled protocol.
      */
     private static Set<String> cachesFor(String eventType, List<ProtocolDescriptor> enabled) {
         for (ProtocolDescriptor protocol : enabled) {
@@ -454,7 +454,7 @@ public class CacheInvalidationService {
         return false;
     }
 
-    /** 每小時清理舊事件 */
+    /** Purge old events every hour */
     @Scheduled(cron = "0 0 * * * ?")
     @Transactional
     public void cleanup() {

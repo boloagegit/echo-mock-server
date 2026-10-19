@@ -19,7 +19,7 @@ public class TibcoFactoryProvider implements JmsTargetFactoryProvider {
         try {
             Class<?> factoryClass = Class.forName("com.tibco.tibjms.TibjmsConnectionFactory");
 
-            // 檢查 tibjms.jar 是否支援 jakarta.jms namespace（需要 EMS 10.3+）
+            // Check if tibjms.jar supports jakarta.jms namespace (requires EMS 10.3+)
             if (!ConnectionFactory.class.isAssignableFrom(factoryClass)) {
                 throw new IllegalStateException(
                         "TIBCO EMS client library (tibjms.jar) uses javax.jms namespace, " +

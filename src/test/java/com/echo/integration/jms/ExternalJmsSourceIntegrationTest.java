@@ -50,8 +50,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 從外部 broker（模擬公司 ESB）接收 JMS 請求：Echo 不啟動內建 Artemis，
- * 監聽外部 broker 上的 queue，並把回覆送到訊息的 JMSReplyTo。
+ * Request JMS received from external broker (analog company ESB): Echo does not start built-in Artemis,
+ * Listening to queue on external broker and sending replies to JMSReplyTo of the message.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
@@ -298,7 +298,7 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
         void customize(TextMessage message) throws Exception;
     }
 
-    /** 模擬公司系統：送一則帶 JMSReplyTo 的請求到 ESB，等回覆。 */
+    /** Simulated company system: Send a request with JMSReplyTo to ESB and wait for a reply. */
     private static Reply request(String body) throws Exception {
         return request(body, message -> { });
     }

@@ -7,9 +7,9 @@ import java.nio.charset.StandardCharsets;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 抽屜裡的長內容：標題與描述最多兩行可展開、長內容在共用程式碼檢視器裡完整呈現（只繪製可見行、
- * 全文搜尋）、區段可收合且標題固定、條件／標籤／引用規則先顯示前幾筆、點外部收合、可加寬。
- * 行為邏輯由 long-content.test.cjs 驗證。
+ * Long content in the drawer: title and description can be expanded up to two lines, long content is fully displayed in the shared code viewer (only visible lines are drawn,
+ * Full text search), the section can be collapsed and the title is fixed, the conditions/labels/reference rules display the first few strokes first, click external collapse, and can be widened.
+ * Behavioral logic verified by long-content.test.cjs.
  */
 class LongContentResourceTest {
     @Test

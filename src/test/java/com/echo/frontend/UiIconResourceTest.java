@@ -7,8 +7,8 @@ import java.nio.charset.StandardCharsets;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Echo 自有圖示：導覽與帳號動作使用同一套線條圖示（24 格線、1.75 線寬），
- * 與 App 標誌一致；圖示僅裝飾，名稱由文字或 aria-label 提供。
+ * Echo's own icon: Navigation and account actions use the same set of line icons (24 grid lines, 1.75 line width),
+ * Consistent with App logo; illustration is for decoration only, name is provided by text or aria-label.
  */
 class UiIconResourceTest {
     @Test

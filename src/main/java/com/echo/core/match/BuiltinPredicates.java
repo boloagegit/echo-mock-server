@@ -16,19 +16,19 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 /**
- * 內建運算子。
+ * Built-in operators.
  *
  * <table>
- *   <caption>運算子</caption>
- *   <tr><th>op</th><th>說明</th><th>選項</th></tr>
- *   <tr><td>equals / notEquals</td><td>文字等值（JSON 1.0 與 1 不相等，數值請用 gte／lte 或 equalToJson）</td>
+ *   <caption> operator </caption>
+ *   <tr><th>op</th><th>Description</th><th>Option</th></tr>
+ *   <tr><td>equals / notEquals</td><td> text equivalent (JSON 1.0 is not equal to 1, please use the numerical value gte/lte or equalToJson) </td>
  *       <td>caseInsensitive</td></tr>
- *   <tr><td>contains</td><td>包含子字串</td><td>caseInsensitive</td></tr>
- *   <tr><td>matches</td><td>正則全字串比對</td><td></td></tr>
- *   <tr><td>exists / absent</td><td>欄位存在／不存在</td><td></td></tr>
- *   <tr><td>gt / gte / lt / lte</td><td>數值比較</td><td></td></tr>
- *   <tr><td>in</td><td>屬於清單中任一值</td><td>caseInsensitive</td></tr>
- *   <tr><td>equalToJson</td><td>JSON 結構等值</td><td>ignoreArrayOrder, ignoreExtraElements</td></tr>
+ *   <tr><td>contains</td><td> contains the substring </td><td>caseInsensitive</td></tr>
+ *   <tr><td>matches</td><td> regular full string comparison </td><td></td></tr>
+ *   <tr><td>exists / absent</td><td> field exists/does not exist</td><td></td></tr>
+ *   <tr><td>gt / gte / lt / lte</td><td>Numerical comparison</td><td></td></tr>
+ *   <tr><td>in</td><td> belongs to any value in the list </td><td>caseInsensitive</td></tr>
+ *   <tr><td>equalToJson</td><td>JSON structural equivalent </td><td>ignoreArrayOrder, ignoreExtraElements</td></tr>
  * </table>
  */
 public final class BuiltinPredicates {
@@ -60,7 +60,7 @@ public final class BuiltinPredicates {
                         BuiltinPredicates::equalToJson));
     }
 
-    // ==================== 運算子實作 ====================
+    // ==================== Operator implementation ====================
 
     private static CompiledPredicate equalsPredicate(JsonNode expected, Map<String, JsonNode> options,
                                                      MatcherLimits limits) {
@@ -159,13 +159,13 @@ public final class BuiltinPredicates {
         };
     }
 
-    // ==================== 工具 ====================
+    // ==================== Tools ====================
 
     private static CompiledPredicate negate(CompiledPredicate predicate) {
         return actual -> !predicate.test(actual);
     }
 
-    /** 純量期望值的文字形式；JSON null 回傳 null。陣列與物件請改用 equalToJson。 */
+    /** Literal form of scalar expected value; JSON null returns null. Please use equalToJson for arrays and objects instead. */
     private static String scalarText(JsonNode expected, String op) {
         if (expected == null || expected.isContainerNode()) {
             throw new IllegalArgumentException(op + " requires a string, number, boolean or null value");
@@ -228,7 +228,7 @@ public final class BuiltinPredicates {
         return new SimplePredicate(op, options, true, passesWhenMissing, true, compiler);
     }
 
-    /** exists／absent：只看有沒有值，不接受 value 與 onMissing。 */
+    /** exists/absent: Only check whether there is a value, value and onMissing are not accepted. */
     private static PredicateFactory presence(String op, boolean whenFound) {
         return new SimplePredicate(op, Set.of(), false, !whenFound, false,
                 (expected, options, limits) -> actual -> whenFound);

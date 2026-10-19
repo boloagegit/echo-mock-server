@@ -33,7 +33,7 @@ public final class SqliteRecoveryEnvironmentPostProcessor
         String jdbcUrl = environment.getProperty("spring.datasource.url");
         Optional<Path> database = databasePath(jdbcUrl);
         if (database.isEmpty()) {
-            // 非 SQLite 或記憶體資料庫（測試）不需要復原；明確指定 sqlite profile 時仍要求檔案資料庫
+            // Non-SQLite and in-memory test databases need no recovery; an explicitly selected sqlite profile still requires a file-backed database.
             if (environment.acceptsProfiles(Profiles.of("sqlite"))) {
                 throw new IllegalStateException(
                         "SQLite recovery requires a file-backed spring.datasource.url.");
@@ -53,7 +53,7 @@ public final class SqliteRecoveryEnvironmentPostProcessor
         }
     }
 
-    /** SQLite JDBC 不會自動建立目錄；預設資料檔位於 ./data。 */
+    /** SQLite JDBC will not automatically create a directory; the default data file is located at ./data. */
     private static void createParentDirectory(Path database) {
         Path parent = database.toAbsolutePath().getParent();
         if (parent == null) {

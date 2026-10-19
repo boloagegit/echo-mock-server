@@ -1,10 +1,10 @@
 /**
- * SidebarNav component - 側邊導航列
+ * SidebarNav component - Side navigation bar
  *
- * 使用全域註冊，不需要 ES Module。
- * 透過 inject 取得 t() 函數。
+ * Use global registration, ES Module is not required.
+ * Obtain t() function through inject.
  *
- * 側欄只放導覽；主題、密度、語言、說明與帳號操作收在底部的使用者選單。
+ * The sidebar only contains navigation; the theme, density, language, description and account operations are collected in the user menu at the bottom.
  */
 const SidebarNav = {
   props: {

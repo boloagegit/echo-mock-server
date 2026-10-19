@@ -41,7 +41,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
 
 /**
- * SQLite 備份服務
+ * SQLite Backup Service
  * <p>
  * Uses SQLite's online backup command so committed WAL content is included in
  * a consistent snapshot. A snapshot is published only after integrity and
@@ -175,9 +175,9 @@ public class SqliteBackupService implements BackupService {
             Path target = dir.resolve(filename);
             staging = dir.resolve(filename + ".part");
 
-            // 使用 SQLite Online Backup API（透過 JDBC）
-            // 這會產生一個包含所有已 commit 資料的完整一致性快照
-            // 比 file copy 安全：file copy 可能漏掉 WAL 中未 checkpoint 的資料
+            // Using SQLite Online Backup API (via JDBC)
+            // This will produce a complete consistent snapshot of all commit data
+            // Safer than file copy: file copy may miss information on checkpoint that is not in WAL
             try (var conn = dataSource.getConnection(); var snapshot = ReadSnapshot.open(conn)) {
                 long expectedBytes = snapshotBytes(conn);
                 if (expectedBytes > maxTotalBytes) {

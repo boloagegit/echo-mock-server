@@ -13,7 +13,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * LDAP 整合測試 - 使用 UnboundID 內嵌 LDAP Server
+ * LDAP integration test - using UnboundID embedded LDAP Server
  */
 class LdapIntegrationTest {
 
@@ -28,7 +28,7 @@ class LdapIntegrationTest {
         
         ldapServer = new InMemoryDirectoryServer(config);
         
-        // 建立測試用戶
+        // Create test user
         ldapServer.add("dn: dc=example,dc=com", "objectClass: domain", "dc: example");
         ldapServer.add("dn: ou=users,dc=example,dc=com", "objectClass: organizationalUnit", "ou: users");
         ldapServer.add(

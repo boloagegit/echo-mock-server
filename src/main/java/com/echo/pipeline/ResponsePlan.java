@@ -5,19 +5,19 @@ import com.echo.entity.FaultType;
 import java.util.concurrent.CompletionStage;
 
 /**
- * {@link Responder} 決定的回應：由 pipeline 統一套用延遲、寫入請求紀錄，再交給協定寫回。
+ * {@link Responder}’s decision response: pipeline applies the delay uniformly, writes the request record, and then writes it back to the protocol.
  */
 public sealed interface ResponsePlan {
 
-    /** 立即可用的回應內容（mock）。 */
+    /** Immediately available response content (mock). */
     record Content(MockResponse response) implements ResponsePlan {
     }
 
-    /** 故障注入；{@code response} 是故障發生前要寫回的內容（連線重置時協定會忽略它）。 */
+    /** Fault injection; {@code response} is the content to be written back before the fault occurs (the protocol ignores it when the connection is reset). */
     record Fault(FaultType type, MockResponse response) implements ResponsePlan {
     }
 
-    /** 轉發到下游，回應在 I/O 完成後才可用。 */
+    /** Forwarded to downstream, response will not be available until I/O is completed. */
     record Forwarded(CompletionStage<MockResponse> response) implements ResponsePlan {
     }
 }

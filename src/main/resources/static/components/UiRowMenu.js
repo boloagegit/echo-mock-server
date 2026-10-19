@@ -1,8 +1,8 @@
 /**
- * UiRowMenu - 表格列的「⋯」選單
+ * UiRowMenu - "⋯" menu of table column
  *
- * 包裝 UiDropdownMenu 並自行管理開關狀態，讓每一列不必在父層記錄。
- * 鍵盤行為（↑↓、Home／End、Esc）沿用 UiDropdownMenu；點擊選單外即關閉。
+ * Wrap UiDropdownMenu and manage the switch state by itself, so that each column does not need to be recorded in the parent layer.
+ * Keyboard behavior (↑↓, Home/End, Esc) follows UiDropdownMenu; click outside the menu to close.
  */
 const UiRowMenu = {
   props: {

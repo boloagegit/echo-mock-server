@@ -15,7 +15,7 @@ import java.io.IOException;
 import java.io.StringReader;
 
 /**
- * 第一次存取時才解析 JSON 或 XML 的 {@link BodyView}。僅供單一請求、單一執行緒使用。
+ * {@link BodyView} of JSON or XML is only parsed for the first time. For use by a single request and a single thread only.
  */
 final class LazyBodyView implements BodyView {
 
@@ -99,7 +99,7 @@ final class LazyBodyView implements BodyView {
         try {
             DocumentBuilder builder = DOC_BUILDER.get();
             builder.reset();
-            // 預設 handler 會把解析錯誤印到 stderr；非 XML body 屬於正常情況，靜默處理。
+            // By default, handler will print parsing errors to stderr; non-XML body is a normal situation and will be processed silently.
             builder.setErrorHandler(SILENT_ERRORS);
             return builder.parse(new InputSource(new StringReader(trimmed)));
         } catch (SAXException | IOException e) {
@@ -115,7 +115,7 @@ final class LazyBodyView implements BodyView {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
-    /** 與舊版 ConditionMatcher 相同的防 XXE 設定。 */
+    /** Same anti-XXE settings as the old version ConditionMatcher. */
     private static DocumentBuilder newDocumentBuilder() {
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();

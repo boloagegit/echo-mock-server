@@ -1,8 +1,8 @@
 /**
- * useTour - 互動式導覽 Composable
+ * useTour - Interactive Tour Composable
  *
- * 管理新手引導 tour 的狀態與步驟邏輯。
- * 從說明文件選擇開始導覽 → 開啟示範規則 → 結束後回到進入前情境。
+ * Manage the status and step logic of novice guide tour.
+ * Select Start Navigation from the Help File → Open the Demonstration Rules → Return to the pre-entry situation after the end.
  *
  * @param {Object} deps - { t, onFinish }
  * @returns {{ tourActive, tourStep, helpSeen, startTour, nextStep, prevStep, skipTour, tourSteps }}

@@ -137,7 +137,7 @@ class AuditSummaryCalculatorTest {
         assertThat(result.name()).isNull();
     }
 
-    /** 與前端 audit-diff.js 的逐行比對相同（數值由前端算出對照），列表與明細的行數才一致。 */
+    /** The row-by-row comparison is the same as the front-end audit-diff.js (the value is calculated and compared by the front-end), so the number of rows in the list and details are consistent. */
     @Test
     void lineDelta_matchesTheDetailLineDiff() {
         assertThat(AuditSummaryCalculator.lineDelta("a\nb\nc", "c\na\nb")).containsExactly(1, 1);

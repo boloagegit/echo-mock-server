@@ -18,7 +18,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 匯入/匯出整合測試（HTTP + JMS）
+ * Import/export integration test (HTTP + JMS)
  */
 @TestPropertySource(properties = "echo.features.bulk-import-export-enabled=true")
 class ImportExportIntegrationTest extends BaseIntegrationTest {
@@ -35,7 +35,7 @@ class ImportExportIntegrationTest extends BaseIntegrationTest {
         });
     }
 
-    // ========== 8.2 匯出單一規則 ==========
+    // ========== 8.2 Exporting a single rule ==========
 
     @Test
     @DisplayName("匯出單一 HTTP 規則 → 確認包含 sseEnabled、sseLoopEnabled 欄位")
@@ -86,7 +86,7 @@ class ImportExportIntegrationTest extends BaseIntegrationTest {
         assertThat(exported.getMatchKey()).isEqualTo("EXPORT.Q");
     }
 
-    // ========== 8.3 匯入單一規則 ==========
+    // ========== 8.3 Importing a single rule ==========
 
     @Test
     @DisplayName("匯入 HTTP SSE 規則 → 確認正確建立")
@@ -113,7 +113,7 @@ class ImportExportIntegrationTest extends BaseIntegrationTest {
         assertThat(imported.getMatchKey()).isEqualTo("/api/imported-sse");
         assertThat(imported.getSseEnabled()).isTrue();
 
-        // 透過 GET 驗證已建立
+        // Verification established via GET
         ResponseEntity<RuleDto> verify = adminClient()
                 .getForEntity("/api/admin/rules/" + imported.getId(), RuleDto.class);
         assertThat(verify.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -140,7 +140,7 @@ class ImportExportIntegrationTest extends BaseIntegrationTest {
         assertThat(imported.getProtocol()).isEqualTo(Protocol.JMS);
         assertThat(imported.getMatchKey()).isEqualTo("IMPORT.Q");
 
-        // 透過 GET 驗證已建立
+        // Verification established via GET
         ResponseEntity<RuleDto> verify = adminClient()
                 .getForEntity("/api/admin/rules/" + imported.getId(), RuleDto.class);
         assertThat(verify.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -148,7 +148,7 @@ class ImportExportIntegrationTest extends BaseIntegrationTest {
         assertThat(verify.getBody().getProtocol()).isEqualTo(Protocol.JMS);
     }
 
-    // ========== 8.4 批次匯入 ==========
+    // ========== 8.4 Batch Import ==========
 
     @Test
     @DisplayName("批次匯入混合 HTTP + JMS + SSE 規則 → 確認全部正確匯入")
@@ -190,19 +190,19 @@ class ImportExportIntegrationTest extends BaseIntegrationTest {
         assertThat(body).isNotNull();
         assertThat(body.get("imported")).isEqualTo(3);
 
-        // 驗證全部規則已建立
+        // Verify that all rules have been created
         ResponseEntity<List> listResponse = adminClient()
                 .getForEntity("/api/admin/rules", List.class);
         assertThat(listResponse.getBody()).isNotNull();
         assertThat(listResponse.getBody()).hasSize(3);
     }
 
-    // ========== 8.5 全量匯出 ==========
+    // ========== 8.5 Full export ==========
 
     @Test
     @DisplayName("建立混合規則 → 全量匯出確認完整")
     void exportAllRules_shouldContainAllMixedRules() {
-        // 先確認目前無規則（@AfterEach 已清理）
+        // First confirm that there are currently no rules (@AfterEach has been cleared)
         ResponseEntity<List<RuleDto>> preCheck = adminClient().exchange(
                 "/api/admin/rules/export",
                 HttpMethod.GET,
@@ -211,7 +211,7 @@ class ImportExportIntegrationTest extends BaseIntegrationTest {
         assertThat(preCheck.getBody()).isNotNull();
         int existingCount = preCheck.getBody().size();
 
-        // 建立混合規則
+        // Creating hybrid rules
         createHttpRule("/api/export-all-http", "GET", "{\"type\":\"http\"}");
         String sseEvents = "[{\"type\":\"normal\",\"data\":\"export-all-sse\"}]";
         createSseRule("/api/export-all-sse", sseEvents);
@@ -228,7 +228,7 @@ class ImportExportIntegrationTest extends BaseIntegrationTest {
         assertThat(exported).isNotNull();
         assertThat(exported).hasSize(existingCount + 3);
 
-        // 驗證包含各種協定（只看本測試建立的）
+        // Verification includes various protocols (only those created by this test)
         long httpCount = exported.stream()
                 .filter(r -> r.getProtocol() == Protocol.HTTP
                         && r.getMatchKey() != null
@@ -238,10 +238,10 @@ class ImportExportIntegrationTest extends BaseIntegrationTest {
                 .filter(r -> r.getProtocol() == Protocol.JMS
                         && "EXPORT-ALL.Q".equals(r.getMatchKey()))
                 .count();
-        assertThat(httpCount).isEqualTo(2); // 一般 HTTP + SSE
+        assertThat(httpCount).isEqualTo(2); // General HTTP + SSE
         assertThat(jmsCount).isEqualTo(1);
 
-        // 驗證 SSE 規則欄位
+        // Validate SSE rule field
         RuleDto sseExported = exported.stream()
                 .filter(r -> "/api/export-all-sse".equals(r.getMatchKey()))
                 .findFirst()
@@ -249,7 +249,7 @@ class ImportExportIntegrationTest extends BaseIntegrationTest {
         assertThat(sseExported).isNotNull();
         assertThat(sseExported.getSseEnabled()).isTrue();
 
-        // 驗證 JMS 規則欄位
+        // Validate JMS rule field
         RuleDto jmsExported = exported.stream()
                 .filter(r -> "EXPORT-ALL.Q".equals(r.getMatchKey()))
                 .findFirst()

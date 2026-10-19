@@ -73,7 +73,7 @@ class RuleServiceTest {
         verify(ruleAuditService).logBatchUpdate(anyList(), anyList());
         verify(protocolHandlerRegistry).findAllByIds(List.of(ruleId));
         verify(protocolHandlerRegistry).updateEnabled(List.of(ruleId), false);
-        // 記錄修訂時不可改動受管理的實體，否則會在批次 UPDATE 前被寫回資料庫
+        // Managed entities cannot be modified when recording revisions, otherwise they will be written back to the database before batch UPDATE
         assertThat(rule.getEnabled()).isTrue();
     }
 

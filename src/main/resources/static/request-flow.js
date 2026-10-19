@@ -1,9 +1,9 @@
 /**
- * request-flow.js - 由一筆請求紀錄整理出「處理流程」：收到請求 → 比對規則 → 模擬回應／轉發／找不到規則 → 回給呼叫端。
+ * request-flow.js - The "processing flow" is organized from a request record: Request received → Rule comparison → Simulated response/Forwarding/Rule not found → Return to the calling end.
  *
- * 純函式、不依賴 Vue，可在 Node 測試中直接載入。輸入是列表摘要（log）、詳細資料（detail，可為 null）與匹配鏈；
- * 舊紀錄沒有 candidateCount、delayMs 等欄位時，對應的資訊就不顯示。
- * 每個步驟的 tone：ok（正常）、warn（特殊處理或沒命中）、bad（失敗）、off（沒有經過）。
+ * Pure function, does not depend on Vue, can be loaded directly in Node test. The input is list summary (log), detailed information (detail, can be null) and matching chain;
+ * When the old record does not have candidateCount, delayMs and other fields, the corresponding information will not be displayed.
+ * tone for each step: ok (normal), warn (special treatment or miss), bad (failed), off (not passed).
  */
 const RequestFlow = (() => {
     const SCENARIO_DETAIL = /^scenario: (.*) \(required: (.*), current: (.*)\)$/;
@@ -18,7 +18,7 @@ const RequestFlow = (() => {
         }
     };
 
-    /** 「scenario: checkout (required: Paid, current: Started)」→ {scenario, required, current}；格式不同時只有 detail。 */
+    /** 「scenario: checkout (required: Paid, current: Started)」 → {scenario, required, current}; only when the formats are different detail. */
     const scenarioSkip = entry => {
         const match = SCENARIO_DETAIL.exec(entry.detail || '');
         return match
@@ -35,9 +35,9 @@ const RequestFlow = (() => {
     };
 
     /**
-     * @param log    列表摘要（matched、forwarded、proxyStatus、faultType、時間等）
-     * @param detail 詳細資料（candidateCount、delayMs、sseEventCount、scenarioSkipped、matchedByFallback）；未載入時為 null
-     * @param chain  解析後的匹配鏈（陣列）；沒有時為 null
+     * @param log    List summary (matched, forwarded, proxyStatus, faultType, time, etc.)
+     * @param detail Detailed information (candidateCount, delayMs, sseEventCount, scenarioSkipped, matchedByFallback); null when not loaded
+     * @param chain  Parsed matching chain (array); if not available, null
      */
     const build = (log, detail, chain) => {
         const d = detail || {};
@@ -118,12 +118,12 @@ const RequestFlow = (() => {
         return {
             received: { protocol: log.protocol, method: log.method, endpoint: log.endpoint, clientIp: log.clientIp, targetHost: log.targetHost, jms },
             match, route, mock, forward, reply, timing,
-            // 詳細資料尚未載入時，候選數與延遲等資訊之後才會出現
+            // When the detailed information has not been loaded, information such as the number of candidates and delay will appear later.
             complete: !!detail,
         };
     };
 
-    /** 時間條各段的寬度（百分比）；有值的段至少 2%，總和為 100。 */
+    /** Width (percentage) of each segment of the time bar; at least 2% of segments have values, summing to 100. */
     const timingSegments = timing => {
         const parts = [
             { key: 'match', ms: timing.matchMs },

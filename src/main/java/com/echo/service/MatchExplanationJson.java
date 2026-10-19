@@ -11,20 +11,20 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.Optional;
 
 /**
- * 把 {@link MatchExplanation} 轉成匹配鏈的 {@code detailTree} JSON，供請求紀錄的「比對過程」以樹狀顯示。
+ * Convert {@link MatchExplanation} to {@code detailTree} JSON of the matching chain, and display the "comparison process" of the request record in a tree shape.
  * <ul>
- *   <li>群組：{@code {"node":"all|any|not","passed":true,"children":[...]}}</li>
- *   <li>結構化條件：{@code {"node":"leaf","passed":false,"spec":{...},"actual":"\"JP\""}}</li>
- *   <li>舊格式條件：{@code {"node":"legacy","source":"body","passed":true,"condition":"a=b","actual":"b"}}</li>
+ *   <li>group: {@code {"node":"all|any|not","passed":true,"children":[...]}}</li>
+ *   <li>structured condition: {@code {"node":"leaf","passed":false,"spec":{...},"actual":"\"JP\""}}</li>
+ *   <li>Old format condition: {@code {"node":"legacy","source":"body","passed":true,"condition":"a=b","actual":"b"}}</li>
  * </ul>
- * 取不到值時以 {@code "missing":true} 表示（結構化條件無法以該方式取值時為 {@code "unavailable":true}），不帶 {@code actual}。
- * 紀錄會存進資料庫或記憶體（記憶體模式預設保留 10,000 筆），因此限制大小：節點數、整棵樹的大約字數、
- * 文字長度與期望值長度都有上限，超過時以 {@code truncated}、{@code valueOmitted} 標示。
+ * When the value cannot be obtained, it is represented by {@code "missing":true} (when the structured condition cannot be obtained in this way, it is represented by {@code "unavailable":true}), without {@code actual}.
+ * Records will be stored in the database or memory (memory mode retains 10,000 records by default), so the size is limited: number of nodes, approximate number of words in the entire tree,
+ * There is an upper limit for the text length and the expected value length. If it exceeds the upper limit, it will be marked with {@code truncated} and {@code valueOmitted}.
  */
 public final class MatchExplanationJson {
 
     static final int MAX_NODES = 200;
-    /** 整棵樹的大約字數上限（一般規則的樹不到 1,000 字）。 */
+    /** Approximate character-count limit for the whole tree; typical rule trees contain fewer than 1,000 characters. */
     static final int MAX_TREE_CHARS = 8_000;
     static final int MAX_TEXT_LENGTH = 300;
     static final int MAX_SPEC_LENGTH = 1_000;
@@ -40,7 +40,7 @@ public final class MatchExplanationJson {
         return write(explanation, new Budget()).toString();
     }
 
-    /** 已寫入的節點數與大約字數。 */
+    /** Number of nodes and approximate word count written. */
     private static final class Budget {
         private int nodes;
         private int chars;
@@ -88,7 +88,7 @@ public final class MatchExplanationJson {
     private static void writeSpec(MatchExplanation explanation, ObjectNode json) {
         MatchNode.Leaf leaf = explanation.leaf();
         if (leaf == null) {
-            // 外部註冊的節點沒有結構化條件，只能顯示說明文字
+            // The externally registered node has no structured conditions and can only display description text.
             json.put("description", truncate(explanation.expected()));
             return;
         }
@@ -100,7 +100,7 @@ public final class MatchExplanationJson {
         json.set("spec", spec);
     }
 
-    /** 結構化條件的實際值已是顯示用的摘要（字串加引號、多個值為清單），取不到值時為 missing／unavailable。 */
+    /** The actual value of the structured condition is already a summary for display (the string is enclosed in quotes, and multiple values are a list). When the value cannot be obtained, it is missing/unavailable. */
     private static void writeLeafActual(String actual, ObjectNode json) {
         if (actual == null || LEAF_MISSING.equals(actual)) {
             json.put("missing", true);
@@ -111,7 +111,7 @@ public final class MatchExplanationJson {
         }
     }
 
-    /** 舊格式條件的實際值為 {@code 欄位=值}；欄位不含 =，取不到值時舊版顯示 null 或 not found。 */
+    /** The actual value of the old format condition is {@code field=value}; the field does not contain =. When the value cannot be obtained, the old version displays null or not found. */
     private static void writeLegacyActual(String actual, ObjectNode json) {
         String value = actual == null ? null : actual.substring(actual.indexOf('=') + 1);
         if (value == null || "null".equals(value) || "not found".equals(value)) {

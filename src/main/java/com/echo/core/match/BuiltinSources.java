@@ -25,7 +25,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 內建取值來源：{@code body}、{@code query}、{@code header}、{@code method}、{@code path}。
+ * Built-in value sources: {@code body}, {@code query}, {@code header}, {@code method}, {@code path}.
  */
 public final class BuiltinSources {
 
@@ -91,7 +91,7 @@ public final class BuiltinSources {
     // ==================== body ====================
 
     private static ValueExtractor body(Selector selector) {
-        // 簡單路徑（例如 //Order/Status）以 local name 比對，DOM 與串流掃描結果相同；其他 XPath 交給 XPath 引擎
+        // A simple path (such as //Order/Status) is compared with local name, DOM is the same as the streaming scan result; other XPath is handed over to the XPath engine
         XmlPath xmlPath = selector.kind() == Selector.Kind.XPATH
                 ? XmlPath.parse(selector.expression()).orElse(null) : null;
         ValueExtractor extractor = switch (selector.kind()) {
@@ -145,7 +145,7 @@ public final class BuiltinSources {
         try {
             path = JsonPath.compile(expression);
         } catch (InvalidPathException e) {
-            // Jayway 的訊息常是內部例外（例如 StringIndexOutOfBoundsException），對使用者沒有幫助
+            // Jayway messages are often internal exceptions (such as StringIndexOutOfBoundsException) and are not helpful to users.
             throw new IllegalArgumentException("Invalid JSONPath: " + expression, e);
         }
         boolean definite = path.isDefinite();
@@ -159,7 +159,7 @@ public final class BuiltinSources {
                 Object value = path.read(json, JSON_PATH_CONFIGURATION);
                 result = value instanceof JsonNode node ? node : MAPPER.valueToTree(value);
             } catch (RuntimeException e) {
-                // PathNotFoundException 以及對錯誤型別套用 filter 等，都視為欄位不存在。
+                // PathNotFoundException and applying filter to the wrong type are treated as if the field does not exist.
                 return Extracted.missing();
             }
             if (definite || !result.isArray()) {
@@ -186,7 +186,7 @@ public final class BuiltinSources {
                 }
                 return Extracted.of(values);
             } catch (XPathExpressionException nodeSetFailure) {
-                // 例如 count(//Item)：結果不是節點集合，改取字串值。
+                // For example, count(//Item): the result is not a node collection, change the string value.
                 try {
                     return Extracted.of(Value.ofText((String) evaluateXPath(expression, doc, XPathConstants.STRING)));
                 } catch (XPathExpressionException e) {
@@ -219,7 +219,7 @@ public final class BuiltinSources {
         };
     }
 
-    /** 把 {@code a.b[0][1].c} 拆成 {@code ["a", "b", 0, 1, "c"]}。 */
+    /** Split {@code a.b[0][1].c} into {@code ["a", "b", 0, 1, "c"]}. */
     private static List<Object> parseFieldPath(String expression) {
         List<Object> steps = new ArrayList<>();
         for (String segment : expression.split("\\.", -1)) {

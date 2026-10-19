@@ -28,11 +28,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * BuiltinUserService 屬性測試（jqwik）
+ * BuiltinUserService attribute test (jqwik)
  * <p>
- * 使用程式化 SQLite 資料庫設定，每個 @Property 方法前重建乾淨的資料庫環境。
- * 每次 try 使用 uniqueName() 產生唯一帳號名稱，避免跨 try 衝突。
- * 涵蓋設計文件中的 Property 1-14。
+ * Using the programmatic SQLite database configuration, rebuild a clean database environment before each @Property method.
+ * Each time try uses uniqueName() to generate a unique account name to avoid cross-try conflicts.
+ * Covering Property 1-14 in the design file.
  */
 class BuiltinUserServicePropertyTest {
 
@@ -40,7 +40,7 @@ class BuiltinUserServicePropertyTest {
     private BuiltinUserRepository repository;
     private EntityManagerFactory emf;
     private TransactionTemplate txTemplate;
-    // 最低強度（4）：雜湊格式與驗證行為相同，每次雜湊從約 80 ms 降到 1 ms 左右；正式程式維持預設強度
+    // Minimum strength (4): The hash format is the same as the verification behavior. Each hash is reduced from about 80 ms to about 1 ms; the official program maintains the default strength
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder(4);
     private final AtomicInteger counter = new AtomicInteger(0);
 
@@ -166,7 +166,7 @@ class BuiltinUserServicePropertyTest {
     // ========== Property Tests ==========
 
     /**
-     * Feature: builtin-account-management, Property 1: 帳號建立儲存 BCrypt 密碼並指派 ROLE_USER
+     * Feature: builtin-account-management, Property 1: Create an account, save the BCrypt password and assign ROLE_USER
      * <p>
      * For any valid username and password, after createUser, the stored password
      * should be BCrypt-verifiable and role should be ROLE_USER.
@@ -189,7 +189,7 @@ class BuiltinUserServicePropertyTest {
     }
 
     /**
-     * Feature: builtin-account-management, Property 2: 重複帳號名稱拒絕建立
+     * Feature: builtin-account-management, Property 2: Rejection of duplicate account name creation
      * <p>
      * Create a user, then try to create another with the same username
      * → should throw IllegalArgumentException("USERNAME_EXISTS").
@@ -211,7 +211,7 @@ class BuiltinUserServicePropertyTest {
     }
 
     /**
-     * Feature: builtin-account-management, Property 3: 帳號名稱長度驗證
+     * Feature: builtin-account-management, Property 3: Account name length verification
      * <p>
      * For any string with length < 3 or > 50, createUser should throw
      * IllegalArgumentException("USERNAME_LENGTH").
@@ -239,7 +239,7 @@ class BuiltinUserServicePropertyTest {
     }
 
     /**
-     * Feature: builtin-account-management, Property 4: 密碼最短長度驗證
+     * Feature: builtin-account-management, Property 4: Minimum password length verification
      * <p>
      * For any string with length < 6, createUser should throw
      * IllegalArgumentException("PASSWORD_TOO_SHORT").
@@ -274,7 +274,7 @@ class BuiltinUserServicePropertyTest {
     }
 
     /**
-     * Feature: builtin-account-management, Property 5: 認證結果與密碼匹配一致性
+     * Feature: builtin-account-management, Property 5: Authentication result and password matching consistency
      * <p>
      * For any created user, authenticate(username, correctPassword) returns true,
      * authenticate(username, wrongPassword) returns false.
@@ -299,7 +299,7 @@ class BuiltinUserServicePropertyTest {
     }
 
     /**
-     * Feature: builtin-account-management, Property 6: 停用帳號拒絕認證
+     * Feature: builtin-account-management, Property 6: Disable account rejection authentication
      * <p>
      * For any created and then disabled user, authenticate should return false
      * even with correct password.
@@ -320,7 +320,7 @@ class BuiltinUserServicePropertyTest {
     }
 
     /**
-     * Feature: builtin-account-management, Property 7: 搜尋結果僅包含匹配帳號
+     * Feature: builtin-account-management, Property 7: Search results only include matching accounts
      * <p>
      * For any keyword, all returned users from searchUsers should have username
      * containing the keyword (case-insensitive).
@@ -344,7 +344,7 @@ class BuiltinUserServicePropertyTest {
     }
 
     /**
-     * Feature: builtin-account-management, Property 8: 密碼重設產生有效臨時密碼並更新標記
+     * Feature: builtin-account-management, Property 8: Password reset generates a valid temporary password and updates the flag
      * <p>
      * After resetPassword, the returned temp password should BCrypt-match the stored hash,
      * passwordResetRequested should be false, forceChangePassword should be true.
@@ -373,7 +373,7 @@ class BuiltinUserServicePropertyTest {
     }
 
     /**
-     * Feature: builtin-account-management, Property 9: 忘記密碼回應不揭露帳號存在性
+     * Feature: builtin-account-management, Property 9: Forgot password response does not reveal the existence of the account
      * <p>
      * requestPasswordReset should not throw for non-existent usernames.
      *
@@ -389,7 +389,7 @@ class BuiltinUserServicePropertyTest {
     }
 
     /**
-     * Feature: builtin-account-management, Property 10: 啟用/停用狀態切換 round-trip
+     * Feature: builtin-account-management, Property 10: Enable/disable status switching round-trip
      * <p>
      * After disableUser, enabled should be false. After enableUser, enabled should be true.
      *
@@ -414,7 +414,7 @@ class BuiltinUserServicePropertyTest {
     }
 
     /**
-     * Feature: builtin-account-management, Property 11: 刪除帳號移除記錄
+     * Feature: builtin-account-management, Property 11: Delete account removal record
      * <p>
      * After deleteUser, the user should not exist in the repository.
      *
@@ -444,7 +444,7 @@ class BuiltinUserServicePropertyTest {
     }
 
     /**
-     * Feature: builtin-account-management, Property 12: 修改密碼 round-trip
+     * Feature: builtin-account-management, Property 12: Change password round-trip
      * <p>
      * After changePassword with correct old password and valid new password,
      * authenticate with new password should return true.
@@ -472,7 +472,7 @@ class BuiltinUserServicePropertyTest {
     }
 
     /**
-     * Feature: builtin-account-management, Property 13: 錯誤舊密碼拒絕修改
+     * Feature: builtin-account-management, Property 13: Wrong old password refuses to be modified
      * <p>
      * changePassword with wrong old password should throw
      * IllegalArgumentException("OLD_PASSWORD_INCORRECT").
@@ -499,7 +499,7 @@ class BuiltinUserServicePropertyTest {
     }
 
     /**
-     * Feature: builtin-account-management, Property 14: 修改密碼後清除強制修改標記
+     * Feature: builtin-account-management, Property 14: Clear the forced modification mark after changing the password
      * <p>
      * For a user with forceChangePassword=true (after resetPassword),
      * changePassword should set forceChangePassword=false.

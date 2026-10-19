@@ -15,7 +15,7 @@ import org.springframework.jms.listener.MessageListenerContainer;
 import org.springframework.stereotype.Component;
 
 /**
- * JMS 連線管理器
+ * JMS Connection Manager
  */
 @Component
 @ConditionalOnProperty(name = "echo.jms.enabled", havingValue = "true")
@@ -63,25 +63,25 @@ public class JmsConnectionManager {
         return connected && jmsTemplate != null;
     }
 
-    /** 收訊來源：embedded 或外部 broker 類型。 */
+    /** Receiving source: embedded or external broker type. */
     public String sourceType() {
         JmsProperties.Source source = jmsProperties.getSource();
         return source.isExternal() ? source.getType().trim().toLowerCase(java.util.Locale.ROOT)
                 : JmsProperties.Source.EMBEDDED;
     }
 
-    /** 收訊來源的 broker 位址。 */
+    /** The broker address of the receiving source. */
     public String sourceUrl() {
         JmsProperties.Source source = jmsProperties.getSource();
         return source.isExternal() ? source.getServerUrl() : "tcp://localhost:" + jmsProperties.getPort();
     }
 
-    /** Listener 收訊狀態。 */
+    /** Listener reception status. */
     public enum ListenerState { RECEIVING, RECONNECTING, UNKNOWN }
 
     /**
-     * Listener 是否正在接收：container 已啟動、不在重新連線中，且至少有一個 consumer。
-     * 沒有 listener container 資訊時為 {@link ListenerState#UNKNOWN}。
+     * The listener is receiving when its container is running, is not reconnecting, and has at least one consumer.
+     * {@link ListenerState#UNKNOWN} when there is no listener container information.
      */
     public ListenerState listenerState() {
         JmsListenerEndpointRegistry registry = listenerRegistry == null ? null : listenerRegistry.getIfAvailable();

@@ -12,16 +12,16 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 
 /**
- * Artemis 配置 - 從 echo.jms 讀取設定
+ * Artemis configuration - read settings from echo.jms
  * <p>
- * Embedded mode 同時啟用 in-VM transport 和 TCP acceptor。
- * App 內部的 JmsListener 和 JmsTemplate 走 in-VM，
- * 外部服務可透過 TCP (預設 tcp://localhost:61616) 連入發送訊息。
+ * Embedded mode enables both in-VM transport and TCP acceptor.
+ * The application's JmsListener and JmsTemplate use in-VM transport;
+ * external services can send messages over TCP, defaulting to tcp://localhost:61616.
  * <p>
- * 注意：使用 fully qualified @Configuration 避免與 Artemis Configuration 類別衝突
+ * Use the fully qualified @Configuration annotation to avoid a name clash with Artemis Configuration.
  * <p>
- * 設定外部 broker（{@code echo.jms.source.type} 不是 embedded）時不啟動內建 Artemis，
- * 改由 {@link ExternalJmsSourceConfig} 提供連線。
+ * Do not start embedded Artemis when an external broker is configured ({@code echo.jms.source.type} is not embedded).
+ * {@link ExternalJmsSourceConfig} provides the connection instead.
  */
 @org.springframework.context.annotation.Configuration
 @ConditionalOnProperty(name = "echo.jms.enabled", havingValue = "true")
@@ -31,11 +31,11 @@ public class ArtemisConfig {
 
     private static final int DEFAULT_PAGE_SIZE_BYTES = 1024 * 1024;
     private static final int PAGE_CACHE_MAX_PAGES = 2;
-    /** 只用來讓暫時佇列套用自己的 address setting；不會改變佇列名稱。 */
+    /** Apply separate address settings to temporary queues without changing their names. */
     static final String TEMPORARY_QUEUE_NAMESPACE = "echo-temporary-queues";
     /**
-     * Broker 檢查可刪除佇列的間隔（Artemis 預設 30 秒）。客戶端請求很快時，等待刪除的佇列數約為
-     * 每秒請求數 ×（閒置時間 + 檢查間隔），所以縮短到 5 秒。
+     * Interval for broker scans for deletable queues; Artemis defaults to 30 seconds. Under high request rates, the pending queue count is roughly
+     * requests per second times (idle timeout + scan interval), so reduce the interval to 5 seconds.
      */
     static final long TEMPORARY_QUEUE_SCAN_PERIOD_MS = 5_000;
 
@@ -47,14 +47,14 @@ public class ArtemisConfig {
         props.setUser(jmsProperties.getUsername());
         props.setPassword(jmsProperties.getPassword());
         props.getEmbedded().setEnabled(true);
-        // 關閉 persistence 時 Artemis 會用 heap 組裝 large message，paging 尚未介入就可能 OOM。
+        // With persistence disabled, Artemis assembles large messages on the heap, potentially exhausting memory before paging can intervene.
         props.getEmbedded().setPersistent(jmsProperties.isPersistent());
         props.getEmbedded().setDataDirectory(jmsProperties.getDataDirectory());
         return props;
     }
 
     /**
-     * 加入 TCP acceptor，讓外部服務可透過 tcp://localhost:{port} 連入
+     * Add a TCP acceptor for external services to connect through tcp://localhost:{port}.
      */
     @Bean
     public ArtemisConfigurationCustomizer artemisConfigurationCustomizer(JmsProperties jmsProperties) {
@@ -137,12 +137,12 @@ public class ArtemisConfig {
     }
 
     /**
-     * 沒有 consumer、閒置超過設定時間的暫時佇列由 broker 刪除。
+     * Delete temporary queues that have no consumers and have exceeded the configured idle timeout.
      * <p>
-     * 暫時佇列原本只在建立它的連線關閉時才刪除。客戶端若在一條長連線上每次請求都建新的回覆佇列
-     * 卻不刪，每個佇列約佔 50 KB heap，
-     * 幾天後就會耗盡記憶體。仍有 consumer 的佇列不受影響；客戶端之後再對已刪除的佇列建立 consumer 時，
-     * Artemis client 會自動重建。只套用到暫時佇列，其他佇列沿用 {@code #} 的設定。
+     * Normally temporary queues are deleted only when their creating connection closes. Some long-lived clients create a reply queue per request
+     * without deleting it. Each queue occupies roughly 50 KB of heap,
+     * which can exhaust memory in days. Queues with active consumers are unaffected. If a client later creates a consumer for a deleted queue,
+     * the Artemis client recreates it automatically. Apply this only to temporary queues; other queues retain the {@code #} settings.
      */
     private static void configureTemporaryQueueCleanup(
             org.apache.activemq.artemis.core.config.Configuration configuration,
@@ -156,8 +156,8 @@ public class ArtemisConfig {
         }
         configuration.setTemporaryQueueNamespace(TEMPORARY_QUEUE_NAMESPACE);
         configuration.setAddressQueueScanPeriod(TEMPORARY_QUEUE_SCAN_PERIOD_MS);
-        // 與 # 的設定合併：分頁、記憶體上限與重送設定不變，只多了閒置刪除。
-        // 訊息數不限：沒有 consumer 的回覆佇列裡只剩客戶端已放棄等待的逾時回覆。
+        // Merge with the # settings: preserve paging, memory limits, and redelivery settings; add only idle deletion.
+        // No message-count limit: a reply queue without consumers contains only timed-out replies that clients have stopped waiting for.
         configuration.addAddressSetting(TEMPORARY_QUEUE_NAMESPACE + ".#", new AddressSettings()
                 .setAutoDeleteCreatedQueues(true)
                 .setAutoDeleteQueuesDelay(idleDeleteMs)

@@ -16,22 +16,22 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * 規則的判斷順序與「一定輪不到」的規則（見 {@link RuleOrderAnalyzer}），供規則頁顯示。
+ * Rule evaluation order and definitely unreachable rules for the rules page; see {@link RuleOrderAnalyzer}.
  * <p>
- * 使用與實際比對相同的規則來源與排序：HTTP 取自規則快照（啟用中且 Response 有效），JMS 取自快取的全部規則（只看啟用中的）。
- * 結果依來源物件快取，規則異動清除快取後自動重算。
+ * Use the same candidates and ordering as actual matching: enabled HTTP snapshot rules with valid Responses, and enabled JMS rules from the cached full list.
+ * Cache results by source-object identity; recompute automatically after rule changes invalidate the source cache.
  */
 @Service
 public class RuleOrderService {
 
-    /** 判斷順序中，沒有條件、但前面已有預設規則而在這個範圍用不到的規則（萬用規則在其他路徑仍可能用到）。 */
+    /** Unconditional rules unused in this scope because an earlier default already covers it; wildcard rules may remain useful on other paths. */
     static final String NOT_USED_HERE = "notUsedHere";
 
     private final HttpRuleService httpRuleService;
     private final JmsRuleService jmsRuleService;
     private final Optional<JmsProperties> jmsProperties;
     private final AtomicReference<CachedIssues> cachedIssues = new AtomicReference<>();
-    /** 索引依規則來源物件重用（來源在規則異動、快取清除後才會換成新的物件）。 */
+    /** Reuse the index by source-object identity; rule changes and cache invalidation replace the source object. */
     private final AtomicReference<HttpSource> cachedHttp = new AtomicReference<>();
     private final AtomicReference<JmsSource> cachedJms = new AtomicReference<>();
 
@@ -42,7 +42,7 @@ public class RuleOrderService {
         this.jmsProperties = jmsProperties;
     }
 
-    /** 判斷順序中的一條規則。 */
+    /** One rule in evaluation order. */
     public record Entry(String id, String description, String method, String path, String targetHost,
                         String queueName, Integer priority, boolean enabled, boolean conditional,
                         String bodyCondition, String queryCondition, String headerCondition, String matchSpec,
@@ -51,16 +51,16 @@ public class RuleOrderService {
     }
 
     /**
-     * 輪不到的原因；{@code byRuleId} 是擋住它的規則，{@code description}／{@code route} 是輪不到的規則本身
-     * （例如 {@code POST /orders}、{@code JMS ORDER}），供列表提示使用。
+     * Unreachability reason: {@code byRuleId} identifies the shadowing rule; {@code description}/{@code route} describe the unreachable rule itself,
+     * (such as {@code POST /orders}, {@code JMS ORDER}), for list prompts.
      */
     public record IssueView(String type, String byRuleId, String byDescription, String description, String route) {
     }
 
     /**
-     * 一條規則的判斷順序。
+     * Evaluation order for one rule.
      *
-     * @param wildcard 這條規則適用所有路徑（或所有 queue）；其他路徑的規則會排在它前面，這裡只列出同樣適用的規則
+     * @param wildcard This rule covers all paths or queues; rules for other paths precede it, so show only rules with the same applicable scope here.
      */
     public record RuleOrderView(String ruleId, String protocol, boolean wildcard, List<Entry> entries) {
         public RuleOrderView {
@@ -68,7 +68,7 @@ public class RuleOrderService {
         }
     }
 
-    /** 所有輪不到的規則（依規則 id）。 */
+    /** All unreachable rules, keyed by rule id. */
     public record IssuesView(int count, Map<String, IssueView> issues) {
         public IssuesView {
             issues = Map.copyOf(issues);
@@ -123,7 +123,7 @@ public class RuleOrderService {
             boolean enabled = !Boolean.FALSE.equals(entry.getEnabled());
             boolean conditional = route.conditional(entry);
             boolean self = entry.getId().equals(rule.getId());
-            // 只適用這條規則一部分請求的規則：列出來，但不能當成所有請求的預設回應
+            // Include partially overlapping rules in the list, but do not treat them as defaults for every request.
             boolean partial = !self && !route.covers(entry, rule);
             boolean usedAsDefault = false;
             IssueView issue = enabled ? issues.get(entry.getId()) : null;
@@ -162,7 +162,7 @@ public class RuleOrderService {
         return rules.stream().filter(rule -> id.equals(rule.getId())).findFirst();
     }
 
-    // ==================== 規則來源 ====================
+    // ==================== Rule source ====================
 
     private record HttpSource(Object origin, List<HttpRule> active, RuleOrderAnalyzer.Route<HttpRule> route,
                               RuleOrderAnalyzer.Index<HttpRule> index) {
@@ -194,8 +194,8 @@ public class RuleOrderService {
         if (cached != null && cached.origin == all) {
             return cached;
         }
-        // 與實際比對相同的候選：停用的與回應已被刪除的規則都不會被考慮
-        // 實際比對時的候選清單先依 id 排序，再套用穩定的優先順序比較；同分時才會與實際順序一致
+        // Use the actual matching candidates, excluding disabled rules and rules whose responses were deleted.
+        // Actual matching orders source candidates by id before applying a stable priority sort; preserve that order to break ties identically.
         List<JmsRule> active = jmsRuleService.withValidResponses(all.stream()
                 .filter(rule -> !Boolean.FALSE.equals(rule.getEnabled()))
                 .sorted(Comparator.comparing(JmsRule::getId, Comparator.nullsLast(Comparator.naturalOrder())))
@@ -207,7 +207,7 @@ public class RuleOrderService {
         return source;
     }
 
-    /** HTTP：host、method 與路徑都要涵蓋；路徑 {@code *} 涵蓋所有路徑，{@code /x/*} 涵蓋以 {@code /x/} 開頭的路徑。 */
+    /** HTTP coverage includes host, method, and path; {@code *} covers every path and {@code /x/*} covers paths starting with {@code /x/}. */
     static final class HttpRoute implements RuleOrderAnalyzer.Route<HttpRule> {
 
         @Override
@@ -249,7 +249,7 @@ public class RuleOrderService {
             return String.valueOf(rule.getMatchKey());
         }
 
-        /** 路徑本身、每一層上層的 {@code /x/*}，以及 {@code *}。 */
+        /** The exact path, each ancestor's {@code /x/*} pattern, and {@code *}. */
         @Override
         public List<String> coveringGroups(HttpRule rule) {
             String path = String.valueOf(rule.getMatchKey());
@@ -284,7 +284,7 @@ public class RuleOrderService {
         }
     }
 
-    /** JMS：queue 相同或 {@code *}；依 endpoint 欄位分桶時，較早的規則不能限定成別的 endpoint 值。 */
+    /** JMS coverage requires the same queue or {@code *}; with endpoint bucketing, an earlier rule cannot require a different endpoint value. */
     static final class JmsRoute implements RuleOrderAnalyzer.Route<JmsRule> {
 
         private final String endpointField;

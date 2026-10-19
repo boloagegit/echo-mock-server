@@ -175,7 +175,7 @@ class ResponseServiceTest {
         assertThat(summaries.get(0).getExtendedAt()).isNull();
     }
 
-    // ========== 多實例快取同步 ==========
+    // ========== Multi-instance cache synchronization ==========
 
     @Test
     void save_existingResponse_clearsBodyAndNotifiesOtherInstances() {

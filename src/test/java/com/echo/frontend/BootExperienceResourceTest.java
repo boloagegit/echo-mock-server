@@ -7,7 +7,7 @@ import java.nio.charset.StandardCharsets;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 重新整理不閃爍：偏好在首次繪製前套用、靜態外框蓋住啟動過程、快取身分讓側欄一次到位。
+ * Refresh without flickering: Preferences are applied before first draw, static frame covers startup process, cache identity allows sidebar to be in place at once.
  */
 class BootExperienceResourceTest {
     @Test

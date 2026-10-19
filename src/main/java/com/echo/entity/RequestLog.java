@@ -7,8 +7,8 @@ import org.hibernate.Length;
 import java.time.LocalDateTime;
 
 /**
- * 請求記錄 Entity
- * 用於統計分析，不記錄 Request/Response Body
+ * Request record Entity
+ * used for statistical analysis, not recorded Request/Response Body
  */
 @Entity
 @Table(name = "request_log", indexes = {
@@ -21,7 +21,7 @@ import java.time.LocalDateTime;
     @Index(name = "idx_log_protocol_matched_time_id", columnList = "protocol,matched,requestTime,id"),
     @Index(name = "idx_log_endpoint_time_id", columnList = "endpoint,requestTime,id"),
     @Index(name = "idx_log_response_time_id", columnList = "responseTimeMs,id"),
-    // 流量概況只讀這幾個欄位：查詢只掃描索引，不讀排在後面的 body 與比對過程
+    // The traffic profile only reads these fields: the query only scans the index, and does not read the body and comparison process ranked later.
     @Index(name = RequestLog.TRAFFIC_INDEX, columnList = "requestTime,matched,forwarded,proxyError,responseTimeMs")
 })
 @Getter
@@ -33,7 +33,7 @@ public class RequestLog {
 
     public static final int MAX_FORWARD_TARGET_LENGTH = 1000;
 
-    /** 流量概況使用的涵蓋索引。 */
+    /** Coverage index used by traffic profile. */
     public static final String TRAFFIC_INDEX = "idx_log_traffic";
 
     /** Protocol-only lists must retain time/id ordering without sorting all matching logs. */
@@ -47,11 +47,11 @@ public class RequestLog {
     @Column(length = 36)
     private String diagnosticId;
 
-    /** 關聯規則 ID (404 時為 null) */
+    /** Association rule ID (null when 404) */
     @Column(length = 36)
     private String ruleId;
 
-    /** 匹配鏈 (JSON 格式，記錄每個候選規則的匹配結果) */
+    /** Matching chain (JSON format, records the matching results of each candidate rule) */
     @Column(length = Length.LONG32)
     private String matchChain;
 
@@ -59,45 +59,45 @@ public class RequestLog {
     @Column(nullable = false)
     private Protocol protocol;
 
-    /** HTTP Method (GET/POST/PUT/DELETE 等) */
+    /** HTTP Method (GET/POST/PUT/DELETE, etc.) */
     @Column(length = 10)
     private String method;
 
-    /** Path 或 Queue Name */
+    /** Path or Queue Name */
     @Column(nullable = false, length = 500)
     private String endpoint;
 
-    /** 是否匹配成功 */
+    /** Whether the match is successful */
     @Column(nullable = false)
     private boolean matched;
 
-    /** 回應時間 (ms) */
+    /** Response time (ms) */
     @Column(nullable = false)
     private int responseTimeMs;
 
-    /** 規則匹配耗時 (ms) */
+    /** Rule matching takes time (ms) */
     private Integer matchTimeMs;
 
-    /** 來源 IP */
+    /** Source IP */
     @Column(length = 50)
     private String clientIp;
 
-    /** 目標主機 (X-Original-Host) */
+    /** Target host (X-Original-Host) */
     @Column(length = 255)
     private String targetHost;
 
-    /** 是否實際嘗試轉發；nullable 讓既有 schema 可安全新增欄位。 */
+    /** Whether to actually try to forward; nullable allows existing schema to safely add new fields. */
     @Builder.Default
     private Boolean forwarded = false;
 
-    /** 實際下游目標的安全顯示文字，不包含認證資料。 */
+    /** The security display text of the actual downstream target does not contain certification information. */
     @Column(length = MAX_FORWARD_TARGET_LENGTH)
     private String forwardTarget;
 
-    /** 代理回應狀態碼 (無匹配轉發時) */
+    /** Agent response status code (when there is no matching forwarding) */
     private Integer proxyStatus;
 
-    /** 代理錯誤訊息 (無匹配轉發失敗時) */
+    /** Agent error message (when forwarding fails without matching) */
     @Column(length = 255)
     private String proxyError;
 
@@ -109,35 +109,35 @@ public class RequestLog {
     @Column(length = Length.LONG32)
     private String responseBody;
 
-    /** 故障注入類型（NONE / CONNECTION_RESET / EMPTY_RESPONSE） */
+    /** Fault injection type (NONE / CONNECTION_RESET / EMPTY_RESPONSE) */
     @Column(length = 20)
     private String faultType;
 
-    /** Scenario 名稱（狀態轉移時記錄） */
+    /** Scenario name (recorded during state transfer) */
     @Column(length = 100)
     private String scenarioName;
 
-    /** Scenario 轉移前狀態 */
+    /** Scenario state before transfer */
     @Column(length = 100)
     private String scenarioFromState;
 
-    /** Scenario 轉移後狀態 */
+    /** Scenario status after transfer */
     @Column(length = 100)
     private String scenarioToState;
 
-    /** 參與比對的候選規則數（處理流程圖用）；舊紀錄為 null。 */
+    /** The number of candidate rules participating in the comparison (for processing flow chart); the old record is null. */
     private Integer candidateCount;
 
-    /** 命中的是沒有條件的預設規則；沒有命中或舊紀錄為 null。 */
+    /** The hit is a default rule without conditions; there is no hit or the old record is null. */
     private Boolean matchedByFallback;
 
-    /** 規則設定的模擬延遲（毫秒），不含在 responseTimeMs 內；SSE 為第一個事件前的延遲。 */
+    /** The simulation delay (milliseconds) set by the rule is not included in responseTimeMs; SSE is the delay before the first event. */
     private Integer delayMs;
 
-    /** SSE 串流的事件數；不是 SSE 時為 null。 */
+    /** The number of events streamed by SSE; when it is not SSE, it is null. */
     private Integer sseEventCount;
 
-    /** 因情境狀態不符而略過的規則（匹配鏈格式的 JSON）。 */
+    /** Rule skipped due to inconsistent situation status (match chain format JSON). */
     @Column(length = Length.LONG32)
     private String scenarioSkipped;
 
@@ -162,9 +162,9 @@ public class RequestLog {
     }
 
     /**
-     * 讓值符合欄位：截短有長度上限的欄位，並移除 NUL 字元。這些值多半直接來自請求（網址、方法、Host header），
-     * SQLite 不檢查長度，但 PostgreSQL、MySQL、SQL Server、Oracle 會拒絕過長的值（PostgreSQL 也拒絕 NUL），
-     * 一筆被拒絕就會讓整批紀錄寫不進去。
+     * Fit the value into the field: Truncate the field with a maximum length and remove the NUL character. Most of these values come directly from the request (url, method, Host header),
+     * SQLite does not check the length, but PostgreSQL, MySQL, SQL Server, Oracle will reject too long values (PostgreSQL also rejects NUL),
+     * One rejected record would otherwise prevent the entire batch from being written.
      */
     void fitColumns() {
         diagnosticId = fit(diagnosticId, 36);
@@ -185,7 +185,7 @@ public class RequestLog {
         scenarioSkipped = withoutNul(scenarioSkipped);
     }
 
-    /** 移除 NUL 後截到 {@code max} 個字元，不切開 surrogate pair。 */
+    /** After removing NUL, truncate {@code max} characters, and do not cut surrogate pair. */
     static String fit(String value, int max) {
         String clean = withoutNul(value);
         if (clean == null || clean.length() <= max) {
@@ -199,7 +199,7 @@ public class RequestLog {
         return value == null || value.indexOf('\0') < 0 ? value : value.replace("\0", "");
     }
 
-    /** 保護日誌寫入，避免合法但過長的下游描述使整批寫入回滾。 */
+    /** Protect log writes to prevent valid but too long downstream descriptions from rolling back the entire batch of writes. */
     public static String limitForwardTarget(String value) {
         return fit(value, MAX_FORWARD_TARGET_LENGTH);
     }

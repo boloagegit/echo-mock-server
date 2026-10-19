@@ -14,7 +14,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/** 規則判斷順序與「一定輪不到」的規則（{@link RuleOrderAnalyzer}、{@link RuleOrderService}）。 */
+/** Rule evaluation order and definitely unreachable rules ({@link RuleOrderAnalyzer}, {@link RuleOrderService}). */
 class RuleOrderServiceTest {
 
     private static final LocalDateTime T0 = LocalDateTime.of(2026, 1, 1, 0, 0);
@@ -37,7 +37,7 @@ class RuleOrderServiceTest {
         when(httpRuleService.httpRuleSnapshot())
                 .thenReturn(new HttpRuleSnapshot(httpRules, HttpRuleService.HTTP_RULE_ORDER, null));
         when(jmsRuleService.findAllJmsRulesCached()).thenReturn(jmsRules);
-        // 回應已被刪除的規則（responseId 999）比對時不會被考慮
+        // Response to a deleted rule (responseId 999) will not be considered when comparing
         when(jmsRuleService.withValidResponses(anyList())).thenAnswer(invocation -> ((List<JmsRule>) invocation
                 .getArgument(0)).stream().filter(rule -> !Long.valueOf(999L).equals(rule.getResponseId())).toList());
         JmsProperties properties = new JmsProperties();
@@ -80,7 +80,7 @@ class RuleOrderServiceTest {
                 http("users", "GET", "/users/*", 0, null),
                 http("users-v2", "GET", "/users/*", 0, ""));
 
-        // 排序條件都相同時，與實際比對一樣維持規則來源的順序
+        // When the sorting conditions are the same, the order of the rule source is maintained as in the actual comparison.
         assertThat(service.issues().issues()).containsOnlyKeys("users-v2");
         assertThat(service.issues().issues().get("users-v2").type()).isEqualTo(RuleOrderAnalyzer.EARLIER_DEFAULT);
     }
@@ -90,10 +90,10 @@ class RuleOrderServiceTest {
         HttpRule hostOnly = http("host-only", "GET", "/stock", 10, "a=1");
         hostOnly.setTargetHost("api.internal");
         RuleOrderService service = service(List.of(
-                // 前綴涵蓋精確路徑；method 未指定涵蓋所有 method
+                // Prefix covers exact path; method not specified covers all method
                 http("prefix", null, "/orders/*", 10, "type=vip"),
                 http("exact", "POST", "/orders/1", 5, "type=vip"),
-                // 精確路徑不涵蓋前綴；指定 host 的規則不涵蓋未指定 host 的規則
+                // Exact path does not cover prefix; rules specifying host do not cover rules that do not specify host
                 http("narrow", "GET", "/items/1", 10, "a=1"),
                 http("wide", "GET", "/items/*", 5, "a=1"),
                 hostOnly,
@@ -151,7 +151,7 @@ class RuleOrderServiceTest {
         assertThat(gated.requiredScenarioState()).isEqualTo("Paid");
         assertThat(view.entries().get(2).issue().type()).isEqualTo(RuleOrderAnalyzer.DUPLICATE_CONDITIONS);
         assertThat(view.entries().get(3).usedAsDefault()).isTrue();
-        // 萬用規則在其他路徑仍會用到，只在這個範圍標示用不到
+        // The wildcard rule will still be used in other paths, but is marked as unused in this scope.
         assertThat(view.entries().get(4).issue().type()).isEqualTo(RuleOrderService.NOT_USED_HERE);
         assertThat(service.issues().issues()).containsOnlyKeys("vip-old");
 
@@ -180,7 +180,7 @@ class RuleOrderServiceTest {
         assertThat(partial.issue().type()).isEqualTo(RuleOrderService.NOT_USED_HERE);
         assertThat(view.entries().get(0).id()).isEqualTo("users");
         assertThat(view.entries().get(0).usedAsDefault()).isTrue();
-        // 只適用部分請求的規則不會被判定輪不到；涵蓋範圍不同的萬用規則也不會互相判定
+        // Partial coverage cannot prove unreachability; wildcard rules with different scopes do not establish that either shadows the other.
         assertThat(service.issues().issues()).isEmpty();
     }
 
@@ -212,7 +212,7 @@ class RuleOrderServiceTest {
 
         RuleOrderService.RuleOrderView view = service.orderFor("queue-default").orElseThrow();
         assertThat(view.protocol()).isEqualTo("JMS");
-        // queue 指定的規則排在萬用 queue 之前；限定 ServiceName=Pay 的規則只適用部分訊息
+        // The rule specified by queue is ranked before the wildcard queue; the rule limiting ServiceName=Pay only applies to some messages
         assertThat(view.entries()).extracting(RuleOrderService.Entry::id)
                 .containsExactly("pay", "pay-copy", "queue-default", "any-default", "wild-default-2");
         assertThat(view.entries().get(0).partial()).isTrue();
@@ -222,7 +222,7 @@ class RuleOrderServiceTest {
 
     @Test
     void jmsRulesThatTieAreOrderedByIdLikeMatching() {
-        // 同 queue、同優先順序、同建立時間：實際比對依 id 排序，所以 "a-default" 才是被使用的預設規則
+        // Same as queue, same priority, same creation time: the actual comparison is sorted by id, so "a-default" is the default rule used
         RuleOrderService service = service(List.of(), List.of(
                 jms("b-default", "ORDER", 0, null), jms("a-default", "ORDER", 0, null)), null);
 
@@ -236,7 +236,7 @@ class RuleOrderServiceTest {
         RuleOrderService service = service(List.of(), List.of(orphan, jms("pay", "ORDER", 5, "ServiceName=Pay"),
                 jms("queue-default", "ORDER", 0, null)), "ServiceName");
 
-        // 比對時會略過 orphan-default，所以後面的規則都輪得到
+        // orphan-default will be skipped during comparison, so all subsequent rules will be included.
         assertThat(service.issues().count()).isZero();
     }
 
@@ -254,7 +254,7 @@ class RuleOrderServiceTest {
         List<HttpRule> rules = new java.util.ArrayList<>();
         for (int i = 0; i < 2_000; i++) {
             HttpRule rule = http(String.format("r%04d", i), "POST", "/orders", 0, null);
-            // 欄位順序交替，內容相同的條件仍要視為相同
+            // The field order is alternated, and conditions with the same content are still considered the same.
             rule.setMatchSpec(i % 2 == 0
                     ? "{\"source\":\"body\",\"selector\":{\"jsonPath\":\"$.t\"},\"op\":\"equals\",\"value\":\"v" + (i % 500) + "\"}"
                     : "{\"value\":\"v" + (i % 500) + "\",\"op\":\"equals\",\"selector\":{\"jsonPath\":\"$.t\"},\"source\":\"body\"}");
@@ -263,7 +263,7 @@ class RuleOrderServiceTest {
         }
         RuleOrderService service = service(rules, List.of(), null);
 
-        // 500 種條件各保留最新的一條，其餘 1,500 條輪不到
+        // Retain only the newest rule for each of 500 distinct conditions; the other 1,500 rules are unreachable.
         assertThat(service.issues().count()).isEqualTo(1_500);
         assertThat(service.orderFor("r1000").orElseThrow().entries()).hasSize(2_000);
     }

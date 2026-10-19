@@ -1,7 +1,7 @@
 package com.echo.core.match;
 
 /**
- * 匹配條件不合法。{@link #path()} 指出出錯的位置，例如 {@code $.all[1].op}。
+ * The matching condition is illegal. {@link #path()} indicates the location of the error, such as {@code $.all[1].op}.
  */
 public class InvalidMatchSpecException extends IllegalArgumentException {
 

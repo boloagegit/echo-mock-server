@@ -15,20 +15,20 @@ import java.util.function.Function;
 import java.util.function.LongSupplier;
 
 /**
- * 規則快照：規則變更後在背景重建，重建期間請求繼續使用舊快照，不必等待。
+ * Rule snapshots rebuild in the background after changes; requests continue using the previous snapshot without waiting.
  *
- * <p>每次變更遞增一個序號；快照記得建立前讀到的序號，較舊的建立結果不會蓋掉較新的。
- * 建立期間又有變更時，結束後再建一次（多次變更合併成一次）。只有第一次（還沒有任何快照）
- * 由呼叫端同步建立。</p>
+ * <p>Increment a revision for every change. Each snapshot remembers the revision read before building, and an older build cannot replace a newer one.
+ * If rules change during a build, rebuild after it finishes, coalescing changes into one build. Only the first snapshot
+ * is built synchronously by its caller.</p>
  *
- * <p>做出變更的一方要等新快照生效：網頁請求在回應前等一次（{@link #awaitPendingChanges()}，
- * 一次批次匯入只等一次），其他執行緒（多台同步、排程清理）在變更當下等待。
- * 如此透過 API 存檔後立刻送出的模擬請求一定會用到新規則。</p>
+ * <p>The caller making a change waits for the new snapshot: a web request waits once before responding ({@link #awaitPendingChanges()},
+ * once per batch import); other threads, such as cross-instance synchronization and scheduled cleanup, wait at the change point.
+ * A mock request sent immediately after saving through the API therefore uses the new rules.</p>
  */
 @Slf4j
 public final class RuleSnapshotCache<K, V> {
 
-    /** 這個執行緒在目前網頁請求中變更過的快取 → 需要等到的序號。 */
+    /** Caches changed by this thread during the current web request, mapped to revisions to await. */
     private static final ThreadLocal<Map<RuleSnapshotCache<?, ?>, Long>> PENDING = new ThreadLocal<>();
     private static final long FAILURE_BACKOFF_NANOS = TimeUnit.SECONDS.toNanos(1);
 
@@ -53,7 +53,7 @@ public final class RuleSnapshotCache<K, V> {
         this.nanoTime = nanoTime;
     }
 
-    /** 目前的快照；過期或有變更時在背景重建並先回傳舊的。第一次由呼叫端建立。 */
+    /** Get the current snapshot; return the old one while rebuilding expired or changed data in the background. Build the first snapshot on the caller thread. */
     public V get(K key) {
         Slot<V> slot = slots.computeIfAbsent(key, k -> new Slot<>());
         Built<V> current = slot.current;
@@ -68,8 +68,8 @@ public final class RuleSnapshotCache<K, V> {
     }
 
     /**
-     * 規則已變更（提交後呼叫）。網頁請求中記下要等的序號，回應前由 {@link #awaitPendingChanges()} 等待；
-     * 其他執行緒直接等到新快照生效。
+     * Called after commit when rules change. During a web request, record the revision to await; {@link #awaitPendingChanges()} waits before responding,
+     * Other threads wait directly until the new snapshot takes effect.
      */
     public void changed(boolean inWebRequest) {
         long generation = changes.incrementAndGet();
@@ -91,14 +91,14 @@ public final class RuleSnapshotCache<K, V> {
         }
     }
 
-    /** 等到這個網頁請求做出的變更都已生效（每個請求結束前呼叫；沒有變更時立即返回）。 */
+    /** Wait for every change made by this web request before the request ends; return immediately if none were made. */
     public static void awaitPendingChanges() {
         Map<RuleSnapshotCache<?, ?>, Long> pending = PENDING.get();
         if (pending == null) {
             return;
         }
         PENDING.remove();
-        // 一個請求同時改到 HTTP 與 JMS 規則時，兩者共用同一個等待期限
+        // A request changing both HTTP and JMS rules shares one wait deadline across both.
         long deadline = 0;
         for (Map.Entry<RuleSnapshotCache<?, ?>, Long> entry : pending.entrySet()) {
             RuleSnapshotCache<?, ?> cache = entry.getKey();
@@ -109,12 +109,12 @@ public final class RuleSnapshotCache<K, V> {
         }
     }
 
-    /** 丟掉這個執行緒記下的待等變更（請求開始時呼叫，避免沿用上一個請求的狀態）。 */
+    /** Discard this thread's pending changes at request start so state cannot leak from the previous request. */
     public static void clearPendingChanges() {
         PENDING.remove();
     }
 
-    /** 等到所有已建立的快照都包含這個序號的變更；逾時則記錄並放行（之後的請求仍會在背景更新）。 */
+    /** Wait until snapshots include this revision; on timeout, log and proceed while later requests still trigger background refresh. */
     boolean awaitUpToDate(long generation) {
         return awaitUpToDate(generation, deadlineFromNow());
     }
@@ -143,7 +143,7 @@ public final class RuleSnapshotCache<K, V> {
         return true;
     }
 
-    /** 第一份快照正在建立的 slot 也算未更新：建立結果可能比這次變更舊。 */
+    /** Do not update a slot while its first snapshot is being built; that result may predate this change. */
     private boolean upToDate(long generation) {
         for (Slot<V> slot : slots.values()) {
             Built<V> current = slot.current;
@@ -155,8 +155,8 @@ public final class RuleSnapshotCache<K, V> {
     }
 
     /**
-     * 還沒有快照時由呼叫端建立（同一個 key 的並行請求在 slot 上等這一次）。建立期間做出的變更會等它：
-     * 結果比變更舊時，建立完成後交給背景重建，變更方等到重建完成（見 {@link #upToDate}）。
+     * The caller is building the first snapshot, and concurrent requests for its key await the same slot. Changes during that build must wait:
+     * if its result predates the change, schedule a background rebuild after it finishes, then wait for that rebuild (see {@link #upToDate}).
      */
     private V buildFirst(K key, Slot<V> slot) {
         synchronized (slot) {
@@ -175,7 +175,7 @@ public final class RuleSnapshotCache<K, V> {
                 return value;
             } finally {
                 if (slot.firstBuilding) {
-                    // 建立失敗：不再讓變更方等這份快照
+                    // If creation failed, stop making the change caller wait for this snapshot.
                     synchronized (installed) {
                         slot.firstBuilding = false;
                         installed.notifyAll();
@@ -186,8 +186,8 @@ public final class RuleSnapshotCache<K, V> {
     }
 
     /**
-     * 排一次背景重建（已排或建立中則不重複）。剛失敗過時延到重試間隔結束再建，不丟掉這次請求：
-     * 等待中的變更方因此在間隔過後就能完成，不必等到逾時。
+     * Schedule one background rebuild unless one is queued or running. After a failure, defer it until the retry interval ends without losing the request,
+     * so pending changes can complete after that interval rather than waiting for a timeout.
      */
     private void requestRebuild(K key, Slot<V> slot, long now) {
         if (!slot.queued.compareAndSet(false, true)) {
@@ -219,9 +219,9 @@ public final class RuleSnapshotCache<K, V> {
     }
 
     /**
-     * 建立期間 {@code queued} 保持 true，期間的請求與變更不再排重建；建完後若序號已前進，再建一次
-     * （變更先遞增序號才嘗試排重建，所以清掉 {@code queued} 後一定看得到這段期間的變更）。
-     * 失敗時保留舊快照；快照仍比變更舊就在重試間隔後再試，直到成功。
+     * Keep {@code queued} true during a build so requests and changes cannot schedule duplicates; if the revision advanced, rebuild after completion.
+     * Changes increment the revision before requesting a rebuild, so clearing {@code queued} cannot hide changes made during the build.
+     * Retain the old snapshot on failure; retry after the backoff until the snapshot catches up with the changes.
      */
     private void rebuild(K key, Slot<V> slot) {
         long generation = changes.get();
@@ -268,7 +268,7 @@ public final class RuleSnapshotCache<K, V> {
         }
     }
 
-    /** 測試用：目前快照包含到的變更序號。 */
+    /** For testing: the change sequence number contained in the current snapshot. */
     long generationOf(K key) {
         Slot<V> slot = slots.get(key);
         Built<V> current = slot == null ? null : slot.current;
@@ -279,9 +279,9 @@ public final class RuleSnapshotCache<K, V> {
         private volatile Built<V> current;
         private final AtomicBoolean queued = new AtomicBoolean();
         private volatile long lastFailureAt;
-        /** 只由建立執行緒讀寫：連續失敗只記一次警告。 */
+        /** Builder-thread only: log one warning for consecutive failures. */
         private boolean failing;
-        /** 第一份快照建立中（還沒有 {@code current}）。 */
+        /** The first snapshot is being created (no {@code current} yet). */
         private volatile boolean firstBuilding;
     }
 

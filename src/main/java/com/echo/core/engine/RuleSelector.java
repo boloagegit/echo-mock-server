@@ -5,45 +5,45 @@ import java.util.List;
 import java.util.function.Predicate;
 
 /**
- * 從已排序的候選規則挑出一條，取代原本分散在 HTTP／JMS pipeline 與規則服務中的四份迴圈。
+ * Select one from the sorted candidate rules to replace the four loops originally scattered in HTTP/JMS pipeline and the rule service.
  * <p>
- * 規則依序檢查：停用的略過；未通過前置檢查（例如 Scenario 狀態）的記下並略過；
- * 有條件且條件成立的立即選中；無條件的依 {@link FallbackPolicy} 記為備選。
- * 都沒有條件成立時回傳備選規則。
+ * Rules are checked in order: disabled ones are skipped; those that fail the pre-check (such as Scenario status) are noted and skipped;
+ * If there are conditions and the conditions are met, they will be selected immediately; if there are no conditions, they will be recorded as alternatives according to {@link FallbackPolicy}.
+ * Return alternative rules when none of the conditions are met.
  */
 public final class RuleSelector {
 
     private RuleSelector() {
     }
 
-    /** 沒有條件成立時，如何從無條件規則中挑選備選。 */
+    /** How to select alternatives from unconditional rules when no condition is true. */
     public enum FallbackPolicy {
-        /** 第一條無條件規則（HTTP）。 */
+        /** The first unconditional rule (HTTP). */
         FIRST_UNCONDITIONAL,
-        /** 優先第一條無條件的非萬用規則，其次第一條無條件的萬用規則（JMS）。 */
+        /** Prefer the first unconditional exact rule, then the first unconditional wildcard rule for JMS. */
         EXACT_BEFORE_WILDCARD
     }
 
-    /** 選擇時需要的規則特性。 */
+    /** Rule properties required when selecting. */
     public interface Traits<R> {
 
         boolean enabled(R rule);
 
-        /** 沒有任何條件（任何請求都符合）。 */
+        /** No conditions (any request is met). */
         boolean unconditional(R rule);
 
-        /** 萬用規則（例如 JMS queue {@code *}）；只影響 {@link FallbackPolicy#EXACT_BEFORE_WILDCARD}。 */
+        /** Wildcard rule, such as JMS queue {@code *}; relevant only to {@link FallbackPolicy#EXACT_BEFORE_WILDCARD}. */
         default boolean wildcard(R rule) {
             return false;
         }
     }
 
     /**
-     * 選擇結果。
+     * Select results.
      *
-     * @param selected         選中的規則；沒有任何規則符合時為 null
-     * @param conditionMatched 選中的規則是因條件成立（而非備選）
-     * @param gateRejected     依序未通過前置檢查的規則（只含選中之前檢查過的）
+     * @param selected         Selected rule; null when no rule matches
+     * @param conditionMatched The selected rule is because the condition is true (not the alternative)
+     * @param gateRejected     Rules that failed the pre-check in sequence (only those that have been checked before are selected)
      */
     public record Selection<R>(R selected, boolean conditionMatched, List<R> gateRejected) {
 
@@ -53,11 +53,11 @@ public final class RuleSelector {
     }
 
     /**
-     * 挑選規則。
+     * Picking rules.
      *
-     * @param ordered          依優先順序排好的候選規則
-     * @param gate             前置檢查，回傳 false 的規則不參與選擇（例如 Scenario 狀態不符）
-     * @param conditionMatches 有條件的規則其條件是否成立；只會對啟用、通過前置檢查且有條件的規則呼叫
+     * @param ordered          Candidate rules ranked by priority
+     * @param gate             Pre-check, the rule returning false does not participate in the selection (for example, the Scenario status does not match)
+     * @param conditionMatches Whether the condition of a conditional rule is true; it will only be called for rules that are enabled, pass pre-check, and are conditional
      */
     public static <R> Selection<R> select(List<R> ordered, FallbackPolicy policy, Traits<R> traits,
                                           Predicate<R> gate, Predicate<R> conditionMatches) {

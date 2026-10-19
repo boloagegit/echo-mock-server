@@ -11,7 +11,7 @@ import org.springframework.jms.config.DefaultJmsListenerContainerFactory;
 import org.springframework.jms.connection.SingleConnectionFactory;
 
 /**
- * JMS 配置 - 只在 echo.jms.enabled=true 時啟用
+ * JMS configuration - only enabled when echo.jms.enabled=true
  */
 @Configuration
 @EnableJms
@@ -38,7 +38,7 @@ public class JmsConfig {
         // returns, which would make transient capacity/logging failures lose
         // the request instead of allowing Artemis to redeliver it.
         factory.setSessionTransacted(true);
-        // 外部 broker 斷線或重啟時，listener 依這個間隔重新連線；內建 broker 不會用到。
+        // After an external broker disconnects or restarts, reconnect listeners at this interval; never fall back to the embedded broker.
         factory.setRecoveryInterval(jmsProperties.getSource().getReconnectIntervalMs());
         return factory;
     }

@@ -108,7 +108,7 @@ class LogAgentDurablePersistenceTest {
 
         agent.submitDurably(() -> task("rule-1", "/after-error"));
 
-        // 第一次寫入主資料庫時發生 Error：工作執行緒不結束，資料留在暫存檔並重試成功
+        // Occurred when writing to the main database for the first time Error: The work thread did not end, the data was left in the temporary file and the retry was successful.
         assertThat(delivered.await(5, TimeUnit.SECONDS)).isTrue();
         awaitSpoolEmpty();
         assertThat(agent.getStats().getProcessedCount()).isEqualTo(1);
@@ -222,7 +222,7 @@ class LogAgentDurablePersistenceTest {
         startAgent();
 
         assertThat(done.await(5, TimeUnit.SECONDS)).isTrue();
-        // 主資料庫只留最新 5 筆：較舊的 7 筆直接跳過，進度在同一個交易中推進
+        // Only the latest 5 transactions are kept in the main database: the older 7 transactions are skipped directly, and the progress is advanced in the same transaction.
         assertThat(persisted).containsExactly("/8", "/9", "/10", "/11", "/12");
         assertThat(emptyCheckpoints).containsExactly(seventh);
         awaitSpoolEmpty();
@@ -243,7 +243,7 @@ class LogAgentDurablePersistenceTest {
         doAnswer(invocation -> {
             List<RequestLog> logs = invocation.getArgument(2);
             if (!logs.isEmpty() && firstBatchStarted.getCount() > 0) {
-                // 第一批寫入卡住，讓第二波紀錄在同一個 30 秒間隔內再被跳過一次
+                // The first batch of writes is stuck, allowing the second wave of records to be skipped again in the same 30 second interval
                 firstBatchStarted.countDown();
                 assertThat(releaseFirstBatch.await(5, TimeUnit.SECONDS)).isTrue();
             }
@@ -266,17 +266,17 @@ class LogAgentDurablePersistenceTest {
             for (int i = 13; i <= 21; i++) {
                 spool.append(task("rule-" + i, "/" + i));
             }
-            Thread.sleep(1_200); // 下一次待寫入量檢查（每秒一次）
+            Thread.sleep(1_200); // Next write pending check (once per second)
             releaseFirstBatch.countDown();
 
             assertThat(done.await(5, TimeUnit.SECONDS)).isTrue();
-            // 第一波跳過 7 筆，第二波在 /13 到 /21 中只留最新 5 筆，跳過 4 筆
+            // The first wave skips 7 records; the second retains only the newest 5 from /13 through /21, skipping 4.
             assertThat(persisted).containsExactly("/8", "/9", "/10", "/11", "/12", "/17", "/18", "/19", "/20", "/21");
             assertThat(agent.getStats().getDroppedCount()).isEqualTo(11);
             agent.destroy();
             agent = null;
 
-            // 第二波在 30 秒內，沒有新的警告；停止時補記，警告裡的筆數加總才等於實際跳過的筆數
+            // The second wave occurs within 30 seconds and emits no new warning; flush its count on shutdown so warning totals equal the actual skipped count.
             List<ILoggingEvent> warnings = appender.list.stream()
                     .filter(event -> event.getFormattedMessage().startsWith("Request logs arrive faster"))
                     .toList();
@@ -336,7 +336,7 @@ class LogAgentDurablePersistenceTest {
 
         assertThat(done.await(10, TimeUnit.SECONDS)).isTrue();
         awaitSpoolEmpty();
-        // 推進進度失敗時不刪除任何紀錄，改為照常寫入：每筆不是寫入就是被計入跳過，不會遺失也不會重複
+        // If checkpoint advancement fails, delete nothing and write normally: every record is either written or counted as skipped, without loss or duplication.
         assertThat(skipAttempts.get()).isGreaterThanOrEqualTo(1);
         assertThat(persisted).doesNotHaveDuplicates().endsWith("/4", "/5", "/6");
         assertThat(persisted.size() + agent.getStats().getDroppedCount()).isEqualTo(6);
@@ -369,7 +369,7 @@ class LogAgentDurablePersistenceTest {
         assertThat(done.await(10, TimeUnit.SECONDS)).isTrue();
         assertThat(persisted).hasSize(200).startsWith("/1", "/2").endsWith("/200").doesNotHaveDuplicates();
         assertThat(agent.getStats().getDroppedCount()).isZero();
-        // 暫存區的記憶體上限計入監控的記憶體上限
+        // The memory limit of the temporary storage area is included in the monitored memory limit.
         assertThat(agent.getStats().getInFlightByteLimit())
                 .isEqualTo(spool.statusSnapshot().inFlightByteLimit() + 64L * 1024 * 1024);
     }
@@ -386,7 +386,7 @@ class LogAgentDurablePersistenceTest {
             throw new IllegalStateException("cannot build the log entry");
         });
         agent.destroy();
-        // 停止後送來的記錄也只計入丟棄，不讓請求失敗
+        // Records sent after stopping will only be counted as discarded, and the request will not fail.
         agent.submitDurably(() -> task("rule-late", "/late"));
 
         assertThat(agent.getStats().getDroppedCount()).isEqualTo(2);

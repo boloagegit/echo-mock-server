@@ -12,18 +12,18 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 可以串流掃描的簡單 XML 路徑，例如 {@code //Order/Status}、{@code /Order/Status}、{@code Order/Status}、
+ * Simple XML paths that can be streamed and scanned, such as {@code //Order/Status}, {@code /Order/Status}, {@code Order/Status},
  * {@code Status}、{@code //Item/@sku}、{@code //Status/text()}。
  * <p>
- * 元素與屬性一律以 local name 比對（不分 namespace 前綴）。{@code /} 開頭是從根元素起算的完整路徑；
- * 其他寫法（含 {@code //} 開頭與相對路徑）是「路徑結尾符合」。取值為元素的全部文字（含子元素）或屬性值，去除前後空白。
+ * Elements and attributes are always compared with local name (regardless of the namespace prefix). {@code /} starts with the complete path starting from the root element;
+ * Other writing methods (including starting with {@code //} and relative paths) are "the end of the path matches". The value is the entire text (including sub-elements) or attribute values of the element, with the leading and trailing whitespace removed.
  * <p>
- * 串流掃描（{@link XmlStreamScan}）與 DOM 查找（{@link #select(Document)}）使用同一套規則，結果相同；
- * 含 predicate、函式、萬用字元、軸或帶前綴名稱的寫法不屬於這裡，交給 XPath 處理。
+ * Streaming scan ({@link XmlStreamScan}) and DOM search ({@link #select(Document)}) use the same set of rules and the results are the same;
+ * Writing methods containing predicate, functions, wildcards, axes or prefixed names do not belong here and are left to XPath for processing.
  *
- * @param elements  元素 local name，由外而內
- * @param absolute  是否從根元素起算
- * @param attribute 結尾屬性的 local name；取元素文字時為 null
+ * @param elements  Element local name, outside in
+ * @param absolute  Whether to count from the root element
+ * @param attribute The ending attribute is local name; when taking the element text, it is null
  */
 public record XmlPath(List<String> elements, boolean absolute, String attribute) {
 
@@ -34,7 +34,7 @@ public record XmlPath(List<String> elements, boolean absolute, String attribute)
         }
     }
 
-    /** 不是簡單路徑時回傳 empty。 */
+    /** Return empty when it is not a simple path. */
     public static Optional<XmlPath> parse(String expression) {
         if (expression == null || expression.isBlank() || expression.startsWith("$.")) {
             return Optional.empty();
@@ -80,7 +80,7 @@ public record XmlPath(List<String> elements, boolean absolute, String attribute)
         return elements.isEmpty() ? Optional.empty() : Optional.of(new XmlPath(elements, absolute, attribute));
     }
 
-    /** 由外而內的元素 local name 是否符合此路徑。 */
+    /** Does outside-in element local name match this path. */
     boolean matchesElementPath(List<String> currentPath) {
         if (absolute) {
             return currentPath.equals(elements);
@@ -97,14 +97,14 @@ public record XmlPath(List<String> elements, boolean absolute, String attribute)
         return true;
     }
 
-    /** 路徑最後一個元素的 local name，串流掃描用來快速篩選。 */
+    /** local name of the last element of the path, stream scanning is used for quick screening. */
     String lastElement() {
         return elements.get(elements.size() - 1);
     }
 
     /**
-     * 在已解析的 DOM 上依文件順序取值，規則與串流掃描相同。DOM 不分 namespace，因此 local name 取 {@code :} 之後的部分；
-     * namespace 宣告（{@code xmlns}、{@code xmlns:*}）不是屬性。
+     * Get the value in file order on the parsed DOM, the rules are the same as stream scanning. DOM does not distinguish namespace, so local name takes the part after {@code :};
+     * The namespace declaration ({@code xmlns}, {@code xmlns:*}) is not an attribute.
      */
     public List<String> select(Document doc) {
         List<String> values = new ArrayList<>();
@@ -155,7 +155,7 @@ public record XmlPath(List<String> elements, boolean absolute, String attribute)
             return localName;
         }
         String qualifiedName = node.getNodeName();
-        // 與 JDK XPath 的 local-name() 相同：取第一個 : 之後的部分
+        // Same as local-name() of JDK XPath: take the part after the first :
         int colon = qualifiedName.indexOf(':');
         return colon < 0 ? qualifiedName : qualifiedName.substring(colon + 1);
     }

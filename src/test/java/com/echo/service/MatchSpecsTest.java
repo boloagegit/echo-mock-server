@@ -34,7 +34,7 @@ class MatchSpecsTest {
         assertThat(normalized.bodyCondition()).isNull();
         assertThat(normalized.queryCondition()).isNull();
         assertThat(normalized.headerCondition()).isNull();
-        // 欄位順序固定、省略預設值
+        // Field order fixed, default value omitted
         assertThat(normalized.matchSpec()).isEqualTo(
                 "{\"any\":[{\"source\":\"body\",\"selector\":{\"jsonPath\":\"$.amount\"},\"op\":\"gte\",\"value\":1000},"
                         + "{\"source\":\"query\",\"name\":\"vip\",\"op\":\"exists\"}]}");
@@ -83,12 +83,12 @@ class MatchSpecsTest {
                 .hasMessageContaining("$.not.source")
                 .hasMessageContaining("source 'header' is not available");
 
-        // method／path 已由路由決定，不開放當條件來源
+        // method/path has been determined by routing and is not open as a condition source
         assertThatThrownBy(() -> MatchSpecs.normalize(json("""
                 {"source": "method", "op": "equals", "value": "GET"}"""), HTTP))
                 .hasMessageContaining("source 'method' is not available");
 
-        // 舊版片段也受同樣限制
+        // Older clips are subject to the same restrictions
         assertThatThrownBy(() -> MatchSpecs.normalize(json("""
                 {"any": [{"legacy": {"source": "query", "condition": "a=1"}}]}"""), JMS))
                 .hasMessageContaining("$.any[0].legacy.source");

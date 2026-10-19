@@ -1,13 +1,13 @@
 package com.echo.core.match;
 
 /**
- * 匹配時的資源上限，預設值與舊版 {@code ConditionMatcher} 相同。
+ * The resource limit during matching, the default value is the same as the old version {@code ConditionMatcher}.
  *
- * @param maxBodyChars           body 超過此長度時不解析，所有 body 條件視為無法判斷
- * @param maxFieldValueLength    單一取值超過此長度時略過
- * @param maxRegexPatternLength  正則表達式長度上限（編譯時檢查）
- * @param maxRegexInputLength    正則比對的輸入長度上限
- * @param regexTimeoutMs         單次正則比對的時間上限
+ * @param maxBodyChars           body will not be parsed if it exceeds this length, and all body conditions will be deemed undeterminable.
+ * @param maxFieldValueLength    Skip if a single value exceeds this length
+ * @param maxRegexPatternLength  Upper limit on regular expression length (compile-time check)
+ * @param maxRegexInputLength    Upper limit of input length for regular comparison
+ * @param regexTimeoutMs         The upper limit of time for a single canonical comparison
  */
 public record MatcherLimits(int maxBodyChars, int maxFieldValueLength,
                             int maxRegexPatternLength, int maxRegexInputLength,

@@ -1,10 +1,10 @@
 /**
- * StatsPage - 請求記錄頁面
+ * StatsPage - Request record page
  *
- * 顯示 Mock 請求記錄，含統計摘要、篩選、排序、匹配鏈追蹤。
- * 列表顯示摘要，所選紀錄正下方 lazy load detail（body / matchChain）。
- * 關閉再開啟使用快取，不重新查詢。
- * ref key 全部以 log.id 為索引，避免排序/分頁/刷新後狀態錯位。
+ * Display Mock request records, including statistical summary, filtering, sorting, and matching chain tracking.
+ * List display summary, lazy load detail (body / matchChain) just below the selected record.
+ * Turn off and on to use cache without re-querying.
+ * ref key are all indexed by log.id to avoid status misalignment after sorting/paging/refreshing.
  */
 const StatsPage = {
   props: {
@@ -88,14 +88,14 @@ const StatsPage = {
     },
   },
   methods: {
-    /** 重新整理列表與流量概況。 */
+    /** Refresh the list and traffic overview. */
     refreshAll() {
       this.$emit('load-logs', true);
       this.$refs.traffic?.load();
     },
     /**
-     * 流量概況的「看這些請求」：只列出這段時間內這個方法與網址（完全相同）沒比對到的請求，
-     * 筆數與統計一致；原本的關鍵字搜尋清掉，避免再縮小範圍。
+     * "Look at these requests" of the traffic overview: only list requests that are not matched by this method and URL (identical) during this period.
+     * Keep the displayed record count consistent with the statistics; clear the previous keyword search so it cannot narrow the selected scope.
      */
     showUnmatched({ protocol, method, endpoint, from, to }) {
       this.$emit('update:logFilter', { ...this.logFilter, protocol, matched: 'false', endpoint: '',

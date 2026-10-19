@@ -4,9 +4,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 協定無關的唯讀請求視圖，供 {@link ValueExtractor} 取值。
+ * Protocol-independent read-only request view for {@link ValueExtractor} value.
  * <p>
- * 不適用的欄位回傳 null（例如 JMS 沒有 method 與 query string）。
+ * Inapplicable fields return null (for example, JMS does not have method and query string).
  */
 public interface RequestView {
 
@@ -14,15 +14,15 @@ public interface RequestView {
 
     String path();
 
-    /** 原始 query string，不含 {@code ?}。 */
+    /** Original query string, without {@code ?}. */
     String queryString();
 
-    /** Header 名稱不分大小寫；實作不保證 map 本身不分大小寫，請用 {@link #header(String)}。 */
+    /** The Header name is not case-sensitive; implementation is not guaranteed. map itself is not case-sensitive, please use {@link #header(String)}. */
     Map<String, String> headers();
 
     BodyView body();
 
-    /** 以不分大小寫的方式取得 header 值，不存在時回傳 null。 */
+    /** Obtain the header value in a case-insensitive manner, and return null if it does not exist. */
     default String header(String name) {
         Map<String, String> headers = headers();
         if (headers == null || name == null) {
@@ -45,7 +45,7 @@ public interface RequestView {
         return new Simple(method, path, queryString, headers, body);
     }
 
-    /** 簡單的不可變實作；略過 null 的 header 名稱或值。 */
+    /** Simple immutable implementation; skip header name or value of null. */
     record Simple(String method, String path, String queryString,
                   Map<String, String> headers, BodyView body) implements RequestView {
 

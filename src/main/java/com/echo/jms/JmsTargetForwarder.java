@@ -28,8 +28,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 /**
- * JMS 轉發器 - 轉發訊息到目標 JMS Server。
- * 透過 {@link JmsTargetFactoryProvider} 策略模式支援多種 JMS provider。
+ * JMS forwarder - forwards message to destination JMS Server.
+ * Support multiple JMS providers using the {@link JmsTargetFactoryProvider} strategy interface.
  */
 @Component
 @ConditionalOnProperty(name = "echo.jms.enabled", havingValue = "true")
@@ -107,14 +107,14 @@ public final class JmsTargetForwarder {
     }
 
     /**
-     * 轉發訊息到目標 JMS Server，等待回應
-     * 使用 target.queue 作為目標 Queue（非 source queue）
+     * Forward message to target JMS Server, waiting for response
+     * Use target.queue as the destination queue, rather than the source queue.
      */
     public String forward(String body, Message originalMessage) {
         return forwardWithMetadata(body, originalMessage).body();
     }
 
-    /** 轉發並回傳不含認證資訊的實際目標，供 Request Log 使用。 */
+    /** Forward and return the actual target without credentials, for request logging. */
     public ForwardResult forwardWithMetadata(String body, Message originalMessage) {
         return forwardWithMetadata(body, originalMessage, Trace.NONE);
     }
@@ -184,7 +184,7 @@ public final class JmsTargetForwarder {
         return forwardWithMetadata(body, originalMessage, connectionId, useDefaultConnection).body();
     }
 
-    /** 依規則選定的連線轉發，並回傳安全的目標資訊。 */
+    /** Forward the connection selected according to the rules and return secure target information. */
     public ForwardResult forwardWithMetadata(String body, Message originalMessage,
                                              String connectionId,
                                              boolean useDefaultConnection) {

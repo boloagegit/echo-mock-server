@@ -1,7 +1,7 @@
 /**
- * RuleEditModal - 規則建立/編輯 Modal
- * 最大的元件，包含協定切換、條件匹配、回應編輯、SSE 編輯器、測試區等功能。
- * 回應內容使用共用的 ui-code-viewer（與抽屜相同的工具列），以 props／事件與父層同步。
+ * RuleEditModal - Rule creation/editing Modal
+ * The largest component, including protocol switching, condition matching, response editing, SSE editor, test area and other functions.
+ * The response content uses the shared ui-code-viewer (the same toolbar as the drawer), synchronized with the parent layer with props/event.
  */
 const RuleEditModal = {
     props: {
@@ -10,7 +10,7 @@ const RuleEditModal = {
         editorMode: { type: String, default: 'form' },
         form: Object,
         conditions: Array,
-        // 進階條件（matchSpec）：見 match-tree.js 與 MatchTreeEditor.js
+        // Advanced conditions (matchSpec): see match-tree.js and MatchTreeEditor.js
         matchMode: { type: String, default: 'simple' },
         matchTree: Object,
         matchError: String,
@@ -87,17 +87,17 @@ const RuleEditModal = {
         const responsePickerActiveIndex = ref(-1);
         // The response content can take over the whole editor body for long bodies; Esc returns.
         const contentExpanded = ref(false);
-        // 條件數：簡易模式為條件列，進階模式為樹中的條件（葉節點與舊版片段）
+        // Condition number: Easy mode is the condition column, advanced mode is the condition in the tree (leaf nodes and legacy fragments)
         const conditionTotal = Vue.computed(() => (props.matchMode === 'advanced' && props.matchTree
             ? MatchTree.count(props.matchTree) : props.conditions.length));
         const hasLegacyConditions = Vue.computed(() => props.matchMode === 'advanced' && props.matchTree
             && MatchTree.hasLegacy(props.matchTree));
-        // 期望值以 = 開頭的等於條件（多半是寫成 ==），比對時多出的 = 會成為期望值的一部分
+        // The expected value is equal to the condition starting with = (mostly written as ==). The extra = during comparison will become part of the expected value.
         const doubleEqualsConditions = Vue.computed(() => (props.matchMode === 'advanced'
             ? (props.matchTree ? MatchTree.doubleEqualsConditions(props.matchTree) : [])
             : props.conditions.filter(c => c.field && MatchTree.hasDoubleEquals(c.field + (c.operator || '=') + (c.value || ''), c.type))
                 .map(c => c.field + (c.operator || '=') + c.value)));
-        // 只有舊格式片段、但條件列無法完整表示（例如沒有運算子），所以以進階模式顯示
+        // There are only old format fragments, but the conditional column cannot be fully expressed (for example, there are no operators), so it is displayed in advanced mode.
         const legacyNotSimple = Vue.computed(() => {
             if (!hasLegacyConditions.value) return false;
             const strings = MatchTree.toLegacyStrings(props.matchTree);
@@ -211,9 +211,9 @@ const RuleEditModal = {
             });
         };
         const saveShortcutKey = SAVE_SHORTCUT_KEY;
-        // 「整串貼上」開著時存檔按鈕維持可按：貼上的內容可能正好修好目前不能存的事件（例如新規則的空白事件）
+        // Keep Save enabled while bulk paste is open: the pasted data may fix currently invalid events, such as a new rule's empty events.
         const sseBulkPending = Vue.computed(() => !!sseEditor.value?.bulkPending);
-        /** 存檔按鈕：SSE「整串貼上」還開著時先套用（看不懂就不存），等套用後的事件與可否存檔更新後再存。 */
+        /** Save action: apply pending SSE bulk paste first, stop on invalid input, and wait for events and save eligibility to update before saving. */
         const requestSave = async close => {
             if (sseEditor.value && !sseEditor.value.commitPending()) return;
             await Vue.nextTick();
@@ -250,7 +250,7 @@ const RuleEditModal = {
                 first.focus();
             }
         };
-        // 已選擇的回應 computed（避免 template 中重複 find）
+        // Selected response computed (to avoid duplication of find in template)
         const selectedResponse = Vue.computed(() =>
             props.responseSummary.find(r => r.id === props.form.responseId)
         );
@@ -635,7 +635,7 @@ const RuleEditModal = {
                 </div>
             </div>
             <div v-if="editorMode==='form'" class="modal-body rule-editor" :inert="saving" :aria-busy="saving" :class="{'is-content-expanded': contentExpanded}">
-                <!-- 左側：匹配條件 + 測試 -->
+                <!-- Left: match condition + test -->
                 <div class="rule-left">
                     <div class="rule-pane-heading" data-tour="protocol">
                         <span class="rule-pane-title-row">
@@ -646,7 +646,7 @@ const RuleEditModal = {
                             :model-value="form.protocol" :options="protocolOptions" :aria-label="t('modal.protocolLabel')"
                             @update:model-value="$emit('set-protocol',$event)"></ui-choice-group>
                     </div>
-                    <!-- 匹配路徑 -->
+                    <!-- Matching path -->
                     <div class="form-block rule-protocol-slot" data-tour="match">
                         <div v-if="form.protocol==='HTTP'" key="http" class="rule-protocol-fields">
                             <!-- Method and path read as one request line, like the header ("GET /api/orders"). -->
@@ -684,7 +684,7 @@ const RuleEditModal = {
                             </div>
                         </div>
                     </div>
-                    <!-- 條件匹配 -->
+                    <!-- Condition matched -->
                     <div class="form-block" data-tour="conditions">
                         <div class="form-block-header">
                             {{t('modal.conditionMatch')}}<span class="form-block-hint">{{matchMode === 'advanced' ? t('match.advancedHint') : t('modal.conditionAllMatch')}}</span>
@@ -731,7 +731,7 @@ const RuleEditModal = {
                             <div v-if="showBodyConditionWarning" class="cond-warning"><i class="bi bi-info-circle"></i> {{t('modal.bodyConditionWarning', {method: form.method})}}</div>
                         </div>
                     </div>
-                    <!-- 規則設定：優先度、標籤與情境匹配，平常收合 -->
+                    <!-- Rule setting: priority, label and situation matching, normal collapse -->
                     <details class="form-block rule-settings-disclosure">
                         <summary class="form-block-header rule-settings-summary">
                             <i class="bi bi-chevron-right rule-settings-chevron" aria-hidden="true"></i>{{t('modal.ruleSettings')}}<span class="form-block-hint">{{ruleSettingsSummary}}</span>
@@ -779,14 +779,14 @@ const RuleEditModal = {
                         </div>
                     </details>
                 </div>
-                <!-- 拖拽分隔線 -->
+                <!-- Drag divider -->
                 <div class="rule-splitter" :class="{dragging:splitterDragging}"
                     role="separator" aria-orientation="vertical" :aria-label="t('modal.resizeRulePanes')"
                     aria-valuemin="15" aria-valuemax="65" :aria-valuenow="Math.round(splitRatio*100)" tabindex="0"
                     @mousedown="startSplitterDrag"
                     @keydown.left.prevent="resizeSplitterBy(-0.02)"
                     @keydown.right.prevent="resizeSplitterBy(0.02)"></div>
-                <!-- 右側：規則命中後的處理模式與對應設定 -->
+                <!-- Right: processing mode and corresponding settings after the rule hits -->
                 <div class="rule-right">
                     <div class="rule-right-content" :inert="responseDropdownOpen ? '' : null" :aria-hidden="responseDropdownOpen ? 'true' : undefined">
                     <div class="rule-pane-heading">
@@ -934,9 +934,9 @@ const RuleEditModal = {
                                 </div>
                             </details>
                         </div>
-                    <!-- 回應模式 + 統一選擇器 -->
+                    <!-- Response mode + unified selector -->
                     <div v-else key="mock" class="form-block mock-result-settings" data-tour="response">
-                        <!-- 回應的形狀：狀態碼與一般／SSE 串流（SSE 描述的是回應，所以放在這裡） -->
+                        <!-- Response shape: status code and general/SSE streaming (SSE describes the response, so it is placed here) -->
                         <div v-if="form.protocol==='HTTP'" key="http" class="response-status-row">
                             <div class="response-status-field">
                                 <label for="ruleStatus">{{t('modal.statusCode')}}</label>
@@ -952,7 +952,7 @@ const RuleEditModal = {
                             <code class="response-reply-type">TextMessage</code>
                             <span class="sub-info">{{t('modal.jmsReplyHint')}}</span>
                         </div>
-                        <!-- 回應內容的來源：使用現有回應或建立新的 -->
+                        <!-- Source of response content: use existing response or create new one -->
                         <div class="response-mode-toolbar">
                             <span class="response-mode-label">{{t('modal.responseMode')}}</span>
                             <ui-choice-group class="protocol-switch" option-class="protocol-btn" variant="compact"
@@ -969,7 +969,7 @@ const RuleEditModal = {
                             <div v-if="form.responseId" class="response-picker-heading">
                                 <strong>{{t('modal.currentSelection')}}</strong>
                             </div>
-                            <!-- 已選擇的回應 -->
+                            <!-- Selected response -->
                             <div v-if="form.responseId" class="response-selected-card">
                                 <div class="response-selected-content">
                                     <strong class="response-selected-desc">{{selectedResponse?.description||t('responses.noDescription')}}</strong>
@@ -1047,16 +1047,16 @@ const RuleEditModal = {
                             </div>
                         </details>
                     </div>
-                    <!-- 回應內容 -->
+                    <!-- Response content -->
                     <div v-if="ruleMode==='MOCK'" class="form-block response-content-block">
-                        <!-- SSE 表格編輯器 -->
+                        <!-- SSE Table Editor -->
                         <sse-events-editor v-if="form.sseEnabled && form.protocol==='HTTP'" ref="sseEditor" class="sse-editor-wrap rule-sse-editor"
                             :events="sseEvents" :loop-enabled="!!form.sseLoopEnabled" @update:loop-enabled="form.sseLoopEnabled = $event"
                             :shared-count="form.responseMode==='existing' && form.responseId ? (selectedResponse?.usageCount || previewResponseUsageCount || 0) : 0"
                             :expanded="contentExpanded" @update:expanded="contentExpanded = $event"
                             :error="formErrors.responseBody"
                             @add="$emit('add-sse-event')" @remove="$emit('remove-sse-event', $event)" @replace="$emit('reorder-sse-events', $event)"></sse-events-editor>
-                        <!-- 使用現有回應 (非 SSE) -->
+                        <!-- Use existing response (not SSE) -->
                         <!-- The label, state and actions live in the viewer's own toolbar: one row above the body
                              instead of a header row plus a toolbar row. Secondary actions are icon buttons. -->
                         <div v-else-if="form.responseMode==='existing'" class="response-content-mode">
@@ -1090,7 +1090,7 @@ const RuleEditModal = {
                             </div>
                             <div v-else class="response-preview-empty">{{t('modal.selectResponse')}}</div>
                         </div>
-                        <!-- 建立新回應 (非 SSE) -->
+                        <!-- Create new response (not SSE) -->
                         <div v-else class="response-content-mode">
                             <ui-code-viewer class="rule-response-code" fill editable :label="t('modal.responseContent')" :placeholder="t('modal.responseBodyPlaceholder')"
                                 :value="form.responseBody || ''" @update:value="form.responseBody = $event" @copy="$emit('copy-text', $event)">
@@ -1176,7 +1176,7 @@ const RuleEditModal = {
                 </div>
             </div>
             <slot v-else name="declarative"></slot>
-            <!-- 測試列：在兩個窗格下方，平常收合 -->
+            <!-- Test column: below the two panes, normally collapsed -->
             <section v-if="editorMode==='form' && editing" class="rule-test-bar" :aria-label="t('modal.testRule')">
                     <div class="form-block rule-test-block">
                         <button type="button" class="form-block-header rule-test-toggle" :aria-expanded="testExpanded" aria-controls="ruleTestPanel" @click="$emit('update:test-expanded',!testExpanded)">

@@ -30,8 +30,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 規則審計服務 - 記錄規則變更歷史
- * 僅在 Database 模式啟用
+ * Rule audit service - record rule change history
+ * Only enabled in Database mode
  */
 @Service
 @ConditionalOnProperty(name = "echo.storage.mode", havingValue = "database", matchIfMissing = true)
@@ -49,7 +49,7 @@ public class RuleAuditService {
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-    /** 比較時忽略的欄位（每次 save 都會變動） */
+    /** Field ignored when comparing (save will change every time) */
     private static final Set<String> IGNORED_FIELDS = Set.of(
             "version", "updatedAt", "extendedAt", "bodySize"
     );
@@ -59,7 +59,7 @@ public class RuleAuditService {
     }
 
     /**
-     * 將規則序列化為 JSON 快照（用於在 JPA save 前保存狀態）
+     * Serialize rules to JSON snapshot (used to save state before JPA save)
      */
     public String snapshot(BaseRule rule) {
         try {
@@ -168,7 +168,7 @@ public class RuleAuditService {
         }
     }
 
-    /** 建立修訂記錄，同時算好列表摘要，列表就不必讀取前後快照。 */
+    /** Create a revision record and calculate the list summary at the same time, so that the list does not need to read the before and after snapshots. */
     private RuleAuditLog newAudit(String ruleId, Action action, String beforeJson, String afterJson,
                                   String operator, LocalDateTime timestamp) {
         AuditSummaryCalculator.Result summary = summarize(ruleId, action, beforeJson, afterJson);
@@ -196,7 +196,7 @@ public class RuleAuditService {
     }
 
     /**
-     * 比較兩個 JSON 字串是否有實質變更（排除 version、updatedAt 等自動欄位）
+     * Compare two JSON strings for substantial changes (exclude automatic fields such as version and updatedAt)
      */
     boolean hasActualChanges(String beforeJson, String afterJson) {
         if (beforeJson == null || afterJson == null) {
@@ -216,7 +216,7 @@ public class RuleAuditService {
             }
             return !beforeNode.equals(afterNode);
         } catch (Exception e) {
-            // JSON 解析失敗，保守起見視為有變更
+            // JSON parsing failed, conservatively regarded as a change
             return true;
         }
     }
@@ -241,7 +241,7 @@ public class RuleAuditService {
                 .toList();
     }
 
-    /** 查詢修訂記錄摘要；完整 JSON 由 getAuditDetail() 單筆載入。 */
+    /** Query revision summaries; getAuditDetail() loads the complete JSON for one record on demand. */
     public AuditQueryResult queryAuditSummary(AuditQueryFilter filter) {
         int pageNumber = Math.max(0, filter.getPage() != null ? filter.getPage() : 0);
         int pageSize = Math.max(1, Math.min(filter.getSize() != null ? filter.getSize() : 20, 100));
@@ -299,7 +299,7 @@ public class RuleAuditService {
         String description = (String) row[9];
         String summary = (String) row[10];
         if (summary == null) {
-            // 舊資料：這一筆現在補算並存回去，之後就不必再算。
+            // Old information: This amount is calculated now and saved back, so there is no need to calculate it again later.
             AuditSummaryCalculator.Result filled = fillSummary(id);
             if (filled != null) {
                 protocol = filled.protocol();
@@ -334,7 +334,7 @@ public class RuleAuditService {
         }
     }
 
-    /** 補算一筆舊資料的列表摘要；一次只載入一筆快照，避免大型回應內容同時佔用記憶體。 */
+    /** Compute a list summary of old data; only load one snapshot at a time to avoid large response content occupying memory at the same time. */
     AuditSummaryCalculator.Result fillSummary(long id) {
         try {
             RuleAuditLog audit = repository.findById(id).orElse(null);
@@ -356,9 +356,9 @@ public class RuleAuditService {
     }
 
     /**
-     * 背景補算升級前的修訂記錄摘要，讓用名稱搜尋也找得到舊資料。
-     * 每輪最多處理 {@value #BACKFILL_BATCHES_PER_RUN} 批、每批 {@value #BACKFILL_BATCH_SIZE} 筆，
-     * 而且一次只載入一筆，不會在啟動時一口氣掃過整張表。
+     * A summary of the revision history before the background back-up upgrade, so that old data can be found by name search.
+     * Process at most {@value #BACKFILL_BATCHES_PER_RUN} batches per run, with {@value #BACKFILL_BATCH_SIZE} records per batch,
+     * And it only loads one item at a time, and will not scan the entire table in one go at startup.
      */
     @Scheduled(initialDelayString = "${echo.audit.summary-backfill-initial-delay-ms:30000}",
             fixedDelayString = "${echo.audit.summary-backfill-delay-ms:60000}")
@@ -376,7 +376,7 @@ public class RuleAuditService {
                 }
             }
             if (filled == before) {
-                // 這一批全部失敗，下一輪再試，避免在同一輪反覆讀同樣的資料。
+                // This batch all failed. Try again in the next round to avoid reading the same data over and over again in the same round.
                 break;
             }
         }
@@ -434,7 +434,7 @@ public class RuleAuditService {
         private int size;
         private long totalElements;
         private int totalPages;
-        /** 伺服器今天的日期；修訂時間是伺服器時區，前端用它判斷「今天／昨天」。 */
+        /** Today's date on the server; the revision time is the server time zone, which is used by the front end to determine "today/yesterday". */
         private String today;
     }
 

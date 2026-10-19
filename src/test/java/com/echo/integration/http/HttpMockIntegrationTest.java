@@ -13,16 +13,16 @@ import org.springframework.http.ResponseEntity;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * HTTP Mock 端點整合測試
+ * HTTP Mock Endpoint Integration Test
  * <p>
- * 測試 /mock/** 端點的各種匹配邏輯、條件匹配、回應處理等。
- * Mock 端點完全繞過 Spring Security，使用 restTemplate（無需認證）。
+ * Test various matching logic, condition matching, response processing, etc. of the /mock/** endpoint.
+ * The Mock endpoint completely bypasses Spring Security and uses restTemplate (no authentication required).
  */
 class HttpMockIntegrationTest extends BaseIntegrationTest {
 
     private static final String ORIGINAL_HOST_HEADER = "X-Original-Host";
 
-    // ========== 3.2 測試基本 Mock 匹配 ==========
+    // ========== 3.2 Test basic Mock matching ==========
 
     @Test
     @DisplayName("基本 Mock 匹配：GET /mock/users + X-Original-Host → 200 + body 正確")
@@ -40,7 +40,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
         assertThat(response.getBody()).isEqualTo("[{\"id\":1}]");
     }
 
-    // ========== 3.3 測試 POST 方法 + JSON body ==========
+    // ========== 3.3 Test POST method + JSON body ==========
 
     @Test
     @DisplayName("POST 方法 + JSON body：POST /mock/orders → 201")
@@ -58,29 +58,29 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
         assertThat(response.getBody()).isEqualTo("{\"created\":true}");
     }
 
-    // ========== 3.4 測試 Body 條件匹配（JSON）==========
+    // ========== 3.4 Test Body condition matching (JSON) ==========
 
     @Test
     @DisplayName("Body 條件匹配（JSON）：type=vip 匹配有條件規則，type=normal fallback 到無條件規則")
     void bodyConditionJson_shouldMatchConditionalAndFallback() {
-        // 有條件規則：bodyCondition=type=vip
+        // Conditional rule: bodyCondition=type=vip
         createHttpRule("/members", "POST", "{\"level\":\"vip\"}", null, 200,
                 "type=vip", null, null, null, null, null, "VIP 規則");
-        // 無條件規則（fallback）
+        // Unconditional rule (fallback)
         createHttpRule("/members", "POST", "{\"level\":\"normal\"}", null, 200,
                 null, null, null, null, null, null, "預設規則");
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        // VIP body → 匹配有條件規則
+        // VIP body → Match conditional rules
         HttpEntity<String> vipRequest = new HttpEntity<>("{\"type\":\"vip\"}", headers);
         ResponseEntity<String> vipResponse = restTemplate.exchange(
                 "/mock/members", HttpMethod.POST, vipRequest, String.class);
         assertThat(vipResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(vipResponse.getBody()).isEqualTo("{\"level\":\"vip\"}");
 
-        // normal body → fallback 到無條件規則
+        // normal body → fallback to unconditional rule
         HttpEntity<String> normalRequest = new HttpEntity<>("{\"type\":\"normal\"}", headers);
         ResponseEntity<String> normalResponse = restTemplate.exchange(
                 "/mock/members", HttpMethod.POST, normalRequest, String.class);
@@ -88,7 +88,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
         assertThat(normalResponse.getBody()).isEqualTo("{\"level\":\"normal\"}");
     }
 
-    // ========== 3.5 測試 Body 條件匹配（XML）==========
+    // ========== 3.5 Test Body condition matching (XML) ==========
 
     @Test
     @DisplayName("Body 條件匹配（XML）：//type=ORDER 匹配 XML body")
@@ -108,7 +108,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
         assertThat(response.getBody()).isEqualTo("<response>matched</response>");
     }
 
-    // ========== 3.6 測試 Query 條件匹配 ==========
+    // ========== 3.6 Test Query condition matching ==========
 
     @Test
     @DisplayName("Query 條件匹配：status=active 匹配成功，status=inactive 不匹配")
@@ -118,21 +118,21 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
 
         HttpHeaders headers = new HttpHeaders();
 
-        // status=active → 匹配成功
+        // status=active → Match successful
         HttpEntity<Void> activeRequest = new HttpEntity<>(headers);
         ResponseEntity<String> activeResponse = restTemplate.exchange(
                 "/mock/items?status=active", HttpMethod.GET, activeRequest, String.class);
         assertThat(activeResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(activeResponse.getBody()).isEqualTo("{\"filtered\":true}");
 
-        // status=inactive → 不匹配（404，因為沒有 fallback 規則）
+        // status=inactive → No match (404, because there is no fallback rule)
         HttpEntity<Void> inactiveRequest = new HttpEntity<>(headers);
         ResponseEntity<String> inactiveResponse = restTemplate.exchange(
                 "/mock/items?status=inactive", HttpMethod.GET, inactiveRequest, String.class);
         assertThat(inactiveResponse.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
-    // ========== 3.7 測試 Header 條件匹配 ==========
+    // ========== 3.7 Test Header condition matching ==========
 
     @Test
     @DisplayName("Header 條件匹配：X-Tenant=abc 匹配成功，不帶 X-Tenant 不匹配")
@@ -140,7 +140,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
         createHttpRule("/tenant-data", "GET", "{\"tenant\":\"abc\"}", null, 200,
                 null, null, "X-Tenant=abc", null, null, null, "Header 條件規則");
 
-        // 帶 X-Tenant: abc → 匹配成功
+        // with X-Tenant: abc → matched successfully
         HttpHeaders headersWithTenant = new HttpHeaders();
         headersWithTenant.set("X-Tenant", "abc");
         HttpEntity<Void> requestWithTenant = new HttpEntity<>(headersWithTenant);
@@ -149,14 +149,14 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
         assertThat(matchResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(matchResponse.getBody()).isEqualTo("{\"tenant\":\"abc\"}");
 
-        // 不帶 X-Tenant → 不匹配（404）
+        // Without X-Tenant → No match (404)
         HttpEntity<Void> requestWithoutTenant = new HttpEntity<>(new HttpHeaders());
         ResponseEntity<String> noMatchResponse = restTemplate.exchange(
                 "/mock/tenant-data", HttpMethod.GET, requestWithoutTenant, String.class);
         assertThat(noMatchResponse.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
-    // ========== 3.8 測試多條件同時匹配（body + query + header）==========
+    // ========== 3.8 Test multiple conditions to match simultaneously (body + query + header) ==========
 
     @Test
     @DisplayName("多條件同時匹配：body + query + header 全滿足才匹配，部分滿足不匹配")
@@ -169,14 +169,14 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
         fullHeaders.setContentType(MediaType.APPLICATION_JSON);
         fullHeaders.set("X-Tenant", "abc");
 
-        // 三個條件都滿足 → 匹配成功
+        // All three conditions are met → matching successful
         HttpEntity<String> fullRequest = new HttpEntity<>("{\"type\":\"order\"}", fullHeaders);
         ResponseEntity<String> fullResponse = restTemplate.exchange(
                 "/mock/multi?status=active", HttpMethod.POST, fullRequest, String.class);
         assertThat(fullResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(fullResponse.getBody()).isEqualTo("{\"all\":\"matched\"}");
 
-        // 只滿足 body + query，缺少 header → 不匹配
+        // Only body + query is satisfied, header is missing → does not match
         HttpHeaders partialHeaders = new HttpHeaders();
         partialHeaders.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<String> partialRequest = new HttpEntity<>("{\"type\":\"order\"}", partialHeaders);
@@ -185,7 +185,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
         assertThat(partialResponse.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
-    // ========== 3.9 測試自訂 Response Headers ==========
+    // ========== 3.9 Test Customization Response Headers ==========
 
     @Test
     @DisplayName("自訂 Response Headers：回應包含 X-Custom header")
@@ -200,7 +200,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
         assertThat(response.getHeaders().getFirst("X-Custom")).isEqualTo("hello");
     }
 
-    // ========== 3.10 測試自訂 HTTP Status Code ==========
+    // ========== 3.10 Test Customization HTTP Status Code ==========
 
     @Test
     @DisplayName("自訂 HTTP Status Code：404 和 500")
@@ -221,7 +221,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
         assertThat(response500.getBody()).isEqualTo("{\"error\":\"internal\"}");
     }
 
-    // ========== 3.11 測試延遲回應（delayMs）==========
+    // ========== 3.11 Test delayed response (delayMs) ==========
 
     @Test
     @DisplayName("延遲回應：delayMs=300 → 回應耗時 ≥ 300ms")
@@ -239,7 +239,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
         assertThat(elapsed).isGreaterThanOrEqualTo(300L);
     }
 
-    // ========== 3.12 測試無匹配規則 + 無 X-Original-Host → 404 ==========
+    // ========== 3.12 Testing No Matching Rules + None X-Original-Host → 404 ==========
 
     @Test
     @DisplayName("無匹配規則 + 無 X-Original-Host → 404")
@@ -251,7 +251,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
         assertThat(response.getBody()).contains("No mock rule found");
     }
 
-    // ========== 3.13 測試萬用 matchKey=* 作為 fallback ==========
+    // ========== 3.13 Test wildcard matchKey=* as fallback ==========
 
     @Test
     @DisplayName("萬用 matchKey=* 作為 fallback：任意路徑都能匹配")
@@ -269,15 +269,15 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
         assertThat(response2.getBody()).isEqualTo("{\"wildcard\":true}");
     }
 
-    // ========== 3.14 測試規則優先順序（priority）==========
+    // ========== 3.14 Test rule priority (priority) ==========
 
     @Test
     @DisplayName("規則優先順序：priority=10 優先於 priority=1")
     void rulePriority_shouldPreferHigherPriorityValue() {
-        // priority=1（較低優先）
+        // priority=1 (lower priority)
         createHttpRule("/priority-test", "GET", "{\"priority\":1}", null, 200,
                 null, null, null, null, null, 1, "低優先規則");
-        // priority=10（較高優先）
+        // priority=10 (higher priority)
         createHttpRule("/priority-test", "GET", "{\"priority\":10}", null, 200,
                 null, null, null, null, null, 10, "高優先規則");
 
@@ -288,15 +288,15 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
         assertThat(response.getBody()).isEqualTo("{\"priority\":10}");
     }
 
-    // ========== 3.15 測試 targetHost 精確度排序 ==========
+    // ========== 3.15 Test targetHost Accuracy Sorting ==========
 
     @Test
     @DisplayName("targetHost 精確度排序：有 targetHost 的規則優先於無 targetHost 的規則")
     void targetHostPrecision_shouldPreferSpecificHost() {
-        // 無 targetHost 的規則
+        // No rule for targetHost
         createHttpRule("/host-test", "GET", "{\"host\":\"none\"}", null, 200,
                 null, null, null, null, null, null, "無 host 規則");
-        // 有 targetHost 的規則
+        // There is a rule for targetHost
         createHttpRule("/host-test", "GET", "{\"host\":\"specific\"}", "api.test", 200,
                 null, null, null, null, null, null, "有 host 規則");
 
@@ -311,12 +311,12 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
         assertThat(response.getBody()).isEqualTo("{\"host\":\"specific\"}");
     }
 
-    // ========== 3.16 測試 Response Template 渲染 ==========
+    // ========== 3.16 Test Response Template Rendering ==========
 
     @Test
     @DisplayName("Response Template 渲染：{{request.path}} 和 {{request.query.name}} 被正確渲染")
     void responseTemplate_shouldRenderPathAndQueryParams() {
-        // 測試 {{request.path}}
+        // Test {{request.path}}
         createHttpRule("/template/path", "GET", "path={{request.path}}");
 
         ResponseEntity<String> pathResponse = restTemplate.getForEntity(
@@ -324,7 +324,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
         assertThat(pathResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(pathResponse.getBody()).isEqualTo("path=/template/path");
 
-        // 測試 {{request.query.name}}
+        // Test {{request.query.name}}
         createHttpRule("/template/query", "GET", "name={{request.query.name}}");
 
         ResponseEntity<String> queryResponse = restTemplate.getForEntity(
@@ -333,7 +333,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
         assertThat(queryResponse.getBody()).isEqualTo("name=John");
     }
 
-    // ========== 3.17 測試 Content-Type 自動偵測 ==========
+    // ========== 3.17 Test Content-Type automatic detection ==========
 
     @Test
     @DisplayName("Content-Type 自動偵測：JSON → application/json，XML → application/xml，純文字 → text/plain")
@@ -354,7 +354,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
         assertThat(xmlResponse.getHeaders().getContentType()).isNotNull();
         assertThat(xmlResponse.getHeaders().getContentType().isCompatibleWith(MediaType.APPLICATION_XML)).isTrue();
 
-        // 純文字 body
+        // Plain text body
         createHttpRule("/ct/text", "GET", "plain text content");
         ResponseEntity<String> textResponse = restTemplate.getForEntity(
                 "/mock/ct/text", String.class);

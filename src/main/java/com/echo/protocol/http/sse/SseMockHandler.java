@@ -35,11 +35,11 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 /**
- * 明確要求 {@code text/event-stream} 的 HTTP 請求：命中 SSE 規則時以 {@link SsePlayer} 播放事件序列，
- * 其他情況交回一般 HTTP pipeline。
+ * HTTP request for {@code text/event-stream} explicitly: play the event sequence as {@link SsePlayer} when the SSE rule is hit,
+ * In other cases, return the general HTTP pipeline.
  * <p>
- * 與一般 pipeline 刻意不同的地方（維持既有行為）：沒有命中的 GET／HEAD 直接回 404、不轉發；
- * SSE 規則遇到 HEAD／OPTIONS 回 405 且不寫請求紀錄；連線重置故障不套用延遲。
+ * Deliberately different from the general pipeline (maintaining the existing behavior): GET/HEAD that does not hit will directly return 404 and will not be forwarded;
+ * When the SSE rule encounters HEAD/OPTIONS, it returns 405 and does not write the request record; the delay is not applied for connection reset failures.
  */
 @Component
 @Slf4j
@@ -78,12 +78,12 @@ public class SseMockHandler {
     }
 
     /**
-     * 處理一個 SSE 請求，回傳 {@link SseEmitter} 或一般 {@link ResponseEntity}。
+     * Process a SSE request and return {@link SseEmitter} or general {@link ResponseEntity}.
      *
-     * @param connectionReset 關閉底層連線（連線重置故障）
-     * @param httpPipeline    改走一般 HTTP pipeline
+     * @param connectionReset Close the underlying connection (connection reset failure)
+     * @param httpPipeline    Change to normal HTTP pipeline
      */
-    // 播放完成的 future 只會正常完成（錯誤已在播放器內處理並寫入診斷），這裡不需要等待。
+    // Playback of completed future will only complete normally (the error has been handled within the player and written diagnostics), there is no need to wait here.
     @SuppressWarnings("FutureReturnValueIgnored")
     public Object handle(MockRequest request, HttpServletResponse response,
                          Runnable connectionReset, Supplier<Object> httpPipeline) {
@@ -106,7 +106,7 @@ public class SseMockHandler {
                             : httpMockPipeline.prepareBodyForMatching(MockRequest.builder().body(body).build(), candidates),
                     request.getQueryString(), request.getHeaders());
         } else {
-            // 保留給舊有單元測試與嵌入式呼叫端的相容路徑。
+            // Compatibility path reserved for legacy unit tests and embedded callers.
             matchResult = httpRuleService.findMatchingHttpRuleWithCandidates(
                     request.getTargetHost(), path, method, body, request.getQueryString(), request.getHeaders());
         }
@@ -173,12 +173,12 @@ public class SseMockHandler {
             return ResponseEntity.status(configuredStatus).body("");
         }
 
-        // 非 SSE 規則（只有相容路徑會走到這裡）→ 一般回應
+        // Non-SSE rule (only compatible paths will go here) → General response
         if (!Boolean.TRUE.equals(rule.getSseEnabled())) {
             return plainResponse(served, rule, configuredStatus);
         }
 
-        // responseId 為 null → HTTP 500
+        // responseId is null → HTTP 500
         if (rule.getResponseId() == null) {
             served.record(faultType, 500, null);
             trace.end("MISSING_RESPONSE");
@@ -190,7 +190,7 @@ public class SseMockHandler {
         String responseBody = ruleService.findResponseBodyById(rule.getResponseId()).orElse("");
         List<SsePlayer.SseEvent> events = SsePlayer.parseEvents(responseBody);
 
-        // 事件列表為空 → HTTP 500
+        // The event list is empty → HTTP 500
         if (events.isEmpty()) {
             served.record(faultType, 500, null);
             trace.end("INVALID_EVENTS");
@@ -268,7 +268,7 @@ public class SseMockHandler {
         return MediaType.TEXT_PLAIN;
     }
 
-    /** 命中規則後寫入請求紀錄所需的共用資訊。 */
+    /** Write the shared information required for the request record after hitting the rule. */
     private final class Served {
         private final MockRequest request;
         private final HttpRule rule;
@@ -294,14 +294,14 @@ public class SseMockHandler {
             this.byFallback = byFallback;
         }
 
-        /** 故障或 Scenario 轉移時才附上匹配分析所需的規則、query 與 headers（與既有紀錄內容相同）。 */
+        /** The rules required for matching analysis, query and headers (the same as the existing record content) are only attached when there is a fault or Scenario transfer. */
         void record(FaultType faultType, Integer responseStatus, String responseBody) {
             record(faultType, responseStatus, responseBody, null, null);
         }
 
         /**
-         * @param sseEventCount 開始播放的 SSE 事件數；沒有播放時為 null
-         * @param delayMs       第一個事件前的延遲；沒有播放時為 null
+         * @param sseEventCount The number of SSE events that started playing; null when there is no playback
+         * @param delayMs       Delay before first event; null when not playing
          */
         void record(FaultType faultType, Integer responseStatus, String responseBody,
                     Integer sseEventCount, Long delayMs) {

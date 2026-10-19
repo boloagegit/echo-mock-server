@@ -4,24 +4,24 @@ import lombok.Builder;
 import lombok.Getter;
 
 /**
- * 規則條件集合 Value Object
+ * Rule condition set Value Object
  * <p>
- * 封裝規則的匹配條件，供 {@code matchRule()} 使用。
- * JMS 規則僅使用 bodyCondition，queryCondition 和 headerCondition 為 null。
+ * Matching conditions of encapsulation rules, for use by {@code matchRule()}.
+ * The JMS rule only uses bodyCondition, queryCondition and headerCondition are null.
  */
 @Getter
 @Builder
 public class ConditionSet {
 
-    /** Body 匹配條件 */
+    /** Body matching conditions */
     private final String bodyCondition;
 
-    /** Query 參數匹配條件（僅 HTTP） */
+    /** Query parameter matching conditions (HTTP only) */
     private final String queryCondition;
 
-    /** Header 匹配條件（僅 HTTP） */
+    /** Header matching condition (HTTP only) */
     private final String headerCondition;
 
-    /** 結構化條件 JSON；有值時以它為準，舊版三個條件為 null */
+    /** Structured condition JSON; when there is a value, it shall prevail. The three conditions of the old version are null */
     private final String matchSpec;
 }

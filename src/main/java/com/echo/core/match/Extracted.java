@@ -3,10 +3,10 @@ package com.echo.core.match;
 import java.util.List;
 
 /**
- * {@link ValueExtractor} 的取值結果。
+ * The value result of {@link ValueExtractor}.
  *
- * @param state  取值狀態
- * @param values {@link State#FOUND} 時至少有一個值，其他狀態為空
+ * @param state  Value status
+ * @param values There is at least one value for {@link State#FOUND}, and the other states are empty.
  */
 public record Extracted(State state, List<Value> values) {
 
@@ -32,17 +32,17 @@ public record Extracted(State state, List<Value> values) {
         return new Extracted(State.FOUND, List.of(value));
     }
 
-    /** 空清單視為 {@link State#MISSING}。 */
+    /** Empty list treated as {@link State#MISSING}. */
     public static Extracted of(List<Value> values) {
         return values.isEmpty() ? MISSING : new Extracted(State.FOUND, values);
     }
 
     public enum State {
-        /** 取到一個以上的值。 */
+        /** More than one value was obtained. */
         FOUND,
-        /** 來源中不存在此欄位。 */
+        /** This field does not exist in the source. */
         MISSING,
-        /** 無法判斷（例如 body 過大、值過長），任何條件都視為不符合。 */
+        /** Unable to judge (for example, body is too large, the value is too long), any condition is considered not met. */
         UNAVAILABLE
     }
 }

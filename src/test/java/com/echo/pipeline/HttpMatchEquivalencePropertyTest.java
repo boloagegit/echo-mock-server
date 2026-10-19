@@ -14,13 +14,13 @@ import java.util.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * HTTP 匹配行為等價性屬性測試
+ * HTTP Match behavior equivalence attribute test
  * <p>
- * Feature: protocol-pipeline-refactor, Property 2: HTTP 匹配行為等價性
+ * Feature: protocol-pipeline-refactor, Property 2: HTTP Match behavior equivalence
  * <p>
- * 使用 jqwik 產生隨機 HttpRule 清單與請求參數，比較 {@code HttpMockPipeline} 透過
- * {@code matchRule()} 的結果與重構前 {@code HttpRuleService.findMatchingHttpRuleInternal()}
- * 的結果，兩者應產生相同的匹配規則（或同時無匹配）。
+ * Use jqwik to generate a random HttpRule list and request parameters, compare {@code HttpMockPipeline} via
+ * Result of {@code matchRule()} vs. {@code HttpRuleService.findMatchingHttpRuleInternal()} before reconstruction
+ * The results of both should produce the same matching rule (or no match at the same time).
  *
  * <b>Validates: Requirements 1.8, 6.2</b>
  */
@@ -29,8 +29,8 @@ class HttpMatchEquivalencePropertyTest {
     // ==================== Controllable ConditionMatcher ====================
 
     /**
-     * 可控的 ConditionMatcher：根據 matchingConditions 集合決定是否匹配。
-     * 兩條路徑（pipeline 和 old service）共用同一個實例，確保匹配決策一致。
+     * Controllable ConditionMatcher: Determine whether to match based on the matchingConditions set.
+     * The two paths (pipeline and old service) share the same instance to ensure consistent matching decisions.
      */
     static class ControllableConditionMatcher extends ConditionMatcher {
         private final Set<String> matchingBodyConditions;
@@ -80,7 +80,7 @@ class HttpMatchEquivalencePropertyTest {
     // ==================== Pipeline Test Subclass ====================
 
     /**
-     * HttpMockPipeline 的測試替身，使用可控的 ConditionMatcher
+     * Test double for HttpMockPipeline, using controllable ConditionMatcher
      */
     static class TestHttpPipeline extends AbstractMockPipeline<HttpRule> {
 
@@ -138,8 +138,8 @@ class HttpMatchEquivalencePropertyTest {
     // ==================== Old Service Logic (extracted) ====================
 
     /**
-     * 重構前 HttpRuleService.findMatchingHttpRuleInternal() 的邏輯，
-     * 原封不動地複製過來作為 oracle。
+     * The logic of HttpRuleService.findMatchingHttpRuleInternal() before reconstruction,
+     * Copied unchanged as oracle.
      */
     static MatchResult<HttpRule> oldFindMatchingHttpRuleInternal(
             List<HttpRule> rules, ConditionMatcher conditionMatcher,
@@ -228,8 +228,8 @@ class HttpMatchEquivalencePropertyTest {
     }
 
     /**
-     * 從規則清單中收集所有非空條件值，隨機選擇一部分作為「匹配成功」的條件。
-     * 這樣可以產生各種匹配/不匹配的組合。
+     * Collect all non-empty condition values from the rule list, and randomly select a part as the "match success" condition.
+     * This can produce various match/mismatch combinations.
      */
     @Provide
     Arbitrary<Set<String>> matchingSubset() {
@@ -239,7 +239,7 @@ class HttpMatchEquivalencePropertyTest {
     // ==================== Helper ====================
 
     /**
-     * 從規則清單中收集所有條件值，隨機選擇子集作為匹配成功的條件
+     * Collect all condition values from the rule list and randomly select a subset as conditions for successful matching
      */
     private ControllableConditionMatcher buildMatcher(List<HttpRule> rules, java.util.Random random) {
         Set<String> allBody = new HashSet<>();
@@ -258,7 +258,7 @@ class HttpMatchEquivalencePropertyTest {
             }
         }
 
-        // 隨機選擇子集
+        // Randomly select subset
         Set<String> matchBody = randomSubset(allBody, random);
         Set<String> matchQuery = randomSubset(allQuery, random);
         Set<String> matchHeader = randomSubset(allHeader, random);
@@ -279,11 +279,11 @@ class HttpMatchEquivalencePropertyTest {
     // ==================== Property Tests ====================
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 2: HTTP 匹配行為等價性
+     * Feature: protocol-pipeline-refactor, Property 2: HTTP Match behavior equivalence
      * <p>
-     * 對任意已排序的 HttpRule 清單，HttpMockPipeline 透過 matchRule() 產生的匹配結果
-     * 與重構前 HttpRuleService.findMatchingHttpRuleInternal() 的結果完全一致
-     * （相同的 matchedRule ID 或同時無匹配）。
+     * For any sorted HttpRule list, the matching result of HttpMockPipeline through matchRule()
+     * Exactly the same as the result of HttpRuleService.findMatchingHttpRuleInternal() before reconstruction
+     * (Same matchedRule ID or both no matches).
      *
      * <b>Validates: Requirements 1.8, 6.2</b>
      */
@@ -295,18 +295,18 @@ class HttpMatchEquivalencePropertyTest {
         java.util.Random random = new java.util.Random(seed);
         ControllableConditionMatcher matcher = buildMatcher(rules, random);
 
-        // 準備 preparedBody（兩邊共用同一個）
+        // Prepare preparedBody (share the same one on both sides)
         ConditionMatcher.PreparedBody prepared = matcher.prepareBody(null);
 
-        // 新 pipeline 路徑
+        // New pipeline path
         TestHttpPipeline pipeline = new TestHttpPipeline(matcher);
         MatchResult<HttpRule> pipelineResult = pipeline.matchRule(rules, prepared, null, null);
 
-        // 舊 service 路徑
+        // Old service path
         MatchResult<HttpRule> oldResult = oldFindMatchingHttpRuleInternal(
                 rules, matcher, prepared, null, null);
 
-        // 比較結果
+        // Comparison results
         assertThat(pipelineResult.isMatched())
                 .as("Both should agree on whether a match was found")
                 .isEqualTo(oldResult.isMatched());
@@ -319,9 +319,9 @@ class HttpMatchEquivalencePropertyTest {
     }
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 2: HTTP 匹配行為等價性
+     * Feature: protocol-pipeline-refactor, Property 2: HTTP Match behavior equivalence
      * <p>
-     * 當所有條件都匹配成功時，兩個實作應選擇相同的規則。
+     * Both implementations should select the same rule when all conditions match successfully.
      *
      * <b>Validates: Requirements 1.8, 6.2</b>
      */
@@ -329,7 +329,7 @@ class HttpMatchEquivalencePropertyTest {
     void equivalenceWhenAllConditionsMatch(
             @ForAll("httpRuleLists") List<HttpRule> rules) {
 
-        // 收集所有條件，全部設為匹配
+        // Collect all conditions and set them all to match
         Set<String> allBody = new HashSet<>();
         Set<String> allQuery = new HashSet<>();
         Set<String> allHeader = new HashSet<>();
@@ -363,9 +363,9 @@ class HttpMatchEquivalencePropertyTest {
     }
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 2: HTTP 匹配行為等價性
+     * Feature: protocol-pipeline-refactor, Property 2: HTTP Match behavior equivalence
      * <p>
-     * 當沒有任何條件匹配成功時，兩個實作應選擇相同的 fallback 規則（或同時無匹配）。
+     * Two implementations should select the same fallback rule when no condition matches successfully (or both have no matches).
      *
      * <b>Validates: Requirements 1.8, 6.2</b>
      */
@@ -373,7 +373,7 @@ class HttpMatchEquivalencePropertyTest {
     void equivalenceWhenNoConditionsMatch(
             @ForAll("httpRuleLists") List<HttpRule> rules) {
 
-        // 不讓任何條件匹配
+        // Don't let any conditions match
         ControllableConditionMatcher matcher = new ControllableConditionMatcher(
                 Collections.emptySet(), Collections.emptySet(), Collections.emptySet());
         ConditionMatcher.PreparedBody prepared = matcher.prepareBody(null);

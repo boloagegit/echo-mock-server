@@ -12,9 +12,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * BuiltinUser Entity 單元測試
+ * BuiltinUser Entity unit test
  * <p>
- * 測試 JPA 生命週期回呼（@PrePersist）與唯一約束。
+ * Testing JPA lifecycle callback (@PrePersist) with unique constraints.
  * Validates: Requirements 8.2
  */
 @DataJpaTest
@@ -48,14 +48,14 @@ class BuiltinUserTest {
 
     @Test
     void uniqueConstraint_shouldRejectDuplicateUsername() {
-        // Given: 先建立一個使用者
+        // Given: Create a user first
         BuiltinUser user1 = BuiltinUser.builder()
                 .username("duplicate")
                 .password("hashedpwd1")
                 .build();
         builtinUserRepository.saveAndFlush(user1);
 
-        // When/Then: 以相同 username 建立第二個使用者應拋出例外
+        // When/Then: Creating a second user with the same username should throw an exception
         BuiltinUser user2 = BuiltinUser.builder()
                 .username("duplicate")
                 .password("hashedpwd2")

@@ -1,30 +1,30 @@
 /**
- * useStats - 請求記錄統計 Composable
+ * useStats - Request record statistics Composable
  *
- * 管理請求記錄（logs）的載入、篩選、排序與分頁。
+ * Manage the loading, filtering, sorting and paging of request records (logs).
  *
- * 列表 API 只回傳摘要（不含 body / matchChain），
- * 展開明細時才 lazy load detail，並快取結果避免重複查詢。
+ * List API only returns the summary (excluding body / matchChain),
+ * Only expand the details lazy load detail, and cache the results to avoid repeated queries.
  *
- * @param {Object} deps - 依賴物件
- * @param {Function} deps.showToast - Toast 通知函式（來自 useToast）
- * @param {Function} deps.t - 翻譯函式（來自 useI18n）
+ * @param {Object} deps - Dependent objects
+ * @param {Function} deps.showToast - Toast notification function (from useToast)
+ * @param {Function} deps.t - Translation function (from useI18n)
  * @returns {Object}
  */
 const useStats = (deps) => {
     const { ref, computed, watch } = Vue;
     const { showToast, t } = deps;
 
-    // --- 資料快取機制 ---
+    // --- Data caching mechanism ---
     const dataLastLoaded = { stats: 0 };
     const DATA_TTL = 30000;
     const shouldLoad = () => !dataLastLoaded.stats || (Date.now() - dataLastLoaded.stats > DATA_TTL);
     const markLoaded = () => { dataLastLoaded.stats = Date.now(); };
 
-    // --- 狀態 ---
+    // --- Status ---
     const logs = ref([]);
     const logSummary = ref({});
-    // method / path：完全相同的方法與網址（流量概況「看這些請求」）；endpoint 是部分比對的關鍵字
+    // method / path: exactly the same method and URL (traffic profile "look at these requests"); endpoint is a partial comparison keyword
     const logFilter = ref({ protocol: '', matched: '', endpoint: '', method: '', path: '', from: '', to: '' });
 
     const savedLogSort = JSON.parse(localStorage.getItem('logSort') || 'null');
@@ -47,17 +47,17 @@ const useStats = (deps) => {
             delete detailCache[detailCacheOrder.shift()];
         }
     };
-    // --- 展開狀態: keyed by log.id ---
+    // --- Expanded status: keyed by log.id ---
     const logDetailExpanded = ref({});
 
-    // --- 篩選、排序與分頁 ---
-    // 清單已由後端完成篩選、排序與分頁；保留這三個 computed 名稱以相容既有元件。
+    // --- Filtering, sorting and paging ---
+    // The list has been filtered, sorted and paginated by the backend; these three computed names are retained for compatibility with existing components.
     const filteredLogs = computed(() => logs.value);
     const sortedLogs = computed(() => logs.value);
     const pagedLogs = computed(() => logs.value);
     const totalPages = computed(() => Math.max(1, serverTotalPages.value));
 
-    /** 切換排序欄位/方向 */
+    /** Switch sorting field/direction */
     const toggleSort = (field) => {
         if (logSort.value.field === field) {
             logSort.value.asc = !logSort.value.asc;
@@ -68,12 +68,12 @@ const useStats = (deps) => {
         localStorage.setItem('logSort', JSON.stringify(logSort.value));
     };
 
-    /** 取得排序圖示 class */
+    /** Get sorting icon class */
     const sortIcon = (f) => logSort.value.field === f
         ? (logSort.value.asc ? 'bi-caret-up-fill' : 'bi-caret-down-fill')
         : 'bi-arrow-down-up';
 
-    /** 每頁筆數變更 */
+    /** Page-size changes */
     const onPageSizeChange = () => {
         localStorage.setItem('logPageSize', logPageSize.value);
     };
@@ -103,7 +103,7 @@ const useStats = (deps) => {
         if (endpoint) { params.set('endpoint', endpoint); }
         if (logFilter.value.method) { params.set('method', logFilter.value.method); }
         if (logFilter.value.path) { params.set('path', logFilter.value.path); }
-        // 時間範圍（流量概況點選的格子），伺服器本地時間字串原樣送回
+        // Time range (the grid clicked in the traffic profile), the server's local time string is sent back as is
         if (logFilter.value.from) { params.set('from', logFilter.value.from); }
         if (logFilter.value.to) { params.set('to', logFilter.value.to); }
         return '/api/admin/logs?' + params.toString();
@@ -151,7 +151,7 @@ const useStats = (deps) => {
         }
     };
 
-    // --- 載入（列表只拿當頁摘要，統計另行低頻刷新） ---
+    // --- Loading (the list only takes the summary of the current page, and the statistics will be refreshed at a low frequency) ---
     const loadLogs = async (force) => {
         if (!force && !shouldLoad()) { return; }
         await Promise.all([loadLogPage(), loadLogSummary()]);
@@ -162,7 +162,7 @@ const useStats = (deps) => {
         else { loadLogPage(); }
     };
 
-    // 查詢條件變更後，只向後端查詢新的一頁，不再於瀏覽器掃描全部記錄。
+    // After the query conditions are changed, only the new page is queried from the backend, and all records are no longer scanned in the browser.
     watch(logFilter, () => {
         reloadLogsFromFirstPage();
     }, { deep: true });
@@ -179,7 +179,7 @@ const useStats = (deps) => {
     const loadLogDetail = async (item) => {
         const id = item.log.id;
         if (!id) { return; }
-        // 已快取 → 直接使用
+        // Cached → Use directly
         if (detailCache[id]) {
             item._detail = detailCache[id];
             if (item._detail.matchChain) {
@@ -187,7 +187,7 @@ const useStats = (deps) => {
             }
             return;
         }
-        // 沒有本文與比對鏈也要載入：「處理流程」需要候選規則數、預設規則、延遲與情境略過等明細
+        // Loading even without this article and comparison chain: "Processing Process" requires details such as the number of candidate rules, default rules, delay and situation skipping
         item._detailLoading = true;
         item._detailError = false;
         try {
@@ -207,7 +207,7 @@ const useStats = (deps) => {
         }
     };
 
-    // --- matchChain 展開 ---
+    // --- matchChain Expand ---
     const toggleMatchChain = (item) => {
         item.showChain = !item.showChain;
         if (item.showChain && !item.matchChainData && item._detail && item._detail.matchChain) {
@@ -215,7 +215,7 @@ const useStats = (deps) => {
         }
     };
 
-    // --- 詳情 Inspector（單一選取，以 log.id 為 key） ---
+    // --- Details Inspector (single selection, log.id is key) ---
     const toggleLogDetail = async (item) => {
         const key = item.log.id;
         if (!key) { return; }
@@ -228,7 +228,7 @@ const useStats = (deps) => {
         logDetailExpanded.value = wasExpanded ? {} : { [key]: true };
         if (!wasExpanded) {
             await loadLogDetail(item);
-            // 重新觸發 watch（detail 載入完成後）
+            // Retrigger watch (after detail is loaded)
             logDetailExpanded.value = { ...logDetailExpanded.value };
         }
     };
@@ -271,7 +271,7 @@ const useStats = (deps) => {
         logFilter.value = { protocol: '', matched: '', endpoint: '', method: '', path: '', from: '', to: '' };
     };
 
-    // --- 清理函式（供 onUnmounted 呼叫） ---
+    // --- Cleanup function (called by onUnmounted) ---
     const cleanupStats = () => {
         if (listAbortController) { listAbortController.abort(); }
     };

@@ -5,42 +5,42 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 舊版三個條件字串（bodyCondition、queryCondition、headerCondition）與 {@link MatchNode} 之間的轉換。
+ * Conversion between the three condition strings of the old version (bodyCondition, queryCondition, headerCondition) and {@link MatchNode}.
  * <p>
- * 轉換只發生在記憶體中；資料庫裡的字串維持不變。
+ * Conversion occurs in memory only; strings in the database remain unchanged.
  */
 public final class LegacyConditions {
 
-    /** {@link MatchExplanation#node()} 中舊版片段的前綴，例如 {@code legacy.body}。 */
+    /** Prefix for legacy fragments in {@link MatchExplanation#node()}, for example {@code legacy.body}. */
     static final String LEGACY_NODE_PREFIX = "legacy.";
 
     private LegacyConditions() {
     }
 
     /**
-     * 舊版三個條件字串，任一欄位沒有條件時為 null。
+     * There are three condition strings in the old version. When there is no condition in any field, it is null.
      *
-     * @param bodyCondition   以 {@code ;} 串接的 body 條件
-     * @param queryCondition  以 {@code ;} 串接的 query 條件
-     * @param headerCondition 以 {@code ;} 串接的 header 條件
+     * @param bodyCondition   body condition concatenated with {@code ;}
+     * @param queryCondition  query condition concatenated with {@code ;}
+     * @param headerCondition header condition concatenated with {@code ;}
      */
     public record Strings(String bodyCondition, String queryCondition, String headerCondition) {
     }
 
     /**
-     * 單一舊版條件的欄位、運算子與期望值（皆已去除前後空白）。
+     * Fields, operators and expected values of a single legacy condition (all with leading and trailing whitespace removed).
      *
-     * @param operator {@code =}、{@code !=}、{@code *=} 或 {@code ~=}
+     * @param operator {@code =}, {@code !=}, {@code *=} or {@code ~=}
      */
     public record Parts(String field, String operator, String value) {
     }
 
     /**
-     * 以比對時相同的規則拆解單一條件：看<strong>第一個</strong> {@code =}，它前一個字元是 {@code ~}、{@code *}、
-     * {@code !} 時分別是 {@code ~=}、{@code *=}、{@code !=}，否則是 {@code =}。例如 {@code a=x!=y} 是欄位
-     * {@code a}、運算子 {@code =}、值 {@code x!=y}。前端條件列與 v1 文件檢查都依這個規則（見 {@code match-tree.js}）。
+     * Use the same rules to disassemble a single condition: look at the first </strong> {@code =} in <strong>, and the characters before it are {@code ~}, {@code *},
+     * {@code ~=}, {@code *=}, {@code !=} respectively when {@code !}, otherwise {@code =}. For example, {@code a=x!=y} is the field
+     * {@code a}, operator {@code =}, value {@code x!=y}. Both the front-end condition column and v1 file check follow this rule (see {@code match-tree.js}).
      *
-     * @return 沒有 {@code =}，或 {@code =} 在第一個字元時回傳 empty（比對時整段被當成欄位）
+     * @return There is no {@code =}, or {@code =} returns empty as the first character (the entire segment is treated as a field during comparison)
      */
     public static Optional<Parts> parts(String condition) {
         int eqIdx = condition.indexOf('=');
@@ -56,8 +56,8 @@ public final class LegacyConditions {
     }
 
     /**
-     * 把舊版條件字串轉成 {@code all[legacy...]}，片段順序與舊版評估順序相同（body → query → header）。
-     * 三個欄位都沒有條件時回傳空的 {@code all}，也就是無條件（fallback）規則。
+     * Convert the old version condition string to {@code all[legacy...]}, and the fragment order is the same as the old version evaluation order (body → query → header).
+     * When there are no conditions in the three fields, an empty {@code all} is returned, which is an unconditional (fallback) rule.
      */
     public static MatchNode.All toMatchNode(String bodyCondition, String queryCondition, String headerCondition) {
         List<MatchNode> fragments = new ArrayList<>();
@@ -68,8 +68,8 @@ public final class LegacyConditions {
     }
 
     /**
-     * 若條件樹可以無損表示成舊版字串（空的 {@code all}，或只含舊版片段的 {@code all}），回傳對應字串。
-     * 用到 {@code any}、{@code not} 或新運算子的條件樹回傳 empty，呼叫端不可把它寫回舊欄位。
+     * If the condition tree can be losslessly represented as an old version string (empty {@code all}, or {@code all} containing only old version fragments), return the corresponding string.
+     * A conditional tree using {@code any}, {@code not} or a new operator returns empty. The caller cannot write it back to the old field.
      */
     public static Optional<Strings> toStrings(MatchNode node) {
         if (!(node instanceof MatchNode.All all)) {
@@ -92,16 +92,16 @@ public final class LegacyConditions {
     }
 
     /**
-     * 產生與舊版匹配鏈完全相同的條件說明，例如
+     * Produces exactly the same conditional specification as the old version of the match chain, e.g.
      * {@code bodyCondition FAIL (expected user.type=vip, actual user.type=normal)}。
      *
-     * @return 非舊版片段的說明時回傳 empty
+     * @return Returning empty when describing a non-old fragment
      */
     public static Optional<String> legacyDetail(MatchExplanation explanation) {
         return sourceOf(explanation).map(source -> detail(source.fieldName(), explanation));
     }
 
-    /** 舊版片段說明來自哪個舊欄位；不是舊版片段時回傳 empty。 */
+    /** Which old field does the old version fragment indicate from? If it is not an old version fragment, return empty. */
     public static Optional<MatchNode.LegacySource> sourceOf(MatchExplanation explanation) {
         if (!explanation.node().startsWith(LEGACY_NODE_PREFIX)) {
             return Optional.empty();

@@ -14,8 +14,8 @@ import java.util.concurrent.Executors;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Response Template Service 單元測試
- * Phase 1: 基礎模板功能
+ * Response Template Service unit test
+ * Phase 1: Basic template function
  */
 class ResponseTemplateServiceTest {
 
@@ -99,7 +99,7 @@ class ResponseTemplateServiceTest {
     void shouldGetBody() {
         String body = "{\"user\":\"test\"}";
         var context = buildContext("/test", "POST", null, null, body);
-        // 使用 triple braces 避免 HTML escape
+        // Use triple braces avoid HTML escape
         String result = templateService.render("Body: {{{request.body}}}", context);
         assertEquals("Body: {\"user\":\"test\"}", result);
     }
@@ -160,7 +160,7 @@ class ResponseTemplateServiceTest {
         assertTrue(result.matches("[0-9]+"));
     }
 
-    // === 複合測試 ===
+    // === Composite test ===
 
     @Test
     @DisplayName("應該能處理複合模板")
@@ -188,7 +188,7 @@ class ResponseTemplateServiceTest {
         assertTrue(result.contains("\"method\": \"POST\""));
     }
 
-    // === 無模板語法 ===
+    // === No template syntax ===
 
     @Test
     @DisplayName("無模板語法時應該原樣返回")
@@ -281,10 +281,10 @@ class ResponseTemplateServiceTest {
     }
 
     // ========================================
-    // Phase 2: 條件與迴圈
+    // Phase 2: Conditions and loops
     // ========================================
 
-    // === 條件判斷 {{#if}} ===
+    // === Conditional judgment {{#if}} ===
 
     @Test
     @DisplayName("if - 條件為真時應該渲染內容")
@@ -319,7 +319,7 @@ class ResponseTemplateServiceTest {
         assertEquals("Unauthorized", result);
     }
 
-    // === 比較運算子 ===
+    // === comparison operator ===
 
     @Test
     @DisplayName("eq - 相等比較")
@@ -374,12 +374,12 @@ class ResponseTemplateServiceTest {
         assertEquals("VERSIONED API", result);
     }
 
-    // === 迴圈 {{#each}} ===
+    // === Loop {{#each}} ===
 
     @Test
     @DisplayName("each - 應該能迭代 Query 參數陣列")
     void shouldIterateQueryArray() {
-        // 模擬 ?ids=1&ids=2&ids=3 的情況，用逗號分隔
+        // Simulate the situation of ?ids=1&ids=2&ids=3, separated by commas
         Map<String, String> query = Map.of("ids", "1,2,3");
         var context = buildContext("/test", "GET", query, null, null);
         String result = templateService.render("{{#each (split request.query.ids ',')}}[{{this}}]{{/each}}", context);
@@ -404,7 +404,7 @@ class ResponseTemplateServiceTest {
         assertEquals("x,y,z", result);
     }
 
-    // === 字串處理 Helper ===
+    // === String processing Helper ===
 
     @Test
     @DisplayName("split - 應該能分割字串")
@@ -424,7 +424,7 @@ class ResponseTemplateServiceTest {
         assertEquals("Count: 5", result);
     }
 
-    // === 複合條件測試 ===
+    // === Compound condition test ===
 
     @Test
     @DisplayName("複合條件 - 根據方法和參數產生不同回應")
@@ -563,7 +563,7 @@ class ResponseTemplateServiceTest {
         assertEquals("", result);
     }
 
-    // === 複合測試 ===
+    // === Composite test ===
 
     @Test
     @DisplayName("jsonPath + 條件 - 根據 JSON 欄位判斷")
@@ -720,7 +720,7 @@ class ResponseTemplateServiceTest {
         assertTrue(value >= -10 && value <= -1, "Value should be -10 to -1: " + value);
     }
 
-    // === Faker 複合測試 ===
+    // === Faker composite test ===
 
     @Test
     @DisplayName("Faker - 多次呼叫應產生不同結果（隨機性驗證）")
@@ -730,7 +730,7 @@ class ResponseTemplateServiceTest {
         for (int i = 0; i < 20; i++) {
             results.add(templateService.render("{{randomFullName}}", context));
         }
-        // 30 個名字 × 30 個姓氏 = 900 種組合，20 次至少應該有 2 種不同結果
+        // 30 first names × 30 last names = 900 combinations, there should be at least 2 different results 20 times
         assertTrue(results.size() > 1, "Should generate different names across calls, got: " + results);
     }
 
@@ -751,7 +751,7 @@ class ResponseTemplateServiceTest {
         var context = buildContext("/test", "GET", query, null, null);
         String template = "{{#each (split request.query.ids ',')}}{{randomFirstName}} {{/each}}";
         String result = templateService.render(template, context);
-        // 應該有 3 個名字，以空格分隔
+        // There should be 3 names, separated by spaces
         String[] parts = result.trim().split("\\s+");
         assertEquals(3, parts.length, "Should have 3 names: " + result);
         for (String part : parts) {
@@ -764,7 +764,7 @@ class ResponseTemplateServiceTest {
     @DisplayName("randomInt - Integer.MAX_VALUE 邊界不應溢位")
     void shouldHandleIntMaxValue() {
         var context = buildContext("/test", "GET", null, null, null);
-        // 使用接近 MAX_VALUE 的範圍
+        // Using range close to MAX_VALUE
         String result = templateService.render("{{randomInt min=2147483600 max=2147483647}}", context);
         long value = Long.parseLong(result);
         assertTrue(value >= 2147483600L && value <= 2147483647L,
@@ -820,7 +820,7 @@ class ResponseTemplateServiceTest {
     }
 
     // ========================================
-    // 同一次渲染只解析一次
+    // The same rendering is only parsed once
     // ========================================
 
     @Test

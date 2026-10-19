@@ -33,10 +33,10 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * HttpMockPipeline 單元測試
+ * HttpMockPipeline unit test
  * <p>
- * 驗證 HTTP 協定 pipeline 的各項行為：匹配回應、模板渲染、proxy 轉發、
- * 無匹配處理、shouldForward 決策、日誌記錄。
+ * Verify various behaviors of HTTP protocol pipeline: matching response, template rendering, proxy forwarding,
+ * No match processing, shouldForward decision, logging.
  */
 @ExtendWith(MockitoExtension.class)
 class HttpMockPipelineTest {
@@ -171,7 +171,7 @@ class HttpMockPipelineTest {
             assertThat(response.getBody()).isEqualTo(plainBody);
             assertThat(response.isMatched()).isTrue();
 
-            // 不應呼叫 render
+            // render should not be called
             verify(templateService, never()).render(anyString(), any());
         }
     }

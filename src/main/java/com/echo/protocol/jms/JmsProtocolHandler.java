@@ -27,7 +27,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * JMS 協定處理器
+ * JMS protocol processor
  */
 @Component
 @ConditionalOnProperty(name = "echo.jms.enabled", havingValue = "true")
@@ -120,7 +120,7 @@ public class JmsProtocolHandler extends AbstractProtocolHandler {
                 .scenarioName(dto.getScenarioName())
                 .requiredScenarioState(dto.getRequiredScenarioState())
                 .newScenarioState(dto.getNewScenarioState())
-                .createdAt(dto.getCreatedAt()) // 保留建立時間
+                .createdAt(dto.getCreatedAt()) // Retain build time
                 .build();
     }
 
@@ -142,7 +142,7 @@ public class JmsProtocolHandler extends AbstractProtocolHandler {
 
     @Override
     public BaseRule save(BaseRule rule) {
-        // 立即寫入：在外層交易內也要讓回傳的規則帶上新的版本號
+        // Flush immediately: even within an outer transaction, the returned rule must carry its new version.
         return repository.saveAndFlush((JmsRule) rule);
     }
 
@@ -152,7 +152,7 @@ public class JmsProtocolHandler extends AbstractProtocolHandler {
     }
 
     /**
-     * 查詢 JMS 規則（含萬用 fallback）
+     * Query JMS rules, including the wildcard fallback.
      */
     public List<JmsRule> findWithFallback(String queueName) {
         return repository.findByQueueNameOrWildcard(queueName);

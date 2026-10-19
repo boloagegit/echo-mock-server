@@ -201,7 +201,7 @@ public class ExcelImportService {
             rule.setNewScenarioState(newState);
         }
 
-        // 建立 Response
+        // Create Response
         String responseBody = getCellString(row, headerMap.get("responsebody"));
         if (!responseBody.isEmpty()) {
             Response response = responseRepository.save(Response.builder()
@@ -251,7 +251,7 @@ public class ExcelImportService {
             rule.setNewScenarioState(newState);
         }
 
-        // 建立 Response
+        // Create Response
         String responseBody = getCellString(row, headerMap.get("responsebody"));
         if (!responseBody.isEmpty()) {
             Response response = responseRepository.save(Response.builder()

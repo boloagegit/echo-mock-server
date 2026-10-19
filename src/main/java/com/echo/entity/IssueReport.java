@@ -10,7 +10,7 @@ import org.hibernate.Length;
 import java.time.LocalDateTime;
 
 /**
- * Issue Report - 使用者回報問題
+ * Issue Report - User reported issues
  */
 @Entity
 @Table(name = "issue_reports", indexes = {

@@ -1,8 +1,8 @@
 /**
- * IssuesPage - Issue Report 頁面
+ * IssuesPage - Issue Report page
  *
- * 使用者回報的問題清單，沿用共用列表語言：工具列搜尋與篩選、資料列、右側詳情抽屜與列選單。
- * 抽屜內呈現描述與管理者回覆，管理者可直接回覆、標記解決／重新開啟或刪除。
+ * User-reported issues use the shared list layout: toolbar search and filters, rows, a right-side detail drawer, and row menus.
+ * Description and administrator reply are displayed in the drawer. Administrators can directly reply, mark for resolution/reopen or delete.
  */
 const IssuesPage = {
   props: {

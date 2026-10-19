@@ -195,7 +195,7 @@ class JmsTargetForwarderExtendedTest {
     void resetConnection_shouldBeIdempotent() throws Exception {
         ReflectionTestUtils.setField(forwarder, "targetConnection", mockConnection);
 
-        // 第一次 reset
+        // First time reset
         java.lang.reflect.Method resetMethod = JmsTargetForwarder.class
                 .getDeclaredMethod("resetConnection", String.class);
         resetMethod.setAccessible(true);
@@ -203,7 +203,7 @@ class JmsTargetForwarderExtendedTest {
 
         assertThat(ReflectionTestUtils.getField(forwarder, "targetConnection")).isNull();
 
-        // 第二次 reset（已經是 null）
+        // Second time reset (already null)
         resetMethod.invoke(forwarder, new Object[]{null});
 
         verify(mockConnection, times(1)).close();

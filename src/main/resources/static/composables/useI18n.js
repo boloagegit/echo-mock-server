@@ -1,9 +1,9 @@
 /**
- * useI18n - 國際化 Composable
+ * useI18n - International Composable
  *
- * 負責語系偵測、切換與翻譯函式 t()。
- * 語系偵測優先順序：localStorage → navigator.language → 預設 en
- * t() 支援 key 路徑查找與 {param} 插值。
+ * Responsible for language detection, switching and translation function t().
+ * Language detection priority: localStorage → navigator.language → Default en
+ * t() supports key path search and {param} interpolation.
  *
  * @returns {{ locale: Ref<string>, messages: Ref<object>, t: Function, switchLocale: Function, loadLocale: Function }}
  */
@@ -16,8 +16,8 @@ const useI18n = () => {
     const messages = ref({});
 
     /**
-     * 載入指定語系的翻譯檔
-     * @param {string} lang - 語系代碼，例如 'zh-TW' 或 'en'
+     * Load the translation file for the specified language
+     * @param {string} lang - Language code, such as 'zh-TW' or 'en'
      */
     const loadLocale = async (lang) => {
         try {
@@ -27,10 +27,10 @@ const useI18n = () => {
     };
 
     /**
-     * 翻譯函式，支援巢狀 key 與參數插值
-     * @param {string} key - 翻譯鍵，例如 'toast.success'
-     * @param {object} [params] - 插值參數，例如 { count: 3 }
-     * @returns {string} 翻譯後的字串，找不到時回傳 key 本身
+     * Translation function, supports nested key and parameter interpolation
+     * @param {string} key - translation key, e.g. 'toast.success'
+     * @param {object} [params] - interpolation parameters, for example { count: 3 }
+     * @returns {string} The translated string will return key itself when it cannot be found.
      */
     const t = (key, params) => {
         const parts = key.split('.');
@@ -47,7 +47,7 @@ const useI18n = () => {
     };
 
     /**
-     * 切換語系（zh-TW ↔ en），並持久化至 localStorage
+     * Switch language (zh-TW ↔ en) and persist to localStorage
      */
     const switchLocale = async () => {
         locale.value = locale.value === 'zh-TW' ? 'en' : 'zh-TW';

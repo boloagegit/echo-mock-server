@@ -4,27 +4,27 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.w3c.dom.Document;
 
 /**
- * 請求 body 的唯讀視圖。實作可延遲解析，並在同一請求內重用解析結果。
+ * Requesting read-only view of body. Implementations can defer parsing and reuse parsing results within the same request.
  * <p>
- * 回傳的 {@link JsonNode} 與 {@link Document} 屬於呼叫端共用的解析結果，不可修改。
+ * The returned {@link JsonNode} and {@link Document} are parsing results shared by the calling end and cannot be modified.
  */
 public interface BodyView {
 
-    /** 原始 body；沒有 body 時為 null。 */
+    /** Original body; null without body. */
     String raw();
 
-    /** Body 超過大小上限，無法判斷任何 body 條件。 */
+    /** Body exceeds the upper size limit and cannot determine any body conditions. */
     boolean tooLarge();
 
-    /** 解析後的 JSON；不是 JSON 或過大時為 null。 */
+    /** JSON after parsing; null if not JSON or too large. */
     JsonNode json();
 
-    /** 解析後的 XML DOM（不分 namespace）；不是 XML 或過大時為 null。 */
+    /** Parsed XML DOM (regardless of namespace); not XML or null if it is too large. */
     Document xml();
 
     /**
-     * 依 {@link XmlPath} 取值（規則與串流掃描相同）；不是 XML 時為 null。
-     * 實作可在同一請求內快取，讓多個條件共用同一條路徑的結果。
+     * The value is obtained based on {@link XmlPath} (the rules are the same as stream scanning); if it is not XML, it is null.
+     * The implementation can cache within the same request, allowing multiple conditions to share the results of the same path.
      */
     default java.util.List<String> xmlValues(XmlPath path) {
         Document doc = xml();

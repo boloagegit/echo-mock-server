@@ -23,11 +23,11 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 差異測試：舊版比對的原始實作（{@link LegacyConditionOracle}）是標準答案，新引擎的舊語法相容層必須在
- * 是否符合、每個條件的說明文字、分數與暫存 key 上都完全一致。
+ * Difference test: The original implementation of the old version comparison ({@link LegacyConditionOracle}) is the standard answer, the old syntax compatibility layer of the new engine must be in
+ * Whether it is met, the description text of each condition, and the score are completely consistent with the temporary storage key.
  * <p>
- * 唯一刻意的差異是期望值只有一個 {@code "} 時舊版會丟出例外，產生器不產生這種值
- * （見 {@link LegacyConditionMatcher}）。
+ * The only deliberate difference is that the old version will throw an exception when the expected value is only one {@code "}, the generator does not produce this value
+ * (see {@link LegacyConditionMatcher}).
  */
 class LegacyDifferentialTest {
 
@@ -91,7 +91,7 @@ class LegacyDifferentialTest {
     private static final List<String> HEADER_VALUES =
             List.of("vip", "VIP", "normal", "application/json", "json", "Bearer.*", "");
 
-    // ==================== 隨機差異測試 ====================
+    // ==================== Random difference test ====================
 
     @Property(tries = 4000)
     void legacyLayerMatchesConditionMatcher(@ForAll("bodyConditions") String bodyCondition,
@@ -139,7 +139,7 @@ class LegacyDifferentialTest {
                 .as(Tuple::of);
     }
 
-    /** 0～3 個片段，以 {@code ;}、{@code " ; "} 或 {@code ;;} 串接；也會產生 null 與空白字串。 */
+    /** 0~3 fragments, concatenated with {@code ;}, {@code " ; "} or {@code ;;}; null and blank strings will also be generated. */
     private static Arbitrary<String> joinedFragments(Arbitrary<String> fragment) {
         Arbitrary<String> joined = Combinators.combine(
                 fragment.list().ofMinSize(1).ofMaxSize(3), Arbitraries.of(";", " ; ", ";;"))
@@ -149,7 +149,7 @@ class LegacyDifferentialTest {
                 Tuple.of(8, joined)).injectNull(0.1);
     }
 
-    // ==================== 指定的邊界案例 ====================
+    // ==================== Specified edge case ====================
 
     @ParameterizedTest
     @MethodSource("edgeCases")
@@ -160,15 +160,15 @@ class LegacyDifferentialTest {
     static Stream<Case> edgeCases() {
         Map<String, String> none = Map.of();
         return Stream.of(
-                // JSONPath 欄位不存在時 != 也不符合；點路徑則符合
+                // When the JSONPath field does not exist, != does not match either; point path does
                 body("$.user.missing!=x", JSON_USER),
                 body("user.missing!=x", JSON_USER),
                 body("$.user.note!=x", JSON_USER),
                 body("user.note=null", JSON_USER),
-                // == 只在點路徑分支被替換
+                // == is replaced only on point path branches
                 body("$.user.type==vip", JSON_USER),
                 body("user.type==vip", JSON_USER),
-                // 同一條件依 body 型別走不同分支
+                // The same condition takes different branches according to the body type
                 body("//Status=OPEN", JSON_USER),
                 body("Type=vip", XML_SOAP),
                 body("Type=vip", JSON_USER),
@@ -176,24 +176,24 @@ class LegacyDifferentialTest {
                 body("/Envelope/Body/Req/Type=vip", XML_SOAP),
                 body("//Item/@sku=S2", XML_ORDER),
                 body("Item=5", XML_ORDER),
-                // 純文字 body 以整段條件做 contains
+                // Pure text body Use the entire condition to make contains
                 body("a=b", "x a=b y"),
                 body("hello", "hello world"),
                 body("type=vip", "   "),
-                // 引號與正則
+                // Quotation marks and regular expressions
                 body("user.type=\"vip\"", JSON_USER),
                 body("user.type=\"\"", JSON_USER),
                 body("user.name~=Alice.*", JSON_USER),
                 body("user.name~=" + "a".repeat(201), JSON_USER),
                 body("user.name~=(", JSON_USER),
                 body("user.name~=(.*a){25}", "{\"user\":{\"name\":\"" + "a".repeat(25) + "b\"}}"),
-                // query／header 缺漏
+                // query/header missing
                 new Case(null, "type!=vip", null, null, null, none),
                 new Case(null, "type!=vip", null, null, "", none),
                 new Case(null, null, "X-Type!=vip", null, null, none),
                 new Case(null, null, "X-Type!=vip", null, null, Map.of("Other", "1")),
                 new Case(null, "type=v%20p", null, null, "type=v%20p", none),
-                // 混合三種條件
+                // Mixing three conditions
                 new Case("user.type=vip;$.items[*].sku=S1", "a=1", "x-type=vip",
                         JSON_USER, "a=1&a=2", Map.of("X-Type", "vip")));
     }
@@ -210,7 +210,7 @@ class LegacyDifferentialTest {
         return new Case(condition, null, null, requestBody, null, Map.of());
     }
 
-    // ==================== 比對 ====================
+    // ==================== Comparison ====================
 
     record Case(String bodyCondition, String queryCondition, String headerCondition,
                 String requestBody, String queryString, Map<String, String> headers) {

@@ -5,10 +5,10 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 延遲範圍計算測試
+ * Delay range calculation test
  * <p>
- * 測試 AbstractMockPipeline.calculateDelay 的各種情境：
- * 固定延遲、隨機範圍、邊界條件。
+ * Test various scenarios for AbstractMockPipeline.calculateDelay:
+ * Fixed delays, random ranges, boundary conditions.
  */
 class DelayRangeTest {
 

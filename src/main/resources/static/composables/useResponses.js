@@ -1,21 +1,21 @@
 /**
- * useResponses - 回應管理 Composable
+ * useResponses - Response Management Composable
  *
- * 管理回應（responses）的 CRUD、篩選、排序、分頁、批次操作，
- * 以及回應規則展開、匯出匯入等功能。
+ * CRUD, filtering, sorting, paging, batch operations of management response (responses),
+ * As well as response rule expansion, export and import functions.
  *
- * @param {Object} deps - 依賴物件
- * @param {Function} deps.showToast - Toast 通知函式（來自 useToast）
- * @param {Function} deps.showConfirm - 確認對話框函式（來自 useToast）
- * @param {Function} deps.t - 翻譯函式（來自 useI18n）
- * @param {Function} deps.requireLogin - 登入檢查函式（來自 useAuth）
- * @returns {Object} 回應管理相關的狀態與方法
+ * @param {Object} deps - Dependent objects
+ * @param {Function} deps.showToast - Toast notification function (from useToast)
+ * @param {Function} deps.showConfirm - Confirm dialog function (from useToast)
+ * @param {Function} deps.t - Translation function (from useI18n)
+ * @param {Function} deps.requireLogin - Login check function (from useAuth)
+ * @returns {Object} Response management related status and methods
  */
 const useResponses = (deps) => {
     const { ref, computed, watch } = Vue;
     const { showToast, showConfirm, t, requireLogin } = deps;
 
-    // --- 資料快取機制 ---
+    // --- Data caching mechanism ---
     const dataLastLoaded = { responses: 0 };
     const dataDirty = { responses: false, options: false };
     const DATA_TTL = 30000;
@@ -23,8 +23,8 @@ const useResponses = (deps) => {
     const markLoaded = () => { dataLastLoaded.responses = Date.now(); dataDirty.responses = false; };
     const markDirty = () => { dataDirty.responses = true; dataDirty.options = true; };
 
-    // --- 工具函式 ---
-    // --- 狀態 ---
+    // --- Utility function ---
+    // --- Status ---
     const responseSummary = ref([]);
     const responseOptions = ref([]);
     const responseFilter = ref('');
@@ -40,41 +40,41 @@ const useResponses = (deps) => {
     let listAbortController = null;
     let responseOptionsLoadedAt = 0;
 
-    // --- Modal 狀態 ---
+    // --- Modal status ---
     const showResponseModal = ref(false);
     const editingResponse = ref(null);
     const responseForm = ref({ description: '', body: '', contentType: 'text' });
     const responseSseEvents = ref([{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }]);
 
-    // --- 批次選取 ---
+    // --- Batch selection ---
     const selectedResponses = ref([]);
     const batchSelectResponseMode = ref(false);
 
-    // --- 規則展開快取 ---
+    // --- Rule expansion cache ---
     const responseRulesCache = {};
 
-    // --- 匯出匯入 dropdown ---
+    // --- Export and import dropdown ---
     const showResponseDataDropdown = ref(false);
 
-    // --- 篩選、排序、分頁 ---
+    // --- Filter, sort, paging ---
     const filteredResponseSummary = computed(() => responseSummary.value);
     const pagedResponseSummary = computed(() => responseSummary.value);
     const responseTotalPages = computed(() => Math.max(1, serverResponseTotalPages.value));
 
-    /** 切換排序欄位/方向 */
+    /** Switch sorting field/direction */
     const toggleResponseSort = f => {
         if (responseSort.value.field === f) responseSort.value.asc = !responseSort.value.asc;
         else { responseSort.value.field = f; responseSort.value.asc = false; }
         localStorage.setItem('responseSort', JSON.stringify(responseSort.value));
     };
 
-    /** 取得排序圖示 class */
+    /** Get sorting icon class */
     const responseSortIcon = f => responseSort.value.field === f ? (responseSort.value.asc ? 'bi-caret-up-fill' : 'bi-caret-down-fill') : 'bi-arrow-down-up';
 
-    /** 每頁筆數變更 */
+    /** Page-size changes */
     const onResponsePageSizeChange = () => {};
 
-    // --- 載入 ---
+    // --- Loading ---
     const buildResponseQuery = () => {
         const params = new URLSearchParams();
         params.set('page', String(Math.max(0, responsePage.value - 1)));
@@ -145,7 +145,7 @@ const useResponses = (deps) => {
     watch(responsePage, () => loadResponseSummary(true));
     watch(responsePageSize, reloadResponseFirstPage);
 
-    // --- Modal 操作 ---
+    // --- Modal Operation ---
     const openResponseModal = async (r) => {
         editingResponse.value = r;
         responseForm.value = r ? { description: r.description || '', body: '', contentType: 'text' } : { description: '', body: '', contentType: 'text' };
@@ -158,7 +158,7 @@ const useResponses = (deps) => {
             if (res && res.ok) {
                 const data = await res.json();
                 responseForm.value.body = data.body || '';
-                // 存檔時帶回這個版本；編輯期間別人存過檔，伺服器會拒絕而不是蓋掉對方的修改。
+                // This version will be brought back when saving; if someone else saves the file during editing, the server will reject rather than overwrite the other party's modifications.
                 responseForm.value.version = data.version ?? null;
                 if (responseForm.value.contentType === 'sse') {
                     responseSseEvents.value = deserializeSseEvents(data.body);
@@ -174,7 +174,7 @@ const useResponses = (deps) => {
         showResponseModal.value = true;
     };
 
-    // 同一個回應的動作（或同一個批次動作）處理中時忽略重複點擊。
+    // Repeated clicks are ignored when the same response action (or the same batch of actions) is being processed.
     const inFlight = createInFlight();
 
     const saveResponse = async () => {
@@ -217,7 +217,7 @@ const useResponses = (deps) => {
         }
     });
 
-    // --- 詳情抽屜：回應內容與引用規則 ---
+    // --- Details drawer: response content and citation rules ---
     const responseDetailId = ref(null);
     const responseDetailCache = ref({});
     const responseDetailLoading = ref(false);
@@ -247,7 +247,7 @@ const useResponses = (deps) => {
     };
     const closeResponseDetail = () => { responseDetailId.value = null; responseDetailLoading.value = false; };
 
-    // --- 規則展開 ---
+    // --- Rule expansion ---
     const toggleResponseRules = async (r) => {
         if (r.expanded) { r.expanded = false; return; }
         if (responseRulesCache[r.id]) { r.rules = responseRulesCache[r.id]; r.expanded = true; return; }
@@ -255,7 +255,7 @@ const useResponses = (deps) => {
         if (res && res.ok) { r.rules = await res.json(); responseRulesCache[r.id] = r.rules; r.expanded = true; }
     };
 
-    // --- 批次操作 ---
+    // --- Batch operation ---
     const toggleSelectAllResponses = e => { selectedResponses.value = e.target.checked ? pagedResponseSummary.value.map(r => r.id) : []; };
 
     const exportResponses = async () => {
@@ -310,7 +310,7 @@ const useResponses = (deps) => {
         }
     });
 
-    // --- 導航 ---
+    // --- Navigation ---
     const goToResponse = (id) => {
         const rid = id.replace('response-', '');
         deps.page.value = 'responses';
@@ -343,7 +343,7 @@ const useResponses = (deps) => {
 
     const clearResponseFilters = () => { responseFilter.value = ''; responseUsageFilter.value = ''; responseContentTypeFilter.value = ''; };
 
-    // --- 展延回應 ---
+    // --- Delayed response ---
     const extendResponse = (id) => inFlight.run('extend:' + id, async () => {
         if (!await requireLogin()) { return; }
         if (!await showConfirm({ title: t('confirm.extendResponse'), message: t('confirm.extendResponseMsg') })) { return; }
@@ -351,10 +351,10 @@ const useResponses = (deps) => {
         if (r && r.ok) { showToast(t('toast.responseExtendSuccess'), 'success'); markDirty(); loadResponseSummary(true); }
     });
 
-    // --- 清除孤兒回應 ---
+    // --- Clear orphan response ---
     const deleteOrphanResponses = () => inFlight.run('orphans', async () => {
         if (!await requireLogin()) { return; }
-        // 先查詢孤兒回應數量
+        // First query the number of orphan responses
         const countRes = await apiCall('/api/admin/responses/orphan-count', {}, { silent: true });
         if (!countRes || !countRes.ok) { return; }
         const { count } = await countRes.json();

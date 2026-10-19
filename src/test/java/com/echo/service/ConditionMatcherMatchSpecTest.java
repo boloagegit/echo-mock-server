@@ -6,7 +6,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 結構化條件的評估與匹配鏈說明。 */
+/** Evaluation and matching chain specification of structured conditions. */
 class ConditionMatcherMatchSpecTest {
 
     private static final String SPEC = """
@@ -39,7 +39,7 @@ class ConditionMatcherMatchSpecTest {
     @Test
     void legacyFieldsAreIgnoredWhenMatchSpecIsPresent() {
         ConditionMatcher matcher = new ConditionMatcher();
-        // 舊欄位寫的條件不成立，但以 matchSpec 為準
+        // The condition written in the old field is not valid, but matchSpec shall prevail.
         assertThat(matcher.matchesPrepared(SPEC, "amount=1", null, null,
                 matcher.prepareBody("{\"amount\":1500}"), null, Map.of("X-Tenant", "acme"))).isTrue();
     }
@@ -74,7 +74,7 @@ class ConditionMatcherMatchSpecTest {
         assertThat(detail.getResults()).hasSize(4);
         assertThat(detail.getResults()).allSatisfy(result ->
                 assertThat(result.getType()).isEqualTo(ConditionMatcher.MATCH_SPEC_TYPE));
-        // header 通過；amount 與 vip 都不成立；status 等於 CANCELLED，所以 not 這一筆不通過
+        // header passes; amount and vip are both invalid; status is equal to CANCELLED, so not does not pass
         assertThat(detail.getResults()).extracting(ConditionMatcher.ConditionResult::isPassed)
                 .containsExactly(true, false, false, false);
         assertThat(detail.getResults().get(3).getCondition()).startsWith("not ");

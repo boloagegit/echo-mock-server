@@ -6,7 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * 系統設定服務 - 從 application.yml 讀取設定
+ * System Setting Service - Reading settings from application.yml
  */
 @Service
 @Slf4j

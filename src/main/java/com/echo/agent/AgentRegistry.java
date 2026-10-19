@@ -9,9 +9,9 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Agent 中央註冊中心。
+ * Central registry for agents.
  * <p>
- * 自動收集所有 {@link EchoAgent} 實作，提供統一查詢介面。
+ * Automatically collect all {@link EchoAgent} implementations and provide a unified query interface.
  */
 @Component
 public class AgentRegistry {
@@ -26,14 +26,14 @@ public class AgentRegistry {
     }
 
     /**
-     * 取得所有已註冊 agent。
+     * Get all registered agents.
      */
     public List<EchoAgent> getAll() {
         return agents;
     }
 
     /**
-     * 依名稱取得 agent。
+     * Get an agent by name.
      */
     public Optional<EchoAgent> getByName(String name) {
         return Optional.ofNullable(agentMap.get(name));

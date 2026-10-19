@@ -1,7 +1,7 @@
 /**
- * TourOverlay - 規則編輯器導覽層
+ * TourOverlay - Rule Editor Navigation Layer
  *
- * 僅負責導覽顯示與鍵盤操作；步驟定位仍由 app.js 管理。
+ * Only responsible for navigation display and keyboard operation; step positioning is still managed by app.js.
  */
 const TourOverlay = {
   props: {

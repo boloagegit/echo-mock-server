@@ -1,7 +1,7 @@
 /**
- * PriorityHelpModal - 優先順序說明 Modal
- * 顯示 Echo Mock Server 的使用說明，包含快速開始、HTTP、JMS、進階等分頁。
- * 左側顯示目錄 (TOC)，可快速跳轉到特定章節。
+ * PriorityHelpModal - Priority Description Modal
+ * Display the usage instructions of Echo Mock Server, including quick start, HTTP, JMS, advanced and other pages.
+ * The table of contents (TOC) is displayed on the left, allowing you to quickly jump to specific chapters.
  */
 const PriorityHelpModal = {
   props: {
@@ -213,7 +213,7 @@ const PriorityHelpModal = {
             >{{item.label}}</button>
           </nav>
           <div class="help-content" ref="helpContentRef" tabindex="0" role="region" :aria-label="t('help.content')">
-          <!-- 快速開始 -->
+          <!-- Quick start -->
           <div v-if="helpTab==='start'" id="help-panel-start" role="tabpanel" aria-labelledby="help-tab-start">
             <div class="help-section" id="start-what">
               <h3>{{t('help.whatIsEcho')}}</h3>
@@ -318,7 +318,7 @@ MessageProducer producer = session.createProducer(queue);</pre>
               <p class="sub-info">{{t('help.jmsReplyNote')}}</p>
             </div>
           </div>
-          <!-- 條件匹配 -->
+          <!-- Condition matched -->
           <div v-if="helpTab==='condition'" id="help-panel-condition" role="tabpanel" aria-labelledby="help-tab-condition">
             <div class="help-section" id="cond-overview">
               <h3>{{t('help.condOverview')}}</h3>
@@ -411,7 +411,7 @@ Authorization!=null               ✓ {{t('help.exNotMatch')}}</pre>
               <p v-html="t('help.condAutoDetectDesc')"></p>
             </div>
           </div>
-          <!-- 進階 -->
+          <!-- Advanced -->
           <div v-if="helpTab==='advanced'" id="help-panel-advanced" role="tabpanel" aria-labelledby="help-tab-advanced">
             <div class="help-section" id="adv-template">
               <h3>{{t('help.responseTemplate')}}</h3>

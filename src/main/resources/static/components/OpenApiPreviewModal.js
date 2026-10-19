@@ -1,7 +1,7 @@
 /**
- * OpenApiPreviewModal - OpenAPI 匯入預覽對話框
+ * OpenApiPreviewModal - OpenAPI Import preview dialog box
  *
- * 顯示從 OpenAPI spec 解析出的規則清單，使用者可勾選/取消個別規則後確認匯入。
+ * Displays the list of rules parsed from OpenAPI spec. The user can check/cancel individual rules and then confirm the import.
  */
 const OpenApiPreviewModal = {
   props: {

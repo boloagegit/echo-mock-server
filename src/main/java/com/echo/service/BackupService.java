@@ -3,9 +3,9 @@ package com.echo.service;
 import java.util.List;
 
 /**
- * 資料庫備份服務介面
+ * Database backup service interface
  * <p>
- * 由 SqliteBackupService 實作；外部資料庫的備份由 DBA 負責。
+ * Implemented by SqliteBackupService; DBA is responsible for the backup of external databases.
  */
 public interface BackupService {
 
@@ -17,7 +17,7 @@ public interface BackupService {
 
     int getRetentionDays();
 
-    /** 備份檔案資訊 */
+    /** Backup file information */
     interface BackupFileInfo {
         String name();
         long size();

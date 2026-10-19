@@ -1,5 +1,5 @@
-# Dev Profile - 開發環境覆蓋設定
-# 啟動方式: ./gradlew dev 或 --spring.profiles.active=dev
+# Dev Profile - Development environment overlay settings
+# Startup method: ./gradlew dev or --spring.profiles.active=dev
 
 echo:
   env-label: DEV

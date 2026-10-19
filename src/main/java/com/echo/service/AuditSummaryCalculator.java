@@ -16,35 +16,35 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 從修訂記錄的前後快照算出列表要顯示的小摘要：對象名稱、協定、說明，以及改了哪些欄位。
+ * Calculate a small summary for the list to display from the before and after snapshots of the revision record: object name, protocol, description, and which fields were changed.
  * <p>
- * 摘要在寫入修訂記錄時算一次並存成小欄位，列表就不必讀取前後快照這兩個大欄位。
- * 舊資料沒有摘要時，由 {@link RuleAuditService} 逐筆補算。
+ * The summary is counted once when writing the revision record and stored in a small field, so that the list does not have to read the two large fields of the before and after snapshots.
+ * When the old data does not have a summary, {@link RuleAuditService} will make up the calculation one by one.
  */
 final class AuditSummaryCalculator {
 
     static final int NAME_LENGTH = 255;
     static final int SUMMARY_LENGTH = 1000;
 
-    /** 不列為「改了什麼」的欄位：每次存檔都會變，或只是內部欄位。與前端 AUDIT_HIDDEN_FIELDS 一致。 */
+    /** Fields not listed as "What changed": it changes every time you save, or it's just an internal field. Consistent with front-end AUDIT_HIDDEN_FIELDS. */
     private static final Set<String> HIDDEN_FIELDS = Set.of(
             "id", "version", "createdAt", "updatedAt", "createdBy", "updatedBy",
             "extendedAt", "bodySize", "protocol", "condition");
 
-    /** 只是內部編號的欄位排在最後，列表前幾項先顯示使用者看得懂的變更。 */
+    /** Only the internal number field is sorted last, and the first few items in the list display the changes that users can understand first. */
     private static final Set<String> TRAILING_FIELDS = Set.of(
             "responseId", "httpTargetConnectionId", "jmsTargetConnectionId");
 
-    /** 摘要最多記幾個欄位；列表只顯示前 3 個，其餘以總數呈現。 */
+    /** The summary can record a maximum of several fields; only the first 3 are displayed in the list, and the rest are presented in total. */
     private static final int MAX_CHANGES = 6;
     private static final int MAX_VALUE_LENGTH = 60;
     private static final int LONG_VALUE_LENGTH = 80;
-    /** 超過這個大小的內容不逐行計數，只標示「內容已變更」。 */
+    /** Content exceeding this size will not be counted line by line, and will only be marked as "Content has changed". */
     private static final int MAX_LINE_COUNT_CHARS = 200_000;
-    /** 逐行比對最多找幾個增刪，與前端 audit-diff.js 的 MAX_EDITS 一致。 */
+    /** Line-by-line comparison can find at most a few additions and deletions, which is consistent with MAX_EDITS of front-end audit-diff.js. */
     private static final int MAX_EDITS = 2000;
 
-    /** 摘要無法計算（快照不是 JSON）時存入的值，避免背景補算一再重試同一筆。 */
+    /** Sentinel for an uncomputable summary, such as a non-JSON snapshot, preventing repeated backfill attempts for the same record. */
     static final String EMPTY_SUMMARY = "{}";
 
     record Result(String protocol, String name, String description, String summary) {
@@ -143,7 +143,7 @@ final class AuditSummaryCalculator {
         summary.put("changeCount", count);
     }
 
-    /** null、缺少欄位與空字串都視為「沒有值」，與前端顯示一致。 */
+    /** null, missing fields and empty strings are all regarded as "no value", which is consistent with the front-end display. */
     private static boolean sameValue(JsonNode b, JsonNode a) {
         boolean bEmpty = isEmpty(b);
         boolean aEmpty = isEmpty(a);
@@ -169,8 +169,8 @@ final class AuditSummaryCalculator {
     }
 
     /**
-     * 新增與刪除的行數，與明細畫面的逐行比對（Myers 最少編輯）相同：先略過頭尾相同的行，再找最少的增刪。
-     * 差異超過 {@link #MAX_EDITS} 時明細改顯示前後全文、不顯示行數，這裡改用不看順序的估算，避免花太多時間。
+     * The number of added and deleted lines is the same as the line-by-line comparison of the detail screen (Myers least edited): first skip the lines with the same beginning and end, and then find the smallest additions and deletions.
+     * When the difference exceeds {@link #MAX_EDITS}, the details are changed to display the full text before and after, and the number of rows is not displayed. Here, the estimation without looking at the order is used to avoid spending too much time.
      */
     static int[] lineDelta(String before, String after) {
         String[] a = before == null ? new String[0] : before.split("\n", -1);
@@ -191,12 +191,12 @@ final class AuditSummaryCalculator {
         if (edits < 0) {
             return unorderedDelta(a, b, start, endA, endB);
         }
-        // 最少編輯數 = 新增 + 刪除，且新增 − 刪除 = 兩邊行數差。
+        // The minimum number of edits = new additions + deletions, and new additions − deletions = the difference in the number of lines on both sides.
         int added = (edits + m - n) >>> 1;
         return new int[] {added, edits - added};
     }
 
-    /** Myers 演算法只算最少的增刪行數（不需還原路徑）；超過上限回傳 -1。 */
+    /** Myers algorithm only counts the minimum number of added and deleted rows (no need to restore the path); if the upper limit is exceeded, -1 is returned. */
     private static int editDistance(String[] a, String[] b, int start, int n, int m) {
         int max = Math.min(n + m, MAX_EDITS);
         int offset = max + 1;
@@ -219,7 +219,7 @@ final class AuditSummaryCalculator {
         return -1;
     }
 
-    /** 差異太多時的估算：把行當成可重複的集合來比，只需線性時間。 */
+    /** Estimation when there are too many differences: compare rows as repeatable sets in linear time. */
     private static int[] unorderedDelta(String[] a, String[] b, int start, int endA, int endB) {
         Map<String, Integer> remaining = new HashMap<>();
         for (int i = start; i < endA; i++) {
@@ -241,7 +241,7 @@ final class AuditSummaryCalculator {
         return new int[] {added, deleted};
     }
 
-    /** 確保摘要不超過欄位長度：從最後面開始拿掉欄位明細，總數仍保留。 */
+    /** Make sure the summary does not exceed the field length: remove the field details starting from the end, but keep the total. */
     private static String fit(ObjectNode summary) {
         String json = summary.toString();
         JsonNode changes = summary.get("changes");
@@ -265,7 +265,7 @@ final class AuditSummaryCalculator {
         return text.isEmpty() ? null : text;
     }
 
-    /** 是／否與數字保留原本型別，前端才能照欄位格式顯示；其他值存成截短後的文字。 */
+    /** Yes/no and numbers retain their original types so that the front end can display them in field format; other values are saved as truncated text. */
     private static void putValue(ObjectNode node, String field, JsonNode value, String text) {
         if (text == null) {
             return;

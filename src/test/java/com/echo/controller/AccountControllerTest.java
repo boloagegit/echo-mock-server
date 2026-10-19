@@ -22,9 +22,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
- * AccountController 單元測試
+ * AccountController unit test
  * <p>
- * 測試使用者自行修改密碼端點的正常流程、錯誤處理與權限控制。
+ * Test the normal process, error handling and permission control of the user's own password modification endpoint.
  */
 @WebMvcTest(AccountController.class)
 @Import({SecurityConfig.class, LdapConfig.class})

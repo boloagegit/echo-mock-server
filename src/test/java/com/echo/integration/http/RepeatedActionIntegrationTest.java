@@ -19,9 +19,9 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 重複送出同一個操作（例如連按兩下）：沒有實際變更時不改版本、不觸發重建與同步，
- * 也不讓正在編輯的人遇到假的版本衝突；真正的變更仍照常生效。
- * 開啟多實例同步，才看得到是否送出同步事件。
+ * Repeating the same operation (such as double-clicking): the version will not be changed if there are no actual changes, and reconstruction and synchronization will not be triggered.
+ * Don't let people who are editing encounter fake version conflicts; real changes still take effect as usual.
+ * Only when multi-instance synchronization is enabled can you see whether synchronization events are sent.
  */
 @TestPropertySource(properties = "echo.cache.sync-enabled=true")
 class RepeatedActionIntegrationTest extends BaseIntegrationTest {

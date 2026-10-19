@@ -13,9 +13,9 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * CandidateSnapshot 單元測試。
+ * CandidateSnapshot unit test.
  * <p>
- * 驗證 Pipeline 整合中 Rule → CandidateSnapshot 的欄位映射與深拷貝正確性。
+ * Verify the correctness of field mapping and deep copy of Rule → CandidateSnapshot in Pipeline integration.
  * <p>
  * Validates: Requirements 11.1, 11.3
  */

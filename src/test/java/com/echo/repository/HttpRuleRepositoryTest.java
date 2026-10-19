@@ -26,7 +26,7 @@ class HttpRuleRepositoryTest {
 
     @Test
     void deleteExpiredRules_shouldNotDeleteProtectedRules() {
-        // Given: 建立受保護和未保護的規則
+        // Given: Creating protected and unprotected rules
         HttpRule protectedRule = HttpRule.builder()
                 .matchKey("/protected")
                 .method("GET")
@@ -47,7 +47,7 @@ class HttpRuleRepositoryTest {
                 .build();
         entityManager.persistAndFlush(unprotectedRule);
         
-        // 設定 createdAt 為 200 天前
+        // Set createdAt to 200 days ago
         LocalDateTime oldDate = LocalDateTime.now().minusDays(200);
         entityManager.getEntityManager()
                 .createQuery("UPDATE HttpRule r SET r.createdAt = :oldDate WHERE r.id IN :ids")
@@ -59,11 +59,11 @@ class HttpRuleRepositoryTest {
         
         assertThat(httpRuleRepository.findAll()).hasSize(2);
         
-        // When: 執行清除
+        // When: Perform cleanup
         LocalDateTime cutoff = LocalDateTime.now().minusDays(180);
         int deleted = httpRuleRepository.deleteExpiredRules(cutoff, false);
         
-        // Then: 只有未保護的規則被刪除
+        // Then: Only unprotected rules are deleted
         assertThat(deleted).isEqualTo(1);
         var remaining = httpRuleRepository.findAll();
         assertThat(remaining).hasSize(1);
@@ -72,7 +72,7 @@ class HttpRuleRepositoryTest {
 
     @Test
     void deleteExpiredRules_shouldNotDeleteRecentRules() {
-        // Given: 建立一個新規則
+        // Given: Create a new rule
         HttpRule newRule = HttpRule.builder()
                 .matchKey("/new")
                 .method("GET")
@@ -83,18 +83,18 @@ class HttpRuleRepositoryTest {
                 .build();
         entityManager.persistAndFlush(newRule);
         
-        // When: 執行清除（cutoff = 180 天前）
+        // When: Performing cleanup (cutoff = 180 days ago)
         LocalDateTime cutoff = LocalDateTime.now().minusDays(180);
         int deleted = httpRuleRepository.deleteExpiredRules(cutoff, false);
         
-        // Then: 新規則不會被刪除
+        // Then: New rules will not be deleted
         assertThat(deleted).isEqualTo(0);
         assertThat(httpRuleRepository.findAll()).hasSize(1);
     }
 
     @Test
     void deleteExpiredRules_shouldRespectExtendedAt() {
-        // Given: 建立一個舊規則但有展延
+        // Given: Create an old rule but with an extension
         HttpRule extendedRule = HttpRule.builder()
                 .matchKey("/extended")
                 .method("GET")
@@ -105,7 +105,7 @@ class HttpRuleRepositoryTest {
                 .build();
         entityManager.persistAndFlush(extendedRule);
         
-        // 設定 createdAt 為 200 天前，但 extendedAt 為今天
+        // Set createdAt to 200 days ago, but extendedAt to today
         LocalDateTime oldDate = LocalDateTime.now().minusDays(200);
         LocalDateTime today = LocalDateTime.now();
         entityManager.getEntityManager()
@@ -117,11 +117,11 @@ class HttpRuleRepositoryTest {
         entityManager.flush();
         entityManager.clear();
         
-        // When: 執行清除
+        // When: Perform cleanup
         LocalDateTime cutoff = LocalDateTime.now().minusDays(180);
         int deleted = httpRuleRepository.deleteExpiredRules(cutoff, false);
         
-        // Then: 展延過的規則不會被刪除
+        // Then: Extended rules will not be deleted
         assertThat(deleted).isEqualTo(0);
         assertThat(httpRuleRepository.findAll()).hasSize(1);
     }

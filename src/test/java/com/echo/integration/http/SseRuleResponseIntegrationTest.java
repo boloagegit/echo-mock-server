@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 
-/** SSE 規則與它的回應：類型、描述保留、與規則一起改寫、類型篩選。 */
+/** SSE rule and its response: type, description retained, overridden with rule, type filter. */
 class SseRuleResponseIntegrationTest extends BaseIntegrationTest {
 
     private static final String EVENTS = "[{\"data\":\"one\",\"delayMs\":10},{\"data\":\"two\",\"delayMs\":10}]";
@@ -45,7 +45,7 @@ class SseRuleResponseIntegrationTest extends BaseIntegrationTest {
         return created.getBody();
     }
 
-    /** 跟前端一樣以 JSON 送出（updateExistingResponse 只用於請求，RuleDto 序列化時不會帶上）。 */
+    /** Send it as JSON like the front end (updateExistingResponse is only used for requests, RuleDto will not be brought during serialization). */
     @SuppressWarnings("unchecked")
     private Map<String, Object> rewritePayload(RuleDto rule, String events) {
         Map<String, Object> payload = objectMapper.convertValue(rule, Map.class);
@@ -93,7 +93,7 @@ class SseRuleResponseIntegrationTest extends BaseIntegrationTest {
         RuleDto rule = createSseRule("/sse/atomic");
         RuleDto current = adminClient().getForObject("/api/admin/rules/" + rule.getId(), RuleDto.class);
         long responsesBefore = responseRepository.count();
-        // 回應已改寫之後，規則寫入才失敗
+        // The rule write fails after the response has been rewritten
         doThrow(new IllegalStateException("simulated database failure")).when(httpProtocolHandler).save(any());
 
         ResponseEntity<String> saved = adminClient().exchange("/api/admin/rules/" + rule.getId(), HttpMethod.PUT,

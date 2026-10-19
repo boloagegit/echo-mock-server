@@ -32,10 +32,10 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 /**
- * 故障注入（Fault Injection）完整測試
+ * Fault injection (Fault Injection) complete test
  * <p>
- * 涵蓋 Pipeline 層、ProtocolHandler 層、Entity 預設值三個面向，
- * 確保 faultType 在整個生命週期中行為正確。
+ * Covers three aspects: Pipeline layer, ProtocolHandler layer, and Entity default value.
+ * Ensure faultType behaves correctly throughout its lifecycle.
  */
 @ExtendWith(MockitoExtension.class)
 class FaultInjectionTest {
@@ -58,8 +58,8 @@ class FaultInjectionTest {
         private TestPipeline pipeline;
 
         /**
-         * 測試用 Pipeline 子類別，繼承 AbstractMockPipeline<HttpRule>，
-         * 所有抽象方法以可控行為實作。
+         * Test Pipeline subclass extending AbstractMockPipeline<HttpRule>,
+         * All abstract methods are implemented with controlled behavior.
          */
         static class TestPipeline extends AbstractMockPipeline<HttpRule> {
 
@@ -313,7 +313,7 @@ class FaultInjectionTest {
                     .sseEnabled(false)
                     .sseLoopEnabled(false)
                     .build();
-            // 強制設為 null 繞過 @Builder.Default
+            // Forced to null to bypass @Builder.Default
             rule.setFaultType(null);
 
             RuleDto dto = handler.toDto(rule, null, false);
@@ -409,11 +409,11 @@ class FaultInjectionTest {
                     .matchKey("/api/test")
                     .httpStatus(200)
                     .build();
-            // 強制設為 null 模擬舊資料
+            // Forced to null to simulate old data
             rule.setFaultType(null);
             assertThat(rule.getFaultType()).isNull();
 
-            // 透過反射觸發 @PrePersist（protected method 在不同 package 無法直接呼叫）
+            // Triggered by reflection @PrePersist (protected method cannot be called directly in different package)
             java.lang.reflect.Method onCreate = HttpRule.class.getDeclaredMethod("onCreate");
             onCreate.setAccessible(true);
             onCreate.invoke(rule);

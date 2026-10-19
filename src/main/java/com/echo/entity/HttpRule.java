@@ -9,19 +9,19 @@ import lombok.experimental.SuperBuilder;
 import org.hibernate.Length;
 
 /**
- * HTTP 協定模擬規則
+ * HTTP protocol simulation rules
  * <p>
- * 定義 HTTP 請求的匹配條件與回應設定：
+ * Define the matching conditions and response settings for the HTTP request:
  * <ul>
- *   <li>匹配條件：targetHost + matchKey (URI) + method + queryCondition + bodyCondition + headerCondition</li>
- *   <li>回應設定：httpStatus + httpHeaders + responseBody/responseId</li>
+ *   <li>matching conditions: targetHost + matchKey (URI) + method + queryCondition + bodyCondition + headerCondition</li>
+ *   <li>response setting: httpStatus + httpHeaders + responseBody/responseId</li>
  * </ul>
  * 
- * <h3>匹配優先順序</h3>
+ * <h3>matches priority</h3>
  * <ol>
- *   <li>priority 數值（越大越優先）</li>
- *   <li>條件精確度（有條件 > 無條件）</li>
- *   <li>路徑精確度（精確匹配 > 萬用字元）</li>
+ *   <li>priority Value (the larger the priority)</li>
+ *   <li>Conditional accuracy (conditional > unconditional)</li>
+ *   <li>Path accuracy (exact match > wildcard)</li>
  * </ol>
  */
 @Entity
@@ -51,55 +51,55 @@ public class HttpRule extends BaseRule {
     private Long httpTargetConnectionId;
 
     /** 
-     * 目標主機
-     * <p>用於區分不同後端服務，可為空表示匹配所有主機
+     * Target host
+     * <p>is used to distinguish different backend services. It can be empty to match all hosts.
      */
     private String targetHost;
 
     /** 
-     * URI 路徑匹配模式
-     * <p>支援萬用字元：/api/* 匹配 /api/users, /api/orders 等
+     * URI path matching pattern
+     * <p>Supports wildcards: /api/* matches /api/users, /api/orders, and so on.
      */
     @Column(nullable = false)
     private String matchKey;
 
     /** 
-     * HTTP 方法
-     * <p>GET, POST, PUT, DELETE 等，可為空表示匹配所有方法
+     * HTTP method
+     * <p>GET, POST, PUT, DELETE, etc., can be empty to match all methods
      */
     private String method;
 
     /** 
-     * Query 參數匹配條件
-     * <p>格式：param=value;param2=value2
+     * Query parameter matching conditions
+     * <p>format: param=value; param2=value2
      */
     @Column(length = 500)
     private String queryCondition;
 
     /**
-     * Header 匹配條件
-     * <p>格式：HeaderName=value;HeaderName2~=pattern
+     * Header matching conditions
+     * <p>format: HeaderName=value;HeaderName2~=pattern
      */
     @Column(length = 500)
     private String headerCondition;
 
-    /** 是否啟用 SSE（Server-Sent Events）模式 */
+    /** Whether to enable SSE (Server-Sent Events) mode */
     @Column(name = "sse_enabled", nullable = false)
     @lombok.Builder.Default
     private Boolean sseEnabled = false;
 
-    /** SSE 事件序列是否循環播放 */
+    /** Is the SSE event sequence played in a loop? */
     @Column(name = "sse_loop_enabled", nullable = false)
     @lombok.Builder.Default
     private Boolean sseLoopEnabled = false;
 
-    /** HTTP 回應狀態碼（預設 200） */
+    /** HTTP response status code (default 200) */
     @Column(nullable = false)
     private Integer httpStatus;
 
     /** 
-     * HTTP 回應標頭（JSON 格式）
-     * <p>例如：{"Content-Type":"application/json","X-Custom":"value"}
+     * HTTP response header (JSON format)
+     * <p>For example: {"Content-Type":"application/json","X-Custom":"value"}
      */
     @Column(length = Length.LONG32)
     private String httpHeaders;
@@ -121,8 +121,8 @@ public class HttpRule extends BaseRule {
     }
 
     /**
-     * 取得合併後的條件字串（供顯示用）
-     * @return 格式化的條件字串，Query 參數以 ? 前綴，Header 以 @ 前綴標示
+     * Get the merged condition string (for display)
+     * @return Formatted condition string, Query parameter is prefixed with ?, Header is marked with @ prefix
      */
     @Transient
     public String getCondition() {

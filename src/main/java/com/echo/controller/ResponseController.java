@@ -25,7 +25,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * 共用回應（多條規則可使用同一份回應內容）的查詢、建立、修改、刪除與延長保存期限。
+ * Query, create, modify, delete and extend the storage period of shared responses (multiple rules can use the same response content).
  */
 @Slf4j
 @RestController
@@ -87,8 +87,8 @@ public class ResponseController {
     public ResponseEntity<?> updateResponse(@PathVariable Long id, @RequestBody Response response) {
         return responseService.findById(id)
                 .map(existing -> {
-                    // 送來的版本與目前不同，表示編輯期間回應已被改過：拒絕，避免把別人的修改蓋掉。
-                    // 沒送版本的呼叫端（舊腳本）維持以目前版本更新。
+                    // The version sent is different from the current version, which means that the response has been modified during editing: reject to avoid covering up other people's modifications.
+                    // Callers with undelivered versions (old scripts) remain updated with the current version.
                     if (response.getVersion() != null && !response.getVersion().equals(existing.getVersion())) {
                         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
                                 "error", "OPTIMISTIC_LOCK_CONFLICT",
@@ -98,14 +98,14 @@ public class ResponseController {
                             .contentType(existing.getContentType()).body(existing.getBody()).build();
                     response.setId(id);
                     response.setVersion(existing.getVersion());
-                    // 沒送的欄位沿用原本的值（只改內容時不會清掉描述或類型）
+                    // Unsent fields retain their original values (the description or type will not be cleared when only changing the content)
                     if (response.getDescription() == null) response.setDescription(existing.getDescription());
                     if (response.getContentType() == null) response.setContentType(existing.getContentType());
                     Response saved;
                     try {
                         saved = responseService.save(response);
                     } catch (ObjectOptimisticLockingFailureException e) {
-                        // 讀取版本後、寫入前剛好有人存檔
+                        // Another caller saves between reading the version and writing the update.
                         return ResponseEntity.status(HttpStatus.CONFLICT)
                                 .body(Map.of("error", "OPTIMISTIC_LOCK_CONFLICT"));
                     }

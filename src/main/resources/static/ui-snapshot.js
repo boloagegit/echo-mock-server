@@ -1,10 +1,10 @@
 /**
- * ui-snapshot.js - 重新整理時先畫出離開前的畫面
+ * ui-snapshot.js - When reorganizing, first draw the screen before leaving
  *
- * app.js 在 pagehide 時把目前畫面（不含對話框、抽屜、通知與選單）存進 sessionStorage。
- * 重新整理或上一頁／下一頁回到同一網址時，這裡在第一次繪製前把它放進開機外框，
- * 所以第一個畫面就和離開前一模一樣；Vue 準備好之後 revealApp 再無縫換成真正的畫面。
- * 快照只用一次，且只在同一分頁、同一網址、十分鐘內有效。
+ * app.js saves the current screen (excluding dialog boxes, drawers, notifications and menus) into sessionStorage during pagehide.
+ * When reorganizing or returning to the same URL from the previous page/next page, put it into the startup frame before drawing it for the first time.
+ * So the first screen is exactly the same as before leaving; after Vue is ready, revealApp will be seamlessly replaced with the real screen.
+ * The snapshot is only used once and is only valid within the same page, the same URL, and within ten minutes.
  */
 (function () {
     var KEY = 'echo.pageSnapshot';

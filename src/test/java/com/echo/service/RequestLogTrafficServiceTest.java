@@ -60,11 +60,11 @@ class RequestLogTrafficServiceTest {
 
     @Test
     void recordsAreCountedByOutcome() {
-        rows(row(NOW.minusMinutes(1), true, false, false, 5),     // 模擬回應
-                row(NOW.minusMinutes(2), true, true, false, 40),   // 轉發
-                row(NOW.minusMinutes(3), true, true, true, 3000),  // 轉發失敗
-                row(NOW.minusMinutes(4), false, false, false, 2),  // 沒比對到
-                row(NOW.minusMinutes(5), false, false, true, 2),   // 沒比對到（轉發錯誤只算在比對到的規則上）
+        rows(row(NOW.minusMinutes(1), true, false, false, 5),     // Simulated response
+                row(NOW.minusMinutes(2), true, true, false, 40),   // Forward
+                row(NOW.minusMinutes(3), true, true, true, 3000),  // Forwarding failed
+                row(NOW.minusMinutes(4), false, false, false, 2),  // No match
+                row(NOW.minusMinutes(5), false, false, true, 2),   // Not matched (forwarding errors are only counted for matched rules)
                 row(NOW.minusHours(3), true, false, false, 7));
 
         var traffic = service.compute(Range.DAY);
@@ -88,7 +88,7 @@ class RequestLogTrafficServiceTest {
 
         var time = service.compute(Range.DAY).responseTime();
 
-        // 實際值 500 與 950；估計值在所在區間內依名次比例取值
+        // The actual value is 500 and 950; the estimated value is based on the ranking ratio within the range.
         assertThat(time.typicalMs()).isBetween(450, 560);
         assertThat(time.slowMs()).isBetween(900, 1000);
     }
@@ -107,7 +107,7 @@ class RequestLogTrafficServiceTest {
     void reportsWhenOlderRecordsWereRemoved() {
         rows();
         query.earliest = NOW.minusDays(2);
-        // id 只會遞增：最小 id 大於 1，代表較舊的紀錄被刪過（刪到上限以下之後筆數已經低於上限）
+        // id will only increase: the minimum id is greater than 1, which means that the older records have been deleted (the number of records has been lower than the upper limit after deletion)
         query.smallestId = 1_001L;
 
         var traffic = service.compute(Range.WEEK);
@@ -241,7 +241,7 @@ class RequestLogTrafficServiceTest {
                        int responseTimeMs) {
     }
 
-    /** 以記憶體中的紀錄模擬資料庫端的統計（與 SQL 相同的規則），並記錄同時執行的查詢數。 */
+    /** Use records in memory to simulate database-side statistics (same rules as SQL), and record the number of queries executed simultaneously. */
     private static final class FakeQuery extends RequestLogTrafficQuery {
         List<Row> rows = List.of();
         List<RequestLogTrafficQuery.EndpointCount> topUnmatched = List.of();

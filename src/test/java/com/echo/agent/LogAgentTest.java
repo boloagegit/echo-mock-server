@@ -24,9 +24,9 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.*;
 
 /**
- * LogAgent 單元測試 — database/memory mode processBatch、analysis enabled/disabled、例外處理。
+ * LogAgent unit test - database/memory mode processBatch, analysis enabled/disabled, exception handling.
  * <p>
- * 直接建構 LogAgent（非 Spring），透過 mock 依賴驗證行為。
+ * Directly construct LogAgent (not Spring) and verify the behavior through mock dependency.
  * <p>
  * Validates: Requirements 5.2, 5.3, 5.4, 7.1, 7.4
  */

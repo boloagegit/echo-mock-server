@@ -12,8 +12,8 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 舊版字串條件經由 {@link ConditionMatcher} 公開 API（新引擎）的結果，與舊版原始實作
- * （{@link LegacyConditionOracle}）一致；細部語意的差異測試見 {@code LegacyDifferentialTest}。
+ * Old version of string condition via {@link ConditionMatcher} exposes results of API (new engine), same as old version of original implementation
+ * ({@link LegacyConditionOracle}) is consistent; for detailed semantic difference testing, see {@code LegacyDifferentialTest}.
  */
 class ConditionMatcherLegacyEquivalenceTest {
 
@@ -30,7 +30,7 @@ class ConditionMatcherLegacyEquivalenceTest {
                 "echo.matcher.max-field-value-length", "2"))) {
             ConditionMatcher bound = context.getBean(ConditionMatcher.class);
 
-            // 先前 Spring 會選無參數建構子，這個設定一直沒有生效
+            // Previously Spring would select the parameterless constructor, but this setting has not taken effect.
             assertThat(bound.matches("user.type=vip", "{\"user\":{\"type\":\"vip\"}}")).isFalse();
             assertThat(bound.matches("user.type=ab", "{\"user\":{\"type\":\"ab\"}}")).isTrue();
         }
@@ -46,7 +46,7 @@ class ConditionMatcherLegacyEquivalenceTest {
                     .as(condition)
                     .isEqualTo(oracle.matchesPrepared(condition, null, null, oracle.prepareBody(XML), null, null));
         }
-        // 串流預先算好的結果使用與比對引擎相同的暫存 key
+        // Streaming precomputed results uses the same buffer as the comparison engine key
         assertThat(streamed.getMatchOutcomesSnapshot())
                 .containsEntry("body://Status=OPEN", true)
                 .containsEntry("body:Item=5", true);
@@ -110,7 +110,7 @@ class ConditionMatcherLegacyEquivalenceTest {
         return context;
     }
 
-    /** 以候選規則的 body 條件準備 body（與 pipeline 相同的規則）。 */
+    /** Prepare body (the same rule as pipeline) with the body condition of the candidate rule. */
     private static ConditionMatcher.PreparedBody prepareBodyFor(ConditionMatcher matcher, String body,
                                                                 java.util.List<String> bodyConditions) {
         return matcher.prepareBody(body, bodyConditions.stream()

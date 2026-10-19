@@ -82,7 +82,7 @@ class SsePlaybackRegressionIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void legalSixteenPlusSixteenSecondSequenceCompletesBeyondOldTimeout() throws Exception {
-        // 舊版固定 30 秒逾時（f7311bd 之前）；兩個 16 秒事件共 32 秒，足以證明串流撐過舊逾時
+        // The old version has a fixed 30-second timeout (before f7311bd); two 16-second events totaling 32 seconds are enough to prove that the stream survives the old timeout
         save(rule("/long", "[{\"data\":\"first\",\"delayMs\":16000},{\"data\":\"second\",\"delayMs\":16000}]"));
         long start = System.nanoTime();
         var response = client.send(request("/long").GET().build(), HttpResponse.BodyHandlers.ofInputStream());

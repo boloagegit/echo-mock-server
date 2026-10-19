@@ -14,12 +14,12 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * HTTP shouldForward 決策正確性屬性測試
+ * HTTP shouldForward Decision correctness attribute test
  * <p>
- * Feature: protocol-pipeline-refactor, Property 4: HTTP shouldForward 決策正確性
+ * Feature: protocol-pipeline-refactor, Property 4: HTTP shouldForward Decision correctness
  * <p>
- * 使用 jqwik 產生隨機 targetHost 字串（含 null、"default"、空字串、空白、任意字串），
- * 驗證 {@code HttpMockPipeline.shouldForward()} 回傳 {@code true} 若且唯若
+ * Use jqwik to generate a random targetHost string (including null, "default", empty string, blank, and any string),
+ * Verify {@code HttpMockPipeline.shouldForward()} and return {@code true} if and only if
  * {@code targetHost != null && !targetHost.equals("default")}。
  *
  * <b>Validates: Requirements 5.2</b>
@@ -27,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class HttpShouldForwardPropertyTest {
 
     /**
-     * 最小化的 HttpMockPipeline，只測試 shouldForward()，不需要真正的依賴。
+     * Minimized HttpMockPipeline, only tests shouldForward(), no real dependencies required.
      */
     private final HttpMockPipeline pipeline = new HttpMockPipeline(
             new StubConditionMatcher(), null, null, null, null, null);
@@ -69,10 +69,10 @@ class HttpShouldForwardPropertyTest {
     // ==================== Property Tests ====================
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 4: HTTP shouldForward 決策正確性
+     * Feature: protocol-pipeline-refactor, Property 4: HTTP shouldForward Decision correctness
      * <p>
-     * 對任意 targetHost 字串，shouldForward() 回傳 true 若且唯若
-     * targetHost != null 且 targetHost 不等於 "default"。
+     * For any targetHost string, shouldForward() returns true if and only if
+     * targetHost != null and targetHost is not equal to "default".
      *
      * <b>Validates: Requirements 5.2</b>
      */
@@ -93,9 +93,9 @@ class HttpShouldForwardPropertyTest {
     }
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 4: HTTP shouldForward 決策正確性
+     * Feature: protocol-pipeline-refactor, Property 4: HTTP shouldForward Decision correctness
      * <p>
-     * null targetHost 永遠不應轉發。
+     * null targetHost should never be forwarded.
      *
      * <b>Validates: Requirements 5.2</b>
      */
@@ -111,9 +111,9 @@ class HttpShouldForwardPropertyTest {
     }
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 4: HTTP shouldForward 決策正確性
+     * Feature: protocol-pipeline-refactor, Property 4: HTTP shouldForward Decision correctness
      * <p>
-     * "default" targetHost 永遠不應轉發。
+     * "default" targetHost should never be forwarded.
      *
      * <b>Validates: Requirements 5.2</b>
      */
@@ -129,9 +129,9 @@ class HttpShouldForwardPropertyTest {
     }
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 4: HTTP shouldForward 決策正確性
+     * Feature: protocol-pipeline-refactor, Property 4: HTTP shouldForward Decision correctness
      * <p>
-     * 任何非 null 且非 "default" 的 targetHost 都應轉發。
+     * Any targetHost that is not null and is not "default" should be forwarded.
      *
      * <b>Validates: Requirements 5.2</b>
      */

@@ -17,7 +17,7 @@ import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 規則快照：變更後背景重建，重建期間回傳舊快照；做出變更的一方等到新快照生效。 */
+/** Rule snapshot: The background is reconstructed after the change, and the old snapshot is returned during the reconstruction; the party who made the change waits until the new snapshot takes effect. */
 class RuleSnapshotCacheTest {
 
     private final ExecutorService builderThread = Executors.newSingleThreadExecutor();
@@ -35,7 +35,7 @@ class RuleSnapshotCacheTest {
         return new RuleSnapshotCache<>("test", builder, builderThread, TimeUnit.MINUTES.toNanos(10), 2_000, clock::get);
     }
 
-    /** 每次建立回傳「版本 N」；建立前可被擋住，模擬重建很慢。 */
+    /** "Version N" is returned every time it is created; it may be blocked before creation, and the simulation reconstruction is very slow. */
     private static final class SlowBuilder implements Function<String, String> {
         final AtomicInteger builds = new AtomicInteger();
         volatile CountDownLatch gate = new CountDownLatch(0);
@@ -79,7 +79,7 @@ class RuleSnapshotCacheTest {
         assertThat(cache.get("k")).isEqualTo("v1");
         builder.block();
 
-        // 變更來自網頁請求：只記下要等的序號，不在當下等待
+        // The change comes from a web request: just write down the sequence number you want to wait for, do not wait now
         cache.changed(true);
         assertThat(builder.started.await(5, TimeUnit.SECONDS)).isTrue();
 
@@ -113,7 +113,7 @@ class RuleSnapshotCacheTest {
 
         builder.gate.countDown();
         request.get(5, TimeUnit.SECONDS);
-        // 三次變更：正在建的那次可能只包含第一次，之後再補建一次；等到的一定包含全部
+        // Three changes: the one under construction may only include the first one, and then another one; the one that waits must include all
         assertThat(cache.generationOf("k")).isEqualTo(3);
         assertThat(seenAfterWait.get()).isEqualTo("v" + builder.builds.get());
         assertThat(builder.builds.get()).isBetween(2, 3);
@@ -146,7 +146,7 @@ class RuleSnapshotCacheTest {
 
         cache.changed(true);
         assertThat(builder.started.await(5, TimeUnit.SECONDS)).isTrue();
-        // 第一次重建進行中又有兩次變更：合併成之後的一次重建
+        // Two more changes were made during the first rebuild: merged into a subsequent rebuild
         cache.changed(true);
         cache.changed(true);
         builder.gate.countDown();
@@ -173,7 +173,7 @@ class RuleSnapshotCacheTest {
         cache.changed(false);
         long waitedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
 
-        // 第二次建立失敗；約 1 秒後自動重試成功，不必等到 5 秒逾時，也不必有新的請求或變更
+        // The second creation failed; it will automatically retry successfully after about 1 second without waiting for the 5 second timeout or new request or change.
         assertThat(waitedMs).isBetween(800L, 3_000L);
         assertThat(cache.get("k")).isEqualTo("v3");
         assertThat(cache.generationOf("k")).isEqualTo(1);
@@ -196,7 +196,7 @@ class RuleSnapshotCacheTest {
         assertThat(failed.await(5, TimeUnit.SECONDS)).isTrue();
         RuleSnapshotCache.clearPendingChanges();
 
-        // 失敗後的重試間隔內再改一次：變更方在間隔過後就完成
+        // Change again within the retry interval after a failure: the changer completes after the interval has elapsed
         long started = System.nanoTime();
         cache.changed(false);
         long waitedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
@@ -281,7 +281,7 @@ class RuleSnapshotCacheTest {
         Future<String> firstRequest = callers.submit(() -> cache.get("k"));
         assertThat(builder.started.await(5, TimeUnit.SECONDS)).isTrue();
 
-        // 第一份快照可能比這次變更舊：變更方不能在它建好前、也不能只因它建好就返回
+        // The first snapshot may be older than this change: the changer cannot return before it is built, nor just because it is built.
         Future<?> change = callers.submit(() -> cache.changed(false));
         TimeUnit.MILLISECONDS.sleep(100);
         assertThat(change).isNotDone();

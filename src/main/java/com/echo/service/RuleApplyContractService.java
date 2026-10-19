@@ -104,7 +104,7 @@ public class RuleApplyContractService {
         return exposedSchema;
     }
 
-    /** 依 apiVersion 回傳 schema；未指定時為 v1。 */
+    /** Return schema according to apiVersion; if not specified, it is v1. */
     public RuleApplySchema schema(String apiVersion) {
         if (apiVersion == null || apiVersion.isBlank() || RuleApplyDocument.API_VERSION.equals(apiVersion)) {
             return exposedSchema;
@@ -115,7 +115,7 @@ public class RuleApplyContractService {
         throw new IllegalArgumentException("Unsupported apiVersion: " + apiVersion);
     }
 
-    /** v2 = v1 的所有欄位 + {@code spec.match}，放在舊版條件欄位之後。 */
+    /** v2 = all fields of v1 + {@code spec.match}, placed after the old version condition fields. */
     private static RuleApplySchema toV2(RuleApplySchema v1) {
         List<RuleApplySchema.Field> fields = new ArrayList<>();
         for (RuleApplySchema.Field field : v1.fields()) {
@@ -377,8 +377,8 @@ public class RuleApplyContractService {
     }
 
     /**
-     * v1 沒有 {@code spec.match}（維持原本的未知欄位錯誤）；v2 的 {@code spec.match} 與舊版條件互斥，
-     * 並以與儲存時相同的規則檢查（運算子、來源、大小上限）。
+     * v1 does not have {@code spec.match} (the original unknown field error is maintained); {@code spec.match} of v2 is mutually exclusive with the old version of conditions,
+     * And check with the same rules as when saving (operator, source, maximum size).
      */
     private void validateMatch(RuleApplyDocument.Spec spec, boolean v2) {
         JsonNode match = spec.getMatch();
@@ -408,7 +408,7 @@ public class RuleApplyContractService {
             return;
         }
         for (String rawCondition : value.split(";", -1)) {
-            // 與比對時相同的拆解規則（第一個 =），例如 a=x!=y 是欄位 a、值 x!=y
+            // The same disassembly rule as the comparison (the first =), for example, a=x!=y is the field a, the value x!=y
             LegacyConditions.Parts parts = LegacyConditions.parts(rawCondition.trim())
                     .filter(candidate -> !candidate.field().isEmpty() && !candidate.value().isEmpty())
                     .orElse(null);

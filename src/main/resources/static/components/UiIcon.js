@@ -1,8 +1,8 @@
 /**
- * UiIcon - Echo 自有的線條圖示（導覽與帳號動作）
+ * UiIcon - Echo's own line icon (navigation and account actions)
  *
- * 24px 格線、1.75 線寬、圓角端點，與 App 標誌同一套幾何，讓側欄讀起來是同一個家族。
- * 其他介面圖示仍使用 Bootstrap Icons。
+ * 24px grid, 1.75 line width, rounded endpoints, the same set of geometry as the App logo, making the sidebar read as the same family.
+ * Other interface icons still use Bootstrap Icons.
  */
 const UI_ICON_PATHS = {
   rules: '<rect x="3" y="5" width="4.5" height="3" rx="1.5"/><path d="M10.5 6.5H21"/><rect x="3" y="10.5" width="4.5" height="3" rx="1.5"/><path d="M10.5 12H18"/><rect x="3" y="16" width="4.5" height="3" rx="1.5"/><path d="M10.5 17.5H20"/>',

@@ -31,7 +31,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_H2_PATH = PROJECT_ROOT / "mockdb"
-# Echo 的預設資料庫位置（application.yml：./data/mockdb.sqlite）
+# The default database location of Echo (application.yml: ./data/mockdb.sqlite)
 DEFAULT_SQLITE_PATH = PROJECT_ROOT / "data" / "mockdb.sqlite"
 DEFAULT_BACKUP_DIR = PROJECT_ROOT / "backups"
 APPLICATION_TABLES = (
@@ -279,7 +279,7 @@ def start_sqlite_app(db_path: Path, log_path: Path, expected: dict[str, int] | N
             "ECHO_CLEANUP_ENABLED": "false",
             "ECHO_JMS_ENABLED": "false",
             "ECHO_REQUEST_LOG_SPOOL_PATH": str(spool_path),
-            # 專案目錄仍有舊 H2 檔、staging SQLite 尚未建立；這正是轉換流程本身，略過升級防呆
+            # There are still old H2 files in the project directory, staging and SQLite have not yet been created; this is the conversion process itself, skip the upgrade to prevent foolproofing
             "SPRING_APPLICATION_JSON": json.dumps({"echo": {"database": {"ignore-legacy-h2": True}}}),
         }
     )
@@ -313,7 +313,7 @@ def start_sqlite_app(db_path: Path, log_path: Path, expected: dict[str, int] | N
                 raise MigrationError(f"Echo 啟動後使用了錯誤資料源：{datasource}")
 
             if expected is not None:
-                # 驗證程序刻意關閉 JMS，status 的 ruleCount 因此只包含 HTTP handler。
+                # The validator deliberately turned off JMS, ruleCount of status and therefore only contained HTTP handler.
                 expected_rules = expected["http_rules"]
                 if int(status_data.get("ruleCount", -1)) != expected_rules:
                     raise MigrationError("啟動後規則數與遷移報告不一致")
@@ -434,7 +434,7 @@ def publish_atomic_database(staging: Path, target: Path, candidate: Path) -> Non
     try:
         with closing(sqlite3.connect(staging, isolation_level=None)) as source:
             source.execute("PRAGMA wal_checkpoint(FULL)").fetchone()
-            # VACUUM INTO 會產生一致、壓縮且不依賴 WAL/SHM 的單檔快照。
+            # VACUUM INTO produces a single snapshot that is consistent, compressed, and independent of WAL/SHM.
             source.execute("VACUUM INTO ?", (str(candidate),))
         with closing(sqlite3.connect(candidate, isolation_level=None)) as connection:
             journal_mode = connection.execute("PRAGMA journal_mode").fetchone()

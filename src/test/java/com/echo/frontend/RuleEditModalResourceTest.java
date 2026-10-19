@@ -24,7 +24,7 @@ class RuleEditModalResourceTest {
 
     @Test
     void showsTheConfiguredNameOfTheApplicationYmlJmsTarget() throws IOException {
-        // echo.jms.target.name 設定的名稱要顯示出來；沒設定時後端給 application.yml，標籤只是備援
+        // The set name of echo.jms.target.name should be displayed; if it is not set, the backend will give application.yml, and the label is only a backup
         for (String component : new String[]{"RuleEditModal.js", "SettingsPage.js", "ConnectionTargetsTable.js"}) {
             assertThat(resourceText("static/components/" + component))
                     .as(component)

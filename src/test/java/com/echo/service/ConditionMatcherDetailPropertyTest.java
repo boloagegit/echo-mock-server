@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * matchesPreparedWithDetail 屬性測試（Property 11, 12）。
+ * matchesPreparedWithDetail attribute test (Property 11, 12).
  * <p>
  * Feature: agent-framework-log-agent
  * <p>
@@ -88,8 +88,8 @@ class ConditionMatcherDetailPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 11: matchesPreparedWithDetail returns structured PASS/FAIL results
      * <p>
-     * 每個非 null 條件產生一個 ConditionResult；每個 result 含 PASS 或 FAIL；
-     * overallMatch = 所有 passed 的 AND。
+     * Each non-null condition produces a ConditionResult; each result contains PASS or FAIL;
+     * overallMatch = AND for all passed.
      * <p>
      * **Validates: Requirements 7.2, 7.3**
      */
@@ -114,7 +114,7 @@ class ConditionMatcherDetailPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 11: matchesPreparedWithDetail returns structured PASS/FAIL results
      * <p>
-     * 每個 ConditionResult 的 detail 包含 "PASS" 或 "FAIL"。
+     * detail for every ConditionResult contains "PASS" or "FAIL".
      * <p>
      * **Validates: Requirements 7.2, 7.3**
      */
@@ -141,7 +141,7 @@ class ConditionMatcherDetailPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 11: matchesPreparedWithDetail returns structured PASS/FAIL results
      * <p>
-     * overallMatch == 所有 results 的 passed 的 AND。
+     * overallMatch == AND for all passed of results.
      * <p>
      * **Validates: Requirements 7.2, 7.3**
      */
@@ -162,7 +162,7 @@ class ConditionMatcherDetailPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 11: matchesPreparedWithDetail returns structured PASS/FAIL results
      * <p>
-     * 混合 body + query + header 條件時，結果數量 = 所有非 null 條件的總數。
+     * When mixing body + query + header conditions, the number of results = the total number of all non-null conditions.
      * <p>
      * **Validates: Requirements 7.2, 7.3**
      */
@@ -204,7 +204,7 @@ class ConditionMatcherDetailPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 11: matchesPreparedWithDetail returns structured PASS/FAIL results
      * <p>
-     * null 條件不產生任何 ConditionResult。
+     * The null condition does not produce any ConditionResult.
      * <p>
      * **Validates: Requirements 7.2, 7.3**
      */
@@ -226,7 +226,7 @@ class ConditionMatcherDetailPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 12: matchesPreparedWithDetail consistency with matchesPrepared
      * <p>
-     * overallMatch 與 matchesPrepared 布林結果一致（body only）。
+     * The Bollinger results of overallMatch and matchesPrepared are consistent (body only).
      * <p>
      * **Validates: Requirements 7.2**
      */
@@ -247,7 +247,7 @@ class ConditionMatcherDetailPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 12: matchesPreparedWithDetail consistency with matchesPrepared
      * <p>
-     * overallMatch 與 matchesPrepared 布林結果一致（all matching conditions）。
+     * The Bollinger results of overallMatch and matchesPrepared are consistent (all matching conditions).
      * <p>
      * **Validates: Requirements 7.2**
      */
@@ -268,7 +268,7 @@ class ConditionMatcherDetailPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 12: matchesPreparedWithDetail consistency with matchesPrepared
      * <p>
-     * overallMatch 與 matchesPrepared 布林結果一致（mixed body + query + header）。
+     * The Bollinger results of overallMatch and matchesPrepared are consistent (mixed body + query + header).
      * <p>
      * **Validates: Requirements 7.2**
      */
@@ -304,7 +304,7 @@ class ConditionMatcherDetailPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 12: matchesPreparedWithDetail consistency with matchesPrepared
      * <p>
-     * overallMatch 與 matchesPrepared 布林結果一致（null conditions）。
+     * The Bollinger results of overallMatch and matchesPrepared are consistent (null conditions).
      * <p>
      * **Validates: Requirements 7.2**
      */

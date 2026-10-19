@@ -12,9 +12,9 @@ import org.springframework.security.ldap.authentication.BindAuthenticator;
 import org.springframework.security.ldap.authentication.LdapAuthenticationProvider;
 
 /**
- * LDAP 認證配置
+ * LDAP authentication configuration
  * <p>
- * 當 echo.ldap.enabled=true 時啟用 LDAP 認證
+ * Enable LDAP authentication when echo.ldap.enabled=true
  */
 @Configuration
 @Slf4j
@@ -39,7 +39,7 @@ public class LdapConfig {
             public Authentication authenticate(Authentication authentication) {
                 
                 if (!ldapEnabled || ldapUrl.isEmpty() || baseDn.isEmpty()) {
-                    return null; // 讓其他 provider 處理
+                    return null; // Let other provider handle it
                 }
 
                 try {
@@ -62,7 +62,7 @@ public class LdapConfig {
 
             @Override
             public boolean supports(Class<?> authentication) {
-                // LDAP 未啟用時不支援，讓 DaoAuthenticationProvider 處理
+                // LDAP is not supported when it is not enabled, let DaoAuthenticationProvider handle it
                 if (!ldapEnabled || ldapUrl.isEmpty() || baseDn.isEmpty()) {
                     return false;
                 }

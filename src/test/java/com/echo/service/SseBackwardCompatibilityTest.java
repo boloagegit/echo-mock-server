@@ -20,7 +20,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 /**
- * 向後相容性驗證：確認 sseEnabled 欄位不影響既有 HTTP 規則行為。
+ * Backward compatibility verification: Confirm that the sseEnabled field does not affect the behavior of the existing HTTP rule.
  *
  * Validates: Requirements 7.1, 7.3
  */

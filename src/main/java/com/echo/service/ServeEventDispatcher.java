@@ -6,8 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 依序把 {@link ServeEvent} 交給各 listener：primary（請求紀錄）與 critical listener 的例外往上傳，其他只記錄。
- * 不可變，可在多執行緒間共用。
+ * Handle {@link ServeEvent} to each listener in sequence: primary (request record) and critical listener exceptions are uploaded, and others are only recorded.
+ * Immutable and can be shared among multiple threads.
  */
 @Slf4j
 public final class ServeEventDispatcher {
@@ -21,10 +21,10 @@ public final class ServeEventDispatcher {
     }
 
     /**
-     * 建立 dispatcher，primary 一定排在第一個。
+     * Create dispatcher, primary must be ranked first.
      *
-     * @param primary 一定會呼叫、例外一定往上傳的 listener（請求紀錄）；排在最前面，可為 null
-     * @param others  其他 listener；與 primary 相同的實例會略過，避免重複紀錄
+     * @param primary listener (request record) will definitely be called and the exception will be uploaded; the first one can be null
+     * @param others  Other listener; instances identical to primary will be skipped to avoid duplicate records
      */
     public static ServeEventDispatcher of(ServeEventListener primary, List<? extends ServeEventListener> others) {
         List<ServeEventListener> rest = new ArrayList<>();

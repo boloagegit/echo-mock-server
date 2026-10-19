@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 /**
- * JMS 配置屬性
+ * JMS configuration properties
  */
 @Component
 @ConfigurationProperties(prefix = "echo.jms")
@@ -22,56 +22,56 @@ public class JmsProperties {
     private String username = "admin";
     private String password = "admin";
 
-    /** Echo Embedded Artemis 上監聽的 Queue（外部服務連入的入口） */
+    /** Queue listened to on Echo's embedded Artemis, where external services send requests. */
     private String queue = "ECHO.REQUEST";
 
-    /** 從 JMS 訊息 body 提取端點識別欄位（XML: element name, JSON: key name） */
+    /** Endpoint-identifying field extracted from the JMS body: XML element name or JSON key. */
     private String endpointField = "ServiceName";
 
-    /** JMS 訊息解析可同時使用的 heap 比例；額度不足時 listener 會等待，讓 broker 形成背壓。 */
+    /** Fraction of heap available for concurrent JMS message parsing; listeners wait when exhausted, applying backpressure through the broker. */
     private int processingMemoryPercent = 25;
 
-    /** XML DOM 相對於編碼後訊息大小的保守記憶體估算倍率。 */
+    /** Conservative XML DOM memory-estimate multiplier relative to the encoded message size. */
     private int xmlMemoryExpansionFactor = 8;
 
-    /** Embedded Artemis 可使用的 heap 比例；超過後依 PAGE 策略寫入磁碟。 */
+    /** Heap fraction available to embedded Artemis; spill to disk using PAGE when exceeded. */
     private int brokerMemoryPercent = 15;
 
-    /** 是否將 Artemis journal、paging 與 large message 寫入磁碟；正式環境必須保持啟用。 */
+    /** Whether Artemis persists journals, paging, and large messages to disk; keep enabled in production. */
     private boolean persistent = true;
 
-    /** Artemis journal、paging 與 large-message 檔案目錄。 */
+    /** Artemis journal, paging and large-message file directory. */
     private String dataDirectory = "./data/artemis";
 
-    /** 每個 listener consumer 最多預取的 encoded bytes；避免 30 個 consumer 各囤 1 MiB。 */
+    /** Maximum encoded bytes prefetched per listener consumer; avoid 30 consumers each retaining 1 MiB. */
     private int consumerWindowSize = 64 * 1024;
 
-    /** Broker 開始阻擋 producer 前必須保留的磁碟空間，避免真的寫到 ENOSPC。 */
+    /** Disk space to reserve before the broker blocks producers, preventing an actual ENOSPC failure. */
     private long minDiskFreeBytes = 512L * 1024 * 1024;
 
-    /** Artemis 重新檢查可用磁碟空間的間隔。 */
+    /** Interval between Artemis disk-space checks. */
     private int diskScanPeriodMs = 1_000;
 
     /**
-     * 沒有 consumer 的暫時佇列（客戶端 request-reply 的回覆佇列）閒置多久後由內建 broker 刪除。
-     * 有些客戶端在同一條長連線上每次請求都建新的暫時佇列卻不刪，broker 原本要等連線關閉才回收，
-     * 幾天下來會耗盡 heap。0 表示不自動刪除。
+     * Idle timeout before the embedded broker deletes consumerless temporary queues used for request-reply.
+     * Some long-lived clients create a temporary reply queue per request without deleting it; the broker would otherwise retain these until the connection closes,
+     * potentially exhausting the heap within days. Set 0 to disable automatic deletion.
      */
     private long temporaryQueueIdleDeleteMs = 10_000;
 
-    /** 暫時性 listener 失敗的第一次重送等待時間。 */
+    /** Initial redelivery delay after a transient listener failure. */
     private long redeliveryDelayMs = 250;
 
-    /** 重送等待時間的倍增倍率，避免儲存或記憶體故障時 busy-loop。 */
+    /** Redelivery-delay multiplier, preventing a busy loop during storage or memory failures. */
     private double redeliveryMultiplier = 2.0;
 
-    /** 重送等待時間上限。負值不接受。 */
+    /** Maximum redelivery delay; negative values are not accepted. */
     private long maxRedeliveryDelayMs = 5_000;
 
-    /** -1 表示不因重送次數自動丟棄訊息。 */
+    /** -1 disables automatic message discard based on the redelivery count. */
     private int maxDeliveryAttempts = -1;
 
-    /** 從哪裡接收 JMS 請求：內建 Artemis（預設）或外部共用 broker（例如 ESB）。 */
+    /** JMS request source: embedded Artemis by default, or an external shared broker such as an ESB. */
     private Source source = new Source();
 
     private Target target = new Target();
@@ -93,9 +93,9 @@ public class JmsProperties {
     }
 
     /**
-     * JMS 請求來源。{@code embedded} 使用 Echo 內建的 Artemis；
-     * {@code artemis} 或 {@code tibco} 連到外部 broker 的 {@link #queue}，
-     * 多台 Echo 監聽同一個 queue 時由 broker 把每則訊息只交給其中一台。
+     * JMS request source. {@code embedded} uses Echo's embedded Artemis;
+     * {@code artemis} or {@code tibco} listens on {@link #queue} on an external broker.
+     * When multiple Echo instances listen to the same queue, the broker delivers each message to only one instance.
      */
     @Getter
     @Setter
@@ -106,19 +106,19 @@ public class JmsProperties {
         private String serverUrl;
         private String username;
         private String password;
-        /** 連不上外部 broker 時，多久重試一次。 */
+        /** Retry interval when an external broker is unavailable. */
         private long reconnectIntervalMs = 5_000;
 
         public boolean isExternal() {
             return isExternalType(type);
         }
 
-        /** 供設定類別的條件判斷使用：空白或 {@code embedded} 以外的值都是外部 broker。 */
+        /** Used by configuration-class conditions: blank or any value other than {@code embedded} selects an external broker. */
         public static boolean isExternalType(String type) {
             return type != null && !type.isBlank() && !EMBEDDED.equalsIgnoreCase(type.trim());
         }
 
-        /** 轉成轉送目標的設定格式，沿用各 broker 的 ConnectionFactory 建立方式。 */
+        /** Convert to the forwarding-target settings format, reusing each broker's ConnectionFactory creation logic. */
         public Target asConnectionTarget() {
             Target connection = new Target();
             connection.setType(type == null ? null : type.trim());
@@ -132,7 +132,7 @@ public class JmsProperties {
     @Getter
     @Setter
     public static class Target {
-        /** 介面與請求記錄顯示的下游名稱；空白時顯示 {@code application.yml}。 */
+        /** Downstream name shown in the UI and request logs; display {@code application.yml} if blank. */
         private String name;
         private boolean enabled = false;
         private String type = "tibco";  // artemis | tibco
@@ -150,7 +150,7 @@ public class JmsProperties {
             this.timeoutSeconds = timeoutSeconds;
         }
 
-        /** 目標 JMS Server 上要轉發到的 Queue */
+        /** Target JMS server and queue for forwarding. */
         private String queue = "TARGET.REQUEST";
     }
 }

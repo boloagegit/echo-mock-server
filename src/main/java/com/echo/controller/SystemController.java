@@ -38,12 +38,12 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 系統狀態與設定：
+ * System status and settings:
  * <ul>
- *   <li>GET /api/admin/status - 系統狀態、功能開關與資料統計</li>
- *   <li>GET /api/admin/agents - 背景工作（Agent）狀態</li>
- *   <li>GET/POST /api/admin/backup - 資料庫備份</li>
- *   <li>POST /api/admin/jms/test - 送出 JMS 測試訊息</li>
+ *   <li>GET /api/admin/status - System status, function switches and data statistics</li>
+ *   <li>GET /api/admin/agents - Background work (Agent) status</li>
+ *   <li>GET/POST /api/admin/backup - Database backup</li>
+ *   <li>POST /api/admin/jms/test - Send JMS test message</li>
  * </ul>
  */
 @RestController
@@ -102,7 +102,7 @@ public class SystemController {
     @Value("${echo.ui.accent:teal}")
     private String uiAccent;
 
-    /** 介面彩蛋（↑↑↓↓←→←→AB 或連點 Echo 圖示 5 下開小遊戲）；正式環境可用 ECHO_UI_EASTER_EGG=false 關閉。 */
+    /** Interface easter egg (↑↑↓↓←→←→AB or click Echo icon 5 to open a mini-game); the official environment can be closed with ECHO_UI_EASTER_EGG=false. */
     @Value("${echo.ui.easter-egg:true}")
     private boolean uiEasterEgg;
 
@@ -135,7 +135,7 @@ public class SystemController {
 
     private final Instant startupTime = Instant.now();
 
-    /** UI 主色僅允許預先定義的值；空白或未知值一律回到預設青綠。 */
+    /** UI The main color only allows predefined values; blank or unknown values will return to the default cyan. */
     private static final String DEFAULT_UI_ACCENT = "teal";
     private static final Set<String> UI_ACCENTS = Set.of("teal", "blue");
 
@@ -147,7 +147,7 @@ public class SystemController {
         return UI_ACCENTS.contains(normalized) ? normalized : DEFAULT_UI_ACCENT;
     }
 
-    // ========== 系統狀態 ==========
+    // ========== System status ==========
 
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> getStatus(
@@ -180,7 +180,7 @@ public class SystemController {
                 .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN")));
         status.put("username", loggedIn ? user.getUsername() : null);
 
-        // 內建帳號資訊
+        // Built-in account information
         if (loggedIn) {
             Optional<BuiltinUser> builtinUser = builtinUserRepository.findByUsername(user.getUsername());
             if (builtinUser.isPresent()) {
@@ -202,13 +202,13 @@ public class SystemController {
         status.put("uiEasterEgg", uiEasterEgg);
         status.put("version", getClass().getPackage().getImplementationVersion() != null
                 ? getClass().getPackage().getImplementationVersion() : "dev");
-        // 檢查孤兒規則
+        // Checking orphan rules
         status.put("orphanRules", responseService.countOrphanRules());
 
-        // 檢查孤兒回應
+        // Check orphan response
         status.put("orphanResponses", responseService.countOrphanResponses());
 
-        // 資料統計
+        // Statistics
         status.put("ruleCount", protocolHandlerRegistry.getAllHandlers().stream()
                 .mapToLong(ProtocolHandler::count)
                 .sum());
@@ -217,7 +217,7 @@ public class SystemController {
         status.put("responseRetentionDays", responseRetentionDays);
         status.put("statsMaxRecords", statsMaxRecords);
 
-        // DB 檔案大小
+        // DB file size
         try {
             databaseFilePath(datasourceUrl)
                     .filter(Files::exists)
@@ -226,7 +226,7 @@ public class SystemController {
             // ignore
         }
 
-        // JVM 記憶體
+        // JVM memory
         Runtime rt = Runtime.getRuntime();
         status.put("jvmHeapUsed", rt.totalMemory() - rt.freeMemory());
         status.put("jvmHeapMax", rt.maxMemory());
@@ -237,7 +237,7 @@ public class SystemController {
         status.put("delaySchedulerQueueSize", universalMockController
                 .map(UniversalMockController::getPendingDelayTaskCount).orElse(-1));
 
-        // 啟動時間
+        // Startup time
         status.put("uptime", Duration.between(startupTime, Instant.now()).toSeconds());
 
         // Issue Report
@@ -287,7 +287,7 @@ public class SystemController {
         }
     }
 
-    // ========== Agent 狀態 ==========
+    // ========== Agent Status ==========
 
     @GetMapping("/agents")
     public ResponseEntity<List<AgentStatusDto>> getAgentStatus() {
@@ -310,7 +310,7 @@ public class SystemController {
         return ResponseEntity.ok(result);
     }
 
-    // ========== 資料庫備份 ==========
+    // ========== Database backup ==========
 
     @GetMapping("/backup/status")
     public ResponseEntity<Map<String, Object>> getBackupStatus() {
@@ -336,7 +336,7 @@ public class SystemController {
                 .orElse(ResponseEntity.badRequest().body(Map.of("error", "Backup not enabled")));
     }
 
-    // ========== JMS 測試 ==========
+    // ========== JMS Test ==========
 
     @PostMapping("/jms/test")
     public ResponseEntity<?> testJms(@RequestBody String message) {

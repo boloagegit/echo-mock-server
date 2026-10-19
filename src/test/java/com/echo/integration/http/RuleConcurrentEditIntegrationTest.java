@@ -13,7 +13,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 同時編輯同一條規則：用過時的版本存檔會被拒絕，不會蓋掉別人的修改（包含啟用／停用等快速操作）。 */
+/** Editing the same rule at the same time: saving with an outdated version will be rejected and will not overwrite other people's modifications (including quick operations such as enable/disable). */
 class RuleConcurrentEditIntegrationTest extends BaseIntegrationTest {
 
     @Test
@@ -33,7 +33,7 @@ class RuleConcurrentEditIntegrationTest extends BaseIntegrationTest {
         assertThat(stale.getBody()).containsEntry("error", "OPTIMISTIC_LOCK_CONFLICT");
         assertThat(get(rule.getId()).getDescription()).isEqualTo("changed by someone else");
 
-        // 重新載入最新版本後可以正常存檔
+        // Saving can work normally after reloading the latest version
         RuleDto latest = get(rule.getId());
         latest.setDescription("my change");
         assertThat(put(latest).getStatusCode()).isEqualTo(HttpStatus.OK);

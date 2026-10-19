@@ -21,7 +21,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
- * 自助註冊整合測試（啟用狀態）
+ * Self-service registration integration test (enabled status)
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -45,7 +45,7 @@ class SelfRegistrationIntegrationTest {
     @Test
     @DisplayName("自助註冊啟用時，未登入使用者可建立帳號並登入")
     void selfRegister_shouldCreateAccountAndAllowLogin() throws Exception {
-        // 1. 自助註冊
+        // 1. Self-service registration
         mockMvc.perform(post("/api/admin/builtin-users/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .accept(MediaType.APPLICATION_JSON)
@@ -55,10 +55,10 @@ class SelfRegistrationIntegrationTest {
                 .andExpect(jsonPath("$.username").value("selfuser"))
                 .andExpect(jsonPath("$.role").value("ROLE_USER"));
 
-        // 2. 驗證帳號已存在於資料庫
+        // 2. Verify that the account already exists in the database
         assertThat(builtinUserRepository.existsByUsername("selfuser")).isTrue();
 
-        // 3. 用新帳號登入
+        // 3. Log in with new account
         mockMvc.perform(post("/api/auth/login")
                         .param("username", "selfuser")
                         .param("password", "mypass123")
@@ -70,7 +70,7 @@ class SelfRegistrationIntegrationTest {
     @Test
     @DisplayName("自助註冊時帳號名稱重複應回傳 409")
     void selfRegister_shouldRejectDuplicateUsername() throws Exception {
-        // 先註冊一個帳號
+        // Register an account first
         mockMvc.perform(post("/api/admin/builtin-users/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .accept(MediaType.APPLICATION_JSON)
@@ -78,7 +78,7 @@ class SelfRegistrationIntegrationTest {
                                 Map.of("username", "dupuser", "password", "secret123"))))
                 .andExpect(status().isCreated());
 
-        // 再用同名註冊
+        // Register again with the same name
         mockMvc.perform(post("/api/admin/builtin-users/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .accept(MediaType.APPLICATION_JSON)

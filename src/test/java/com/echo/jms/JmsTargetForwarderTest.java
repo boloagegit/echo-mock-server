@@ -40,7 +40,7 @@ class JmsTargetForwarderTest {
 
     @Test
     void forward_shouldReturnError_whenConnectionFails() {
-        // 使用本機未監聽的 port 測試錯誤處理，避免測試依賴 DNS timeout。
+        // Use port, which is not monitored by this machine, to test error handling to avoid testing dependencies on DNS timeout.
         jmsProperties.getTarget().setServerUrl("tcp://127.0.0.1:19999");
         jmsProperties.getTarget().setQueue("TARGET.REQUEST");
         
@@ -93,12 +93,12 @@ class JmsTargetForwarderTest {
         String result = forwarder.forward("<test>body</test>", originalMessage);
         
         assertThat(result).contains("<error>");
-        // TIBCO jar 不存在時會拋出 IllegalStateException
+        // TIBCO jar will be thrown when IllegalStateException does not exist
     }
 
     @Test
     void cleanup_shouldNotThrow_whenNoConnection() {
-        // 沒有連線時 cleanup 應該安全執行
+        // cleanup should be executed safely when not connected
         forwarder.cleanup();
     }
 

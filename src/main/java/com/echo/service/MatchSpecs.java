@@ -14,20 +14,20 @@ import java.util.Set;
 import java.util.TreeSet;
 
 /**
- * 儲存規則時檢查並正規化結構化條件（{@code matchSpec}）。
+ * Check and normalize structured conditions ({@code matchSpec}) when storing rules.
  * <p>
- * 所有錯誤在儲存時回報（含 JSON 路徑），不會留到請求進來才變成「不符合」。能用舊版條件字串表達的條件
- * 會轉回三個舊欄位，{@code matchSpec} 只保存真正需要的進階條件，避免新舊欄位不一致。
+ * All errors are reported when saving (including the JSON path), and will not be left until the request comes in to become "unconformed". Conditions that can be expressed using legacy condition strings
+ * Three old fields will be transferred back. {@code matchSpec} only saves the truly required advanced conditions to avoid inconsistency between the old and new fields.
  */
 public final class MatchSpecs {
 
-    /** 條件 JSON 的長度上限（字元）。 */
+    /** Maximum length (in characters) of condition JSON. */
     public static final int MAX_SPEC_CHARS = 64 * 1024;
-    /** 組合節點（all／any／not）最多巢狀層數。 */
+    /** The combined node (all/any/not) has the maximum number of nested layers. */
     public static final int MAX_DEPTH = 16;
-    /** 條件樹節點總數上限。 */
+    /** The upper limit of the total number of conditional tree nodes. */
     public static final int MAX_NODES = 256;
-    /** {@code in} 清單最多項目數。 */
+    /** {@code in} The maximum number of items in the list. */
     public static final int MAX_IN_VALUES = 1000;
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -37,12 +37,12 @@ public final class MatchSpecs {
     }
 
     /**
-     * 正規化後的條件：{@code matchSpec} 與三個舊欄位只會有一邊有值（都沒有時為無條件規則）。
+     * Condition after normalization: {@code matchSpec} and the three old fields will only have a value on one side (when none of them are, it will be an unconditional rule).
      *
-     * @param matchSpec       規範化的條件 JSON；可用舊欄位表達時為 null
-     * @param bodyCondition   舊版 body 條件
-     * @param queryCondition  舊版 query 條件
-     * @param headerCondition 舊版 header 條件
+     * @param matchSpec       Normalized condition JSON; null when expressed using old fields
+     * @param bodyCondition   Old version body condition
+     * @param queryCondition  Old version query condition
+     * @param headerCondition Old version header condition
      */
     public record Normalized(String matchSpec, String bodyCondition, String queryCondition,
                              String headerCondition) {
@@ -53,11 +53,11 @@ public final class MatchSpecs {
     }
 
     /**
-     * 檢查並正規化條件。
+     * Check and normalize conditions.
      *
-     * @param spec           使用者提供的條件 JSON
-     * @param allowedSources 此協定可用的取值來源（見 {@code ProtocolDescriptor#matchSources()}）
-     * @throws InvalidMatchSpecException 條件不合法，訊息包含 JSON 路徑
+     * @param spec           User provided conditions JSON
+     * @param allowedSources Available value sources for this protocol (see {@code ProtocolDescriptor#matchSources()})
+     * @throws InvalidMatchSpecException The condition is illegal, the message contains the JSON path
      */
     public static Normalized normalize(JsonNode spec, Set<String> allowedSources) {
         if (spec == null || spec.isNull() || spec.isMissingNode()) {
@@ -68,7 +68,7 @@ public final class MatchSpecs {
         }
         MatchNode node = MatchSpecCodec.parse(spec);
         new Walker(allowedSources).walk(node, "$", 0);
-        // 運算子、來源、選項與期望值的完整檢查
+        // Complete check of operators, sources, options and expected values
         COMPILER.compile(node);
 
         Optional<LegacyConditions.Strings> legacy = LegacyConditions.toStrings(node);
@@ -80,7 +80,7 @@ public final class MatchSpecs {
         return new Normalized(MatchSpecCodec.toJson(node).toString(), null, null, null);
     }
 
-    /** 讀取已儲存的條件 JSON；格式錯誤時回傳 empty（只用於顯示，比對時另有保護）。 */
+    /** Read the stored condition JSON; return empty when the format is incorrect (only for display, and protected during comparison). */
     public static Optional<JsonNode> read(String stored) {
         if (stored == null || stored.isBlank()) {
             return Optional.empty();
@@ -92,7 +92,7 @@ public final class MatchSpecs {
         }
     }
 
-    /** 條件樹中的條件數（葉節點與舊版片段），供自動產生的描述使用。 */
+    /** Condition numbers (leaf nodes and legacy fragments) in the condition tree for use in automatically generated descriptions. */
     public static int conditionCount(String stored) {
         return read(stored).map(MatchSpecs::conditionCount).orElse(0);
     }
@@ -108,7 +108,7 @@ public final class MatchSpecs {
         }
     }
 
-    /** DTO 的條件 JSON 轉成儲存用字串；沒有條件時為 null。 */
+    /** The condition JSON of DTO is converted into a string for storage; when there is no condition, it is null. */
     public static String toStored(JsonNode spec) {
         return spec == null || spec.isNull() || spec.isMissingNode() ? null : spec.toString();
     }
@@ -126,7 +126,7 @@ public final class MatchSpecs {
         return 1;
     }
 
-    /** 檢查巢狀層數、節點數、來源與 {@code in} 清單長度。 */
+    /** Check nest level, node count, source and {@code in} manifest length. */
     private static final class Walker {
         private final Set<String> allowedSources;
         private int nodes;

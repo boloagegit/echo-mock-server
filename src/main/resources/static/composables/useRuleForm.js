@@ -1,33 +1,33 @@
 /**
- * useRuleForm - 規則表單 Composable
+ * useRuleForm - Rule form Composable
  *
- * 管理規則新增/編輯表單的所有狀態與邏輯，包含：
- * - 表單狀態與驗證
- * - SSE 事件編輯與預覽
- * - 條件解析
- * - 測試區（HTTP/JMS/SSE）
- * - 回應預覽與編輯
- * - 回應選擇器
- * - 表單輔助（標籤、Header）
- * - Modal 最大化狀態
- * - watchers 設定
+ * All states and logic of the management rule new/edit form, including:
+ * - Form status and validation
+ * - SSE event editing and preview
+ * - Conditional analysis
+ * - Test area (HTTP/JMS/SSE)
+ * - Response preview and editing
+ * - response selector
+ * - Form assistance (label, Header)
+ * - Modal maximized state
+ * - watchers settings
  *
- * @param {Object} deps - 依賴物件
- * @param {Function} deps.showToast - Toast 通知函式（來自 useToast）
- * @param {Function} deps.showConfirm - 確認對話框函式（來自 useToast）
- * @param {Function} deps.t - 翻譯函式（來自 useI18n）
- * @param {Function} deps.requireLogin - 登入檢查函式（來自 useAuth）
- * @param {Function} deps.login - 登入跳轉函式（來自 useAuth）
- * @param {Function} deps.loadRules - 載入規則函式（來自 useRules）
- * @param {import('vue').Ref} deps.rules - 規則列表（來自 useRules）
- * @param {import('vue').Ref} deps.rulePreviewCache - 規則預覽快取（來自 useRules）
- * @param {import('vue').Ref} deps.ruleDetailId - 詳情抽屜目前顯示的規則 ID（來自 useRules）
- * @param {Function} deps.loadRuleDetail - 重新載入規則詳情（來自 useRules）
- * @param {Function} deps.rulesMarkDirty - 標記規則資料需重新載入（來自 useRules）
- * @param {Function} deps.responsesMarkDirty - 標記回應資料需重新載入（來自 useResponses）
- * @param {import('vue').Ref} deps.responseSseEvents - 回應 SSE 事件（來自 useResponses）
- * @param {import('vue').Ref} deps.jmsEnabled - JMS 是否啟用（來自 app.js）
- * @returns {Object} 規則表單相關的狀態與方法
+ * @param {Object} deps - Dependent objects
+ * @param {Function} deps.showToast - Toast notification function (from useToast)
+ * @param {Function} deps.showConfirm - Confirm dialog function (from useToast)
+ * @param {Function} deps.t - Translation function (from useI18n)
+ * @param {Function} deps.requireLogin - Login check function (from useAuth)
+ * @param {Function} deps.login - Login jump function (from useAuth)
+ * @param {Function} deps.loadRules - Loading rule function (from useRules)
+ * @param {import('vue').Ref} deps.rules - Rule list (from useRules)
+ * @param {import('vue').Ref} deps.rulePreviewCache - Rule preview cache (from useRules)
+ * @param {import('vue').Ref} deps.ruleDetailId - The details drawer currently displays rule ID (from useRules)
+ * @param {Function} deps.loadRuleDetail - Reload rule details (from useRules)
+ * @param {Function} deps.rulesMarkDirty - Marking rule data needs to be reloaded (from useRules)
+ * @param {Function} deps.responsesMarkDirty - Flag response data needs to be reloaded (from useResponses)
+ * @param {import('vue').Ref} deps.responseSseEvents - Response to event SSE (from useResponses)
+ * @param {import('vue').Ref} deps.jmsEnabled - Is JMS enabled (from app.js)
+ * @returns {Object} Status and methods related to the rule form
  */
 const useRuleForm = (deps) => {
     const { ref, computed, watch } = Vue;
@@ -35,10 +35,10 @@ const useRuleForm = (deps) => {
             loadRules, rulePreviewCache, ruleDetailId, loadRuleDetail, rulesMarkDirty, openRuleOrder,
             responsesMarkDirty, responseSseEvents } = deps;
 
-    // --- 工具函式 ---
+    // --- Utility function ---
     const matchAll = (text, keywords) => keywords.every(kw => text.includes(kw));
 
-    // --- 表單狀態 ---
+    // --- Form status ---
     const showModal = ref(false);
     const editing = ref(null);
     const form = ref({ protocol: 'HTTP', action: 'MOCK', forwardTargetMode: 'ORIGINAL_HOST', httpTargetConnectionId: null, jmsTargetConnectionId: null, targetHost: '', matchKey: '', method: 'GET', status: 200, delayMs: 0, maxDelayMs: null, priority: 0, responseBody: '', condition: '', description: '', enabled: true, isProtected: false, tags: '', responseMode: 'new', responseId: null, faultType: 'NONE', scenarioName: '', requiredScenarioState: '', newScenarioState: '' });
@@ -58,12 +58,12 @@ const useRuleForm = (deps) => {
     const conditionsExpanded = ref(true);
     const formErrors = ref({});
 
-    // --- 進階條件（matchSpec）---
-    // simple：原本的條件列（存成三個舊欄位）；advanced：樹狀條件（存成 matchSpec），見 match-tree.js
+    // --- Advanced conditions (matchSpec) ---
+    // simple: original condition column (saved as three old fields); advanced: tree condition (saved as matchSpec), see match-tree.js
     const matchMode = ref('simple');
     const matchTree = ref(MatchTree.group('all', []));
     const matchError = ref('');
-    // 進階條件無法轉回條件列時，切回簡易模式前先在畫面上確認
+    // When advanced conditions cannot be transferred back to the condition column, confirm on the screen before switching back to simple mode.
     const matchSwitchPending = ref(false);
     const matchSources = computed(() => (form.value.protocol === 'JMS' ? ['body'] : ['body', 'query', 'header']));
     const hasMatchSpecObject = r => !!(r && r.matchSpec && typeof r.matchSpec === 'object');
@@ -75,9 +75,9 @@ const useRuleForm = (deps) => {
                 matchTree.value = MatchTree.fromSpec(r.matchSpec);
                 matchMode.value = 'advanced';
                 return;
-            } catch { /* 格式錯誤時以空的進階條件開啟，儲存時由後端回報 */ }
+            } catch { /* When the format is wrong, it is opened with empty advanced conditions and will be reported by the backend when saving. */ }
         }
-        // 條件列無法完整表示的舊版條件（例如沒有運算子）以進階模式的舊格式片段原樣顯示，儲存時不會遺失或改變
+        // Older conditions that cannot be fully expressed in the conditional column (for example, without operators) are displayed as they are in the old format fragment of advanced mode and will not be lost or changed when saved.
         if (r && MatchTree.toSimpleRows(r.bodyCondition, r.queryCondition, r.headerCondition) === null) {
             matchTree.value = MatchTree.fromLegacyStrings(r.bodyCondition, r.queryCondition, r.headerCondition);
             matchMode.value = 'advanced';
@@ -90,7 +90,7 @@ const useRuleForm = (deps) => {
         const join = type => conditions.value.filter(c => c.type === type && c.field && c.value).map(c => c.field + (c.operator || '=') + c.value).join(';') || null;
         return { bodyCondition: join('body'), queryCondition: join('query'), headerCondition: join('header') };
     };
-    /** 目前畫面上的進階條件；不是儲存時（例如切換到宣告式編輯）用寬鬆轉換，不讓條件消失。 */
+    /** The advanced conditions on the current screen; use loose transformation when not saving (such as switching to declarative editing) to prevent the conditions from disappearing. */
     const currentMatchSpec = ({ lenient = true } = {}) => (matchMode.value === 'advanced'
         ? MatchTree.toSpec(matchTree.value, lenient) : null);
     const setMatchMode = async mode => {
@@ -98,7 +98,7 @@ const useRuleForm = (deps) => {
         if (mode === 'advanced') {
             const strings = serializeSimpleConditions();
             let tree = MatchTree.fromLegacyStrings(strings.bodyCondition, strings.queryCondition, strings.headerCondition);
-            // 由後端切分，與比對時完全相同；失敗時用本地相同規則的結果
+            // Split by the backend, exactly the same as the comparison; when it fails, the result of the same local rule is used
             const response = await apiCall('/api/admin/rules/match/parse', {
                 method: 'POST', body: JSON.stringify({ protocol: form.value.protocol, ...strings })
             }, { silent: true });
@@ -120,7 +120,7 @@ const useRuleForm = (deps) => {
         matchMode.value = 'simple';
         matchError.value = '';
     };
-    /** 確認後切回簡易模式：進階條件清空（儲存時明確送出清除）。 */
+    /** Switch back to simple mode after confirmation: Advanced conditions are cleared (explicitly send clear when saving). */
     const confirmSimpleMatchMode = () => {
         conditions.value = [];
         matchTree.value = MatchTree.group('all', []);
@@ -129,7 +129,7 @@ const useRuleForm = (deps) => {
         matchError.value = '';
     };
     const cancelSimpleMatchMode = () => { matchSwitchPending.value = false; };
-    /** 套用宣告式文件轉回表單時的條件。 */
+    /** Apply conditions when declarative documents are converted back to forms. */
     const applyMatchDraft = (spec, draftConditions) => {
         if (spec && typeof spec === 'object') {
             resetMatchState({ matchSpec: spec });
@@ -139,7 +139,7 @@ const useRuleForm = (deps) => {
             conditions.value = draftConditions || [];
         }
     };
-    // 編輯時以與儲存相同的規則即時檢查（不寫入資料），錯誤訊息帶 JSON 路徑
+    // When editing, check immediately with the same rules as saving (no data is written), error message with JSON path
     let matchValidationSeq = 0;
     const validateMatchNow = async () => {
         if (matchMode.value !== 'advanced' || !showModal.value) { matchError.value = ''; return; }
@@ -154,19 +154,19 @@ const useRuleForm = (deps) => {
         try {
             const result = await response.json();
             if (seq === matchValidationSeq) matchError.value = result.valid === false ? (result.error || '') : '';
-        } catch { /* 檢查失敗時不顯示錯誤，儲存時仍由後端把關 */ }
+        } catch { /* No error will be displayed when the check fails, and the backend will still check it when saving. */ }
     };
     const validateMatchDebounced = debounce(validateMatchNow, 400);
 
-    // --- Modal 最大化 ---
+    // --- Modal Maximize ---
     const ruleModalMaximized = ref(false);
     const responseModalMaximized = ref(false);
 
-    // --- SSE 事件 ---
+    // --- SSE event ---
     const sseEvents = ref([]);
     const addSseEvent = () => { sseEvents.value.push({ event: '', data: '', id: '', delayMs: 0, type: 'normal' }); };
     const removeSseEvent = (index) => { if (sseEvents.value.length > 1) { sseEvents.value.splice(index, 1); } };
-    // --- 驗證 ---
+    // --- Verification ---
     const validateForm = () => {
         const errors = {};
         const faulting = form.value.faultType && form.value.faultType !== 'NONE';
@@ -228,7 +228,7 @@ const useRuleForm = (deps) => {
         return Object.keys(errors).length === 0;
     };
 
-    // --- Catch-all 偵測 ---
+    // --- Catch-all detection ---
     const showCatchAllWarning = ref(false);
     const catchAllConfirmed = ref(false);
     const isCatchAll = computed(() => {
@@ -278,7 +278,7 @@ const useRuleForm = (deps) => {
             return jmsTargetConnections.value.some(target => target.enabled && target.defaultConnection);
         }
         if (form.value.sseEnabled && form.value.protocol === 'HTTP') {
-            // 與伺服器相同：每個事件都要有資料，延遲是 0–600000 的整數毫秒
+            // Same as server: each event must have data, delay is an integer millisecond from 0–600000
             if (!sseEvents.value.length || !sseEvents.value.every(e => e.data
                 && Number.isInteger(e.delayMs) && e.delayMs >= 0 && e.delayMs <= 600000)) return false;
             if (form.value.responseMode === 'existing' && !form.value.responseId) return false;
@@ -293,7 +293,7 @@ const useRuleForm = (deps) => {
         return true;
     });
 
-    // --- 回應選擇器 ---
+    // --- response selector ---
     const responsePickerSearch = ref('');
     const responsePickerAppliedSearch = ref('');
     const responseDropdownOpen = ref(false);
@@ -386,7 +386,7 @@ const useRuleForm = (deps) => {
         sseEvents.value = [{ event: '', data: '', id: '', delayMs: 0, type: 'normal' }];
     };
 
-    // --- 回應預覽 ---
+    // --- Response preview ---
     const previewResponseId = ref(null);
     const previewResponseBody = ref('');
     const previewResponseLoading = ref(false);
@@ -406,7 +406,7 @@ const useRuleForm = (deps) => {
         previewResponseUsageCount.value = 0;
     };
 
-    // --- 表單輔助 ---
+    // --- Form Assistant ---
     const newTag = ref({ key: '', value: '' });
     const addTag = () => { if (!newTag.value.key) return; const tags = parseTags(form.value.tags); tags[newTag.value.key] = newTag.value.value; form.value.tags = JSON.stringify(tags); newTag.value = { key: '', value: '' } };
     const removeTag = k => { const tags = parseTags(form.value.tags); delete tags[k]; form.value.tags = Object.keys(tags).length ? JSON.stringify(tags) : '' };
@@ -414,7 +414,7 @@ const useRuleForm = (deps) => {
     const addHeader = () => { if (!newHeader.value.key) return; const h = parseHeaders(form.value.responseHeaders); h[newHeader.value.key] = newHeader.value.value; form.value.responseHeaders = JSON.stringify(h); newHeader.value = { key: '', value: '' } };
     const removeHeader = k => { const h = parseHeaders(form.value.responseHeaders); delete h[k]; form.value.responseHeaders = Object.keys(h).length ? JSON.stringify(h) : '' };
 
-    // --- 測試區 ---
+    // --- Test area ---
     const testExpanded = ref(false);
     const testParams = ref({ query: '', headersStr: '', body: '', timeout: 30 });
     const testResult = ref(null);
@@ -422,16 +422,16 @@ const useRuleForm = (deps) => {
     const testSseEvents = ref([]);
     const testSseAbort = ref(null);
 
-    /** 依據目前條件自動產生測試資料 */
+    /** Automatically generate test data based on current conditions */
     const generateTestData = () => {
         const bodyConds = conditions.value.filter(c => c.type === 'body' && c.field && c.value);
         const queryConds = conditions.value.filter(c => c.type === 'query' && c.field && c.value);
         const headerConds = conditions.value.filter(c => c.type === 'header' && c.field && c.value);
 
-        // 判斷 body 格式：條件欄位是 XPath（/ 開頭）時產生 XML
+        // Determine body format: XML is generated when the condition field is XPath (starting with /)
         const isXml = bodyConds.some(c => c.field.startsWith('/'));
 
-        // 產生 Body
+        // Generate Body
         if (bodyConds.length) {
             const resolveValue = (c) => {
                 if (c.operator === '=' || c.operator === '*=') { return c.value; }
@@ -441,11 +441,11 @@ const useRuleForm = (deps) => {
             };
 
             if (isXml) {
-                // 產生 XML
+                // Generate XML
                 const elements = {};
                 for (const c of bodyConds) {
                     const val = resolveValue(c);
-                    // 取最後一段作為元素名（//order/type → type, type → type）
+                    // Take the last paragraph as the element name (//order/type → type, type → type)
                     const parts = c.field.split('/').filter(Boolean);
                     const tag = parts[parts.length - 1] || c.field;
                     elements[tag] = val;
@@ -457,7 +457,7 @@ const useRuleForm = (deps) => {
                 xml += '</root>';
                 testParams.value.body = xml;
             } else {
-                // 產生 JSON
+                // Generate JSON
                 const obj = {};
                 for (const c of bodyConds) {
                     const val = resolveValue(c);
@@ -489,21 +489,21 @@ const useRuleForm = (deps) => {
             }
         }
 
-        // 產生 Query
+        // Generate Query
         if (queryConds.length) {
             testParams.value.query = queryConds
                 .map(c => c.field + '=' + ((c.operator === '=' || c.operator === '*=') ? c.value : 'test'))
                 .join('&');
         }
 
-        // 產生 Headers
+        // Generate Headers
         if (headerConds.length) {
             testParams.value.headersStr = headerConds
                 .map(c => c.field + ':' + ((c.operator === '=' || c.operator === '*=') ? c.value : 'test'))
                 .join(', ');
         }
 
-        // 展開測試區
+        // Expand test area
         if (!testExpanded.value) {
             testExpanded.value = true;
         }
@@ -612,7 +612,7 @@ const useRuleForm = (deps) => {
         }
     };
 
-    // --- 表單操作 ---
+    // --- Form operations ---
     const setProtocol = p => {
         form.value.protocol = p;
         form.value.matchKey = p === 'JMS' ? '*' : '';
@@ -641,7 +641,7 @@ const useRuleForm = (deps) => {
         responseDropdownOpen.value = false;
     };
 
-    /** 舊版條件字串轉成條件列，拆解規則與後端相同（見 MatchTree.parseLegacyCondition）；無法完整表示時不加入，由 resetMatchState 改用進階模式。 */
+    /** The old version of conditional strings is converted into conditional columns, and the disassembly rules are the same as the backend (see MatchTree.parseLegacyCondition); it is not added when it cannot be fully expressed, and resetMatchState uses advanced mode instead. */
     const parseConditions = r => {
         const rows = MatchTree.toSimpleRows(r.bodyCondition, r.queryCondition, r.headerCondition);
         if (rows) conditions.value.push(...rows);
@@ -720,7 +720,7 @@ const useRuleForm = (deps) => {
         catchAllConfirmed.value = false;
         showCatchAllWarning.value = false;
         resetResponsePreview();
-        // 一律讀取最新內容與版本：列表上的資料可能已過時，用舊內容存檔會蓋掉別人的修改
+        // Always read the latest content and version: the information on the list may be out of date, and saving old content will overwrite other people's modifications.
         const res = await apiCall(`/api/admin/rules/${r.id}`, {}, { silent: true });
         if (res && res.ok) { r = await res.json(); }
         form.value = { ...r, action: r.action || 'MOCK', forwardTargetMode: r.forwardTargetMode || (r.protocol === 'JMS' ? 'DEFAULT_CONNECTION' : 'ORIGINAL_HOST'), responseMode: r.responseId ? 'existing' : 'new' };
@@ -769,8 +769,8 @@ const useRuleForm = (deps) => {
     const saving = ref(false);
 
     const saveRule = async (andClose = false) => {
-        // SSE 模式：序列化表格資料到 responseBody。使用現有回應時，事件與規則一起送出，
-        // 由後端在同一個交易內改寫該回應（規則存檔失敗時回應也不會被改到）。
+        // SSE mode: Serialize table data to responseBody. When using existing responses, the event is sent along with the rule,
+        // The response is overwritten by the backend within the same transaction (the response will not be modified if the rule save fails).
         let existingResponseBody = null;
         if (form.value.action !== 'FORWARD' && form.value.sseEnabled && form.value.protocol === 'HTTP') {
             const serialized = serializeSseEvents(sseEvents.value);
@@ -804,7 +804,7 @@ const useRuleForm = (deps) => {
         form.value.bodyCondition = simple.bodyCondition;
         form.value.queryCondition = simple.queryCondition;
         form.value.headerCondition = simple.headerCondition;
-        // 使用現有 Response 時：正在編輯的回應內容與規則一起送出，在同一個交易內儲存
+        // When using the existing Response: the response content being edited is sent together with the rules and stored in the same transaction
         const faulting = form.value.faultType && form.value.faultType !== 'NONE';
         const previewEdited = !faulting && form.value.action !== 'FORWARD' && form.value.responseMode === 'existing'
             && form.value.responseId && previewEditing.value && previewEditBody.value !== previewResponseBody.value;
@@ -814,7 +814,7 @@ const useRuleForm = (deps) => {
         if (matchSpec) {
             payload.matchSpec = matchSpec;
         } else {
-            // 規則原本使用進階條件、而現在沒有任何條件時要明確清除；未送 matchSpec 時後端會保留原本的進階條件
+            // If the rule originally used advanced conditions, but now there are no conditions, it must be cleared clearly; when matchSpec is not sent, the backend will retain the original advanced conditions.
             const hadAdvanced = hasMatchSpecObject(editing.value);
             const noLegacy = !simple.bodyCondition && !simple.queryCondition && !simple.headerCondition;
             payload.matchSpec = hadAdvanced && noLegacy ? { all: [] } : null;
@@ -861,7 +861,7 @@ const useRuleForm = (deps) => {
                     if (previewEdited) { previewResponseBody.value = previewEditBody.value; previewEditing.value = false; }
                     responsesMarkDirty();
                 }
-                // 有判斷順序的問題時只顯示一則提醒（已包含「已儲存」），否則顯示一般的成功訊息
+                // Only display a reminder (including "Saved") when there is a problem with determining the order, otherwise display a general success message
                 const savedMessage = editing.value ? t('toast.ruleSaveSuccess') : t('toast.ruleCreateSuccess');
                 neverReachedWarning(saved).then(warning => {
                     if (!warning) { showToast(savedMessage, 'success'); return; }
@@ -874,7 +874,7 @@ const useRuleForm = (deps) => {
                 if (andClose) { closeModal(); loadRules(true); }
                 else {
                     editing.value = saved;
-                    // 後端會把只用到舊語法的進階條件轉回條件列，畫面跟著儲存結果
+                    // The backend will convert advanced conditions that only use the old syntax back to the condition column, and the screen will store the results accordingly.
                     form.value.matchSpec = saved.matchSpec ?? null;
                     form.value.advancedMatch = saved.advancedMatch;
                     conditions.value = [];
@@ -892,14 +892,14 @@ const useRuleForm = (deps) => {
             else if (r && (r.status === 401 || r.status === 403)) { login(); }
         } catch (e) { showToast(t('toast.ruleSaveFailed'), 'error'); }
         saving.value = false;
-        // 編輯期間規則被別人改過：表單保持原樣，由使用者決定載入最新版本或保留自己的修改
+        // The rules were changed by others during editing: the form remains as it is, and it is up to the user to load the latest version or keep their own changes.
         if (saveConflict) { return { conflict: saveConflict }; }
         return savedSuccessfully;
     };
 
     /**
-     * 儲存後檢查判斷順序：這條規則永遠輪不到，或它讓其他規則永遠輪不到時，回傳要顯示的提醒（{title, detail, ruleId}）；
-     * 沒有問題或檢查失敗時回傳 null（只是提醒，不影響儲存）。
+     * After saving, check evaluation order: return a warning ({title, detail, ruleId}) if this rule is unreachable or makes other rules unreachable;
+     * null is returned when there is no problem or the check fails (it is just a reminder and does not affect storage).
      */
     const neverReachedWarning = async saved => {
         try {
@@ -927,7 +927,7 @@ const useRuleForm = (deps) => {
         }
     };
 
-    // --- 回應預覽編輯 ---
+    // --- Response preview edit ---
     const togglePreviewEditing = async () => {
         if (!previewEditing.value) {
             const rid = form.value.responseId;
@@ -1067,7 +1067,7 @@ const useRuleForm = (deps) => {
         });
     };
 
-    // --- 回應選擇抽屜關閉 ---
+    // --- Response to select drawer close ---
     const closeResponseDropdown = e => {
         if (!responseDropdownOpen.value) return;
         if (!e.target.closest('.response-picker-drawer, .response-picker-change, .response-picker-empty-launch')) {
@@ -1076,48 +1076,48 @@ const useRuleForm = (deps) => {
     };
 
     return {
-        // 表單狀態
+        // Form status
         showModal, editing, form, conditions, conditionsExpanded, formErrors, saving,
-        // 進階條件
+        // Advanced conditions
         matchMode, matchTree, matchError, matchSwitchPending, matchSources,
         setMatchMode, confirmSimpleMatchMode, cancelSimpleMatchMode, currentMatchSpec, applyMatchDraft,
         httpTargetConnections, loadHttpTargetConnections,
         jmsTargetConnections, loadJmsTargetConnections,
-        // 驗證
+        // Verify
         canSave, validateForm,
-        // Catch-all 偵測
+        // Catch-all detection
         showCatchAllWarning, catchAllConfirmed,
-        // Body condition 警告
+        // Body condition Warning
         showBodyConditionWarning,
-        // SSE 事件
+        // SSE event
         sseEvents, addSseEvent, removeSseEvent,
-        // 表單操作
+        // Form operations
         setProtocol, resetForm, openCreate, copyRule, createFromLog, openEdit, closeModal,
         saveRule, parseConditions, onResponseModeChange,
-        // 測試區
+        // Test area
         testExpanded, testParams, testResult, testLoading,
         testSseEvents, testSseMode, runTest, stopSseTest, generateTestData,
-        // 回應預覽
+        // Response preview
         previewResponseId, previewResponseBody, previewResponseLoading, previewResponseLoadFailed,
         previewEditing, previewEditBody, previewResponseUsageCount,
         previewSaving, togglePreviewEditing, savePreviewResponse,
-        // 回應選擇器
+        // Response selector
         responsePickerSearch, responseDropdownOpen, filteredResponsePicker,
         responsePickerSseOnly, responsePickerSummary,
         responsePickerPage, responsePickerTotalElements, responsePickerTotalPages,
         responsePickerLoading, responsePickerError,
         openResponsePickerDrawer, submitResponsePickerSearch,
         setResponsePickerSseOnly, changeResponsePickerPage, selectResponseOption, clearResponseSelection,
-        // 表單輔助
+        // Form assistance
         newTag, addTag, removeTag, newHeader, addHeader, removeHeader,
-        // SSE 回應預覽
-        // Modal 最大化
+        // SSE response preview
+        // Modal Maximize
         ruleModalMaximized, responseModalMaximized,
-        // 格式切換
+        // Format switching
 
         // watchers
         setupFormWatchers,
-        // 回應選擇抽屜關閉
+        // Response to select drawer close
         closeResponseDropdown
     };
 };

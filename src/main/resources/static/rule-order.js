@@ -1,21 +1,21 @@
 /**
- * rule-order.js - 判斷順序很長時（同一個路徑有很多規則）要顯示哪些項目。
+ * rule-order.js - Determine which items to display when the sequence is very long (the same path has many rules).
  *
- * 純函式、不依賴 Vue，可在 Node 測試中直接載入。
+ * Pure function, does not depend on Vue, can be loaded directly in Node test.
  */
 const RuleOrder = (() => {
-    /** 項目不超過這個數量時全部顯示。 */
+    /** All items will be displayed if they do not exceed this number. */
     const SHOW_ALL_UP_TO = 25;
-    /** 超過時開頭顯示的數量。 */
+    /** The number shown at the beginning when exceeded. */
     const HEAD = 15;
 
     /**
-     * 回傳要顯示的項目，被省略的連續項目以 {gap: 數量} 代替。
-     * 一定顯示：開頭幾項、{@code keepIds} 中的項目（目前這條規則、擋住它的規則、預設回應）與目前這條規則前後各一項。
+     * Return the items to be displayed. Omitted consecutive items are replaced by {gap: quantity}.
+     * Must display: the first few items, the items in {@code keepIds} (the current rule, the rules blocking it, the default response) and one item before and after the current rule.
      *
-     * @param entries 依檢查順序排列的項目（有 id）
-     * @param keepIds 一定要顯示的 id
-     * @param selfId  目前這條規則的 id
+     * @param entries Items arranged in order of inspection (including id)
+     * @param keepIds id must be displayed
+     * @param selfId  The current rule is id
      */
     const visibleEntries = (entries, keepIds = [], selfId = null) => {
         if (entries.length <= SHOW_ALL_UP_TO) return entries.slice();

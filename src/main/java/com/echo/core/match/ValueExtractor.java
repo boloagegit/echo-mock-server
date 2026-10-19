@@ -1,6 +1,6 @@
 package com.echo.core.match;
 
-/** 從請求取出條件要判斷的值。實作必須是執行緒安全且無狀態的。 */
+/** Get the value of the condition to be judged from the request. The implementation must be thread-safe and stateless. */
 @FunctionalInterface
 public interface ValueExtractor {
 

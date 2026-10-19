@@ -12,7 +12,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 審計日誌整合測試
+ * Audit log integration test
  */
 class AuditLogIntegrationTest extends BaseIntegrationTest {
 
@@ -55,13 +55,13 @@ class AuditLogIntegrationTest extends BaseIntegrationTest {
     void updateRule_generatesUpdateAudit() {
         RuleDto rule = createHttpRule("/api/audit-update", "GET", "{\"ok\":true}");
 
-        // 更新 description（使用 exchange + JSON Content-Type）
+        // Update description (use exchange + JSON Content-Type)
         rule.setDescription("已更新的描述");
         ResponseEntity<RuleDto> updateResp = updateRule(rule.getId(), rule);
         assertThat(updateResp.getStatusCode()).isEqualTo(HttpStatus.OK);
 
         List<Map<String, Object>> audits = getRuleAuditLogs(rule.getId());
-        // 應有 CREATE + UPDATE
+        // There should be CREATE + UPDATE
         assertThat(audits.size()).isGreaterThanOrEqualTo(2);
         Map<String, Object> updateAudit = audits.stream()
                 .filter(a -> "UPDATE".equals(a.get("action")))
@@ -76,12 +76,12 @@ class AuditLogIntegrationTest extends BaseIntegrationTest {
         RuleDto rule = createHttpRule("/api/audit-delete", "GET", "{\"ok\":true}");
         String ruleId = rule.getId();
 
-        // 使用 exchange 確保 DELETE 帶認證
+        // Use exchange to ensure DELETE with authentication
         ResponseEntity<Void> delResp = adminClient().exchange(
                 "/api/admin/rules/" + ruleId, HttpMethod.DELETE, null, Void.class);
         assertThat(delResp.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
 
-        // 刪除後用全域審計查詢
+        // Use global audit query after deletion
         List<Map<String, Object>> allAudits = getAllAuditLogs(null);
         Map<String, Object> deleteAudit = allAudits.stream()
                 .filter(a -> ruleId.equals(a.get("ruleId")) && "DELETE".equals(a.get("action")))

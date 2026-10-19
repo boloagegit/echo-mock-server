@@ -16,7 +16,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** 大量 ID 不組成單一 IN 清單（H2 會 O(n²)，SQL Server／Oracle 有參數上限），結果必須與原本相同。 */
+/** A large number of ID do not form a single IN list (H2 will O(n²), SQL Server/Oracle have parameter upper limits), and the result must be the same as the original. */
 class RuleServiceValidResponseIdsTest {
 
     private final ResponseRepository responses = mock(ResponseRepository.class);

@@ -95,7 +95,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .build();
         HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
         RestTemplate restTemplate = new RestTemplate(factory);
-        // 不要把 4xx/5xx 當作異常，讓 proxy 可以正確回傳原始狀態碼
+        // Do not treat 4xx/5xx as exceptions, let proxy correctly return the original status code
         restTemplate.setErrorHandler(new org.springframework.web.client.DefaultResponseErrorHandler() {
             @Override
             public boolean hasError(org.springframework.http.client.ClientHttpResponse response) {

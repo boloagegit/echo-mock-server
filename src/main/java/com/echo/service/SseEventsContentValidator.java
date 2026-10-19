@@ -5,8 +5,8 @@ import org.springframework.stereotype.Component;
 
 
 /**
- * SSE 事件回應內容驗證器。
- * 驗證 body 為合法的 SSE 事件 JSON 陣列。
+ * SSE event response content validator.
+ * Verifying body is a legitimate SSE event JSON array.
  */
 @Component
 public class SseEventsContentValidator implements ResponseContentValidator {

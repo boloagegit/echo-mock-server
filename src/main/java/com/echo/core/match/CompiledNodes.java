@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/** {@link CompiledMatcher} 的節點實作。 */
+/** Node implementation of {@link CompiledMatcher}. */
 final class CompiledNodes {
 
     private static final int MAX_ACTUAL_VALUES_SHOWN = 5;
@@ -143,8 +143,8 @@ final class CompiledNodes {
         private final BodyRequirements bodyRequirements;
 
         /**
-         * @param spec      編譯前的條件，放進說明供畫面顯示
-         * @param readsBody 取值器不是內建 body 取值器時，來源是否會讀 body（無法判斷需求時視為需要完整解析）
+         * @param spec      Conditions before compilation, put in description for display on the screen
+         * @param readsBody When the valuer is not the built-in body valuer, will the source read body (if the requirement cannot be determined, it will be considered as requiring complete analysis)
          */
         Leaf(ValueExtractor extractor, CompiledPredicate predicate, MatchNode.Quantifier quantifier,
              boolean resultWhenMissing, int maxFieldValueLength, String description, MatchNode.Leaf spec,
@@ -171,7 +171,7 @@ final class CompiledNodes {
             return readsBody ? BodyRequirements.FULL : BodyRequirements.NONE;
         }
 
-        /** 與 {@link #decide} 相同的規則，只是值由串流掃描逐一提供。 */
+        /** Same rules as {@link #decide}, except the values are provided one by one by the stream scan. */
         private final class LeafStreamCheck implements BodyRequirements.StreamCheck {
 
             private final XmlPath path;
@@ -275,7 +275,7 @@ final class CompiledNodes {
                     return false;
                 }
             }
-            // ANY：沒有任何值符合；ALL：所有可用值都符合（但至少要有一個可用值）。
+            // ANY: No value matches; ALL: All available values match (but there must be at least one available value).
             return quantifier == MatchNode.Quantifier.ALL && anyUsable;
         }
 

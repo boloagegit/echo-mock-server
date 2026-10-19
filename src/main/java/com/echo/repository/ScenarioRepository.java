@@ -14,7 +14,7 @@ public interface ScenarioRepository extends JpaRepository<Scenario, Long> {
 
     void deleteByScenarioName(String scenarioName);
 
-    /** CAS 更新：只有當前狀態符合預期時才更新 */
+    /** CAS Update: Only update if the current status is as expected */
     @Modifying
     @Query("UPDATE Scenario s SET s.currentState = :newState, s.updatedAt = CURRENT_TIMESTAMP, s.version = s.version + 1 " +
            "WHERE s.scenarioName = :name AND s.currentState = :expectedState")

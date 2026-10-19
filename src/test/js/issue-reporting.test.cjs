@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-// utils.js 的共用小工具；只取需要的函式，不覆蓋測試替身（例如 apiCall）。
+// Shared gadget for utils.js; only takes the required functions and does not cover test doubles (such as apiCall).
 const utilsHelper = name => {
   const holder = { Vue: { ref: v => ({ value: v }), computed: fn => ({ get value() { return fn(); } }), watch() {}, reactive: v => v } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../main/resources/static/utils.js'), 'utf8') + '\nthis.__helper = ' + name + ';', holder);

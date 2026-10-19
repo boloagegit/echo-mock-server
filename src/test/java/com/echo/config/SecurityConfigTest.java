@@ -98,7 +98,7 @@ class SecurityConfigTest {
     void webSecurityCustomizer_shouldIgnoreMockPath() {
         var customizer = config.webSecurityCustomizer();
         assertThat(customizer).isNotNull();
-        // WebSecurityCustomizer 會讓 /mock/** 完全繞過 Security Filter Chain
+        // WebSecurityCustomizer will cause /mock/** to completely bypass Security Filter Chain
     }
 
     @Test

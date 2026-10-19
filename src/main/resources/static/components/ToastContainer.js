@@ -1,7 +1,7 @@
 /**
- * ToastContainer - Toast 通知容器
+ * ToastContainer - Toast notification container
  *
- * 顯示操作成功/失敗的 Toast 訊息。
+ * Display the Toast message of operation success/failure.
  */
 const ToastContainer = {
   props: {

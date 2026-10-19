@@ -1,7 +1,7 @@
 /**
- * ConfirmModal - 通用確認對話框
+ * ConfirmModal - Generic confirmation dialog
  *
- * 保留一般、危險與輸入確認三種流程，集中處理焦點、鍵盤及驗證回饋。
+ * Keep the three processes of general, danger and input confirmation, and focus on processing focus, keyboard and verification feedback.
  */
 const ConfirmModal = {
   props: {

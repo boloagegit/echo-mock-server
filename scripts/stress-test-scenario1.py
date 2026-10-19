@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-情境一壓力測試：最複雜的 HTTP 匹配路徑
+Scenario 1 stress test: the most complex HTTP matching path
 
-用法：python3 scripts/stress-test-scenario1.py [BASE_URL]
+Usage: python3 scripts/stress-test-scenario1.py [BASE_URL]
 """
 
 import json
@@ -63,7 +63,7 @@ print(f"目標：{BASE_URL}")
 print("=========================================")
 print()
 
-# --- 建立 6 條規則 ---
+# --- Create 6 rules ---
 
 rules = [
     {
@@ -151,7 +151,7 @@ for i, rule in enumerate(rules, 1):
 
 target_id = created_ids[4]
 
-# --- 清除舊日誌 ---
+# --- Clear old logs ---
 api("DELETE", "/api/admin/logs/all")
 
 print()
@@ -195,7 +195,7 @@ if resp_headers.get("X-Trace-Id"):
 if resp_headers.get("X-Matched"):
     print(f"  X-Matched:  {resp_headers['X-Matched']}")
 
-# --- 等日誌寫入（database 模式每 10 秒 flush）---
+# --- Waiting for log writing (database mode every 10 seconds flush) ---
 print()
 print("等待日誌寫入 (最多 12 秒)...")
 for attempt in range(12):
@@ -210,7 +210,7 @@ for attempt in range(12):
 else:
     print("\n  超時，嘗試直接查詢...")
 
-# --- 查詢請求日誌 ---
+# --- Query request log ---
 print()
 print("=========================================")
 print("  查詢匹配時間")
@@ -253,7 +253,7 @@ else:
 print()
 print("=========================================")
 
-# --- 清理 ---
+# --- Cleanup ---
 print()
 print("清理測試規則...")
 api("DELETE", "/api/admin/rules/all")

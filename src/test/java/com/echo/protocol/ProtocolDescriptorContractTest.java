@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/** 每個協定的描述都必須與其 entity、快取設定一致；新增協定時這裡會抓到欄位或快取名稱打錯。 */
+/** The description of each protocol must be consistent with its entity and cache settings; when adding a protocol, a field will be captured here or the cache name will be incorrectly typed. */
 class ProtocolDescriptorContractTest {
 
     static Stream<ProtocolDescriptor> descriptors() {
@@ -77,7 +77,7 @@ class ProtocolDescriptorContractTest {
             try {
                 return Optional.of(c.getDeclaredField(name));
             } catch (NoSuchFieldException ignored) {
-                // 往父類別找
+                // Search the superclass hierarchy.
             }
         }
         return Optional.empty();

@@ -1,8 +1,8 @@
 /**
- * RulesPage - 模擬規則頁面
+ * RulesPage - Simulation Rules Page
  *
- * 列表／分組兩種檢視共用 RuleTable；點選一列在右側抽屜（RuleDetail）顯示詳情，
- * ↑↓ 可在目前可見的規則間切換。篩選一律使用可清除的切換群組，搜尋邊打邊篩。
+ * List/group views share RuleTable; click a column to display details in the right drawer (RuleDetail).
+ * ↑↓ switches between currently visible rules. Always use clearable switching groups for filtering, and search and filter at the same time.
  */
 const RulesPage = {
   inject: ['t'],
@@ -62,7 +62,7 @@ const RulesPage = {
     return { orderIssues: { count: 0, issues: {} } };
   },
   watch: {
-    // 規則清單重新載入完成時（含新增、修改、刪除後）一併更新輪不到的規則
+    // Refresh unreachable-rule indicators whenever the rule list reloads, including after additions, edits, and deletions.
     'loading.rules'(busy) { if (!busy) { this.loadOrderIssues(); } }
   },
   mounted() {
@@ -163,7 +163,7 @@ const RulesPage = {
       try {
         const r = await apiCall('/api/admin/rules/order-issues', {}, { silent: true });
         if (r && r.ok) { this.orderIssues = await r.json(); }
-      } catch { /* 只是提示，載入失敗時不顯示 */ }
+      } catch { /* Just a prompt, not displayed when loading fails. */ }
     },
     setFilter(key, value) {
       this.$emit('update:ruleFilter', { ...this.ruleFilter, [key]: value });

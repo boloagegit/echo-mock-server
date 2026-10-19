@@ -1,8 +1,8 @@
 /**
- * ui-boot.js - 首次繪製前套用使用者偏好
+ * ui-boot.js - Apply user preferences before first drawing
  *
- * 在 <head> 同步執行：主題與密度在 Vue 掛載前就套用，重新整理時不會先閃過預設樣式。
- * 偏好值仍由 useTheme / setDensity 管理，這裡只讀取。
+ * Synchronous execution in <head>: The theme and density are applied before Vue is mounted, and the default style will not be flashed first when reorganizing.
+ * The preference value is still managed by useTheme / setDensity and is only read here.
  */
 (function () {
     var root = document.documentElement;

@@ -6,20 +6,20 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * IBM MQ ConnectionFactory Provider（空殼）。
+ * IBM MQ ConnectionFactory provider stub.
  * <p>
- * 需要外部依賴：com.ibm.mq:com.ibm.mq.allclient
+ * Requires external dependencies: com.ibm.mq:com.ibm.mq.allclient
  * Maven:
  * <pre>
  *   implementation 'com.ibm.mq:com.ibm.mq.allclient:9.3.+'
  * </pre>
- * 或手動放 jar 到 libs/ 並用反射載入。
+ * Alternatively, place the JAR in libs/ and load it through reflection.
  * <p>
- * 建立 MQConnectionFactory 時需設定：
+ * When creating MQConnectionFactory, you need to set:
  * - hostName / port / channel / queueManager
  * - transportType = WMQConstants.WMQ_CM_CLIENT
  * <p>
- * TODO: 待取得 IBM MQ client library 後實作
+ * TODO: To be implemented after obtaining IBM MQ client library
  */
 @Component
 @Slf4j
@@ -32,7 +32,7 @@ public class IbmMqFactoryProvider implements JmsTargetFactoryProvider {
 
     @Override
     public ConnectionFactory create(JmsProperties.Target target) throws Exception {
-        // TODO: 實作 IBM MQ ConnectionFactory 建立
+        // TODO: Implement IBM MQ ConnectionFactory creation.
         //   Class<?> factoryClass = Class.forName("com.ibm.mq.jms.MQConnectionFactory");
         //   Object factory = factoryClass.getDeclaredConstructor().newInstance();
         //   factoryClass.getMethod("setHostName", String.class).invoke(factory, host);

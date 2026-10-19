@@ -19,7 +19,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 回應管理整合測試
+ * Response to management integration test
  */
 @TestPropertySource(properties = "echo.features.bulk-import-export-enabled=true")
 class ResponseManagementIntegrationTest extends BaseIntegrationTest {
@@ -107,7 +107,7 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
         assertThat(verify.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
-    // ========== 9.3 Response 列表與搜尋 ==========
+    // ========== 9.3 Response List and Search ==========
 
     @Test
     @DisplayName("列表 Response → 回傳全部")
@@ -144,7 +144,7 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
         assertThat(response.getBody()).allMatch(r -> r.getDescription().contains("訂單"));
     }
 
-    // ========== 9.4 Response 摘要（含使用數量） ==========
+    // ========== 9.4 Response Summary (including usage quantity) ==========
 
     @Test
     @DisplayName("Response 摘要 → 回傳 id、description、bodySize、usageCount")
@@ -268,7 +268,7 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
                 .doesNotContain(sseId);
     }
 
-    // ========== 9.5 Response 關聯規則查詢 ==========
+    // ========== 9.5 Response Association Rule Query ==========
 
     @Test
     @DisplayName("查詢 Response 關聯規則 → 回傳 HTTP + JMS 規則")
@@ -305,7 +305,7 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
                 && "LINKED.Q".equals(r.getMatchKey()));
     }
 
-    // ========== 9.6 刪除 Response 連帶刪除關聯規則 ==========
+    // ========== 9.6 Delete Response and delete the association rules ==========
 
     @Test
     @DisplayName("刪除 Response → 關聯規則也被刪除")
@@ -349,7 +349,7 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
         assertThat(jmsVerify.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
-    // ========== 9.7 Response 批次刪除 ==========
+    // ========== 9.7 Response batch deletion ==========
 
     @Test
     @DisplayName("批次刪除 Response → 確認刪除成功")
@@ -379,7 +379,7 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
                 .getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
-    // ========== 9.8 Response 全部刪除 ==========
+    // ========== 9.8 Response Delete all ==========
 
     @Test
     @DisplayName("全部刪除 Response → 確認清空（含關聯規則）")
@@ -412,7 +412,7 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
         assertThat(listResp.getBody()).isNotNull().isEmpty();
     }
 
-    // ========== 9.9 Response 匯出/匯入 ==========
+    // ========== 9.9 Response Export/Import ==========
 
     @Test
     @DisplayName("匯出全部 Response → 回傳完整列表")

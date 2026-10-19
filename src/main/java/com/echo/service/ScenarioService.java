@@ -13,9 +13,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Scenario 狀態機服務
+ * Scenario state machine service
  * <p>
- * 管理 Scenario 的狀態查詢、轉移、重置與清理。
+ * Manage the status query, transfer, reset and cleanup of Scenario.
  */
 @Service
 @RequiredArgsConstructor
@@ -27,7 +27,7 @@ public class ScenarioService {
     private final ScenarioRepository scenarioRepository;
 
     /**
-     * 查詢 Scenario 當前狀態，不存在時回傳預設狀態 "Started"
+     * Query the current status of Scenario, and return the default status "Started" if it does not exist.
      */
     public String getCurrentState(String scenarioName) {
         return scenarioRepository.findByScenarioName(scenarioName)
@@ -36,10 +36,10 @@ public class ScenarioService {
     }
 
     /**
-     * CAS 語意更新 Scenario 狀態。
-     * 如果 Scenario 不存在，先建立再更新。
+     * CAS semantic update Scenario status.
+     * If Scenario does not exist, create it first and then update it.
      *
-     * @return true 如果狀態轉移成功
+     * @return true if the status transfer is successful
      */
     @Transactional
     public boolean advanceState(String scenarioName, String expectedState, String newState) {
@@ -49,7 +49,7 @@ public class ScenarioService {
             return true;
         }
 
-        // Scenario 不存在，嘗試建立
+        // Scenario does not exist, try to create it
         if (scenarioRepository.findByScenarioName(scenarioName).isEmpty()) {
             try {
                 Scenario scenario = Scenario.builder()
@@ -59,11 +59,11 @@ public class ScenarioService {
                 scenarioRepository.save(scenario);
                 log.debug("Scenario '{}' created with state '{}'", scenarioName, DEFAULT_STATE);
             } catch (DataIntegrityViolationException e) {
-                // 另一個執行緒已建立，忽略
+                // Another thread has been created, ignored
                 log.debug("Scenario '{}' already created by another thread", scenarioName);
             }
 
-            // 再次嘗試 CAS 更新
+            // Try CAS update again
             updated = scenarioRepository.updateStateIfMatch(scenarioName, expectedState, newState);
             if (updated > 0) {
                 log.debug("Scenario '{}' state advanced after creation: {} -> {}",
@@ -78,7 +78,7 @@ public class ScenarioService {
     }
 
     /**
-     * 重置單一 Scenario 為預設狀態
+     * Reset single Scenario to default state
      */
     @Transactional
     public void resetScenario(String scenarioName) {
@@ -90,7 +90,7 @@ public class ScenarioService {
     }
 
     /**
-     * 重置全部 Scenario 為預設狀態
+     * Reset all Scenario to default state
      */
     @Transactional
     public void resetAll() {
@@ -103,14 +103,14 @@ public class ScenarioService {
     }
 
     /**
-     * 列出所有 Scenario
+     * List all Scenario
      */
     public List<Scenario> findAll() {
         return scenarioRepository.findAll();
     }
 
     /**
-     * 刪除不再被任何規則引用的 Scenario
+     * Delete Scenario which is no longer referenced by any rules
      */
     @Transactional
     public int deleteOrphans(Set<String> activeScenarioNames) {

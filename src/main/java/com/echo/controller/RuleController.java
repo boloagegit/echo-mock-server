@@ -35,13 +35,13 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * 規則的查詢、建立、修改、刪除與測試：
+ * Query, create, modify, delete and test rules:
  * <ul>
- *   <li>GET /api/admin/rules、/rules/page、/rules/groups、/rules/group - 規則列表與分組</li>
- *   <li>GET/POST/PUT/DELETE /api/admin/rules/{id} - 單一規則</li>
- *   <li>DELETE /api/admin/rules/batch、/rules/all - 批次刪除</li>
- *   <li>POST /api/admin/rules/match/parse、/rules/match/validate - 結構化條件編輯器</li>
- *   <li>POST /api/admin/rules/{id}/test - 測試規則</li>
+ *   <li>GET /api/admin/rules, /rules/page, /rules/groups, /rules/group - Rule list and grouping</li>
+ *   <li>GET/POST/PUT/DELETE /api/admin/rules/{id} - single rule</li>
+ *   <li>DELETE /api/admin/rules/batch, /rules/all - Batch delete</li>
+ *   <li>POST /api/admin/rules/match/parse, /rules/match/validate - Structured condition editor</li>
+ *   <li>POST /api/admin/rules/{id}/test - Test rule</li>
  * </ul>
  */
 @RestController
@@ -57,11 +57,11 @@ public class RuleController {
     @Value("${server.port:8080}")
     private int serverPort;
 
-    // ========== 查詢 ==========
+    // ========== Query ==========
 
     @GetMapping("/rules")
     public ResponseEntity<List<RuleDto>> listRules() {
-        // 列表只需要規則 metadata。不傳入 Response，避免讀取整張 responses 的 LOB body。
+        // List only requires rule metadata. Do not pass in Response to avoid reading LOB body of the entire responses.
         List<RuleDto> all = protocolHandlerRegistry.findAllRules().stream()
                 .map(rule -> protocolHandlerRegistry.toDto(rule, null))
                 .toList();
@@ -151,7 +151,7 @@ public class RuleController {
                 keyword, limit, sortField, direction);
     }
 
-    // ========== 單一規則 ==========
+    // ========== Single Rule ==========
 
     @GetMapping("/rules/{id}")
     public ResponseEntity<RuleDto> getRule(@PathVariable String id) {
@@ -183,8 +183,8 @@ public class RuleController {
         ruleEditService.validateScenarioFields(dto);
         return protocolHandlerRegistry.findById(id)
                 .map(existing -> {
-                    // 送來的版本與目前不同，表示編輯期間規則已被改過：拒絕，避免把別人的修改蓋掉。
-                    // 沒送版本的呼叫端（舊腳本）維持以目前版本更新。
+                    // The version sent is different from the current version, which means that the rules have been changed during editing: reject to avoid covering up other people's modifications.
+                    // Callers with undelivered versions (old scripts) remain updated with the current version.
                     if (dto.getVersion() != null && !dto.getVersion().equals(existing.getVersion())) {
                         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
                                 "error", "OPTIMISTIC_LOCK_CONFLICT",
@@ -192,8 +192,8 @@ public class RuleController {
                     }
                     dto.setId(id);
                     dto.setVersion(existing.getVersion());
-                    dto.setCreatedAt(existing.getCreatedAt()); // 保留建立時間
-                    // 在 save 之前先序列化快照，避免 JPA merge 後 existing 被覆蓋
+                    dto.setCreatedAt(existing.getCreatedAt()); // Retain build time
+                    // Serialize the snapshot before save to prevent existing from being overwritten after JPA merge
                     String beforeJson = ruleAuditService.map(s -> s.snapshot(existing)).orElse(null);
                     try {
                         RuleEditService.Saved result = ruleEditService.save(dto);
@@ -227,7 +227,7 @@ public class RuleController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // ========== 批次刪除 ==========
+    // ========== Batch deletion ==========
 
     @DeleteMapping("/rules/batch")
     public ResponseEntity<?> deleteRules(@RequestBody List<String> ids) {
@@ -240,7 +240,7 @@ public class RuleController {
                 deleted++;
             }
         }
-        // 沒有刪到任何規則（例如重複送出）就不重建規則、也不通知其他節點。
+        // If no rules are deleted (such as repeated sending), the rules will not be rebuilt and other nodes will not be notified.
         if (deleted > 0) {
             ruleEditService.allRulesChanged();
         }
@@ -258,14 +258,14 @@ public class RuleController {
         return ResponseEntity.ok(Map.of("deleted", count));
     }
 
-    // ========== 結構化條件 ==========
+    // ========== Structured conditions ==========
 
-    /** 結構化條件編輯器使用的請求：協定，加上舊版三個條件字串或 matchSpec。 */
+    /** Structured condition editor using request: protocol, plus legacy three condition strings or matchSpec. */
     public record MatchRequest(Protocol protocol, String bodyCondition, String queryCondition,
                                String headerCondition, JsonNode matchSpec) {
     }
 
-    /** 把舊版條件字串轉成只含舊版片段的結構化條件（切法與比對時相同），供編輯器切換到進階模式。 */
+    /** Convert the old version of the condition string into a structured condition containing only the old version of the fragment (the cutting method is the same as during comparison), so that the editor can switch to advanced mode. */
     @PostMapping("/rules/match/parse")
     public Map<String, Object> parseMatch(@RequestBody MatchRequest request) {
         ruleEditService.requireProtocolEnabled(request.protocol());
@@ -274,9 +274,9 @@ public class RuleController {
     }
 
     /**
-     * 以與儲存時相同的規則檢查結構化條件，不寫入任何資料，供編輯器即時提示。
-     * 檢查本身一律回 200：{@code valid=false} 時附錯誤訊息與 JSON 路徑；{@code valid=true} 時回傳正規化結果
-     * （可用舊版字串表達時 {@code advanced=false} 並附上三個字串）。
+     * Check the structured conditions according to the same rules as when saving, without writing any data, so that the editor can prompt immediately.
+     * The check itself always returns 200: when {@code valid=false}, an error message and JSON path are attached; when {@code valid=true}, the normalized result is returned
+     * (When the old version of the string can be expressed as {@code advanced=false} and three strings are attached).
      */
     @PostMapping("/rules/match/validate")
     public ResponseEntity<Map<String, Object>> validateMatch(@RequestBody MatchRequest request) {
@@ -304,7 +304,7 @@ public class RuleController {
         return ResponseEntity.ok(result);
     }
 
-    // ========== 規則測試 ==========
+    // ========== Rule Test ==========
 
     @PostMapping("/rules/{id}/test")
     public ResponseEntity<?> testRule(@PathVariable String id, @RequestBody Map<String, Object> testRequest) {

@@ -1,16 +1,16 @@
 /**
- * easter-egg.js - 隱藏彩蛋的觸發器
+ * easter-egg.js - Trigger for hidden easter eggs
  *
- * 兩種方式開啟 Echo Strike 小遊戲：
- * - 輸入 ↑ ↑ ↓ ↓ ← → ← → A B（最後兩鍵也接受 B A）。
- * - 快速連點側邊欄左上角的 Echo 圖示 5 下（滑鼠、觸控都可以）。
- * 規則：
- * - 只在伺服器設定允許時生效（/api/admin/status 的 uiEasterEgg，對應 ECHO_UI_EASTER_EGG，預設開啟）。
- * - 游標在輸入框、下拉選單、可編輯區或程式碼編輯器時不判斷，打字不會誤觸。
- * - 兩鍵間隔超過 1.5 秒或按錯就重新計算；連點時兩下間隔超過 0.6 秒就重新計算。
- * - 圖示偶爾「眨眼」一次（登入後約半分鐘，之後每隔幾分鐘），暗示它可以點；
- *   分頁在背景、遊戲開著或系統設定「減少動態效果」時不眨。
- * - 遊戲本體（echo-strike.js）在觸發後才載入，平常只有這個監聽器和一個計時器。
+ * There are two ways to open the Echo Strike mini-game:
+ * - Enter ↑ ↑ ↓ ↓ ← → ← → A B (the last two keys also accept B A).
+ * - Quickly click the Echo icon in the upper left corner of the sidebar 5 times (mouse or touch is acceptable).
+ * Rules:
+ * - Only takes effect when the server settings allow it (uiEasterEgg of /api/admin/status, corresponding to ECHO_UI_EASTER_EGG, enabled by default).
+ * - The cursor is not judged when it is in the input box, drop-down menu, editable area or code editor, and the cursor will not be accidentally touched when typing.
+ * - Recalculate if the interval between two keys exceeds 1.5 seconds or press the wrong key; recalculate if the interval between two clicks exceeds 0.6 seconds when connecting points.
+ * - The icon "blinks" occasionally (about half a minute after logging in, and every few minutes thereafter), suggesting that it can be clicked;
+ *   Pagination does not blink in the background, when the game is open, or when the system is set to "reduce motion effects".
+ * - The game itself (echo-strike.js) is loaded after it is triggered. Usually there is only this listener and a timer.
  */
 (function () {
     var SEQUENCE = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight'];

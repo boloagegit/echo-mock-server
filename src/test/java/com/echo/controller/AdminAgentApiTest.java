@@ -27,9 +27,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Admin Agent API 單元測試。
+ * Admin Agent API unit test.
  * <p>
- * 使用 MockMvc 測試 GET /api/admin/agents 端點。
+ * Testing GET /api/admin/agents endpoints using MockMvc.
  */
 @ExtendWith(MockitoExtension.class)
 class AdminAgentApiTest {

@@ -4,7 +4,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 /**
- * Agent 狀態資料傳輸物件，用於 Admin API 回傳。
+ * Agent status data transmission object, used for Admin API return.
  */
 @Getter
 @Builder

@@ -17,10 +17,10 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 內建帳號管理服務
+ * Built-in account management service
  * <p>
- * 處理帳號建立、查詢、密碼驗證等核心邏輯。
- * 密碼一律以 BCrypt 雜湊儲存，永不以明文存於資料庫。
+ * Handles core logic such as account creation, query, password verification, etc.
+ * Passwords are always stored as BCrypt hash and are never stored in the database in clear text.
  */
 @Service
 @Slf4j
@@ -38,19 +38,19 @@ public class BuiltinUserService {
         this(builtinUserRepository, new BCryptPasswordEncoder());
     }
 
-    /** 測試用：可改用較低強度的 BCrypt，雜湊格式與驗證行為相同，只是比較快。 */
+    /** For testing: You can use the lower strength BCrypt instead. The hash format has the same behavior as the verification, but is faster. */
     BuiltinUserService(BuiltinUserRepository builtinUserRepository, BCryptPasswordEncoder passwordEncoder) {
         this.builtinUserRepository = builtinUserRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
     /**
-     * 建立新的內建帳號
+     * Create new built-in account
      *
-     * @param username 帳號名稱（3-50 字元）
-     * @param password 密碼（至少 6 字元）
-     * @return 建立的使用者
-     * @throws IllegalArgumentException 帳號長度不符、密碼太短、帳號已存在
+     * @param username Account name (3-50 characters)
+     * @param password Password (at least 6 characters)
+     * @return User created
+     * @throws IllegalArgumentException Account length does not match, password is too short, account already exists
      */
     @Transactional
     public BuiltinUser createUser(String username, String password) {
@@ -77,17 +77,17 @@ public class BuiltinUserService {
     }
 
     /**
-     * 取得所有內建帳號清單
+     * Get a list of all built-in accounts
      */
     public List<BuiltinUser> listUsers() {
         return builtinUserRepository.findAll();
     }
 
     /**
-     * 依關鍵字搜尋帳號（模糊比對帳號名稱，不分大小寫）
+     * Search accounts by keywords (fuzzy comparison of account names, not case sensitive)
      *
-     * @param keyword 搜尋關鍵字
-     * @return 符合條件的使用者清單
+     * @param keyword Search keyword
+     * @return List of eligible users
      */
     public List<BuiltinUser> searchUsers(String keyword) {
         if (keyword == null || keyword.isBlank()) {
@@ -126,14 +126,14 @@ public class BuiltinUserService {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     /**
-     * 重設指定帳號的密碼
+     * Reset the password of the specified account
      * <p>
-     * 產生 8 字元隨機臨時密碼（包含大小寫字母和數字），以 BCrypt 雜湊儲存，
-     * 設定 forceChangePassword=true，清除 passwordResetRequested，回傳臨時密碼明文。
+     * Generate an 8-character random temporary password (including uppercase and lowercase letters and numbers), and store it in BCrypt hash,
+     * Set forceChangePassword=true, clear passwordResetRequested, and return the temporary password plaintext.
      *
-     * @param id 使用者 ID
-     * @return 臨時密碼明文
-     * @throws IllegalArgumentException 帳號不存在
+     * @param id User ID
+     * @return Temporary password plain text
+     * @throws IllegalArgumentException Account does not exist
      */
     @Transactional
     public String resetPassword(Long id) {
@@ -151,12 +151,12 @@ public class BuiltinUserService {
     }
 
     /**
-     * 忘記密碼請求
+     * Forgot password request
      * <p>
-     * 設定 passwordResetRequested=true 與請求時間。
-     * 帳號不存在時不拋例外，防止帳號列舉攻擊。
+     * Set passwordResetRequested=true and request time.
+     * Do not throw an exception when the account does not exist to prevent account enumeration attacks.
      *
-     * @param username 帳號名稱
+     * @param username Account name
      */
     @Transactional
     public void requestPasswordReset(String username) {
@@ -169,14 +169,14 @@ public class BuiltinUserService {
     }
 
     /**
-     * 使用者自行修改密碼
+     * User can change password by himself
      * <p>
-     * 驗證舊密碼正確後，將新密碼以 BCrypt 雜湊儲存，並清除 forceChangePassword 標記。
+     * After verifying that the old password is correct, store the new password as BCrypt hash and clear the forceChangePassword mark.
      *
-     * @param username    帳號名稱
-     * @param oldPassword 舊密碼
-     * @param newPassword 新密碼（至少 6 字元）
-     * @throws IllegalArgumentException 帳號不存在、舊密碼不正確、新密碼太短
+     * @param username    Account name
+     * @param oldPassword old password
+     * @param newPassword New password (at least 6 characters)
+     * @throws IllegalArgumentException Account does not exist, old password is incorrect, new password is too short
      */
     @Transactional
     public void changePassword(String username, String oldPassword, String newPassword) {
@@ -199,10 +199,10 @@ public class BuiltinUserService {
     }
 
     /**
-     * 啟用帳號
+     * Activate account
      *
-     * @param id 使用者 ID
-     * @throws IllegalArgumentException 帳號不存在
+     * @param id User ID
+     * @throws IllegalArgumentException Account does not exist
      */
     @Transactional
     public void enableUser(Long id) {
@@ -214,10 +214,10 @@ public class BuiltinUserService {
     }
 
     /**
-     * 停用帳號
+     * Account deactivated
      *
-     * @param id 使用者 ID
-     * @throws IllegalArgumentException 帳號不存在
+     * @param id User ID
+     * @throws IllegalArgumentException Account does not exist
      */
     @Transactional
     public void disableUser(Long id) {
@@ -229,12 +229,12 @@ public class BuiltinUserService {
     }
 
     /**
-     * 刪除帳號
+     * Delete account
      * <p>
-     * 若該帳號為系統中唯一的 Admin，則拒絕刪除。
+     * If the account is the only Admin in the system, the deletion will be refused.
      *
-     * @param id 使用者 ID
-     * @throws IllegalArgumentException 帳號不存在或為唯一 Admin
+     * @param id User ID
+     * @throws IllegalArgumentException The account does not exist or is unique Admin
      */
     @Transactional
     public void deleteUser(Long id) {
@@ -250,13 +250,13 @@ public class BuiltinUserService {
     }
 
     /**
-     * 驗證帳號密碼
+     * Verify account password
      * <p>
-     * 用於屬性測試等場景的密碼驗證輔助方法。
+     * Password verification auxiliary method for attribute testing and other scenarios.
      *
-     * @param username 帳號名稱
-     * @param password 密碼明文
-     * @return true 若帳號存在、已啟用且密碼正確
+     * @param username Account name
+     * @param password Password plain text
+     * @return true If the account exists, is enabled and the password is correct
      */
     public boolean authenticate(String username, String password) {
         return builtinUserRepository.findByUsername(username)
@@ -266,9 +266,9 @@ public class BuiltinUserService {
     }
 
     /**
-     * 更新最後登入時間
+     * Update last login time
      *
-     * @param username 帳號名稱
+     * @param username Account name
      */
     @Transactional
     public void updateLastLogin(String username) {

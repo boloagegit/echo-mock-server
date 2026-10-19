@@ -20,7 +20,7 @@ public interface CacheEventRepository extends JpaRepository<CacheEvent, Long> {
     @Query("SELECT MAX(e.id) FROM CacheEvent e")
     Long findMaxId();
 
-    /** 刪除舊事件，但保留編號最大的一筆，避免編號在資料表清空後重新開始。 */
+    /** Delete old events, but keep the one with the largest number to prevent the numbering from restarting after the data table is cleared. */
     @Modifying
     @Query("DELETE FROM CacheEvent e WHERE e.timestamp < :cutoff AND e.id < :keepId")
     int deleteOlderThan(@Param("cutoff") LocalDateTime cutoff, @Param("keepId") Long keepId);

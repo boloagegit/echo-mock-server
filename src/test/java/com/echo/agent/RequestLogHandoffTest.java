@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 請求記錄暫存區：不等寫入、超過上限丟最舊的、寫入失敗時保留重試。 */
+/** Request record temporary storage area: no wait for writing, discard the oldest one when the upper limit is exceeded, and keep it for retry when writing fails. */
 class RequestLogHandoffTest {
 
     private final List<String> written = Collections.synchronizedList(new ArrayList<>());
@@ -47,7 +47,7 @@ class RequestLogHandoffTest {
         };
     }
 
-    /** 寫入端被擋住，直到 gate 打開；用來讓記錄在暫存區累積。 */
+    /** The write end is blocked until gate is opened; used to allow records to accumulate in the temporary area. */
     private RequestLogHandoff.Sink blockedUntil(CountDownLatch gate, CountDownLatch entered) {
         return batch -> {
             entered.countDown();
@@ -72,7 +72,7 @@ class RequestLogHandoffTest {
         for (int i = 0; i < 50; i++) {
             handoff.offer(task("/" + i));
         }
-        // 寫入端被擋住時，放入仍立即返回
+        // When the writing end is blocked, the input still returns immediately.
         assertThat(System.nanoTime() - started).isLessThan(TimeUnit.MILLISECONDS.toNanos(200));
         gate.countDown();
 
@@ -134,7 +134,7 @@ class RequestLogHandoffTest {
         handoff.offer(task("/first"));
         assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
 
-        // 寫入端忙著寫 /first 時又來 25 筆：連同寫入中的那筆共 10 筆，只留最新 9 筆
+        // While the writer handles /first, enqueue 25 more records; a capacity of 10 including the in-flight record retains only the newest 9 queued records.
         for (int i = 0; i < 25; i++) {
             handoff.offer(task("/" + i));
         }
@@ -168,7 +168,7 @@ class RequestLogHandoffTest {
         gate.countDown();
 
         assertThat(handoff.awaitIdle(5_000)).isTrue();
-        // 寫入中的 /first 也佔記憶體：只留得下最新的 2 筆
+        // /first being written also occupies memory: only the latest 2 entries can be left.
         assertThat(written).containsExactly("/first", "/3", "/4");
         assertThat(handoff.droppedCount()).isEqualTo(4);
     }
@@ -218,7 +218,7 @@ class RequestLogHandoffTest {
                 }
             }
             if (call == 2) {
-                // 第一筆處理了但沒存到（例如太大被拒），之後的暫時寫不進去
+                // The first record was processed but not stored, for example because it was oversized; subsequent writes are temporarily unavailable.
                 return new RequestLogSpool.AppendResult(1, 1);
             }
             batch.forEach(t -> written.add(t.getEndpoint()));
@@ -269,7 +269,7 @@ class RequestLogHandoffTest {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-            // 停止時暫存檔已不收：這一批都沒寫進去
+            // The spool stopped accepting writes during shutdown; none of this batch was written.
             return new RequestLogSpool.AppendResult(0, 0);
         }, 10, System::nanoTime);
         handoff.start();
@@ -296,11 +296,11 @@ class RequestLogHandoffTest {
         } finally {
             logger.detachAppender(appender);
         }
-        // 等待中的 9 筆在停止時丟掉；寫入中的那筆沒寫成，也計入丟棄，不再放回重試
+        // Drop the 9 queued records on shutdown; the failed in-flight record also counts as dropped and must not be requeued.
         assertThat(handoff.writerAlive()).isFalse();
         assertThat(handoff.droppedCount()).isEqualTo(10);
         assertThat(handoff.bytes()).isZero();
-        // 日誌裡報出的丟棄筆數加起來也是 10（寫入中的那筆在停止後補報）
+        // Logged drop counts must also total 10; report the in-flight record after shutdown.
         int reported = appender.list.stream().filter(e -> e.getLevel() == Level.WARN)
                 .map(ILoggingEvent::getFormattedMessage)
                 .filter(m -> m.startsWith("Request logging dropped "))
@@ -343,7 +343,7 @@ class RequestLogHandoffTest {
         handoff.offer(task("/second", 10_000));
         assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
 
-        // 寫入中的 1～2 筆仍佔記憶體：只能再收 1～2 筆
+        // The 1-2 in-flight records still occupy memory, leaving room for only 1-2 more records.
         for (int i = 0; i < 5; i++) {
             handoff.offer(task("/" + i, 10_000));
         }
@@ -368,7 +368,7 @@ class RequestLogHandoffTest {
             handoff.offer(task("/" + i));
         }
 
-        // 寫入中的 /first 佔一筆：等待中最多 2 筆
+        // The in-flight /first record occupies one slot, leaving room for at most 2 queued records.
         assertThat(handoff.size()).isEqualTo(3);
         gate.countDown();
         assertThat(handoff.awaitIdle(5_000)).isTrue();
@@ -462,7 +462,7 @@ class RequestLogHandoffTest {
             logger.detachAppender(appender);
         }
 
-        // 第一次丟棄就警告，之後最多每 30 秒一次；各次警告的筆數加起來就是丟掉的總數
+        // Warn for the first discard, and then at most every 30 seconds; the number of warnings adds up to the total number of discards
         List<String> warnings = appender.list.stream().filter(e -> e.getLevel() == Level.WARN)
                 .map(ILoggingEvent::getFormattedMessage).toList();
         assertThat(warnings).isNotEmpty().allMatch(w -> w.startsWith("Request logging dropped ")
@@ -471,7 +471,7 @@ class RequestLogHandoffTest {
         int reported = warnings.stream()
                 .mapToInt(w -> Integer.parseInt(w.replaceAll("^Request logging dropped (\\d+) entries.*$", "$1")))
                 .sum();
-        // 上限 5 筆含寫入中的 1 筆：12 筆裡只留得下最新 4 筆
+        // A capacity of 5 includes the in-flight record, so only the newest 4 of the 12 queued records fit.
         assertThat(reported).isEqualTo(8);
     }
 }

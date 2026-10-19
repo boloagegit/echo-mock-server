@@ -17,41 +17,41 @@ import java.util.List;
 @Repository
 public interface RequestLogRepository extends JpaRepository<RequestLog, Long> {
 
-    /** 取得某規則最近 N 筆記錄 */
+    /** Get the latest N records of a rule */
     List<RequestLog> findByRuleIdOrderByRequestTimeDesc(String ruleId, Pageable pageable);
 
-    /** 分頁查詢最近請求 */
+    /** Paginated query for recent requests */
     Page<RequestLog> findAllByOrderByRequestTimeDesc(Pageable pageable);
 
-    /** 今日請求數 */
+    /** Number of requests today */
     @Query("SELECT COUNT(r) FROM RequestLog r WHERE r.requestTime >= :startOfDay")
     long countTodayRequests(@Param("startOfDay") LocalDateTime startOfDay);
 
-    /** 成功請求數 */
+    /** Number of successful requests */
     long countByMatched(boolean matched);
 
-    /** 依規則統計 */
+    /** Statistics according to rules */
     @Query("SELECT r.ruleId, COUNT(r), AVG(r.responseTimeMs) FROM RequestLog r " +
            "WHERE r.ruleId IS NOT NULL GROUP BY r.ruleId ORDER BY COUNT(r) DESC")
     List<Object[]> findRuleStats(Pageable pageable);
 
-    /** 刪除過期記錄 */
+    /** Delete expired records */
     @Modifying
     @Transactional
     @Query("DELETE FROM RequestLog r WHERE r.requestTime < :cutoffTime")
     int deleteByRequestTimeBefore(@Param("cutoffTime") LocalDateTime cutoffTime);
 
-    /** 查詢最舊的 N 筆記錄 ID（供刪除用） */
+    /** Query the oldest N record ID (for deletion) */
     @Query("SELECT r.id FROM RequestLog r ORDER BY r.requestTime ASC")
     List<Long> findOldestIds(Pageable pageable);
 
-    /** 批次刪除指定 ID */
+    /** Batch deletion specified ID */
     @Modifying
     @Transactional
     @Query("DELETE FROM RequestLog r WHERE r.id IN :ids")
     int deleteByIds(@Param("ids") List<Long> ids);
 
-    /** 刪除最舊的 N 筆記錄（先查 ID 再刪除） */
+    /** Delete the oldest N record (check ID first and then delete) */
     default int deleteOldest(int limit) {
         List<Long> ids = findOldestIds(Pageable.ofSize(limit));
         if (ids.isEmpty()) {
@@ -60,11 +60,11 @@ public interface RequestLogRepository extends JpaRepository<RequestLog, Long> {
         return deleteByIds(ids);
     }
 
-    /** 依時間區間查詢 (用於流量圖，由呼叫端在 Java 層做分鐘分組) */
+    /** Query by time interval (used for traffic graphs, the calling end does minute grouping at the Java layer) */
     @Query("SELECT r.requestTime FROM RequestLog r WHERE r.requestTime >= :startTime ORDER BY r.requestTime")
     List<LocalDateTime> findRequestTimesSince(@Param("startTime") LocalDateTime startTime);
 
-    /** 摘要投影查詢（排除 LOB 欄位：requestBody, responseBody, matchChain） */
+    /** Summary projection query (excluding LOB field: requestBody, responseBody, matchChain) */
     @Query("SELECT r.id, r.ruleId, r.protocol, r.method, r.endpoint, r.matched, " +
            "r.responseTimeMs, r.matchTimeMs, r.clientIp, r.requestTime, r.targetHost, " +
            "r.forwarded, r.forwardTarget, r.proxyStatus, r.proxyError, r.responseStatus, " +
@@ -76,8 +76,8 @@ public interface RequestLogRepository extends JpaRepository<RequestLog, Long> {
     List<Object[]> findSummaryProjections(Pageable pageable);
 
     /**
-     * 摘要分頁查詢。篩選與分頁全部在資料庫執行，避免先載入 max-records 再於 Java 過濾。
-     * 排序由 Pageable 提供，呼叫端必須限制允許的排序欄位。
+     * Summary paging query. Filtering and paging are all performed in the database to avoid loading max-records first and then filtering on Java.
+     * Sorting is provided by Pageable, the caller must limit the allowed sorting fields.
      */
     @Query(value = "SELECT r.id, r.ruleId, r.protocol, r.method, r.endpoint, r.matched, " +
                    "r.responseTimeMs, r.matchTimeMs, r.clientIp, r.requestTime, r.targetHost, " +
@@ -119,7 +119,7 @@ public interface RequestLogRepository extends JpaRepository<RequestLog, Long> {
                                    @Param("toTime") LocalDateTime toTime,
                                    Pageable pageable);
 
-    /** 不限時間範圍的摘要分頁查詢。 */
+    /** Summary paging query without time range. */
     default Page<Object[]> findSummaryPage(String ruleId, Protocol protocol, Boolean matched, String endpoint,
                                            Long afterId, Pageable pageable) {
         return findSummaryPage(ruleId, protocol, matched, endpoint, afterId, null, null, pageable);

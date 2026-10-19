@@ -3,10 +3,10 @@ package com.echo.core.match;
 import java.util.Objects;
 
 /**
- * Body 的取值方式。
+ * The value method of Body.
  *
- * @param kind       取值方式
- * @param expression JSONPath、XPath 或點路徑；{@link Kind#RAW} 時為 null
+ * @param kind       Value method
+ * @param expression JSONPath, XPath or point path; null for {@link Kind#RAW}
  */
 public record Selector(Kind kind, String expression) {
 
@@ -24,13 +24,13 @@ public record Selector(Kind kind, String expression) {
     }
 
     public enum Kind {
-        /** Jayway JSONPath，例如 {@code $.order.items[*].sku}。 */
+        /** Jayway JSONPath, for example {@code $.order.items[*].sku}. */
         JSON_PATH("jsonPath"),
-        /** XPath 1.0，例如 {@code //Order/Status}。 */
+        /** XPath 1.0, such as {@code //Order/Status}. */
         XPATH("xpath"),
-        /** JSON 點路徑，例如 {@code order.items[0].sku}。 */
+        /** JSON point path, for example {@code order.items[0].sku}. */
         FIELD("field"),
-        /** 整個 body 原文。 */
+        /** The entire body original text. */
         RAW("raw");
 
         private final String jsonName;
@@ -39,7 +39,7 @@ public record Selector(Kind kind, String expression) {
             this.jsonName = jsonName;
         }
 
-        /** JSON 表示中使用的鍵名。 */
+        /** JSON The key name used in the representation. */
         public String jsonName() {
             return jsonName;
         }

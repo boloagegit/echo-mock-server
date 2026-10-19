@@ -9,10 +9,10 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * 狀態機場景實體
+ * State machine scene entity
  * <p>
- * 記錄每個 scenario 的當前狀態，用於 Stateful Scenarios 功能。
- * 規則可透過 scenarioName 關聯到 Scenario，實現狀態驅動的匹配邏輯。
+ * Record the current status of each scenario for Stateful Scenarios functions.
+ * Rules can be associated to Scenario through scenarioName to implement state-driven matching logic.
  */
 @Entity
 @Table(name = "scenarios")
@@ -26,15 +26,15 @@ public class Scenario {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** Scenario 名稱（唯一） */
+    /** Scenario name (unique) */
     @Column(nullable = false, unique = true)
     private String scenarioName;
 
-    /** 當前狀態 */
+    /** Current status */
     @Column(nullable = false)
     private String currentState;
 
-    /** 樂觀鎖版本號 */
+    /** Optimistic locking version number */
     @Version
     private Long version;
 

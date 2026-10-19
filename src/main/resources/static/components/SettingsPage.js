@@ -1,7 +1,7 @@
 /**
- * SettingsPage - 系統設定頁面
+ * SettingsPage - System Settings Page
  *
- * 顯示服務資訊、協定設定、資料儲存、認證設定、備份狀態，以及危險操作區。
+ * Display service information, protocol settings, data storage, authentication settings, backup status, and dangerous operation areas.
  */
 const SettingsPage = {
   props: {
@@ -19,7 +19,7 @@ const SettingsPage = {
   ],
   inject: ['t'],
   created() {
-    // 非響應式：只用來擋重複點擊，不需要觸發畫面更新。
+    // Non-responsive: only used to block repeated clicks and does not need to trigger screen updates.
     this.inFlight = createInFlight();
   },
   data() {
@@ -246,7 +246,7 @@ const SettingsPage = {
         }
       } finally { this.httpTargetSaving = false; }
     },
-    // 設為預設的請求處理中時忽略重複點擊（選單在重新載入前仍可再點）。
+    // Ignore repeated clicks when set to default request processing (menu can still be clicked before reloading).
     makeDefaultHttpTarget(target) {
       return this.inFlight.run('http-default:' + target.id, async () => {
         const res = await apiCall('/api/admin/http-target-connections/' + target.id + '/default', { method: 'PUT' });

@@ -25,37 +25,37 @@ public class CacheConfig {
     public static final String HTTP_TARGET_DEFAULT_CACHE = "httpTargetDefault";
     public static final String HTTP_TARGET_RESOLVED_CACHE = "httpTargetResolved";
 
-    /** 所有規則快取名稱（供需要清除全部的場景使用） */
+    /** All rule cache names (for use in scenarios where all needs to be cleared) */
     public static final List<String> ALL_RULE_CACHES = List.of(HTTP_RULES_CACHE, JMS_RULES_CACHE);
 
-    /** 規則查詢快取最多保留的 request key 數，避免動態 URL 撐大 heap。 */
+    /** Maximum request-derived keys in the rule-query cache, preventing dynamic URLs from growing the heap without bound. */
     @Value("${echo.cache.rules.max-entries:2000}")
     private int ruleCacheMaxEntries = 2000;
 
-    /** 規則查詢快取閒置逾時分鐘數。 */
+    /** Rule query cache idle timeout minutes. */
     @Value("${echo.cache.rules.expire-minutes:60}")
     private int ruleCacheExpireMinutes = 60;
 
     /**
-     * 規則與連線設定快取的最長存活分鐘數，不論是否常被使用。
-     * 多台部署時若漏掉變更通知，最晚這麼久之後也會重新讀取。
+     * Maximum cache lifetime in minutes for rules and connection settings, regardless of access frequency.
+     * This bounds the delay before reloading if a change notification is missed across multiple deployments.
      */
     @Value("${echo.cache.rules.max-age-minutes:10}")
     private int ruleCacheMaxAgeMinutes = 10;
 
-    /** Response body 快取上限 (預設 200MB) */
+    /** Response body cache limit (default 200MB) */
     @Value("${echo.cache.body.max-size-mb:200}")
     private int bodyCacheMaxSizeMb;
 
-    /** 超過此大小的 body 不快取 (預設 500KB) */
+    /** body larger than this size is not cached (default 500KB) */
     @Value("${echo.cache.body.threshold-kb:500}")
     private int bodyCacheThresholdKb;
 
-    /** Body 快取過期時間 (預設 720 分鐘 = 12 小時) */
+    /** Body cache expiration time (default 720 minutes = 12 hours) */
     @Value("${echo.cache.body.expire-minutes:720}")
     private int bodyCacheExpireMinutes;
 
-    /** Body 快取最長存活分鐘數，不論是否常被使用（漏掉變更通知時的保底）。 */
+    /** Maximum body-cache lifetime in minutes, regardless of access frequency, as a fallback for missed change notifications. */
     @Value("${echo.cache.body.max-age-minutes:60}")
     private int bodyCacheMaxAgeMinutes = 60;
 
@@ -77,7 +77,7 @@ public class CacheConfig {
         return cacheManager;
     }
 
-    /** Response body 快取 - weight-based LRU */
+    /** Response body cache - weight-based LRU */
     @Bean
     public Cache<Long, String> responseBodyCache() {
         return Caffeine.newBuilder()

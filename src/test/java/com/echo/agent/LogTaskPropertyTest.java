@@ -11,12 +11,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * LogTask 不可變性屬性測試（Property 18）。
+ * LogTask immutability property test (Property 18).
  * <p>
  * Feature: agent-framework-log-agent, Property 18: LogTask immutability
  * <p>
- * 驗證 LogTask 的 candidates 與 headers 為不可修改集合，
- * 修改操作拋出 UnsupportedOperationException。
+ * Verify that LogTask candidates and headers are immutable collections,
+ * Modify operation threw UnsupportedOperationException.
  */
 class LogTaskPropertyTest {
 
@@ -25,7 +25,7 @@ class LogTaskPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 18: LogTask immutability
      * <p>
-     * candidates 為不可修改集合，add 操作拋出 UnsupportedOperationException。
+     * candidates is an unmodifiable collection, and the add operation throws UnsupportedOperationException.
      * <p>
      * **Validates: Requirements 11.3**
      */
@@ -69,7 +69,7 @@ class LogTaskPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 18: LogTask immutability
      * <p>
-     * headers 為不可修改集合，put 操作拋出 UnsupportedOperationException。
+     * headers is an unmodifiable collection, and the put operation throws UnsupportedOperationException.
      * <p>
      * **Validates: Requirements 11.3**
      */
@@ -107,7 +107,7 @@ class LogTaskPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 18: LogTask immutability
      * <p>
-     * 修改原始 mutable list/map 不影響 LogTask 內部的 candidates 與 headers。
+     * Modifying the original mutable list/map does not affect candidates and headers inside LogTask.
      * <p>
      * **Validates: Requirements 11.3**
      */
@@ -150,7 +150,7 @@ class LogTaskPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 18: LogTask immutability
      * <p>
-     * null candidates 與 null headers 應產生空的不可變集合。
+     * null candidates and null headers should produce empty immutable collections.
      * <p>
      * **Validates: Requirements 11.3**
      */

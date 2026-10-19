@@ -4,20 +4,20 @@ import com.echo.entity.Protocol;
 import com.echo.entity.ResponseContentType;
 
 /**
- * 靜態工具類，根據協定與 SSE 設定推斷回應內容類型。
+ * Static tool class that infers the response content type based on the protocol and SSE settings.
  */
 public final class ContentTypeConstraints {
 
     private ContentTypeConstraints() {
-        // 不可實例化
+        // Not instantiable
     }
 
     /**
-     * 推斷回應內容類型。
+     * Inferring response content type.
      *
-     * @param protocol   協定類型
-     * @param sseEnabled 是否啟用 SSE
-     * @return 推斷的 ResponseContentType
+     * @param protocol   protocol type
+     * @param sseEnabled Whether to enable SSE
+     * @return Inferred ResponseContentType
      */
     public static ResponseContentType infer(Protocol protocol, Boolean sseEnabled) {
         if (protocol == Protocol.HTTP && Boolean.TRUE.equals(sseEnabled)) {

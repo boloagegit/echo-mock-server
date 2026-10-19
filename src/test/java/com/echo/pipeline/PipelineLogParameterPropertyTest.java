@@ -18,17 +18,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 /**
- * Pipeline 日誌參數完整性屬性測試
+ * Pipeline Log parameter integrity attribute test
  * <p>
- * Feature: protocol-pipeline-refactor, Property 5: Pipeline 日誌參數完整性
+ * Feature: protocol-pipeline-refactor, Property 5: Pipeline Log parameter integrity
  * <p>
- * 使用 jqwik 產生隨機 pipeline 執行情境（匹配成功、轉發、無匹配），
- * 驗證 {@code recordLog()} 傳入 {@code RequestLogService.record()} 的參數正確性：
+ * Use jqwik to generate a random pipeline execution situation (match successfully, forward, no match),
+ * Verify the correctness of the parameters passed into {@code RequestLogService.record()} by {@code recordLog()}:
  * <ul>
- *   <li>matched=true 時 ruleId 非 null</li>
- *   <li>matched=false 時 ruleId 為 null</li>
- *   <li>protocol 與請求協定一致</li>
- *   <li>endpoint 與請求路徑一致</li>
+ *   <li>matched=true when ruleId is not null</li>
+ *   <li>ruleId is null when matched=false</li>
+ *   <li>protocol is consistent with the request protocol</li>
+ *   <li>endpoint is consistent with the requested path</li>
  * </ul>
  *
  * <b>Validates: Requirements 6.5</b>
@@ -38,22 +38,22 @@ class PipelineLogParameterPropertyTest {
     // ==================== Scenario Enum ====================
 
     enum Scenario {
-        /** 候選規則中有匹配的規則 */
+        /** There is a matching rule among the candidate rules */
         MATCH_SUCCESS,
-        /** 無匹配，shouldForward=true，forward 回傳回應 */
+        /** No match, shouldForward=true, forward returns response */
         FORWARD,
-        /** 無匹配，shouldForward=false，handleNoMatch 回傳回應 */
+        /** No match, shouldForward=false, handleNoMatch returns response */
         NO_MATCH
     }
 
     // ==================== Test Subclass ====================
 
     /**
-     * 具體測試子類別，根據 scenario 控制 pipeline 行為。
+     * Concrete test subclass controlling pipeline behavior according to the scenario.
      * <p>
-     * - MATCH_SUCCESS: findCandidateRules 回傳含一條 enabled 無條件規則（作為 fallback 匹配）
-     * - FORWARD: findCandidateRules 回傳空清單，shouldForward=true
-     * - NO_MATCH: findCandidateRules 回傳空清單，shouldForward=false
+     * - MATCH_SUCCESS: The findCandidateRules return contains an unconditional rule for enabled (matched as fallback)
+     * - FORWARD: findCandidateRules returns an empty list, shouldForward=true
+     * - NO_MATCH: findCandidateRules returns an empty list, shouldForward=false
      */
     static class ScenarioPipeline extends AbstractMockPipeline<HttpRule> {
 
@@ -191,10 +191,10 @@ class PipelineLogParameterPropertyTest {
     // ==================== Property Tests ====================
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 5: Pipeline 日誌參數完整性
+     * Feature: protocol-pipeline-refactor, Property 5: Pipeline Log parameter integrity
      * <p>
-     * 對任意 pipeline 執行情境，驗證 pipeline 交給請求紀錄的 ServeEvent 時：
-     * matched=true → ruleId 非 null；matched=false → ruleId 為 null。
+     * For any pipeline execution context, when verifying that pipeline is handed over to ServeEvent that requested the record:
+     * matched=true → ruleId is not null; matched=false → ruleId is null.
      *
      * <b>Validates: Requirements 6.5</b>
      */
@@ -222,7 +222,7 @@ class PipelineLogParameterPropertyTest {
 
         pipeline.execute(request);
 
-        // 取得交給請求紀錄的事件
+        // Get the event that submitted the request record
 
         ServeEvent served = ServeEventCaptor.single(mockLogService);
 
@@ -241,9 +241,9 @@ class PipelineLogParameterPropertyTest {
     }
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 5: Pipeline 日誌參數完整性
+     * Feature: protocol-pipeline-refactor, Property 5: Pipeline Log parameter integrity
      * <p>
-     * 對任意 pipeline 執行情境，驗證 pipeline 交給請求紀錄的事件中的 protocol 與請求的 protocol 一致。
+     * For any pipeline execution scenario, verify that the protocol in the event pipeline handed to the request record is consistent with the requested protocol.
      *
      * <b>Validates: Requirements 6.5</b>
      */
@@ -280,9 +280,9 @@ class PipelineLogParameterPropertyTest {
     }
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 5: Pipeline 日誌參數完整性
+     * Feature: protocol-pipeline-refactor, Property 5: Pipeline Log parameter integrity
      * <p>
-     * 對任意 pipeline 執行情境，驗證 pipeline 交給請求紀錄的事件中的 endpoint 與請求的 path 一致。
+     * For any pipeline execution scenario, verify that the endpoint in the event pipeline handed to the request record is consistent with the requested path.
      *
      * <b>Validates: Requirements 6.5</b>
      */
@@ -319,9 +319,9 @@ class PipelineLogParameterPropertyTest {
     }
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 5: Pipeline 日誌參數完整性
+     * Feature: protocol-pipeline-refactor, Property 5: Pipeline Log parameter integrity
      * <p>
-     * 綜合驗證：對任意情境，所有四個日誌參數同時正確。
+     * Comprehensive verification: for any scenario, all four log parameters are correct at the same time.
      *
      * <b>Validates: Requirements 6.5</b>
      */

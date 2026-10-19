@@ -241,7 +241,7 @@ class RuleAuditServiceTest {
         assertThat(captor.getValue().getTimestamp()).isNotNull();
     }
 
-    // ==================== hasActualChanges 測試 ====================
+    // ==================== hasActualChanges Test ====================
 
     @Test
     void hasActualChanges_shouldReturnFalse_whenOnlyIgnoredFieldsDiffer() {
@@ -297,7 +297,7 @@ class RuleAuditServiceTest {
         assertThat(service.hasActualChanges("not json", "{\"id\":\"1\"}")).isTrue();
     }
 
-    // ==================== 無實質變更跳過測試 ====================
+    // ==================== Skip testing without substantial changes ====================
 
     @Test
     void logUpdate_shouldSkip_whenNoActualChanges() {

@@ -16,14 +16,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 請求紀錄的流量概況：一段時間內每一格各有多少模擬回應、轉發、沒比對到與轉發失敗，加上回應時間與最常沒比對到的請求。
+ * Traffic overview of request records: how many simulated responses, forwards, unmatched and forwarded failures there were in each grid within a period of time, plus the response time and the most frequently unmatched requests.
  * <p>
- * 資源使用：
+ * Resource usage:
  * <ul>
- *   <li>資料庫模式在資料庫內分格計數，只取回幾十列結果；記憶體模式直接走訪既有的紀錄，不另外複製。
- *       回應時間以固定的區間計數估算，記憶體與紀錄筆數無關。</li>
- *   <li>結果依時間範圍暫存 {@link #CACHE_TTL}，期間所有人共用同一份；同一時間只有一個統計在執行，
- *       所以很多人同時開啟頁面也只會查詢一次、最多佔用一條資料庫連線。</li>
+ *   <li>database mode counts cells in the database and only retrieves dozens of rows of results; memory mode directly accesses existing records without additional copies.
+ *       The response time is estimated based on fixed interval counts, and the memory has nothing to do with the number of records.</li>
+ *   <li>The  result is temporarily stored in {@link #CACHE_TTL} according to the time range. During this period, everyone shares the same copy; only one statistics is executed at the same time.
+ *       Therefore, if many people open the page at the same time, they will only query it once, occupying at most one database connection.</li>
  * </ul>
  */
 @Service
@@ -33,7 +33,7 @@ public class RequestLogTrafficService {
     static final Duration CACHE_TTL = Duration.ofSeconds(5);
     static final int TOP_UNMATCHED = 5;
 
-    /** 回應時間區間的上限（毫秒），每個數量級約 6 格；最後一格為更慢的請求。 */
+    /** The upper limit of the response time interval (milliseconds), about 6 bars per order of magnitude; the last bar is for slower requests. */
     static final int[] RESPONSE_TIME_EDGES = {
             1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 70, 100, 150, 200, 300, 500, 700,
             1_000, 1_500, 2_000, 3_000, 5_000, 7_000, 10_000, 15_000, 20_000, 30_000, 60_000};
@@ -46,7 +46,7 @@ public class RequestLogTrafficService {
     private final Map<Range, Cached> cache = new EnumMap<>(Range.class);
     private Clock clock = Clock.systemDefaultZone();
 
-    /** 可選的時間範圍與每一格的長度。 */
+    /** Optional time range and length of each grid. */
     public enum Range {
         HOUR("1h", 30, Duration.ofMinutes(2)),
         DAY("24h", 48, Duration.ofMinutes(30)),
@@ -80,14 +80,14 @@ public class RequestLogTrafficService {
         }
     }
 
-    /** 一格時間內各種結果的筆數；{@code start} 含、下一格的 start 不含。 */
+    /** The number of various results in one grid; {@code start} is included, and start in the next grid is not included. */
     public record Bucket(LocalDateTime start, int mocked, int forwarded, int unmatched, int forwardFailed) {
     }
 
     public record Totals(long requests, long mocked, long forwarded, long unmatched, long forwardFailed) {
     }
 
-    /** 估計的回應時間（毫秒）：一般（中位數）與最慢 5% 的起點；沒有紀錄時為 null。 */
+    /** Estimated response time (milliseconds): average (median) and slowest 5% starting point; null when not logged. */
     public record ResponseTime(Integer typicalMs, Integer slowMs) {
     }
 
@@ -95,8 +95,8 @@ public class RequestLogTrafficService {
     }
 
     /**
-     * 流量概況。{@code earliestRecord} 是目前保留的最早紀錄；{@code truncated} 為 true 表示已達筆數上限，
-     * 更早的紀錄已被刪除，earliestRecord 之前的格子沒有資料（不是沒有流量）。
+     * Traffic overview. {@code earliestRecord} is the oldest retained record; {@code truncated} indicates that the retention-count limit has been reached,
+     * The earlier records have been deleted, and the grid before earliestRecord has no data (not no traffic).
      */
     public record Traffic(String range, LocalDateTime from, LocalDateTime to, int bucketMinutes,
                           List<Bucket> buckets, Totals totals, ResponseTime responseTime,
@@ -116,7 +116,7 @@ public class RequestLogTrafficService {
         if (cached != null) {
             return cached.traffic();
         }
-        // 同一時間只計算一次：等待中的請求在拿到鎖後直接使用剛算好的結果
+        // Only calculated once at the same time: the waiting request directly uses the newly calculated result after getting the lock.
         synchronized (computeLock) {
             cached = cachedIfFresh(range);
             if (cached != null) {
@@ -130,7 +130,7 @@ public class RequestLogTrafficService {
         }
     }
 
-    /** 紀錄被清除時呼叫，讓下次查詢重新計算。 */
+    /** Called when the record is cleared, so that the next query can be recalculated. */
     public void invalidate() {
         synchronized (cache) {
             cache.clear();
@@ -163,7 +163,7 @@ public class RequestLogTrafficService {
             MemoryTotals memory = scanMemory(from, now, acc);
             earliest = memory.earliest;
             topUnmatched = memory.topUnmatched();
-            // 環形緩衝區滿了才會丟掉最舊的
+            // The oldest ring buffer will be discarded when it is full.
             truncated = memory.count >= maxRecords;
         } else {
             List<LocalDateTime> starts = new ArrayList<>(range.buckets);
@@ -176,7 +176,7 @@ public class RequestLogTrafficService {
             topUnmatched = trafficQuery.topUnmatched(from, now, TOP_UNMATCHED).stream()
                     .map(e -> new Endpoint(e.protocol(), e.method(), e.endpoint(), e.count()))
                     .toList();
-            // 資料庫超過上限時會刪到上限以下騰出空間，筆數無法看出是否刪過；最小 id 大於 1 才是刪過的證據
+            // When the database exceeds the upper limit, it will be deleted below the upper limit to make room. The number of records cannot be used to tell whether they have been deleted; the minimum id is greater than 1, which is evidence of deletion.
             Long smallestId = trafficQuery.smallestId();
             truncated = smallestId != null && smallestId > 1;
         }
@@ -184,7 +184,7 @@ public class RequestLogTrafficService {
                 acc.responseTime(), topUnmatched, earliest, truncated, maxRecords, now);
     }
 
-    /** 記憶體模式：直接走訪環形緩衝區，不另外複製。 */
+    /** Memory mode: Direct access to the ring buffer without additional copying. */
     private MemoryTotals scanMemory(LocalDateTime from, LocalDateTime now, Accumulator acc) {
         MemoryTotals totals = new MemoryTotals();
         Iterable<RequestLogService.LogEntry> buffer = requestLogService.getMemoryBuffer();
@@ -205,7 +205,7 @@ public class RequestLogTrafficService {
             }
             acc.add(time, entry.isMatched(), entry.isForwarded(), entry.getProxyError() != null,
                     entry.getResponseTimeMs());
-            // 最常沒比對到的請求只算到概況產生的時間，與「看這些請求」列出的範圍相同
+            // The most frequently unmatched requests are only counted to the time when the profile was generated, which is the same range as listed in "Look at these requests"
             if (!entry.isMatched() && time.isBefore(now)) {
                 totals.unmatched.merge(new EndpointKey(entry.getProtocol(), entry.getMethod(), entry.getEndpoint()),
                         1L, Long::sum);
@@ -240,7 +240,7 @@ public class RequestLogTrafficService {
         }
     }
 
-    /** 逐筆累加：每一格四種結果的筆數與回應時間區間的筆數。 */
+    /** Accumulate per-record counts for each time bucket's four outcomes and each latency bucket. */
     static final class Accumulator {
         private final LocalDateTime from;
         private final long bucketSeconds;
@@ -266,7 +266,7 @@ public class RequestLogTrafficService {
             responseTimes[responseTimeSlot(responseTimeMs)]++;
         }
 
-        /** 資料庫統計好的一格。 */
+        /** The database statistics are good. */
         void addCounts(RequestLogTrafficQuery.BucketCount count) {
             if (count.bucket() < 0 || count.bucket() >= counts.length) {
                 return;
@@ -278,7 +278,7 @@ public class RequestLogTrafficService {
             c[0] += (int) (count.total() - count.unmatched() - count.forwarded() - count.forwardFailed());
         }
 
-        /** 資料庫統計好的回應時間區間筆數（與 {@link #RESPONSE_TIME_EDGES} 對應）。 */
+        /** The number of response time intervals calculated by the database (corresponding to {@link #RESPONSE_TIME_EDGES}). */
         void addResponseTimes(long[] slots) {
             for (int i = 0; i < Math.min(slots.length, responseTimes.length); i++) {
                 responseTimes[i] += slots[i];
@@ -315,7 +315,7 @@ public class RequestLogTrafficService {
             return new ResponseTime(percentile(total, 0.5), percentile(total, 0.95));
         }
 
-        /** 以區間計數估計百分位數：落在哪一格，就在該格的上下限之間依名次比例取值。 */
+        /** Estimating the percentile by interval counting: whichever grid it falls on, the value will be calculated in proportion to the ranking between the upper and lower limits of the grid. */
         private int percentile(long total, double quantile) {
             double rank = quantile * total;
             long seen = 0;

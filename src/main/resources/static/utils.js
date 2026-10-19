@@ -1,8 +1,8 @@
 /**
- * utils.js - Echo Mock Server 共用工具函式
+ * utils.js - Echo Mock Server Shared tool functions
  *
- * 提供全域工具函式供各元件與 app.js 使用。
- * 載入順序：vue.global.prod.js → codemirror → utils.js → components → app.js
+ * Provide global tool functions for use by various components and app.js.
+ * Loading sequence: vue.global.prod.js → codemirror → utils.js → components → app.js
  */
 const { createApp, ref, computed, watch, onMounted, onUnmounted } = Vue;
 const api = async (url, opt = {}) => { const r = await fetch(url, { ...opt, headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', ...(opt.headers || {}) } }); return r };
@@ -11,7 +11,7 @@ const shortId = id => id && id.length > 8 ? id.substring(0, 8) : id;
 const daysLeft = (createdAt, extendedAt, retentionDays) => { if (!retentionDays) return null; const baseDate = extendedAt || createdAt; if (!baseDate) return null; const d = Math.ceil((new Date(baseDate).getTime() + retentionDays * 86400000 - Date.now()) / 86400000); return d > 0 ? d : 0; };
 const fmtSize = bytes => { if (!bytes) return '0 B'; if (bytes < 1024) return bytes + ' B'; if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'; return (bytes / 1024 / 1024).toFixed(2) + ' MB'; };
 const reasonText = r => { const map = {match: _t('reasonText.match'), disabled: _t('reasonText.disabled'), condition_not_match: _t('reasonText.condition_not_match'), fallback: _t('reasonText.fallback'), skipped: _t('reasonText.skipped'), 'near-miss': _t('reasonText.nearMiss'), shadowed: _t('reasonText.shadowed'), mismatch: _t('reasonText.mismatch')}; return map[r] || r; };
-// 使用結構化條件（matchSpec）的規則以摘要顯示；見 match-tree.js。
+// Rules using structured conditions (matchSpec) are shown in summary; see match-tree.js.
 const hasMatchSpec = r => !!(r && r.matchSpec && typeof r.matchSpec === 'object');
 const matchSummary = r => MatchTree.summarizeSpec(r.matchSpec);
 const condCount = r => { if (hasMatchSpec(r)) return matchSummary(r).count; const b = (r.bodyCondition||'').split(';').filter(x=>x); const q = (r.queryCondition||'').split(';').filter(x=>x); const h = (r.headerCondition||'').split(';').filter(x=>x); return b.length + q.length + h.length; };
@@ -202,8 +202,8 @@ const createSseParser = onEvent => {
     };
 };
 /**
- * 同一個項目的寫入動作（啟用、刪除、展延…）還在處理中時，忽略重複觸發，例如連按兩下。
- * 確認對話框也算在處理中，所以重複點擊不會疊出第二個動作。key 以動作加項目 ID 組成。
+ * When the write action (enable, delete, extend...) of the same item is still being processed, repeated triggers, such as double-clicking, are ignored.
+ * The confirmation dialog box is also counted as being processed, so repeated clicks will not overlap the second action. key is composed of action plus item ID.
  */
 const createInFlight = () => {
     const pending = new Set();
@@ -217,7 +217,7 @@ const createInFlight = () => {
 let _showToast = null;
 let _t = null;
 const apiCall = async (url, opt = {}, config = {}) => {
-    // quietStatuses：呼叫端自行處理的狀態碼，不顯示通用錯誤
+    // quietStatuses: The status code is handled by the caller itself and no general error is displayed.
     const { silent = false, errorMsg = '', quietStatuses = [] } = config;
     try {
         const headers = { 'Accept': 'application/json', ...(opt.headers || {}) };

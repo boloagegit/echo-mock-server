@@ -13,7 +13,7 @@ import org.springframework.http.ResponseEntity;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * JMS 規則 CRUD 整合測試
+ * JMS rule CRUD integration test
  */
 class JmsRuleCrudIntegrationTest extends BaseIntegrationTest {
 
@@ -51,7 +51,7 @@ class JmsRuleCrudIntegrationTest extends BaseIntegrationTest {
     void updateJmsRule_shouldUpdateDescription() {
         RuleDto created = createJmsRule("ORDER.Q", "<ok/>");
 
-        // 先 GET 取得完整 dto（含 version）
+        // GET first to obtain complete dto (including version)
         ResponseEntity<RuleDto> getResponse = adminClient()
                 .getForEntity("/api/admin/rules/" + created.getId(), RuleDto.class);
         RuleDto toUpdate = getResponse.getBody();
@@ -67,7 +67,7 @@ class JmsRuleCrudIntegrationTest extends BaseIntegrationTest {
 
         assertThat(putResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
 
-        // 再 GET 確認
+        // Confirm again GET
         ResponseEntity<RuleDto> verifyResponse = adminClient()
                 .getForEntity("/api/admin/rules/" + created.getId(), RuleDto.class);
         assertThat(verifyResponse.getBody()).isNotNull();

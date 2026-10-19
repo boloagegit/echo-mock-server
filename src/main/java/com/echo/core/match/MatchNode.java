@@ -9,29 +9,29 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 尚未編譯的匹配條件樹。
+ * Match condition tree not yet compiled.
  * <p>
- * 由 {@link MatchSpecCodec#parse(JsonNode)} 從 JSON 產生，再交給 {@link MatcherCompiler} 編譯。
- * 所有節點皆為不可變物件。
+ * {@link MatchSpecCodec#parse(JsonNode)} is generated from JSON and then handed over to {@link MatcherCompiler} for compilation.
+ * All nodes are immutable objects.
  */
 public sealed interface MatchNode
         permits MatchNode.All, MatchNode.Any, MatchNode.Not, MatchNode.Leaf, MatchNode.Legacy {
 
-    /** 全部子節點都符合才符合；沒有子節點時視為無條件（永遠符合）。 */
+    /** All child nodes must be consistent to be eligible; if there are no child nodes, it is considered unconditional (always consistent). */
     record All(List<MatchNode> children) implements MatchNode {
         public All {
             children = List.copyOf(children);
         }
     }
 
-    /** 任一子節點符合即符合；沒有子節點時永遠不符合。 */
+    /** If any child node is consistent, it is consistent; if there are no child nodes, it is never consistent. */
     record Any(List<MatchNode> children) implements MatchNode {
         public Any {
             children = List.copyOf(children);
         }
     }
 
-    /** 子節點不符合時才符合。 */
+    /** Compliant only when child nodes do not comply. */
     record Not(MatchNode child) implements MatchNode {
         public Not {
             Objects.requireNonNull(child, "child");
@@ -39,16 +39,16 @@ public sealed interface MatchNode
     }
 
     /**
-     * 葉節點：從請求的 {@code source} 取值，再以 {@code op} 判斷。
+     * Leaf node: Get the value from the requested {@code source}, and then judge it based on {@code op}.
      *
-     * @param source    取值來源，例如 body、query、header
-     * @param name      query／header 等具名來源的名稱；不需要時為 null
-     * @param selector  body 的取值方式；不需要時為 null
-     * @param op        運算子名稱，例如 equals、matches
-     * @param value     期望值；exists／absent 等不需要期望值時為 null
-     * @param quantifier 取到多個值時的判斷方式
-     * @param onMissing 取不到值時的判斷方式
-     * @param options   運算子選項，例如 caseInsensitive
+     * @param source    Value source, such as body, query, header
+     * @param name      The name of the named source such as query/header; null when not required
+     * @param selector  The value method of body; when not needed, it is null
+     * @param op        Operator name, such as equals, matches
+     * @param value     Expected value; exists/absent, etc. when the expected value is not required, it is null
+     * @param quantifier How to judge when multiple values are obtained
+     * @param onMissing How to judge when the value cannot be obtained
+     * @param options   Operator options, such as caseInsensitive
      */
     record Leaf(String source, String name, Selector selector, String op, JsonNode value,
                 Quantifier quantifier, OnMissing onMissing, Map<String, JsonNode> options)
@@ -84,13 +84,13 @@ public sealed interface MatchNode
     }
 
     /**
-     * 舊版字串條件的單一片段（以 {@code ;} 切開後的一段），依舊版 {@code ConditionMatcher} 的語意原樣評估。
+     * A single fragment of the old version of the string condition (a segment cut by {@code ;}) is evaluated as it is with the semantics of {@code ConditionMatcher}.
      * <p>
-     * 舊語意中運算子解析與 body 型別（JSON／XML／純文字）在執行期才決定，無法無損轉成
-     * {@link Leaf}，因此獨立成一種節點。見 {@link LegacyConditions}。
+     * The operator parsing and body type (JSON/XML/plain text) in the old semantics are determined during execution and cannot be converted losslessly
+     * {@link Leaf}, so it is an independent node. See {@link LegacyConditions}.
      *
-     * @param source    片段來自哪個舊欄位
-     * @param condition 已去除前後空白、不含 {@code ;} 的片段
+     * @param source    Which old field does the fragment come from?
+     * @param condition Fragment with leading and trailing whitespace removed, without {@code ;}
      */
     record Legacy(LegacySource source, String condition) implements MatchNode {
         public Legacy {
@@ -102,7 +102,7 @@ public sealed interface MatchNode
         }
     }
 
-    /** 舊版條件欄位。 */
+    /** Legacy condition field. */
     enum LegacySource {
         BODY("body", "bodyCondition"),
         QUERY("query", "queryCondition"),
@@ -116,12 +116,12 @@ public sealed interface MatchNode
             this.fieldName = fieldName;
         }
 
-        /** JSON 表示中的名稱，也是舊版暫存 key 的前綴（例如 {@code body:}）。 */
+        /** The name in the JSON representation, which is also the prefix for the legacy staging key (e.g. {@code body:}). */
         public String jsonName() {
             return jsonName;
         }
 
-        /** 舊版規則欄位與匹配鏈使用的名稱，例如 {@code bodyCondition}。 */
+        /** The name used by legacy rule fields and match chains, such as {@code bodyCondition}. */
         public String fieldName() {
             return fieldName;
         }
@@ -136,17 +136,17 @@ public sealed interface MatchNode
         }
     }
 
-    /** 取到多個值（例如 XPath 命中多個節點）時的判斷方式。 */
+    /** Judgment method when multiple values are obtained (for example, XPath hits multiple nodes). */
     enum Quantifier {
-        /** 任一值符合即可（預設，與舊版 XML 條件行為一致）。 */
+        /** Any value can match (default, consistent with the old version XML conditional behavior). */
         ANY,
-        /** 所有值都要符合。 */
+        /** All values must match. */
         ALL
     }
 
-    /** 取不到值時的判斷方式。 */
+    /** How to judge when the value cannot be obtained. */
     enum OnMissing {
-        /** 由運算子決定：notEquals、absent 視為符合，其餘視為不符合。 */
+        /** Determined by the operator: notEquals and absent are regarded as consistent, and the others are regarded as inconsistent. */
         AUTO,
         PASS,
         FAIL

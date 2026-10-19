@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * ContentTypeConstraints.infer() 單元測試與屬性測試。
+ * ContentTypeConstraints.infer() unit testing and attribute testing.
  */
 class ContentTypeConstraintsTest {
 
@@ -53,10 +53,10 @@ class ContentTypeConstraintsTest {
     // --- Property Test ---
 
     /**
-     * Property 1: contentType 推斷確定性 — 相同 (protocol, sseEnabled) 組合始終回傳相同結果。
+     * Property 1: contentType Inference determinism - The same (protocol, sseEnabled) combination always returns the same result.
      *
      * Validates: Requirements 1.2
-     * Validates: 設計文件正確性屬性 1
+     * Validates: Design file correctness attribute 1
      */
     @Property(tries = 200)
     void inferIsDeterministic(

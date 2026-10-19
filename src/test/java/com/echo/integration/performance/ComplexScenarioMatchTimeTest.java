@@ -16,17 +16,17 @@ import org.springframework.http.ResponseEntity;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 情境一壓力測試：最複雜的 HTTP 匹配路徑
+ * Scenario 1 stress test: the most complex HTTP matching path
  * <p>
- * 觸發完整匹配鏈：
+ * Trigger complete match chain:
  * <ol>
- *   <li>多條規則排序（priority + targetHost + matchKey 精確度）</li>
- *   <li>Body 條件匹配（JSON 巢狀欄位 + JSONPath）</li>
- *   <li>Query 條件匹配</li>
- *   <li>Header 條件匹配（包含運算子）</li>
- *   <li>Response Template 渲染（Handlebars + jsonPath helper）</li>
- *   <li>自訂 Response Headers</li>
- *   <li>匹配鏈追蹤 + 請求日誌記錄</li>
+ *   <li>multiple rules sorting (priority + targetHost + matchKey accuracy)</li>
+ *   <li>Body condition matching (JSON nested field + JSONPath)</li>
+ *   <li>Query condition matches</li>
+ *   <li>Header Conditional matching (including operators)</li>
+ *   <li>Response Template rendering (Handlebars + jsonPath helper)</li>
+ *   <li>Customized Response Headers</li>
+ *   <li>matching chain tracking + request logging</li>
  * </ol>
  */
 class ComplexScenarioMatchTimeTest extends BaseIntegrationTest {
@@ -37,30 +37,30 @@ class ComplexScenarioMatchTimeTest extends BaseIntegrationTest {
     @Test
     @DisplayName("情境一：多條件匹配 + 模板渲染 — 測量 matchTimeMs")
     void complexScenario_shouldMeasureMatchTime() {
-        // === 建立多條規則，製造排序 + 匹配鏈的複雜度 ===
+        // === Create multiple rules to create sorting + matching chain complexity ===
 
-        // 規則 A：萬用 matchKey（排序最後）
+        // Rule A: wildcard matchKey (sorted last)
         createHttpRule("*", "POST", "{\"fallback\":\"wildcard\"}", HOST, 200,
                 null, null, null, null, null, 0, "萬用 fallback");
 
-        // 規則 B：精確路徑，無條件（fallback 候選）
+        // Rule B: Exact path, unconditional (fallback candidate)
         createHttpRule("/api/v1/orders", "POST", "{\"fallback\":\"no-condition\"}", HOST, 200,
                 null, null, null, null, null, 0, "無條件 fallback");
 
-        // 規則 C：精確路徑，條件不匹配（會被跳過，增加匹配鏈長度）
+        // Rule C: exact path, condition does not match (will be skipped, increase matching chain length)
         createHttpRule("/api/v1/orders", "POST", "{\"wrong\":true}", HOST, 200,
                 "type=REFUND", "status=cancelled", "X-Channel=internal",
                 null, null, 0, "不匹配的條件規則");
 
-        // 規則 D：精確路徑，部分條件匹配（body 匹配但 header 不匹配）
+        // Rule D: exact path, partial condition match (body matches but header does not match)
         createHttpRule("/api/v1/orders", "POST", "{\"partial\":true}", HOST, 200,
                 "type=ORDER", "status=active", "X-Channel=internal",
                 null, null, 0, "部分匹配規則");
 
-        // 規則 E（目標規則）：精確路徑，全條件匹配 + 模板渲染
-        // bodyCondition: JSON 巢狀 + JSONPath
+        // Rule E (target rule): exact path, full condition matching + template rendering
+        // bodyCondition: JSON Nest + JSONPath
         // queryCondition: status=active
-        // headerCondition: Content-Type 包含 json + 自訂 header
+        // headerCondition: Content-Type includes json + customized header
         String templateBody = "{"
                 + "\"orderId\":\"{{jsonPath request.body '$.orderId'}}\","
                 + "\"customer\":\"{{jsonPath request.body '$.customer.name'}}\","
@@ -79,11 +79,11 @@ class ComplexScenarioMatchTimeTest extends BaseIntegrationTest {
                 "{\"X-Trace-Id\":\"echo-trace\",\"X-Matched\":\"true\"}",
                 null, 0, "目標規則：全條件 + 模板");
 
-        // 規則 F：無 targetHost 的同路徑規則（排序在有 host 之後）
+        // Rule F: Same path rule without targetHost (sorted after host)
         createHttpRule("/api/v1/orders", "POST", "{\"no-host\":true}", null, 200,
                 null, null, null, null, null, 0, "無 host 規則");
 
-        // === 發送請求觸發匹配 ===
+        // === Send request to trigger matching ===
 
         String requestBody = "{"
                 + "\"type\":\"ORDER\","
@@ -106,24 +106,24 @@ class ComplexScenarioMatchTimeTest extends BaseIntegrationTest {
                 "/mock/api/v1/orders?status=active&type=vip",
                 HttpMethod.POST, request, String.class);
 
-        // === 驗證回應 ===
+        // === Verification response ===
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 
         String body = response.getBody();
         assertThat(body).isNotNull();
-        // 模板渲染驗證
+        // Template rendering verification
         assertThat(body).contains("\"orderId\":\"ORD-20260329-001\"");
         assertThat(body).contains("\"customer\":\"John\"");
         assertThat(body).contains("\"itemCount\":\"2\"");
         assertThat(body).contains("\"path\":\"/api/v1/orders\"");
         assertThat(body).contains("\"method\":\"POST\"");
         assertThat(body).contains("\"status\":\"active\"");
-        // 自訂 response headers
+        // Customized response headers
         assertThat(response.getHeaders().getFirst("X-Trace-Id")).isEqualTo("echo-trace");
         assertThat(response.getHeaders().getFirst("X-Matched")).isEqualTo("true");
 
-        // === 查詢請求日誌，取得 matchTimeMs（需等待 LogAgent 非同步 flush）===
+        // === Query the request log and obtain matchTimeMs (need to wait for LogAgent asynchronous flush) ===
 
         RequestLogService.SummaryQueryResult logResult = null;
         for (int attempt = 0; attempt < 15; attempt++) {
@@ -150,7 +150,7 @@ class ComplexScenarioMatchTimeTest extends BaseIntegrationTest {
         assertThat(latestLog.getEndpoint()).isEqualTo("/api/v1/orders");
         assertThat(latestLog.isMatched()).isTrue();
 
-        // 輸出匹配時間
+        // Output matching time
         System.out.println("========================================");
         System.out.println("情境一壓力測試結果");
         System.out.println("========================================");
@@ -159,7 +159,7 @@ class ComplexScenarioMatchTimeTest extends BaseIntegrationTest {
         System.out.println("回應時間 (ms):  " + latestLog.getResponseTimeMs());
         System.out.println("========================================");
 
-        // matchTimeMs 應該有值
+        // matchTimeMs should have a value
         assertThat(latestLog.getMatchTimeMs()).isNotNull();
         assertThat(latestLog.getMatchTimeMs()).isGreaterThanOrEqualTo(0);
     }

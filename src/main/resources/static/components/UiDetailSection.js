@@ -1,8 +1,8 @@
 /**
- * UiDetailSection - 抽屜裡可收合的區段
+ * UiDetailSection - Collapsible section in drawer
  *
- * 標題列在捲動時固定在抽屜頂端，隨時知道正在看哪一段；收合時在標題旁顯示摘要。
- * 收合狀態依 id 記在這個瀏覽器，下次打開同類詳情維持一樣。
+ * The title bar is fixed at the top of the drawer when scrolling, so you can always know which paragraph you are looking at; a summary is displayed next to the title when it is collapsed.
+ * The collapsed status is recorded in this browser as id, and the similar details will remain the same next time you open it.
  */
 const DETAIL_SECTION_KEY = 'echo.drawerSections';
 const readCollapsedSections = () => {

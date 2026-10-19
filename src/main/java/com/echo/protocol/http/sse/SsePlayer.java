@@ -33,30 +33,30 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * SSE 事件序列播放器：依每個事件的 delayMs 排程送出，支援 error／abort／loop。
+ * SSE event sequence player: sent according to the delayMs schedule of each event, supporting error/abort/loop.
  * <p>
- * 每個事件只在實際發送時短暫使用 scheduler；等待期間不占用執行緒。
- * 播放中的串流在關機時一併停止。
+ * Each event uses scheduler only briefly when actually sent; the thread is not occupied during the waiting period.
+ * Stop active streams during application shutdown.
  */
 @Component
 @Slf4j
 public class SsePlayer {
 
     private static final int SCHEDULER_POOL_SIZE = 8;
-    /** 同時進行中的寫入上限；每個串流同時最多一個寫入，全部忙碌時其他串流稍後重試。 */
+    /** Maximum number of simultaneous writes in progress; each stream can have at most one write at a time, and other streams will try again later when all are busy. */
     static final int MAX_WRITERS = 256;
     static final long DEFAULT_STALLED_WRITE_TIMEOUT_MS = 120_000;
     static final long MIN_STALLED_WRITE_TIMEOUT_MS = 1_000;
     private static final long STALL_CHECK_INTERVAL_MS = 1_000;
-    /** writer 全部忙碌時，多久後重試寫入。 */
+    /** writer When all are busy, how long will it take to retry writing. */
     private static final long WRITER_RETRY_MS = 200;
     private static final long OVERLOAD_LOG_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(10);
     private final AtomicLong lastOverloadLog = new AtomicLong();
     private static final MediaType TEXT_UTF8 = new MediaType("text", "plain", StandardCharsets.UTF_8);
 
     private final ResponseTemplateService templateService;
-    // 排程執行緒只負責計時；實際寫入在 writer 執行，客戶端不讀資料時只卡住自己的 writer，
-    // 不會讓其他串流或一般 HTTP 延遲工作跟著等待。
+    // The scheduled execution thread is only responsible for timing; the actual writing is executed at writer. When the client does not read data, it only blocks its own writer.
+    // Will not let other streams or general HTTP delay work wait.
     private final ScheduledExecutorService scheduler;
     private final Executor writer;
     private final ExecutorService ownedWriter;
@@ -75,7 +75,7 @@ public class SsePlayer {
         this(templateService, null, null, stalledWriteTimeoutMs);
     }
 
-    /** 測試用：自訂排程器時，寫入直接在排程的執行緒進行，維持原本的同步行為。 */
+    /** For testing: When customizing the scheduler, writing is performed directly on the execution thread of the schedule, maintaining the original synchronization behavior. */
     public SsePlayer(ResponseTemplateService templateService, ScheduledExecutorService scheduler) {
         this(templateService, scheduler, scheduler != null ? Runnable::run : null, DEFAULT_STALLED_WRITE_TIMEOUT_MS);
     }
@@ -92,7 +92,7 @@ public class SsePlayer {
         this.writer = writer != null ? writer : ownedWriter;
         this.stalledWriteTimeoutNanos = TimeUnit.MILLISECONDS.toNanos(
                 Math.max(MIN_STALLED_WRITE_TIMEOUT_MS, stalledWriteTimeoutMs));
-        // 看門狗用獨立執行緒，不佔用事件排程，也不計入待送事件數
+        // The watchdog uses an independent execution thread, does not occupy the event schedule, and is not counted in the number of events to be sent.
         this.watchdog = scheduler == null ? createWatchdog() : null;
         this.stallCheck = watchdog == null ? null : watchdog.scheduleWithFixedDelay(this::closeStalledWrites,
                 STALL_CHECK_INTERVAL_MS, STALL_CHECK_INTERVAL_MS, TimeUnit.MILLISECONDS);
@@ -126,8 +126,8 @@ public class SsePlayer {
     }
 
     /**
-     * 寫入超過 stalled-write-timeout 仍未完成（客戶端連著但不讀資料）時，關閉該連線讓卡住的寫入結束、
-     * 釋放 writer。只看「正在進行的寫入」，事件之間的等待時間不算，所以間隔很長的串流不受影響。
+     * When the write exceeds stalled-write-timeout and is not completed (the client is connected but does not read data), close the connection to allow the stuck write to end.
+     * Release writer. Only looking at "ongoing writes", the waiting time between events is not counted, so streams with long intervals are not affected.
      */
     void closeStalledWrites() {
         long now = System.nanoTime();
@@ -135,7 +135,7 @@ public class SsePlayer {
             try {
                 playback.closeIfStalled(now);
             } catch (RuntimeException error) {
-                // 週期工作遇到例外會停止排程，因此逐一攔下
+                // Periodic tasks will stop scheduling when encountering exceptions, so they are stopped one by one.
                 log.warn("Stalled SSE check failed: {}", error.getMessage());
             }
         }
@@ -166,10 +166,10 @@ public class SsePlayer {
         return scheduler instanceof ScheduledThreadPoolExecutor executor ? executor.getQueue().size() : 0;
     }
 
-    /** 單一 SSE 事件；欄位與 {@link SseEventSequence.Event} 相同。 */
+    /** Single SSE event; fields are the same as {@link SseEventSequence.Event}. */
     public record SseEvent(String event, String data, String id, Long delayMs, String type) {}
 
-    /** 模板渲染所需的請求資訊。 */
+    /** Request information required for template rendering. */
     public record RequestContext(String queryString, Map<String, String> headers,
                                  String path, String method, String body) {
         ResponseTemplateService.TemplateContext templateContext() {
@@ -190,12 +190,12 @@ public class SsePlayer {
     }
 
     /**
-     * 開始播放；回傳的 future 在串流完成、失敗或取消時完成。
+     * Start playback; the returned future completes when the stream finishes, fails, or is cancelled.
      * <p>
-     * type=normal（或 null）：正常發送事件<br>
-     * type=error：發送 error event（name="error"）後 completeWithError<br>
-     * type=abort：不送事件，直接 completeWithError<br>
-     * loopEnabled=true：事件列表發完後從頭重複，直到客戶端斷開或遇到 error/abort
+     * type=normal (or null): Send event <br> normally
+     * type=error: After sending error event (name="error") completeWithError<br>
+     * type=abort: No event is sent, directly completeWithError<br>
+     * loopEnabled=true: After the event list is sent, it repeats from the beginning until the client disconnects or encounters error/abort
      */
     public CompletableFuture<Void> play(SseEmitter emitter, List<SseEvent> events, boolean loopEnabled,
                                         RequestContext request, long initialDelay, Trace trace) {
@@ -203,9 +203,9 @@ public class SsePlayer {
     }
 
     /**
-     * 開始播放，並在客戶端長時間不讀資料時關閉連線。
+     * Start playing and close the connection if the client does not read data for a long time.
      *
-     * @param closeConnection 關閉底層連線；用來結束卡住的寫入，可為 null
+     * @param closeConnection Close the underlying connection; used to end stuck writing, can be null
      */
     public CompletableFuture<Void> play(SseEmitter emitter, List<SseEvent> events, boolean loopEnabled,
                                         RequestContext request, long initialDelay, Trace trace,
@@ -233,9 +233,9 @@ public class SsePlayer {
         private final Trace trace;
         private final AtomicLong sentEvents = new AtomicLong();
         private final Runnable closeConnection;
-        /** 目前寫入開始的時間；0 表示沒有寫入進行中。 */
+        /** The current writing start time; 0 means no writing is in progress. */
         private volatile long writeStartedNanos;
-        /** 看門狗關閉了連線；之後寫入失敗是預期的，不記成客戶端斷線。 */
+        /** The watchdog closed the connection; subsequent write failures are expected and are not recorded as client disconnections. */
         private volatile boolean closedAsStalled;
         private int index;
 
@@ -287,8 +287,8 @@ public class SsePlayer {
             try {
                 writer.execute(() -> deliver(event));
             } catch (RejectedExecutionException error) {
-                // 所有 writer 都在等不讀資料的客戶端；稍後再試，等那些連線逾時關閉後就會有空位，
-                // 健康的串流只是延後，不會被停掉。
+                // All writer are waiting for clients that cannot read data; try again later, and there will be vacancies after those connections time out and are closed.
+                // Healthy streaming is only delayed and will not be stopped.
                 logOverload();
                 retryLater(event);
             }
@@ -323,12 +323,12 @@ public class SsePlayer {
         private void closeIfStalled(long now) {
             long started = writeStartedNanos;
             if (started == 0 || now - started < stalledWriteTimeoutNanos) return;
-            // 寫入剛好在此時完成並結束串流時，這裡搶不到停止權，不能再關閉已經完成的連線
+            // When the writing is completed and the streaming ends at this time, the stop right cannot be obtained here, and the completed connection cannot be closed.
             if (!stopped.compareAndSet(false, true)) return;
             closedAsStalled = true;
             long waitedMs = TimeUnit.NANOSECONDS.toMillis(now - started);
             if (closeConnection == null) {
-                // 不在看門狗呼叫 emitter：它會等卡住的寫入釋放同一把鎖，讓整個看門狗停擺
+                // Not watching watchdog call emitter: it will wait for the stuck write to release the same lock, stalling the entire watchdog
                 log.warn("SSE write has not finished for {} ms; stream stopped (connection cannot be closed)", waitedMs);
             } else {
                 log.warn("SSE write has not finished for {} ms; closing the connection", waitedMs);

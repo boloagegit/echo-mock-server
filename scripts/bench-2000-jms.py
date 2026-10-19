@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-JMS 2000 規則匹配效能測試（ServiceName + CustId 條件）
+JMS 2000 rule matching performance test (ServiceName + CustId condition)
 
-建立 2000 條 JMS 規則，大部分含 //ServiceName + //CustId 條件，
-發送 10 次 XML 訊息，取 matchTimeMs 觀察優化效果。
+Create 2000 JMS rules, most of which contain //ServiceName + //CustId conditions,
+Send the XML message 10 times and take matchTimeMs to observe the optimization effect.
 
-用法：python3 scripts/bench-2000-jms.py [BASE_URL]
+Usage: python3 scripts/bench-2000-jms.py [BASE_URL]
 """
 
 import json, os, sys, time, urllib.request, base64
@@ -17,7 +17,7 @@ AUTH = base64.b64encode(
 QUEUE = "ECHO.REQUEST"
 TOTAL_RULES = 2000
 RUNS = 10
-# 所有規則用相同 ServiceName，讓分桶無法過濾，強制遍歷全部候選
+# All rules use the same ServiceName, the handicap bucket cannot be filtered, and all candidates are forced to be traversed
 SAME_SERVICE = True
 
 
@@ -83,21 +83,21 @@ print(f"  條件模式：//ServiceName=xxx;//CustId=yyy")
 print(f"  XML body：{xml_size:,} bytes")
 print("=" * 60)
 
-# 確認 JMS
+# Confirm JMS
 _, status = api("GET", "/api/admin/status")
 if not status.get("jmsEnabled"):
     print("\n⚠ JMS 未啟用")
     sys.exit(1)
 print(f"\n  JMS 已啟用")
 
-# 清理
+# Cleanup
 print("\n  清理舊資料...")
 api("DELETE", "/api/admin/rules/all")
 api("DELETE", "/api/admin/responses/orphans")
 api("DELETE", "/api/admin/logs/all")
 time.sleep(0.5)
 
-# 目標規則先建立（createdAt 最舊 → 排序最後，強制遍歷全部候選）
+# The target rule is established first (createdAt is the oldest → sorted last, forcing all candidates to be traversed)
 print(f"  建立 {TOTAL_RULES} 條規則...")
 api("POST", "/api/admin/rules", {
     "protocol": "JMS",
@@ -109,7 +109,7 @@ api("POST", "/api/admin/rules", {
 })
 time.sleep(0.3)
 
-# 建立 1999 條不匹配規則（ServiceName 相同，CustId 不同）
+# Create 1999 non-matching rules (ServiceName is the same, CustId is different)
 BATCH = 100
 created = 0
 for batch_start in range(0, TOTAL_RULES - 1, BATCH):
@@ -133,7 +133,7 @@ for batch_start in range(0, TOTAL_RULES - 1, BATCH):
 
 print(f"\r  建立完成：{created + 1} 條規則                ")
 
-# 觸發快取重建
+# Cache rebuild triggered
 _, rules = api("GET", "/api/admin/rules")
 if isinstance(rules, list) and rules:
     fid = rules[0].get("id")
@@ -142,7 +142,7 @@ if isinstance(rules, list) and rules:
         api("PUT", f"/api/admin/rules/{fid}/enable")
 time.sleep(1)
 
-# 發送測試
+# Send test
 print(f"\n  開始測試（{RUNS} 次）...")
 match_times = []
 response_times = []
@@ -181,7 +181,7 @@ for run in range(RUNS):
     else:
         print(f"    #{run+1:2d}  ⚠ 超時")
 
-# 總結
+# Summary
 print()
 print("=" * 60)
 if match_times:
@@ -197,7 +197,7 @@ else:
     print("  ⚠ 未取得匹配時間")
 print("=" * 60)
 
-# 清理
+# Cleanup
 print("\n清理...")
 api("DELETE", "/api/admin/rules/all")
 api("DELETE", "/api/admin/responses/orphans")

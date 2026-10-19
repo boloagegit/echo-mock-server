@@ -18,10 +18,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 /**
- * 匹配鏈分析單元測試 — 具體場景驗證。
+ * Matching chain analysis unit test - specific scenario verification.
  * <p>
- * 直接建構 LogAgent（非 Spring），使用真實 ConditionMatcher，
- * 呼叫 package-private analyzeMatchChain(task) 驗證分析結果。
+ * Directly construct LogAgent (not Spring), using the real ConditionMatcher,
+ * Call package-private analyzeMatchChain(task) to verify the analysis results.
  * <p>
  * Validates: Requirements 7.1, 7.4, 8.1, 9.1, 10.3
  */
@@ -52,7 +52,7 @@ class MatchChainAnalysisTest {
     // ==================== Combined Scenario: match + near-miss + shadowed + skipped ====================
 
     /**
-     * 測試具體場景：一個 match + 一個 near-miss + 一個 shadowed + 一個 skipped 的組合。
+     * Test specific scenario: a combination of one match + one near-miss + one shadowed + one skipped.
      * <p>
      * Request body: {"type":"ORDER","env":"prod"}
      * <ul>
@@ -161,7 +161,7 @@ class MatchChainAnalysisTest {
         assertThat(skippedEntry.get("reason")).isEqualTo("skipped");
         assertThat(skippedEntry.get("detail")).isEqualTo("Rule disabled");
 
-        // 有評估條件的條目附上樹狀說明（比對過程畫面用）；停用的規則沒有
+        // Entries with evaluation conditions are attached with tree descriptions (for comparison process screens); deactivated rules are not.
         assertThat(treeOf(matchEntry)).containsEntry("node", "all").containsEntry("passed", true);
         Map<String, Object> nearMissTree = treeOf(nearMissEntry);
         assertThat(nearMissTree).containsEntry("passed", false);
@@ -182,7 +182,7 @@ class MatchChainAnalysisTest {
     // ==================== Analysis Disabled ====================
 
     /**
-     * 測試 analysis disabled 時只保留基本 matchChain（原始值不變）。
+     * When testing analysis disabled only the base matchChain is retained (original value unchanged).
      * <p>
      * Validates: Requirements 7.4
      */
@@ -226,8 +226,8 @@ class MatchChainAnalysisTest {
     // ==================== Match with query + header conditions ====================
 
     /**
-     * 測試含 body + query + header 三種條件的 match 場景，
-     * 驗證 detail 包含所有條件類型的 PASS 資訊。
+     * Test the match scenario with three conditions: body + query + header,
+     * Verify that detail contains PASS information for all condition types.
      * <p>
      * Validates: Requirements 7.1
      */
@@ -281,7 +281,7 @@ class MatchChainAnalysisTest {
     // ==================== Null/empty candidates ====================
 
     /**
-     * 測試 candidates 為空時回傳原始 matchChain。
+     * Test to return original matchChain when candidates is empty.
      */
     @Test
     void analyzeMatchChain_emptyCandidates_shouldReturnOriginalMatchChain() {
@@ -308,7 +308,7 @@ class MatchChainAnalysisTest {
     }
 
     /**
-     * 測試 preparedBody 為 null 時回傳原始 matchChain。
+     * When testing preparedBody as null, the original matchChain is returned.
      */
     @Test
     void analyzeMatchChain_nullPreparedBody_shouldReturnOriginalMatchChain() {
@@ -345,7 +345,7 @@ class MatchChainAnalysisTest {
     // ==================== Mismatch (all conditions fail) ====================
 
     /**
-     * 測試全部條件都不通過時不記錄 mismatch（簡化匹配鏈）。
+     * Do not log mismatch (simplified matching chain) when all test conditions fail.
      */
     @Test
     void analyzeMatchChain_allConditionsFail_shouldNotIncludeMismatch() {
@@ -379,14 +379,14 @@ class MatchChainAnalysisTest {
         // Act
         String json = analysisEnabledAgent.analyzeMatchChain(task);
 
-        // Assert — mismatch 不記錄，chain 為空回傳 null
+        // Assert — mismatch is not recorded, chain is empty and null is returned
         assertThat(json).isNull();
     }
 
     // ==================== Fallback rule (no conditions) ====================
 
     /**
-     * 測試無條件規則（fallback）的處理。
+     * Testing the handling of unconditional rules (fallback).
      */
     @Test
     void analyzeMatchChain_fallbackRule_noConditions() throws Exception {

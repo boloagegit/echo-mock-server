@@ -83,7 +83,7 @@ public class CleanupService {
     private int cleanupRules(LocalDateTime cutoff) {
         int rulesDeleted = protocolRegistry.deleteExpiredRules(cutoff);
 
-        // 清除快取（交易內的清除會在提交後再清一次）並通知其他實例
+        // Invalidate caches, repeat invalidation after commit if inside a transaction, and notify other instances.
         if (rulesDeleted > 0) {
             for (String cacheName : CacheConfig.ALL_RULE_CACHES) {
                 var cache = cacheManager.getCache(cacheName);
@@ -113,7 +113,7 @@ public class CleanupService {
 
     private int cleanupScenarios() {
 
-        // 清理不再被任何規則引用的 Scenario
+        // Clean up Scenario which is no longer referenced by any rules
         Set<String> activeScenarioNames = protocolRegistry.findAllRules().stream()
                 .map(BaseRule::getScenarioName)
                 .filter(Objects::nonNull)

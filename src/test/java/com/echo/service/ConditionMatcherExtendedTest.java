@@ -226,19 +226,19 @@ class ConditionMatcherExtendedTest {
         matcher.cleanup();
     }
 
-    // ========== maxFieldValueLength 防呆測試 ==========
+    // ========== maxFieldValueLength Fool-proof test ==========
 
     @Test
     void jsonPrepared_fieldValueTooLarge_shouldReturnFalse() {
-        // 使用小閾值的 matcher 來測試
+        // Use small threshold matcher to test
         ConditionMatcher smallMatcher = new ConditionMatcher(100);
         String largeValue = "x".repeat(200);
         String json = "{\"userId\":\"U001\",\"image\":\"" + largeValue + "\"}";
         PreparedBody prepared = smallMatcher.prepareBody(json);
 
-        // image 欄位超過 100 字元，應該跳過
+        // image field exceeds 100 characters and should be skipped
         assertThat(smallMatcher.matchesPrepared("image=something", null, null, prepared, null, null)).isFalse();
-        // userId 欄位正常大小，應該正常匹配
+        // userId field is normal size and should match normally
         assertThat(smallMatcher.matchesPrepared("userId=U001", null, null, prepared, null, null)).isTrue();
     }
 
@@ -249,9 +249,9 @@ class ConditionMatcherExtendedTest {
         String json = "{\"data\":{\"image\":\"" + largeValue + "\",\"id\":\"A1\"}}";
         PreparedBody prepared = smallMatcher.prepareBody(json);
 
-        // JsonPath 取到的值超過閾值
+        // The value obtained by JsonPath exceeds the threshold
         assertThat(smallMatcher.matchesPrepared("$.data.image=something", null, null, prepared, null, null)).isFalse();
-        // 正常欄位
+        // Normal field
         assertThat(smallMatcher.matchesPrepared("$.data.id=A1", null, null, prepared, null, null)).isTrue();
     }
 
@@ -262,9 +262,9 @@ class ConditionMatcherExtendedTest {
         String xml = "<root><image>" + largeValue + "</image><id>A1</id></root>";
         PreparedBody prepared = smallMatcher.prepareBody(xml);
 
-        // XML 節點值超過閾值
+        // XML node value exceeds the threshold
         assertThat(smallMatcher.matchesPrepared("image=something", null, null, prepared, null, null)).isFalse();
-        // 正常節點
+        // Normal node
         assertThat(smallMatcher.matchesPrepared("id=A1", null, null, prepared, null, null)).isTrue();
     }
 
@@ -275,15 +275,15 @@ class ConditionMatcherExtendedTest {
         String xml = "<root><image>" + largeValue + "</image><id>A1</id></root>";
         PreparedBody prepared = smallMatcher.prepareBody(xml);
 
-        // XPath 取到的值超過閾值
+        // The value obtained by XPath exceeds the threshold
         assertThat(smallMatcher.matchesPrepared("//image=something", null, null, prepared, null, null)).isFalse();
-        // 正常 XPath
+        // Normal XPath
         assertThat(smallMatcher.matchesPrepared("//id=A1", null, null, prepared, null, null)).isTrue();
     }
 
     @Test
     void defaultMatcher_2MB_shouldAllowNormalFields() {
-        // 預設 matcher (2MB 閾值) 對正常欄位不受影響
+        // Default matcher (2MB threshold) has no effect on normal fields
         String json = "{\"userId\":\"U001\",\"name\":\"test\"}";
         PreparedBody prepared = matcher.prepareBody(json);
 
@@ -361,7 +361,7 @@ class ConditionMatcherExtendedTest {
                 prepared, null, null)).isFalse();
     }
 
-    /** 以候選規則的 body 條件準備 body（與 pipeline 相同的規則）。 */
+    /** Prepare body (the same rule as pipeline) with the body condition of the candidate rule. */
     private static ConditionMatcher.PreparedBody prepareBodyFor(ConditionMatcher matcher, String body,
                                                                 java.util.List<String> bodyConditions) {
         return matcher.prepareBody(body, bodyConditions.stream()

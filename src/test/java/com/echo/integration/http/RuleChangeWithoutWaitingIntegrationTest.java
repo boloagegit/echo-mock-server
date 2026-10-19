@@ -27,13 +27,13 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mockingDetails;
 
 /**
- * 改規則時模擬請求不必等規則清單重建：重建期間用舊清單回應；存檔的請求等到新清單生效才回應，
- * 所以存檔後立刻送出的模擬請求一定用到新規則。
+ * When changing rules, the simulation request does not have to wait for the rule list to be rebuilt: the old list will be used to respond during the rebuilding; the saved request will not be responded to until the new list takes effect.
+ * So simulation requests sent immediately after saving must use the new rules.
  */
 @TestPropertySource(properties = "echo.features.bulk-import-export-enabled=true")
 class RuleChangeWithoutWaitingIntegrationTest extends BaseIntegrationTest {
 
-    /** 讓建立 HTTP 規則清單變慢，模擬規則很多時的重建時間。 */
+    /** Makes building the HTTP rule list slower, simulating rebuild times when there are many rules. */
     private static final AtomicLong SLOW_BUILD_MS = new AtomicLong();
     private static final long SLOW_MS = 800;
 
@@ -47,7 +47,7 @@ class RuleChangeWithoutWaitingIntegrationTest extends BaseIntegrationTest {
             if (ms > 0) {
                 Thread.sleep(ms);
             }
-            // Spring Data 的 repository 是介面：交給 spy 原本的預設行為（轉呼叫真正的 repository）
+            // repository of Spring Data is the interface: hand over the original default behavior of spy (redirect the call to the real repository)
             return mockingDetails(httpRuleRepository).getMockCreationSettings().getDefaultAnswer().answer(invocation);
         }).when(httpRuleRepository).findByEnabledTrueOrderByIdAsc();
     }
@@ -76,14 +76,14 @@ class RuleChangeWithoutWaitingIntegrationTest extends BaseIntegrationTest {
         CompletableFuture<RuleDto> saving = CompletableFuture.supplyAsync(() -> createHttpRule("/nowait/b", "GET", "B"));
         TimeUnit.MILLISECONDS.sleep(150);
 
-        // 重建進行中：舊規則照常、立刻回應，不等那 800 ms
+        // Reconstruction in progress: old rules as usual, respond immediately, without waiting for the 800 ms
         long requestStarted = System.nanoTime();
         ResponseEntity<String> during = mock("/nowait/a");
         long tookMs = millisSince(requestStarted);
         assertThat(during.getBody()).isEqualTo("A");
         assertThat(tookMs).as("mock request during a rebuild took %d ms", tookMs).isLessThan(400);
 
-        // 存檔要等新清單生效才回應；回應後立刻送出的模擬請求一定用到新規則
+        // The save must wait for the new list to take effect before responding; simulation requests sent immediately after the response must use the new rules
         saving.get(10, TimeUnit.SECONDS);
         assertThat(millisSince(saveStarted)).isGreaterThanOrEqualTo(SLOW_MS);
         SLOW_BUILD_MS.set(0);
@@ -130,7 +130,7 @@ class RuleChangeWithoutWaitingIntegrationTest extends BaseIntegrationTest {
 
         assertThat(imported.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(imported.getBody()).containsEntry("imported", 50);
-        // 50 次存檔若各等一次 200 ms 的重建要 10 秒以上；合併後只等少數幾次
+        // If you wait for each of the 50 saves, the reconstruction of 200 ms will take more than 10 seconds; only wait a few times after merging.
         assertThat(tookMs).as("import of 50 rules took %d ms", tookMs).isLessThan(3_000);
         for (int i = 0; i < 50; i += 7) {
             assertThat(mock("/nowait/bulk/" + i).getBody()).isEqualTo("bulk" + i);

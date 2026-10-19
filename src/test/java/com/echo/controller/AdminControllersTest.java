@@ -44,7 +44,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-/** 管理後台 API（/api/admin）各 controller 與共用規則儲存的單元測試。 */
+/** Unit test of admin backend API (/api/admin) for each controller and shared rule storage. */
 @ExtendWith(MockitoExtension.class)
 class AdminControllersTest {
 
@@ -127,7 +127,7 @@ class AdminControllersTest {
         audit = new AuditController(Optional.of(ruleAuditService));
         scenarios = new ScenarioController(scenarioService);
         ReflectionTestUtils.setField(scenarios, "scenariosEnabled", true);
-        // 預設 HTTP 啟用，JMS 停用
+        // Default HTTP is enabled, JMS is disabled
         lenient().when(protocolHandlerRegistry.isEnabled(Protocol.HTTP)).thenReturn(true);
         lenient().when(protocolHandlerRegistry.isEnabled(Protocol.JMS)).thenReturn(false);
     }

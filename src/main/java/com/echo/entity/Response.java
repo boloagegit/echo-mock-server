@@ -9,18 +9,18 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 
 /**
- * 共用回應內容
+ * Shared response content
  * <p>
- * 可被多個規則共用的回應範本，適用於：
+ * Response template that can be shared by multiple rules, applicable to:
  * <ul>
- *   <li>多個端點回傳相同內容</li>
- *   <li>大型回應內容集中管理</li>
- *   <li>回應內容版本控制</li>
+ *   <li>Multiple endpoints return the same content</li>
+ *   <li>Centralized management of large response content</li>
+ *   <li>response content version control</li>
  * </ul>
  * 
- * <h3>使用方式</h3>
- * 規則可透過 responseId 關聯此表，或直接在規則中設定 responseBody。
- * 使用共用回應可減少重複資料並方便統一維護。
+ * <h3>How to use</h3>
+ * The rule can be associated with this table through responseId, or responseBody can be set directly in the rule.
+ * Use shared responses to reduce duplicate data and facilitate unified maintenance.
  */
 @Entity
 @Table(name = "responses")
@@ -35,65 +35,65 @@ public class Response {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 樂觀鎖版本號 */
+    /** Optimistic locking version number */
     @Version
     private Long version;
 
-    /** 回應描述（用於識別與搜尋） */
+    /** Response description (for identification and search) */
     private String description;
 
     /** 
-     * 回應內容
-     * <p>使用 Lazy Load 避免列表查詢時載入大型內容
+     * Response content
+     * <p>uses Lazy Load to avoid loading large content during list query
      */
     @Column(length = Length.LONG32)
     @Basic(fetch = FetchType.LAZY)
     private String body;
 
     /** 
-     * Body 大小（bytes）
-     * <p>用於快取決策與顯示，自動計算
+     * Body size (bytes)
+     * <p>is used for cache decision-making and display, automatic calculation
      */
     private Integer bodySize;
 
     /** 
-     * 回應內容類型
-     * <p>TEXT = 一般文字/JSON/XML，SSE_EVENTS = SSE 事件陣列
+     * Response content type
+     * <p>TEXT = General text/JSON/XML, SSE_EVENTS = SSE event array
      */
     @Column(length = 20)
     private String contentType;
 
-    /** SSE 回應的類型值；舊版或宣告式文件可能寫成 {@code SSE_EVENTS}，讀取時視為相同。 */
+    /** SSE The type value of the response; legacy or declarative files may be written as {@code SSE_EVENTS} and are treated the same when read. */
     public static final String SSE = "SSE";
 
-    /** 是否為 SSE 事件回應（{@code SSE} 或舊值 {@code SSE_EVENTS}）。 */
+    /** Whether it is the SSE event response ({@code SSE} or the old value {@code SSE_EVENTS}). */
     public static boolean isSse(String contentType) {
         return SSE.equalsIgnoreCase(contentType) || "SSE_EVENTS".equalsIgnoreCase(contentType);
     }
 
-    /** 對外一律回傳統一的類型值（舊資料的 {@code SSE_EVENTS} 也回傳 {@code SSE}）。 */
+    /** Always expose a normalized type value; legacy {@code SSE_EVENTS} values are returned as {@code SSE} too. */
     public String getContentType() {
         return normalizeContentType(contentType);
     }
 
-    /** 統一儲存的類型值：SSE 一律存成 {@code SSE}，一般回應存成 null。 */
+    /** The type value of unified storage: SSE is always saved as {@code SSE}, and the general response is saved as null. */
     public static String normalizeContentType(String contentType) {
         return isSse(contentType) ? SSE : null;
     }
 
-    /** 建立時間 */
+    /** Creation time */
     @Column(updatable = false)
     private LocalDateTime createdAt;
 
-    /** 最後更新時間 */
+    /** Last updated */
     private LocalDateTime updatedAt;
 
-    /** 展延時間（用於計算孤兒回應自動清除日期） */
+    /** Extension time (used to calculate the automatic clearing date of orphan responses) */
     private LocalDateTime extendedAt;
 
     /**
-     * Metadata 建構子（JPQL 投影用）
-     * <p>用於查詢列表時不載入 body 欄位
+     * Metadata constructor (for JPQL projection)
+     * <p>The body field is not loaded when  is used to query the list.
      */
     public Response(Long id, Long version, String description, Integer bodySize,
                     String contentType, LocalDateTime createdAt, LocalDateTime updatedAt,
@@ -121,7 +121,7 @@ public class Response {
         updateBodySize();
     }
 
-    /** 計算並更新 body 大小 */
+    /** Calculate and update body size */
     private void updateBodySize() {
         bodySize = body != null ? body.getBytes(StandardCharsets.UTF_8).length : 0;
     }

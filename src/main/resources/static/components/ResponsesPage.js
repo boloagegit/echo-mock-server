@@ -1,8 +1,8 @@
 /**
- * ResponsesPage - 回應管理頁面
+ * ResponsesPage - Response to the management page
  *
- * 與規則頁使用同一套列表語言：點選一列開啟右側詳情抽屜（引用規則、內容、保留期限），
- * 雙擊或編輯鈕開啟編輯器，其餘操作收在「⋯」。搜尋邊打邊篩。
+ * Use the same list language as the rule page: click a column to open the details drawer on the right (reference rules, content, retention period),
+ * Double-click or edit button to open the editor, and other operations are closed in "⋯". Search and sift at the same time.
  */
 const ResponsesPage = {
   props: {

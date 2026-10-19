@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-壓力測試：複雜 XML body 對匹配效能的影響
+Stress Test: Complex XML body Impact on Matching Performance
 
-測試策略：
-  - 產生不同大小的 XML body（1KB / 10KB / 50KB / 100KB）
-  - 每種大小搭配多條 XPath 條件的候選規則
-  - 比較 JSON vs XML 的匹配時間差異
+Test strategy:
+  - Produces XML body of different sizes (1KB / 10KB / 50KB / 100KB)
+  - Candidate rules for each size with multiple XPath conditions
+  - Compare the matching time difference of JSON vs XML
 
-用法：python3 scripts/stress-test-xml-body.py [BASE_URL]
+Usage: python3 scripts/stress-test-xml-body.py [BASE_URL]
 """
 
 import json
@@ -70,7 +70,7 @@ def wait_for_logs(endpoint_filter, expected_count=1, timeout=15):
 
 
 def generate_xml(item_count, extra_fields_per_item=5):
-    """產生模擬 SOAP/ESB 風格的 XML"""
+    """Generate XML emulating SOAP/ESB style"""
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ord="http://example.com/orders">',
@@ -125,7 +125,7 @@ def generate_xml(item_count, extra_fields_per_item=5):
 
 
 def generate_json(item_count, extra_fields_per_item=5):
-    """產生等效的 JSON body"""
+    """produces the equivalent JSON body"""
     items = []
     for i in range(item_count):
         item = {
@@ -162,7 +162,7 @@ def generate_json(item_count, extra_fields_per_item=5):
     }, ensure_ascii=False)
 
 
-# XML body 大小配置：(item_count, extra_fields, 預估大小標籤)
+# XML body size cases: (item_count, extra_fields, estimated size label)
 XML_SIZES = [
     (5, 3, "~1KB"),
     (50, 5, "~10KB"),
@@ -170,7 +170,7 @@ XML_SIZES = [
     (400, 10, "~100KB"),
 ]
 
-CANDIDATE_COUNT = 10  # 同 path 候選規則數
+CANDIDATE_COUNT = 10  # Same as path candidate rule number
 
 print("=" * 60)
 print("壓力測試：XML body 大小 vs 匹配效能")
@@ -192,18 +192,18 @@ for size_idx, (item_count, extra_fields, size_label) in enumerate(XML_SIZES):
     print(f"  Items: {item_count}, Extra fields/item: {extra_fields}")
     print(f"{'─' * 60}")
 
-    # --- 清理 ---
+    # --- Cleanup ---
     api("DELETE", "/api/admin/rules/all")
     api("DELETE", "/api/admin/responses/orphans")
     api("DELETE", "/api/admin/logs/all")
     time.sleep(0.3)
 
-    # --- 建立候選規則（XPath 條件不匹配）---
+    # --- Create candidate rule (XPath condition does not match) ---
     xml_path = f"/xml/orders-{size_idx}"
     json_path = f"/json/orders-{size_idx}"
 
     for i in range(CANDIDATE_COUNT):
-        # XML 候選
+        # XML candidate
         api("POST", "/api/admin/rules", {
             "protocol": "HTTP", "matchKey": xml_path, "method": "POST",
             "targetHost": HOST,
@@ -214,7 +214,7 @@ for size_idx, (item_count, extra_fields, size_label) in enumerate(XML_SIZES):
             "description": f"XML 候選 #{i}",
             "sseEnabled": False,
         })
-        # JSON 候選
+        # JSON candidate
         api("POST", "/api/admin/rules", {
             "protocol": "HTTP", "matchKey": json_path, "method": "POST",
             "targetHost": HOST,
@@ -226,8 +226,8 @@ for size_idx, (item_count, extra_fields, size_label) in enumerate(XML_SIZES):
             "sseEnabled": False,
         })
 
-    # --- 建立目標規則 ---
-    # XML 目標：多個 XPath 條件
+    # --- Create target rules ---
+    # XML target: multiple XPath conditions
     api("POST", "/api/admin/rules", {
         "protocol": "HTTP", "matchKey": xml_path, "method": "POST",
         "targetHost": HOST,
@@ -239,7 +239,7 @@ for size_idx, (item_count, extra_fields, size_label) in enumerate(XML_SIZES):
         "sseEnabled": False,
     })
 
-    # JSON 目標：多個欄位條件
+    # JSON Target: Multiple field conditions
     api("POST", "/api/admin/rules", {
         "protocol": "HTTP", "matchKey": json_path, "method": "POST",
         "targetHost": HOST,
@@ -251,14 +251,14 @@ for size_idx, (item_count, extra_fields, size_label) in enumerate(XML_SIZES):
         "sseEnabled": False,
     })
 
-    # 清快取
+    # Clear cache
     time.sleep(0.3)
 
-    # --- 測試 XML ---
+    # --- Test XML ---
     xml_times = []
     for run in range(5):
         api("DELETE", "/api/admin/logs/all")
-        # 清快取（disable/enable 任一規則）
+        # Clear cache (any rule disable/enable)
         _, rules_resp = api("GET", "/api/admin/rules")
         if isinstance(rules_resp, list) and rules_resp:
             first_id = rules_resp[0].get("id")
@@ -279,7 +279,7 @@ for size_idx, (item_count, extra_fields, size_label) in enumerate(XML_SIZES):
             if mt is not None:
                 xml_times.append(mt)
 
-    # --- 測試 JSON ---
+    # --- Test JSON ---
     json_times = []
     for run in range(5):
         api("DELETE", "/api/admin/logs/all")
@@ -303,7 +303,7 @@ for size_idx, (item_count, extra_fields, size_label) in enumerate(XML_SIZES):
             if mt is not None:
                 json_times.append(mt)
 
-    # --- 結果 ---
+    # --- Result ---
     xml_avg = sum(xml_times) / len(xml_times) if xml_times else -1
     json_avg = sum(json_times) / len(json_times) if json_times else -1
     ratio = xml_avg / json_avg if json_avg > 0 else -1
@@ -322,7 +322,7 @@ for size_idx, (item_count, extra_fields, size_label) in enumerate(XML_SIZES):
         "ratio": ratio,
     })
 
-# === 總結 ===
+# === Summary ===
 print()
 print("=" * 60)
 print("  總結：XML vs JSON 匹配效能")
@@ -336,7 +336,7 @@ for r in all_results:
     print(f"  {r['size']:<10} {r['xml_bytes']:>12,} {r['json_bytes']:>12,} {xml_str:>10} {json_str:>10} {ratio_str:>8}")
 print("=" * 60)
 
-# --- 清理 ---
+# --- Cleanup ---
 print()
 print("清理...")
 api("DELETE", "/api/admin/rules/all")

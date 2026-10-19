@@ -25,9 +25,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
- * BuiltinAccountController 單元測試
+ * BuiltinAccountController unit test
  * <p>
- * 使用 @WebMvcTest 搭配 SecurityConfig 測試 API 端點的正常流程、錯誤處理與權限控制。
+ * Use @WebMvcTest with SecurityConfig to test the normal process, error handling and permission control of the API endpoint.
  */
 @WebMvcTest(BuiltinAccountController.class)
 @Import({SecurityConfig.class, LdapConfig.class})
@@ -45,7 +45,7 @@ class BuiltinAccountControllerTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    // ========== GET /api/admin/builtin-users — 帳號清單 ==========
+    // ========== GET /api/admin/builtin-users — Account List ==========
 
     @Test
     void listUsers_shouldReturn401_whenNotAuthenticated() throws Exception {
@@ -84,7 +84,7 @@ class BuiltinAccountControllerTest {
                 .andExpect(jsonPath("$[0].enabled").value(true));
     }
 
-    // ========== POST /api/admin/builtin-users — 建立帳號 ==========
+    // ========== POST /api/admin/builtin-users — Create an account ==========
 
     @Test
     @WithMockUser(roles = "ADMIN")
@@ -167,7 +167,7 @@ class BuiltinAccountControllerTest {
                 .andExpect(status().isForbidden());
     }
 
-    // ========== PUT /{id}/enable — 啟用帳號 ==========
+    // ========== PUT /{id}/enable — Activate account ==========
 
     @Test
     @WithMockUser(roles = "ADMIN")
@@ -191,7 +191,7 @@ class BuiltinAccountControllerTest {
                 .andExpect(jsonPath("$.error").value("USER_NOT_FOUND"));
     }
 
-    // ========== PUT /{id}/disable — 停用帳號 ==========
+    // ========== PUT /{id}/disable — Deactivate account ==========
 
     @Test
     @WithMockUser(roles = "ADMIN")
@@ -215,7 +215,7 @@ class BuiltinAccountControllerTest {
                 .andExpect(jsonPath("$.error").value("USER_NOT_FOUND"));
     }
 
-    // ========== DELETE /{id} — 刪除帳號 ==========
+    // ========== DELETE /{id} — Delete account ==========
 
     @Test
     @WithMockUser(roles = "ADMIN")
@@ -239,7 +239,7 @@ class BuiltinAccountControllerTest {
                 .andExpect(jsonPath("$.error").value("CANNOT_DELETE_ONLY_ADMIN"));
     }
 
-    // ========== POST /{id}/reset-password — 重設密碼 ==========
+    // ========== POST /{id}/reset-password — Reset password ==========
 
     @Test
     @WithMockUser(roles = "ADMIN")
@@ -264,7 +264,7 @@ class BuiltinAccountControllerTest {
                 .andExpect(jsonPath("$.error").value("USER_NOT_FOUND"));
     }
 
-    // ========== POST /forgot-password — 忘記密碼（公開） ==========
+    // ========== POST /forgot-password — Forgot Password (Public) ==========
 
     @Test
     void forgotPassword_shouldReturn200_always() throws Exception {
@@ -290,7 +290,7 @@ class BuiltinAccountControllerTest {
                 .andExpect(jsonPath("$.message").value("OK"));
     }
 
-    // ========== POST /register — 自助註冊（預設停用） ==========
+    // ========== POST /register — Self-service registration (disabled by default) ==========
 
     @Test
     void selfRegister_shouldReturn403_whenDisabled() throws Exception {

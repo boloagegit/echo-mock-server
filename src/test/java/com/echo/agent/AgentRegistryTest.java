@@ -14,16 +14,16 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * AgentRegistry 單元測試。
+ * AgentRegistry unit test.
  * <p>
- * 測試空 agent 列表、多個 agent 註冊與查詢。
+ * Test empty agent list, multiple agent registration and query.
  * <p>
  * Validates: Requirements 3.1, 3.2, 3.3, 3.4
  */
 @ExtendWith(MockitoExtension.class)
 class AgentRegistryTest {
 
-    // ── 空 agent 列表 (Requirement 3.1, 3.2) ──
+    // ── Empty agent list (Requirement 3.1, 3.2) ──
 
     @Test
     void getAll_withEmptyList_shouldReturnEmptyList() {
@@ -39,7 +39,7 @@ class AgentRegistryTest {
         assertThat(registry.getByName("any-agent")).isEmpty();
     }
 
-    // ── 多個 agent 註冊與查詢 (Requirement 3.1, 3.2, 3.3, 3.4) ──
+    // ── Multiple agent registrations and queries (Requirement 3.1, 3.2, 3.3, 3.4) ──
 
     @Test
     void getAll_withMultipleAgents_shouldReturnAllRegistered() {
