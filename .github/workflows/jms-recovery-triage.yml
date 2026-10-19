@@ -1,0 +1,39 @@
+name: JMS recovery triage
+
+on:
+  push:
+    branches: [codex/request-log-spool-performance]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 39192524196
+          name: windows-development-reports
+          path: previous-failure
+      - name: Extract bounded failure details
+        run: |
+          python3 - <<'PY'
+          import html,json,re
+          from pathlib import Path
+          path=next(Path('previous-failure').rglob('com.echo.jms.JmsRepeatedRecoveryIntegrationTest.html'))
+          for pre in re.findall(r'<pre[^>]*>(.*?)</pre>',path.read_text(),re.S):
+              text=html.unescape(re.sub(r'<[^>]*>','',pre))
+              if 'AssertionFailedError' not in text:continue
+              result={}
+              for name,pattern in [('expected',r'expected:\s*"([^"]*)"'),('actual',r'but was:\s*"([^"]*)"')]:
+                  match=re.search(pattern,text)
+                  if match:
+                      value=match.group(1)
+                      result[name]={'chars':len(value),'prefix':value[:250],'suffix':value[-100:]}
+              if not result:result={'boundedMessage':text[:500],'tail':text[-500:]}
+              print('TRIAGE_RESULT '+json.dumps(result,ensure_ascii=False))
+          PY
