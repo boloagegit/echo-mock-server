@@ -31,7 +31,7 @@ class MixedProtocolIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("14.2 同時存在 HTTP + JMS 規則，各自匹配正常")
+    @DisplayName("14.2 HTTP and JMS rules coexist and match independently")
     void mixedProtocols_coexist() {
         createHttpRule("/api/mixed", "GET",
                 "{\"type\":\"http\"}", "mixed.test");
@@ -52,7 +52,7 @@ class MixedProtocolIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("14.3 規則列表包含 HTTP 和 JMS 規則")
+    @DisplayName("14.3 The rule list includes HTTP and JMS rules")
     void ruleList_containsBothProtocols() {
         createHttpRule("/api/list-mix", "GET", "{\"http\":true}");
         createJmsRule("LIST.MIX.Q", "{\"jms\":true}");
@@ -67,7 +67,7 @@ class MixedProtocolIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("14.4 批次刪除混合規則")
+    @DisplayName("14.4 Batch deletion supports mixed protocols")
     void batchDelete_mixedProtocols() {
         RuleDto httpRule = createHttpRule("/api/bdel-mix", "GET", "{\"h\":true}");
         RuleDto jmsRule = createJmsRule("BDEL.MIX.Q", "{\"j\":true}");
@@ -91,7 +91,7 @@ class MixedProtocolIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("14.5 全部刪除")
+    @DisplayName("14.5 Deletes all rules")
     void deleteAll() {
         createHttpRule("/api/delall-a", "GET", "{\"a\":true}");
         createJmsRule("DELALL.Q", "{\"b\":true}");
@@ -105,7 +105,7 @@ class MixedProtocolIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("14.6 另一人修改後用舊版本更新 → 409；用每次存檔回傳的版本連續更新 → 都成功")
+    @DisplayName("14.6 A stale version returns 409 after another edit; consecutive updates using returned versions succeed")
     void sequentialUpdates_bothSucceed() {
         RuleDto rule = createHttpRule("/api/lock-test", "GET", "{\"ok\":true}");
 

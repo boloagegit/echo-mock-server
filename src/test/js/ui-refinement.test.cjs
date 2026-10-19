@@ -155,7 +155,11 @@ test('actual app comparison follows the JMS queue; replies follow the request, s
 
 test('complete save interval locks both editor bodies and mode controls, including before and after the API response', () => {
   const app = source('app.js');
-  const declaration = app.slice(app.indexOf('const applyRuleSettings ='), app.indexOf('// === 帳號管理 composable'));
+  const start = app.indexOf('const applyRuleSettings =');
+  const end = app.indexOf('const accountsCtx = useAccounts(', start);
+  assert.ok(start >= 0, 'the declarative save handler exists');
+  assert.ok(end > start, 'the next composable bounds the save handler');
+  const declaration = app.slice(start, end);
   assert.ok(declaration.indexOf('ruleSaveInFlight.value = true') < declaration.indexOf('await applyRuleDocument()'));
   assert.ok(declaration.indexOf('finally { ruleSaveInFlight.value = false; }') > declaration.indexOf('markRuleDraftSaved()'));
   const index = source('index.html');

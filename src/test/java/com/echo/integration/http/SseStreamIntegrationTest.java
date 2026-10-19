@@ -105,7 +105,7 @@ class SseStreamIntegrationTest extends BaseIntegrationTest {
     // ========== 5.2 Test Basic SSE Streaming ==========
 
     @Test
-    @DisplayName("基本 SSE 串流：3 個 normal 事件 → Content-Type 為 text/event-stream，收到 3 個事件、data 正確")
+    @DisplayName("Basic SSE stream: 3 normal events use text/event-stream and deliver the expected data")
     void basicSseStream_shouldReturn3EventsWithCorrectData() throws Exception {
         String sseBody = "[{\"type\":\"normal\",\"data\":\"event1\"},"
                 + "{\"type\":\"normal\",\"data\":\"event2\"},"
@@ -129,7 +129,7 @@ class SseStreamIntegrationTest extends BaseIntegrationTest {
     // ========== 5.3 Test SSE event including event name and id ==========
 
     @Test
-    @DisplayName("SSE 事件含 event name 與 id：event=update、id=42 → 驗證 SSE 協定格式")
+    @DisplayName("SSE event names and IDs: event=update and id=42 use the correct wire format")
     void sseEventWithNameAndId_shouldIncludeEventAndIdFields() throws Exception {
         String sseBody = "[{\"type\":\"normal\",\"data\":\"payload\",\"event\":\"update\",\"id\":\"42\"}]";
         createSseRule("/stream-named", sseBody);
@@ -153,7 +153,7 @@ class SseStreamIntegrationTest extends BaseIntegrationTest {
     // ========== 5.4 Test SSE event delay ==========
 
     @Test
-    @DisplayName("SSE 事件延遲：delayMs=300 → 總耗時 ≥ 300ms")
+    @DisplayName("SSE event delay: delayMs=300 takes at least 300 ms")
     void sseEventDelay_shouldTakeAtLeast300ms() throws Exception {
         String sseBody = "[{\"type\":\"normal\",\"data\":\"delayed\",\"delayMs\":300}]";
         createSseRule("/stream-delay", sseBody);
@@ -173,7 +173,7 @@ class SseStreamIntegrationTest extends BaseIntegrationTest {
     // ========== 5.5 Testing error event behavior ==========
 
     @Test
-    @DisplayName("error 事件行為：事件序列含 type=error → 收到 error event 後連線關閉")
+    @DisplayName("An error event closes the connection after delivery")
     void sseErrorEvent_shouldSendErrorAndClose() throws Exception {
         String sseBody = "[{\"type\":\"normal\",\"data\":\"before-error\"},"
                 + "{\"type\":\"error\",\"data\":\"something went wrong\"}]";
@@ -195,7 +195,7 @@ class SseStreamIntegrationTest extends BaseIntegrationTest {
     // ========== 5.6 Testing abort event behavior ==========
 
     @Test
-    @DisplayName("abort 事件行為：事件序列含 type=abort → 連線中斷")
+    @DisplayName("An abort event interrupts the connection")
     void sseAbortEvent_shouldDisconnect() throws Exception {
         String sseBody = "[{\"type\":\"normal\",\"data\":\"before-abort\"},"
                 + "{\"type\":\"abort\",\"data\":\"abort-data\"}]";
@@ -215,7 +215,7 @@ class SseStreamIntegrationTest extends BaseIntegrationTest {
     // ========== 5.7 Test SSE request fallback for non-SSE rules ==========
 
     @Test
-    @DisplayName("非 SSE 規則的 SSE 請求 fallback：sseEnabled=false → fallback 到一般 ResponseEntity")
+    @DisplayName("An SSE request to a non-SSE rule falls back to an ordinary ResponseEntity")
     void nonSseRuleFallback_shouldReturnNormalResponse() throws Exception {
         createHttpRule("/stream-fallback", "GET", "{\"fallback\":true}");
 
@@ -228,7 +228,7 @@ class SseStreamIntegrationTest extends BaseIntegrationTest {
     // ========== 5.8 Test SSE template rendering ==========
 
     @Test
-    @DisplayName("SSE 模板渲染：事件 data 含 {{request.path}} → 渲染後的值正確")
+    @DisplayName("SSE templates render {{request.path}} in event data correctly")
     void sseTemplateRendering_shouldRenderRequestPath() throws Exception {
         String sseBody = "[{\"type\":\"normal\",\"data\":\"path={{request.path}}\"}]";
         createSseRule("/stream-template", sseBody);
@@ -245,7 +245,7 @@ class SseStreamIntegrationTest extends BaseIntegrationTest {
     // ========== 5.9 Test SSE Rule responseId is null → 500 ==========
 
     @Test
-    @DisplayName("SSE 規則 responseId 為 null → 500")
+    @DisplayName("An SSE rule with null responseId returns 500")
     void sseRuleWithNullResponseId_shouldReturn500() throws Exception {
         // Create the SSE rule first (Response will be created automatically)
         RuleDto created = createSseRule("/stream-no-response",
@@ -268,7 +268,7 @@ class SseStreamIntegrationTest extends BaseIntegrationTest {
     // ========== 5.10 Test SSE Rule body is empty event list → 500 ==========
 
     @Test
-    @DisplayName("SSE 規則 body 為空事件列表 → 500")
+    @DisplayName("An SSE rule with an empty event list returns 500")
     void sseRuleWithEmptyEventList_shouldReturn500() throws Exception {
         // Create SSE rule, data of events in body are all empty (will be filtered out by parseSseEvents)
         // Establish legal rules first, then modify them directly Response body
@@ -294,7 +294,7 @@ class SseStreamIntegrationTest extends BaseIntegrationTest {
     // ========== 5.11 Test SSE No matching rule → 404 ==========
 
     @Test
-    @DisplayName("SSE 無匹配規則 → 404")
+    @DisplayName("No matching SSE rule returns 404")
     void sseNoMatchingRule_shouldReturn404() throws Exception {
         HttpResponse<String> response = sendSseRequest("/nonexistent-sse-path");
 

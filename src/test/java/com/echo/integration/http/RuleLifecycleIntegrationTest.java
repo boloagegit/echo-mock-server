@@ -41,7 +41,7 @@ class RuleLifecycleIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("12.2 停用規則後不參與 Mock 匹配")
+    @DisplayName("12.2 Disabled rules do not participate in mock matching")
     void disableRule_notMatchedByMock() {
         // Do not set targetHost to avoid proxy forwarding causing 502
         RuleDto rule = createHttpRule("/api/lifecycle-dis", "GET", "{\"ok\":true}");
@@ -59,7 +59,7 @@ class RuleLifecycleIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("12.3 重新啟用規則後恢復匹配")
+    @DisplayName("12.3 Re-enabling a rule restores matching")
     void enableRule_resumesMatching() {
         RuleDto rule = createHttpRule("/api/lifecycle-en", "GET", "{\"ok\":true}");
 
@@ -74,7 +74,7 @@ class RuleLifecycleIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("12.4 批次啟用/停用")
+    @DisplayName("12.4 Batch enable and disable")
     void batchEnableDisable() {
         RuleDto r1 = createHttpRule("/api/batch-a", "GET", "{\"a\":true}");
         RuleDto r2 = createHttpRule("/api/batch-b", "GET", "{\"b\":true}");
@@ -98,7 +98,7 @@ class RuleLifecycleIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("12.5 規則保護與取消保護")
+    @DisplayName("12.5 Protect and unprotect rules")
     void protectAndUnprotect() {
         RuleDto rule = createHttpRule("/api/protect-test", "GET", "{\"ok\":true}");
 
@@ -114,7 +114,7 @@ class RuleLifecycleIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("12.6 批次保護/取消保護")
+    @DisplayName("12.6 Batch protect and unprotect")
     void batchProtectUnprotect() {
         RuleDto r1 = createHttpRule("/api/bp-a", "GET", "{\"a\":true}");
         RuleDto r2 = createHttpRule("/api/bp-b", "GET", "{\"b\":true}");
@@ -131,7 +131,7 @@ class RuleLifecycleIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("12.7 規則展延 → extendedAt 被更新")
+    @DisplayName("12.7 Extending a rule updates extendedAt")
     void extendRule_updatesExtendedAt() {
         RuleDto rule = createHttpRule("/api/extend-test", "GET", "{\"ok\":true}");
         assertThat(rule.getExtendedAt()).isNull();
@@ -145,7 +145,7 @@ class RuleLifecycleIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("12.8 批次展延 → 多個規則 extendedAt 被更新")
+    @DisplayName("12.8 Batch extension updates extendedAt for multiple rules")
     void batchExtend() {
         RuleDto r1 = createHttpRule("/api/bext-a", "GET", "{\"a\":true}");
         RuleDto r2 = createHttpRule("/api/bext-b", "GET", "{\"b\":true}");
@@ -160,7 +160,7 @@ class RuleLifecycleIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("12.9 按標籤啟用/停用")
+    @DisplayName("12.9 Enable and disable rules by tag")
     void enableDisableByTag() {
         // Create rules and then update tags
         RuleDto rule = createHttpRule("/api/tag-test", "GET", "{\"ok\":true}");

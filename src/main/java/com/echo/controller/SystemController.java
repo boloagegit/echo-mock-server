@@ -9,6 +9,7 @@ import com.echo.protocol.ProtocolHandler;
 import com.echo.protocol.ProtocolHandlerRegistry;
 import com.echo.repository.BuiltinUserRepository;
 import com.echo.service.BackupService;
+import com.echo.service.BuildInfoService;
 import com.echo.service.IssueReportService;
 import com.echo.service.RequestLogService;
 import com.echo.service.ResponseService;
@@ -62,6 +63,7 @@ public class SystemController {
     private final AgentRegistry agentRegistry;
     private final CacheManager cacheManager;
     private final IssueReportService issueReportService;
+    private final BuildInfoService buildInfoService;
 
     @Value("${echo.ldap.enabled:false}")
     private boolean ldapEnabled;
@@ -202,6 +204,7 @@ public class SystemController {
         status.put("uiEasterEgg", uiEasterEgg);
         status.put("version", getClass().getPackage().getImplementationVersion() != null
                 ? getClass().getPackage().getImplementationVersion() : "dev");
+        status.put("build", buildInfoService.getMetadata());
         // Checking orphan rules
         status.put("orphanRules", responseService.countOrphanRules());
 

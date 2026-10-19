@@ -2,7 +2,7 @@
  * useRules - Rule Management Composable
  *
  * CRUD, filtering, sorting, paging, batch operations of management rules (rules),
- * Drag-and-drop sorting, in-line preview, export and import, label grouping and other functions.
+ * Inline previews, export/import, tag grouping, and related actions.
  *
  * @param {Object} deps - Dependent objects
  * @param {Function} deps.showToast - Toast notification function (from useToast)

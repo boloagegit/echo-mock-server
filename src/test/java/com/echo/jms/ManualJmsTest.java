@@ -27,7 +27,7 @@ public class ManualJmsTest {
                 
                 // Request without matching rules
                 String xml = "<request><serviceName>UnknownService</serviceName></request>";
-                System.out.println("--- 無匹配規則測試 ---");
+                System.out.println("--- No matching rule test ---");
                 System.out.println("Sent: " + xml);
                 
                 TextMessage request = session.createTextMessage(xml);

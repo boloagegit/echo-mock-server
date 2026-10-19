@@ -30,7 +30,7 @@ class RepeatedActionIntegrationTest extends BaseIntegrationTest {
     private CacheEventRepository cacheEvents;
 
     @Test
-    @DisplayName("重複停用不改版本，編輯中的人可以照常存檔；停用與重新啟用仍然生效")
+    @DisplayName("Repeated disabling preserves the version and concurrent edits while disable/re-enable operations still take effect")
     void repeatedDisableIsANoOp() {
         RuleDto rule = createHttpRule("/api/repeat-toggle", "GET", "{\"ok\":true}");
         long initial = cacheEvents.count();
@@ -55,7 +55,7 @@ class RepeatedActionIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("停用只寫一筆修訂記錄，版本只加一")
+    @DisplayName("Disabling creates one revision record and increments the version once")
     void oneDisableIsOneVersionAndOneAuditEntry() {
         RuleDto rule = createHttpRule("/api/repeat-audit", "GET", "{}");
         long before = get(rule.getId()).getVersion();
@@ -69,7 +69,7 @@ class RepeatedActionIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("重複保護不是錯誤；不存在的規則仍回 404；批次只回報實際改變的筆數")
+    @DisplayName("Repeated protection succeeds, missing rules return 404, and batches report only actual changes")
     void repeatedProtect() {
         RuleDto rule = createHttpRule("/api/repeat-protect", "GET", "{}");
         assertThat(state(rule.getId(), "protect")).isEqualTo(HttpStatus.OK);
@@ -85,7 +85,7 @@ class RepeatedActionIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("批次刪除不存在的規則不送同步事件")
+    @DisplayName("Deleting nonexistent rules in a batch emits no synchronization event")
     void deletingNothingPublishesNothing() {
         long events = cacheEvents.count();
         ResponseEntity<Map> deleted = adminClient().exchange("/api/admin/rules/batch", HttpMethod.DELETE,
@@ -95,7 +95,7 @@ class RepeatedActionIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("回應：內容沒變不送同步事件；用舊版本存檔回 409，不蓋掉別人的修改")
+    @DisplayName("Response no-ops emit no synchronization event; stale saves return 409 and preserve other edits")
     void responseSaves() {
         Response created = createResponse("repeat-response", "{\"v\":1}");
         Response mine = adminClient().getForObject("/api/admin/responses/" + created.getId(), Response.class);

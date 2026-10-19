@@ -59,7 +59,7 @@ class AdvancedMatchIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("進階條件：all／any／not、數值比較與 exists 依條件選擇規則，未命中時落到無條件規則")
+    @DisplayName("Advanced all/any/not, numeric, and exists conditions select rules and fall back to an unconditional rule on no match")
     void advancedRuleSelectsRequests() throws Exception {
         assertThat(post(advancedRule("/adv/orders", json(SPEC), "big")).getStatusCode())
                 .isEqualTo(HttpStatus.CREATED);
@@ -74,7 +74,7 @@ class AdvancedMatchIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("進階條件以規範化 JSON 儲存，舊欄位為空；可用舊語法表達的條件轉回舊欄位")
+    @DisplayName("Stores advanced conditions as normalized JSON with empty legacy fields, converting representable conditions back to legacy fields")
     void storageIsCanonicalAndLegacyExpressibleSpecsCollapse() throws Exception {
         RuleDto created = adminClient().postForEntity("/api/admin/rules",
                 advancedRule("/adv/store", json(SPEC), "ok"), RuleDto.class).getBody();
@@ -95,7 +95,7 @@ class AdvancedMatchIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("不認得 matchSpec 的編輯（沒有條件）保留進階條件；送出 {\"all\":[]} 才會清除")
+    @DisplayName("Edits unaware of matchSpec preserve advanced conditions; only an explicit {\"all\":[]} clears them")
     void editsWithoutConditionsPreserveTheAdvancedSpec() throws Exception {
         RuleDto created = adminClient().postForEntity("/api/admin/rules",
                 advancedRule("/adv/preserve", json(SPEC), "ok"), RuleDto.class).getBody();
@@ -120,7 +120,7 @@ class AdvancedMatchIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("matchSpec 與舊版條件同時出現、運算子錯誤、不支援的來源都在儲存時回 400")
+    @DisplayName("Saving rejects mixed matchSpec and legacy conditions, invalid operators, or unsupported sources with 400")
     void invalidSpecsAreRejectedOnSave() throws Exception {
         RuleDto conflict = advancedRule("/adv/bad", json(SPEC), "ok");
         conflict.setBodyCondition("a=1");
@@ -140,7 +140,7 @@ class AdvancedMatchIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("v2 文件可用 spec.match 建立規則；進階規則的 manifest 以 v2 輸出；v1 不接受 spec.match")
+    @DisplayName("v2 documents create rules through spec.match and export advanced rules as v2; v1 rejects spec.match")
     void v2DocumentsCarryMatch() throws Exception {
         String v2 = """
                 {"apiVersion": "echo.mock/v2", "kind": "Rule",
@@ -181,7 +181,7 @@ class AdvancedMatchIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("v2 schema 多了 spec.match；預設仍為 v1")
+    @DisplayName("The v2 schema adds spec.match while v1 remains the default")
     @SuppressWarnings({"unchecked", "rawtypes"})
     void schemaHasV2Variant() {
         Map v1 = adminClient().getForEntity("/api/admin/rules/schema", Map.class).getBody();
@@ -194,7 +194,7 @@ class AdvancedMatchIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("編輯器 API：舊版字串轉成舊版片段；即時檢查回傳正規化結果或帶路徑的錯誤（一律 200）")
+    @DisplayName("Editor API converts legacy strings to fragments and returns normalized validation results or path-specific errors with 200")
     @SuppressWarnings({"unchecked", "rawtypes"})
     void editorParseAndValidateEndpoints() throws Exception {
         Map parsed = adminClient().postForEntity("/api/admin/rules/match/parse", Map.of(

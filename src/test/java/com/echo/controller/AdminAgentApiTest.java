@@ -62,7 +62,7 @@ class AdminAgentApiTest {
         SystemController controller = new SystemController(
                 protocolHandlerRegistry, responseService, Optional.empty(), Optional.empty(), requestLogService,
                 Optional.empty(), Optional.empty(), builtinUserRepository, agentRegistry, cacheManager,
-                issueReportService);
+                issueReportService, new com.echo.service.BuildInfoService(Optional.empty()));
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 

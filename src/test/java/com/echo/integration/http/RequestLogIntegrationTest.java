@@ -46,7 +46,7 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("流量概況「看這些請求」：方法與網址完全相同才列出，與統計的筆數一致")
+    @DisplayName("Traffic-overview requests match method and URL exactly and agree with aggregate counts")
     void methodAndPathFilterMatchesTheTrafficCount() {
         HttpHeaders headers = new HttpHeaders();
         headers.set("X-Original-Host", "exact.test");
@@ -68,7 +68,7 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("10.2a HTTP Mock 請求成功 → 日誌 matched=true")
+    @DisplayName("10.2a A successful HTTP mock request records matched=true")
     void httpMockMatched_logsMatchedTrue() {
         createHttpRule("/api/log-test", "GET", "{\"ok\":true}", "log.test");
 
@@ -86,7 +86,7 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("處理流程圖的資料（候選規則數、模擬延遲）存進紀錄並由詳細資料回傳")
+    @DisplayName("Records and returns flow-diagram data, including candidate counts and simulated delay")
     @SuppressWarnings("unchecked")
     void flowDetailsAreStoredAndReturnedWithTheDetail() {
         createHttpRule("/api/log-flow", "GET", "{\"ok\":true}", "flow.test");
@@ -109,7 +109,7 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("10.2b HTTP Mock 無匹配 → 日誌 matched=false")
+    @DisplayName("10.2b An unmatched HTTP mock request records matched=false")
     void httpMockUnmatched_logsMatchedFalse() {
         HttpHeaders headers = new HttpHeaders();
         headers.set("X-Original-Host", "nomatch.test");
@@ -123,7 +123,7 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("10.3 日誌篩選: protocol / matched / endpoint")
+    @DisplayName("10.3 Log filters: protocol, matched, and endpoint")
     void logFiltering() {
         createHttpRule("/api/filter-a", "GET", "{\"a\":true}", "filter.test");
         createHttpRule("/api/filter-b", "GET", "{\"b\":true}", "filter.test");
@@ -156,7 +156,7 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("10.4 日誌摘要: totalRequests / matchedRequests / matchRate")
+    @DisplayName("10.4 Log summary: totalRequests, matchedRequests, and matchRate")
     void logSummary() {
         createHttpRule("/api/summary-test", "GET", "{\"ok\":true}", "summary.test");
 
@@ -186,7 +186,7 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("10.5 日誌查詢: endpoint 篩選")
+    @DisplayName("10.5 Log queries support endpoint filtering")
     void logEndpointFilter() {
         createHttpRule("/api/limit-test", "GET", "{\"ok\":true}", "limit.test");
 
@@ -202,7 +202,7 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("10.6 日誌查詢: 後端分頁、排序與 afterId 增量查詢")
+    @DisplayName("10.6 Log queries support server pagination, sorting, and incremental afterId queries")
     @SuppressWarnings("unchecked")
     void logServerPaginationAndIncrementalQuery() {
         HttpHeaders headers = new HttpHeaders();

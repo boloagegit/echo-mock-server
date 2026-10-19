@@ -48,7 +48,7 @@ class ArtemisTemporaryQueueCleanupIntegrationTest {
     }
 
     @Test
-    @DisplayName("沒有 consumer 的暫時佇列閒置後被刪除；仍在聽的佇列保留")
+    @DisplayName("Deletes idle consumerless temporary queues while retaining queues with active consumers")
     void idleTemporaryQueuesAreDeletedWhileListenedQueuesStay() throws Exception {
         Session session = start(IDLE_DELETE_MS);
         TemporaryQueue abandoned = session.createTemporaryQueue();
@@ -73,7 +73,7 @@ class ArtemisTemporaryQueueCleanupIntegrationTest {
     }
 
     @Test
-    @DisplayName("客戶端之後再聽已刪除的暫時佇列時會自動重建，仍收得到回覆")
+    @DisplayName("Listening again recreates a deleted temporary queue and still receives replies")
     void deletedTemporaryQueueIsRecreatedWhenTheClientListensAgain() throws Exception {
         Session session = start(IDLE_DELETE_MS);
         TemporaryQueue reused = session.createTemporaryQueue();
@@ -89,7 +89,7 @@ class ArtemisTemporaryQueueCleanupIntegrationTest {
     }
 
     @Test
-    @DisplayName("暫時佇列仍套用 # 的分頁與記憶體設定；一般佇列不會被設為自動刪除")
+    @DisplayName("Temporary queues retain # paging and memory settings; regular queues keep automatic deletion disabled")
     void temporaryQueuesKeepTheWildcardPolicy() throws Exception {
         Session session = start(IDLE_DELETE_MS);
         TemporaryQueue temporary = session.createTemporaryQueue();
@@ -108,7 +108,7 @@ class ArtemisTemporaryQueueCleanupIntegrationTest {
     }
 
     @Test
-    @DisplayName("設為 0 時不自動刪除，維持連線關閉才回收")
+    @DisplayName("Setting 0 disables automatic deletion and retains cleanup on connection close")
     void zeroKeepsTemporaryQueuesUntilTheConnectionCloses() throws Exception {
         Session session = start(0);
         TemporaryQueue abandoned = session.createTemporaryQueue();

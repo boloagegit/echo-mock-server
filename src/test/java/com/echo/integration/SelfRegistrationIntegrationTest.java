@@ -43,7 +43,7 @@ class SelfRegistrationIntegrationTest {
     }
 
     @Test
-    @DisplayName("自助註冊啟用時，未登入使用者可建立帳號並登入")
+    @DisplayName("When self-registration is enabled, anonymous users can create accounts and log in")
     void selfRegister_shouldCreateAccountAndAllowLogin() throws Exception {
         // 1. Self-service registration
         mockMvc.perform(post("/api/admin/builtin-users/register")
@@ -68,7 +68,7 @@ class SelfRegistrationIntegrationTest {
     }
 
     @Test
-    @DisplayName("自助註冊時帳號名稱重複應回傳 409")
+    @DisplayName("Self-registration with a duplicate username returns 409")
     void selfRegister_shouldRejectDuplicateUsername() throws Exception {
         // Register an account first
         mockMvc.perform(post("/api/admin/builtin-users/register")

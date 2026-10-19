@@ -99,7 +99,7 @@ class JmsMockIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("JMS 訊息發送與規則匹配: 建立規則 -> POST /api/admin/jms/test -> 200")
+    @DisplayName("JMS send and matching: create a rule, then POST /api/admin/jms/test returns 200")
     void sendMessage_matchesRule() throws Exception {
         RuleDto rule = createJmsRule("ECHO.REQUEST", "{\"ok\":true}");
         int before = currentJmsLogCount();
@@ -118,7 +118,7 @@ class JmsMockIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("JMS Body 條件匹配: bodyCondition=type=ORDER -> 匹配有條件的規則")
+    @DisplayName("JMS body conditions: bodyCondition=type=ORDER selects the conditional rule")
     void bodyCondition_matchesConditionalRule() throws Exception {
         RuleDto conditional = createJmsRule("ECHO.REQUEST",
                 "{\"matched\":\"conditional\"}",
@@ -138,7 +138,7 @@ class JmsMockIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("JMS 萬用 queueName=* 作為 fallback")
+    @DisplayName("JMS wildcard queueName=* provides a fallback")
     void wildcardQueue_fallback() throws Exception {
         RuleDto wildcard = createJmsRule("*",
                 "{\"matched\":\"wildcard\"}",
@@ -155,7 +155,7 @@ class JmsMockIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("JMS 規則優先順序: priority=10 優先於 priority=1")
+    @DisplayName("JMS rule priority: priority=10 precedes priority=1")
     void priority_higherPriorityMatches() throws Exception {
         createJmsRule("ECHO.REQUEST",
                 "{\"matched\":\"low\"}",
@@ -175,7 +175,7 @@ class JmsMockIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("JMS XML Body 條件匹配: //type=INVOICE -> 匹配 XML 訊息")
+    @DisplayName("JMS XML body conditions: //type=INVOICE matches the XML message")
     void xmlBodyCondition_matches() throws Exception {
         RuleDto xmlRule = createJmsRule("ECHO.REQUEST",
                 "<response>matched</response>",
@@ -193,7 +193,7 @@ class JmsMockIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("JMS 回覆套用共用模板：請求內容與訊息標頭都能帶進回覆")
+    @DisplayName("JMS replies use shared templates with request bodies and message headers")
     @SuppressWarnings("unchecked")
     void replyRendersSharedTemplate() {
         RuleDto rule = createJmsRule("ECHO.REQUEST",
@@ -209,7 +209,7 @@ class JmsMockIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("JMS 回覆沒有模板語法時原樣送出")
+    @DisplayName("JMS replies without template syntax are sent unchanged")
     @SuppressWarnings("unchecked")
     void replyWithoutTemplateIsUnchanged() {
         RuleDto rule = createJmsRule("ECHO.REQUEST", "<reply>static {braces} only</reply>");

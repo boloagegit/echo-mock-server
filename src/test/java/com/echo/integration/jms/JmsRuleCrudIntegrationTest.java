@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class JmsRuleCrudIntegrationTest extends BaseIntegrationTest {
 
     @Test
-    @DisplayName("建立 JMS 規則 → 201，回傳 dto 包含 protocol=JMS、matchKey=ORDER.Q")
+    @DisplayName("Creating a JMS rule returns 201 with protocol=JMS and matchKey=ORDER.Q")
     void createJmsRule_shouldReturn201WithCorrectFields() {
         RuleDto created = createJmsRule("ORDER.Q", "<ok/>");
 
@@ -29,7 +29,7 @@ class JmsRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("讀取 JMS 規則 → 200，欄位正確（含 responseBody）")
+    @DisplayName("Reading a JMS rule returns 200 with correct fields, including responseBody")
     void getJmsRule_shouldReturn200WithCorrectFields() {
         RuleDto created = createJmsRule("ORDER.Q", "<ok/>");
 
@@ -47,7 +47,7 @@ class JmsRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("更新 JMS 規則 description → 200，再 GET 確認已更新")
+    @DisplayName("Updating a JMS rule description returns 200 and a subsequent GET confirms the change")
     void updateJmsRule_shouldUpdateDescription() {
         RuleDto created = createJmsRule("ORDER.Q", "<ok/>");
 
@@ -75,7 +75,7 @@ class JmsRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("刪除 JMS 規則 → 204，再 GET → 404")
+    @DisplayName("Deleting a JMS rule returns 204 and a subsequent GET returns 404")
     void deleteJmsRule_shouldReturn204ThenGetReturns404() {
         RuleDto created = createJmsRule("ORDER.Q", "<ok/>");
 

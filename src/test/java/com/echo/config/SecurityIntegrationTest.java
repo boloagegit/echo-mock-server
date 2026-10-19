@@ -51,7 +51,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest({SystemController.class, RuleController.class, RuleApplyController.class, RuleStateController.class,
         ImportExportController.class, ResponseController.class, RequestLogController.class, AuditController.class,
         ScenarioController.class})
-@Import({SecurityConfig.class, LdapConfig.class, RuleApplyContractService.class, RuleEditService.class})
+@Import({SecurityConfig.class, LdapConfig.class, RuleApplyContractService.class, RuleEditService.class,
+        com.echo.service.BuildInfoService.class})
 @TestPropertySource(properties = "echo.features.bulk-import-export-enabled=true")
 class SecurityIntegrationTest {
 

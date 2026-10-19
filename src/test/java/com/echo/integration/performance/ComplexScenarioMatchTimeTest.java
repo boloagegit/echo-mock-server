@@ -35,7 +35,7 @@ class ComplexScenarioMatchTimeTest extends BaseIntegrationTest {
     private static final String ORIGINAL_HOST_HEADER = "X-Original-Host";
 
     @Test
-    @DisplayName("情境一：多條件匹配 + 模板渲染 — 測量 matchTimeMs")
+    @DisplayName("Scenario 1: measure matchTimeMs for multiple conditions and template rendering")
     void complexScenario_shouldMeasureMatchTime() {
         // === Create multiple rules to create sorting + matching chain complexity ===
 
@@ -152,11 +152,11 @@ class ComplexScenarioMatchTimeTest extends BaseIntegrationTest {
 
         // Output matching time
         System.out.println("========================================");
-        System.out.println("情境一壓力測試結果");
+        System.out.println("Scenario 1 load-test results");
         System.out.println("========================================");
-        System.out.println("匹配規則 ID:    " + latestLog.getRuleId());
-        System.out.println("匹配時間 (ms):  " + latestLog.getMatchTimeMs());
-        System.out.println("回應時間 (ms):  " + latestLog.getResponseTimeMs());
+        System.out.println("Matched rule ID:    " + latestLog.getRuleId());
+        System.out.println("Match time (ms):    " + latestLog.getMatchTimeMs());
+        System.out.println("Response time (ms): " + latestLog.getResponseTimeMs());
         System.out.println("========================================");
 
         // matchTimeMs should have a value

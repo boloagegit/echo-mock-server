@@ -29,7 +29,7 @@ class ResponseTemplateServiceTest {
     // === Request Path ===
 
     @Test
-    @DisplayName("應該能取得完整路徑")
+    @DisplayName("Reads the full request path")
     void shouldGetFullPath() {
         var context = buildContext("/api/users/123", "GET", null, null, null);
         String result = templateService.render("Path: {{request.path}}", context);
@@ -37,7 +37,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("應該能取得路徑片段")
+    @DisplayName("Reads path segments")
     void shouldGetPathSegments() {
         var context = buildContext("/api/users/123", "GET", null, null, null);
         String result = templateService.render("{{request.pathSegments.[0]}}/{{request.pathSegments.[2]}}", context);
@@ -47,7 +47,7 @@ class ResponseTemplateServiceTest {
     // === Request Method ===
 
     @Test
-    @DisplayName("應該能取得 HTTP 方法")
+    @DisplayName("Reads the HTTP method")
     void shouldGetMethod() {
         var context = buildContext("/test", "POST", null, null, null);
         String result = templateService.render("Method: {{request.method}}", context);
@@ -57,7 +57,7 @@ class ResponseTemplateServiceTest {
     // === Query Parameters ===
 
     @Test
-    @DisplayName("應該能取得 Query 參數")
+    @DisplayName("Reads query parameters")
     void shouldGetQueryParam() {
         Map<String, String> query = Map.of("name", "John", "age", "30");
         var context = buildContext("/test", "GET", query, null, null);
@@ -66,7 +66,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("Query 參數不存在時應該為空")
+    @DisplayName("Missing query parameters produce empty output")
     void shouldHandleMissingQueryParam() {
         var context = buildContext("/test", "GET", Map.of(), null, null);
         String result = templateService.render("Name: {{request.query.name}}", context);
@@ -76,7 +76,7 @@ class ResponseTemplateServiceTest {
     // === Headers ===
 
     @Test
-    @DisplayName("應該能取得 Header")
+    @DisplayName("Reads request headers")
     void shouldGetHeader() {
         Map<String, String> headers = Map.of("Authorization", "Bearer token123", "X-Request-Id", "req-456");
         var context = buildContext("/test", "GET", null, headers, null);
@@ -85,7 +85,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("Header 不存在時應該為空")
+    @DisplayName("Missing headers produce empty output")
     void shouldHandleMissingHeader() {
         var context = buildContext("/test", "GET", null, Map.of(), null);
         String result = templateService.render("Token: {{request.headers.X-Token}}", context);
@@ -95,7 +95,7 @@ class ResponseTemplateServiceTest {
     // === Request Body ===
 
     @Test
-    @DisplayName("應該能取得 Request Body")
+    @DisplayName("Reads the request body")
     void shouldGetBody() {
         String body = "{\"user\":\"test\"}";
         var context = buildContext("/test", "POST", null, null, body);
@@ -107,7 +107,7 @@ class ResponseTemplateServiceTest {
     // === Now (Date/Time) ===
 
     @Test
-    @DisplayName("應該能產生當前時間")
+    @DisplayName("Generates the current time")
     void shouldGenerateNow() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("{{now}}", context);
@@ -116,7 +116,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("應該能格式化當前時間")
+    @DisplayName("Formats the current time")
     void shouldFormatNow() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("{{now format='yyyy-MM-dd'}}", context);
@@ -124,7 +124,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("應該能產生 epoch 時間")
+    @DisplayName("Generates epoch time")
     void shouldGenerateEpoch() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("{{now format='epoch'}}", context);
@@ -135,7 +135,7 @@ class ResponseTemplateServiceTest {
     // === Random Value ===
 
     @Test
-    @DisplayName("應該能產生 UUID")
+    @DisplayName("Generates a UUID")
     void shouldGenerateUUID() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("{{randomValue type='UUID'}}", context);
@@ -143,7 +143,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("應該能產生指定長度的隨機字串")
+    @DisplayName("Generates a random string of the requested length")
     void shouldGenerateRandomString() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("{{randomValue length=10 type='ALPHANUMERIC'}}", context);
@@ -152,7 +152,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("應該能產生隨機數字")
+    @DisplayName("Generates a random number")
     void shouldGenerateRandomNumeric() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("{{randomValue length=6 type='NUMERIC'}}", context);
@@ -163,7 +163,7 @@ class ResponseTemplateServiceTest {
     // === Composite test ===
 
     @Test
-    @DisplayName("應該能處理複合模板")
+    @DisplayName("Renders compound templates")
     void shouldHandleComplexTemplate() {
         Map<String, String> query = Map.of("id", "123");
         Map<String, String> headers = Map.of("X-Correlation-Id", "corr-789");
@@ -191,7 +191,7 @@ class ResponseTemplateServiceTest {
     // === No template syntax ===
 
     @Test
-    @DisplayName("無模板語法時應該原樣返回")
+    @DisplayName("Returns text without template syntax unchanged")
     void shouldReturnAsIsWhenNoTemplate() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("Plain text response", context);
@@ -199,7 +199,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("空字串應該返回空字串")
+    @DisplayName("An empty string returns an empty string")
     void shouldHandleEmptyString() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("", context);
@@ -207,7 +207,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("null 應該返回空字串")
+    @DisplayName("null returns an empty string")
     void shouldHandleNull() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render(null, context);
@@ -215,13 +215,13 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("模板快取預設使用 16 MiB 權重預算")
+    @DisplayName("The template cache defaults to a 16 MiB weight budget")
     void shouldUseDefaultTemplateCacheWeightBudget() {
         assertEquals(16L * 1024 * 1024, templateService.templateCacheMaxWeightBytes());
     }
 
     @Test
-    @DisplayName("超過權重預算的模板仍會渲染但不進入快取")
+    @DisplayName("Templates exceeding the weight budget render without being cached")
     void oversizedTemplateShouldRenderWithoutBeingCached() {
         ResponseTemplateService smallCacheService = new ResponseTemplateService(1);
         String oversized = "x".repeat(175_000) + "{{request.method}}";
@@ -234,13 +234,13 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("模板權重包含來源字元與編譯結構預留")
+    @DisplayName("Template weight includes source characters and compiled-structure allowance")
     void templateWeightShouldBeConservative() {
         assertTrue(ResponseTemplateService.estimateTemplateWeight("x".repeat(1_000)) >= 6_000);
     }
 
     @Test
-    @DisplayName("共享編譯模板不得混用並行請求上下文")
+    @DisplayName("Shared compiled templates keep concurrent request contexts isolated")
     void cachedTemplateShouldKeepConcurrentRequestContextsIsolated() throws Exception {
         var executor = Executors.newFixedThreadPool(8);
         try {
@@ -287,7 +287,7 @@ class ResponseTemplateServiceTest {
     // === Conditional judgment {{#if}} ===
 
     @Test
-    @DisplayName("if - 條件為真時應該渲染內容")
+    @DisplayName("if renders its body when the condition is true")
     void shouldRenderIfTrue() {
         Map<String, String> query = Map.of("debug", "true");
         var context = buildContext("/test", "GET", query, null, null);
@@ -296,7 +296,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("if - 條件為假時不應該渲染內容")
+    @DisplayName("if omits its body when the condition is false")
     void shouldNotRenderIfFalse() {
         var context = buildContext("/test", "GET", Map.of(), null, null);
         String result = templateService.render("{{#if request.query.debug}}DEBUG MODE{{/if}}", context);
@@ -304,7 +304,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("if/else - 應該渲染 else 區塊")
+    @DisplayName("if/else renders the else branch")
     void shouldRenderElse() {
         var context = buildContext("/test", "GET", Map.of(), null, null);
         String result = templateService.render("{{#if request.query.name}}Hello {{request.query.name}}{{else}}Hello Guest{{/if}}", context);
@@ -312,7 +312,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("unless - 條件為假時應該渲染內容")
+    @DisplayName("unless renders its body when the condition is false")
     void shouldRenderUnless() {
         var context = buildContext("/test", "GET", Map.of(), null, null);
         String result = templateService.render("{{#unless request.query.auth}}Unauthorized{{/unless}}", context);
@@ -322,7 +322,7 @@ class ResponseTemplateServiceTest {
     // === comparison operator ===
 
     @Test
-    @DisplayName("eq - 相等比較")
+    @DisplayName("eq tests equality")
     void shouldCompareEqual() {
         Map<String, String> query = Map.of("status", "active");
         var context = buildContext("/test", "GET", query, null, null);
@@ -331,7 +331,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("ne - 不相等比較")
+    @DisplayName("ne tests inequality")
     void shouldCompareNotEqual() {
         Map<String, String> query = Map.of("status", "pending");
         var context = buildContext("/test", "GET", query, null, null);
@@ -340,7 +340,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("gt - 大於比較")
+    @DisplayName("gt tests greater-than comparisons")
     void shouldCompareGreaterThan() {
         Map<String, String> query = Map.of("count", "15");
         var context = buildContext("/test", "GET", query, null, null);
@@ -349,7 +349,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("lt - 小於比較")
+    @DisplayName("lt tests less-than comparisons")
     void shouldCompareLessThan() {
         Map<String, String> query = Map.of("count", "5");
         var context = buildContext("/test", "GET", query, null, null);
@@ -358,7 +358,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("contains - 包含比較")
+    @DisplayName("contains tests substring membership")
     void shouldCompareContains() {
         Map<String, String> query = Map.of("name", "John Doe");
         var context = buildContext("/test", "GET", query, null, null);
@@ -367,7 +367,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("matches - 正則比較")
+    @DisplayName("matches evaluates regular expressions")
     void shouldCompareMatches() {
         var context = buildContext("/api/v2/users", "GET", null, null, null);
         String result = templateService.render("{{#if (matches request.path '/api/v[0-9]+/')}}VERSIONED API{{/if}}", context);
@@ -377,7 +377,7 @@ class ResponseTemplateServiceTest {
     // === Loop {{#each}} ===
 
     @Test
-    @DisplayName("each - 應該能迭代 Query 參數陣列")
+    @DisplayName("each iterates query-parameter arrays")
     void shouldIterateQueryArray() {
         // Simulate the situation of ?ids=1&ids=2&ids=3, separated by commas
         Map<String, String> query = Map.of("ids", "1,2,3");
@@ -387,7 +387,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("each - 應該能使用 @index")
+    @DisplayName("each supports @index")
     void shouldAccessIndex() {
         Map<String, String> query = Map.of("items", "a,b,c");
         var context = buildContext("/test", "GET", query, null, null);
@@ -396,7 +396,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("each - 應該能使用 @first 和 @last")
+    @DisplayName("each supports @first and @last")
     void shouldAccessFirstLast() {
         Map<String, String> query = Map.of("items", "x,y,z");
         var context = buildContext("/test", "GET", query, null, null);
@@ -407,7 +407,7 @@ class ResponseTemplateServiceTest {
     // === String processing Helper ===
 
     @Test
-    @DisplayName("split - 應該能分割字串")
+    @DisplayName("split divides strings")
     void shouldSplitString() {
         Map<String, String> query = Map.of("tags", "java,spring,boot");
         var context = buildContext("/test", "GET", query, null, null);
@@ -416,7 +416,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("size - 應該能取得陣列大小")
+    @DisplayName("size returns the array length")
     void shouldGetSize() {
         Map<String, String> query = Map.of("items", "a,b,c,d,e");
         var context = buildContext("/test", "GET", query, null, null);
@@ -427,7 +427,7 @@ class ResponseTemplateServiceTest {
     // === Compound condition test ===
 
     @Test
-    @DisplayName("複合條件 - 根據方法和參數產生不同回應")
+    @DisplayName("Compound conditions generate different replies from methods and parameters")
     void shouldHandleComplexCondition() {
         var context = buildContext("/api/users", "POST", Map.of(), null, null);
         String template = "{{#if (eq request.method 'POST')}}Created{{else if (eq request.method 'GET')}}Retrieved{{else}}Unknown{{/if}}";
@@ -436,7 +436,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("複合模板 - 條件 + 迴圈 + 動態值")
+    @DisplayName("Compound templates combine conditions, loops, and dynamic values")
     void shouldHandleComplexTemplate2() {
         Map<String, String> query = Map.of("ids", "101,102", "format", "json");
         var context = buildContext("/api/orders", "GET", query, null, null);
@@ -454,7 +454,7 @@ class ResponseTemplateServiceTest {
     // === JSONPath ===
 
     @Test
-    @DisplayName("jsonPath - 應該能取得簡單欄位")
+    @DisplayName("jsonPath reads a simple field")
     void shouldGetJsonPathSimpleField() {
         String body = "{\"name\":\"Alice\",\"age\":25}";
         var context = buildContext("/test", "POST", null, null, body);
@@ -463,7 +463,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("jsonPath - 應該能取得巢狀欄位")
+    @DisplayName("jsonPath reads nested fields")
     void shouldGetJsonPathNestedField() {
         String body = "{\"user\":{\"profile\":{\"name\":\"Bob\"}}}";
         var context = buildContext("/test", "POST", null, null, body);
@@ -472,7 +472,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("jsonPath - 應該能取得陣列元素")
+    @DisplayName("jsonPath reads array elements")
     void shouldGetJsonPathArrayElement() {
         String body = "{\"items\":[{\"id\":1},{\"id\":2},{\"id\":3}]}";
         var context = buildContext("/test", "POST", null, null, body);
@@ -481,7 +481,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("jsonPath - 應該能取得陣列")
+    @DisplayName("jsonPath reads arrays")
     void shouldGetJsonPathArray() {
         String body = "{\"tags\":[\"java\",\"spring\",\"boot\"]}";
         var context = buildContext("/test", "POST", null, null, body);
@@ -490,7 +490,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("jsonPath - 路徑不存在時應該為空")
+    @DisplayName("jsonPath returns empty output for missing paths")
     void shouldHandleMissingJsonPath() {
         String body = "{\"name\":\"Alice\"}";
         var context = buildContext("/test", "POST", null, null, body);
@@ -499,7 +499,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("jsonPath - 無效 JSON 應該為空")
+    @DisplayName("jsonPath returns empty output for invalid JSON")
     void shouldHandleInvalidJson() {
         String body = "not a json";
         var context = buildContext("/test", "POST", null, null, body);
@@ -508,7 +508,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("jsonPath - 搭配 size 取得陣列大小")
+    @DisplayName("jsonPath combines with size to return an array length")
     void shouldGetJsonPathArraySize() {
         String body = "{\"items\":[1,2,3,4,5]}";
         var context = buildContext("/test", "POST", null, null, body);
@@ -519,7 +519,7 @@ class ResponseTemplateServiceTest {
     // === XPath ===
 
     @Test
-    @DisplayName("xPath - 應該能取得元素文字")
+    @DisplayName("xPath reads element text")
     void shouldGetXPathText() {
         String body = "<root><name>Alice</name></root>";
         var context = buildContext("/test", "POST", null, null, body);
@@ -528,7 +528,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("xPath - 應該能取得巢狀元素")
+    @DisplayName("xPath reads nested elements")
     void shouldGetXPathNestedElement() {
         String body = "<order><customer><name>Bob</name></customer></order>";
         var context = buildContext("/test", "POST", null, null, body);
@@ -537,7 +537,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("xPath - 應該能取得屬性")
+    @DisplayName("xPath reads attributes")
     void shouldGetXPathAttribute() {
         String body = "<item id=\"123\" status=\"active\"/>";
         var context = buildContext("/test", "POST", null, null, body);
@@ -546,7 +546,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("xPath - 路徑不存在時應該為空")
+    @DisplayName("xPath returns empty output for missing paths")
     void shouldHandleMissingXPath() {
         String body = "<root><name>Alice</name></root>";
         var context = buildContext("/test", "POST", null, null, body);
@@ -555,7 +555,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("xPath - 無效 XML 應該為空")
+    @DisplayName("xPath returns empty output for invalid XML")
     void shouldHandleInvalidXml() {
         String body = "not xml";
         var context = buildContext("/test", "POST", null, null, body);
@@ -566,7 +566,7 @@ class ResponseTemplateServiceTest {
     // === Composite test ===
 
     @Test
-    @DisplayName("jsonPath + 條件 - 根據 JSON 欄位判斷")
+    @DisplayName("jsonPath conditions evaluate JSON fields")
     void shouldUseJsonPathInCondition() {
         String body = "{\"status\":\"active\",\"count\":10}";
         var context = buildContext("/test", "POST", null, null, body);
@@ -575,7 +575,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("jsonPath + 迴圈 - 迭代 JSON 陣列")
+    @DisplayName("jsonPath loops iterate JSON arrays")
     void shouldIterateJsonPathArray() {
         String body = "{\"users\":[{\"name\":\"A\"},{\"name\":\"B\"},{\"name\":\"C\"}]}";
         var context = buildContext("/test", "POST", null, null, body);
@@ -590,7 +590,7 @@ class ResponseTemplateServiceTest {
     // === randomFirstName ===
 
     @Test
-    @DisplayName("randomFirstName - 應該產生非空名字")
+    @DisplayName("randomFirstName generates a nonempty first name")
     void shouldGenerateRandomFirstName() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("{{randomFirstName}}", context);
@@ -602,7 +602,7 @@ class ResponseTemplateServiceTest {
     // === randomLastName ===
 
     @Test
-    @DisplayName("randomLastName - 應該產生非空姓氏")
+    @DisplayName("randomLastName generates a nonempty last name")
     void shouldGenerateRandomLastName() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("{{randomLastName}}", context);
@@ -614,7 +614,7 @@ class ResponseTemplateServiceTest {
     // === randomFullName ===
 
     @Test
-    @DisplayName("randomFullName - 應該產生包含空格的全名")
+    @DisplayName("randomFullName generates a full name containing a space")
     void shouldGenerateRandomFullName() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("{{randomFullName}}", context);
@@ -625,7 +625,7 @@ class ResponseTemplateServiceTest {
     // === randomEmail ===
 
     @Test
-    @DisplayName("randomEmail - 應該產生有效格式的 email")
+    @DisplayName("randomEmail generates a correctly formatted email address")
     void shouldGenerateRandomEmail() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("{{randomEmail}}", context);
@@ -635,7 +635,7 @@ class ResponseTemplateServiceTest {
     // === randomPhoneNumber ===
 
     @Test
-    @DisplayName("randomPhoneNumber - 應該產生格式化電話號碼")
+    @DisplayName("randomPhoneNumber generates a formatted phone number")
     void shouldGenerateRandomPhoneNumber() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("{{randomPhoneNumber}}", context);
@@ -645,7 +645,7 @@ class ResponseTemplateServiceTest {
     // === randomCity ===
 
     @Test
-    @DisplayName("randomCity - 應該產生非空城市名")
+    @DisplayName("randomCity generates a nonempty city name")
     void shouldGenerateRandomCity() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("{{randomCity}}", context);
@@ -656,7 +656,7 @@ class ResponseTemplateServiceTest {
     // === randomCountry ===
 
     @Test
-    @DisplayName("randomCountry - 應該產生非空國家名")
+    @DisplayName("randomCountry generates a nonempty country name")
     void shouldGenerateRandomCountry() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("{{randomCountry}}", context);
@@ -667,7 +667,7 @@ class ResponseTemplateServiceTest {
     // === randomStreetAddress ===
 
     @Test
-    @DisplayName("randomStreetAddress - 應該產生門牌號碼 + 街道名")
+    @DisplayName("randomStreetAddress generates a street number and name")
     void shouldGenerateRandomStreetAddress() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("{{randomStreetAddress}}", context);
@@ -677,7 +677,7 @@ class ResponseTemplateServiceTest {
     // === randomInt ===
 
     @Test
-    @DisplayName("randomInt - 應該產生指定範圍內的整數")
+    @DisplayName("randomInt generates an integer within the requested range")
     void shouldGenerateRandomInt() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("{{randomInt min=10 max=20}}", context);
@@ -686,7 +686,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("randomInt - 預設範圍 0~100")
+    @DisplayName("randomInt defaults to the range 0 through 100")
     void shouldGenerateRandomIntDefault() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("{{randomInt}}", context);
@@ -695,7 +695,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("randomInt - min > max 時應自動交換")
+    @DisplayName("randomInt swaps min and max when min > max")
     void shouldSwapMinMaxWhenReversed() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("{{randomInt min=50 max=10}}", context);
@@ -704,7 +704,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("randomInt - min == max 時應回傳該值")
+    @DisplayName("randomInt returns the bound when min == max")
     void shouldReturnExactValueWhenMinEqualsMax() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("{{randomInt min=42 max=42}}", context);
@@ -712,7 +712,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("randomInt - 支援負數範圍")
+    @DisplayName("randomInt supports negative ranges")
     void shouldSupportNegativeRange() {
         var context = buildContext("/test", "GET", null, null, null);
         String result = templateService.render("{{randomInt min=-10 max=-1}}", context);
@@ -723,7 +723,7 @@ class ResponseTemplateServiceTest {
     // === Faker composite test ===
 
     @Test
-    @DisplayName("Faker - 多次呼叫應產生不同結果（隨機性驗證）")
+    @DisplayName("Faker produces different results across repeated calls")
     void shouldGenerateDifferentValuesOnMultipleCalls() {
         var context = buildContext("/test", "GET", null, null, null);
         Set<String> results = new HashSet<>();
@@ -735,7 +735,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("Faker + 條件 - faker 搭配 if/eq 使用")
+    @DisplayName("Faker combines with if/eq conditions")
     void shouldUseFakerWithCondition() {
         var context = buildContext("/test", "POST", null, null, null);
         String template = "{{#if (eq request.method 'POST')}}Created by {{randomFirstName}}{{/if}}";
@@ -745,7 +745,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("Faker + each 迴圈 - 每次迭代應產生值")
+    @DisplayName("Faker produces a value on each loop iteration")
     void shouldUseFakerInEachLoop() {
         Map<String, String> query = Map.of("ids", "1,2,3");
         var context = buildContext("/test", "GET", query, null, null);
@@ -761,7 +761,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("randomInt - Integer.MAX_VALUE 邊界不應溢位")
+    @DisplayName("randomInt does not overflow at Integer.MAX_VALUE")
     void shouldHandleIntMaxValue() {
         var context = buildContext("/test", "GET", null, null, null);
         // Using range close to MAX_VALUE
@@ -772,7 +772,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("Faker 複合模板 - 產生完整使用者資料")
+    @DisplayName("Compound Faker templates generate complete user profiles")
     void shouldGenerateFakeUserProfile() {
         var context = buildContext("/test", "GET", null, null, null);
         String template = """
@@ -794,7 +794,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("renderIfTemplate：沒有模板語法時不建立上下文、原樣回傳")
+    @DisplayName("renderIfTemplate returns non-template text unchanged without creating a context")
     void renderIfTemplateSkipsContextWithoutTemplate() {
         java.util.concurrent.atomic.AtomicInteger built = new java.util.concurrent.atomic.AtomicInteger();
 
@@ -810,7 +810,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("TemplateContext.of 由原始 query string 建立 query")
+    @DisplayName("TemplateContext.of builds query parameters from the raw query string")
     void templateContextParsesQueryString() {
         var context = ResponseTemplateService.TemplateContext.of("/p", "GET", "a=1&b=x&flag", Map.of("h", "v"), "body");
 
@@ -824,7 +824,7 @@ class ResponseTemplateServiceTest {
     // ========================================
 
     @Test
-    @DisplayName("同一內容的多個 xPath / jsonPath 結果與逐一解析時相同")
+    @DisplayName("Repeated xPath/jsonPath reads on the same content match individually parsed results")
     void multiplePathsOnSameBodyGiveSameResults() {
         String xml = "<o><a>1</a><b x='y'>2</b><c><d>3</d></c></o>";
         var xmlContext = buildContext("/t", "POST", null, null, xml);
@@ -842,7 +842,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("ParsedBodies：相同內容只解析一次，解析失敗也記住")
+    @DisplayName("ParsedBodies parses identical content once and remembers parsing failures")
     void parsedBodiesParseEachSourceOnce() {
         var parsed = new ResponseTemplateService.ParsedBodies();
         String xml = "<o><a>1</a></o>";
@@ -855,7 +855,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("ParsedBodies：只保留最近幾份內容")
+    @DisplayName("ParsedBodies retains only the most recent bodies")
     void parsedBodiesKeepOnlyRecentSources() {
         var parsed = new ResponseTemplateService.ParsedBodies();
         var first = parsed.xml("<o>0</o>");
@@ -867,7 +867,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("解析結果不跨請求：不同請求的內容各自取值")
+    @DisplayName("Parsed results remain request-local and use each request's content")
     void parsedBodiesAreNotSharedAcrossRenders() {
         String template = "{{xPath request.body '//id/text()'}}-{{jsonPath request.body '$.id'}}";
         assertEquals("A-", templateService.render(template, buildContext("/t", "POST", null, null, "<r><id>A</id></r>")));
@@ -876,7 +876,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("多執行緒同時渲染 xPath / jsonPath，各自拿到自己的值")
+    @DisplayName("Concurrent xPath/jsonPath rendering returns each thread's own values")
     void concurrentRendersWithPathsStayIsolated() throws Exception {
         var executor = Executors.newFixedThreadPool(8);
         try {
@@ -905,14 +905,14 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("無效的 XPath 運算式回傳空字串，不影響同一模板的其他欄位")
+    @DisplayName("Invalid XPath expressions return an empty string without affecting other template fields")
     void invalidXPathExpressionReturnsEmpty() {
         var context = buildContext("/t", "POST", null, null, "<r><id>1</id></r>");
         assertEquals("[]1", templateService.render("[{{xPath request.body '//['}}]{{xPath request.body '//id/text()'}}", context));
     }
 
     @Test
-    @DisplayName("jsonPath append() 不影響同一模板中其他欄位讀到的內容")
+    @DisplayName("jsonPath append() does not affect other field reads in the same template")
     void jsonPathAppendDoesNotLeakIntoLaterPaths() {
         var context = buildContext("/t", "POST", null, null, "{\"items\":[{\"id\":7},{\"id\":8}]}");
 
@@ -923,7 +923,7 @@ class ResponseTemplateServiceTest {
     }
 
     @Test
-    @DisplayName("由請求內容組出的長 XPath 不留在執行緒上")
+    @DisplayName("Long request-derived XPath expressions are not retained on threads")
     void longXPathExpressionsAreNotRetained() throws Exception {
         var executor = Executors.newSingleThreadExecutor();
         try {

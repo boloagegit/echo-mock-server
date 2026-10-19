@@ -45,7 +45,7 @@ class JmsDisabledIntegrationTest {
     }
 
     @Test
-    @DisplayName("JMS 停用時不啟動內建 broker 與 listener")
+    @DisplayName("Disabling JMS starts neither the embedded broker nor listeners")
     void disabledJmsDoesNotStartEmbeddedBrokerOrListener() {
         assertThat(context.getBeansOfType(EmbeddedActiveMQ.class)).isEmpty();
         assertThat(context.getBeansOfType(JmsConnectionManager.class)).isEmpty();
@@ -53,7 +53,7 @@ class JmsDisabledIntegrationTest {
     }
 
     @Test
-    @DisplayName("JMS 停用時 HTTP 模擬與 readiness 仍正常")
+    @DisplayName("HTTP mocks and readiness remain available with JMS disabled")
     void httpMockAndReadinessRemainAvailable() {
         RuleDto dto = RuleDto.builder()
                 .protocol(Protocol.HTTP).method("GET").matchKey("/jms-disabled/http")
@@ -69,7 +69,7 @@ class JmsDisabledIntegrationTest {
     }
 
     @Test
-    @DisplayName("JMS 停用時 POST JMS 規則 → 400，錯誤訊息包含 JMS")
+    @DisplayName("Creating a JMS rule while JMS is disabled returns 400 with a JMS-related error")
     @SuppressWarnings("unchecked")
     void createJmsRuleWhenDisabled_shouldReturn400() {
         RuleDto dto = RuleDto.builder()

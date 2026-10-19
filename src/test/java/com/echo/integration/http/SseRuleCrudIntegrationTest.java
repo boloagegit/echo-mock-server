@@ -27,7 +27,7 @@ class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
     // ========== 4.2 Test establishment of SSE rules ==========
 
     @Test
-    @DisplayName("建立 SSE 規則：sseEnabled=true + 合法 SSE JSON body → 201，dto 包含 sseEnabled=true、sseLoopEnabled=false、responseContentType=SSE_EVENTS")
+    @DisplayName("Creating an SSE rule with valid events returns 201, sseEnabled=true, sseLoopEnabled=false, and responseContentType=SSE_EVENTS")
     void createSseRule_shouldReturn201WithCorrectFields() {
         RuleDto created = createSseRule("/api/sse/test", VALID_SSE_BODY);
 
@@ -43,7 +43,7 @@ class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
     // ========== 4.3 Test Update SSE Rules ==========
 
     @Test
-    @DisplayName("更新 SSE 規則：修改 sseLoopEnabled=true → 確認更新成功")
+    @DisplayName("Updating an SSE rule sets sseLoopEnabled=true successfully")
     void updateSseRule_shouldUpdateSseLoopEnabled() {
         RuleDto created = createSseRule("/api/sse/update", VALID_SSE_BODY);
 
@@ -89,7 +89,7 @@ class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("SSE body 驗證：非 JSON 陣列（純字串）→ 400")
+    @DisplayName("SSE validation rejects a JSON string instead of an array with 400")
     void sseBodyValidation_notJsonArray_shouldReturn400() {
         RuleDto dto = RuleDto.builder()
                 .protocol(Protocol.HTTP)
@@ -107,7 +107,7 @@ class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("SSE body 驗證：JSON 物件（非陣列）→ 400")
+    @DisplayName("SSE validation rejects a JSON object instead of an array with 400")
     void sseBodyValidation_jsonObjectNotArray_shouldReturn400() {
         RuleDto dto = RuleDto.builder()
                 .protocol(Protocol.HTTP)
@@ -125,7 +125,7 @@ class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("SSE body 驗證：空陣列 [] → 400")
+    @DisplayName("SSE validation rejects an empty event array with 400")
     void sseBodyValidation_emptyArray_shouldReturn400() {
         RuleDto dto = RuleDto.builder()
                 .protocol(Protocol.HTTP)
@@ -143,7 +143,7 @@ class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("SSE body 驗證：事件 data 為空 → 400")
+    @DisplayName("SSE validation rejects empty event data with 400")
     void sseBodyValidation_emptyEventData_shouldReturn400() {
         RuleDto dto = RuleDto.builder()
                 .protocol(Protocol.HTTP)
@@ -161,7 +161,7 @@ class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("SSE body 驗證：無效 type → 400")
+    @DisplayName("SSE validation rejects an invalid event type with 400")
     void sseBodyValidation_invalidType_shouldReturn400() {
         RuleDto dto = RuleDto.builder()
                 .protocol(Protocol.HTTP)
@@ -181,7 +181,7 @@ class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
     // ========== 4.5 Testing non-SSE rules does not trigger SSE verification ==========
 
     @Test
-    @DisplayName("非 SSE 規則不觸發 SSE 驗證：sseEnabled=false + 任意 body → 不被 SSE 驗證器拒絕")
+    @DisplayName("Non-SSE rules skip SSE validation for arbitrary bodies")
     void nonSseRule_shouldNotTriggerSseValidation() {
         // Use of illegal SSE body (but legal plain text for general HTTP rules)
         RuleDto created = createHttpRule("/api/non-sse", "GET", "this is not a json array");
@@ -192,7 +192,7 @@ class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("非 SSE 規則：sseEnabled=false + 空陣列 body → 建立成功（不觸發 SSE 驗證）")
+    @DisplayName("Non-SSE rules accept an empty array body without SSE validation")
     void nonSseRule_withEmptyArrayBody_shouldSucceed() {
         RuleDto created = createHttpRule("/api/non-sse-array", "GET", "[]");
 

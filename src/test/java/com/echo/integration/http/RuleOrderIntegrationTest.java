@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RuleOrderIntegrationTest extends BaseIntegrationTest {
 
     @Test
-    @DisplayName("條件相同的較後規則被標為輪不到，判斷順序依實際排序列出")
+    @DisplayName("Later rules with identical conditions are unreachable and evaluation order matches actual sorting")
     @SuppressWarnings("unchecked")
     void duplicateRuleIsReportedAndOrderIsListed() {
         RuleDto vip = createHttpRule("/api/order-check", "POST", "{\"vip\":true}", null, 200,

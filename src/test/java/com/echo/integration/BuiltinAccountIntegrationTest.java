@@ -57,7 +57,7 @@ class BuiltinAccountIntegrationTest {
     // ========== Test 1: Log in successfully after creating an account ==========
 
     @Test
-    @DisplayName("建立內建帳號後，使用該帳號密碼登入應成功")
+    @DisplayName("A newly created built-in account can log in with its credentials")
     void createUserThenLogin_shouldSucceed() throws Exception {
         // Create an account through API (as admin)
         mockMvc.perform(post("/api/admin/builtin-users")
@@ -80,7 +80,7 @@ class BuiltinAccountIntegrationTest {
     // ========== Test 2: Login failed after deactivating the account ==========
 
     @Test
-    @DisplayName("停用帳號後，使用該帳號登入應失敗")
+    @DisplayName("A disabled account cannot log in")
     void disabledUser_loginShouldFail() throws Exception {
         // Create account
         BuiltinUser user = builtinUserService.createUser("vendor02", "secret123");
@@ -100,7 +100,7 @@ class BuiltinAccountIntegrationTest {
     // ========== Test 3: Appear in the list after creating an account API ==========
 
     @Test
-    @DisplayName("建立帳號後，帳號清單 API 應包含該帳號")
+    @DisplayName("The account-list API includes newly created accounts")
     void createUser_shouldAppearInListApi() throws Exception {
         // Create account
         builtinUserService.createUser("vendor03", "secret123");
@@ -116,7 +116,7 @@ class BuiltinAccountIntegrationTest {
     }
 
     @Test
-    @DisplayName("帳號管理分頁 API 支援搜尋、狀態篩選與排序")
+    @DisplayName("The paginated account API supports search, status filters, and sorting")
     void accountPage_shouldFilterSortAndPaginate() throws Exception {
         BuiltinUser alpha = builtinUserService.createUser("alpha-user", "secret123");
         builtinUserService.createUser("beta-user", "secret123");
@@ -142,7 +142,7 @@ class BuiltinAccountIntegrationTest {
     // ========== Test 4: Complete password reset process ==========
 
     @Test
-    @DisplayName("密碼重設流程：建立帳號 → 重設密碼 → 用臨時密碼登入 → 強制改密碼")
+    @DisplayName("Password reset: create an account, reset its password, log in with the temporary password, then force a password change")
     void fullPasswordResetFlow() throws Exception {
         // 1. Create an account
         BuiltinUser user = builtinUserService.createUser("vendor04", "original123");
@@ -198,7 +198,7 @@ class BuiltinAccountIntegrationTest {
     // ========== Test 5: Forgot password API Do not reveal the existence of the account ==========
 
     @Test
-    @DisplayName("忘記密碼 API 對存在與不存在的帳號都回傳 200")
+    @DisplayName("The forgot-password API returns 200 for both existing and nonexistent accounts")
     void forgotPassword_shouldReturn200ForBothExistingAndNonExisting() throws Exception {
         // Create an account
         builtinUserService.createUser("vendor05", "secret123");
@@ -228,7 +228,7 @@ class BuiltinAccountIntegrationTest {
     // ========== Test 6: Non-Admin cannot access account management API ==========
 
     @Test
-    @DisplayName("非 Admin 使用者無法存取 /api/admin/builtin-users")
+    @DisplayName("Non-admin users cannot access /api/admin/builtin-users")
     void nonAdminUser_cannotAccessBuiltinUsersApi() throws Exception {
         // Not certified → 401
         mockMvc.perform(get("/api/admin/builtin-users")
@@ -254,7 +254,7 @@ class BuiltinAccountIntegrationTest {
     // ========== Test 7: Logged in users can change their password ==========
 
     @Test
-    @DisplayName("已登入的內建帳號使用者可透過 change-password API 修改密碼")
+    @DisplayName("Signed-in built-in users can change their password through the change-password API")
     void authenticatedUser_canChangePassword() throws Exception {
         // Create account
         builtinUserService.createUser("vendor07", "oldPass123");
@@ -286,7 +286,7 @@ class BuiltinAccountIntegrationTest {
     // ========== Test 8: Database unique account name constraint ==========
 
     @Test
-    @DisplayName("資料庫層級的 username 唯一約束應阻止重複帳號")
+    @DisplayName("The database username uniqueness constraint rejects duplicate accounts")
     void uniqueUsernameConstraint_shouldPreventDuplicates() throws Exception {
         // Create your first account
         builtinUserService.createUser("uniqueuser", "secret123");
@@ -308,7 +308,7 @@ class BuiltinAccountIntegrationTest {
     // ========== Test 9: Self-service registration is disabled by default ==========
 
     @Test
-    @DisplayName("自助註冊預設停用，應回傳 403")
+    @DisplayName("Self-registration is disabled by default and returns 403")
     void selfRegister_shouldReturn403_whenDisabledByDefault() throws Exception {
         mockMvc.perform(post("/api/admin/builtin-users/register")
                         .contentType(MediaType.APPLICATION_JSON)

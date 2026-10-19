@@ -16,6 +16,29 @@ def gitTag = providers.exec {
 version = releaseVersion ?: (gitTag ? gitTag.replaceFirst(/^v/, '') : '0.0.0-SNAPSHOT')
 description = 'Enterprise-grade dual-protocol mock server for HTTP and JMS'
 
+// Capture the source identity at build time; deployed JARs never invoke Git.
+def gitCommit = providers.exec {
+    commandLine 'git', 'rev-parse', '--verify', 'HEAD'
+    ignoreExitValue = true
+}.standardOutput.asText.get().trim()
+def gitStatus = providers.exec {
+    commandLine 'git', 'status', '--porcelain', '--untracked-files=normal'
+    ignoreExitValue = true
+}
+def gitDirty = gitCommit && gitStatus.result.get().exitValue == 0
+        ? !gitStatus.standardOutput.asText.get().trim().isEmpty() : null
+
+springBoot {
+    buildInfo {
+        properties {
+            additional = [
+                    'git.commit': gitCommit,
+                    'git.dirty': gitDirty == null ? 'unknown' : gitDirty.toString()
+            ]
+        }
+    }
+}
+
 // Required by the current SpotBugs/BCEL toolchain and backward-compatible with
 // Spring Boot 3.5's managed Commons Lang API.
 ext['commons-lang3.version'] = '3.20.0'

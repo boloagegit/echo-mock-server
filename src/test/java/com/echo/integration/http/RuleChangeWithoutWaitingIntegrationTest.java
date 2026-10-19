@@ -66,7 +66,7 @@ class RuleChangeWithoutWaitingIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("規則清單重建很慢時，模擬請求立刻用舊清單回應；存檔回應時新規則已生效")
+    @DisplayName("During slow snapshot rebuilding, mock requests use the old rules immediately; save replies wait for the new rules")
     void mockRequestsDoNotWaitWhileTheRuleListIsRebuilt() throws Exception {
         createHttpRule("/nowait/a", "GET", "A");
         assertThat(mock("/nowait/a").getBody()).isEqualTo("A");
@@ -91,7 +91,7 @@ class RuleChangeWithoutWaitingIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("存檔後立刻送出的模擬請求用到新內容（修改、刪除）")
+    @DisplayName("Mock requests immediately after saving see updates and deletions")
     void changesAreLiveWhenTheAdminResponseArrives() {
         RuleDto rule = createHttpRule("/nowait/edit", "GET", "old");
         assertThat(mock("/nowait/edit").getBody()).isEqualTo("old");
@@ -111,7 +111,7 @@ class RuleChangeWithoutWaitingIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("批次匯入 50 條：只等一次重建，回應時全部規則都已生效")
+    @DisplayName("Importing 50 rules waits for one rebuild and replies only after every rule takes effect")
     void batchImportWaitsOnceAndEveryRuleIsLive() {
         createHttpRule("/nowait/warm", "GET", "warm");
         assertThat(mock("/nowait/warm").getBody()).isEqualTo("warm");

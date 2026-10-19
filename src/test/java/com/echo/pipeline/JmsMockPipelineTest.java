@@ -100,11 +100,11 @@ class JmsMockPipelineTest {
     // ==================== 1. Normal match response ====================
 
     @Nested
-    @DisplayName("正常匹配回應")
+    @DisplayName("Matched response")
     class NormalMatchResponse {
 
         @Test
-        @DisplayName("無 body 條件時不解析 XML DOM")
+        @DisplayName("No body conditions means no XML DOM parsing")
         void unconditionalRuleSkipsBodyParsing() {
             JmsRule rule = buildRule("jms-fallback", "ORDER.REQUEST", null, 99L);
 
@@ -120,7 +120,7 @@ class JmsMockPipelineTest {
         }
 
         @Test
-        @DisplayName("回覆內容經共用模板渲染：可用請求 body 與訊息標頭")
+        @DisplayName("Shared reply templates support request bodies and message headers")
         void responseBodyIsRenderedWithSharedTemplate() {
             pipeline.setTemplateService(new com.echo.service.ResponseTemplateService());
             JmsRule rule = buildRule("jms-template", "ORDER.REQUEST", null, 101L);
@@ -142,7 +142,7 @@ class JmsMockPipelineTest {
         }
 
         @Test
-        @DisplayName("匹配成功時回傳 status=200、正確 body、matched=true")
+        @DisplayName("A match returns status=200, the expected body, and matched=true")
         void matchedReturnsCorrectResponse() {
             JmsRule rule = buildRule("jms-rule-1", "ORDER.REQUEST",
                     "ServiceName=CreateOrder", 100L);
@@ -182,11 +182,11 @@ class JmsMockPipelineTest {
     // ==================== 2. JMS forwarding success ====================
 
     @Nested
-    @DisplayName("JMS 轉發成功")
+    @DisplayName("Successful JMS forwarding")
     class JmsForwardingSuccess {
 
         @Test
-        @DisplayName("無匹配且 target 啟用時轉發成功，forwarded=true")
+        @DisplayName("No match with an enabled target forwards successfully with forwarded=true")
         void forwardSuccess() {
             when(targetForwarder.hasActiveTarget()).thenReturn(true);
             when(jmsProperties.getQueue()).thenReturn("ORDER.REQUEST");
@@ -214,7 +214,7 @@ class JmsMockPipelineTest {
 
 
         @Test
-        @DisplayName("規則命中時使用該規則指定的 JMS 連線")
+        @DisplayName("A matching rule uses its configured JMS connection")
         void matchedRuleUsesSelectedConnection() {
             JmsRule rule = buildRule("jms-forward-rule", "ORDER.REQUEST", null, null);
             rule.setAction(JmsRuleAction.FORWARD);
@@ -241,11 +241,11 @@ class JmsMockPipelineTest {
     // ==================== 3. JMS forwarding failure (error in response) ====================
 
     @Nested
-    @DisplayName("JMS 轉發失敗（回應含 <error>）")
+    @DisplayName("JMS forwarding failure with <error> in the response")
     class JmsForwardingFailure {
 
         @Test
-        @DisplayName("轉發回應包含 <error> 時設定 proxyError")
+        @DisplayName("A forwarding response containing <error> sets proxyError")
         void forwardWithErrorResponse() {
             when(targetForwarder.hasActiveTarget()).thenReturn(true);
             when(jmsProperties.getQueue()).thenReturn("ORDER.REQUEST");
@@ -270,11 +270,11 @@ class JmsMockPipelineTest {
     // ==================== 4. No match and no forward target → error reply ====================
 
     @Nested
-    @DisplayName("無匹配且不轉發 → error reply")
+    @DisplayName("No match without forwarding returns an error reply")
     class NoMatchNoForward {
 
         @Test
-        @DisplayName("空候選清單且 shouldForward=false 時回傳 error XML")
+        @DisplayName("Empty candidates with shouldForward=false return error XML")
         void noMatchReturnsErrorReply() {
             when(jmsProperties.getQueue()).thenReturn("ORDER.REQUEST");
 
@@ -297,11 +297,11 @@ class JmsMockPipelineTest {
     // ==================== 5. shouldForward() decision logic ====================
 
     @Nested
-    @DisplayName("shouldForward() 決策邏輯")
+    @DisplayName("shouldForward() decisions")
     class ShouldForwardDecision {
 
         @Test
-        @DisplayName("存在有效預設轉發連線 → true")
+        @DisplayName("A valid default forwarding connection returns true")
         void enabledWithServerUrlReturnsTrue() {
             when(targetForwarder.hasActiveTarget()).thenReturn(true);
 
@@ -314,7 +314,7 @@ class JmsMockPipelineTest {
         }
 
         @Test
-        @DisplayName("沒有有效預設轉發連線 → false")
+        @DisplayName("No valid default forwarding connection returns false")
         void disabledReturnsFalse() {
             when(targetForwarder.hasActiveTarget()).thenReturn(false);
 
@@ -327,7 +327,7 @@ class JmsMockPipelineTest {
         }
 
         @Test
-        @DisplayName("預設解析器回傳 false 時不轉發")
+        @DisplayName("A false default-resolver result prevents forwarding")
         void enabledWithNullServerUrlReturnsFalse() {
             when(targetForwarder.hasActiveTarget()).thenReturn(false);
 
@@ -340,7 +340,7 @@ class JmsMockPipelineTest {
         }
 
         @Test
-        @DisplayName("無可用連線時保持 false")
+        @DisplayName("No available connection keeps the result false")
         void enabledWithEmptyServerUrlReturnsFalse() {
             when(targetForwarder.hasActiveTarget()).thenReturn(false);
 
@@ -356,11 +356,11 @@ class JmsMockPipelineTest {
     // ==================== 6. RequestLogService.record() called with correct params ====================
 
     @Nested
-    @DisplayName("RequestLogService.record() 參數正確性")
+    @DisplayName("RequestLogService.record() arguments")
     class RecordLogVerification {
 
         @Test
-        @DisplayName("匹配成功時 record() 傳入正確的 ruleId、protocol、matched 等參數")
+        @DisplayName("A matched record() call receives the expected ruleId, protocol, and matched values")
         void recordCalledOnMatch() {
             JmsRule rule = buildRule("jms-log-rule", "ORDER.REQUEST",
                     "ServiceName=CreateOrder", 200L);
@@ -403,7 +403,7 @@ class JmsMockPipelineTest {
         }
 
         @Test
-        @DisplayName("無匹配且不轉發時 record() 傳入 ruleId=null、matched=false")
+        @DisplayName("An unmatched, unforwarded record() call receives ruleId=null and matched=false")
         void recordCalledOnNoMatch() {
             when(jmsProperties.getQueue()).thenReturn("ORDER.REQUEST");
 

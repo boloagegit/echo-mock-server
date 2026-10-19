@@ -38,7 +38,7 @@ class ImportExportIntegrationTest extends BaseIntegrationTest {
     // ========== 8.2 Exporting a single rule ==========
 
     @Test
-    @DisplayName("匯出單一 HTTP 規則 → 確認包含 sseEnabled、sseLoopEnabled 欄位")
+    @DisplayName("Exporting one HTTP rule includes sseEnabled and sseLoopEnabled")
     void exportSingleHttpRule_shouldContainSseFields() {
         RuleDto created = createHttpRule("/api/export-test", "GET", "{\"data\":\"export\"}");
 
@@ -56,7 +56,7 @@ class ImportExportIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("匯出單一 SSE 規則 → 確認 sseEnabled=true")
+    @DisplayName("Exporting one SSE rule includes sseEnabled=true")
     void exportSingleSseRule_shouldHaveSseEnabledTrue() {
         String sseEvents = "[{\"type\":\"normal\",\"data\":\"hello\"}]";
         RuleDto created = createSseRule("/api/export-sse", sseEvents);
@@ -71,7 +71,7 @@ class ImportExportIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("匯出單一 JMS 規則 → 確認包含 protocol=JMS")
+    @DisplayName("Exporting one JMS rule includes protocol=JMS")
     void exportSingleJmsRule_shouldContainProtocolJms() {
         RuleDto created = createJmsRule("EXPORT.Q", "<export/>");
 
@@ -89,7 +89,7 @@ class ImportExportIntegrationTest extends BaseIntegrationTest {
     // ========== 8.3 Importing a single rule ==========
 
     @Test
-    @DisplayName("匯入 HTTP SSE 規則 → 確認正確建立")
+    @DisplayName("Importing an HTTP SSE rule creates it correctly")
     void importSingleSseRule_shouldCreateSuccessfully() {
         String sseEvents = "[{\"type\":\"normal\",\"data\":\"imported-sse\"}]";
         RuleDto importDto = RuleDto.builder()
@@ -122,7 +122,7 @@ class ImportExportIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("匯入 JMS 規則 → 確認正確建立")
+    @DisplayName("Importing a JMS rule creates it correctly")
     void importSingleJmsRule_shouldCreateSuccessfully() {
         RuleDto importDto = RuleDto.builder()
                 .protocol(Protocol.JMS)
@@ -151,7 +151,7 @@ class ImportExportIntegrationTest extends BaseIntegrationTest {
     // ========== 8.4 Batch Import ==========
 
     @Test
-    @DisplayName("批次匯入混合 HTTP + JMS + SSE 規則 → 確認全部正確匯入")
+    @DisplayName("Bulk import creates mixed HTTP, JMS, and SSE rules correctly")
     @SuppressWarnings("unchecked")
     void batchImportMixedRules_shouldImportAll() {
         RuleDto httpRule = RuleDto.builder()
@@ -200,7 +200,7 @@ class ImportExportIntegrationTest extends BaseIntegrationTest {
     // ========== 8.5 Full export ==========
 
     @Test
-    @DisplayName("建立混合規則 → 全量匯出確認完整")
+    @DisplayName("Exporting all mixed rules preserves the complete set")
     void exportAllRules_shouldContainAllMixedRules() {
         // First confirm that there are currently no rules (@AfterEach has been cleared)
         ResponseEntity<List<RuleDto>> preCheck = adminClient().exchange(

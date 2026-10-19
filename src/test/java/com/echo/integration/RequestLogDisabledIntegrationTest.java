@@ -36,7 +36,7 @@ class RequestLogDisabledIntegrationTest extends BaseIntegrationTest {
     private JmsConnectionManager jmsConnectionManager;
 
     @Test
-    @DisplayName("關閉請求記錄時 HTTP XML 規則正常且不啟動記錄背景元件")
+    @DisplayName("With request logging disabled, HTTP XML rules work without starting logging components")
     void disabledLogging_shouldKeepHttpXmlMockWorkingWithoutLogWorkers() {
         assertThat(applicationContext.getBeansOfType(LogAgent.class)).isEmpty();
         assertThat(applicationContext.getBeansOfType(RequestLogSpool.class)).isEmpty();
@@ -58,7 +58,7 @@ class RequestLogDisabledIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("關閉請求記錄時 JMS XML 規則仍會回覆且不新增記錄")
+    @DisplayName("With request logging disabled, JMS XML rules still reply without adding logs")
     void disabledLogging_shouldKeepJmsXmlReplyWorking() throws Exception {
         createJmsRule("ECHO.REQUEST", "<response>matched</response>",
                 "//type=ORDER", null, "request log disabled");

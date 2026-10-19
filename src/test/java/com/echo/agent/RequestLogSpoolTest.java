@@ -873,7 +873,7 @@ class RequestLogSpoolTest {
     }
 
     @Test
-    @DisplayName("寫入時發生 Error（例如記憶體不足）：寫入執行緒不結束，這批回報失敗並釋放容量，之後的記錄照常寫入")
+    @DisplayName("A write Error, including insufficient memory, fails the batch and releases capacity without stopping later writes")
     void writerSurvivesAnErrorAndKeepsWriting() throws Exception {
         RequestLogSpool spool = errorSpool("error.sqlite");
         try {
@@ -897,7 +897,7 @@ class RequestLogSpoolTest {
     }
 
     @Test
-    @DisplayName("已寫入後才發生 Error：仍回報成功，不讓呼叫端重送，資料只有一筆")
+    @DisplayName("An Error after commit still reports success and prevents retries or duplicate records")
     void errorAfterTheCommitStillReportsSuccess() throws Exception {
         RequestLogSpool spool = errorSpool("after-commit.sqlite");
         try {
@@ -920,7 +920,7 @@ class RequestLogSpoolTest {
     }
 
     @Test
-    @DisplayName("暫存檔暫時無法寫入、重試時又發生 Error：清掉「無法寫入」的狀態，之後的記錄照常寫入")
+    @DisplayName("An Error while retrying unavailable spool storage clears the unavailable state so later writes can proceed")
     void errorWhileRetryingAnUnavailableStorageDoesNotBlockLaterLogs() throws Exception {
         RequestLogSpool spool = errorSpool("unavailable.sqlite");
         try {

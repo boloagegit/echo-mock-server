@@ -60,7 +60,7 @@ class SseRuleResponseIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("規則編輯器建立的 SSE 規則，回應類型是 SSE")
+    @DisplayName("An SSE rule created by the editor has response type SSE")
     void sseRuleCreatesSseResponse() {
         RuleDto rule = createSseRule("/sse/type");
 
@@ -68,7 +68,7 @@ class SseRuleResponseIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("在規則裡改寫既有回應的 SSE 事件：同一個回應、描述保留、不另外建立回應")
+    @DisplayName("Editing existing SSE events through a rule reuses the Response and preserves its description")
     void updatingEventsRewritesTheExistingResponse() {
         RuleDto rule = createSseRule("/sse/rewrite");
         Long responseId = rule.getResponseId();
@@ -88,7 +88,7 @@ class SseRuleResponseIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("規則寫入資料庫失敗時，同一次改寫的回應也一起復原")
+    @DisplayName("A failed rule write also rolls back the Response update in the same operation")
     void failedRuleWriteRollsBackTheResponse() {
         RuleDto rule = createSseRule("/sse/atomic");
         RuleDto current = adminClient().getForObject("/api/admin/rules/" + rule.getId(), RuleDto.class);
@@ -105,7 +105,7 @@ class SseRuleResponseIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("只更新回應內容時，描述與類型保留原值")
+    @DisplayName("Updating only the response body preserves its description and type")
     void updatingOnlyTheBodyKeepsDescriptionAndType() {
         RuleDto rule = createSseRule("/sse/keep");
         Long id = rule.getResponseId();
@@ -119,7 +119,7 @@ class SseRuleResponseIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("舊版沒有標成 SSE 的回應：規則重新存檔時補上 SSE 類型")
+    @DisplayName("Resaving a legacy SSE rule marks its previously untyped Response as SSE")
     void legacyUntypedResponseIsMarkedSseWhenTheRuleIsSaved() {
         RuleDto rule = createSseRule("/sse/legacy");
         Response stored = responseRepository.findById(rule.getResponseId()).orElseThrow();
@@ -136,7 +136,7 @@ class SseRuleResponseIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("SSE 類型篩選找得到 SSE 回應，包含舊值 SSE_EVENTS；一般篩選不包含它們")
+    @DisplayName("The SSE filter includes SSE and legacy SSE_EVENTS values; the ordinary-response filter excludes both")
     @SuppressWarnings("unchecked")
     void contentTypeFilterFindsSseResponses() {
         Response current = createResponse("current sse", EVENTS);
@@ -161,7 +161,7 @@ class SseRuleResponseIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("在規則裡把共用的一般回應清空：回應內容真的被清空，不是默默沿用舊內容")
+    @DisplayName("Clearing a shared ordinary response through a rule empties its body instead of silently reusing the old contents")
     void clearingAnExistingGeneralResponseFromTheRuleSavesTheEmptyBody() {
         Response shared = createResponse("shared general", "{\"ok\":true}");
         RuleDto dto = RuleDto.builder().protocol(Protocol.HTTP).matchKey("/general/clear").method("GET").status(200)
@@ -178,7 +178,7 @@ class SseRuleResponseIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("SSE 回應不可在規則裡被清空")
+    @DisplayName("An SSE response cannot be cleared through a rule")
     void clearingAnSseResponseFromTheRuleIsRejected() {
         RuleDto rule = createSseRule("/sse/clear");
         RuleDto current = adminClient().getForObject("/api/admin/rules/" + rule.getId(), RuleDto.class);
@@ -191,7 +191,7 @@ class SseRuleResponseIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("SSE 規則改回一般回應並改寫內容：回應也改回一般類型")
+    @DisplayName("Changing an SSE rule back to ordinary content also restores the ordinary Response type")
     void turningAnSseRuleBackIntoAGeneralResponseConvertsItsResponse() {
         RuleDto rule = createSseRule("/sse/back");
         RuleDto current = adminClient().getForObject("/api/admin/rules/" + rule.getId(), RuleDto.class);
@@ -208,7 +208,7 @@ class SseRuleResponseIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("另一條 SSE 規則也使用這個回應時，不能在規則裡把它改成一般內容（規則與回應都不變）")
+    @DisplayName("Another SSE rule sharing the Response prevents conversion to ordinary content and leaves both rule and Response unchanged")
     void aResponseStillUsedByAnotherSseRuleCannotBecomeGeneral() {
         RuleDto rule = createSseRule("/sse/shared-a");
         RuleDto other = RuleDto.builder().protocol(Protocol.HTTP).matchKey("/sse/shared-b").method("GET").status(200)
@@ -228,7 +228,7 @@ class SseRuleResponseIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("標成 SSE 的回應必須是有效的 SSE 事件")
+    @DisplayName("Responses marked SSE must contain valid SSE events")
     void sseResponseContentIsValidated() {
         ResponseEntity<String> created = adminClient().postForEntity("/api/admin/responses",
                 Map.of("description", "broken", "body", "not json", "contentType", "SSE"), String.class);

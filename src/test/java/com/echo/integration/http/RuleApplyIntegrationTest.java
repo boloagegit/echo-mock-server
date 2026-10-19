@@ -23,7 +23,7 @@ class RuleApplyIntegrationTest extends BaseIntegrationTest {
     private ObjectMapper objectMapper;
 
     @Test
-    @DisplayName("Apply HTTP JSON 建立後回傳可再次套用的 canonical resource")
+    @DisplayName("Applying HTTP JSON creates and returns a reusable canonical resource")
     void applyHttpRuleCreatesThenUpdatesWithResourceVersion() throws Exception {
         RuleApplyDocument create = httpDocument("/apply/orders", "POST", "initial");
 
@@ -55,7 +55,7 @@ class RuleApplyIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("建立規則時不得指定 ID，必須由後端產生")
+    @DisplayName("Rule creation rejects client-supplied IDs and requires server-generated IDs")
     void createRejectsClientSuppliedId() throws Exception {
         RuleApplyDocument document = httpDocument("/apply/client-id", "GET", "value");
         document.setMetadata(RuleApplyDocument.Metadata.builder()
@@ -74,7 +74,7 @@ class RuleApplyIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("更新端點綁定原規則 ID，不得透過 JSON 改指另一筆")
+    @DisplayName("The update endpoint binds the original rule ID and rejects retargeting through JSON")
     void updateRejectsDocumentIdDifferentFromPath() throws Exception {
         RuleApplyDocument first = apply(
                 httpDocument("/apply/first", "GET", "first"), RuleApplyResult.class)
@@ -103,7 +103,7 @@ class RuleApplyIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("重複套用相同 responseBody 時沿用既有 Response")
+    @DisplayName("Reapplying an identical responseBody reuses the existing Response")
     void exactReapplyReusesResponse() throws Exception {
         ResponseEntity<RuleApplyResult> created = apply(
                 httpDocument("/apply/idempotent", "GET", "same"), RuleApplyResult.class);
@@ -117,7 +117,7 @@ class RuleApplyIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("舊 resourceVersion 不得覆蓋較新的規則")
+    @DisplayName("A stale resourceVersion cannot overwrite a newer rule")
     void staleResourceVersionReturnsConflict() throws Exception {
         RuleApplyDocument stale = apply(
                 httpDocument("/apply/conflict", "GET", "v1"), RuleApplyResult.class)
@@ -135,7 +135,7 @@ class RuleApplyIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("Apply 可建立 JMS 規則")
+    @DisplayName("Apply can create JMS rules")
     void applyCreatesJmsRule() throws Exception {
         RuleApplyDocument document = RuleApplyDocument.builder()
                 .apiVersion(RuleApplyDocument.API_VERSION)
@@ -161,7 +161,7 @@ class RuleApplyIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("Apply 缺少必要欄位時 fail fast")
+    @DisplayName("Apply fails fast on missing required fields")
     void missingMatchKeyReturnsBadRequest() {
         RuleApplyDocument invalid = RuleApplyDocument.builder()
                 .apiVersion(RuleApplyDocument.API_VERSION)
@@ -179,7 +179,7 @@ class RuleApplyIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("Apply 遇到拼錯的欄位時不得靜默忽略")
+    @DisplayName("Apply rejects misspelled fields instead of silently ignoring them")
     void unknownSpecFieldReturnsBadRequest() throws Exception {
         String json = """
                 {
@@ -204,7 +204,7 @@ class RuleApplyIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("宣告式 schema 列出允許值與協定適用範圍")
+    @DisplayName("The declarative schema documents allowed values and protocol applicability")
     void schemaDescribesAllowedValuesAndApplicability() {
         ResponseEntity<Map> response = adminClient().getForEntity("/api/admin/rules/schema", Map.class);
 
@@ -214,7 +214,7 @@ class RuleApplyIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("JMS 文件不得接受 HTTP 專用欄位")
+    @DisplayName("JMS documents reject HTTP-only fields")
     void jmsDocumentRejectsHttpOnlyFieldWithStructuredError() throws Exception {
         String json = """
                 {
@@ -238,7 +238,7 @@ class RuleApplyIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("既有規則的 protocol 不可透過 Apply 變更")
+    @DisplayName("Apply cannot change an existing rule's protocol")
     void protocolChangeReturnsConflict() throws Exception {
         RuleApplyDocument canonical = apply(
                 httpDocument("/apply/protocol", "GET", "http"), RuleApplyResult.class)

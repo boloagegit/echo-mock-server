@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RuleTestApiIntegrationTest extends BaseIntegrationTest {
 
     @Test
-    @DisplayName("13.2 HTTP 規則測試: POST /api/admin/rules/{id}/test → 回傳 status/body/elapsed")
+    @DisplayName("13.2 HTTP rule test: POST /api/admin/rules/{id}/test returns status, body, and elapsed")
     void testHttpRule() {
         RuleDto rule = createHttpRule("/api/test-endpoint", "GET",
                 "{\"result\":\"ok\"}", "test.host", 200);
@@ -46,7 +46,7 @@ class RuleTestApiIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("13.3 JMS 規則測試: POST /api/admin/rules/{id}/test → 回傳結果")
+    @DisplayName("13.3 JMS rule test: POST /api/admin/rules/{id}/test returns a result")
     void testJmsRule() {
         // Send to Echo queue, which is actually monitored: will receive the response of the rule, without waiting for the 30 seconds timeout (the old way of writing is sent to TEST.QUEUE, which is not monitored)
         RuleDto rule = createJmsRule("ECHO.REQUEST", "{\"jms\":\"response\"}");

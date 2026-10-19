@@ -62,7 +62,7 @@ class RequestLogHandoffTest {
     }
 
     @Test
-    @DisplayName("記錄依序寫入，放入時不等待")
+    @DisplayName("Writes records in order without blocking enqueue")
     void writesInOrderWithoutWaiting() throws Exception {
         CountDownLatch gate = new CountDownLatch(1);
         handoff = new RequestLogHandoff(100, 1 << 20, blockedUntil(gate, new CountDownLatch(1)), 10, System::nanoTime);
@@ -125,7 +125,7 @@ class RequestLogHandoffTest {
     }
 
     @Test
-    @DisplayName("超過筆數上限：丟掉最舊的，保留最新的")
+    @DisplayName("Exceeding the record limit drops the oldest records and retains the newest")
     void dropsTheOldestOverTheEntryLimit() throws Exception {
         CountDownLatch gate = new CountDownLatch(1);
         CountDownLatch entered = new CountDownLatch(1);
@@ -150,7 +150,7 @@ class RequestLogHandoffTest {
     }
 
     @Test
-    @DisplayName("超過記憶體上限：丟掉最舊的；單筆就超過上限的不保留")
+    @DisplayName("Exceeding the memory limit drops the oldest records and rejects individually oversized records")
     void dropsTheOldestOverTheByteLimit() throws Exception {
         CountDownLatch gate = new CountDownLatch(1);
         CountDownLatch entered = new CountDownLatch(1);
@@ -174,7 +174,7 @@ class RequestLogHandoffTest {
     }
 
     @Test
-    @DisplayName("寫入失敗：記錄留在暫存區，恢復後依序寫入且不重複")
+    @DisplayName("A write failure retains buffered records and retries in order without duplicates after recovery")
     void keepsEntriesWhileWritesFailAndRetries() throws Exception {
         AtomicBoolean failing = new AtomicBoolean(true);
         AtomicInteger attempts = new AtomicInteger();
@@ -202,7 +202,7 @@ class RequestLogHandoffTest {
     }
 
     @Test
-    @DisplayName("只處理完前面幾筆：已處理的不再送（沒存到的計入丟失），其餘重試")
+    @DisplayName("A processed prefix is not resubmitted; count unstored records as lost and retry the remainder")
     void retriesOnlyWhatWasNotHandled() throws Exception {
         CountDownLatch gate = new CountDownLatch(1);
         CountDownLatch entered = new CountDownLatch(1);
@@ -242,7 +242,7 @@ class RequestLogHandoffTest {
     }
 
     @Test
-    @DisplayName("停止時把暫存區寫完；停止後的記錄直接丟掉")
+    @DisplayName("Shutdown drains the buffer and drops records received after shutdown")
     void stopDrainsAndLaterEntriesAreDropped() {
         handoff = new RequestLogHandoff(1_000, 1 << 20, recording(), 10, System::nanoTime);
         handoff.start();
@@ -258,7 +258,7 @@ class RequestLogHandoffTest {
     }
 
     @Test
-    @DisplayName("停止時寫到一半逾時：寫入端結束、不空轉，沒寫完的計入丟棄")
+    @DisplayName("A shutdown timeout stops the writer without spinning and counts unfinished records as dropped")
     void stopTimingOutMidBatchEndsTheWriterAndCountsTheRest() throws Exception {
         CountDownLatch gate = new CountDownLatch(1);
         CountDownLatch entered = new CountDownLatch(1);
@@ -311,7 +311,7 @@ class RequestLogHandoffTest {
     }
 
     @Test
-    @DisplayName("寫入時發生 Error：寫入端不停止，之後照常寫入")
+    @DisplayName("An Error during writing does not stop the writer or subsequent writes")
     void anErrorWhileWritingDoesNotStopTheWriter() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         handoff = new RequestLogHandoff(100, 1 << 20, batch -> {
@@ -331,7 +331,7 @@ class RequestLogHandoffTest {
     }
 
     @Test
-    @DisplayName("正在寫入的那批也計入記憶體上限")
+    @DisplayName("The in-flight batch counts toward the memory limit")
     void theBatchBeingWrittenCountsTowardsTheMemoryLimit() throws Exception {
         CountDownLatch gate = new CountDownLatch(1);
         CountDownLatch entered = new CountDownLatch(1);
@@ -355,7 +355,7 @@ class RequestLogHandoffTest {
     }
 
     @Test
-    @DisplayName("正在寫入的那批也計入筆數上限")
+    @DisplayName("The in-flight batch counts toward the record limit")
     void theBatchBeingWrittenCountsTowardsTheEntryLimit() throws Exception {
         CountDownLatch gate = new CountDownLatch(1);
         CountDownLatch entered = new CountDownLatch(1);
@@ -377,7 +377,7 @@ class RequestLogHandoffTest {
     }
 
     @Test
-    @DisplayName("建立記錄失敗而沒放進暫存區：也會警告")
+    @DisplayName("Warns when record creation fails before buffering")
     void droppingBeforeTheBufferAlsoWarns() {
         Logger logger = (Logger) LoggerFactory.getLogger(RequestLogHandoff.class);
         ListAppender<ILoggingEvent> appender = new ListAppender<>();
@@ -398,7 +398,7 @@ class RequestLogHandoffTest {
     }
 
     @Test
-    @DisplayName("大小估計包含每個字串欄位（例如被略過的情境規則）")
+    @DisplayName("Size estimates include every string field, including skipped scenario rules")
     void sizeEstimateCountsEveryStringField() {
         long empty = RequestLogHandoff.estimateBytes(LogTask.builder().build());
         String big = "x".repeat(100_000);
@@ -414,7 +414,7 @@ class RequestLogHandoffTest {
     }
 
     @Test
-    @DisplayName("寫入端卡住時，丟棄的警告仍會出現")
+    @DisplayName("Drop warnings are emitted even while the writer is stuck")
     void dropWarningAppearsWhileTheWriterIsStuck() throws Exception {
         Logger logger = (Logger) LoggerFactory.getLogger(RequestLogHandoff.class);
         ListAppender<ILoggingEvent> appender = new ListAppender<>();
@@ -439,7 +439,7 @@ class RequestLogHandoffTest {
     }
 
     @Test
-    @DisplayName("丟掉記錄時記錄一次警告，寫出丟了幾筆與上限")
+    @DisplayName("Dropping records emits a warning with the dropped count and limit")
     void warnsAboutDroppedEntries() throws Exception {
         Logger logger = (Logger) LoggerFactory.getLogger(RequestLogHandoff.class);
         ListAppender<ILoggingEvent> appender = new ListAppender<>();

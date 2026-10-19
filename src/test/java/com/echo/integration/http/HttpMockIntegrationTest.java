@@ -25,7 +25,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
     // ========== 3.2 Test basic Mock matching ==========
 
     @Test
-    @DisplayName("基本 Mock 匹配：GET /mock/users + X-Original-Host → 200 + body 正確")
+    @DisplayName("Basic mock matching: GET /mock/users with X-Original-Host returns 200 and the expected body")
     void basicMockMatch_shouldReturnCorrectResponse() {
         createHttpRule("/users", "GET", "[{\"id\":1}]", "api.test", 200);
 
@@ -43,7 +43,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
     // ========== 3.3 Test POST method + JSON body ==========
 
     @Test
-    @DisplayName("POST 方法 + JSON body：POST /mock/orders → 201")
+    @DisplayName("POST /mock/orders with a JSON body returns 201")
     void postMethodWithJsonBody_shouldReturn201() {
         createHttpRule("/orders", "POST", "{\"created\":true}", null, 201);
 
@@ -61,7 +61,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
     // ========== 3.4 Test Body condition matching (JSON) ==========
 
     @Test
-    @DisplayName("Body 條件匹配（JSON）：type=vip 匹配有條件規則，type=normal fallback 到無條件規則")
+    @DisplayName("JSON body conditions: type=vip selects the conditional rule; type=normal selects the unconditional fallback")
     void bodyConditionJson_shouldMatchConditionalAndFallback() {
         // Conditional rule: bodyCondition=type=vip
         createHttpRule("/members", "POST", "{\"level\":\"vip\"}", null, 200,
@@ -91,7 +91,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
     // ========== 3.5 Test Body condition matching (XML) ==========
 
     @Test
-    @DisplayName("Body 條件匹配（XML）：//type=ORDER 匹配 XML body")
+    @DisplayName("XML body conditions: //type=ORDER matches the XML body")
     void bodyConditionXml_shouldMatchXPathCondition() {
         createHttpRule("/xml-orders", "POST", "<response>matched</response>", null, 200,
                 "//type=ORDER", null, null, null, null, null, "XML 條件規則");
@@ -111,7 +111,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
     // ========== 3.6 Test Query condition matching ==========
 
     @Test
-    @DisplayName("Query 條件匹配：status=active 匹配成功，status=inactive 不匹配")
+    @DisplayName("Query conditions: status=active matches and status=inactive does not")
     void queryCondition_shouldMatchActiveAndRejectInactive() {
         createHttpRule("/items", "GET", "{\"filtered\":true}", null, 200,
                 null, "status=active", null, null, null, null, "Query 條件規則");
@@ -135,7 +135,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
     // ========== 3.7 Test Header condition matching ==========
 
     @Test
-    @DisplayName("Header 條件匹配：X-Tenant=abc 匹配成功，不帶 X-Tenant 不匹配")
+    @DisplayName("Header conditions: X-Tenant=abc matches and a missing X-Tenant does not")
     void headerCondition_shouldMatchWithHeaderAndRejectWithout() {
         createHttpRule("/tenant-data", "GET", "{\"tenant\":\"abc\"}", null, 200,
                 null, null, "X-Tenant=abc", null, null, null, "Header 條件規則");
@@ -159,7 +159,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
     // ========== 3.8 Test multiple conditions to match simultaneously (body + query + header) ==========
 
     @Test
-    @DisplayName("多條件同時匹配：body + query + header 全滿足才匹配，部分滿足不匹配")
+    @DisplayName("Body, query, and header conditions must all match; partial matches fail")
     void multipleConditions_shouldRequireAllToMatch() {
         createHttpRule("/multi", "POST", "{\"all\":\"matched\"}", null, 200,
                 "type=order", "status=active", "X-Tenant=abc",
@@ -188,7 +188,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
     // ========== 3.9 Test Customization Response Headers ==========
 
     @Test
-    @DisplayName("自訂 Response Headers：回應包含 X-Custom header")
+    @DisplayName("Custom response headers include X-Custom")
     void customResponseHeaders_shouldBeIncludedInResponse() {
         createHttpRule("/custom-headers", "GET", "{\"ok\":true}", null, 200,
                 null, null, null, "{\"X-Custom\":\"hello\"}", null, null, "自訂 Headers 規則");
@@ -203,7 +203,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
     // ========== 3.10 Test Customization HTTP Status Code ==========
 
     @Test
-    @DisplayName("自訂 HTTP Status Code：404 和 500")
+    @DisplayName("Custom HTTP status codes: 404 and 500")
     void customStatusCode_shouldReturnConfiguredStatus() {
         createHttpRule("/not-found", "GET", "{\"error\":\"not found\"}", null, 404,
                 null, null, null, null, null, null, "404 規則");
@@ -224,7 +224,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
     // ========== 3.11 Test delayed response (delayMs) ==========
 
     @Test
-    @DisplayName("延遲回應：delayMs=300 → 回應耗時 ≥ 300ms")
+    @DisplayName("Delayed response: delayMs=300 takes at least 300 ms")
     void delayedResponse_shouldTakeAtLeastConfiguredDelay() {
         createHttpRule("/delayed", "GET", "{\"delayed\":true}", null, 200,
                 null, null, null, null, 300L, null, "延遲規則");
@@ -242,7 +242,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
     // ========== 3.12 Testing No Matching Rules + None X-Original-Host → 404 ==========
 
     @Test
-    @DisplayName("無匹配規則 + 無 X-Original-Host → 404")
+    @DisplayName("No matching rule and no X-Original-Host returns 404")
     void noMatchAndNoOriginalHost_shouldReturn404() {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 "/mock/nonexistent", String.class);
@@ -254,7 +254,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
     // ========== 3.13 Test wildcard matchKey=* as fallback ==========
 
     @Test
-    @DisplayName("萬用 matchKey=* 作為 fallback：任意路徑都能匹配")
+    @DisplayName("Wildcard matchKey=* provides a fallback for any path")
     void wildcardMatchKey_shouldMatchAnyPath() {
         createHttpRule("*", "GET", "{\"wildcard\":true}");
 
@@ -272,7 +272,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
     // ========== 3.14 Test rule priority (priority) ==========
 
     @Test
-    @DisplayName("規則優先順序：priority=10 優先於 priority=1")
+    @DisplayName("Rule priority: priority=10 precedes priority=1")
     void rulePriority_shouldPreferHigherPriorityValue() {
         // priority=1 (lower priority)
         createHttpRule("/priority-test", "GET", "{\"priority\":1}", null, 200,
@@ -291,7 +291,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
     // ========== 3.15 Test targetHost Accuracy Sorting ==========
 
     @Test
-    @DisplayName("targetHost 精確度排序：有 targetHost 的規則優先於無 targetHost 的規則")
+    @DisplayName("Host specificity: rules with targetHost precede rules without it")
     void targetHostPrecision_shouldPreferSpecificHost() {
         // No rule for targetHost
         createHttpRule("/host-test", "GET", "{\"host\":\"none\"}", null, 200,
@@ -314,7 +314,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
     // ========== 3.16 Test Response Template Rendering ==========
 
     @Test
-    @DisplayName("Response Template 渲染：{{request.path}} 和 {{request.query.name}} 被正確渲染")
+    @DisplayName("Response templates render {{request.path}} and {{request.query.name}} correctly")
     void responseTemplate_shouldRenderPathAndQueryParams() {
         // Test {{request.path}}
         createHttpRule("/template/path", "GET", "path={{request.path}}");
@@ -336,7 +336,7 @@ class HttpMockIntegrationTest extends BaseIntegrationTest {
     // ========== 3.17 Test Content-Type automatic detection ==========
 
     @Test
-    @DisplayName("Content-Type 自動偵測：JSON → application/json，XML → application/xml，純文字 → text/plain")
+    @DisplayName("Content-Type detection: JSON uses application/json, XML uses application/xml, and plain text uses text/plain")
     void contentTypeAutoDetection_shouldDetectCorrectType() {
         // JSON body
         createHttpRule("/ct/json", "GET", "{\"type\":\"json\"}");

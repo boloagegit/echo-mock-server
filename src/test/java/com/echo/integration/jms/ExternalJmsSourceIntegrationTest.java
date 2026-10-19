@@ -86,7 +86,7 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("外部模式不啟動內建 Artemis，也不開 echo.jms.port")
+    @DisplayName("External mode starts neither embedded Artemis nor echo.jms.port")
     void embeddedBrokerIsNotStarted() {
         assertThat(context.getBeanProvider(EmbeddedActiveMQ.class).getIfAvailable()).isNull();
         assertThatThrownBy(() -> {
@@ -97,7 +97,7 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("系統狀態顯示外部來源、位址與接收中")
+    @DisplayName("System status exposes the external source, address, and receiving state")
     @SuppressWarnings("unchecked")
     void statusShowsExternalSource() throws Exception {
         waitUntilReceiving();
@@ -110,7 +110,7 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("ESB 上的請求由 Echo 處理，回覆送到 JMSReplyTo 並帶 correlation id")
+    @DisplayName("Echo handles ESB requests and replies to JMSReplyTo with the correlation ID")
     void requestOnEsbIsAnsweredOnReplyTo() throws Exception {
         createJmsRule(QUEUE, "<reply>from-echo</reply>");
         waitUntilReceiving();
@@ -122,7 +122,7 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("改寫已快取的共用回應後，真實 JMS 與 HTTP 下一筆請求都取得新內容")
+    @DisplayName("Updating a cached shared response refreshes the next real JMS and HTTP replies")
     void rewritingAWarmResponseUpdatesRealJmsAndHttpReplies() throws Exception {
         RuleDto rule = createJmsRule(QUEUE, "before");
         RuleDto shared = RuleDto.builder().protocol(Protocol.HTTP).method("GET")
@@ -148,7 +148,7 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("ESB 重啟後 Echo 自動重新連線並繼續處理")
+    @DisplayName("Echo reconnects automatically and resumes processing after an ESB restart")
     void reconnectsAfterEsbRestart() throws Exception {
         createJmsRule(QUEUE, "<reply>again</reply>");
         waitUntilReceiving();
@@ -172,7 +172,7 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("外部 ESB 模式也套用共用模板，可取得 correlation ID 與自訂屬性")
+    @DisplayName("External ESB mode supports shared templates, correlation IDs, and custom properties")
     void templateUsesCorrelationIdAndPropertiesFromEsbMessage() throws Exception {
         createJmsRule(QUEUE, "<reply><corr>{{request.headers.JMSCorrelationID}}</corr>"
                 + "<branch>{{request.headers.branch}}</branch><amount>{{jsonPath request.body '$.amount'}}</amount></reply>");
@@ -187,13 +187,13 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("一個慢 JMS 目標等待回覆時，另一目標與 HTTP 仍可處理")
+    @DisplayName("A slow JMS target waiting for a reply does not block another target or HTTP")
     void oneSlowTargetLeavesCapacityForHealthyJmsAndHttp() throws Exception {
         exerciseSlowTarget(1);
     }
 
     @Test
-    @DisplayName("同一來源的兩個 listener 都等待慢目標時，JMS 排隊並在目標恢復後正確完成")
+    @DisplayName("When both source listeners wait on a slow target, JMS queues requests and completes them after recovery")
     void saturatedSharedListenersRetainAndRecoverQueuedRequests() throws Exception {
         exerciseSlowTarget(2);
     }
