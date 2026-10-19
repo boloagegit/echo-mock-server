@@ -87,6 +87,10 @@ class NativeHttpBodyIntegrationTest extends BaseIntegrationTest {
         }) : HttpRequest.BodyPublishers.ofByteArray(encoded);
         var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/mock/bulk-body"))
                 .timeout(Duration.ofSeconds(10)).header("Content-Type", "text/plain;charset=" + charset.name())
+                // Declared oversize is rejected before reading. Wait for that response
+                // instead of racing the deliberate close with unsent bytes on Windows.
+                // Unknown-length uploads still send the body to test the cumulative limit.
+                .expectContinue(!chunked && encoded.length > LIMIT)
                 .POST(publisher).build();
         return HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build()
                 .send(request, HttpResponse.BodyHandlers.ofString());
