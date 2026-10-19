@@ -11,7 +11,8 @@
  * user menu at the bottom; the service card mirrors /api/admin/status.
  */
 .sidebar { background: var(--sidebar-bg); border-inline-end-color: var(--border) }
-.sidebar.has-user-menu { overflow: visible; z-index: 50 }
+/* Keep the menu visible through its leave transition and above the mobile backdrop (99). */
+.sidebar:has(.user-menu) { overflow: visible; z-index: 100 }
 .sidebar-header { min-height: 60px; padding: 0.875rem 0.75rem 0.5rem 1.125rem; border-bottom: 0 }
 .sidebar-brand { font-weight: var(--font-weight-semibold); font-size: 16px }
 .sidebar-toggle { background: transparent; color: var(--text-subtle) }

@@ -76,7 +76,7 @@ class LoginAccessibilityResourceTest {
 
         assertThat(index)
                 .contains("/style.css?v=20261016.1")
-                .contains("/components/SidebarNav.js?v=20261007.9");
+                .contains("/components/SidebarNav.js?v=20261019.1");
         assertThat(sidebar).contains("class=\"brand-mark\" aria-hidden=\"true\"");
         assertThat(css)
                 .contains(".sidebar-brand:hover .brand-icon { transform: scale(1.06) rotate(-3deg) }")

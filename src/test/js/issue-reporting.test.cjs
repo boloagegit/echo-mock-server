@@ -174,7 +174,7 @@ test('navigation, page mount, app wiring, default config and cached asset versio
   assert.ok(app.includes('loading, isAdmin, issueReportingEnabled }'));
   const versions = {
     'composables/useRouter.js': '20261016.2', 'composables/useIssues.js': '20261001.1',
-    'components/SidebarNav.js': '20261007.9', 'app.js': '20261016.3',
+    'components/SidebarNav.js': '20261019.1', 'app.js': '20261016.3',
   };
   for (const [asset, version] of Object.entries(versions)) {
     assert.ok(source('index.html').includes(asset + '?v=' + version), asset);
