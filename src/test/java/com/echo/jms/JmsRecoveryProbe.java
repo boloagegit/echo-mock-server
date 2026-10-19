@@ -100,6 +100,7 @@ public final class JmsRecoveryProbe {
     private static final class Fixture implements AutoCloseable {
         private final ActiveMQServer broker;
         private final String url;
+        private final JmsProperties properties = new JmsProperties();
         private final TrackingProvider provider = new TrackingProvider();
         private final Map<JmsForwardingRoute, JmsTargetForwarder> forwarders = new EnumMap<>(JmsForwardingRoute.class);
         private final Map<JmsForwardingRoute, JmsRuntimeMetrics> metrics = new EnumMap<>(JmsForwardingRoute.class);
@@ -134,14 +135,12 @@ public final class JmsRecoveryProbe {
             try {
                 broker.start();
                 responder = new Responder();
-                var properties = new JmsProperties();
                 // Preserve Echo's default caching and provider-policy selection. These bounded
                 // transport settings belong to this deliberately unavailable test destination.
                 properties.getTarget().setEnabled(true);
                 properties.getTarget().setType("artemis");
                 properties.getTarget().setServerUrl(url);
                 properties.getTarget().setQueue(QUEUE);
-                properties.getTarget().setTimeoutSeconds(5);
                 for (var route : JmsForwardingRoute.values()) {
                     var telemetry = new JmsRuntimeMetrics(new MonitoringProperties());
                     metrics.put(route, telemetry);
@@ -156,14 +155,7 @@ public final class JmsRecoveryProbe {
         private void cycle() throws Exception {
             cycle++;
             healthyBurst();
-            List<Future<String>> timeouts = new ArrayList<>();
-            for (var route : JmsForwardingRoute.values()) {
-                timeouts.add(callers.submit(() -> route.forward(forwarders.get(route), "no-reply:" + cycle)));
-            }
-            for (var timeout : timeouts) {
-                assertThat(timeout.get(15, TimeUnit.SECONDS)).isEqualTo("<error>JMS response timeout</error>");
-                expectedFailures++;
-            }
+            exerciseReceiveTimeouts();
             assertDrained();
 
             interruptedReceived = new CountDownLatch(JmsForwardingRoute.values().length);
@@ -205,17 +197,46 @@ public final class JmsRecoveryProbe {
             assertThat(provider.liveCount()).isEqualTo(3);
         }
 
+        private void exerciseReceiveTimeouts() throws Exception {
+            // Healthy persistent large replies use Echo's normal receive budget. Only
+            // deliberately unanswered requests get a short deadline. Connection
+            // settings, forwarders and connection revisions stay fixed between phases.
+            int normalTimeout = properties.getTarget().getTimeoutSeconds();
+            int factoriesBefore = provider.created;
+            properties.getTarget().setTimeoutSeconds(5);
+            try {
+                receiveTimeouts();
+                assertThat(provider.created).as("timeout-only change keeps connection factories").isEqualTo(factoriesBefore);
+            } finally {
+                properties.getTarget().setTimeoutSeconds(normalTimeout);
+            }
+        }
+
+        private void receiveTimeouts() throws Exception {
+            List<Future<String>> timeouts = new ArrayList<>();
+            for (var route : JmsForwardingRoute.values()) {
+                timeouts.add(callers.submit(() -> route.forward(forwarders.get(route), "no-reply:" + cycle)));
+            }
+            for (var timeout : timeouts) {
+                assertThat(timeout.get(45, TimeUnit.SECONDS)).isEqualTo("<error>JMS response timeout</error>");
+                expectedFailures++;
+            }
+        }
+
         private void healthyBurst() throws Exception {
             List<Future<?>> work = new ArrayList<>();
             for (var route : JmsForwardingRoute.values()) {
                 for (int worker = 0; worker < CALLERS_PER_ROUTE; worker++) {
                     String request = ++requestSequence + ":" + cycle + ":" + route + ":" + worker + ":" + PAYLOAD;
                     work.add(callers.submit(() -> {
+                        long started = System.nanoTime();
                         String reply = route.forward(forwarders.get(route), request);
+                        long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
                         String prefix = reply == null ? "<null>" : reply.substring(0, Math.min(160, reply.length()));
                         assertThat(reply).withFailMessage(
-                                "JMS recovery reply mismatch: route=%s cycle=%d expectedPrefix=%s actualChars=%d actualPrefix=%s",
-                                route, cycle, request.substring(0, 64), reply == null ? -1 : reply.length(), prefix)
+                                "JMS recovery reply mismatch: route=%s cycle=%d elapsedMs=%d responderFailure=%s expectedPrefix=%s actualChars=%d actualPrefix=%s",
+                                route, cycle, elapsedMillis, responderFailure.get(), request.substring(0, 64),
+                                reply == null ? -1 : reply.length(), prefix)
                                 .isEqualTo(request);
                     }));
                 }
