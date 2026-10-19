@@ -118,7 +118,7 @@ const SidebarNav = {
     }
   },
   template: /* html */`
-    <aside class="sidebar" :class="{collapsed: sidebarCollapsed, 'mobile-open': mobileMenu, 'has-user-menu': userMenuOpen}" @click.stop>
+    <aside class="sidebar" :class="{collapsed: sidebarCollapsed, 'mobile-open': mobileMenu}" @click.stop>
       <div class="sidebar-header">
         <div class="sidebar-brand">
           <span class="brand-mark" aria-hidden="true"><svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.4" aria-hidden="true"><path d="M6.5 4.5V19.5"/><path d="M6.5 4.5H18"/><path d="M6.5 12H15.5" stroke-opacity="0.78"/><path d="M6.5 19.5H14.5" stroke-opacity="0.55"/></svg></span>
