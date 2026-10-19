@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
     @Index(name = "idx_log_protocol", columnList = "protocol"),
     @Index(name = "idx_log_request_time_id", columnList = "requestTime,id"),
     @Index(name = "idx_log_rule_time_id", columnList = "ruleId,requestTime,id"),
+    @Index(name = RequestLog.PROTOCOL_TIME_INDEX, columnList = "protocol,requestTime,id"),
     @Index(name = "idx_log_protocol_matched_time_id", columnList = "protocol,matched,requestTime,id"),
     @Index(name = "idx_log_endpoint_time_id", columnList = "endpoint,requestTime,id"),
     @Index(name = "idx_log_response_time_id", columnList = "responseTimeMs,id"),
@@ -34,6 +35,9 @@ public class RequestLog {
 
     /** 流量概況使用的涵蓋索引。 */
     public static final String TRAFFIC_INDEX = "idx_log_traffic";
+
+    /** Protocol-only lists must retain time/id ordering without sorting all matching logs. */
+    public static final String PROTOCOL_TIME_INDEX = "idx_log_protocol_time_id";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
