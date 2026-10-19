@@ -11,6 +11,11 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.TestPropertySource;
 
 import java.io.ByteArrayInputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -62,8 +67,10 @@ class NativeHttpBodyIntegrationTest extends BaseIntegrationTest {
         byte[] atLimit = "x".repeat(LIMIT).getBytes(StandardCharsets.UTF_8);
         assertThat(send(atLimit, StandardCharsets.UTF_8, chunked).statusCode()).isEqualTo(200);
         assertReleased();
-        assertThat(send(java.util.Arrays.copyOf(atLimit, LIMIT + 1), StandardCharsets.UTF_8, chunked).statusCode())
-                .isEqualTo(413);
+        int rejected = chunked
+                ? send(java.util.Arrays.copyOf(atLimit, LIMIT + 1), StandardCharsets.UTF_8, true).statusCode()
+                : rejectDeclaredOversize();
+        assertThat(rejected).isEqualTo(413);
         assertReleased();
         assertThat(send(new byte[]{'x'}, StandardCharsets.UTF_8, false).body()).isEqualTo("accepted");
         assertReleased();
@@ -87,13 +94,27 @@ class NativeHttpBodyIntegrationTest extends BaseIntegrationTest {
         }) : HttpRequest.BodyPublishers.ofByteArray(encoded);
         var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/mock/bulk-body"))
                 .timeout(Duration.ofSeconds(10)).header("Content-Type", "text/plain;charset=" + charset.name())
-                // Declared oversize is rejected before reading. Wait for that response
-                // instead of racing the deliberate close with unsent bytes on Windows.
-                // Unknown-length uploads still send the body to test the cumulative limit.
-                .expectContinue(!chunked && encoded.length > LIMIT)
                 .POST(publisher).build();
         return HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build()
                 .send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private int rejectDeclaredOversize() throws Exception {
+        // The declared size alone must trigger rejection, without waiting for body bytes.
+        // Sending headers only also avoids a client's write racing the server's deliberate
+        // connection close. The unknown-length case above uploads the actual oversized body.
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 3_000);
+            socket.setSoTimeout(10_000);
+            String headers = "POST /mock/bulk-body HTTP/1.1\r\nHost: localhost\r\n"
+                    + "Content-Type: text/plain;charset=UTF-8\r\nContent-Length: " + (LIMIT + 1) + "\r\n\r\n";
+            socket.getOutputStream().write(headers.getBytes(StandardCharsets.US_ASCII));
+            socket.getOutputStream().flush();
+            var input = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
+            String status = input.readLine();
+            assertThat(status).startsWith("HTTP/1.1 ");
+            return Integer.parseInt(status.split(" ")[1]);
+        }
     }
 
     private double nativeRequests() {
