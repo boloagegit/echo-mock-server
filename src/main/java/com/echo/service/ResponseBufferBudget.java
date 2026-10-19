@@ -4,7 +4,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Application-wide byte budget for HTTP response bodies currently being accumulated.
- * Reservations are incremental so small responses do not reserve the per-response maximum.
+ * Owned byte buffers reserve their capacity; incremental text decoders reserve received bytes.
+ * Neither path reserves the configured per-response maximum for every small response.
  */
 final class ResponseBufferBudget {
 

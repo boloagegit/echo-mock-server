@@ -707,10 +707,12 @@ class HttpOutboundForwarderTest {
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
     void fragmentedResponsesMatchWholeBodyDecodingAcrossCharsets(boolean declaredLength) {
-        for (String name : new String[]{"UTF-8", "UTF-16", "GB18030", "ISO-2022-JP"}) {
+        for (String name : new String[]{"UTF-8", "UTF-16", "GB18030", "ISO-2022-JP",
+                "US-ASCII", "ISO-8859-1"}) {
             Charset charset = Charset.forName(name);
             byte[] encoded = ("ASCII".repeat(2_000) + "銀行😀".repeat(2_000)).getBytes(charset);
             byte[] truncated = Arrays.copyOf(encoded, encoded.length - 1);
+            truncated[truncated.length - 1] = (byte) 0xFF;
             String path = "/fragmented-" + name;
             server.createContext(path, exchange -> {
                 exchange.getResponseHeaders().set("Content-Type", "text/plain;charset=" + name);
@@ -768,7 +770,7 @@ class HttpOutboundForwarderTest {
                     && System.nanoTime() < deadline) {
                 Thread.sleep(5);
             }
-            assertThat(forwarder.metricsSnapshot().pool().bufferedResponseBytes()).isEqualTo(3);
+            assertThat(forwarder.metricsSnapshot().pool().bufferedResponseBytes()).isEqualTo(8);
             assertThat(pending.cancel(true)).isTrue();
             deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
             while ((forwarder.metricsSnapshot().activeForwards() != 0

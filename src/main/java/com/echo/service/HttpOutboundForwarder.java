@@ -4,6 +4,7 @@ import com.echo.dto.HttpForwardMetricsDto;
 import com.echo.pipeline.MockRequest;
 import com.echo.pipeline.MockResponse;
 import com.echo.util.CancellableStages;
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelOption;
 import io.netty.handler.codec.http.HttpHeaderNames;
@@ -448,7 +449,7 @@ public final class HttpOutboundForwarder {
             }
             return readResponseBody(responseBody, contentCharset(
                             response.responseHeaders().get(HttpHeaderNames.CONTENT_TYPE)),
-                            isSmallResponse(declaredLength))
+                            smallResponseLength(declaredLength))
                     .map(value -> new ForwardResponse(status, value))
                     .switchIfEmpty(Mono.just(new ForwardResponse(status, null)));
         }).single();
@@ -462,17 +463,26 @@ public final class HttpOutboundForwarder {
         }
     }
 
-    private static boolean isSmallResponse(String declaredLength) {
-        if (declaredLength == null) return false;
+    private static int smallResponseLength(String declaredLength) {
+        if (declaredLength == null) {
+            return 0;
+        }
         try {
             long length = Long.parseLong(declaredLength);
-            return length > 0 && length <= SMALL_RESPONSE_BYTES;
+            return length > 0 && length <= SMALL_RESPONSE_BYTES ? (int) length : 0;
         } catch (NumberFormatException ignored) {
-            return false;
+            return 0;
         }
     }
 
-    private Mono<String> readResponseBody(ByteBufFlux responseBody, Charset charset, boolean smallResponse) {
+    private Mono<String> readResponseBody(ByteBufFlux responseBody, Charset charset, int bufferedLength) {
+        if (bufferedLength > 0) {
+            BufferedResponseBody output = new BufferedResponseBody(
+                    bufferedLength, maxResponseBodyBytes, responseBufferBudget);
+            return responseBody.doOnNext(output::append)
+                    .then(Mono.fromSupplier(() -> output.decode(charset)))
+                    .doFinally(ignored -> output.close());
+        }
         AtomicInteger receivedBytes = new AtomicInteger();
         ResponseBufferBudget.Reservation reservation = responseBufferBudget.openReservation();
         ByteBufFlux boundedBody = ByteBufFlux.fromInbound(responseBody.doOnNext(chunk -> {
@@ -486,13 +496,6 @@ public final class HttpOutboundForwarder {
             }
             receivedBytes.set((int) nextSize);
         }));
-        if (smallResponse) {
-            // Reactor owns and releases the aggregated buffers on completion, error and cancellation.
-            // Larger or unknown-length responses keep incremental text decoding below.
-            return boundedBody.aggregate().asString(charset)
-                    .filter(ignored -> receivedBytes.get() > 0)
-                    .doFinally(ignored -> reservation.close());
-        }
         StreamingTextAccumulator output = new StreamingTextAccumulator(charset);
         return boundedBody.asByteArray()
                 .doOnNext(output::append)
@@ -500,6 +503,82 @@ public final class HttpOutboundForwarder {
                         ? Mono.empty()
                         : Mono.fromSupplier(output::finish)))
                 .doFinally(ignored -> reservation.close());
+    }
+
+    /** One owned buffer, independent of incoming fragment count and parent-buffer sizes. */
+    static final class BufferedResponseBody implements AutoCloseable {
+        private final int initialCapacity;
+        private final int maximumBytes;
+        private final ResponseBufferBudget budget;
+        private final ResponseBufferBudget.Reservation reservation;
+        private ByteBuf buffer;
+        private boolean closed;
+
+        BufferedResponseBody(int initialCapacity, int maximumBytes, ResponseBufferBudget budget) {
+            if (initialCapacity < 1 || initialCapacity > maximumBytes) {
+                throw new IllegalArgumentException("Invalid initial HTTP response buffer capacity");
+            }
+            this.initialCapacity = initialCapacity;
+            this.maximumBytes = maximumBytes;
+            this.budget = budget;
+            this.reservation = budget.openReservation();
+        }
+
+        synchronized void append(ByteBuf chunk) {
+            if (closed || !chunk.isReadable()) {
+                return;
+            }
+            long needed = (buffer == null ? 0L : buffer.writerIndex()) + chunk.readableBytes();
+            if (needed > maximumBytes) {
+                throw new ResponseBodyTooLargeException(maximumBytes);
+            }
+            int capacity = buffer == null ? 0 : buffer.capacity();
+            int desired = buffer == null ? Math.max(initialCapacity, (int) needed)
+                    : (int) Math.min(maximumBytes, Math.max(needed, 2L * capacity));
+            if (buffer == null || needed > capacity) {
+                if (!reservation.tryReserve(desired - capacity)) {
+                    throw new ResponseBufferCapacityException(budget.maximumBytes());
+                }
+                if (buffer == null) {
+                    buffer = chunk.alloc().heapBuffer(desired, maximumBytes);
+                } else {
+                    buffer.capacity(desired);
+                }
+            }
+            // Do not retain source slices: a tiny slice can otherwise pin a large parent allocation.
+            buffer.writeBytes(chunk, chunk.readerIndex(), chunk.readableBytes());
+        }
+
+        synchronized String decode(Charset charset) {
+            if (buffer == null) {
+                return null;
+            }
+            // Keep JDK replacement semantics, including malformed US-ASCII input.
+            // Netty's US-ASCII shortcut treats high-bit bytes as Latin-1 instead.
+            if (buffer.hasArray()) {
+                return new String(buffer.array(), buffer.arrayOffset() + buffer.readerIndex(),
+                        buffer.readableBytes(), charset);
+            }
+            byte[] bytes = new byte[buffer.readableBytes()];
+            buffer.getBytes(buffer.readerIndex(), bytes);
+            return new String(bytes, charset);
+        }
+
+        @Override
+        public synchronized void close() {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            try {
+                if (buffer != null) {
+                    buffer.release();
+                }
+            } finally {
+                buffer = null;
+                reservation.close();
+            }
+        }
     }
 
     private static Charset contentCharset(HttpHeaders headers) {
