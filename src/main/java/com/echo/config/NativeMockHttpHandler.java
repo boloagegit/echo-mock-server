@@ -142,9 +142,33 @@ final class NativeMockHttpHandler implements HttpHandler {
         // worker. Both declared and chunked bodies use the same finite allocation limit.
         Receiver receiver = exchange.getRequestReceiver();
         receiver.setMaxBufferSize(resources.maxBodyBytes);
-        receiver.receiveFullBytes((ex, bytes) -> dispatch(ex,
-                () -> execute(ex, bytes.length == 0 ? null : new String(bytes, bodyCharset))),
+        var body = new NativeHttpRequestBody(resources.maxBodyBytes, contentLength);
+        lease.onClose(body::close);
+        receiver.receivePartialBytes((ex, chunk, last) -> {
+            if (!available(ex)) return;
+            try {
+                if (!body.append(chunk)) return;
+            } catch (Receiver.RequestToLargeException tooLarge) {
+                receiver.pause();
+                body.close();
+                NativeHttpObservation.error(ex, tooLarge);
+                fail(ex, 413, "Request body exceeds native HTTP limit");
+                return;
+            }
+            if (last) {
+                // Match the full receiver's handling of Undertow's decoded-length header.
+                var headers = ex.getRequestHeaders();
+                if (headers.contains(Headers.X_CONTENT_LENGTH) && !headers.contains(Headers.CONTENT_LENGTH)) {
+                    headers.put(Headers.CONTENT_LENGTH, body.size());
+                }
+                dispatch(ex, () -> {
+                    var received = body.take();
+                    if (received != null) execute(ex, received.decode(bodyCharset));
+                });
+            }
+        },
                 (ex, error) -> {
+                    body.close();
                     NativeHttpObservation.error(ex, error);
                     if (error instanceof Receiver.RequestToLargeException
                             || error instanceof io.undertow.server.RequestTooBigException) {

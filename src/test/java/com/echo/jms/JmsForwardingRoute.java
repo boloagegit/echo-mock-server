@@ -6,6 +6,7 @@ import com.echo.service.JmsTargetConnectionService;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -23,11 +24,14 @@ enum JmsForwardingRoute {
         if (this == LEGACY) return new JmsTargetForwarder(properties, providers, metrics);
 
         JmsTargetConnectionService service = mock(JmsTargetConnectionService.class);
-        var resolved = new JmsTargetConnectionService.ResolvedTarget("db:7:1", "Test", properties.getTarget(), false);
+        // Resolve a fresh defensive snapshot so a probe's per-phase receive budget
+        // applies to all routes, while its connection identity/revision stays fixed.
+        Supplier<JmsTargetConnectionService.ResolvedTarget> resolved = () ->
+                new JmsTargetConnectionService.ResolvedTarget("db:7:1", "Test", properties.getTarget(), false);
         if (this == DEFAULT) {
-            when(service.resolveActive()).thenReturn(Optional.of(resolved));
+            when(service.resolveActive()).thenAnswer(invocation -> Optional.of(resolved.get()));
         } else {
-            when(service.resolveEnabled("7")).thenReturn(resolved);
+            when(service.resolveEnabled("7")).thenAnswer(invocation -> resolved.get());
         }
         var forwarder = new JmsTargetForwarder(service, providers, metrics);
         forwarder.configureResources(properties);

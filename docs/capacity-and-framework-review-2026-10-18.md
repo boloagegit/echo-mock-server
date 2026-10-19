@@ -2,6 +2,8 @@
 
 [繁體中文](zh-TW/capacity-and-framework-review-2026-10-18.md)
 
+Follow-up: [bounded JSON spool reads, JMS controls and a ten-minute observation](request-log-spool-read-experiment-2026-10-18.md).
+
 The operating recommendation is based on large messages, not only the earlier 16 KiB writer probe. SQLite retention primarily consumes disk; `-Xmx512m` is not a 512 MiB whole-process limit. This review does not change production retention, recording limits, or JMS semantics.
 
 Recommendation: start with **10,000 retained database records and the existing 1,000/s writer ceiling**. The 20,000-record observation also passes, but its main DB plus two retained snapshots needs about 7.4 GiB, with another snapshot/WAL/spool space during backup. The mixed 10k case is not a worst-case per-record disk budget. Uncapping is an evaluated setting, not a new default; choose it only against required traffic/latency and storage capacity. Observed whole-process RSS is about 1.0–1.1 GiB despite the 512 MiB heap.

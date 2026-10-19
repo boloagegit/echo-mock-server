@@ -20,7 +20,7 @@ Echo stands in for the services your application talks to during development and
 - **See why a request matched.** Every logged request shows its processing flow and the full match chain: which rules were candidates, and which condition passed or failed.
 - **Built for teams.** It has logins (built-in accounts or LDAP) with admin and user roles, an audit trail, tags for bulk enable and disable, and rule protection and retention. Several instances can share one database.
 - **Fits a locked-down network.** Ship one JAR, start it with `java -jar`, and keep the data in SQLite. The UI assets are bundled through WebJars, so no CDN is needed.
-- **Measured, not guessed.** The benchmarks against WireMock are published with their method, scripts and summarized results, including the cases where Echo gains little, such as slow downstreams. See [Performance](#performance).
+- **Measured HTTP performance.** In the published tests, fixed-response throughput is about 1.9× WireMock 3.13.2's, and throughput with 2,000 path rules is about 10.2×. Slow downstreams gain much less. See [Performance](#performance) for test conditions, methods and limits.
 
 ## Quick start
 
@@ -135,6 +135,32 @@ HTTP/1.1 acceleration is enabled by default. The 2026-10-16 comparison used Java
 Slow downstream calls and deliberate delays gain much less than simple responses. These are workload-specific measurements, not a promise that every request is faster. See the [validation report](docs/native-http-validation-2026-10-16.md) for the full matrix, latency, errors and rerun scripts, and [performance history](docs/performance.md) for earlier comparisons. These reports are in Traditional Chinese.
 
 The [HTTP acceleration guide](docs/native-http.md) covers capacity limits, compatibility and switching back with `ECHO_HTTP_TRANSPORT=servlet`. [JMS resource reuse](docs/jms-performance-and-correctness.md) and [startup measurements](docs/performance-hardening-2026-10-16.md) are documented separately (also in Traditional Chinese).
+
+With a 512 MiB heap, 128 KiB padding and request recording enabled, upgrading Artemis from 2.40 to 2.57 improves mean JMS mock throughput by 91.9% and forwarding by 20.4% across four fresh JVMs. This compares Echo before and after the upgrade. The [existing validation report](docs/artemis-large-message-validation-2026-10-18.md) includes interoperability, latency and ten-minute mixed-load observations, including the thread-count warning and its analysis. These results apply to Artemis paths; TIBCO EMS is not benchmarked.
+
+Additional validation on 2026-10-19 ([Echo source 7570db0](https://github.com/boloagegit/echo-mock-server/commit/7570db0c8c0670675afff39dca5c063c58ddd8ba)) used Linux, Java 17, a shared four-CPU quota, 512 MiB heap, G1 and NMT on both products. With recording **off**, 16 connections and four rules, these are means from two fresh JVMs per product: 20 s initial warmup, then 10 s warmup and 20 s measurement per case. Every received response was checked; no response or socket errors occurred.
+
+| Scenario | Echo req/s | WireMock 3.13.2 req/s | Ratio |
+|---|---:|---:|---:|
+| Fixed response | 73,430 | 55,506 | 1.32× |
+| Template | 70,268 | 28,589 | 2.46× |
+| Repeated 16 KiB XML, field near the start | 39,991 | 19,449 | 2.06× |
+| 16 KiB forwarding | 12,364 | 8,488 | 1.46× |
+
+XML uses a simple predicate on a valid document: Echo can finish streaming matching early, so this is not a full-document validation comparison. With 64 KiB forwarding, the ratio was 1.18×. These conditions differ from the older Java 21 / 1 GiB comparison above.
+
+With recording **on**, a separate ten-minute run sustained 200 req/s per product: 20% each fixed/template/XML16KiB/forward16KiB/delay10ms, eight callers, live rule edits, JMS off. Each product completed 120,000 main requests without errors. Echo confirmed all main and probe logs with no drops or retries; WireMock retained 10,000 journal entries. Both passed the declared heap/native/RSS/thread/file-descriptor growth checks. CPU includes monitoring and rule edits; memory below is after drain and diagnostic GC outside measured traffic.
+
+| Recorded-load metric | Echo | WireMock 3.13.2 |
+|---|---:|---:|
+| Forwarding P99 (ms) | 13.8 | 15.9 |
+| Server CPU (µs/mock reply) | 1485.2 | 2561.7 |
+| Heap after GC (MiB) | 49.9 | 129.6 |
+| Process RAM, RSS (MiB) | 888.8 | 685.2 |
+
+Echo uses asynchronous SQLite (10,000-row limit, default 1,000/s writer cap); WireMock uses an in-memory journal with a 10,000-entry limit. Persistence and overload policies differ: Echo drops logs under saturation, so recording-on peak reply throughput is **not** complete-journal throughput. Process RAM is higher for Echo in this run. Ten minutes is a finite regression observation, not proof of indefinite stability.
+
+Separately, ten logged-in browser sessions queried log pages/details/traffic during 120,000 mixed HTTP/JMS requests with 128 KiB bodies, a 512 MiB heap and backups enabled: no request errors, log drops or write retries; all seven resource-growth checks passed. Mean page/detail times were 19.9/9.9 ms. JMS validation uses Artemis, not TIBCO EMS.
 
 ## Documentation
 
