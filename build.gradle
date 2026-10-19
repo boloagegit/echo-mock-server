@@ -16,6 +16,29 @@ def gitTag = providers.exec {
 version = releaseVersion ?: (gitTag ? gitTag.replaceFirst(/^v/, '') : '0.0.0-SNAPSHOT')
 description = 'Enterprise-grade dual-protocol mock server for HTTP and JMS'
 
+// Capture the source identity at build time; deployed JARs never invoke Git.
+def gitCommit = providers.exec {
+    commandLine 'git', 'rev-parse', '--verify', 'HEAD'
+    ignoreExitValue = true
+}.standardOutput.asText.get().trim()
+def gitStatus = providers.exec {
+    commandLine 'git', 'status', '--porcelain', '--untracked-files=normal'
+    ignoreExitValue = true
+}
+def gitDirty = gitCommit && gitStatus.result.get().exitValue == 0
+        ? !gitStatus.standardOutput.asText.get().trim().isEmpty() : null
+
+springBoot {
+    buildInfo {
+        properties {
+            additional = [
+                    'git.commit': gitCommit,
+                    'git.dirty': gitDirty == null ? 'unknown' : gitDirty.toString()
+            ]
+        }
+    }
+}
+
 // Required by the current SpotBugs/BCEL toolchain and backward-compatible with
 // Spring Boot 3.5's managed Commons Lang API.
 ext['commons-lang3.version'] = '3.20.0'
@@ -53,8 +76,8 @@ repositories {
     mavenCentral()
 }
 
-// H2 不再是支援的資料庫。只有離線的 H2→SQLite 轉換工具需要 H2 驅動，因此放在獨立的 source set：
-// 不會打包進 echo-server.jar，也不在一般測試的 classpath（避免 @DataJpaTest 悄悄改用內嵌 H2）。
+// H2 is no longer a supported database. Only the offline H2-to-SQLite migration tool needs its driver, so it has a separate source set:
+// It is excluded from echo-server.jar and the normal test classpath, preventing @DataJpaTest from silently switching to embedded H2.
 sourceSets {
     h2Migration {
         java.srcDir 'src/h2Migration/java'
@@ -174,8 +197,8 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
     finalizedBy jacocoTestReport
-    // 測試類別分到多個 JVM 平行執行（各自的 Spring context；資料庫檔名與連接埠都是隨機的，不會互相干擾）。
-    // 用一半的核心：Spring context 啟動很吃 CPU，全部核心反而互相拖慢。-PtestForks=1 可改回單一 JVM。
+    // Run test classes in separate JVMs in parallel, each with its own Spring context and random database filenames and ports to avoid interference.
+    // Use half the cores: Spring context startup is CPU-intensive, and using every core causes contention. -PtestForks=1 selects a single JVM.
     maxParallelForks = providers.gradleProperty('testForks').map { it as int }
             .getOrElse(Math.max(1, Runtime.runtime.availableProcessors().intdiv(2)))
 }
@@ -289,32 +312,32 @@ jacoco {
     toolVersion = "0.8.15"
 }
 
-// SpotBugs 靜態分析
+// SpotBugs static analysis
 import com.github.spotbugs.snom.Confidence
 import com.github.spotbugs.snom.Effort
 import net.ltgt.gradle.errorprone.CheckSeverity
 
-// Error Prone 編譯期檢查（僅編譯階段，不影響 runtime）
+// Error Prone compile-time checks; these do not affect runtime behavior.
 tasks.withType(JavaCompile).configureEach {
     // Source files contain Chinese text; Windows JDK 17 may default to a legacy code page.
     options.encoding = 'UTF-8'
     options.errorprone {
         disableWarningsInGeneratedCode = true
-        // Lombok 產生的程式碼會觸發的誤報
+        // Disable false positives triggered by Lombok-generated code.
         check('DefaultCharset', CheckSeverity.OFF)
-        // 避免與 Spring 慣例衝突的檢查
+        // Disable checks that conflict with Spring conventions.
         check('ImmutableEnumChecker', CheckSeverity.OFF)
         check('MutablePublicArray', CheckSeverity.OFF)
-        // Mock Server 內部使用，String.split 在已知分隔符下行為明確
+        // Internal Mock Server usage: String.split has well-defined behavior for known delimiters.
         check('StringSplitter', CheckSeverity.OFF)
-        // 此專案為單機部署，LocalDateTime.now() 使用系統時區是刻意設計
+        // This application uses a single-server deployment; LocalDateTime.now() intentionally uses the system time zone.
         check('JavaTimeDefaultTimeZone', CheckSeverity.OFF)
-        // Handlebars helper 需要 java.util.Date
+        // Handlebars helper requires java.util.Date
         check('JavaUtilDate', CheckSeverity.OFF)
     }
 }
 
-// 測試程式碼放寬 Error Prone 檢查
+// Relax Error Prone checks for test code.
 tasks.named('compileTestJava').configure {
     options.errorprone {
         check('MissingSummary', CheckSeverity.OFF)
@@ -335,7 +358,7 @@ tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
         xml.required = false
     }
 }
-// 測試程式碼不需要 SpotBugs 靜態分析
+// Test code does not require SpotBugs static analysis
 spotbugsTest.enabled = false
 spotbugsH2MigrationTest.enabled = false
 
@@ -351,17 +374,17 @@ tasks.named('bootJar') {
     }
 }
 
-// 開發時直接從 src 讀取靜態資源，修改後瀏覽器重整即可生效
+// Read static resources directly from src during development; refresh the browser to see changes.
 bootRun {
     sourceResources sourceSets.main
 }
 
-// 快速啟動指令
+// Quick start command
 tasks.register('dev') {
     group = 'application'
     description = 'Run in dev mode (no login required)'
     doFirst {
-        // dev task 使用 dev profile，資料庫沿用 application.yml 的預設 SQLite。
+        // The dev task uses the dev profile and the default SQLite database from application.yml.
         bootRun.configure {
             args = ["--spring.profiles.active=dev"]
         }
@@ -369,7 +392,7 @@ tasks.register('dev') {
     finalizedBy 'bootRun'
 }
 
-// 快速測試指令
+// Quick test command
 tasks.register('t') {
     group = 'verification'
     description = 'Run all tests (shortcut)'
@@ -381,7 +404,7 @@ tasks.register('runJmsTest', JavaExec) {
     mainClass = 'com.echo.jms.ManualJmsTest'
 }
 
-// 由 scripts/migrate-h2-to-sqlite.py 呼叫；連線資訊一律透過環境變數傳入。
+// Called by scripts/migrate-h2-to-sqlite.py; all connection settings are passed through environment variables.
 tasks.register('migrateH2ToSqlite', JavaExec) {
     group = 'application'
     description = 'Migrate and verify an offline H2 database into a staged SQLite database'

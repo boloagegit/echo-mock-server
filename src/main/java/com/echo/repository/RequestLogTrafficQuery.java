@@ -14,9 +14,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 流量概況用的請求紀錄查詢。統計在資料庫內完成，只回傳每一格（或每個回應時間區間）的筆數，
- * 不把個別紀錄載入記憶體；查詢只用到 {@link RequestLog#TRAFFIC_INDEX} 涵蓋的小欄位，不讀 body 與比對過程。
- * 分格以時間比較完成（不依賴資料庫的日期函式），所以外部資料庫也適用。
+ * Request-log queries for the traffic overview. Aggregate in the database and return only counts per cell or latency bucket,
+ * Do not load individual records into memory; query only uses the small field covered by {@link RequestLog#TRAFFIC_INDEX}, and does not read body and compare the process.
+ * The division is done by time comparison (does not rely on the date function of the database), so external databases are also suitable.
  */
 @Repository
 public class RequestLogTrafficQuery {
@@ -27,16 +27,16 @@ public class RequestLogTrafficQuery {
     private final Map<Integer, String> bucketQueries = new ConcurrentHashMap<>();
     private final Map<List<Integer>, String> responseTimeQueries = new ConcurrentHashMap<>();
 
-    /** 一格時間內的筆數；轉發與轉發失敗只算比對到規則的請求。 */
+    /** Count records in a time bucket; forwarding and forwarding failures include only requests that matched a rule. */
     public record BucketCount(int bucket, long total, long unmatched, long forwarded, long forwardFailed) {
     }
 
-    /** 沒比對到的請求，依協定、方法與網址分組的筆數。 */
+    /** The number of unmatched requests grouped by protocol, method and URL. */
     public record EndpointCount(Protocol protocol, String method, String endpoint, long count) {
     }
 
     /**
-     * 依格子統計：{@code starts} 是每一格的開始時間（遞增），第一格之前的紀錄不算，最後一格包含之後的紀錄。
+     * Statistics by grid: {@code starts} is the starting time of each grid (increasingly), the records before the first grid are not counted, and the last grid includes the records after that.
      */
     @Transactional(readOnly = true)
     public List<BucketCount> countByBucket(List<LocalDateTime> starts) {
@@ -53,7 +53,7 @@ public class RequestLogTrafficQuery {
                 .toList();
     }
 
-    /** 依回應時間區間統計：第 i 格為不超過 {@code edges[i]} 毫秒（且超過前一格），最後一格為更慢的請求。 */
+    /** Statistics based on response time interval: the i grid is no more than {@code edges[i]} milliseconds (and exceeds the previous grid), and the last grid is a slower request. */
     @Transactional(readOnly = true)
     public long[] countByResponseTime(LocalDateTime from, int[] edges) {
         List<Integer> key = java.util.Arrays.stream(edges).boxed().toList();
@@ -66,9 +66,9 @@ public class RequestLogTrafficQuery {
         return counts;
     }
 
-    /** {@code from} 之後最常沒比對到的請求。 */
+    /** The most frequently unmatched request after {@code from}. */
     @Transactional(readOnly = true)
-    /** {@code from} 起到 {@code to}（不含，概況產生的時間）為止：與「看這些請求」列出的範圍相同。 */
+    /** {@code from} to {@code to} (excluding the time when the profile was generated): the same range as listed in "Look at these requests". */
     public List<EndpointCount> topUnmatched(LocalDateTime from, LocalDateTime to, int limit) {
         return entityManager.createQuery(
                         "SELECT r.protocol, r.method, r.endpoint, COUNT(r) FROM RequestLog r "
@@ -83,11 +83,11 @@ public class RequestLogTrafficQuery {
                 .toList();
     }
 
-    /** 目前保留的紀錄中最早的時間；沒有紀錄時為 null。 */
+    /** The earliest time in the currently retained record; when there is no record, it is null. */
     @Transactional(readOnly = true)
     /**
-     * 最小的紀錄 id（沒有紀錄時為 null）。id 只會遞增，所以大於 1 代表較舊的紀錄曾被刪除
-     * （筆數上限、清除紀錄）；重新啟動或多台主機也一樣成立。走主鍵索引。
+     * The smallest record is id (null when there is no record). id will only increase, so if it is greater than 1, it means that the older record has been deleted.
+     * including retention limits and clearing logs, even after restart or across instances. Uses the primary-key index.
      */
     public Long smallestId() {
         return entityManager.createQuery("SELECT MIN(r.id) FROM RequestLog r", Long.class).getSingleResult();

@@ -16,9 +16,9 @@ import java.util.stream.Collectors;
 import com.echo.util.CurrentOperator;
 
 /**
- * 協定處理器註冊中心
+ * Protocol handler registry
  * <p>
- * 自動收集所有 ProtocolHandler 實作，提供統一存取介面。
+ * Automatically collect all ProtocolHandler implementations and provide a unified access interface.
  */
 @Component
 public class ProtocolHandlerRegistry {
@@ -33,14 +33,14 @@ public class ProtocolHandlerRegistry {
     }
 
     /**
-     * 取得所有處理器
+     * Get all processors
      */
     public List<ProtocolHandler> getAllHandlers() {
         return handlers;
     }
 
     /**
-     * 已啟用協定的描述（依處理器注入順序）
+     * Description of enabled protocols (in order of processor injection)
      */
     public List<ProtocolDescriptor> descriptors() {
         return handlers.stream()
@@ -50,21 +50,21 @@ public class ProtocolHandlerRegistry {
     }
 
     /**
-     * 依協定取得描述；協定未啟用時為 empty
+     * Obtain description by protocol; empty when protocol is not enabled
      */
     public Optional<ProtocolDescriptor> descriptor(Protocol protocol) {
         return getHandler(protocol).map(ProtocolHandler::descriptor);
     }
 
     /**
-     * 依協定取得處理器
+     * Obtained processor according to protocol
      */
     public Optional<ProtocolHandler> getHandler(Protocol protocol) {
         return Optional.ofNullable(handlerMap.get(protocol));
     }
 
     /**
-     * 取得所有規則（跨協定）
+     * Get all rules (cross-protocol)
      */
     public List<BaseRule> findAllRules() {
         return handlers.stream()
@@ -74,7 +74,7 @@ public class ProtocolHandlerRegistry {
     }
 
     /**
-     * 依 ID 查詢規則（跨協定）
+     * Query rules according to ID (cross-protocol)
      */
     public Optional<? extends BaseRule> findById(String id) {
         for (ProtocolHandler handler : handlers) {
@@ -87,7 +87,7 @@ public class ProtocolHandlerRegistry {
     }
 
     /**
-     * 依 ID 批次查詢規則（跨協定）
+     * According to ID batch query rules (cross-protocol)
      */
     public List<BaseRule> findAllByIds(List<String> ids) {
         if (ids.isEmpty()) {
@@ -101,7 +101,7 @@ public class ProtocolHandlerRegistry {
 
 
     /**
-     * 刪除過期規則（跨協定）
+     * Delete expired rules (cross-protocol)
      */
     public int deleteExpiredRules(LocalDateTime cutoff) {
         return handlers.stream()
@@ -110,7 +110,7 @@ public class ProtocolHandlerRegistry {
     }
 
     /**
-     * 批次更新啟用狀態（跨協定）
+     * Batch update enabled status (cross-protocol)
      */
     public int updateEnabled(List<String> ids, boolean enabled, LocalDateTime updatedAt, String updatedBy) {
         if (ids.isEmpty()) {
@@ -126,7 +126,7 @@ public class ProtocolHandlerRegistry {
     }
 
     /**
-     * 批次更新保護狀態（跨協定）
+     * Batch update protection status (cross-protocol)
      */
     public int updateProtected(List<String> ids, boolean isProtected, LocalDateTime updatedAt, String updatedBy) {
         if (ids.isEmpty()) {
@@ -142,7 +142,7 @@ public class ProtocolHandlerRegistry {
     }
 
     /**
-     * 批次展延規則（跨協定）
+     * Batch extension rules (across protocols)
      */
     public int extendRules(List<String> ids, LocalDateTime extendedAt, String updatedBy) {
         if (ids.isEmpty()) {
@@ -158,7 +158,7 @@ public class ProtocolHandlerRegistry {
     }
 
     /**
-     * 依 responseId 刪除規則（跨協定）
+     * Deletion rule according to responseId (cross-protocol)
      */
     public int deleteByResponseId(Long responseId) {
         return handlers.stream()
@@ -167,7 +167,7 @@ public class ProtocolHandlerRegistry {
     }
 
     /**
-     * 依 responseId 查詢規則（跨協定）
+     * Query rules according to responseId (cross-protocol)
      */
     public List<BaseRule> findByResponseId(Long responseId) {
         return handlers.stream()
@@ -177,7 +177,7 @@ public class ProtocolHandlerRegistry {
     }
 
     /**
-     * 計算孤兒規則數量（跨協定）
+     * Counting the number of orphan rules (across protocols)
      */
     public long countOrphanRules() {
         return handlers.stream()
@@ -186,7 +186,7 @@ public class ProtocolHandlerRegistry {
     }
 
     /**
-     * 依標籤 pattern 查詢規則 ID（跨協定，避免全表載入）
+     * Query rule ID based on label pattern (cross-protocol, avoid full table loading)
      */
     public List<String> findIdsByTagPattern(String pattern) {
         return handlers.stream()
@@ -195,7 +195,7 @@ public class ProtocolHandlerRegistry {
     }
 
     /**
-     * 將 Rule 轉換為 DTO（自動找對應的 Handler）
+     * Convert Rule to DTO (automatically find the corresponding Handler)
      */
     public RuleDto toDto(BaseRule rule, Response response, boolean includeBody) {
         return getHandler(rule.getProtocol())
@@ -208,14 +208,14 @@ public class ProtocolHandlerRegistry {
     }
 
     /**
-     * 檢查協定是否啟用
+     * Check if the protocol is enabled
      */
     public boolean isEnabled(Protocol protocol) {
         return getHandler(protocol).map(ProtocolHandler::isEnabled).orElse(false);
     }
 
     /**
-     * 產生規則描述
+     * Generate rule description
      */
     public String generateDescription(RuleDto dto) {
         return getHandler(dto.getProtocol())

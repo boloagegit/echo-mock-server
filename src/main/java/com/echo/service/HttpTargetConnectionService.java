@@ -155,7 +155,7 @@ public class HttpTargetConnectionService {
         targetsChanged();
     }
 
-    /** 通知其他實例重新讀取轉送連線設定。 */
+    /** Notify other instances to re-read the forwarding connection settings. */
     private void targetsChanged() {
         cacheInvalidationService.ifPresent(CacheInvalidationService::publishHttpTargetsChanged);
     }

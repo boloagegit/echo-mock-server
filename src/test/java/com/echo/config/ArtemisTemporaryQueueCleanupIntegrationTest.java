@@ -23,8 +23,8 @@ import java.time.Duration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 真實 broker：客戶端在同一條長連線上每次請求都建新的暫時回覆佇列卻不刪時，
- * 沒有 consumer 的佇列要被刪掉，仍在使用的佇列與其他設定不受影響。
+ * True broker: When the client creates a new temporary reply queue for each request on the same long connection but does not delete it,
+ * The queue without consumer will be deleted. The queues and other settings that are still in use will not be affected.
  */
 class ArtemisTemporaryQueueCleanupIntegrationTest {
 
@@ -48,7 +48,7 @@ class ArtemisTemporaryQueueCleanupIntegrationTest {
     }
 
     @Test
-    @DisplayName("沒有 consumer 的暫時佇列閒置後被刪除；仍在聽的佇列保留")
+    @DisplayName("Deletes idle consumerless temporary queues while retaining queues with active consumers")
     void idleTemporaryQueuesAreDeletedWhileListenedQueuesStay() throws Exception {
         Session session = start(IDLE_DELETE_MS);
         TemporaryQueue abandoned = session.createTemporaryQueue();
@@ -61,7 +61,7 @@ class ArtemisTemporaryQueueCleanupIntegrationTest {
 
         Awaitility.await().atMost(Duration.ofSeconds(10))
                 .until(() -> !exists(abandoned) && !exists(abandonedWithLateReply));
-        // 佇列的 address（以及它的分頁物件）在下一次掃描時一併移除
+        // The queued address (and its paging objects) will be removed from the next scan
         Awaitility.await().atMost(Duration.ofSeconds(10))
                 .until(() -> broker.getAddressInfo(SimpleString.of(abandoned.getQueueName())) == null);
         assertThat(exists(listened)).isTrue();
@@ -73,7 +73,7 @@ class ArtemisTemporaryQueueCleanupIntegrationTest {
     }
 
     @Test
-    @DisplayName("客戶端之後再聽已刪除的暫時佇列時會自動重建，仍收得到回覆")
+    @DisplayName("Listening again recreates a deleted temporary queue and still receives replies")
     void deletedTemporaryQueueIsRecreatedWhenTheClientListensAgain() throws Exception {
         Session session = start(IDLE_DELETE_MS);
         TemporaryQueue reused = session.createTemporaryQueue();
@@ -89,7 +89,7 @@ class ArtemisTemporaryQueueCleanupIntegrationTest {
     }
 
     @Test
-    @DisplayName("暫時佇列仍套用 # 的分頁與記憶體設定；一般佇列不會被設為自動刪除")
+    @DisplayName("Temporary queues retain # paging and memory settings; regular queues keep automatic deletion disabled")
     void temporaryQueuesKeepTheWildcardPolicy() throws Exception {
         Session session = start(IDLE_DELETE_MS);
         TemporaryQueue temporary = session.createTemporaryQueue();
@@ -108,7 +108,7 @@ class ArtemisTemporaryQueueCleanupIntegrationTest {
     }
 
     @Test
-    @DisplayName("設為 0 時不自動刪除，維持連線關閉才回收")
+    @DisplayName("Setting 0 disables automatic deletion and retains cleanup on connection close")
     void zeroKeepsTemporaryQueuesUntilTheConnectionCloses() throws Exception {
         Session session = start(0);
         TemporaryQueue abandoned = session.createTemporaryQueue();
@@ -124,7 +124,7 @@ class ArtemisTemporaryQueueCleanupIntegrationTest {
         properties.setTemporaryQueueIdleDeleteMs(idleDeleteMs);
         ConfigurationImpl configuration = new ConfigurationImpl();
         new ArtemisConfig().artemisConfigurationCustomizer(properties).customize(configuration);
-        // 只用 in-VM，不開 TCP port；縮短掃描間隔讓測試不必等預設的 30 秒
+        // Only use in-VM, do not open TCP port; shorten the scan interval so that the test does not have to wait for the default 30 seconds
         configuration.getAcceptorConfigurations().clear();
         configuration.addAcceptorConfiguration("cleanup-test", BROKER_URL);
         configuration.setAddressQueueScanPeriod(100);

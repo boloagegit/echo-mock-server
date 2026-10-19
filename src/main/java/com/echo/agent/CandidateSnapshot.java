@@ -11,10 +11,10 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 候選規則的不可變快照。
+ * Immutable snapshot of candidate rules.
  * <p>
- * 在 Pipeline 主執行緒建立快照後傳入 LogAgent 背景執行緒，
- * 避免跨執行緒存取 JPA managed entity。
+ * Create the snapshot on the Pipeline thread, then pass it to the LogAgent background thread.
+ * Avoid accessing JPA-managed entities across threads.
  */
 @Getter
 @Builder
@@ -28,12 +28,12 @@ public class CandidateSnapshot {
     private final String bodyCondition;
     private final String queryCondition;
     private final String headerCondition;
-    /** 結構化條件 JSON；有值時以它為準 */
+    /** Structured condition JSON; takes precedence when present. */
     private final String matchSpec;
     private final int priority;
 
     /**
-     * 從 HttpRule 建立深拷貝快照。
+     * Create a deep-copy snapshot from an HttpRule.
      */
     public static CandidateSnapshot fromHttpRule(HttpRule rule) {
         return CandidateSnapshot.builder()
@@ -50,9 +50,9 @@ public class CandidateSnapshot {
     }
 
     /**
-     * 從 JmsRule 建立深拷貝快照。
+     * Create a deep-copy snapshot from a JmsRule.
      * <p>
-     * JMS 規則沒有 queryCondition 與 headerCondition，設為 null。
+     * JMS rules have no queryCondition or headerCondition; both are set to null.
      */
     public static CandidateSnapshot fromJmsRule(JmsRule rule) {
         return CandidateSnapshot.builder()
@@ -69,14 +69,14 @@ public class CandidateSnapshot {
     }
 
     /**
-     * 將 BaseRule 候選列表轉換為 CandidateSnapshot 不可變列表（深拷貝）。
+     * Deep-copy BaseRule candidates into an immutable list of CandidateSnapshot objects.
      * <p>
-     * 根據規則的實際型別（HttpRule 或 JmsRule）呼叫對應的工廠方法。
-     * 不支援的規則型別會被過濾掉。
+     * Call the corresponding factory method according to the actual type of the rule (HttpRule or JmsRule).
+     * Unsupported rule types will be filtered out.
      *
-     * @param candidates 候選規則列表
-     * @param <T> BaseRule 的子型別
-     * @return 不可變的 CandidateSnapshot 列表
+     * @param candidates Candidate rule list
+     * @param <T> Subtype of BaseRule
+     * @return Immutable CandidateSnapshot list
      */
     public static <T extends BaseRule> List<CandidateSnapshot> toCandidateSnapshots(List<T> candidates) {
         if (candidates == null || candidates.isEmpty()) {

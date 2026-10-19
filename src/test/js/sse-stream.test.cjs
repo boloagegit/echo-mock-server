@@ -37,7 +37,7 @@ test('empty data dispatches, id-only and event-only do not; NUL id ignored and E
 function formFixture(fetch) {
   const context = { window: {}, document: {}, TextDecoder, AbortController, setTimeout, clearTimeout, fetch,
     Vue: { ref: value => ({ value }), computed: fn => ({ get value() { return fn(); } }), watch: () => {} } };
-  // 與 index.html 相同的載入順序：match-tree.js → utils.js → useRuleForm.js
+  // The same loading sequence as index.html: match-tree.js → utils.js → useRuleForm.js
   vm.runInNewContext(fs.readFileSync(path.join(root, 'match-tree.js'), 'utf8') + '\n' + source + '\n'
     + fs.readFileSync(path.join(root, 'composables/useRuleForm.js'), 'utf8') + '\nthis.create = useRuleForm;', context);
   const form = context.create({ t: x => x });

@@ -1,15 +1,15 @@
 /**
- * MatchTreeNode - 進階條件（matchSpec）的樹狀編輯器，一個元件遞迴顯示群組與條件。
- * 節點模型與轉換見 match-tree.js；這裡直接修改傳入的節點物件（父層持有整棵樹）。
+ * MatchTreeNode - The tree editor of advanced conditions (matchSpec), a component displays groups and conditions recursively.
+ * See match-tree.js for the node model and transformation; the incoming node object is directly modified here (the parent layer holds the entire tree).
  */
 const MatchTreeNode = {
     name: 'MatchTreeNode',
     props: {
         node: { type: Object, required: true },
-        // 此協定可用的取值來源，例如 ['body', 'query', 'header']
+        // Available value sources for this protocol, such as ['body', 'query', 'header']
         sources: { type: Array, required: true },
         depth: { type: Number, default: 0 },
-        // 根節點不能刪除，也不能被包成 not 以外的東西
+        // The root node cannot be deleted or packaged into something other than not
         root: { type: Boolean, default: false },
     },
     emits: ['remove'],

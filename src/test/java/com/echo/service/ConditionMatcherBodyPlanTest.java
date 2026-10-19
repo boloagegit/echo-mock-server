@@ -7,7 +7,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 依候選規則條件的需求準備 body（§4.5、§7.2.9）：不解析、串流掃描或完整解析。 */
+/** Prepare body as required by candidate rule conditions (§4.5, §7.2.9): no parsing, streaming scan, or full parsing. */
 class ConditionMatcherBodyPlanTest {
 
     private static final String XML = "<Order><Header><ServiceName>Pay</ServiceName></Header>"
@@ -40,7 +40,7 @@ class ConditionMatcherBodyPlanTest {
         ConditionMatcher.PreparedBody prepared = prepare(XML, legacy, advanced);
 
         assertThat(prepared.getXmlDoc()).isNull();
-        // 結果已由串流掃描算好，比對時直接使用
+        // The result has been calculated by stream scanning and can be used directly during comparison.
         assertThat(prepared.getMatchOutcomesSnapshot()).containsEntry("body:ServiceName=Pay", true).hasSize(2);
         assertThat(matcher.matchesPrepared("ServiceName=Pay", null, null, prepared, null, null)).isTrue();
         assertThat(matcher.matchesPrepared(SIMPLE_XPATH_SPEC, null, null, null, prepared, null, null)).isTrue();
@@ -59,7 +59,7 @@ class ConditionMatcherBodyPlanTest {
 
     @Test
     void xmlThatCannotBeStreamedFallsBackToNormalParsing() {
-        // namespace 前綴未宣告：StAX 無法處理，DOM（不分 namespace）可以
+        // namespace prefix is not announced: StAX cannot be processed, DOM (regardless of namespace) can be processed
         String unbound = "<ns:Order><ns:Status>OPEN</ns:Status></ns:Order>";
         ConditionMatcher.PreparedBody prepared = prepare(unbound, matcher.conditions("Status=OPEN", null, null));
 

@@ -20,11 +20,11 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 /**
- * 舊版字串條件片段的評估，逐行對應 {@code com.echo.service.ConditionMatcher} 的行為
- * （運算子解析、執行期 body 型別派送、各分支在欄位不存在時的結果、actual 值的描述文字）。
+ * Evaluate legacy string-condition fragments, mirroring each behavior of {@code com.echo.service.ConditionMatcher}
+ * including operator parsing, runtime body-type dispatch, missing-field branches, and actual-value descriptions.
  * <p>
- * 刻意保留舊版的不一致之處（例如 JSONPath 欄位不存在時 {@code !=} 也不符合），由差異測試確保等價。
- * 唯一刻意的差異：期望值只有一個 {@code "} 時，舊版會丟出例外（HTTP 回 500），這裡視為字面值比對。
+ * Intentionally preserve legacy inconsistencies, such as {@code !=} not matching a missing JSONPath field; differential tests enforce equivalence.
+ * One intentional difference: a lone {@code "} expected value previously threw an exception and returned HTTP 500; compare it literally here.
  */
 final class LegacyConditionMatcher implements CompiledMatcher {
 
@@ -39,13 +39,13 @@ final class LegacyConditionMatcher implements CompiledMatcher {
     private final String cacheKey;
     private final MatcherLimits limits;
     /**
-     * 比對用的解析結果。JSON 點路徑與 XML 元素路徑會先把 {@code ==} 換成 {@code =}（XML 與串流掃描一致，見 §7.2.9）；
-     * JSONPath、query、header 不換。
+     * Parsed condition. JSON dot paths and XML element paths normalize {@code ==} to {@code =}; XML matches streaming scans, see section 7.2.9.
+     * JSONPath, query, header will not be replaced.
      */
     private final Parsed parsed;
     private final Parsed parsedWithoutDoubleEquals;
     private final JsonPath jsonPath;
-    /** XML body 時的簡單路徑（可串流）；無法以簡單路徑表示時為 null，改用 XPath。 */
+    /** Simple XML-body path for streaming; null if the expression requires general XPath evaluation. */
     private final XmlPath xmlPath;
     private final BodyRequirements bodyRequirements;
 
@@ -70,7 +70,7 @@ final class LegacyConditionMatcher implements CompiledMatcher {
         if (condition.startsWith("$.")) {
             return BodyRequirements.BODY_WITHOUT_XML;
         }
-        // 相同條件只在 XML body 時用到 XML；JSON body 時走 JSON 點路徑
+        // Use the same condition as an XML path for XML bodies or a JSON dot path for JSON bodies.
         return xmlPath != null ? BodyRequirements.streamable(new LegacyStreamCheck()) : BodyRequirements.FULL;
     }
 
@@ -79,7 +79,7 @@ final class LegacyConditionMatcher implements CompiledMatcher {
         return bodyRequirements;
     }
 
-    /** 與 {@link #matchXmlNodes} 相同：任一個（未超過長度上限的）值符合即成立。 */
+    /** Like {@link #matchXmlNodes}: match if any value within the length limit satisfies the condition. */
     private final class LegacyStreamCheck implements BodyRequirements.StreamCheck {
 
         @Override
@@ -176,7 +176,7 @@ final class LegacyConditionMatcher implements CompiledMatcher {
 
     private boolean matchBody(EvalContext context) {
         BodyView body = context.request().body();
-        // JSONPath 只看 JSON：先處理，避免為了判斷 body 型別而解析 XML（串流掃描過的 body 沒有 DOM）
+        // JSONPath applies only to JSON; check it first to avoid parsing XML just to determine the body type, since streaming XML has no DOM.
         if (condition.startsWith("$.")) {
             return !BodyType.emptyOrTooLarge(body) && matchJsonPath(context);
         }
@@ -207,7 +207,7 @@ final class LegacyConditionMatcher implements CompiledMatcher {
         return parsed.test(result.value);
     }
 
-    /** 與舊版相同：同一請求內同一個 JSONPath 只評估一次，結果跨條件共用。 */
+    /** Same as the old version: the same JSONPath is only evaluated once in the same request, and the results are shared across conditions. */
     private JsonPathResult readJsonPath(EvalContext context) {
         JsonNode json = context.request().body().json();
         if (json == null || jsonPath == null) {
@@ -285,7 +285,7 @@ final class LegacyConditionMatcher implements CompiledMatcher {
         }
     }
 
-    // ==================== actual value（匹配鏈說明） ====================
+    // ==================== actual value (matching chain description) ====================
 
     private String actualValue(EvalContext context, Parsed described) {
         RequestView request = context.request();
@@ -320,7 +320,7 @@ final class LegacyConditionMatcher implements CompiledMatcher {
                 return xmlActual(context, described.field, body);
             }
         } catch (RuntimeException e) {
-            // 與舊版相同：取值失敗時顯示 not found
+            // Preserve legacy behavior: display not found if value extraction fails.
         }
         return "not found";
     }
@@ -356,7 +356,7 @@ final class LegacyConditionMatcher implements CompiledMatcher {
                 return values.get(0);
             }
         } catch (XPathExpressionException | RuntimeException e) {
-            // 與舊版相同：取值失敗時顯示 not found
+            // Preserve legacy behavior: display not found if value extraction fails.
         }
         return "not found";
     }
@@ -389,10 +389,10 @@ final class LegacyConditionMatcher implements CompiledMatcher {
     // ==================== XML lookup ====================
 
     /**
-     * XML body 中欄位的值（去除前後空白、依文件順序）；不是 XML 時為 null。
-     * 簡單路徑（{@link XmlPath}）以 local name 比對，與串流掃描相同，結果由 body 在同一請求內快取共用；
-     * 其他寫法（含 predicate、函式、帶前綴名稱等）照舊用 XPath，同一請求內相同欄位只查找一次。
-     * 查找失敗也會保存，之後以同樣的例外回報，讓呼叫端維持舊版的處理方式。
+     * XML-body field values, trimmed and in document order; null for non-XML bodies.
+     * Simple {@link XmlPath} expressions match local names, as streaming scans do. Cache results on the body within the request;
+     * other expressions, including predicates, functions, and prefixed names, still use XPath and evaluate each field once per request.
+     * Cache lookup failures too and rethrow the same exception, preserving legacy caller behavior.
      */
     private List<String> xmlValues(EvalContext context, String field, BodyView body)
             throws XPathExpressionException {
@@ -442,11 +442,11 @@ final class LegacyConditionMatcher implements CompiledMatcher {
     }
 
     /**
-     * 等同 XPath {@code //*[local-name()='name']}（依文件順序），但直接走訪 DOM，比 XPath 快一個數量級。
+     * Equivalent to XPath {@code //*[local-name()='name']} in document order, but traverses the DOM directly, roughly an order of magnitude faster.
      * <p>
-     * 舊版 SOAP 類條件（例如 {@code CustomerId=...} 對上 {@code <ns:CustomerId>}）每次都會走到這裡。
-     * DOM 不分 namespace 時 local name 取 {@code :} 之後的部分，與 JDK XPath 的 {@code local-name()} 一致；
-     * 名稱含 {@code '} 時 XPath 字面值會失效，維持走原本的 XPath 以保留相同結果。
+     * Older SOAP-like conditions (e.g. {@code CustomerId=...} vs. {@code <ns:CustomerId>}) end up here every time.
+     * For a non-namespace-aware DOM, take the part after {@code :} in both local and node names, matching JDK XPath {@code local-name()}.
+     * A name containing {@code '} makes the XPath literal invalid; keep the original XPath path to preserve that result.
      */
     private static NodeList elementsByLocalName(Document doc, String name) {
         NodeList all = doc.getElementsByTagName("*");
@@ -488,8 +488,8 @@ final class LegacyConditionMatcher implements CompiledMatcher {
     }
 
     /**
-     * 每個執行緒各自快取編譯後的 XPath（XPathExpression 不是執行緒安全的）。
-     * 舊版以跨執行緒共用的快取避免重複編譯；少了快取時 SOAP 類條件會慢約 15%。
+     * Each thread caches compiled XPath (XPathExpression is not thread-safe).
+     * Legacy code shared a compiled-expression cache across threads; removing caching makes SOAP-style conditions roughly 15% slower.
      */
     private static XPathExpression compiledXPath(String xpath) throws XPathExpressionException {
         Map<String, XPathExpression> cache = XPATH_CACHE.get();
@@ -547,7 +547,7 @@ final class LegacyConditionMatcher implements CompiledMatcher {
                 .replace("'", "&apos;");
     }
 
-    // ==================== 解析與比對 ====================
+    // ==================== Analysis and comparison ====================
 
     private static String stripBodyPrefix(String field) {
         return field.startsWith("body.") ? field.substring(5) : field;
@@ -557,14 +557,14 @@ final class LegacyConditionMatcher implements CompiledMatcher {
         try {
             return JsonPath.compile(path);
         } catch (RuntimeException e) {
-            // InvalidPathException 等：舊版在評估時才編譯，失敗視為欄位不存在
+            // Legacy code compiles only during evaluation; failures such as InvalidPathException mean the field is missing.
             return null;
         }
     }
 
     private enum Op { EQUAL, NOT_EQUAL, CONTAINS, MATCHES }
 
-    /** 舊版 {@code parseCondition} + {@code matchValue}：以第一個 {@code =} 前一個字元決定運算子。 */
+    /** Legacy {@code parseCondition} + {@code matchValue}: determine the operator from the character before the first {@code =}. */
     private static final class Parsed {
 
         private final String field;
@@ -616,7 +616,7 @@ final class LegacyConditionMatcher implements CompiledMatcher {
             }
         }
 
-        /** 舊版在比對時才編譯，過長或語法錯誤都視為不符合。 */
+        /** Legacy code compiles only during matching; excessive length or invalid syntax means no match. */
         private static Pattern compileRegex(String regex, MatcherLimits limits) {
             if (regex.length() > limits.maxRegexPatternLength()) {
                 return null;
@@ -629,7 +629,7 @@ final class LegacyConditionMatcher implements CompiledMatcher {
         }
     }
 
-    /** 依存取順序淘汰的小型快取。 */
+    /** Small access-order eviction cache. */
     private static final class LruCache<K, V> extends LinkedHashMap<K, V> {
 
         private static final long serialVersionUID = 1L;
@@ -647,14 +647,14 @@ final class LegacyConditionMatcher implements CompiledMatcher {
         }
     }
 
-    /** {@link EvalContext#cachedValue} 的 key；同一路徑字串對應同一個結果。 */
+    /** key of {@link EvalContext#cachedValue}; the same path string corresponds to the same result. */
     private record JsonPathKey(String path) {
     }
 
     private record XmlLookupKey(String field) {
     }
 
-    /** {@code values} 為 null 表示查找失敗（XPath 語法錯誤等）。 */
+    /** {@code values} is null, which means the search failed (XPath syntax error, etc.). */
     private record XmlLookup(List<String> values) {
         static final XmlLookup FAILED = new XmlLookup(null);
     }
@@ -663,7 +663,7 @@ final class LegacyConditionMatcher implements CompiledMatcher {
         static final JsonPathResult MISSING = new JsonPathResult(false, null);
     }
 
-    /** 對應舊版 {@code PreparedBody.BodyType}。 */
+    /** Corresponds to the old version {@code PreparedBody.BodyType}. */
     private enum BodyType {
         EMPTY, TOO_LARGE, JSON, XML, PLAIN;
 

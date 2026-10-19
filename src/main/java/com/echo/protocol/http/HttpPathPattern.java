@@ -1,11 +1,11 @@
 package com.echo.protocol.http;
 
 /**
- * HTTP 規則路徑（matchKey）的比對規則，請求比對、規則快照的路徑索引與規則順序檢查都用這一份：
+ * The comparison rules of HTTP rule path (matchKey), request comparison, path index of rule snapshot and rule sequence check all use this copy:
  * <ul>
- *   <li>{@code *}：所有路徑</li>
- *   <li>{@code /x/*}：以 {@code /x/} 開頭的路徑</li>
- *   <li>其他：路徑完全相同</li>
+ *   <li>{@code *}: all paths</li>
+ *   <li>{@code /x/*}: Path  starting with {@code /x/}</li>
+ *   <li>Others: The path is exactly the same as</li>
  * </ul>
  */
 public final class HttpPathPattern {
@@ -13,7 +13,7 @@ public final class HttpPathPattern {
     private HttpPathPattern() {
     }
 
-    /** 規則路徑是否符合請求路徑。 */
+    /** Whether the rule path matches the request path. */
     public static boolean matches(String pattern, String path) {
         if ("*".equals(pattern)) {
             return true;
@@ -27,12 +27,12 @@ public final class HttpPathPattern {
         return isPrefix(pattern) && path.startsWith(prefixOf(pattern));
     }
 
-    /** 只符合與自己完全相同的請求路徑（不是 {@code *}，也不是 {@code /x/*}）。 */
+    /** Only match the request path that is exactly the same as itself (not {@code *}, not {@code /x/*}). */
     public static boolean isExact(String pattern) {
         return pattern != null && !"*".equals(pattern) && !isPrefix(pattern);
     }
 
-    /** {@code broader} 符合的請求路徑是否包含 {@code narrower} 符合的所有請求路徑。 */
+    /** Whether the request path matched by {@code broader} contains all the request paths matched by {@code narrower}. */
     public static boolean covers(String broader, String narrower) {
         if (broader == null || narrower == null) {
             return false;

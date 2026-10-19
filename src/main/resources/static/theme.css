@@ -1,14 +1,14 @@
 /**
- * theme.css - 共用主題變數（Signal Console）
- * 供 index.html (主站) 與 login.html (登入頁) 共用。
+ * theme.css - Shared topic variables (Signal Console)
+ * Shared by index.html (main site) and login.html (login page).
  *
- * 兩個獨立維度：
- *   data-theme  : dark（預設）／light，由使用者偏好決定
- *   data-accent : teal（預設）／blue，由部署設定 echo.ui.accent（ECHO_UI_ACCENT）決定，
- *                 用來區分不同部署環境（例如 SIT 青綠、UAT 藍）
+ * Two independent dimensions:
+ *   data-theme: dark (default)/light, determined by user preference
+ *   data-accent: teal (default)/blue, determined by the deployment setting echo.ui.accent (ECHO_UI_ACCENT),
+ *                 Used to distinguish different deployment environments (such as SIT cyan, UAT blue)
  */
 
-/* 深色主題（預設）＋ 青綠主色 */
+/* Dark theme (default) + turquoise main color */
 :root {
     color-scheme: dark;
     --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
@@ -57,7 +57,7 @@
     --brand-ink: #eceef1;
 }
 
-/* 深色主題 ＋ 藍色主色 */
+/* Dark theme + blue main color */
 :root[data-accent="blue"] {
     --primary: #8db2ff;
     --primary-strong: #8db2ff;
@@ -68,7 +68,7 @@
     --on-primary: #0a1b3d;
 }
 
-/* 淺色主題 ＋ 青綠主色 */
+/* Light theme + green main color */
 :root[data-theme="light"] {
     color-scheme: light;
     --bg: #f4f5f7;
@@ -113,7 +113,7 @@
     --brand-ink: #eceef1;
 }
 
-/* 淺色主題 ＋ 藍色主色 */
+/* Light theme + blue main color */
 :root[data-theme="light"][data-accent="blue"] {
     --primary: #2457c5;
     --primary-strong: #1b4799;

@@ -15,9 +15,9 @@ import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * {@link MatchNode} 與 JSON 之間的轉換。
+ * Conversion between {@link MatchNode} and JSON.
  * <p>
- * 這裡只檢查結構；運算子、來源、選項是否存在由 {@link MatcherCompiler} 依註冊表檢查。
+ * Only the structure is checked here; whether operators, sources, and options exist is checked by {@link MatcherCompiler} according to the registry.
  *
  * <pre>{@code
  * {"all": [ <node>, ... ]}
@@ -39,15 +39,15 @@ public final class MatchSpecCodec {
     }
 
     /**
-     * 從 JSON 解析條件樹。
+     * Parsing condition tree from JSON.
      *
-     * @throws InvalidMatchSpecException 結構不合法
+     * @throws InvalidMatchSpecException Illegal structure
      */
     public static MatchNode parse(JsonNode json) {
         return parse(json, "$");
     }
 
-    /** 規範化的 JSON：欄位順序固定、省略預設值、選項依名稱排序。 */
+    /** Standardized JSON: Field order is fixed, default values are omitted, and options are sorted by name. */
     public static ObjectNode toJson(MatchNode node) {
         ObjectNode json = NODES.objectNode();
         if (node instanceof MatchNode.All all) {

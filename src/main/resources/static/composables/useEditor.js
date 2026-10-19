@@ -1,13 +1,13 @@
 /**
- * useEditor - 內容格式偵測
+ * useEditor - Content format detection
  *
- * 回應內容的檢視與編輯都改用共用的 ui-code-viewer（行號、語法上色、搜尋、換行、格式化、複製）。
- * 這裡只保留 detectMode，給請求記錄的內容判斷 JSON／XML／純文字。
+ * Viewing and editing of response content are changed to use the shared ui-code-viewer (line number, syntax coloring, search, line wrapping, formatting, copying).
+ * Only detectMode is retained here to determine the content of the requested record JSON/XML/plain text.
  *
  * @returns {{ detectMode: Function }}
  */
 const useEditor = () => {
-    /** 偵測文字格式，回傳 CodeMirror mode 字串 */
+    /** Detect text format and return CodeMirror mode string */
     const detectMode = (text) => {
         const s = (text || '').trim();
         if (s.startsWith('{') || s.startsWith('[')) return 'application/json';

@@ -1,27 +1,27 @@
 /**
- * useRules - 規則管理 Composable
+ * useRules - Rule Management Composable
  *
- * 管理規則（rules）的 CRUD、篩選、排序、分頁、批次操作、
- * 拖曳排序、行內預覽、匯出匯入、標籤分組等功能。
+ * CRUD, filtering, sorting, paging, batch operations of management rules (rules),
+ * Inline previews, export/import, tag grouping, and related actions.
  *
- * @param {Object} deps - 依賴物件
- * @param {Function} deps.showToast - Toast 通知函式（來自 useToast）
- * @param {Function} deps.showConfirm - 確認對話框函式（來自 useToast）
- * @param {Function} deps.t - 翻譯函式（來自 useI18n）
- * @param {Function} deps.requireLogin - 登入檢查函式（來自 useAuth）
- * @param {Function} deps.login - 登入跳轉函式（來自 useAuth）
- * @param {import('vue').Ref} deps.isLoggedIn - 是否已登入（來自 useAuth）
- * @param {import('vue').Ref} deps.loading - 全域 loading 狀態
- * @param {import('vue').Ref} deps.page - 當前頁面（來自 app.js）
- * @param {import('vue').Ref} deps.httpLabel - HTTP 協定標籤
- * @param {import('vue').Ref} deps.jmsLabel - JMS 協定標籤
- * @returns {Object} 規則管理相關的狀態與方法
+ * @param {Object} deps - Dependent objects
+ * @param {Function} deps.showToast - Toast notification function (from useToast)
+ * @param {Function} deps.showConfirm - Confirm dialog function (from useToast)
+ * @param {Function} deps.t - Translation function (from useI18n)
+ * @param {Function} deps.requireLogin - Login check function (from useAuth)
+ * @param {Function} deps.login - Login jump function (from useAuth)
+ * @param {import('vue').Ref} deps.isLoggedIn - Are you logged in (from useAuth)
+ * @param {import('vue').Ref} deps.loading - Global loading status
+ * @param {import('vue').Ref} deps.page - Current page (from app.js)
+ * @param {import('vue').Ref} deps.httpLabel - HTTP protocol tag
+ * @param {import('vue').Ref} deps.jmsLabel - JMS protocol tag
+ * @returns {Object} Status and methods related to rule management
  */
 const useRules = (deps) => {
     const { ref, computed, watch } = Vue;
     const { showToast, showConfirm, t, requireLogin, login, isLoggedIn, loading, httpLabel, jmsLabel } = deps;
 
-    // --- 資料快取機制 ---
+    // --- Data caching mechanism ---
     const dataLastLoaded = { rules: 0 };
     const dataDirty = { rules: false };
     const DATA_TTL = 30000;
@@ -29,7 +29,7 @@ const useRules = (deps) => {
     const markLoaded = () => { dataLastLoaded.rules = Date.now(); dataDirty.rules = false; };
     const markDirty = () => { dataDirty.rules = true; };
 
-    // --- 狀態 ---
+    // --- Status ---
     const rules = ref([]);
     const savedRuleSort = JSON.parse(localStorage.getItem('ruleSort') || 'null');
     const ruleFilter = ref({ protocol: '', enabled: '', isProtected: '', mode: '', expiring: '', unreachable: '', keyword: '' });
@@ -41,11 +41,11 @@ const useRules = (deps) => {
     let listRequestSequence = 0;
     let listAbortController = null;
 
-    // --- 選取 ---
+    // --- Select ---
     const selectedRules = ref([]);
     const batchSelectMode = ref(false);
 
-    // --- 標籤分組 ---
+    // --- Tag grouping ---
     const ruleViewMode = ref(localStorage.getItem('ruleViewMode') || 'list');
     const expandedTagGroups = ref([]);
     const tagKeys = ref({});
@@ -63,7 +63,7 @@ const useRules = (deps) => {
         if (g === '_untagged' && !groupLoaded.value[g]) { await loadRuleGroup(g, getGroupLimit(g)); }
     };
 
-    // --- 子群組展開收合 ---
+    // --- Expand and collapse subgroups ---
     const expandedTagSubgroups = ref([]);
     const toggleTagSubgroup = async (key) => {
         const i = expandedTagSubgroups.value.indexOf(key);
@@ -74,7 +74,7 @@ const useRules = (deps) => {
         }
     };
 
-    // --- 群組漸進渲染 ---
+    // --- Group progressive rendering ---
     const GROUP_PAGE_SIZE = 20;
     const groupVisibleLimit = ref({});
     const getGroupLimit = (key) => groupVisibleLimit.value[key] || GROUP_PAGE_SIZE;
@@ -87,10 +87,10 @@ const useRules = (deps) => {
         groupVisibleLimit.value = { ...groupVisibleLimit.value, [key]: total };
         await loadRuleGroup(key, total);
     };
-    // 篩選條件變更時重置 limit
+    // Reset when filter conditions change limit
     watch(ruleFilter, () => { groupVisibleLimit.value = {}; }, { deep: true });
 
-    // --- 篩選、排序、分頁 ---
+    // --- Filter, sort, paging ---
     const filteredRules = computed(() => {
         return ruleViewMode.value === 'list' ? rules.value : [];
     });
@@ -106,7 +106,7 @@ const useRules = (deps) => {
     const toggleRuleSort = f => { ruleSort.value = ruleSort.value.field === f ? { field: f, asc: !ruleSort.value.asc } : { field: f, asc: false }; localStorage.setItem('ruleSort', JSON.stringify(ruleSort.value)); };
     const ruleSortIcon = f => ruleSort.value.field === f ? (ruleSort.value.asc ? 'bi-caret-up-fill' : 'bi-caret-down-fill') : 'bi-arrow-down-up';
 
-    // --- 載入 ---
+    // --- Loading ---
     const buildRuleQuery = () => {
         const params = new URLSearchParams();
         params.set('page', String(Math.max(0, rulePage.value - 1)));
@@ -254,7 +254,7 @@ const useRules = (deps) => {
     });
 
     // --- CRUD ---
-    // 同一條規則的動作（或同一個批次動作）處理中時忽略重複點擊。
+    // Repeated clicks are ignored when the action of the same rule (or the same batch of actions) is being processed.
     const inFlight = createInFlight();
     const deleteRule = id => inFlight.run('delete:' + id, async () => {
         if (!await requireLogin()) { return; }
@@ -281,8 +281,8 @@ const useRules = (deps) => {
     });
 
     /**
-     * 切換啟用狀態：立即生效，並在通知中提供「復原」。
-     * 這是可逆操作，所以不再逐次確認；刪除等不可逆操作仍會確認。
+     * Toggle enabled status: effective immediately and provide "Revert" in notification.
+     * This is a reversible operation, so it will no longer be confirmed one after another; irreversible operations such as deletion will still be confirmed.
      */
     const toggleEnabled = (rule, { offerUndo = true } = {}) => inFlight.run('toggle:' + rule.id, async () => {
         if (!await requireLogin()) return;
@@ -302,7 +302,7 @@ const useRules = (deps) => {
 
     const toggleSelectAll = e => { selectedRules.value = e.target.checked ? pagedRules.value.map(r => r.id) : [] };
 
-    // --- 匯出匯入 ---
+    // --- Export and import ---
     const exportRules = async () => {
         const r = await apiCall('/api/admin/rules/export', {}, { errorMsg: t('toast.exportFailed') });
         if (r && r.ok) {
@@ -355,7 +355,7 @@ const useRules = (deps) => {
         deps.loading.value.importError = '';
         try {
             if (importFormat.value === 'openapi') {
-                // OpenAPI: 先預覽
+                // OpenAPI: Preview first
                 const formData = new FormData();
                 formData.append('file', importFile.value);
                 const r = await apiCall('/api/admin/rules/import-openapi/preview', { method: 'POST', body: formData }, { silent: true });
@@ -399,11 +399,11 @@ const useRules = (deps) => {
         if (!deps.loading.value.importError) { importFile.value = null; importFileName.value = ''; }
     };
 
-    // --- 批次操作 ---
+    // --- Batch operation ---
     const batchProtect = (protect) => inFlight.run('batch', async () => {
         if (!await requireLogin()) return;
         const url = protect ? '/api/admin/rules/batch/protect' : '/api/admin/rules/batch/unprotect';
-        // 後端只回報實際改變的筆數（原本就已保護的不算），通知顯示選取的數量。
+        // The backend only reports the actual number of changes (those already protected are not counted), and the notification displays the selected number.
         const count = selectedRules.value.length;
         const r = await apiCall(url, { method: 'PUT', body: JSON.stringify(selectedRules.value) }, { errorMsg: t('toast.batchOperationFailed') });
         if (r && r.ok) { showToast(protect ? t('toast.batchProtected', {count}) : t('toast.batchUnprotected', {count}), 'success'); selectedRules.value = []; markDirty(); loadRules(true); }
@@ -428,7 +428,7 @@ const useRules = (deps) => {
         if (r && r.ok) { const d = await r.json(); showToast(t('toast.deleteAllRulesSuccess', {count: d.deleted}), 'success'); markDirty(); loadRules(true); }
     });
 
-    // --- 詳情抽屜 ---
+    // ---Details Drawer ---
     const ruleDetailId = ref(null);
     const rulePreviewCache = ref({});
     const rulePreviewLoading = ref({});
@@ -459,7 +459,7 @@ const useRules = (deps) => {
             const data = await r.json();
             await hydrateForwardTarget(data);
             const body = data.responseBody || '';
-            // SSE 內容：顯示實際送出的串流原文，並附一行摘要（事件數、全長、循環、在哪裡結束連線）
+            // SSE Content: Display the actual sent stream text, with a one-line summary (number of events, full length, loop, where to end the connection)
             const events = data.sseEnabled ? deserializeSseEvents(body) : [];
             if (events.length && events[0].data) {
                 data._previewBody = SseEvents.rawStream(events, data.sseLoopEnabled === true, t);
@@ -496,7 +496,7 @@ const useRules = (deps) => {
     const removeRuleChip = key => { ruleFilter.value[key] = ''; };
     const clearRuleFilters = () => { ruleFilter.value = { protocol: '', enabled: '', isProtected: '', mode: '', expiring: '', unreachable: '', keyword: '' }; };
 
-    // --- 其他 ---
+    // --- Others ---
     const showPriorityHelp = ref(false);
     const helpTab = ref('start');
 
@@ -527,7 +527,7 @@ const useRules = (deps) => {
 
     const goToRule = id => { deps.page.value = 'rules'; ruleFilter.value.keyword = id; openRuleDetail({ id }); };
 
-    // --- 匯出匯入整合 dropdown ---
+    // --- Export and import integration dropdown ---
     const showDataDropdown = ref(false);
     const toggleDataDropdown = () => { showDataDropdown.value = !showDataDropdown.value; };
     const closeDataDropdown = e => { if (!e.target.closest('.data-dropdown-wrapper')) showDataDropdown.value = false; };
@@ -599,7 +599,7 @@ const useRules = (deps) => {
         importFileName,
         handleImportFile,
         doImport,
-        // 詳情抽屜
+        // Details drawer
         ruleDetailId,
         rulePreviewCache,
         rulePreviewLoading,
@@ -611,7 +611,7 @@ const useRules = (deps) => {
         ruleFilterChips,
         removeRuleChip,
         clearRuleFilters,
-        // 其他
+        // Other
         showPriorityHelp,
         helpTab,
         clipCopy,
@@ -629,7 +629,7 @@ const useRules = (deps) => {
         openApiPreviewRules,
         openApiImporting,
         confirmOpenApiImport,
-        // 快取控制（供外部使用）
+        // Cache control (for external use)
         markDirty
     };
 };

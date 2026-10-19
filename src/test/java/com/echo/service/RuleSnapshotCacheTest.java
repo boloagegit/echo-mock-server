@@ -17,7 +17,7 @@ import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 規則快照：變更後背景重建，重建期間回傳舊快照；做出變更的一方等到新快照生效。 */
+/** Rule snapshot: The background is reconstructed after the change, and the old snapshot is returned during the reconstruction; the party who made the change waits until the new snapshot takes effect. */
 class RuleSnapshotCacheTest {
 
     private final ExecutorService builderThread = Executors.newSingleThreadExecutor();
@@ -35,7 +35,7 @@ class RuleSnapshotCacheTest {
         return new RuleSnapshotCache<>("test", builder, builderThread, TimeUnit.MINUTES.toNanos(10), 2_000, clock::get);
     }
 
-    /** 每次建立回傳「版本 N」；建立前可被擋住，模擬重建很慢。 */
+    /** "Version N" is returned every time it is created; it may be blocked before creation, and the simulation reconstruction is very slow. */
     private static final class SlowBuilder implements Function<String, String> {
         final AtomicInteger builds = new AtomicInteger();
         volatile CountDownLatch gate = new CountDownLatch(0);
@@ -61,7 +61,7 @@ class RuleSnapshotCacheTest {
     }
 
     @Test
-    @DisplayName("第一次由呼叫端建立；之後沒有變更時不再重建")
+    @DisplayName("The caller builds the first snapshot; unchanged rules require no rebuild")
     void firstGetBuildsOnceAndThenReuses() {
         SlowBuilder builder = new SlowBuilder();
         RuleSnapshotCache<String, String> cache = cache(builder);
@@ -72,14 +72,14 @@ class RuleSnapshotCacheTest {
     }
 
     @Test
-    @DisplayName("重建很慢時，請求立刻拿到舊快照，不必等待")
+    @DisplayName("Slow rebuilding returns the previous snapshot immediately without making requests wait")
     void requestsGetThePreviousSnapshotWhileRebuilding() throws Exception {
         SlowBuilder builder = new SlowBuilder();
         RuleSnapshotCache<String, String> cache = cache(builder);
         assertThat(cache.get("k")).isEqualTo("v1");
         builder.block();
 
-        // 變更來自網頁請求：只記下要等的序號，不在當下等待
+        // The change comes from a web request: just write down the sequence number you want to wait for, do not wait now
         cache.changed(true);
         assertThat(builder.started.await(5, TimeUnit.SECONDS)).isTrue();
 
@@ -92,7 +92,7 @@ class RuleSnapshotCacheTest {
     }
 
     @Test
-    @DisplayName("網頁請求做出的變更：回應前等到新快照生效；沒有變更時不等")
+    @DisplayName("Web-request changes await the new snapshot before replying; unchanged requests do not wait")
     void pendingChangesAreAwaitedOnceAtTheEndOfTheRequest() throws Exception {
         SlowBuilder builder = new SlowBuilder();
         RuleSnapshotCache<String, String> cache = cache(builder);
@@ -113,7 +113,7 @@ class RuleSnapshotCacheTest {
 
         builder.gate.countDown();
         request.get(5, TimeUnit.SECONDS);
-        // 三次變更：正在建的那次可能只包含第一次，之後再補建一次；等到的一定包含全部
+        // Three changes: the one under construction may only include the first one, and then another one; the one that waits must include all
         assertThat(cache.generationOf("k")).isEqualTo(3);
         assertThat(seenAfterWait.get()).isEqualTo("v" + builder.builds.get());
         assertThat(builder.builds.get()).isBetween(2, 3);
@@ -124,7 +124,7 @@ class RuleSnapshotCacheTest {
     }
 
     @Test
-    @DisplayName("不在網頁請求中的變更（多台同步、排程）：當下等到新快照生效")
+    @DisplayName("Changes outside web requests, including synchronization and scheduling, await the new snapshot immediately")
     void changesOutsideWebRequestsWaitRightAway() {
         SlowBuilder builder = new SlowBuilder();
         RuleSnapshotCache<String, String> cache = cache(builder);
@@ -137,7 +137,7 @@ class RuleSnapshotCacheTest {
     }
 
     @Test
-    @DisplayName("建立期間又有變更：再建一次，較舊的結果不會蓋掉較新的")
+    @DisplayName("Changes during a build trigger another build; older results cannot replace newer ones")
     void changesDuringABuildTriggerOneMoreBuild() throws Exception {
         SlowBuilder builder = new SlowBuilder();
         RuleSnapshotCache<String, String> cache = cache(builder);
@@ -146,7 +146,7 @@ class RuleSnapshotCacheTest {
 
         cache.changed(true);
         assertThat(builder.started.await(5, TimeUnit.SECONDS)).isTrue();
-        // 第一次重建進行中又有兩次變更：合併成之後的一次重建
+        // Two more changes were made during the first rebuild: merged into a subsequent rebuild
         cache.changed(true);
         cache.changed(true);
         builder.gate.countDown();
@@ -158,7 +158,7 @@ class RuleSnapshotCacheTest {
     }
 
     @Test
-    @DisplayName("重建失敗：繼續用舊快照，重試間隔過後自動再建，等待中的變更方隨之完成")
+    @DisplayName("A failed rebuild retains the previous snapshot and retries after backoff, completing waiting changes after recovery")
     void failedRebuildKeepsThePreviousSnapshotAndRetriesAfterTheBackoff() {
         AtomicInteger calls = new AtomicInteger();
         RuleSnapshotCache<String, String> cache = new RuleSnapshotCache<>("test", key -> {
@@ -173,14 +173,14 @@ class RuleSnapshotCacheTest {
         cache.changed(false);
         long waitedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
 
-        // 第二次建立失敗；約 1 秒後自動重試成功，不必等到 5 秒逾時，也不必有新的請求或變更
+        // The second creation failed; it will automatically retry successfully after about 1 second without waiting for the 5 second timeout or new request or change.
         assertThat(waitedMs).isBetween(800L, 3_000L);
         assertThat(cache.get("k")).isEqualTo("v3");
         assertThat(cache.generationOf("k")).isEqualTo(1);
     }
 
     @Test
-    @DisplayName("重試間隔中又有變更：不丟掉，間隔過後重建並包含它")
+    @DisplayName("Changes during retry backoff are retained and included in the next rebuild")
     void changeDuringTheFailureBackoffIsBuiltAfterIt() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         CountDownLatch failed = new CountDownLatch(1);
@@ -196,7 +196,7 @@ class RuleSnapshotCacheTest {
         assertThat(failed.await(5, TimeUnit.SECONDS)).isTrue();
         RuleSnapshotCache.clearPendingChanges();
 
-        // 失敗後的重試間隔內再改一次：變更方在間隔過後就完成
+        // Change again within the retry interval after a failure: the changer completes after the interval has elapsed
         long started = System.nanoTime();
         cache.changed(false);
         long waitedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
@@ -207,7 +207,7 @@ class RuleSnapshotCacheTest {
     }
 
     @Test
-    @DisplayName("超過最長存活時間：背景重建，請求先拿舊的")
+    @DisplayName("Maximum lifetime expiry triggers background rebuilding while requests use the previous snapshot")
     void expiredSnapshotIsRebuiltInTheBackground() throws Exception {
         SlowBuilder builder = new SlowBuilder();
         RuleSnapshotCache<String, String> cache = cache(builder);
@@ -227,7 +227,7 @@ class RuleSnapshotCacheTest {
     }
 
     @Test
-    @DisplayName("延遲讀者看到舊快照過期：新快照已裝好時不再重複建立")
+    @DisplayName("A delayed reader seeing an expired snapshot does not rebuild again if a new snapshot is already installed")
     void delayedExpiredReaderDoesNotRebuildAnAlreadyFreshSnapshot() throws Exception {
         var pausedReader = new AtomicReference<Thread>();
         var pauseOnce = new AtomicBoolean(true);
@@ -273,7 +273,7 @@ class RuleSnapshotCacheTest {
     }
 
     @Test
-    @DisplayName("第一次建立期間有變更提交：變更方等到包含變更的快照生效")
+    @DisplayName("Changes committed during the first build wait for a snapshot that includes them")
     void changeDuringTheFirstBuildWaitsForASnapshotThatIncludesIt() throws Exception {
         SlowBuilder builder = new SlowBuilder();
         builder.block();
@@ -281,7 +281,7 @@ class RuleSnapshotCacheTest {
         Future<String> firstRequest = callers.submit(() -> cache.get("k"));
         assertThat(builder.started.await(5, TimeUnit.SECONDS)).isTrue();
 
-        // 第一份快照可能比這次變更舊：變更方不能在它建好前、也不能只因它建好就返回
+        // The first snapshot may be older than this change: the changer cannot return before it is built, nor just because it is built.
         Future<?> change = callers.submit(() -> cache.changed(false));
         TimeUnit.MILLISECONDS.sleep(100);
         assertThat(change).isNotDone();
@@ -294,7 +294,7 @@ class RuleSnapshotCacheTest {
     }
 
     @Test
-    @DisplayName("第一次建立失敗：變更方不必等到逾時")
+    @DisplayName("Failure of the first build does not make the change caller wait for a timeout")
     void failedFirstBuildReleasesWaitingChanges() throws Exception {
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch gate = new CountDownLatch(1);
@@ -321,7 +321,7 @@ class RuleSnapshotCacheTest {
     }
 
     @Test
-    @DisplayName("一個請求改到兩份快照：共用一個等待期限，不會等兩倍時間")
+    @DisplayName("One request changing two snapshots shares one wait deadline instead of waiting twice")
     void pendingChangesShareOneDeadline() {
         SlowBuilder httpBuilder = new SlowBuilder();
         SlowBuilder jmsBuilder = new SlowBuilder();
@@ -346,7 +346,7 @@ class RuleSnapshotCacheTest {
     }
 
     @Test
-    @DisplayName("同時第一次取用：只建立一次")
+    @DisplayName("Concurrent first reads build the snapshot only once")
     void concurrentFirstGetsBuildOnce() throws Exception {
         SlowBuilder builder = new SlowBuilder();
         builder.block();

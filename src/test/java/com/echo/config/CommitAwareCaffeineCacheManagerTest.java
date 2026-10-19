@@ -48,7 +48,7 @@ class CommitAwareCaffeineCacheManagerTest {
 
         cache.clear();
         assertThat(cache.get("k")).isNull();
-        // 提交前另一個請求讀到尚未提交的舊資料並放回快取
+        // Before commit, another request reads old data and puts it back in the cache.
         cache.put("k", "old");
         commit();
 
@@ -124,7 +124,7 @@ class CommitAwareCaffeineCacheManagerTest {
         assertThat(seenAfterCommit).as("not before commit").isEmpty();
         commit();
 
-        // 只執行一次，且在提交後補清之後：看不到提交前放回的舊資料
+        // Run only once, after the post-commit invalidation: the stale value cached before commit is no longer visible.
         assertThat(seenAfterCommit).containsExactly("null");
     }
 

@@ -51,7 +51,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest({SystemController.class, RuleController.class, RuleApplyController.class, RuleStateController.class,
         ImportExportController.class, ResponseController.class, RequestLogController.class, AuditController.class,
         ScenarioController.class})
-@Import({SecurityConfig.class, LdapConfig.class, RuleApplyContractService.class, RuleEditService.class})
+@Import({SecurityConfig.class, LdapConfig.class, RuleApplyContractService.class, RuleEditService.class,
+        com.echo.service.BuildInfoService.class})
 @TestPropertySource(properties = "echo.features.bulk-import-export-enabled=true")
 class SecurityIntegrationTest {
 
@@ -138,7 +139,7 @@ class SecurityIntegrationTest {
                 .andExpect(content().contentType("image/x-icon"));
     }
 
-    // ========== 匯出 API ==========
+    // ========== Export API ==========
 
     @Test
     void pagedRules_shouldReturn200_whenNotAuthenticated() throws Exception {
@@ -242,7 +243,7 @@ class SecurityIntegrationTest {
                 .andExpect(status().isOk());
     }
 
-    // ========== 批次匯入 API ==========
+    // ========== Batch import API ==========
 
     @Test
     void importBatch_shouldReturn401_whenNotAuthenticated() throws Exception {
@@ -271,7 +272,7 @@ class SecurityIntegrationTest {
                 .andExpect(status().isOk());
     }
 
-    // ========== 批次刪除 API ==========
+    // ========== Batch deletion API ==========
 
     @Test
     void deleteBatch_shouldReturn401_whenNotAuthenticated() throws Exception {
@@ -300,7 +301,7 @@ class SecurityIntegrationTest {
                 .andExpect(status().isOk());
     }
 
-    // ========== 全部刪除 API ==========
+    // ========== Delete all API ==========
 
     @Test
     void deleteAll_shouldReturn401_whenNotAuthenticated() throws Exception {
@@ -345,7 +346,7 @@ class SecurityIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
-    // ========== 一般規則 CRUD ==========
+    // ========== General Rules CRUD ==========
 
     @Test
     @WithMockUser(roles = "USER")
@@ -439,7 +440,7 @@ class SecurityIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
-    // ========== 批次啟用/停用 API ==========
+    // ========== Batch enable/disable API ==========
 
     @Test
     @WithMockUser(roles = "USER")
@@ -461,7 +462,7 @@ class SecurityIntegrationTest {
                 .andExpect(status().isOk());
     }
 
-    // ========== Tag 批次操作 API ==========
+    // ========== Tag Batch operation API ==========
 
     @Test
     @WithMockUser(roles = "USER")

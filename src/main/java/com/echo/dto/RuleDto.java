@@ -11,10 +11,10 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * 規則資料傳輸物件
+ * Rule data transfer object
  * <p>
- * 統一 HTTP/JMS 規則的 API 回傳格式。
- * 轉換方法由 ProtocolHandler 提供：toDto() / fromDto()
+ * Unify the API return format of the HTTP/JMS rules.
+ * Conversion method provided by ProtocolHandler: toDto() / fromDto()
  */
 @Data
 @Builder
@@ -31,12 +31,12 @@ public class RuleDto {
     private String queryCondition;
     private String headerCondition;
     /**
-     * 結構化條件（JSON 物件）。有值時以它為準，舊版三個條件欄位必須為空；
-     * 可用舊版字串表達的條件在儲存時會轉成舊欄位。要清除進階條件請送 {@code {"all": []}}。
+     * Structured condition (JSON object). When there is a value, it will prevail. The three condition fields of the old version must be empty;
+     * Conditions that can be expressed using legacy strings will be converted to legacy fields when saved. To clear the advanced conditions please send {@code {"all": []}}.
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private JsonNode matchSpec;
-    /** 唯讀：此規則使用結構化條件（舊版 UI 無法編輯其條件）。 */
+    /** Read only: This rule uses structured conditions (older versions of UI cannot edit their conditions). */
     private Boolean advancedMatch;
     private Integer priority;
     private String description;
@@ -53,8 +53,8 @@ public class RuleDto {
     private String responseBody;
 
     /**
-     * 為 true 時，responseBody 改寫 responseId 指向的既有回應（與規則在同一個交易內儲存），
-     * 而不是另外建立新回應。只用於請求，不會出現在回應中。
+     * When it is true, responseBody overwrites the existing response pointed to by responseId (stored in the same transaction as the rule),
+     * Instead of creating a new response. Only used in requests and will not appear in responses.
      */
     @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.WRITE_ONLY)
     private Boolean updateExistingResponse;

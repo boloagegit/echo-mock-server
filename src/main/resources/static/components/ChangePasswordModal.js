@@ -1,7 +1,7 @@
 /**
- * ChangePasswordModal - 修改密碼對話框
+ * ChangePasswordModal - Change password dialog box
  *
- * 同時支援使用者主動修改與登入後必須修改兩種狀態。
+ * Supports both user-initiated modification and mandatory modification after logging in.
  */
 const ChangePasswordModal = {
   props: {

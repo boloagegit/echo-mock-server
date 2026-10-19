@@ -25,8 +25,8 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * 管理後台各 API 共用的規則讀取與儲存：檢查欄位、處理回應內容與轉發設定、寫入規則並清除規則快取。
- * 建立、更新、宣告式文件與匯入都經過 {@link #save}，確保檢查方式一致。
+ * Read and store rules shared by all API in the management background: check fields, process response content and forwarding settings, write rules, and clear the rule cache.
+ * Create, update, declarative files and import all go through {@link #save} to ensure consistent checking methods.
  */
 @Service
 @RequiredArgsConstructor
@@ -43,7 +43,7 @@ public class RuleEditService {
     @Value("${echo.features.scenarios-enabled:false}")
     private boolean scenariosEnabled;
 
-    /** 儲存後的規則與回傳給前端的內容。 */
+    /** The stored rules and the content returned to the front end. */
     public record Saved(BaseRule rule, RuleDto dto) {
     }
 
@@ -56,7 +56,7 @@ public class RuleEditService {
                 .map(r -> protocolHandlerRegistry.toDto(r, getResponse(r.getResponseId()), includeBody));
     }
 
-    /** 所有規則（含回應內容），供匯出使用。 */
+    /** All rules (including response content) are for export. */
     public List<RuleDto> findAllDtos() {
         return protocolHandlerRegistry.findAllRules().stream()
                 .map(r -> protocolHandlerRegistry.toDto(r, getResponse(r.getResponseId())))
@@ -79,13 +79,13 @@ public class RuleEditService {
         }
     }
 
-    /** 規則與它建立或改寫的回應在同一個交易內儲存：任一失敗時都不會留下一半的變更。 */
+    /** A rule is stored in the same transaction as the responses it creates or overrides: no half of the changes are left behind if either fails. */
     @Transactional
     public Saved save(RuleDto dto) {
         validateRuleFields(dto);
         applyMatchSpec(dto);
         Response response;
-        // 改寫的既有回應在規則寫入之後才存：回應的檢查（其他使用它的 SSE 規則）要看到這條規則的新設定
+        // The overwritten existing response is not saved until the rule is written: checks of the response (other SSE rules that use it) need to see the new settings for this rule
         Response rewritten = null;
         boolean faulting = dto.getFaultType() != null
                 && !dto.getFaultType().isBlank()
@@ -128,8 +128,8 @@ public class RuleEditService {
             dto.setSseEnabled(false);
             dto.setSseLoopEnabled(false);
             response = null;
-        // 使用現有 Response，並改寫它的內容（例如在規則裡編輯 SSE 事件）
-        // 空白內容也算改寫（一般回應可以清空；SSE 回應會被下面的驗證擋下），不可當成「沿用」而默默不存
+        // Use existing Response and overwrite its content (e.g. edit SSE event in rules)
+        // Blank content is also considered to be rewritten (general responses can be cleared; SSE responses will be blocked by the following verification) and cannot be regarded as "inherited" and silently stored.
         } else if (dto.getResponseId() != null && Boolean.TRUE.equals(dto.getUpdateExistingResponse())
                 && dto.getResponseBody() != null) {
             Response existing = responseService.findById(dto.getResponseId())
@@ -137,25 +137,25 @@ public class RuleEditService {
             validateSseRule(dto, dto.getResponseBody());
             validateResponseContent(dto);
             existing.setBody(dto.getResponseBody());
-            // 跟著規則決定類型：SSE 規則的回應是 SSE；規則改回一般回應時，回應也改回一般
+            // The type is determined by the rule: SSE. The response of the rule is SSE; when the rule is changed back to a normal response, the response is also changed back to normal.
             existing.setContentType(isSseRule(dto) ? Response.SSE : null);
             response = existing;
             rewritten = existing;
-        // 使用現有 Response
+        // Use existing Response
         } else if (dto.getResponseId() != null && (dto.getResponseBody() == null || dto.getResponseBody().isBlank())) {
             response = responseService.findById(dto.getResponseId())
                     .orElseThrow(() -> new IllegalArgumentException("Response not found: " + dto.getResponseId()));
             validateSseRule(dto, response.getBody());
             if (isSseRule(dto) && !Response.isSse(response.getContentType())) {
-                // 舊版建立的 SSE 規則回應沒有標成 SSE；內容已通過 SSE 驗證，順便補上類型
+                // The SSE rule response created by the old version is not marked as SSE; the content has passed SSE verification, and the type is added by the way.
                 response.setContentType(Response.SSE);
                 response = responseService.save(response);
             }
         } else {
-            // 驗證回應內容格式
+            // Verify response content format
             validateSseRule(dto, dto.getResponseBody());
             validateResponseContent(dto);
-            // 建立新 Response - 自動產生描述
+            // Create new Response - automatically generate description
             String desc = dto.getResponseDescription();
             if (desc == null || desc.isBlank()) {
                 desc = protocolHandlerRegistry.generateDescription(dto);
@@ -175,14 +175,14 @@ public class RuleEditService {
         stampForSave(candidate);
         BaseRule saved = handler.save(candidate);
         if (rewritten != null) {
-            // 仍在同一個交易內：檢查失敗（例如另一條 SSE 規則也用這個回應）時規則與回應一起復原
+            // Still in the same transaction: when the check fails (for example, another SSE rule also responds with this) the rule is restored together with the response
             response = responseService.save(rewritten);
         }
         rulesChanged(dto.getProtocol());
         return new Saved(saved, handler.toDto(saved, response, false));
     }
 
-    /** 寫入建立者（新規則）或沿用原建立者，並記錄這次的修改者。 */
+    /** Write the creator (new rule) or use the original creator, and record the modifier this time. */
     public void stampForSave(BaseRule candidate) {
         String operator = CurrentOperator.username();
         if (candidate.getId() == null) {
@@ -196,14 +196,14 @@ public class RuleEditService {
         candidate.setUpdatedBy(operator);
     }
 
-    /** 一個協定的規則有變更：清除本機的規則快取並通知其他節點。 */
+    /** The rules of a protocol have changed: clear the local rule cache and notify other nodes. */
     public void rulesChanged(Protocol protocol) {
         protocolHandlerRegistry.descriptor(protocol)
                 .ifPresent(descriptor -> evictCache(descriptor.rulesCacheName()));
         cacheInvalidationService.ifPresent(s -> s.publishInvalidation(protocol));
     }
 
-    /** 所有協定的規則都可能有變更（例如 Excel 匯入）。 */
+    /** All agreed rules are subject to change (e.g. Excel import). */
     public void allRulesChanged() {
         protocolHandlerRegistry.descriptors().forEach(protocol -> evictCache(protocol.rulesCacheName()));
         cacheInvalidationService.ifPresent(CacheInvalidationService::publishInvalidation);
@@ -217,8 +217,8 @@ public class RuleEditService {
     }
 
     /**
-     * 關閉 Scenario 功能時，不允許建立或變更 Scenario 設定。
-     * 既有規則的值可以原樣保存，避免使用者修改其他欄位時意外破壞既有行為。
+     * When the Scenario function is turned off, it is not allowed to create or change the Scenario settings.
+     * The values of existing rules can be saved as they are to prevent users from accidentally destroying existing behavior when modifying other fields.
      */
     private void validateScenarioFeature(RuleDto dto) {
         if (scenariosEnabled) {
@@ -273,11 +273,11 @@ public class RuleEditService {
     }
 
     /**
-     * 檢查並正規化結構化條件（見 {@link MatchSpecs}）。
+     * Check and normalize structured conditions (see {@link MatchSpecs}).
      * <p>
-     * 規則以整筆取代的方式儲存，而舊版 UI、Excel 與 v1 文件不認得 {@code matchSpec}：沒有送出結構化條件、
-     * 也沒有任何舊版條件時，保留既有規則的結構化條件，避免編輯其他欄位時把進階條件清掉。
-     * 要清除進階條件請明確送出 {@code {"all": []}}。
+     * The rules are stored in the form of block replacement, and the old versions of UI, Excel and v1 files are not recognized. {@code matchSpec}: No structured conditions are sent.
+     * When there are no old conditions, keep the structured conditions of the existing rules to avoid clearing the advanced conditions when editing other fields.
+     * To clear the advanced conditions please send {@code {"all": []}} explicitly.
      */
     private void applyMatchSpec(RuleDto dto) {
         JsonNode spec = dto.getMatchSpec();

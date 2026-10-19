@@ -9,21 +9,21 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Log Agent 的任務值物件。
+ * The task value object of Log Agent.
  * <p>
- * 包含所有日誌欄位（與 {@code RequestLogService.LogEntry} 相同）
- * 以及匹配分析上下文（candidates、analysisBody、queryString、headers）。
- * 解析後的 XML DOM / JSON tree 絕不可進入此物件；背景分析需要時會從
- * {@code analysisBody} 重新建立短生命週期的 PreparedBody。
+ * Contains all log fields (same as {@code RequestLogService.LogEntry})
+ * and matching analysis context (candidates, analysisBody, queryString, headers).
+ * Never retain a parsed XML DOM or JSON tree in this object; background analysis creates a
+ * short-lived PreparedBody from {@code analysisBody} instead.
  * <p>
- * {@code candidates} 與 {@code headers} 為不可變集合，
- * 透過靜態工廠方法以 {@code List.copyOf()} 與 {@code Map.copyOf()} 確保不可變性。
+ * {@code candidates} and {@code headers} are immutable collections.
+ * Ensuring immutability via static factory methods with {@code List.copyOf()} and {@code Map.copyOf()}.
  */
 @Getter
 @Builder
 public class LogTask {
 
-    // --- 基本日誌欄位 ---
+    // --- Basic log fields ---
     private final String ruleId;
     private final Protocol protocol;
     private final String method;
@@ -45,19 +45,19 @@ public class LogTask {
 
     private final String faultType;
 
-    // --- Scenario 狀態轉移資訊 ---
+    // Scenario state-transition information
     private final String scenarioName;
     private final String scenarioFromState;
     private final String scenarioToState;
 
-    // --- 處理流程資訊 ---
+    // --- Processing information ---
     private final Integer candidateCount;
     private final Boolean matchedByFallback;
     private final Integer delayMs;
     private final Integer sseEventCount;
     private final String scenarioSkipped;
 
-    // --- 匹配分析上下文 ---
+    // --- Match analysis context ---
     private final List<CandidateSnapshot> candidates;
     private final String analysisBody;
     private final String queryString;

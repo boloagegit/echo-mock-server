@@ -21,14 +21,14 @@ public class FeignMockConfig {
             String targetUrl = template.feignTarget().url();
             URI uri = URI.create(targetUrl);
             
-            // 保留原始 host
+            // Keep original host
             String originalHost = uri.getHost();
             if (uri.getPort() > 0 && uri.getPort() != 80 && uri.getPort() != 443) {
                 originalHost += ":" + uri.getPort();
             }
             template.header("X-Original-Host", originalHost);
             
-            // 保留 base path (如 /csiw)，與 template 的 path 組合
+            // Reserve base path (such as /csiw), combined with path of template
             String basePath = uri.getPath();
             if (basePath == null || basePath.equals("/")) {
                 basePath = "";

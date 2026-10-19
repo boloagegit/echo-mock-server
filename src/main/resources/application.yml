@@ -1,30 +1,30 @@
 server:
   port: 8080
   undertow:
-    max-http-post-size: 10485760  # 10MB，允許帶 base64 圖片的大 request 進入
+    max-http-post-size: 10485760  # 10MB, allow large request with base64 picture to enter
     threads:
       # I/O threads stay CPU-derived unless SERVER_UNDERTOW_THREADS_IO is set.
       # A single I/O thread helps some workloads but is not universally faster; see docs/http-io-tuning.md.
-      worker: 32        # Undertow worker threads，可用環境變數 SERVER_UNDERTOW_THREADS_WORKER 覆蓋
+      worker: 32        # Undertow worker threads, which can be overridden by the environment variable SERVER_UNDERTOW_THREADS_WORKER
   servlet:
     session:
-      timeout: 180d  # Session 180 天 (約半年) 過期
+      timeout: 180d  # Session expires in 180 days (about half a year)
       cookie:
-        max-age: 180d  # Cookie 也設定 180 天
+        max-age: 180d  # Cookie is also set to 180 days
 
 spring:
   web:
     resources:
       cache:
-        # 瀏覽器可快取靜態資源，但每次以 Last-Modified 驗證（未變更回 304），改版後一定拿到新檔。
-        # index.html 另由 WebMvcConfig 設為不快取。
+        # Browsers may cache static resources but revalidate with Last-Modified each time, receiving 304 when unchanged and fresh files after updates.
+        # index.html is set to not be cached by WebMvcConfig.
         cachecontrol:
           no-cache: true
         use-last-modified: true
   application:
     name: echo
-  # 背景排程（快取同步、清理、備份）用 Spring Boot 自己的排程執行緒，與原生 HTTP 計時器分開。
-  # 多於一條執行緒，夜間備份才不會擋住每 5 秒一次的快取同步。
+  # Background scheduling (cache sync, cleanup, backup) uses Spring Boot's own scheduler thread, separate from the native HTTP timer.
+  # More than one thread so that nightly backup does not block cache synchronization every 5 seconds.
   task:
     scheduling:
       thread-name-prefix: echo-scheduled-
@@ -35,19 +35,19 @@ spring:
     exclude:
       - org.springframework.boot.autoconfigure.ldap.LdapAutoConfiguration
 
-  # Database: 預設 SQLite（WAL），資料檔位於 ./data（Docker volume 掛載點）
-  # 外部資料庫請啟用對應 profile：postgresql、mysql、mariadb、sqlserver、oracle
-  # H2 已不再支援；既有 H2 資料請以 scripts/migrate-h2-to-sqlite.py 轉換
+  # Database: Default SQLite (WAL), the data file is located at ./data (Docker volume mount point)
+  # Select the matching profile for external databases: postgresql, mysql, mariadb, sqlserver, or oracle.
+  # H2 is no longer supported; migrate existing H2 data with scripts/migrate-h2-to-sqlite.py.
   datasource:
     url: jdbc:sqlite:./data/mockdb.sqlite?journal_mode=WAL&busy_timeout=10000&synchronous=NORMAL&foreign_keys=ON
     driver-class-name: org.sqlite.JDBC
     hikari:
-      # 交易管理器會序列化寫入；連線池保留 WAL 的並行讀取能力。
+      # The transaction manager serializes writes; the connection pool retains parallel read capabilities for WAL.
       maximum-pool-size: 3
       minimum-idle: 1
-      connection-timeout: 15000   # 必須 > busy_timeout，避免 pool 比 SQLite 先放棄
-      idle-timeout: 600000        # 10 分鐘（SQLite in-process，不需頻繁回收）
-      max-lifetime: 0             # 不限制（SQLite 無 server 端 timeout）
+      connection-timeout: 15000   # Must exceed busy_timeout so the pool does not give up before SQLite.
+      idle-timeout: 600000        # 10 minutes (SQLite in-process, no need for frequent recycling)
+      max-lifetime: 0             # Unlimited; SQLite has no server-side timeout.
 
   jpa:
     database-platform: com.echo.config.EchoSqliteDialect
@@ -62,17 +62,17 @@ spring:
     caffeine:
       spec: maximumSize=10000,expireAfterWrite=43200s
 
-  # Artemis - 由 echo.jms 設定控制，此區塊保留供 Spring Boot 自動配置
+  # Artemis - controlled by echo.jms settings, this block is reserved for automatic configuration by Spring Boot
   artemis:
     mode: embedded
     embedded:
-      # Boot 仍會自動配置 Artemis；只停用 Echo 的 listener 不會阻止內建 broker 啟動。
+      # Boot will still automatically configure Artemis; just disabling listener for Echo will not prevent the built-in broker from starting.
       enabled: ${echo.jms.enabled:false}
 
-# Echo 自訂配置
+# Echo Custom configuration
 echo:
   sse:
-    # 客戶端連著但不讀資料時，寫入卡住超過這個時間就關閉該連線（毫秒，最少 1000）；事件之間的等待不算
+    # Close connections whose clients stop reading and block writes beyond this timeout, in milliseconds with a minimum of 1000; exclude waits between events.
     stalled-write-timeout-ms: ${ECHO_SSE_STALLED_WRITE_TIMEOUT_MS:120000}
   # Healthy requests write no diagnostic file lines. Anomalies have bounded metadata only.
   diagnostics:
@@ -89,9 +89,9 @@ echo:
     records-per-second: 20 # aggregate anomaly/detail output limit, omitted records counted
   sqlite:
     recovery:
-      # fail-fast: 保留損壞資料庫並停止啟動；restore-latest: 從最新有效備份還原
+      # fail-fast: preserve a corrupt database and abort startup; restore-latest: restore the newest valid backup.
       mode: ${ECHO_SQLITE_RECOVERY_MODE:fail-fast}
-      # 確認 runtime corruption 時退出，交由 supervisor 重啟並執行上述啟動復原
+      # Exit when confirming runtime corruption, leaving it to supervisor to restart and perform the above startup recovery
       runtime-check-enabled: ${ECHO_SQLITE_RUNTIME_CHECK_ENABLED:true}
       runtime-check-interval-ms: ${ECHO_SQLITE_RUNTIME_CHECK_INTERVAL_MS:30000}
   # Resource snapshots are ADMIN-only and collected only on manual refresh.
@@ -110,114 +110,114 @@ echo:
     request-log-enabled: true
     application-log-enabled: true
     storage-enabled: true
-  env-label:                    # 環境別名（如 DEV、SIT、UAT），可用環境變數 ECHO_ENV_LABEL 覆蓋
+  env-label:                    # Environment alias (such as DEV, SIT, UAT), which can be overridden by the environment variable ECHO_ENV_LABEL
   ui:
-    accent: ${ECHO_UI_ACCENT:teal}  # 介面主色：teal（青綠）或 blue（藍），用來區分不同部署環境；其他值視為 teal
-    easter-egg: ${ECHO_UI_EASTER_EGG:true}  # 介面彩蛋（↑↑↓↓←→←→AB 或連點 Echo 圖示 5 下開小遊戲）；設 false 關閉
+    accent: ${ECHO_UI_ACCENT:teal}  # UI accent color: teal or blue, to distinguish deployments; unknown values fall back to teal.
+    easter-egg: ${ECHO_UI_EASTER_EGG:true}  # UI easter egg: enter ↑↑↓↓←→←→AB or click the Echo icon five times to open the mini-game; set false to disable.
   features:
-    issue-reporting-enabled: ${ECHO_ISSUE_REPORTING_ENABLED:false}      # 問題回報，預設關閉
-    bulk-import-export-enabled: ${ECHO_BULK_IMPORT_EXPORT_ENABLED:false}  # 批次匯入／匯出，預設關閉
-    scenarios-enabled: ${ECHO_SCENARIOS_ENABLED:false}                    # Scenario 狀態機，預設關閉
+    issue-reporting-enabled: ${ECHO_ISSUE_REPORTING_ENABLED:false}      # Issue reporting, disabled by default.
+    bulk-import-export-enabled: ${ECHO_BULK_IMPORT_EXPORT_ENABLED:false}  # Bulk import/export, disabled by default.
+    scenarios-enabled: ${ECHO_SCENARIOS_ENABLED:false}                    # Scenario state machine, disabled by default.
   remember-me:
-    key: ${ECHO_REMEMBER_ME_KEY:change-me-in-production}  # 必須透過環境變數覆蓋
-    validity: 180d                # Remember Me cookie 有效期，可用環境變數 ECHO_REMEMBER_ME_VALIDITY 覆蓋
+    key: ${ECHO_REMEMBER_ME_KEY:change-me-in-production}  # Must be overridden through environment variables
+    validity: 180d                # Remember Me cookie validity period, which can be overridden by the environment variable ECHO_REMEMBER_ME_VALIDITY
   admin:
-    username: admin             # 可用環境變數 ECHO_ADMIN_USERNAME 覆蓋
-    password: "{bcrypt}$2a$10$cGp.LHC3zCORJIgwLvh6qehSMWZV27KbwI0VravTWP51EkxvbkEmm"  # admin，可用環境變數 ECHO_ADMIN_PASSWORD 覆蓋
+    username: admin             # Override with the ECHO_ADMIN_USERNAME environment variable.
+    password: "{bcrypt}$2a$10$cGp.LHC3zCORJIgwLvh6qehSMWZV27KbwI0VravTWP51EkxvbkEmm"  # admin, which can be overridden by the environment variable ECHO_ADMIN_PASSWORD
   storage:
-    mode: database  # database 或 file
-    file-path: ./data/rules.json  # file 模式時的路徑
+    mode: database  # database or file
+    file-path: ./data/rules.json  # Path in file mode
   cache:
     body:
-      max-size-mb: 50          # Response body 快取上限 (MB)，512MB heap 下不宜過大
-      threshold-kb: 5120      # 超過此大小的 body 不快取 (KB) - 5MB
-      expire-minutes: 720     # 快取閒置過期時間 (分鐘) - 12 小時
-      max-age-minutes: 60     # 不論是否常用，最晚多久重新讀取 (多實例漏掉通知時的保底)
+      max-size-mb: 50          # Response-body cache limit in MB; keep it modest with a 512 MB heap.
+      threshold-kb: 5120      # body larger than this size is not cached (KB) - 5MB
+      expire-minutes: 720     # Cache idle expiration time (minutes) - 12 hours
+      max-age-minutes: 60     # Maximum cache lifetime regardless of access, as a fallback for missed cross-instance notifications.
     template:
-      # 以來源與編譯結構的保守估算限制模板快取；單筆超過預算仍會渲染但不保留。
+      # Bound the template cache using conservative estimates of source and compiled structure; render oversized templates without caching them.
       max-weight-mb: ${ECHO_CACHE_TEMPLATE_MAX_WEIGHT_MB:16}
     rules:
-      max-age-minutes: 10     # 規則與 HTTP 轉送連線設定快取最晚多久重新讀取 (多實例保底)
-      change-wait-ms: 5000    # 改規則的請求最多等多久讓新規則生效 (模擬請求不等，重建期間用舊規則)
-    sync-interval-ms: 5000    # 多實例 cache 同步間隔 (毫秒)
+      max-age-minutes: 10     # Maximum cache lifetime for rules and HTTP forwarding connections, as a cross-instance safety net.
+      change-wait-ms: 5000    # Maximum time a rule-changing request waits for the new snapshot; mock requests keep using the previous snapshot without waiting during rebuild.
+    sync-interval-ms: 5000    # Multi-instance cache synchronization interval (milliseconds)
   jms:
     enabled: false
     policy-summary-enabled: true # Describes policy; does not suppress Artemis warnings.
-    alias:                     # JMS 協定顯示別名，可用環境變數 ECHO_JMS_ALIAS 覆蓋
-    port: 61616              # Artemis 監聽埠 (外部服務連線 tcp://localhost:61616)
-    username: admin          # Artemis 帳密，可用環境變數 ECHO_JMS_USERNAME / ECHO_JMS_PASSWORD 覆蓋
+    alias:                     # JMS protocol display alias, which can be overridden by the environment variable ECHO_JMS_ALIAS
+    port: 61616              # Artemis listening port (external service connection tcp://localhost:61616)
+    username: admin          # Artemis credentials, overridden by ECHO_JMS_USERNAME / ECHO_JMS_PASSWORD environment variables.
     password: admin
-    concurrency: "10-30"     # JMS listener 並發數 (min-max)，可用環境變數 ECHO_JMS_CONCURRENCY 覆蓋
+    concurrency: "10-30"     # JMS listener concurrency (min-max), overridden by ECHO_JMS_CONCURRENCY.
     forward:
-      session-cache-size: 8       # 每個目標版本最多保留的 idle Session；0 停用快取。回覆 Queue 每筆獨立。
-      # 預設保留 provider 的連線／重試／failover 政策；開啟前需驗證實際 ESB 故障行為。
+      session-cache-size: 8       # Maximum idle Session instances retained per target version; 0 disables caching. Each request has its own reply queue.
+      # Preserve the provider's connection, retry, and failover policies by default; validate actual ESB failure behavior before enabling this option.
       bounded-waits-enabled: ${ECHO_JMS_FORWARD_BOUNDED_WAITS_ENABLED:false}
-    queue: ECHO.REQUEST      # Echo 監聽的 Source Queue（外部服務送訊息到此 Queue）
+    queue: ECHO.REQUEST      # Source queue listened to by Echo; external services send messages here.
     source:
-      # 從哪裡接收 JMS：embedded（內建 Artemis，預設）| artemis | tibco（外部共用 broker，例如 ESB）
-      # 多台 Echo 監聽同一個外部 queue 時，broker 會把每則訊息只交給其中一台
+      # Where to receive JMS: embedded (built-in Artemis, default) | artemis | tibco (external shared broker, such as ESB)
+      # When multiple Echo instances share an external queue, the broker delivers each message to just one instance.
       type: ${ECHO_JMS_SOURCE_TYPE:embedded}
       server-url: ${ECHO_JMS_SOURCE_SERVER_URL:}
       username: ${ECHO_JMS_SOURCE_USERNAME:}
       password: ${ECHO_JMS_SOURCE_PASSWORD:}
-      reconnect-interval-ms: 5000   # 外部 broker 連不上時的重試間隔
-    endpoint-field: ServiceName  # 從訊息 body 提取端點識別欄位（XML element / JSON key）
+      reconnect-interval-ms: 5000   # Retry interval when external broker cannot connect
+    endpoint-field: ServiceName  # Extract endpoint identification field from message body (XML element / JSON key)
     target:
-      name: ${ECHO_JMS_TARGET_NAME:}  # 介面與請求記錄顯示的下游名稱，例如 ESB-UAT；空白時顯示 application.yml
-      enabled: false         # true 時啟用轉發到目標 JMS Server
+      name: ${ECHO_JMS_TARGET_NAME:}  # The downstream name displayed in the interface and request records, such as ESB-UAT; when blank, application.yml is displayed
+      enabled: false         # Enable forwarding to the target JMS server when true.
       type: tibco            # artemis | tibco
       server-url: tcp://esb-server:7222
       username: admin
-      password: changeme       # 範例佔位符，請透過環境變數 ECHO_JMS_TARGET_PASSWORD 覆蓋
+      password: changeme       # Sample placeholder, please overwrite it through the environment variable ECHO_JMS_TARGET_PASSWORD
       timeout-seconds: 30
-      queue: TARGET.REQUEST  # 目標 JMS Server 上的 Queue（轉發目的地）
-    # 沒有 consumer 的暫時回覆佇列閒置多久後刪除（毫秒）；0 表示只在客戶端連線關閉時刪除。
-    # 避免客戶端每次請求建新的暫時佇列卻不刪，幾天後耗盡 heap。
+      queue: TARGET.REQUEST  # Queue on destination JMS Server (forward destination)
+    # Idle timeout in milliseconds for consumerless temporary reply queues; 0 deletes them only when the client connection closes.
+    # Prevent clients that create but never delete per-request temporary queues from exhausting the heap over several days.
     temporary-queue-idle-delete-ms: ${ECHO_JMS_TEMPORARY_QUEUE_IDLE_DELETE_MS:10000}
-    # Listener 交易失敗時保留訊息並以退避間隔重送；-1 表示不自動丟棄。
+    # Retain messages after listener transaction failures and redeliver with backoff; -1 disables automatic discard.
     redelivery-delay-ms: ${ECHO_JMS_REDELIVERY_DELAY_MS:250}
     redelivery-multiplier: ${ECHO_JMS_REDELIVERY_MULTIPLIER:2.0}
     max-redelivery-delay-ms: ${ECHO_JMS_MAX_REDELIVERY_DELAY_MS:5000}
     max-delivery-attempts: ${ECHO_JMS_MAX_DELIVERY_ATTEMPTS:-1}
-    # 提前保留 512 MiB，讓 broker 阻擋 producer，避免實際寫到磁碟 0 bytes。
+    # Reserve 512 MiB so the broker blocks producers before the disk actually reaches zero free bytes.
     min-disk-free-bytes: ${ECHO_JMS_MIN_DISK_FREE_BYTES:536870912}
     disk-scan-period-ms: ${ECHO_JMS_DISK_SCAN_PERIOD_MS:1000}
   http:
-    alias: HTTP     # HTTP 協定顯示名稱
-    # native：有容量上限的 HTTP/1.1 加速路徑；特殊請求仍走 Servlet。詳見 docs/native-http.md。
-    # 預設啟用；設 ECHO_HTTP_TRANSPORT=servlet 並重啟可切回原入口。
+    alias: HTTP     # HTTP protocol display name
+    # native: HTTP/1.1 acceleration path with capacity upper limit; special requests still go through Servlet. See docs/native-http.md for details.
+    # Enabled by default; set ECHO_HTTP_TRANSPORT=servlet and restart to switch back to the original entrance.
     transport: ${ECHO_HTTP_TRANSPORT:native}
     native:
-      # 只回收閒置工作執行緒，忙碌工作不受影響；0 保留原本不回收的行為。
+      # Retire only idle worker threads, leaving busy workers alone; 0 preserves the previous behavior of keeping idle threads.
       worker-idle-timeout-seconds: ${ECHO_HTTP_NATIVE_WORKER_IDLE_TIMEOUT_SECONDS:60}
-    # HTTP request 的總時間預算；連線設定的 pool + connect + read 必須小於此值
+    # Total HTTP request budget; connection settings for pool wait + connect + read must sum to less than this value.
     request-timeout-ms: ${ECHO_HTTP_REQUEST_TIMEOUT_MS:40000}
     forward:
-      # 全部 HTTP 下游共用並行連線上限；不再另設單一下游 50 條限制
+      # Concurrent-connection limit shared by all HTTP targets; no separate 50-connection per-target limit.
       max-connections: ${ECHO_HTTP_FORWARD_MAX_CONNECTIONS:1000}
-      # 容量用盡時最多等待筆數；超過立即回應容量不足，避免尖峰耗盡 heap
+      # Maximum waiting requests when capacity is exhausted; reject excess requests immediately to prevent traffic spikes from exhausting the heap.
       max-pending-requests: ${ECHO_HTTP_FORWARD_MAX_PENDING_REQUESTS:1000}
-      # 單筆下游回應最多 10 MiB；Content-Length 與 chunked body 都會檢查
+      # Limit each downstream response to 10 MiB; check both Content-Length and chunked bodies.
       max-response-body-bytes: ${ECHO_HTTP_FORWARD_MAX_RESPONSE_BODY_BYTES:10485760}
-      # 全部進行中下游回應合計最多緩衝 128 MiB，避免 1000 條連線同時撐爆 heap
+      # Buffer at most 128 MiB across all in-flight downstream responses, preventing 1000 concurrent connections from exhausting the heap.
       max-buffered-response-bytes: ${ECHO_HTTP_FORWARD_MAX_BUFFERED_RESPONSE_BYTES:134217728}
       pool-acquire-timeout-ms: ${ECHO_HTTP_FORWARD_POOL_ACQUIRE_TIMEOUT_MS:3000}
   stats:
-    retention-days: 7  # 統計資料保留天數
+    retention-days: 7  # Number of days to retain statistical data
   request-log:
-    # SQLite：新紀錄使用 JDBC 批次寫入；false 切回 JPA。其他資料庫保留 JPA。
+    # SQLite: insert new logs using JDBC batches; false selects JPA. Other databases continue using JPA.
     jdbc-batch-enabled: ${ECHO_REQUEST_LOG_JDBC_BATCH_ENABLED:true}
-    enabled: ${ECHO_REQUEST_LOG_ENABLED:true} # false 時完全停止新增請求記錄，供隔離核心效能壓測
-    store: database    # memory 或 database
-    max-records: 10000 # 最大記錄數
-    # false（預設）：回應不等記錄寫入；寫入跟不上時丟掉最舊的記錄，模擬回應不受影響，程序意外結束時遺失尚未寫入的記錄
-    # true：每筆記錄寫入暫存檔後才回應，記錄無法寫入時回 503（較慢）
+    enabled: ${ECHO_REQUEST_LOG_ENABLED:true} # false disables new request logs entirely, isolating core performance during load tests.
+    store: database    # memory or database
+    max-records: 10000 # Maximum number of records
+    # false (default): reply without waiting for log writes; drop oldest logs if writes fall behind. Mock replies remain unaffected, but an unexpected process exit loses unwritten logs.
+    # true: wait for each spool write before replying; return 503 if the log cannot be written, at the cost of latency.
     wait-for-write: ${ECHO_REQUEST_LOG_WAIT_FOR_WRITE:false}
     buffer:
-      max-entries: ${ECHO_REQUEST_LOG_BUFFER_MAX_ENTRIES:20000} # 等待寫入的記錄最多幾筆
-      max-mb: ${ECHO_REQUEST_LOG_BUFFER_MAX_MB:64}               # 等待寫入的記錄最多佔多少記憶體 (MB)
+      max-entries: ${ECHO_REQUEST_LOG_BUFFER_MAX_ENTRIES:20000} # Maximum number of records waiting to be written
+      max-mb: ${ECHO_REQUEST_LOG_BUFFER_MAX_MB:64}               # The maximum amount of memory occupied by records waiting to be written (MB)
     durable:
-      # 獨立 SQLite WAL 先接收紀錄，主資料庫暫時不可用時不會靜默丟失
+      # Independent SQLite WAL receives records first and will not be lost silently when the main database is temporarily unavailable.
       spool-path: ${ECHO_REQUEST_LOG_SPOOL_PATH:./data/request-log-spool.sqlite}
       append-queue-capacity: ${ECHO_REQUEST_LOG_SPOOL_QUEUE_CAPACITY:2000}
       append-batch-size: ${ECHO_REQUEST_LOG_SPOOL_BATCH_SIZE:100}
@@ -225,39 +225,39 @@ echo:
       queue-offer-timeout-ms: ${ECHO_REQUEST_LOG_SPOOL_OFFER_TIMEOUT_MS:10000}
       retry-ms: ${ECHO_REQUEST_LOG_SPOOL_RETRY_MS:250}
       max-pending-bytes: ${ECHO_REQUEST_LOG_SPOOL_MAX_PENDING_BYTES:10737418240}
-      # 在暫存檔所在磁碟預留 512 MiB；只由背景 writer 每秒檢查，0 可停用。
+      # Reserve 512 MiB on the spool disk; the background writer checks once per second. Set 0 to disable.
       min-free-bytes: ${ECHO_REQUEST_LOG_SPOOL_MIN_FREE_BYTES:536870912}
   audit:
-    retention-days: 30  # 審計記錄保留天數
+    retention-days: 30  # Number of days to retain audit records
   cleanup:
-    enabled: true           # 啟用定時清除
-    cron: "0 0 3 * * *"     # 每天凌晨 3 點執行
-    rule-retention-days: 180  # 規則保留天數 (預設半年)
-    response-retention-days: 180  # 回應保留天數
+    enabled: true           # Enable scheduled purge
+    cron: "0 0 3 * * *"     # Executed every day at 3 am
+    rule-retention-days: 180  # Rule retention days (default half a year)
+    response-retention-days: 180  # Response retention days
   backup:
-    enabled: true             # 啟用 SQLite 自動備份（外部資料庫由 DBA 負責）
-    cron: "0 0 3 * * *"       # 每天凌晨 3 點執行
-    path: ./backups           # 備份目錄
-    retention-days: 7         # 備份保留天數
-    max-total-bytes: ${ECHO_BACKUP_MAX_TOTAL_BYTES:10737418240} # 已完成備份最多 10 GiB
-    max-files: ${ECHO_BACKUP_MAX_FILES:100} # 防止大量小型備份累積；至少保留最後一份驗證有效的備份
-    min-free-bytes: ${ECHO_BACKUP_MIN_FREE_BYTES:536870912} # 開始複製前預留 512 MiB
-    housekeeping-interval-ms: ${ECHO_BACKUP_HOUSEKEEPING_INTERVAL_MS:3600000} # 每小時獨立清理
-    on-shutdown: true         # 應用關閉時備份
+    enabled: true             # Enable automatic SQLite backups; DBAs manage backups for external databases.
+    cron: "0 0 3 * * *"       # Executed every day at 3 am
+    path: ./backups           # Backup directory
+    retention-days: 7         # Backup retention days
+    max-total-bytes: ${ECHO_BACKUP_MAX_TOTAL_BYTES:10737418240} # Limit completed backups to 10 GiB in total.
+    max-files: ${ECHO_BACKUP_MAX_FILES:100} # Bound the number of small backups while retaining at least the latest verified valid backup.
+    min-free-bytes: ${ECHO_BACKUP_MIN_FREE_BYTES:536870912} # Reserve 512 MiB before starting copying
+    housekeeping-interval-ms: ${ECHO_BACKUP_HOUSEKEEPING_INTERVAL_MS:3600000} # Independent cleaning every hour
+    on-shutdown: true         # Backup when application is closed
   agent:
     log:
-      queue-capacity: 3000           # LogAgent 佇列容量
-      batch-size: 50                # 批次大小觸發閾值
-      flush-interval-seconds: 5     # 時間觸發間隔（秒）
+      queue-capacity: 3000           # LogAgent queue capacity
+      batch-size: 50                # Batch size trigger threshold
+      flush-interval-seconds: 5     # Time trigger interval (seconds)
       max-write-rate-per-second: ${ECHO_AGENT_LOG_MAX_WRITE_RATE_PER_SECOND:1000}
     analysis:
-      enabled: true                 # 啟用匹配鏈分析（near-miss / shadowed 偵測）
+      enabled: true                 # Enable match chain analysis (near-miss / shadowed detection)
   matcher:
-    max-field-value-length: 2097152  # 單一欄位值長度上限 (bytes)，超過跳過比對，預設 2MB
+    max-field-value-length: 2097152  # Maximum field-value length in bytes, default 2 MB; skip matching values that exceed it.
   builtin-account:
-    self-registration: false  # 設為 true 允許未登入使用者自行申請帳號
+    self-registration: false  # Set to true to allow non-logged-in users to apply for accounts by themselves
   ldap:
-    enabled: false  # 設為 true 啟用 LDAP 認證
+    enabled: false  # Set to true to enable LDAP authentication
     url: ldap://ldap.example.com:389
     base-dn: dc=example,dc=com
     user-pattern: uid={0},ou=users
@@ -273,13 +273,13 @@ management:
       probes:
         enabled: true
       group:
-        # 下游／資料庫故障只影響 readiness，不讓外部故障造成無限重啟。
+        # Downstream/database failure only affects readiness, preventing external failures from causing infinite restarts.
         liveness:
           include: livenessState
         readiness:
           include: readinessState,db,diskSpace,jmsSource
   health:
-    # 只觀察既有 listener，不讓探針另外連線到 TIBCO／Artemis。
+    # Observe only existing listeners; probes must not create additional TIBCO/Artemis connections.
     jms:
       enabled: false
     diskspace:
@@ -288,7 +288,7 @@ management:
 
 logging:
   file:
-    path: ${LOGGING_FILE_PATH:./logs}  # 預設 ./logs，可用環境變數覆蓋
+    path: ${LOGGING_FILE_PATH:./logs}  # Default ./logs, can be overridden by environment variables
   level:
     root: WARN
     com.echo: INFO

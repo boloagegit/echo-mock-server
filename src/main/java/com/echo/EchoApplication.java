@@ -6,14 +6,14 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
- * Echo Mock Server 主程式入口
+ * Echo Mock Server Main program entrance
  * <p>
- * 提供 HTTP/JMS 協定的模擬服務，支援：
+ * Provides simulation services of HTTP/JMS protocol, supporting:
  * <ul>
- *   <li>規則式請求匹配與回應</li>
- *   <li>條件式路由（Body/Query 參數匹配）</li>
- *   <li>共用回應管理</li>
- *   <li>請求日誌與稽核追蹤</li>
+ *   <li>rule-based request matching and response</li>
+ *   <li>conditional routing (Body/Query parameter matching)</li>
+ *   <li>shared response management</li>
+ *   <li>request log and audit trail</li>
  * </ul>
  */
 @SpringBootApplication

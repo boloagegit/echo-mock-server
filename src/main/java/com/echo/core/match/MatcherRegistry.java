@@ -6,7 +6,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 運算子與取值來源的註冊表。建立後不可變，可在多執行緒間共用。
+ * Registry of operators and value sources. Once created, it is immutable and can be shared among multiple threads.
  */
 public final class MatcherRegistry {
 
@@ -19,7 +19,7 @@ public final class MatcherRegistry {
         this.sources = Map.copyOf(sources);
     }
 
-    /** 只含內建運算子與來源的註冊表。 */
+    /** Registry containing only built-in operators and sources. */
     public static MatcherRegistry defaults() {
         return builder().withDefaults().build();
     }
@@ -59,9 +59,9 @@ public final class MatcherRegistry {
         }
 
         /**
-         * 註冊運算子。
+         * Registering operator.
          *
-         * @throws IllegalStateException 運算子名稱重複
+         * @throws IllegalStateException Duplicate operator name
          */
         public Builder register(PredicateFactory factory) {
             if (predicates.putIfAbsent(factory.op(), factory) != null) {
@@ -71,9 +71,9 @@ public final class MatcherRegistry {
         }
 
         /**
-         * 註冊取值來源。
+         * Register value source.
          *
-         * @throws IllegalStateException 來源名稱重複
+         * @throws IllegalStateException Duplicate source name
          */
         public Builder register(ValueSourceFactory factory) {
             if (sources.putIfAbsent(factory.source(), factory) != null) {

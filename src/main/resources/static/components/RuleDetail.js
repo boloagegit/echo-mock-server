@@ -1,8 +1,8 @@
 /**
- * RuleDetail - 規則詳情抽屜
+ * RuleDetail - Rule details drawer
  *
- * 由規則列表點選開啟。上方是常用動作（編輯、複製、查看回應），其餘收在「⋯」；
- * 內容依「匹配條件 → 回應 → 規則資訊」排列，與編輯器的閱讀順序一致。
+ * Click to open from the rule list. Above are common actions (editing, copying, viewing responses), and the rest are collected in "⋯";
+ * The content is arranged according to "matching conditions → response → rule information", which is consistent with the editor's reading order.
  */
 const RuleDetail = {
   inject: ['t'],
@@ -51,7 +51,7 @@ const RuleDetail = {
       return condTagsGrouped(this.view);
     },
     conditionCount() {
-      // 進階條件的摘要含群組標題（ALL／ANY），條件數以樹中的條件為準
+      // The summary of advanced conditions includes the group title (ALL/ANY). The number of conditions is based on the conditions in the tree.
       if (hasMatchSpec(this.view)) return condCount(this.view);
       return this.conditionGroups.reduce((sum, group) => sum + group.items.length, 0);
     },
@@ -78,7 +78,7 @@ const RuleDetail = {
     body() {
       return this.shownDetail?._previewBody || '';
     },
-    /** SSE 規則：「48 個事件 · 全長 24.3 秒 · 循環播放」，有錯誤／中止事件時改說在第幾個事件結束連線。 */
+    /** SSE rule: "48 events · Total length 24.3 seconds · Loop playback", when there is an error/abort event, the connection will be terminated at which event. */
     sse() {
       const info = this.isHttp && this.view.sseEnabled ? this.shownDetail?._sseSummary : null;
       if (!info) return null;

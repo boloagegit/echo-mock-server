@@ -12,11 +12,11 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 完整 E2E 測試：Client → Echo (embedded Artemis 61616) → JmsTargetForwarder → Docker Artemis (61617) → 回應
+ * Complete E2E test: Client → Echo (embedded Artemis 61616) → JmsTargetForwarder → Docker Artemis (61617) → Response
  *
- * 前置條件：
- * 1. Docker Artemis 在 port 61617
- * 2. Echo 啟動且 echo.jms.target.enabled=true, type=artemis, server-url=tcp://localhost:61617
+ * Prerequisites:
+ * 1. Docker Artemis in port 61617
+ * 2. Echo starts and echo.jms.target.enabled=true, type=artemis, server-url=tcp://localhost:61617
  */
 class JmsFullE2eTest {
 
@@ -38,12 +38,12 @@ class JmsFullE2eTest {
     }
 
     /**
-     * 完整 e2e 流程：
-     * 1. 在 Docker Artemis (61617) 的 TARGET.REQUEST 啟動 consumer（模擬 target server）
-     * 2. 發送 JMS 訊息到 Echo (61616) 的 ECHO.REQUEST
-     * 3. Echo 無匹配規則 → JmsTargetForwarder 轉發到 Docker Artemis TARGET.REQUEST
-     * 4. 模擬 target server 收到訊息，回覆到 JMSReplyTo
-     * 5. JmsTargetForwarder 收到回覆，回傳給原始 caller
+     * Complete e2e process:
+     * 1. Start consumer in TARGET.REQUEST of Docker Artemis (61617) (emulates target server)
+     * 2. Send JMS message to ECHO.REQUEST of Echo (61616)
+     * 3. Echo has no matching rule → JmsTargetForwarder is forwarded to Docker Artemis TARGET.REQUEST
+     * 4. Simulate target server receives the message and replies to JMSReplyTo
+     * 5. JmsTargetForwarder receives the reply and sends it back to the original caller
      */
     @Test
     @EnabledIf("isBothArtemisRunning")
@@ -51,7 +51,7 @@ class JmsFullE2eTest {
         String requestBody = "<ServiceRequest><ServiceName>PaymentQuery</ServiceName><AccountId>12345</AccountId></ServiceRequest>";
         String expectedReply = "<ServiceResponse><Status>OK</Status><Balance>99999</Balance></ServiceResponse>";
 
-        // Step 1: 在 Docker Artemis 啟動 target server consumer（背景執行緒）
+        // Step 1: Start target server consumer in Docker Artemis (background thread)
         CompletableFuture<String> targetReceived = new CompletableFuture<>();
 
         Thread targetServer = new Thread(() -> {
@@ -66,12 +66,12 @@ class JmsFullE2eTest {
                         Queue queue = session.createQueue(TARGET_QUEUE);
                         MessageConsumer consumer = session.createConsumer(queue);
 
-                        // 等待 Echo 轉發過來的訊息
+                        // Waiting for the message forwarded by Echo
                         Message incoming = consumer.receive(15000);
                         if (incoming instanceof TextMessage tm) {
                             targetReceived.complete(tm.getText());
 
-                            // 回覆到 JMSReplyTo
+                            // Reply to JMSReplyTo
                             Destination replyTo = incoming.getJMSReplyTo();
                             if (replyTo != null) {
                                 MessageProducer replier = session.createProducer(replyTo);
@@ -91,10 +91,10 @@ class JmsFullE2eTest {
         targetServer.setDaemon(true);
         targetServer.start();
 
-        // 等一下讓 consumer 準備好
+        // Wait for consumer to be ready
         Thread.sleep(1000);
 
-        // Step 2: 發送 JMS 訊息到 Echo 的 ECHO.REQUEST queue
+        // Step 2: ECHO.REQUEST queue that sends JMS message to Echo
         ActiveMQConnectionFactory echoFactory = new ActiveMQConnectionFactory(ECHO_ARTEMIS_URL);
         echoFactory.setUser("admin");
         echoFactory.setPassword("admin");
@@ -106,13 +106,13 @@ class JmsFullE2eTest {
                 Queue echoQueue = session.createQueue(ECHO_QUEUE);
                 TemporaryQueue replyQueue = session.createTemporaryQueue();
 
-                // 發送到 Echo
+                // Send to Echo
                 MessageProducer producer = session.createProducer(echoQueue);
                 TextMessage request = session.createTextMessage(requestBody);
                 request.setJMSReplyTo(replyQueue);
                 producer.send(request);
 
-                // 等待 Echo 的回覆（Echo 轉發到 target → target 回覆 → Echo 回傳）
+                // Waiting for a reply from Echo (Echo forwards to target → target replies → Echo replies)
                 MessageConsumer replyConsumer = session.createConsumer(replyQueue);
                 Message reply = replyConsumer.receive(20000);
 
@@ -124,12 +124,12 @@ class JmsFullE2eTest {
             }
         }
 
-        // Step 3: 驗證
-        // 3a. Target server 確實收到了 Echo 轉發的訊息
+        // Step 3: Verification
+        // 3a. Target server did receive the message forwarded by Echo
         String receivedByTarget = targetReceived.get(10, TimeUnit.SECONDS);
         assertThat(receivedByTarget).isEqualTo(requestBody);
 
-        // 3b. Client 收到了 target server 的回覆（經由 Echo 轉發回來）
+        // 3b. Client received the reply from target server (forwarded via Echo)
         assertThat(echoReply).isEqualTo(expectedReply);
     }
 }

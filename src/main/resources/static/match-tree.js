@@ -1,15 +1,15 @@
 /**
- * match-tree.js - 結構化條件（matchSpec）與編輯畫面樹狀模型之間的轉換。
+ * match-tree.js - Conversion between structured conditions (matchSpec) and editing screen tree model.
  *
- * 純函式、不依賴 Vue，可在 Node 測試中直接載入。後端格式見 MatchSpecCodec：
+ * Pure function, does not depend on Vue, can be loaded directly in Node test. For the backend format, see MatchSpecCodec:
  *   {all:[...]} {any:[...]} {not:node} {legacy:{source,condition}}
  *   {source, name?, selector?, op, value?, quantifier?, onMissing?, options?}
  *
- * 編輯畫面的節點：
+ * Edit screen nodes:
  *   group  {id, kind:'group', op:'all'|'any', negate, children:[]}
  *   leaf   {id, kind:'leaf', source, name, selectorKind, selector, op, valueText, options, negate, ...}
  *   legacy {id, kind:'legacy', source, condition, negate}
- * `not` 以節點上的 negate 表示；連續兩層 not 會互相抵銷。
+ * `not` is represented by negate on the node; two consecutive layers of not will cancel each other out.
  */
 const MatchTree = (() => {
     const OPS = ['equals', 'notEquals', 'contains', 'matches', 'exists', 'absent', 'gt', 'gte', 'lt', 'lte', 'in', 'equalToJson'];
@@ -32,7 +32,7 @@ const MatchTree = (() => {
 
     const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 
-    /** 期望值在輸入框中的文字；in 以換行分隔，equalToJson 為格式化的 JSON。 */
+    /** The expected value is the text in the input box; in is separated by newlines, and equalToJson is formatted JSON. */
     const valueToText = (op, value) => {
         if (value === undefined || value === null) return '';
         if (op === 'in' && Array.isArray(value)) return value.map(v => (typeof v === 'string' ? v : JSON.stringify(v))).join('\n');
@@ -40,7 +40,7 @@ const MatchTree = (() => {
         return typeof value === 'string' ? value : JSON.stringify(value);
     };
 
-    /** 後端 JSON → 編輯樹。根節點一定是 group，方便新增條件。 */
+    /** Backend JSON → Edit tree. The root node must be group to facilitate adding new conditions. */
     const fromSpec = spec => {
         const root = toNode(spec, false);
         return root.kind === 'group' ? root : group('all', [root]);
@@ -78,7 +78,7 @@ const MatchTree = (() => {
         return node;
     };
 
-    /** 期望值文字 → JSON；文字沒改時沿用原本的 JSON（例如數字 1000 不會變成字串 "1000"）。 */
+    /** Expected value text → JSON; if the text is not changed, the original JSON will be used (for example, the number 1000 will not become the string "1000"). */
     const textToValue = (node, lenient) => {
         if (NO_VALUE_OPS.includes(node.op)) return undefined;
         if (node.original && node.original.op === node.op && node.original.text === node.valueText) return node.original.value;
@@ -96,8 +96,8 @@ const MatchTree = (() => {
     };
 
     /**
-     * 編輯樹 → 後端 JSON。equalToJson 的 JSON 格式錯誤時丟出例外（由畫面提示）；
-     * lenient 時改以原始文字保留（切換到宣告式編輯等「不是儲存」的情況，不能讓條件消失）。
+     * Edit tree → backend JSON. An exception is thrown when the JSON format of equalToJson is incorrect (prompted by the screen);
+     * When lenient is changed, the original text is retained (switching to declarative editing and other "not saving" situations cannot make the condition disappear).
      */
     const toSpec = (node, lenient = false) => {
         let json;
@@ -128,7 +128,7 @@ const MatchTree = (() => {
     const optionsFor = op => (CASE_INSENSITIVE_OPS.includes(op) ? ['caseInsensitive']
         : op === 'equalToJson' ? ['ignoreArrayOrder', 'ignoreExtraElements'] : []);
 
-    /** 舊版三個條件字串 → 只含舊版片段的 all（與後端 LegacyConditions.toMatchNode 相同的切法）。 */
+    /** The three condition strings of the old version → all containing only the old version of the fragment (the same cutting method as the backend LegacyConditions.toMatchNode). */
     const fromLegacyStrings = (bodyCondition, queryCondition, headerCondition) => {
         const children = [];
         [['body', bodyCondition], ['query', queryCondition], ['header', headerCondition]].forEach(([source, text]) => {
@@ -138,9 +138,9 @@ const MatchTree = (() => {
     };
 
     /**
-     * 拆解單一舊版條件，規則與後端比對時相同（{@code LegacyConditions.parts}）：看第一個 =，
-     * 它前一個字元是 ~、*、! 時分別是 ~=、*=、!=，否則是 =。例如 a=x!=y 是欄位 a、值 x!=y。
-     * 沒有 =，或 = 在第一個字元時回傳 null。
+     * Disassemble a single old version condition, the rules are the same as the backend comparison ({@code LegacyConditions.parts}): look at the first =,
+     * When the preceding character is ~, *, !, it is ~=, *=, != respectively, otherwise it is =. For example, a=x!=y is the field a and the value x!=y.
+     * Without =, or = returns null as the first character.
      */
     const parseLegacyCondition = condition => {
         const text = String(condition ?? '');
@@ -152,8 +152,8 @@ const MatchTree = (() => {
     };
 
     /**
-     * 期望值以 = 開頭的「等於」條件（通常是寫成 ==），而且這個 = 會被當成期望值的一部分：
-     * JSONPath（$. 開頭）、query 與 header 不會把 == 當成 =；JSON 欄位路徑與 XML 路徑會（§4.4 #3、§7.2.9）。
+     * Expect an "equal" condition whose value begins with = (usually written as ==), and the = will be treated as part of the expected value:
+     * JSONPath (starting with $.), query and header do not treat == as =; JSON field paths and XML paths do (§4.4 #3, §7.2.9).
      */
     const hasDoubleEquals = (condition, source = 'body') => {
         const parsed = parseLegacyCondition(condition);
@@ -161,12 +161,12 @@ const MatchTree = (() => {
             && (source !== 'body' || parsed.field.startsWith('$.'));
     };
 
-    /** 樹中有上述問題的舊格式片段原文。 */
+    /** Old format snippet text with the above problem in the tree. */
     const doubleEqualsConditions = node => (node.kind === 'group'
         ? node.children.flatMap(doubleEqualsConditions)
         : (node.kind === 'legacy' && hasDoubleEquals((node.condition || '').trim(), node.source) ? [node.condition.trim()] : []));
 
-    /** 條件列寫回字串後拆解結果不變，才算能用條件列表示（例如 "a! =b" 寫回 "a!=b" 會變成不等於）。 */
+    /** Only when the conditional column is written back to the string and the disassembly result remains unchanged can it be expressed by the conditional column (for example, "a! =b" written back to "a!=b" will become not equal). */
     const simpleRowOf = (type, condition) => {
         const parsed = parseLegacyCondition(condition);
         if (!parsed || !parsed.field || !parsed.value) return null;
@@ -176,8 +176,8 @@ const MatchTree = (() => {
     };
 
     /**
-     * 舊版三個字串轉成簡易模式的條件列（欄位原樣保留，包括 // 開頭的 XPath）。
-     * 任何片段無法用條件列完整表示時回傳 null，呼叫端改用進階模式顯示，避免儲存時遺失或改變條件。
+     * The old version of three strings is converted into a conditional column in simple mode (the fields are retained as they are, including XPath at the beginning of //).
+     * When any fragment cannot be fully represented by the condition column, null is returned, and the caller switches to advanced mode display to avoid losing or changing conditions during storage.
      */
     const toSimpleRows = (bodyCondition, queryCondition, headerCondition) => {
         const rows = [];
@@ -191,7 +191,7 @@ const MatchTree = (() => {
         return rows;
     };
 
-    /** 若樹只是「全部符合」的舊版片段，回傳三個舊版字串；否則回傳 null（無法切回簡易模式而不遺失條件）。 */
+    /** If the tree is only an old version fragment that "matches all", return three old version strings; otherwise, return null (cannot switch back to simple mode without losing the conditions). */
     const toLegacyStrings = tree => {
         if (tree.kind !== 'group' || tree.op !== 'all' || tree.negate) return null;
         const parts = { body: [], query: [], header: [] };
@@ -204,11 +204,11 @@ const MatchTree = (() => {
         return { bodyCondition: join(parts.body), queryCondition: join(parts.query), headerCondition: join(parts.header) };
     };
 
-    /** 條件數（葉節點與舊版片段）。 */
+    /** Condition number (leaf nodes and legacy fragments). */
     const count = node => (node.kind === 'group' ? node.children.reduce((sum, child) => sum + count(child), 0) : 1);
     const countSpec = spec => { try { return count(fromSpec(spec)); } catch { return 0; } };
 
-    /** 單一條件的文字，例如 header[X-Tenant] = acme、body $.amount >= 1000。 */
+    /** Text for a single condition, such as header[X-Tenant] = acme, body $.amount >= 1000. */
     const describeLeaf = node => {
         const prefix = node.negate ? 'NOT ' : '';
         if (node.kind === 'legacy') return prefix + node.source + ': ' + node.condition;
@@ -222,7 +222,7 @@ const MatchTree = (() => {
         return prefix + target + ' ' + op + ' ' + value;
     };
 
-    /** 多行摘要：組合節點以 ALL／ANY 標示並縮排，供詳情與提示文字使用。 */
+    /** Multi-line summary: Combination nodes are marked with ALL/ANY and indented for details and prompt text. */
     const describeLines = (node, depth = 0) => {
         const indent = '  '.repeat(depth);
         if (node.kind !== 'group') return [indent + describeLeaf(node)];
@@ -230,7 +230,7 @@ const MatchTree = (() => {
         return [head, ...node.children.flatMap(child => describeLines(child, depth + 1))];
     };
 
-    /** 一行摘要，供規則清單使用。 */
+    /** One-line summary for use with rule lists. */
     const describe = node => {
         if (node.kind !== 'group') return describeLeaf(node);
         const joiner = node.op === 'all' ? ' AND ' : ' OR ';
@@ -241,7 +241,7 @@ const MatchTree = (() => {
     const summarizeSpec = spec => {
         try {
             const tree = fromSpec(spec);
-            // 根節點的 ALL 是預設，不需要另外顯示
+            // ALL of the root node is the default and does not need to be displayed separately.
             const lines = tree.op === 'all' && !tree.negate
                 ? tree.children.flatMap(child => describeLines(child, 0))
                 : describeLines(tree, 0);
@@ -251,16 +251,16 @@ const MatchTree = (() => {
         }
     };
 
-    /** 樹中是否有任何條件（沒有時為萬用規則）。 */
+    /** Whether there are any conditions in the tree (if not, it is a wildcard rule). */
     const hasConditions = tree => count(tree) > 0;
 
-    /** 是否含舊格式片段（畫面上提示它們沿用簡易模式的比對方式）。 */
+    /** Does it contain old format clips (the screen prompts them to use the simple mode comparison method). */
     const hasLegacy = node => (node.kind === 'group' ? node.children.some(hasLegacy) : node.kind === 'legacy');
 
-    /** 是否有 body 來源的條件（GET 等無 body 方法的提醒）。 */
+    /** Is there a condition for the body source (GET etc. without body method reminder). */
     const usesBody = node => (node.kind === 'group' ? node.children.some(usesBody) : node.source === 'body');
 
-    /** 以 id 找到父節點，供刪除與搬移使用。 */
+    /** Find the parent node with id for deletion and relocation. */
     const findParent = (root, id) => {
         if (root.kind !== 'group') return null;
         for (const child of root.children) {
@@ -276,30 +276,30 @@ const MatchTree = (() => {
         if (parent) parent.children = parent.children.filter(child => child.id !== id);
     };
 
-    // ==================== 匹配鏈的樹狀比對說明（後端 MatchExplanationJson） ====================
+    // ==================== Tree comparison description of matching chain (backend MatchExplanationJson) ====================
 
     const LEGACY_OPERATORS = { '=': 'equals', '!=': 'notEquals', '*=': 'contains', '~=': 'matches' };
 
     const isExplainGroup = node => !!node && (node.node === 'all' || node.node === 'any' || node.node === 'not');
 
-    /** 最上層列出的節點：根節點是「全部要符合」時直接列出子節點（與規則摘要相同，預設的 ALL 不另外顯示）。 */
+    /** Nodes listed at the top level: when the root node is "all must match", the child nodes are listed directly (the same as the rule summary, the default ALL is not displayed separately). */
     const explainTopLevel = tree => {
         if (!tree) return [];
         return tree.node === 'all' ? (tree.children || []) : [tree];
     };
 
-    /** 最上層條件數與通過數。 */
+    /** The top level condition number and pass number. */
     const explainCounts = tree => {
         const top = explainTopLevel(tree);
         return { total: top.length, passed: top.filter(node => node.passed).length };
     };
 
-    /** 節點對整體結果是否有幫助：在 NOT 底下，不符合才算有幫助。 */
+    /** Whether the node is helpful to the overall result: Under NOT, it is considered helpful if it does not match. */
     const explainOk = (node, negated) => !!node.passed !== !!negated;
 
     /**
-     * 單一條件的顯示欄位 {source, target, op, value, options}；op 是 OPS 中的名稱（由畫面翻譯）。
-     * 無法拆解時只有 {source, raw}。
+     * Display fields for a single condition {source, target, op, value, options}; op is the name in OPS (translated by the screen).
+     * Only {source, raw} cannot be disassembled.
      */
     const explainLeaf = node => {
         if (node.node === 'legacy') {

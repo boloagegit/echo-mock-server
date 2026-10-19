@@ -10,10 +10,10 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * 內建帳號使用者
+ * Built-in account user
  * <p>
- * 儲存於資料庫的本地帳號，與 LDAP 認證並行運作。
- * 管理員可為外部廠商建立帳號，廠商透過內建帳號登入後即可操作系統。
+ * Local account stored in database, operating in parallel with LDAP authentication.
+ * Administrators can create accounts for external vendors, and vendors can operate the system after logging in with the built-in account.
  */
 @Entity
 @Table(name = "builtin_users", indexes = {
@@ -29,50 +29,50 @@ public class BuiltinUser {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 樂觀鎖版本號 */
+    /** Optimistic locking version number */
     @Version
     private Long version;
 
-    /** 帳號名稱（唯一，3-50 字元） */
+    /** Account name (unique, 3-50 characters) */
     @Column(nullable = false, unique = true, length = 50)
     private String username;
 
-    /** BCrypt 雜湊密碼 */
+    /** BCrypt hash password */
     @JsonIgnore
     @Column(nullable = false)
     private String password;
 
-    /** 角色：ROLE_USER 或 ROLE_ADMIN */
+    /** Role: ROLE_USER or ROLE_ADMIN */
     @Column(nullable = false, length = 20)
     @Builder.Default
     private String role = "ROLE_USER";
 
-    /** 是否啟用 */
+    /** Enable or not */
     @Column(nullable = false)
     @Builder.Default
     private Boolean enabled = true;
 
-    /** 忘記密碼請求標記 */
+    /** Forgot password request flag */
     @Column(nullable = false)
     @Builder.Default
     private Boolean passwordResetRequested = false;
 
-    /** 忘記密碼請求時間 */
+    /** Forgot password request time */
     private LocalDateTime passwordResetRequestedAt;
 
-    /** 強制修改密碼標記（臨時密碼登入後為 true） */
+    /** Forced change of password mark (temporary password after login is true) */
     @Column(nullable = false)
     @Builder.Default
     private Boolean forceChangePassword = false;
 
-    /** 建立時間 */
+    /** Creation time */
     @Column(updatable = false)
     private LocalDateTime createdAt;
 
-    /** 更新時間 */
+    /** Update time */
     private LocalDateTime updatedAt;
 
-    /** 最後登入時間 */
+    /** Last login time */
     private LocalDateTime lastLoginAt;
 
     @PrePersist

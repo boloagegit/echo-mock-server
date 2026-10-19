@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 規則的判斷順序與一定輪不到的規則（唯讀，與規則內容相同的存取權限）。 */
+/** Read-only rule evaluation order and unreachable rules, using the same access permissions as rule contents. */
 @RestController
 @RequestMapping("/api/admin/rules")
 @RequiredArgsConstructor
@@ -16,13 +16,13 @@ public class RuleOrderController {
 
     private final RuleOrderService ruleOrderService;
 
-    /** 所有一定輪不到的規則，供規則列表標示。 */
+    /** All definitely unreachable rules, for indicators in the rule list. */
     @GetMapping("/order-issues")
     public ResponseEntity<RuleOrderService.IssuesView> issues() {
         return ResponseEntity.ok(ruleOrderService.issues());
     }
 
-    /** 這條規則的判斷順序：會一起考慮的規則，依實際檢查順序排列。 */
+    /** The judgment order of this rule: the rules that will be considered together are arranged in the actual checking order. */
     @GetMapping("/{id}/order")
     public ResponseEntity<RuleOrderService.RuleOrderView> order(@PathVariable String id) {
         return ruleOrderService.orderFor(id).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());

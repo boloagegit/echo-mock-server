@@ -15,12 +15,12 @@ import java.util.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * AbstractMockPipeline.matchRule() 屬性測試
+ * AbstractMockPipeline.matchRule() attribute test
  * <p>
- * Feature: protocol-pipeline-refactor, Property 1: matchRule 共用匹配邏輯正確性
+ * Feature: protocol-pipeline-refactor, Property 1: matchRule Common matching logic correctness
  * <p>
- * 使用 jqwik 產生隨機候選規則清單（隨機 enabled/disabled、有條件/無條件），
- * 搭配可控的 ConditionMatcher，驗證 matchRule() 的五個不變式。
+ * Use jqwik to generate a random candidate rule list (random enabled/disabled, conditional/unconditional),
+ * Verify the five invariants of matchRule() with controllable ConditionMatcher.
  *
  * **Validates: Requirements 1.2, 1.3, 1.4, 1.5, 1.6**
  */
@@ -29,7 +29,7 @@ class AbstractMockPipelineMatchRulePropertyTest {
     // ==================== Test Subclass ====================
 
     /**
-     * 具體測試子類別，實作所有抽象方法以便測試 matchRule()
+     * Concrete test subclass implementing all abstract methods to exercise matchRule().
      */
     static class TestPipeline extends AbstractMockPipeline<HttpRule> {
 
@@ -83,7 +83,7 @@ class AbstractMockPipelineMatchRulePropertyTest {
     }
 
     /**
-     * Stub ConditionMatcher：根據 matchingConditions 集合決定是否匹配
+     * Stub ConditionMatcher: Determine whether to match based on the matchingConditions set
      */
     static class StubConditionMatcher extends ConditionMatcher {
         private final Set<String> matchingConditions;
@@ -149,15 +149,15 @@ class AbstractMockPipelineMatchRulePropertyTest {
     // ==================== Property Tests ====================
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 1: matchRule 共用匹配邏輯正確性
+     * Feature: protocol-pipeline-refactor, Property 1: matchRule Common matching logic correctness
      * <p>
-     * 不變式 1：回傳的規則永遠不是 enabled=false 的規則
+     * Invariant 1: The returned rule is never the rule of enabled=false
      *
      * **Validates: Requirements 1.2**
      */
     @Property(tries = 200)
     void matchedRuleIsNeverDisabled(@ForAll("candidateRules") List<HttpRule> candidates) {
-        // 讓所有條件都匹配，確保 disabled 規則仍不會被選中
+        // Make sure all conditions match to ensure the disabled rule is still not selected
         Set<String> allConditions = new HashSet<>();
         for (HttpRule r : candidates) {
             if (r.getBodyCondition() != null && !r.getBodyCondition().isBlank()) {
@@ -176,9 +176,9 @@ class AbstractMockPipelineMatchRulePropertyTest {
     }
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 1: matchRule 共用匹配邏輯正確性
+     * Feature: protocol-pipeline-refactor, Property 1: matchRule Common matching logic correctness
      * <p>
-     * 不變式 2：條件匹配成功的 enabled 規則優先於無條件 fallback 規則
+     * Invariant 2: enabled rules with successful conditional matching take precedence over unconditional fallback rules
      *
      * **Validates: Requirements 1.3**
      */
@@ -186,7 +186,7 @@ class AbstractMockPipelineMatchRulePropertyTest {
     void conditionMatchedRuleTakesPriorityOverFallback(
             @ForAll("candidateRules") List<HttpRule> candidates) {
 
-        // 收集所有有條件的 enabled 規則的 bodyCondition
+        // Collecting bodyCondition for all conditional enabled rules
         Set<String> allConditions = new HashSet<>();
         for (HttpRule r : candidates) {
             if (Boolean.TRUE.equals(r.getEnabled()) && hasCondition(r)) {
@@ -198,14 +198,14 @@ class AbstractMockPipelineMatchRulePropertyTest {
         MatchResult<HttpRule> result = pipeline.matchRule(candidates, null, null, null);
 
         if (result.isMatched()) {
-            // 檢查是否存在條件匹配成功的 enabled 規則
+            // Check whether there is a enabled rule whose condition matches successfully
             boolean hasConditionMatchedEnabled = candidates.stream()
                     .anyMatch(r -> Boolean.TRUE.equals(r.getEnabled())
                             && hasCondition(r)
                             && allConditions.contains(r.getBodyCondition()));
 
             if (hasConditionMatchedEnabled) {
-                // 回傳的規則必須是有條件的（不是 fallback）
+                // The returned rule must be conditional (not fallback)
                 assertThat(hasCondition(result.getMatchedRule()))
                         .as("When condition-matched rules exist, result should be a condition-matched rule, not fallback")
                         .isTrue();
@@ -214,9 +214,9 @@ class AbstractMockPipelineMatchRulePropertyTest {
     }
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 1: matchRule 共用匹配邏輯正確性
+     * Feature: protocol-pipeline-refactor, Property 1: matchRule Common matching logic correctness
      * <p>
-     * 不變式 3：當無匹配且無 fallback 時，回傳空 MatchResult (matched=false, matchedRule=null)
+     * Invariant 3: When there is no match and no fallback, return empty MatchResult (matched=false, matchedRule=null)
      *
      * **Validates: Requirements 1.6**
      */
@@ -224,15 +224,15 @@ class AbstractMockPipelineMatchRulePropertyTest {
     void noMatchAndNoFallbackReturnsEmptyResult(
             @ForAll("candidateRules") List<HttpRule> candidates) {
 
-        // 不讓任何條件匹配成功
+        // Do not allow any condition to match successfully
         Set<String> noMatchConditions = Collections.emptySet();
         TestPipeline pipeline = createPipeline(noMatchConditions);
 
-        // 移除所有無條件的 enabled 規則（確保沒有 fallback）
+        // Remove all unconditional enabled rules (make sure there are no fallback)
         List<HttpRule> noFallbackCandidates = new ArrayList<>();
         for (HttpRule r : candidates) {
             if (Boolean.TRUE.equals(r.getEnabled()) && !hasCondition(r)) {
-                // 跳過無條件 enabled 規則
+                // Skipping unconditional enabled rule
                 continue;
             }
             noFallbackCandidates.add(r);
@@ -249,9 +249,9 @@ class AbstractMockPipelineMatchRulePropertyTest {
     }
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 1: matchRule 共用匹配邏輯正確性
+     * Feature: protocol-pipeline-refactor, Property 1: matchRule Common matching logic correctness
      * <p>
-     * 不變式 4：第一個無條件 enabled 規則成為 fallback
+     * Invariant 4: The first unconditional enabled rule becomes fallback
      *
      * **Validates: Requirements 1.4, 1.5**
      */
@@ -259,13 +259,13 @@ class AbstractMockPipelineMatchRulePropertyTest {
     void firstNoConditionEnabledRuleBecomesFallback(
             @ForAll("candidateRules") List<HttpRule> candidates) {
 
-        // 不讓任何條件匹配成功，這樣只有 fallback 會被選中
+        // Do not allow any condition to match successfully, so that only fallback will be selected
         Set<String> noMatchConditions = Collections.emptySet();
         TestPipeline pipeline = createPipeline(noMatchConditions);
 
         MatchResult<HttpRule> result = pipeline.matchRule(candidates, null, null, null);
 
-        // 找出預期的 fallback：第一個 enabled 且無條件的規則
+        // Find expected fallback: first enabled and unconditional rule
         HttpRule expectedFallback = null;
         for (HttpRule r : candidates) {
             if (Boolean.TRUE.equals(r.getEnabled()) && !hasCondition(r)) {
@@ -280,15 +280,15 @@ class AbstractMockPipelineMatchRulePropertyTest {
                     .as("Fallback should be the first no-condition enabled rule")
                     .isEqualTo(expectedFallback.getId());
         } else {
-            // 沒有 fallback 候選，且沒有條件匹配 → 空結果
+            // No fallback candidate and no condition matching → empty result
             assertThat(result.isMatched()).isFalse();
         }
     }
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 1: matchRule 共用匹配邏輯正確性
+     * Feature: protocol-pipeline-refactor, Property 1: matchRule Common matching logic correctness
      * <p>
-     * 不變式 5：第一個條件匹配成功的 enabled 規則立即勝出
+     * Invariant 5: the first enabled rule whose conditions match wins immediately.
      *
      * **Validates: Requirements 1.3**
      */
@@ -296,7 +296,7 @@ class AbstractMockPipelineMatchRulePropertyTest {
     void firstConditionMatchedEnabledRuleWinsImmediately(
             @ForAll("candidateRules") List<HttpRule> candidates) {
 
-        // 讓所有條件都匹配
+        // Make all conditions match
         Set<String> allConditions = new HashSet<>();
         for (HttpRule r : candidates) {
             if (r.getBodyCondition() != null && !r.getBodyCondition().isBlank()) {
@@ -307,7 +307,7 @@ class AbstractMockPipelineMatchRulePropertyTest {
         TestPipeline pipeline = createPipeline(allConditions);
         MatchResult<HttpRule> result = pipeline.matchRule(candidates, null, null, null);
 
-        // 找出預期的第一個條件匹配成功的 enabled 規則
+        // Find the enabled rule where the expected first condition matches successfully
         HttpRule expectedFirst = null;
         for (HttpRule r : candidates) {
             if (Boolean.TRUE.equals(r.getEnabled()) && hasCondition(r)) {

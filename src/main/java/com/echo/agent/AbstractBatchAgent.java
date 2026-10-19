@@ -13,9 +13,9 @@ import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * 泛型批次處理基底類別，封裝佇列管理、排程器、批次策略等共用邏輯。
+ * Generic batch processing base class, encapsulating common logic such as queue management, scheduler, batch strategy, etc.
  *
- * @param <T> 任務型別
+ * @param <T> Task type
  */
 @Slf4j
 public abstract class AbstractBatchAgent<T> implements EchoAgent {
@@ -164,7 +164,7 @@ public abstract class AbstractBatchAgent<T> implements EchoAgent {
                 }
 
                 processBatchSafely(batch);
-                // 沿用同一個 list：記憶體不足時也不必再配置新的批次
+                // Reuse the same list so that collecting another batch requires no allocation under memory pressure.
                 batch.clear();
             }
         } catch (InterruptedException e) {
@@ -196,11 +196,11 @@ public abstract class AbstractBatchAgent<T> implements EchoAgent {
             processBatch(batch);
             processedCount.addAndGet(batch.size());
         } catch (Exception | Error e) {
-            // Error（例如 OutOfMemoryError）也只放棄這一批，不能讓唯一的處理執行緒結束
+            // Even Error (such as OutOfMemoryError) must only abandon this batch, never terminate the sole processing thread.
             try {
                 log.error("Agent {} processBatch failed: {}", getName(), e.getMessage(), e);
             } catch (Throwable ignored) {
-                // 記錄失敗也要繼續
+                // Continue even if recording fails
             }
         } finally {
             afterBatchProcessed(batch.size(), System.nanoTime() - startedAt);
@@ -270,18 +270,18 @@ public abstract class AbstractBatchAgent<T> implements EchoAgent {
     }
 
     /**
-     * 子類別實作批次處理邏輯。
+     * Subclasses implement batch processing.
      *
-     * @param batch 本次批次的任務列表；返回後會清空重用，需要保留時請複製
+     * @param batch The task list of this batch; it will be cleared and reused after return. Please copy it if you need to keep it.
      */
     protected abstract void processBatch(List<T> batch);
 
     /**
-     * 將 Object 型別的任務轉換為泛型 T。
-     * 型別不符時應回傳 null。
+     * Convert tasks of type Object to generic T.
+     * null should be returned when the type does not match.
      *
-     * @param task 原始任務物件
-     * @return 轉換後的任務，或 null 表示型別不符
+     * @param task Original task object
+     * @return The converted task, or null if the type is incompatible
      */
     protected abstract T castTask(Object task);
 }

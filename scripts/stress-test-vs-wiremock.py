@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-Echo vs WireMock RPS 比較測試
+Echo vs WireMock RPS Comparison test
 
-用相同的場景、相同的並發數，分別打 Echo 和 WireMock，比較 RPS 和延遲。
+Using the same scenario and the same number of concurrency, play Echo and WireMock respectively, and compare RPS and latency.
 
-場景：
-  1. 簡單匹配（無條件）
-  2. JSON body 條件匹配（多候選規則）
-  3. 小型 XML + XPath 條件（~2KB）
-  4. 大型 XML + XPath 條件（~100KB）
+Scenario:
+  1. Simple match (unconditional)
+  2. JSON body condition matching (multiple candidate rules)
+  3. Small XML + XPath condition (~2KB)
+  4. Large XML + XPath condition (~100KB)
 
-用法：python3 scripts/stress-test-vs-wiremock.py [ECHO_URL] [WM_URL] [DURATION] [CONCURRENCY]
+Usage: python3 scripts/stress-test-vs-wiremock.py [ECHO_URL] [WM_URL] [DURATION] [CONCURRENCY]
 """
 
 import json
@@ -158,7 +158,7 @@ def run_rps(base_url, path, method, headers, body_bytes, duration, concurrency):
     return {"total": 0, "rps": 0, "errors": errors, "avg": 0, "p50": 0, "p95": 0, "p99": 0, "min": 0, "max": 0}
 
 
-# === 場景定義 ===
+# === Scenario definition ===
 
 small_xml = generate_xml(5, 3)
 large_xml = generate_xml(200, 8)
@@ -294,7 +294,7 @@ SCENARIOS = [
 ]
 
 
-# === 執行 ===
+# === Execute ===
 
 print("=" * 70)
 print("  Echo vs WireMock RPS 比較")
@@ -369,7 +369,7 @@ for idx, sc in enumerate(SCENARIOS):
         "echo": echo_result, "wm": wm_result, "ratio": ratio,
     })
 
-# === 總結 ===
+# === Summary ===
 print()
 print("=" * 70)
 print("  總結：Echo vs WireMock")
@@ -381,7 +381,7 @@ for r in all_results:
     print(f"  {r['name']:<30} {bl:>6} {r['echo']['rps']:>9,.0f} {r['wm']['rps']:>9,.0f} {r['ratio']:>7.2f}x {r['echo']['errors']:>9,} {r['wm']['errors']:>9,} {r['echo']['p95']:>9.1f}ms {r['wm']['p95']:>9.1f}ms")
 print("=" * 70)
 
-# --- 清理 ---
+# --- Cleanup ---
 echo_api("DELETE", "/api/admin/rules/all")
 echo_api("DELETE", "/api/admin/responses/orphans")
 echo_api("DELETE", "/api/admin/logs/all")

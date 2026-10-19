@@ -1,7 +1,7 @@
 /**
- * SettingsPage - 系統設定頁面
+ * SettingsPage - System Settings Page
  *
- * 顯示服務資訊、協定設定、資料儲存、認證設定、備份狀態，以及危險操作區。
+ * Display service information, protocol settings, data storage, authentication settings, backup status, and dangerous operation areas.
  */
 const SettingsPage = {
   props: {
@@ -19,7 +19,7 @@ const SettingsPage = {
   ],
   inject: ['t'],
   created() {
-    // 非響應式：只用來擋重複點擊，不需要觸發畫面更新。
+    // Non-responsive: only used to block repeated clicks and does not need to trigger screen updates.
     this.inFlight = createInFlight();
   },
   data() {
@@ -246,7 +246,7 @@ const SettingsPage = {
         }
       } finally { this.httpTargetSaving = false; }
     },
-    // 設為預設的請求處理中時忽略重複點擊（選單在重新載入前仍可再點）。
+    // Ignore repeated clicks when set to default request processing (menu can still be clicked before reloading).
     makeDefaultHttpTarget(target) {
       return this.inFlight.run('http-default:' + target.id, async () => {
         const res = await apiCall('/api/admin/http-target-connections/' + target.id + '/default', { method: 'PUT' });
@@ -507,7 +507,7 @@ const SettingsPage = {
       <div class="page-header">
         <div class="page-heading">
           <h1 class="page-title">{{t('settings.title')}}</h1>
-          <span v-if="status" class="page-meta settings-context"><span>{{t('settings.version')}} {{status.version}}</span><span>{{t('settings.uptime')}} {{formatUptime(status.uptime)}}</span><span>HTTP {{status.serverPort}}</span></span>
+          <span v-if="status" class="page-meta settings-context"><span>{{t('settings.version')}} {{status.version}}</span><span v-if="status.build?.shortCommit" :title="status.build.commit">{{t('settings.gitCommit')}} {{status.build.shortCommit}}<template v-if="status.build.dirty"> ({{t('settings.buildDirty')}})</template></span><span>{{t('settings.uptime')}} {{formatUptime(status.uptime)}}</span><span>HTTP {{status.serverPort}}</span></span>
         </div>
         <div class="page-actions">
           <ui-button variant="secondary" @click="refreshStatus" :disabled="isAdmin ? resourceLoading : loading.status" :title="t('settings.manualRefreshHint')"><i class="bi bi-arrow-clockwise" :class="{'spin':isAdmin ? resourceLoading : loading.status}" aria-hidden="true"></i>{{t('settings.refresh')}}</ui-button>
@@ -537,6 +537,8 @@ const SettingsPage = {
           <div class="settings-card-header">{{t('settings.serviceInfo')}}</div>
           <div class="settings-card-body">
             <div class="settings-item"><span class="settings-label">{{t('settings.version')}}</span><span class="settings-value">{{ status.version }}</span></div>
+            <div class="settings-item"><span class="settings-label">{{t('settings.gitCommit')}}</span><span class="settings-value settings-value-sm"><code>{{ status.build?.commit || t('settings.buildUnknown') }}</code><template v-if="status.build?.dirty"> ({{t('settings.buildDirty')}})</template></span></div>
+            <div class="settings-item"><span class="settings-label">{{t('settings.buildTime')}}</span><span class="settings-value settings-value-sm">{{ status.build?.time ? new Date(status.build.time).toLocaleString() : t('settings.buildUnknown') }}</span></div>
             <div class="settings-item"><span class="settings-label">{{t('settings.httpPort')}}</span><span class="settings-value">{{ status.serverPort }}</span></div>
             <div class="settings-item"><span class="settings-label">{{t('settings.envLabel')}}</span><span class="settings-value">{{ status.envLabel || t('settings.notSet') }}</span></div>
             <div class="settings-item"><span class="settings-label">{{t('settings.sessionTimeout')}}</span><span class="settings-value">{{ formatSession(status.sessionTimeout) }}</span></div>

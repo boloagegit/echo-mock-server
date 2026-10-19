@@ -70,7 +70,7 @@ class RequestLogSpoolTest {
         List<RequestLogSpool.SpoolEntry> all = spool.readAfter(0, 100);
         long third = all.get(2).sequence();
 
-        // 保留最新 5 筆：可略過到第 3 筆
+        // Retaining the newest 5 records allows skipping through the third record.
         assertThat(spool.sequenceBeforeNewest(5)).isEqualTo(third);
         assertThat(spool.sequenceBeforeNewest(8)).isZero();
         assertThat(spool.sequenceBeforeNewest(100)).isZero();
@@ -472,7 +472,7 @@ class RequestLogSpoolTest {
         spool.start();
         spool.stop();
 
-        // 不是單筆的問題：回報沒處理任何一筆，由呼叫端稍後重試
+        // This is not a record-specific rejection: report that no records were processed so the caller can retry later.
         assertThat(spool.appendAll(List.of(task("rule-1", "/a"))))
                 .isEqualTo(new RequestLogSpool.AppendResult(0, 0));
     }
@@ -873,7 +873,7 @@ class RequestLogSpoolTest {
     }
 
     @Test
-    @DisplayName("寫入時發生 Error（例如記憶體不足）：寫入執行緒不結束，這批回報失敗並釋放容量，之後的記錄照常寫入")
+    @DisplayName("A write Error, including insufficient memory, fails the batch and releases capacity without stopping later writes")
     void writerSurvivesAnErrorAndKeepsWriting() throws Exception {
         RequestLogSpool spool = errorSpool("error.sqlite");
         try {
@@ -897,7 +897,7 @@ class RequestLogSpoolTest {
     }
 
     @Test
-    @DisplayName("已寫入後才發生 Error：仍回報成功，不讓呼叫端重送，資料只有一筆")
+    @DisplayName("An Error after commit still reports success and prevents retries or duplicate records")
     void errorAfterTheCommitStillReportsSuccess() throws Exception {
         RequestLogSpool spool = errorSpool("after-commit.sqlite");
         try {
@@ -920,7 +920,7 @@ class RequestLogSpoolTest {
     }
 
     @Test
-    @DisplayName("暫存檔暫時無法寫入、重試時又發生 Error：清掉「無法寫入」的狀態，之後的記錄照常寫入")
+    @DisplayName("An Error while retrying unavailable spool storage clears the unavailable state so later writes can proceed")
     void errorWhileRetryingAnUnavailableStorageDoesNotBlockLaterLogs() throws Exception {
         RequestLogSpool spool = errorSpool("unavailable.sqlite");
         try {
@@ -934,7 +934,7 @@ class RequestLogSpoolTest {
                     throw new OutOfMemoryError("simulated");
                 }
             };
-            // 呼叫端收到失敗後，寫入執行緒先停一下：狀態若還沒清掉，下一筆一定會被擋（以前偶爾發生）
+            // Pause the writer after notifying the caller of failure; if its state has not been cleared, the next record will be blocked, reproducing the former intermittent failure.
             spool.afterAbandonNotifiedForTest = () -> {
                 try {
                     Thread.sleep(200);

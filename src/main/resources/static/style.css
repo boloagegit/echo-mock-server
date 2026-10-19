@@ -5,9 +5,9 @@
 @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('/webjars/fontsource__jetbrains-mono/files/jetbrains-mono-latin-500-normal.woff2') format('woff2') }
 @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 600; font-display: swap; src: url('/webjars/fontsource__jetbrains-mono/files/jetbrains-mono-latin-600-normal.woff2') format('woff2') }
 
-/* 主題變數由 theme.css 提供 (index.html 已引入) */
+/* Topic variables provided by theme.css (index.html has been introduced) */
 
-/* App 專用變數 */
+/* App special variable */
 :root {
     --sidebar-width: 232px;
     --sidebar-collapsed: 60px;
@@ -375,8 +375,8 @@ body {
 .workspace-search-clear:hover { color: var(--text); background: rgba(var(--muted-rgb), 0.12) }
 .workspace-search-clear:focus-visible { outline: none; box-shadow: var(--focus-ring) }
 
-/* Toolbar - 搜尋與篩選整合 */
-/* Filter Row — 統一篩選列 */
+/* Toolbar - Search and filter integration */
+/* Filter Row — Unified filter column */
 .page-header .page-actions .btn-secondary { border-color: transparent; background: var(--surface-control) }
 .page-header .page-actions .btn-secondary:hover,
 .page-header .page-actions .btn-secondary.active { color: var(--primary); background: var(--surface-primary-soft) }
@@ -432,7 +432,7 @@ body {
 .btn-group .btn:first-child { border-radius: var(--radius-control) 0 0 var(--radius-control) }
 .btn-group .btn:last-child { border-radius: 0 var(--radius-control) var(--radius-control) 0 }
 
-/* Focus Visible - 鍵盤導航焦點環 */
+/* Focus Visible - Keyboard navigation focus ring */
 .btn:focus-visible, .nav-item:focus-visible, .toggle:focus-visible,
 .sidebar-toggle:focus-visible, .close-btn:focus-visible,
 a:focus-visible, [tabindex]:focus-visible {
@@ -479,7 +479,7 @@ tr:hover { background: var(--hover) }
 .rule-source-host code { color: var(--text); font-size: var(--font-xs); font-weight: 500 }
 /* Rule status row */
 
-/* Badges - 更緊湊 */
+/* Badges - more compact */
 .badge { font-size: 11.5px; font-weight: 600; line-height: 1.25; padding: 0.18rem 0.42rem; border-radius: 4px; white-space: nowrap }
 .badge-jms { background: rgba(var(--success-rgb), 0.15); color: var(--success) }
 .badge-method { background: var(--hover); color: var(--muted) }
@@ -653,7 +653,7 @@ td .sub-info { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
     min-height: 0;
 }
 
-/* SSE 回應：與規則編輯器相同的事件清單；只有這一區捲動（標題與工具固定在上方） */
+/* SSE response: The same event list as the rule editor; only this area scrolls (the title and tools are fixed at the top) */
 .response-sse-workspace {
     display: flex;
     flex: 1 1 auto !important;
@@ -664,8 +664,8 @@ td .sub-info { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
     scrollbar-gutter: stable;
     padding-inline-end: var(--space-xs);
 }
-/* 清單照內容長高（不被壓縮），標題才能在捲動時固定在上方；放大編輯時填滿這一區，
- * 視窗太矮放不下時這一區照樣可以捲動（編輯區不會被切掉） */
+/* The content of the list photo needs to be taller (not compressed) so that the title can be fixed at the top when scrolling; this area can be filled when zooming in and editing.
+ * When the window is too short to fit, this area can still be scrolled (the editing area will not be cut off) */
 .response-sse-editor { flex: 0 0 auto }
 .response-sse-workspace.is-expanded .response-sse-editor { flex: 1 1 auto; min-height: 0 }
 .issue-create-modal { max-width: 600px }
@@ -921,7 +921,7 @@ kbd {
 .help-fullscreen .help-content { max-height: none; flex: 1 }
 @media (max-width: 700px) { .help-toc { display: none } }
 
-/* Rule Editor Modal - 全螢幕 */
+/* Rule Editor Modal - Full screen */
 .rule-modal-fullscreen { width: calc(100vw - 48px) !important; max-width: calc(100vw - 48px) !important; height: calc(100vh - 48px); max-height: calc(100vh - 48px); border: 0; border-radius: var(--radius-surface); box-shadow: var(--shadow-surface); transition: border-radius var(--motion-base) var(--ease-standard) }
 .rule-modal-fullscreen:focus-visible { outline: 0 }
 .rule-modal-fullscreen > .modal-header { border-bottom: 1px solid var(--separator); background: var(--card) }
@@ -1017,7 +1017,7 @@ kbd {
     .help-tooltip::after { border: 1px solid CanvasText }
 }
 
-/* Splitter 拖拽分隔線 */
+/* Splitter Drag the divider */
 .rule-splitter {
     position: relative;
     align-self: stretch;
@@ -1693,7 +1693,7 @@ textarea.form-control { min-height: 80px; font-family: var(--font-mono); font-si
 .toast.error .toast-progress { background: var(--danger) }
 .toast.info .toast-progress { background: var(--primary) }
 .toast.warning .toast-progress { background: var(--warning) }
-/* 有標題的通知（例如儲存規則後的提醒）：標題、說明、動作按鈕上下排列，種類由圖示表示 */
+/* Notifications with titles (such as reminders after saving rules): titles, descriptions, and action buttons are arranged up and down, and the types are represented by icons */
 .toast-wrap .toast.is-rich { align-items: flex-start; gap: 0.65rem; padding: 0.75rem 0.875rem 0.85rem }
 .toast.is-rich .toast-icon { margin-top: 0.15rem; font-size: 1.05rem }
 .toast-body { display: grid; flex: 1; gap: 0.2rem; min-width: 0 }
@@ -2004,7 +2004,7 @@ tr.active { background: var(--hover) }
 }
 .log-inspector-trace .match-chain-list { overflow: visible; padding: 0; background: transparent }
 
-/* 規則判斷順序（RuleOrderView）與規則列表的提示 */
+/* Tips on rule judgment order (RuleOrderView) and rule list */
 .ro { display: grid; gap: var(--space-sm); font-size: var(--font-sm) }
 .ro p { margin: 0 }
 .ro-scope { color: var(--muted) }
@@ -2043,7 +2043,7 @@ button.ro-item:hover, button.ro-item:focus-visible { border-color: var(--border2
 }
 .ro-gap:hover, .ro-gap:focus-visible { background: var(--surface-neutral-soft) }
 
-/* 請求處理流程（RequestFlowView）：抽屜窄時由上而下，加寬後由左而右 */
+/* Request processing flow (RequestFlowView): When the drawer is narrow, it is from top to bottom, and when it is widened, it is from left to right. */
 .log-inspector-flow { overflow: auto }
 .rf { container-type: inline-size; display: grid; gap: var(--space-md) }
 .rf-steps { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; margin: 0; padding: 0; list-style: none }
@@ -2107,7 +2107,7 @@ button.ro-item:hover, button.ro-item:focus-visible { border-color: var(--border2
     .rf-received .rf-card, .rf-match .rf-card, .rf-reply .rf-card { height: auto }
 }
 
-/* 匹配鏈的條件樹（MatchExplainTree） */
+/* Conditional tree of matching chain (MatchExplainTree) */
 .logs-workspace .match-chain-tree { grid-column: 2 / -1; display: grid; justify-items: start; gap: var(--space-xs); min-width: 0 }
 .match-chain-tree-summary { color: var(--muted); font-size: var(--font-sm) }
 .match-chain-raw-toggle {
@@ -2749,7 +2749,7 @@ input[type="checkbox"] {
     color: white;
 }
 
-/* 測試區 */
+/* Test area */
 .rule-test-block { gap: 0 }
 .rule-test-toggle {
     width: 100%;
@@ -2827,7 +2827,7 @@ input[type="checkbox"] {
     overflow-wrap: anywhere;
 }
 
-/* 篩選 chips */
+/* Filter chips */
 .filter-chips {
     display: flex;
     flex-wrap: wrap;
@@ -2884,10 +2884,10 @@ input[type="checkbox"] {
     color: var(--danger);
 }
 
-/* 未使用回應醒目提示 */
+/* Unused response reminder */
 /* Unused is neutral; the retention badge carries the near-expiry warning. */
 
-/* 表單驗證錯誤樣式 */
+/* Form validation error style */
 .is-invalid {
     border-color: var(--danger) !important;
 }
@@ -2903,18 +2903,18 @@ select.is-invalid {
     background-color: rgba(var(--danger-rgb), 0.05);
 }
 
-/* 規則行內預覽 */
+/* Rule inline preview */
 /* Expanded row motion is owned by ui-detail-row-motion below. */
 .rule-preview-error { color: var(--danger) }
 .rule-preview-error .btn { margin-inline-start: var(--space-sm) }
-/* 請求紀錄展開詳情的雙欄 grid（RWD） */
+/* Requesting double columns of record expansion details grid (RWD) */
 
-/* 頂部列：ID + 描述 + 按鈕 */
-/* 欄位區：統一 label-value 行（單欄，緊密高度） */
+/* Top column: ID + description + button */
+/* Column area: Unified label-value rows (single column, compact height) */
 .pv-body-empty { padding: var(--space-sm) 0; color: var(--muted); font-size: var(--font-md) }
 .settings-inline-note { margin: var(--space-sm) 0; color: var(--muted); font-size: var(--font-sm); line-height: 1.5; overflow-wrap: anywhere }
 .cond-builder-actions { display: flex; align-items: center; gap: var(--space-sm) }
-/* 進階條件（matchSpec）樹狀編輯器：群組以左側線條表示層級，條件兩列排版以適應較窄的編輯欄 */
+/* Advanced conditions (matchSpec) tree editor: Groups are represented by lines on the left, and conditions are typed in two columns to accommodate the narrower editing column. */
 .match-mode-switch { flex: none }
 .match-builder { display: flex; flex-direction: column; gap: 0.4rem }
 .match-group { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0 }
@@ -2958,7 +2958,7 @@ select.is-invalid {
 .cond-builder-actions.is-empty .cond-add { flex: 0 0 auto; width: auto; padding-inline: var(--space-sm) }
 .rule-editor .response-preview-empty { flex: 0 0 auto; min-height: 0; padding: var(--space-md); justify-content: flex-start }
 /* Preview condition list */
-/* 回應 Body 區 */
+/* Response to zone Body */
 /* Shared expanded-detail surface used by rule previews and request-log inspector panes. */
 .ui-detail-panel {
     padding: var(--space-md);
@@ -3042,25 +3042,25 @@ select.is-invalid {
     to { opacity: 1; transform: translateY(0) }
 }
 
-/* ===== SSE 表格編輯器 ===== */
+/* ===== SSE Table Editor ===== */
 .rule-sse-loop { display: inline-flex; align-items: center; gap: var(--space-xs); margin: 0 }
 .rule-sse-loop .form-check-label { display: inline-flex; align-items: center; gap: var(--space-xs); font-size: var(--font-sm) }
 .rule-sse-error { display: block }
 
 
-/* error 列 */
+/* error column */
 .sse-row-error {
     background: rgba(var(--danger-rgb), 0.1);
     box-shadow: inset 0 0 0 1px rgba(var(--danger-rgb), 0.28);
 }
 
-/* abort 列 */
+/* abort column */
 .sse-row-abort {
     background: rgba(var(--warning-rgb), 0.1);
     box-shadow: inset 0 0 0 1px rgba(var(--warning-rgb), 0.28);
 }
 
-/* 拖曳把手 */
+/* Drag handle */
 .sse-drag-handle {
     cursor: grab;
     color: var(--muted);
@@ -3076,7 +3076,7 @@ select.is-invalid {
     cursor: grabbing;
 }
 
-/* 串流預覽面板 */
+/* Streaming preview panel */
 .sse-preview {
     background: var(--code-bg);
     border: 1px solid var(--border);
@@ -3094,9 +3094,9 @@ select.is-invalid {
     line-height: 1.5;
 }
 
-/* 循環提示 */
+/* Loop prompt */
 
-/* 淺色主題微調 */
+/* Light theme tweaks */
 :root[data-theme="light"] .sse-row-error {
     background: rgba(var(--danger-rgb), 0.08);
 }
@@ -4237,7 +4237,7 @@ select.form-select-sm { height: var(--control-h-sm); min-height: var(--control-h
 }
 
 
-/* Traffic overview（請求紀錄頁上方的流量概況） */
+/* Traffic overview (traffic overview at the top of the request record page) */
 .traffic {
     --traffic-mocked: rgba(var(--primary-rgb), 0.72);
     --traffic-forwarded: #7f93b8;
@@ -4367,7 +4367,7 @@ select.form-select-sm { height: var(--control-h-sm); min-height: var(--control-h
     list-style: none; margin: 0; padding: 2px 6px 2px 0; min-height: 0;
     flex: none;
 }
-/* 平常只有右側窗格捲動（不做兩層捲動）；放大整個編輯區時清單自己捲動 */
+/* Usually only the right pane scrolls (no two-layer scrolling); when the entire editing area is enlarged, the list scrolls by itself */
 .sse-ed.is-expanded .sse-ed-list { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain }
 .sse-ev { scroll-margin-top: 112px }
 .sse-ev { position: relative; display: grid; grid-template-columns: var(--sse-time-w) var(--sse-rail-w) minmax(0, 1fr); align-items: start }
@@ -4496,7 +4496,7 @@ select.form-select-sm { height: var(--control-h-sm); min-height: var(--control-h
     .sse-ev-size { display: none }
     .sse-ev-name { flex-basis: 64px }
     .sse-ev-foot-hint { display: none }
-    /* 窄畫面：工具按鈕換行，不撐出橫向捲動 */
+    /* Narrow screen: tool buttons wrap and do not support horizontal scrolling */
     .sse-ed-search { flex: 1 1 100% }
     .sse-ed-tool-buttons { flex-wrap: wrap; margin-left: 0 }
 }

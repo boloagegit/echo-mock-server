@@ -32,11 +32,11 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * 宣告式規則文件（echo.mock/v1、v2）：
+ * Declarative rule files (echo.mock/v1, v2):
  * <ul>
- *   <li>GET /api/admin/rules/schema - 文件格式</li>
- *   <li>GET /api/admin/rules/{id}/manifest - 以文件格式取得規則</li>
- *   <li>POST /api/admin/rules/apply、PUT /api/admin/rules/{id}/apply - 以完整文件建立或更新規則</li>
+ *   <li>GET /api/admin/rules/schema - File format</li>
+ *   <li>GET /api/admin/rules/{id}/manifest - Get rule  in file format</li>
+ *   <li>POST /api/admin/rules/apply, PUT /api/admin/rules/{id}/apply - Create or update rule  with complete file</li>
  * </ul>
  */
 @RestController
@@ -141,8 +141,8 @@ public class RuleApplyController {
     }
 
     /**
-     * responseId + responseBody 表示期望內容。內容相同時沿用；不同時建立新回應並重新綁定，
-     * 避免修改其他規則共用的 Response。
+     * responseId + responseBody indicates the expected content. If the content is the same, it will be used; if not, create a new response and rebind it at the same time.
+     * Avoid modifying Response that is shared by other rules.
      */
     private void prepareApplyResponse(RuleDto dto) {
         if (dto.getResponseId() == null || dto.getResponseBody() == null) {

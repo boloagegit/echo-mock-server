@@ -7,8 +7,8 @@ import java.nio.charset.StandardCharsets;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 共用列表系統：已遷移的列表頁必須使用同一套列（data-table）、詳情抽屜、列選單與工具列，
- * 讓點選、鍵盤與操作位置在每一頁都一致。遷移一頁就把它加進 MIGRATED_LISTS。
+ * Shared list system: Migrated list pages must use the same set of columns (data-table), detail drawer, column menu and toolbar.
+ * Make click, keyboard and operation positions consistent on every page. Migrate one page and add it to MIGRATED_LISTS.
  */
 class ListSystemResourceTest {
     /** page component, its row/table component (same file when the page renders rows itself), has batch selection. */

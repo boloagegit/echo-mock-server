@@ -304,12 +304,12 @@ public class JmsTargetConnectionService {
         return copy;
     }
 
-    /** 設定檔下游的顯示名稱：{@code echo.jms.target.name}，沒設定時為 {@code application.yml}。 */
+    /** The display name of the downstream configuration file is: {@code echo.jms.target.name}. If not set, it is {@code application.yml}. */
     private String legacyName() {
         return configuredLegacyName(jmsProperties.getTarget(), YAML_TARGET_NAME);
     }
 
-    /** {@code echo.jms.target.name}（去掉前後空白）；空白時回傳 {@code fallback}。 */
+    /** {@code echo.jms.target.name} (remove the leading and trailing blanks); return {@code fallback} when blank. */
     public static String configuredLegacyName(JmsProperties.Target target, String fallback) {
         String name = target.getName();
         return name == null || name.isBlank() ? fallback : name.trim();

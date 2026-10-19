@@ -1,10 +1,10 @@
 package com.echo.service;
 
 /**
- * 接收 {@link ServeEvent}。在處理請求的執行緒上同步呼叫，實作不可阻塞；需要 I/O 的實作自行排入佇列。
+ * Receiving {@link ServeEvent}. Called synchronously on the thread handling the request, the implementation is non-blocking; the implementation requiring I/O queues itself.
  * <p>
- * {@link #critical()} 為 true 的 listener（請求紀錄）丟出的例外會往上傳：HTTP 回 503，JMS 讓遞送失敗以便重送；
- * 其他 listener 的例外只會記錄，不影響回應。
+ * The exception thrown by {@link #critical()} for listener (request record) of true will be uploaded: HTTP will return 503, and JMS will fail the delivery for resend;
+ * Other listener exceptions will only be recorded and will not affect the response.
  */
 public interface ServeEventListener {
 

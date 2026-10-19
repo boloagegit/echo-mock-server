@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 切回 Servlet 模式時，排程與 @Async 的執行緒安排和預設模式相同。 */
+/** When switching back to Servlet mode, the schedule is the same as the thread arrangement and default mode of @Async. */
 @TestPropertySource(properties = "echo.http.transport=servlet")
 class ScheduledJobThreadsServletModeIntegrationTest extends BaseIntegrationTest {
 

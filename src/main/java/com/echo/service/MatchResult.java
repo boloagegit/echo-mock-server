@@ -11,7 +11,7 @@ import java.util.List;
 public class MatchResult<T extends BaseRule> {
     private final T matchedRule;
     private final List<MatchChainEntry> matchChain;
-    /** 選中的是沒有條件的備選規則（條件都不成立時才會選它）。 */
+    /** The selected rule is an alternative rule without conditions (it will be selected only when none of the conditions are met). */
     private final boolean byFallback;
 
     public MatchResult(T matchedRule, List<MatchChainEntry> matchChain) {

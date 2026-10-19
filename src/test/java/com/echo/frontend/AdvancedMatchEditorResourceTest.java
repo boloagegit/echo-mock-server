@@ -12,7 +12,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 進階條件（matchSpec）編輯器的接線：載入順序、元件註冊、儲存與宣告式文件的轉換、顯示與多語系。 */
+/** Advanced condition (matchSpec) editor wiring: loading sequence, component registration, storage and declarative file conversion, display and multi-language. */
 class AdvancedMatchEditorResourceTest {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -40,17 +40,17 @@ class AdvancedMatchEditorResourceTest {
                 .contains("<match-tree-node :node=\"matchTree\" :sources=\"matchSources\" root>")
                 .contains("v-if=\"matchSwitchPending\" class=\"match-switch-confirm\" role=\"alert\"")
                 .contains("v-if=\"matchError\" class=\"match-error\" role=\"alert\"")
-                // == 的提醒在簡易與進階模式都會出現
+                // == reminder will appear in both easy and advanced modes
                 .contains("? (props.matchTree ? MatchTree.doubleEqualsConditions(props.matchTree) : [])")
                 .contains("MatchTree.hasDoubleEquals(c.field + (c.operator || '=') + (c.value || ''), c.type)");
 
         String form = resourceText("static/composables/useRuleForm.js");
-        // 進階規則改用簡易模式且沒有條件時要明確清除；否則後端會保留原本的進階條件
+        // When the advanced rules are changed to simple mode and there are no conditions, they must be cleared clearly; otherwise, the backend will retain the original advanced conditions.
         assertThat(form).contains("payload.matchSpec = hadAdvanced && noLegacy ? { all: [] } : null;")
                 .contains("if (!strings || !MatchTree.toSimpleRows(strings.bodyCondition, strings.queryCondition, strings.headerCondition)) {")
                 .contains("'/api/admin/rules/match/validate'")
                 .contains("'/api/admin/rules/match/parse'");
-        // 條件列與後端用同一套拆解規則；無法完整表示的舊版條件改以進階模式原樣顯示，不會在儲存時遺失
+        // The condition column and the backend use the same set of disassembly rules; old conditions that cannot be fully expressed are displayed as they are in advanced mode and will not be lost when saving.
         assertThat(form).contains("const rows = MatchTree.toSimpleRows(r.bodyCondition, r.queryCondition, r.headerCondition);")
                 .contains("if (r && MatchTree.toSimpleRows(r.bodyCondition, r.queryCondition, r.headerCondition) === null) {")
                 .doesNotContain("for (const op of ['!=', '*=', '~=', '='])");
@@ -67,7 +67,7 @@ class AdvancedMatchEditorResourceTest {
         String apply = resourceText("static/composables/useRuleApply.js");
         assertThat(apply).contains("document.spec.match != null ? API_V2 : API_V1")
                 .contains("apiVersion: spec.match ? API_V2 : API_V1,")
-                // 只有舊格式片段的進階條件寫回舊欄位，文件維持 v1
+                // Only the advanced conditions of the old format fragment are written back to the old fields, and the file remains v1
                 .contains("const legacyStrings = matchSpec ? legacyStringsOf(matchSpec) : null;")
                 .contains("issue(errors, 'MATCH_CONFLICT', 'spec.match');")
                 .contains("'/api/admin/rules/schema?apiVersion=' + encodeURIComponent(API_V2)");

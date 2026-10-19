@@ -1,4 +1,4 @@
-/** RuleApplyModal - K8s 風格的宣告式 JSON 規則編輯器。 */
+/** RuleApplyModal - K8s style declarative JSON rules editor. */
 const RuleApplyModal = {
   inject: ['t'],
   props: {

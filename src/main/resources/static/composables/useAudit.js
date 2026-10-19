@@ -1,31 +1,31 @@
 /**
- * useAudit - 修訂記錄 Composable
+ * useAudit - Revision history Composable
  *
- * 管理修訂記錄（audit logs）的伺服器分頁、篩選、排序，
- * 以及單筆明細 lazy load、變更比對與格式化顯示。
+ * Manage server paging, filtering, and sorting of revision records (audit logs),
+ * as well as lazy loading of individual records, change comparison, and formatted display.
  *
- * @param {Object} deps - 依賴物件
- * @param {Function} deps.showToast - Toast 通知函式（來自 useToast）
- * @param {Function} deps.showConfirm - 確認對話框函式（來自 useToast）
- * @param {Function} deps.t - 翻譯函式（來自 useI18n）
- * @param {Function} deps.requireLogin - 登入檢查函式（來自 useAuth）
- * @returns {Object} 修訂記錄狀態與操作
+ * @param {Object} deps - Dependent objects
+ * @param {Function} deps.showToast - Toast notification function (from useToast)
+ * @param {Function} deps.showConfirm - Confirm dialog function (from useToast)
+ * @param {Function} deps.t - Translation function (from useI18n)
+ * @param {Function} deps.requireLogin - Login check function (from useAuth)
+ * @returns {Object} revision record status and operations
  */
 const useAudit = (deps) => {
     const { ref, computed, watch } = Vue;
     const { showToast, showConfirm, t, requireLogin } = deps;
 
-    // --- 資料快取機制 ---
+    // --- Data caching mechanism ---
     const dataLastLoaded = { audit: 0 };
     const DATA_TTL = 30000;
     const shouldLoad = () => !dataLastLoaded.audit || (Date.now() - dataLastLoaded.audit > DATA_TTL);
     const markLoaded = () => { dataLastLoaded.audit = Date.now(); };
 
-    // --- 狀態 ---
+    // --- Status ---
     const auditLogs = ref([]);
     const selectedAudit = ref(null);
     const auditFilter = ref({ action: '', operator: '', keyword: '', type: '', ruleId: '' });
-    // 單一規則／回應的最近記錄（詳細面板下方的時間軸），以 ruleId 為鍵。
+    // Recent records for a single rule/response (timeline below details panel), keyed by ruleId.
     const targetHistory = ref({});
     const TARGET_HISTORY_SIZE = 8;
     let historyGeneration = 0;
@@ -34,7 +34,7 @@ const useAudit = (deps) => {
     const auditPage = ref(1);
     const auditPageSize = ref(parseInt(localStorage.getItem('auditPageSize')) || 20);
     const auditTotalElements = ref(0);
-    // 伺服器的「今天」（修訂時間沒有時區，以伺服器日期判斷今天／昨天）。
+    // "Today" of the server (the revision time has no time zone, and the server date is used to determine today/yesterday).
     const auditToday = ref('');
     const serverTotalPages = ref(0);
     let listRequestSequence = 0;
@@ -45,7 +45,7 @@ const useAudit = (deps) => {
     const DETAIL_CACHE_LIMIT = 100;
     const cacheDetail = (id, detail) => {
         if (!detailCache[id]) { detailCacheOrder.push(id); }
-        // 列表摘要以列表 API 的版本為準，明細只補上前後快照。
+        // The list summary is subject to the version of list API, and the details only include the before and after snapshots.
         const { summary, ...snapshot } = detail || {};
         detailCache[id] = snapshot;
         while (detailCacheOrder.length > DETAIL_CACHE_LIMIT) {
@@ -53,32 +53,32 @@ const useAudit = (deps) => {
         }
     };
 
-    // --- 篩選、排序、分頁 ---
-    // 列表已由後端完成篩選、排序與分頁；保留 computed 名稱相容既有畫面。
+    // --- Filter, sort, paging ---
+    // The list has been filtered, sorted and paginated by the backend; the computed name is retained to be compatible with the existing screen.
     const filteredAudit = computed(() => auditLogs.value);
     const sortedAudit = computed(() => auditLogs.value);
     const pagedAudit = computed(() => auditLogs.value);
     const auditTotalPages = computed(() => Math.max(1, serverTotalPages.value));
     const auditTruncated = computed(() => false);
 
-    /** 切換排序欄位/方向 */
+    /** Switch sorting field/direction */
     const toggleAuditSort = (field) => {
         if (auditSort.value.field === field) auditSort.value.asc = !auditSort.value.asc;
         else { auditSort.value.field = field; auditSort.value.asc = false; }
         localStorage.setItem('auditSort', JSON.stringify(auditSort.value));
     };
 
-    /** 取得排序圖示 class */
+    /** Get sorting icon class */
     const auditSortIcon = (f) => auditSort.value.field === f
         ? (auditSort.value.asc ? 'bi-caret-up-fill' : 'bi-caret-down-fill')
         : 'bi-arrow-down-up';
 
-    /** 每頁筆數變更 */
+    /** Page-size changes */
     const onAuditPageSizeChange = () => {
         localStorage.setItem('auditPageSize', auditPageSize.value);
     };
 
-    // --- 載入與刪除 ---
+    // --- Load and delete ---
     const buildAuditQuery = () => {
         const params = new URLSearchParams();
         params.set('page', String(Math.max(0, auditPage.value - 1)));
@@ -157,12 +157,12 @@ const useAudit = (deps) => {
         reloadAuditFromFirstPage();
     });
 
-    /** 載入某個規則／回應最近的修訂記錄；同一次列表載入內成功一次就不再重抓。 */
+    /** Load the latest revision record of a rule/response; if the same list is loaded successfully once, it will not be re-crawled. */
     const loadTargetHistory = async (ruleId) => {
         const cached = targetHistory.value[ruleId];
-        // 載入中或已成功的不重抓；上次失敗的重新打開時再試一次。
+        // Do not re-catch if loading or has been successful; try again when re-opening failed last time.
         if (!ruleId || (cached && !cached.failed)) { return; }
-        // 列表重新載入會清空時間軸；那之前發出的請求晚回來時不寫回，避免舊結果蓋掉新的。
+        // Reloading the list will clear the timeline; the previously sent requests will not be written back when they come back later, to prevent the old results from overwriting the new ones.
         const generation = historyGeneration;
         targetHistory.value = { ...targetHistory.value, [ruleId]: { loading: true, items: [], total: 0, failed: false } };
         const params = new URLSearchParams({ page: '0', size: String(TARGET_HISTORY_SIZE), sort: 'timestamp', direction: 'desc', ruleId });
@@ -180,7 +180,7 @@ const useAudit = (deps) => {
         }
     };
 
-    /** 只看某一個規則或回應的全部修訂記錄。 */
+    /** Only view all revision records of a certain rule or response. */
     const filterAuditTarget = (ruleId) => {
         auditFilter.value = { action: '', operator: '', keyword: '', type: '', ruleId: ruleId || '' };
     };
@@ -215,7 +215,7 @@ const useAudit = (deps) => {
         if (r && r.ok) { const d = await r.json(); showToast(t('toast.deleteAllAuditSuccess', {count: d.deleted}), 'success'); loadAudit(true); }
     };
 
-    // --- 欄位標籤與格式化 ---
+    // --- Field labels and formatting ---
     const AUDIT_FIELD_LABELS = () => ({
         matchKey: t('auditFields.matchKey'), targetHost: t('auditFields.targetHost'), method: t('auditFields.method'),
         bodyCondition: t('auditFields.bodyCondition'), queryCondition: t('auditFields.queryCondition'), headerCondition: t('auditFields.headerCondition'),
@@ -270,7 +270,7 @@ const useAudit = (deps) => {
                     if (isEmpty(bv) && isEmpty(av)) { continue; }
                     if (JSON.stringify(bv) !== JSON.stringify(av)) {
                         if (key === 'tags') {
-                            // 兩邊都能解析成 key=value 才列加減；格式不對時照一般欄位顯示前後的值。
+                            // Both sides can be parsed into key=value to list addition and subtraction; if the format is incorrect, the before and after values will be displayed in the normal fields.
                             const bt = tagPairs(bv), at = tagPairs(av);
                             const pairs = bt && at && tagChange(bt, at);
                             if (pairs) {
@@ -279,7 +279,7 @@ const useAudit = (deps) => {
                             }
                         }
                         const b = formatFieldValue(key, bv), a = formatFieldValue(key, av);
-                        // beforeText/afterText 是逐行比對與複製用的原文（存下來的字串，不是排版後的樣子）；沒有值時為空字串。
+                        // beforeText/afterText is the original text used for line-by-line comparison and copying (the string is saved, not what it looks like after typesetting); when there is no value, it is an empty string.
                         const raw = (v, shown) => isEmpty(v) ? '' : (typeof v === 'string' ? v : shown);
                         changes.push({ label: fieldLabel(key), before: b, after: a, long: isLong(b) || isLong(a),
                             beforeText: raw(bv, b), afterText: raw(av, a) });
@@ -341,7 +341,7 @@ const useAudit = (deps) => {
         return '';
     };
 
-    // --- 列表摘要（不需載入前後快照）---
+    // --- List summary (no need to load before and after snapshots) ---
     const LIST_CHANGE_LIMIT = 3;
 
     const tagPairs = (raw) => {
@@ -351,11 +351,11 @@ const useAudit = (deps) => {
             if (tags && typeof tags === 'object' && !Array.isArray(tags)) {
                 return Object.entries(tags).map(([k, v]) => k + '=' + (typeof v === 'string' ? v : JSON.stringify(v)));
             }
-        } catch (e) { /* 截短的值無法解析，改顯示原文 */ }
+        } catch (e) { /* The truncated value cannot be parsed, display the original text instead */ }
         return null;
     };
 
-    /** 新增與移除的標籤；兩邊顯示成一樣的文字（例如 1 改成 "1"）時回傳 null，改用前後值顯示。 */
+    /** Add and remove tags; when both sides are displayed with the same text (for example, 1 is changed to "1"), null is returned, and the front and rear values are used instead. */
     const tagChange = (before, after) => {
         const added = after.filter(x => !before.includes(x)), removed = before.filter(x => !after.includes(x));
         return added.length || removed.length ? { added, removed } : null;
@@ -378,7 +378,7 @@ const useAudit = (deps) => {
         };
     };
 
-    /** 列表每一列要顯示的名稱、說明行與「改了什麼」，全部來自後端的小摘要。 */
+    /** The name, description line and "what changed" to be displayed in each column of the list are all from the small summary in the backend. */
     const describeAuditRow = (log) => {
         const summary = log.summary || {};
         const response = !!log.ruleId?.startsWith('response-');

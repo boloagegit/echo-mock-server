@@ -99,7 +99,7 @@ class WebMvcConfigTest {
         
         var restTemplate = config.restTemplate();
         
-        // 驗證使用 HttpComponentsClientHttpRequestFactory (支援 SSL 忽略)
+        // Verify using HttpComponentsClientHttpRequestFactory (support SSL ignored)
         assertThat(restTemplate.getRequestFactory())
                 .isInstanceOf(org.springframework.http.client.HttpComponentsClientHttpRequestFactory.class);
     }

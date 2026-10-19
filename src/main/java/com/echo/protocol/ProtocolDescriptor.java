@@ -7,16 +7,16 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 一個協定在協定無關程式（規則查詢、快取失效、管理 API）中需要的資訊，由該協定的 {@link ProtocolHandler} 提供。
- * 新增協定時在 handler 中描述，不需要在各個 service 加上協定分支。
+ * Information required by a protocol in protocol-independent programs (rule lookup, cache invalidation, management API) is provided by the protocol's {@link ProtocolHandler}.
+ * When adding a new protocol, it is described in handler. There is no need to add protocol branches to each service.
  *
- * @param id             協定
- * @param ruleType       規則 entity 類別（規則清單查詢使用）
- * @param rulesCacheName 規則快取名稱；規則異動與多實例同步時清除
- * @param searchFields   規則清單關鍵字搜尋的欄位（entity 屬性名稱）
- * @param mockAction     規則 {@code action} 欄位代表「回傳 mock」的值
- * @param forwardAction  規則 {@code action} 欄位代表「轉發」的值
- * @param matchSources   結構化條件（{@code matchSpec}）可使用的取值來源，例如 {@code body}、{@code header}
+ * @param id             Protocol
+ * @param ruleType       Rule entity class, used for rule-list queries.
+ * @param rulesCacheName Rule cache name; cleared when rules change and synchronize multiple instances
+ * @param searchFields   Rule list keyword search field (entity attribute name)
+ * @param mockAction     The rule {@code action} field represents the value of "return mock"
+ * @param forwardAction  The rule {@code action} field represents the value of "forward"
+ * @param matchSources   Value sources that can be used for structured conditions ({@code matchSpec}), such as {@code body}, {@code header}
  */
 public record ProtocolDescriptor(Protocol id,
                                  Class<? extends BaseRule> ruleType,
@@ -31,7 +31,7 @@ public record ProtocolDescriptor(Protocol id,
         matchSources = Set.copyOf(matchSources);
     }
 
-    /** 多實例同步時，代表「此協定的規則已變更」的事件類型。 */
+    /** When synchronizing multiple instances, the event type represents "the rules of this protocol have changed". */
     public String cacheEventType() {
         return cacheEventType(id);
     }

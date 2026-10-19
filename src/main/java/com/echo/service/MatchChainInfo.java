@@ -1,10 +1,10 @@
 package com.echo.service;
 
 /**
- * 匹配鏈條目的共用介面
+ * Match chain destination shared interface
  * <p>
- * HTTP 和 JMS 的 MatchChainEntry 都實作此介面，
- * 讓 {@link MatchDescriptionBuilder} 可以統一處理。
+ * Both HTTP and MatchChainEntry of JMS implement this interface.
+ * Allow {@link MatchDescriptionBuilder} to be processed uniformly.
  */
 public interface MatchChainInfo {
 
@@ -18,16 +18,16 @@ public interface MatchChainInfo {
 
     String getCondition();
 
-    /** 匹配分數，例如 "2/3"；無分析時回傳 null */
+    /** Matching score, such as "2/3"; return null when there is no analysis */
     String getScore();
 
-    /** PASS/FAIL 詳細描述；無分析時回傳 null */
+    /** PASS/FAIL Detailed description; return null when there is no analysis */
     String getDetail();
 
-    /** 是否為 near-miss（部分條件通過但未全部通過） */
+    /** Is it near-miss (some conditions passed but not all) */
     boolean isNearMiss();
 
-    /** 樹狀比對說明的 JSON（見 {@link MatchExplanationJson}）；無分析時回傳 null */
+    /** JSON of the tree comparison description (see {@link MatchExplanationJson}); return null when there is no analysis */
     default String getDetailTree() {
         return null;
     }

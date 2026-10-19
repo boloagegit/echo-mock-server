@@ -11,9 +11,9 @@ import java.security.Principal;
 import java.util.Map;
 
 /**
- * 使用者帳號操作 REST API
+ * User account operation REST API
  * <p>
- * 提供已登入使用者自行修改密碼等功能，路徑為 /api/account/**。
+ * Provides functions such as password modification for logged-in users. The path is /api/account/**.
  */
 @Slf4j
 @RestController
@@ -24,7 +24,7 @@ public class AccountController {
     private final BuiltinUserService builtinUserService;
 
     /**
-     * 已登入使用者自行修改密碼
+     * Logged-in user can change password by himself/herself
      */
     @PutMapping("/change-password")
     public ResponseEntity<?> changePassword(@RequestBody Map<String, String> body, Principal principal) {

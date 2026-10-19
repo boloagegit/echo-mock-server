@@ -209,7 +209,7 @@ class MatcherEvaluationTest {
 
         @Test
         void equalToJsonUsesMaximumMatchingForUnorderedArrays() {
-            // 貪婪配對會把 {"a":1} 配給第一個元素而失敗；正確答案是可以配對。
+            // Greedy matching will allocate {"a":1} to the first element and fail; the correct answer is that it can be matched.
             RequestView request = body("{\"items\":[{\"a\":1,\"b\":2},{\"a\":1}]}");
 
             assertThat(matches("{'source':'body','selector':{'field':'items'},'op':'equalToJson',"
@@ -330,7 +330,7 @@ class MatcherEvaluationTest {
             assertThat(first.matches(context)).isTrue();
             assertThat(second.matches(context)).isTrue();
             assertThat(second.explain(context).passed()).isTrue();
-            assertThat(calls).hasValue(2); // explain 需要實際值，會再取一次；判斷結果仍沿用暫存
+            assertThat(calls).hasValue(2); // explain requires the actual value and will fetch it again; the judgment result will still be temporarily stored.
             assertThat(context.outcomesSnapshot()).containsEntry(
                     MatchSpecCodec.toJson(MatchSpecCodec.parse(json(leaf))).toString(), true);
         }

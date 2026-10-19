@@ -1,6 +1,6 @@
 package com.echo.core.match;
 
-/** 編譯後的運算子，判斷單一值是否符合。實作必須是執行緒安全且無狀態的。 */
+/** The compiled operator determines whether a single value is consistent. The implementation must be thread-safe and stateless. */
 @FunctionalInterface
 public interface CompiledPredicate {
 

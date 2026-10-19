@@ -1,26 +1,26 @@
 /**
- * useRouter - URL 路由管理 Composable
+ * useRouter - URL Routing Management Composable
  *
- * 管理前端 hash 路由，包含頁面切換、URL 參數同步、
- * 瀏覽器上一頁/下一頁支援。
- * 頁面切換時自動觸發對應的資料載入函式，
- * 篩選條件變更時自動同步至 URL。
+ * Management front-end hash routing, including page switching, URL parameter synchronization,
+ * Browser previous page/next page support.
+ * The corresponding data loading function is automatically triggered when the page is switched.
+ * Automatically synchronize to URL when filtering conditions change.
  *
- * @param {Object} deps - 依賴物件
- * @param {Ref} deps.page - 當前頁面 ref（來自 app.js）
- * @param {Ref} deps.ruleFilter - 規則篩選條件（來自 useRules）
- * @param {Ref} deps.responseFilter - 回應篩選條件（來自 useResponses）
- * @param {Ref} deps.logFilter - 記錄篩選條件（來自 useStats）
- * @param {Ref} deps.auditFilter - 修訂篩選條件（來自 useAudit）
- * @param {Ref} deps.isAdmin - 是否為管理員（來自 useAuth）
- * @param {Ref} deps.issueReportingEnabled - 後端是否啟用問題回報
- * @param {Function} deps.loadRules - 載入規則函式（來自 useRules）
- * @param {Function} deps.loadLogs - 載入記錄函式（來自 useStats）
- * @param {Function} deps.loadAudit - 載入修訂函式（來自 useAudit）
- * @param {Function} deps.loadResponseSummary - 載入回應摘要函式（來自 useResponses）
- * @param {Function} deps.loadBackupStatus - 載入備份狀態函式（來自 app.js）
- * @param {Function} deps.loadStatus - 載入系統狀態函式（來自 app.js）
- * @param {Function} deps.loadAccounts - 載入帳號清單函式（來自 useAccounts）
+ * @param {Object} deps - Dependent objects
+ * @param {Ref} deps.page - Current page ref (from app.js)
+ * @param {Ref} deps.ruleFilter - Rule filter conditions (from useRules)
+ * @param {Ref} deps.responseFilter - Response filter (from useResponses)
+ * @param {Ref} deps.logFilter - Record filter conditions (from useStats)
+ * @param {Ref} deps.auditFilter - Revised filter conditions (from useAudit)
+ * @param {Ref} deps.isAdmin - Is it an administrator (from useAuth)
+ * @param {Ref} deps.issueReportingEnabled - Whether problem reporting is enabled on the backend
+ * @param {Function} deps.loadRules - Loading rule function (from useRules)
+ * @param {Function} deps.loadLogs - Load record function (from useStats)
+ * @param {Function} deps.loadAudit - Load revised function (from useAudit)
+ * @param {Function} deps.loadResponseSummary - Load response summary function (from useResponses)
+ * @param {Function} deps.loadBackupStatus - Load backup status function (from app.js)
+ * @param {Function} deps.loadStatus - Load system status function (from app.js)
+ * @param {Function} deps.loadAccounts - Load account list function (from useAccounts)
  * @returns {{ page: Ref, validPages: Array, parseHash: Function, updateUrl: Function, applyUrlParams: Function, setupRouterWatchers: Function }}
  */
 const useRouter = (deps) => {
@@ -29,7 +29,7 @@ const useRouter = (deps) => {
     // The page actually on screen. `page` is the target and drives the sidebar right away.
     const shownPage = deps.shownPage || Vue.ref(page.value);
 
-    // --- 狀態 ---
+    // --- Status ---
     const validPages = ['rules', 'responses', 'stats', 'audit', 'issues', 'accounts', 'settings'];
     const isIssuesEnabled = () => deps.issueReportingEnabled?.value === true && typeof loadIssues === 'function';
 
@@ -69,7 +69,7 @@ const useRouter = (deps) => {
     let urlLoad = null;
 
     /**
-     * 解析目前的 hash，回傳頁面名稱與查詢參數
+     * Parse the current hash and return the page name and query parameters
      * @returns {{ pageName: string, params: URLSearchParams }}
      */
     const parseHash = () => {
@@ -81,8 +81,8 @@ const useRouter = (deps) => {
     };
 
     /**
-     * 根據目前頁面與篩選條件更新 URL hash
-     * @param {boolean} [skipHistory=false] - 是否使用 replaceState 而非 pushState
+     * Update URL hash based on the current page and filter conditions
+     * @param {boolean} [skipHistory=false] - Whether to use replaceState instead of pushState
      */
     const updateUrl = (skipHistory = false) => {
         let path = `#/${page.value}`;
@@ -115,8 +115,8 @@ const useRouter = (deps) => {
     };
 
     /**
-     * 從 URL hash 解析參數並套用至頁面與篩選條件
-     * @returns {Promise|null} 目前頁面資料載入完成的 Promise
+     * Parse parameters from URL hash and apply to pages and filter conditions
+     * @returns {Promise|null} The current page data loading is completed Promise
      */
     const applyUrlParams = () => {
         const { pageName, params } = parseHash();
@@ -140,7 +140,7 @@ const useRouter = (deps) => {
             logFilter.value.protocol = params.get('protocol') || '';
             logFilter.value.matched = params.get('matched') || '';
             logFilter.value.endpoint = params.get('endpoint') || '';
-            // 時間範圍兩端都要是完整的本地時間，否則忽略
+            // Both ends of the time range must be complete local time, otherwise they are ignored
             const localTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
             const from = params.get('from') || '', to = params.get('to') || '';
             const validRange = localTime.test(from) && localTime.test(to);
@@ -164,12 +164,12 @@ const useRouter = (deps) => {
     };
 
     /**
-     * 設定所有路由相關的 watchers：
-     * - 頁面切換 → 更新 URL 與載入資料
-     * - 篩選條件變更 → 同步至 URL
+     * Set all routing related watchers:
+     * - Page switching → Update URL and load data
+     * - Filter condition changes → Sync to URL
      */
     const setupRouterWatchers = () => {
-        // 頁面切換 → 更新 URL
+        // Page switching → Update URL
         watch(page, (newPage, oldPage) => {
             if (newPage === 'issues' && !isIssuesEnabled()) {
                 page.value = 'rules';
@@ -186,12 +186,12 @@ const useRouter = (deps) => {
                 }
             });
         }
-        // 篩選條件 → 同步 URL
+        // Filter → Sync URL
         watch(ruleFilter, () => { if (page.value === 'rules') updateUrl(); }, { deep: true });
         watch(responseFilter, () => { if (page.value === 'responses') updateUrl(); });
         watch(logFilter, () => { if (page.value === 'stats') updateUrl(); }, { deep: true });
         watch(auditFilter, () => { if (page.value === 'audit') updateUrl(); }, { deep: true });
-        // 頁面切換 → 載入對應資料，資料到齊（或短暫等待後）才換上新頁面
+        // Page switching → Load the corresponding data, and then change to a new page after the data is complete (or wait for a short time)
         watch(page, p => {
             const pending = urlLoad && urlLoad.page === p && p !== 'settings' ? urlLoad.pending : loadPage(p);
             urlLoad = null;

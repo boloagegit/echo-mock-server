@@ -29,13 +29,13 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * HTTP 協定的 MockPipeline 實作
+ * MockPipeline implementation of HTTP protocol
  * <p>
- * 實作 HTTP 特有的 pipeline 步驟：
+ * Implement HTTP-specific pipeline steps:
  * <ul>
- *   <li>候選規則查詢：委派給 {@link HttpRuleService}</li>
- *   <li>回應建構：模板渲染 + 自訂 HTTP headers</li>
- *   <li>轉發：委派給非阻塞 HTTP outbound client</li>
+ *   <li>candidate rule query: delegated to {@link HttpRuleService}</li>
+ *   <li>response construction: template rendering + customization HTTP headers</li>
+ *   <li>forward: delegated to non-blocking HTTP outbound client</li>
  * </ul>
  */
 @Component
@@ -83,7 +83,7 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
 
     @Override
     protected MockResponse buildResponse(HttpRule rule, MockRequest request, String responseBody) {
-        // 解析自訂 HTTP headers
+        // Parse customization HTTP headers
         Map<String, String> responseHeaders = parseHttpHeaders(rule.getHttpHeaders());
 
         int status = rule.getHttpStatus() != null ? rule.getHttpStatus() : 200;

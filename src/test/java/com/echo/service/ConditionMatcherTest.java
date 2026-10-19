@@ -8,7 +8,7 @@ class ConditionMatcherTest {
 
     private final ConditionMatcher matcher = new ConditionMatcher();
 
-    // ========== 基本測試 ==========
+    // ========== Basic Test ==========
 
     @Test
     void matches_shouldReturnTrue_whenNoCondition() {
@@ -24,7 +24,7 @@ class ConditionMatcherTest {
         assertThat(matcher.matches("custId=123", "   ")).isFalse();
     }
 
-    // ========== JSON 測試 ==========
+    // ========== JSON Test ==========
 
     @Test
     void json_shouldMatchSimpleField() {
@@ -88,8 +88,8 @@ class ConditionMatcherTest {
     @Test
     void json_shouldMatchArrayBody() {
         String body = "[{\"id\":\"A\"},{\"id\":\"B\"}]";
-        // 陣列根節點需要用索引存取
-        assertThat(matcher.matches("[0].id=A", body)).isFalse(); // 不支援根陣列索引
+        // Array root node requires index access
+        assertThat(matcher.matches("[0].id=A", body)).isFalse(); // Root array index not supported
     }
 
     @Test
@@ -104,7 +104,7 @@ class ConditionMatcherTest {
         assertThat(matcher.matches("order.customer.id=VIP001", body)).isFalse();
     }
 
-    // ========== XML (JMS) 測試 ==========
+    // ========== XML (JMS) test ==========
 
     @Test
     void xml_shouldMatchSimpleElement() {
@@ -206,7 +206,7 @@ class ConditionMatcherTest {
         assertThat(matcher.matches("invalidcondition", xml)).isFalse();
     }
 
-    // ========== 純文字測試 ==========
+    // ========== Plain text test ==========
 
     @Test
     void plainText_shouldMatchContains() {
@@ -215,7 +215,7 @@ class ConditionMatcherTest {
         assertThat(matcher.matches("notfound", body)).isFalse();
     }
 
-    // ========== 分開的 body/query 條件測試 ==========
+    // ========== Separate body/query condition test ==========
 
     @Test
     void matchesSeparate_shouldMatchBodyCondition() {
@@ -248,7 +248,7 @@ class ConditionMatcherTest {
         assertThat(matcher.matches(null, "missing=value", null, "other=1")).isFalse();
     }
 
-    // ========== Query Parameter 測試 ==========
+    // ========== Query Parameter Test ==========
 
     @Test
     void queryParam_shouldMatchMultiple() {
@@ -261,7 +261,7 @@ class ConditionMatcherTest {
         assertThat(matcher.matches("?id=1", "{}", null)).isFalse();
     }
 
-    // ========== WireMock 風格 Operators 測試 ==========
+    // ========== WireMock style Operators test ==========
 
     @Test
     void operator_contains_shouldMatch() {
@@ -334,12 +334,12 @@ class ConditionMatcherTest {
         assertThat(matcher.matches("?status!=inactive", "{}", "status=active")).isTrue();
     }
 
-    // ========== Size Limits 測試 ==========
+    // ========== Size Limits Test ==========
 
     @Test
     void sizeLimit_shouldRejectLargeXml_whenExceeds10MB() {
         StringBuilder largeXml = new StringBuilder("<root>");
-        // 建立超過 10MB 的 XML
+        // Creating XML over 10MB
         for (int i = 0; i < 1024 * 1024; i++) {
             largeXml.append("<item>data</item>");
         }
@@ -351,7 +351,7 @@ class ConditionMatcherTest {
     @Test
     void sizeLimit_shouldRejectLargeJson_whenExceeds10MB() {
         StringBuilder largeJson = new StringBuilder("{\"items\":[");
-        // 建立超過 10MB 的 JSON
+        // Creating JSON over 10MB
         for (int i = 0; i < 1024 * 1024; i++) {
             if (i > 0) largeJson.append(",");
             largeJson.append("\"item").append(i).append("\"");
@@ -370,7 +370,7 @@ class ConditionMatcherTest {
         assertThat(matcher.matches("item=data", normalJson)).isTrue();
     }
 
-    // ========== Pattern Cache 測試 ==========
+    // ========== Pattern Cache Test ==========
 
     @Test
     void patternCache_shouldReuseCompiledPattern_whenSameRegex() {
@@ -378,9 +378,9 @@ class ConditionMatcherTest {
         String body2 = "{\"email\":\"user2@test.com\"}";
         String regex = "email~=.*@test\\.com";
         
-        // 第一次使用會編譯 pattern
+        // pattern will be compiled when used for the first time.
         assertThat(matcher.matches(regex, body1)).isTrue();
-        // 第二次使用應該重用快取的 pattern
+        // The cached pattern should be reused for the second time
         assertThat(matcher.matches(regex, body2)).isTrue();
     }
 
@@ -390,7 +390,7 @@ class ConditionMatcherTest {
         
         assertThat(matcher.matches("email~=.*@example\\.com", body)).isTrue();
         assertThat(matcher.matches("phone~=\\d{3}-\\d{3}-\\d{4}", body)).isTrue();
-        // 兩個不同的 regex 都應該被快取
+        // Two different regex should both be cached
         assertThat(matcher.matches("email~=.*@example\\.com", body)).isTrue();
     }
 
@@ -399,16 +399,16 @@ class ConditionMatcherTest {
         String body = "{\"text\":\"sample\"}";
         String invalidRegex = "text~=[invalid(regex";
         
-        // 無效的 regex 不應該被快取，且應該返回 false
+        // Invalid regex should not be cached and false should be returned
         assertThat(matcher.matches(invalidRegex, body)).isFalse();
         assertThat(matcher.matches(invalidRegex, body)).isFalse();
     }
 
-    // ========== parseCondition 運算子解析測試 ==========
+    // ========== parseCondition operator analysis test ==========
 
     @Test
     void parseCondition_scenarioA_valueContainsNotEqual() {
-        // 場景 A: value 含 != 不應被誤判
+        // Scene A: value contains != and should not be misjudged
         // condition: status=active!=true → field=status, op=EQUAL, value=active!=true
         String body = "{\"status\":\"active!=true\"}";
         assertThat(matcher.matches("status=active!=true", body)).isTrue();
@@ -416,7 +416,7 @@ class ConditionMatcherTest {
 
     @Test
     void parseCondition_scenarioB_valueContainsTildeEqual() {
-        // 場景 B: value 含 ~= 不應被誤判
+        // Scene B: value contains ~= and should not be misjudged
         // condition: regex=abc~=def → field=regex, op=EQUAL, value=abc~=def
         String body = "{\"regex\":\"abc~=def\"}";
         assertThat(matcher.matches("regex=abc~=def", body)).isTrue();
@@ -424,14 +424,14 @@ class ConditionMatcherTest {
 
     @Test
     void parseCondition_scenarioC_jsonPathNormal() {
-        // 場景 C: JsonPath 正常解析
+        // Scene C: JsonPath normal analysis
         String body = "{\"data\":{\"items\":[{\"name\":\"test\"}]}}";
         assertThat(matcher.matches("$.data.items[0].name=test", body)).isTrue();
     }
 
     @Test
     void parseCondition_scenarioD_xpathNotEqual() {
-        // 場景 D: XPath 搭配 != 運算子
+        // Scene D: XPath with != operator
         String xml = "<root><element>value</element></root>";
         assertThat(matcher.matches("//element!=wrong", xml)).isTrue();
         assertThat(matcher.matches("//element!=value", xml)).isFalse();
@@ -439,7 +439,7 @@ class ConditionMatcherTest {
 
     @Test
     void parseCondition_scenarioE_valueContainsStarEqual() {
-        // 場景 E: value 含 *= 不應被誤判
+        // Scene E: value contains *= and should not be misjudged
         // condition: field=abc*=def → field=field, op=EQUAL, value=abc*=def
         String body = "{\"field\":\"abc*=def\"}";
         assertThat(matcher.matches("field=abc*=def", body)).isTrue();
@@ -447,16 +447,16 @@ class ConditionMatcherTest {
 
     @Test
     void parseCondition_scenarioF_doubleEqualsSyntax() {
-        // 場景 F: == 語法（matchJson 會先 replace == → =）
+        // Scenario F: == syntax (matchJson will first replace == → =)
         String body = "{\"type\":\"ORDER\"}";
         assertThat(matcher.matches("type == ORDER", body)).isTrue();
-        // body.type prefix 會被自動去掉，所以也能匹配
+        // body.type prefix will be automatically removed, so it can also match
         assertThat(matcher.matches("body.type == \"ORDER\"", body)).isTrue();
     }
 
     @Test
     void parseCondition_scenarioG_headerWithOperator() {
-        // 場景 G: Header 條件搭配運算子
+        // Scene G: Header Conditional collocation operator
         java.util.Map<String, String> headers = java.util.Map.of("Content-Type", "application/json");
         assertThat(matcher.matches(null, null, "Content-Type!=text/xml", null, null, headers)).isTrue();
         assertThat(matcher.matches(null, null, "Content-Type!=application/json", null, null, headers)).isFalse();
@@ -465,14 +465,14 @@ class ConditionMatcherTest {
 
     @Test
     void parseCondition_scenarioH_emptyValue() {
-        // 場景 H: value 為空
+        // Scene H: value is empty
         String body = "{\"field\":\"\"}";
         assertThat(matcher.matches("field=", body)).isTrue();
     }
 
     @Test
     void parseCondition_scenarioI_jsonPathWithContains() {
-        // 場景 I: JsonPath 搭配 *= 運算子
+        // Scene I: JsonPath with *= operator
         String body = "{\"user\":{\"name\":\"John Smith\"}}";
         assertThat(matcher.matches("$.user.name*=Smith", body)).isTrue();
         assertThat(matcher.matches("$.user.name*=Jane", body)).isFalse();

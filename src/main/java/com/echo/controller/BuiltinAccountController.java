@@ -22,9 +22,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 內建帳號管理 REST API
+ * Built-in account management REST API
  * <p>
- * 提供帳號 CRUD、啟用/停用、密碼重設、忘記密碼、自助註冊等功能。
+ * Provides account CRUD, activation/deactivation, password reset, forgotten password, self-service registration and other functions.
  */
 @Slf4j
 @RestController
@@ -37,7 +37,7 @@ public class BuiltinAccountController {
     @Value("${echo.builtin-account.self-registration:false}")
     private boolean selfRegistrationEnabled;
 
-    /** 公開端點速率限制：每個 IP 每分鐘最多 10 次 */
+    /** Public endpoint rate limit: 10 max per minute per IP */
     private static final int RATE_LIMIT = 10;
     private final Cache<String, AtomicInteger> rateLimitCache = Caffeine.newBuilder()
             .expireAfterWrite(1, TimeUnit.MINUTES)
@@ -102,7 +102,7 @@ public class BuiltinAccountController {
         });
     }
 
-    /** 忘記密碼請求（公開）— 無論帳號是否存在都回傳相同格式 */
+    /** Forgot password request (public) - returns the same format regardless of whether the account exists */
     @PostMapping("/forgot-password")
     public ResponseEntity<Map<String, String>> forgotPassword(@RequestBody Map<String, String> body, HttpServletRequest request) {
         if (isRateLimited(request.getRemoteAddr())) {
@@ -112,7 +112,7 @@ public class BuiltinAccountController {
         return ResponseEntity.ok(Map.of("message", "OK"));
     }
 
-    /** 自助註冊（公開，需啟用 echo.builtin-account.self-registration） */
+    /** Self-service registration (public, echo.builtin-account.self-registration needs to be enabled) */
     @PostMapping("/register")
     public ResponseEntity<?> selfRegister(@RequestBody Map<String, String> body, HttpServletRequest request) {
         if (isRateLimited(request.getRemoteAddr())) {
@@ -130,7 +130,7 @@ public class BuiltinAccountController {
         }
     }
 
-    /** 統一處理 IllegalArgumentException + 樂觀鎖衝突 */
+    /** Unified processing of IllegalArgumentException + optimistic lock conflicts */
     private ResponseEntity<?> handleRequest(RequestAction action) {
         try {
             return action.execute();

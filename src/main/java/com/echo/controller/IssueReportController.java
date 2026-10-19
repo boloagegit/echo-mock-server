@@ -22,8 +22,8 @@ import java.util.Map;
 /**
  * Issue Report REST API
  * <p>
- * 建立/查看：任何登入使用者
- * 回覆/resolve/reopen/刪除：僅 ADMIN
+ * Create/View: any logged in user
+ * Reply/resolve/reopen/Delete: ADMIN only
  */
 @Slf4j
 @RestController

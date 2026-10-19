@@ -11,11 +11,11 @@ import java.util.stream.IntStream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * AgentRegistry 屬性測試（Property 6）。
+ * AgentRegistry attribute test (Property 6).
  * <p>
  * Feature: agent-framework-log-agent, Property 6: AgentRegistry lookup correctness
  * <p>
- * N 個 agent 註冊後 getAll 回傳 N 個；已註冊名稱可查到；未註冊名稱回傳 empty。
+ * N agent getAll returns N after registration; registered names can be found; unregistered names return empty.
  * <p>
  * **Validates: Requirements 3.2, 3.3, 3.4**
  */
@@ -24,7 +24,7 @@ class AgentRegistryPropertyTest {
     // ==================== Stub EchoAgent ====================
 
     /**
-     * 簡單的 EchoAgent stub，僅提供 getName() 回傳固定名稱。
+     * Simple EchoAgent stub, only getName() return fixed name is provided.
      */
     static class StubAgent implements EchoAgent {
 
@@ -79,7 +79,7 @@ class AgentRegistryPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 6: AgentRegistry lookup correctness
      * <p>
-     * getAll() 回傳的 agent 數量等於註冊數量。
+     * The number of agent returned by getAll() is equal to the registered number.
      * <p>
      * **Validates: Requirements 3.2**
      */
@@ -99,7 +99,7 @@ class AgentRegistryPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 6: AgentRegistry lookup correctness
      * <p>
-     * 已註冊名稱可透過 getByName 查到對應 agent。
+     * The registered name can be found through getByName corresponding to agent.
      * <p>
      * **Validates: Requirements 3.3**
      */
@@ -123,7 +123,7 @@ class AgentRegistryPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 6: AgentRegistry lookup correctness
      * <p>
-     * 未註冊名稱透過 getByName 回傳 empty。
+     * Unregistered name returns empty via getByName.
      * <p>
      * **Validates: Requirements 3.4**
      */
@@ -152,8 +152,8 @@ class AgentRegistryPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 6: AgentRegistry lookup correctness
      * <p>
-     * 綜合驗證：N 個 agent 註冊後 getAll 回傳 N 個；每個已註冊名稱可查到；
-     * 未註冊名稱回傳 empty。
+     * Comprehensive verification: N agent getAll returns N after registration; each registered name can be found;
+     * Unregistered name returned empty.
      * <p>
      * **Validates: Requirements 3.2, 3.3, 3.4**
      */

@@ -30,7 +30,7 @@ test('the flow tab gets its details even when a log has no bodies or match chain
   assert.equal(item._detail.candidateCount, 3);
   assert.equal(item._detailLoading, false);
 
-  // 已載入的明細從快取取用，不再發請求
+  // The loaded details are fetched from the cache and no more requests are made.
   const again = { log: { id: 42, hasRequestBody: false, hasResponseBody: false, hasMatchChain: false } };
   await stats.loadLogDetail(again);
   assert.equal(urls.length, 1);

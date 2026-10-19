@@ -13,22 +13,22 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.LongSupplier;
 
 /**
- * 請求記錄的記憶體暫存區：請求不必等記錄寫入硬碟，記錄放進這裡後由一條背景執行緒批次寫入。
+ * In-memory request-log buffer: requests do not wait for disk writes; a background thread drains this buffer in batches.
  *
- * <p>筆數與估計記憶體都有上限；超過時丟掉最舊的（只保留最新的記錄本來就是記錄上限的做法），
- * 並定期記錄丟了幾筆，請求不會因為記錄而變慢或失敗。還沒交給暫存檔的記錄在寫入暫時失敗時保留下來稍後重試；
- * 已交出但沒有確認寫入的計入丟失（重送可能重複）。程序意外結束時，尚未寫入的記錄會遺失。</p>
+ * <p>Both the record count and estimated memory are bounded. Drop the oldest records when either limit is exceeded, preserving the newest records as retention does.
+ * Report drop counts periodically. Logging must not slow or fail requests. Retain records not yet handed to the spool and retry temporary write failures;
+ * count handed-off but unconfirmed writes as dropped, since retrying could duplicate them. An unexpected process exit loses records not yet written.</p>
  */
 @Slf4j
 final class RequestLogHandoff {
 
-    /** 一次交給寫入端的筆數。 */
+    /** Maximum number of records handed to the writer at once. */
     static final int BATCH_SIZE = 500;
     /** Limit simultaneous task retention during serialization/commit; an admitted larger entry goes alone. */
     static final long MAX_BATCH_ESTIMATED_BYTES = 16L * 1024 * 1024;
     private static final long DROP_WARNING_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(30);
 
-    /** 寫入一批，回傳從頭算起處理完的筆數與其中沒存到的筆數；之後的會再交一次。 */
+    /** Write a batch and return the processed-prefix count and the count not stored; resubmit the remaining suffix later. */
     interface Sink {
         RequestLogSpool.AppendResult write(List<LogTask> batch);
     }
@@ -42,15 +42,15 @@ final class RequestLogHandoff {
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition available = lock.newCondition();
     private final Condition drained = lock.newCondition();
-    /** 以下受 {@link #lock} 保護。等待寫入的記錄。 */
+    /** Pending records, protected by {@link #lock}. */
     private final ArrayDeque<Entry> entries = new ArrayDeque<>();
-    /** 等待中與正在寫入的記錄的估計大小：寫入完成前仍佔著記憶體，一起計入上限。 */
+    /** Estimated size of queued and in-flight records; in-flight writes still occupy memory and count toward the limit until complete. */
     private long bytes;
     private boolean running;
-    /** 停止完成：寫入端結束，之後寫不完的記錄計入丟棄、不再放回。 */
+    /** Shutdown is complete: the writer has finished, and unfinished records are dropped rather than requeued. */
     private boolean closed;
     private boolean writing;
-    /** 正在寫入的那批筆數：寫入完成前仍佔著記憶體，計入筆數上限與 {@link #size()}。 */
+    /** In-flight record count: these records still occupy memory until the write completes and count toward the limit and {@link #size()}. */
     private int inFlight;
     private boolean writeFailureLogged;
 
@@ -86,14 +86,14 @@ final class RequestLogHandoff {
         writer.start();
     }
 
-    /** 放進暫存區，永不等待；超過上限時丟掉最舊的。停止後的記錄直接丟掉。 */
+    /** Enqueue without waiting; drop the oldest records when limits are exceeded. Drop new records immediately after shutdown. */
     void offer(LogTask task) {
         long size = estimateBytes(task);
         boolean droppedAny;
         lock.lock();
         try {
             if (!running || size > maxBytes) {
-                // 單筆就超過上限的不保留，也不為它丟掉其他記錄
+                // Reject a single oversized record without evicting other records to make room for it.
                 dropped.incrementAndGet();
                 otherDropped.incrementAndGet();
                 droppedAny = true;
@@ -107,12 +107,12 @@ final class RequestLogHandoff {
             lock.unlock();
         }
         if (droppedAny) {
-            // 寫入端卡住時也要看得到警告（最多每 30 秒一次）
+            // Emit warnings even when the writer is stuck, at most once every 30 seconds.
             warnAboutDrops(false);
         }
     }
 
-    /** 計入因其他原因（例如建立記錄失敗）沒有放進暫存區的記錄。 */
+    /** Count records that never reached the buffer, for example because record creation failed. */
     void countDropped() {
         dropped.incrementAndGet();
         otherDropped.incrementAndGet();
@@ -120,7 +120,7 @@ final class RequestLogHandoff {
     }
 
     /**
-     * 停止接收，最多等 {@code drainTimeoutMillis} 把暫存區寫完，之後剩下的丟掉。
+     * Stop accepting records, allow at most {@code drainTimeoutMillis} to drain the buffer, then drop the remainder.
      */
     void stop(long drainTimeoutMillis) {
         long remaining = TimeUnit.MILLISECONDS.toNanos(drainTimeoutMillis);
@@ -193,12 +193,12 @@ final class RequestLogHandoff {
         return maxBytes;
     }
 
-    /** 測試用：寫入端是否仍在執行。 */
+    /** Test hook: whether the writer is still running. */
     boolean writerAlive() {
         return writer != null && writer.isAlive();
     }
 
-    /** 超過上限時從最舊的等待記錄開始丟（正在寫入的那批不能丟，但計入記憶體）。 */
+    /** Evict the oldest queued records until within limits. The in-flight batch cannot be evicted, but still counts toward memory usage. */
     private boolean dropOldestOverLimit() {
         boolean droppedAny = false;
         while (!entries.isEmpty() && (entries.size() + inFlight > maxEntries || bytes > maxBytes)) {
@@ -226,7 +226,7 @@ final class RequestLogHandoff {
                 lostInBatch = Math.min(result.lost(), handled);
                 writeFailureLogged = false;
             } catch (Throwable e) {
-                // 包含 Error：寫入端不能就此停止，否則記錄只會一直被丟棄
+                // Include Error: the writer must survive, or all subsequent records would only be dropped.
                 handled = 0;
                 lostInBatch = 0;
                 if (!writeFailureLogged) {
@@ -246,7 +246,7 @@ final class RequestLogHandoff {
         }
     }
 
-    /** 等到有記錄或停止；停止且暫存區空了回傳 null。 */
+    /** Wait for records or shutdown; return null when stopped and the buffer is empty. */
     private List<Entry> take() {
         lock.lock();
         try {
@@ -281,7 +281,7 @@ final class RequestLogHandoff {
         }
     }
 
-    /** 沒寫完的放回最前面（再超過上限時，丟掉的仍是最舊的）；已停止時改為計入丟棄。 */
+    /** Requeue unfinished records at the front, still evicting the oldest if limits are exceeded; count them as dropped after shutdown. */
     private void finish(List<Entry> batch, int handled) {
         boolean droppedAfterStop = false;
         lock.lock();
@@ -308,12 +308,12 @@ final class RequestLogHandoff {
             lock.unlock();
         }
         if (droppedAfterStop) {
-            // stop() 的最後一次警告早於這批的結果：補報這批，停止後的記錄不會少算
+            // stop() emitted its final warning before this batch completed; report this batch's remaining drops so shutdown does not undercount them.
             warnAboutDrops(true);
         }
     }
 
-    /** 寫入失敗後稍等再試（停止中也等，不在失敗時空轉）。 */
+    /** Back off after a write failure, including during shutdown, to avoid a busy loop. */
     private void pauseBeforeRetry() {
         lock.lock();
         try {
@@ -343,8 +343,8 @@ final class RequestLogHandoff {
     }
 
     /**
-     * 估計一筆記錄在記憶體中的大小，用來限制暫存區的記憶體：字串以每字元 2 bytes 計，
-     * 另加物件本身、每個 header、候選規則與比對結果的固定成本。
+     * Estimate a record's heap footprint for the buffer limit: count two bytes per string character,
+     * plus fixed object overhead, each header, candidate rules, and matching results.
      */
     static long estimateBytes(LogTask task) {
         long fixed = 512;
@@ -354,7 +354,7 @@ final class RequestLogHandoff {
         if (task.getMatchOutcomes() != null) {
             fixed += (long) task.getMatchOutcomes().size() * 128;
         }
-        // 每個字串欄位都計入：任何一個都可能很大（例如 scenarioSkipped 帶著被略過規則的條件）
+        // Count every string field: any may be large, such as scenarioSkipped containing skipped-rule conditions.
         long chars = 0;
         for (String value : new String[] {
                 task.getRuleId(), task.getMethod(), task.getEndpoint(), task.getClientIp(),
@@ -381,7 +381,7 @@ final class RequestLogHandoff {
     private record Entry(LogTask task, long bytes) {
     }
 
-    /** 測試用：等寫入端把目前的暫存區處理完。 */
+    /** Test hook: wait for the writer to finish processing the current buffer. */
     boolean awaitIdle(long timeoutMillis) throws InterruptedException {
         long remaining = TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
         lock.lock();

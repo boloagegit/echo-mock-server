@@ -6,39 +6,39 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 運算子的擴充點。內建運算子見 {@link BuiltinPredicates}。
+ * Extension point of operator. See {@link BuiltinPredicates} for built-in operators.
  */
 public interface PredicateFactory {
 
-    /** 條件 JSON 中 {@code op} 欄位的值。 */
+    /** The value of the {@code op} field in condition JSON. */
     String op();
 
-    /** 支援的選項名稱；條件使用其他選項時編譯失敗。 */
+    /** Supported option names; compilation fails when conditions use other options. */
     default Set<String> supportedOptions() {
         return Set.of();
     }
 
-    /** 是否需要 {@code value}；為 false 時條件不得帶 value。 */
+    /** Whether {@code value} is required; when it is false, the condition must not include value. */
     default boolean requiresValue() {
         return true;
     }
 
-    /** {@code onMissing=auto} 且取不到值時的結果。 */
+    /** {@code onMissing=auto} and the result cannot be obtained. */
     default boolean passesWhenMissing() {
         return false;
     }
 
-    /** 是否允許條件自訂 {@code onMissing}；本身就在判斷有無值的運算子應回傳 false。 */
+    /** Whether to allow customization of conditions {@code onMissing}; operators that determine whether there is a value should return false. */
     default boolean allowsOnMissing() {
         return true;
     }
 
     /**
-     * 編譯運算子。
+     * Compile operator.
      *
-     * @param expected 期望值；{@link #requiresValue()} 為 false 時為 null
-     * @param options  已過濾為 {@link #supportedOptions()} 內的選項
-     * @throws IllegalArgumentException 期望值或選項不合法
+     * @param expected Expected value; null when {@link #requiresValue()} is false
+     * @param options  Filtered to options within {@link #supportedOptions()}
+     * @throws IllegalArgumentException Illegal expected value or option
      */
     CompiledPredicate compile(JsonNode expected, Map<String, JsonNode> options, MatcherLimits limits);
 }

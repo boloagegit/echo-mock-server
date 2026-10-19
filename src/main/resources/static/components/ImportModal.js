@@ -1,7 +1,7 @@
 /**
- * ImportModal - 規則匯入對話框
+ * ImportModal - Rules Import Dialog
  *
- * 支援 JSON、Excel 與 OpenAPI 格式的規則匯入，含拖放上傳。
+ * Supports rule import in JSON, Excel and OpenAPI formats, including drag-and-drop upload.
  */
 const ImportModal = {
   props: {

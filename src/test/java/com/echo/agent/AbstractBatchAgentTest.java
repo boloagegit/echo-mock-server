@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * AbstractBatchAgent 單元測試 — 生命週期、flush interval、processBatch 例外處理、castTask 型別不符。
+ * AbstractBatchAgent unit test - life cycle, flush interval, processBatch exception handling, castTask type mismatch.
  * Validates: Requirements 2.3, 2.4, 2.5
  */
 class AbstractBatchAgentTest {
@@ -32,8 +32,8 @@ class AbstractBatchAgentTest {
     // ==================== Test Subclass ====================
 
     /**
-     * 具體測試子類別，記錄所有 processBatch 呼叫以供驗證。
-     * 可選擇性地在 processBatch 中拋出例外。
+     * Concrete test subclass recording every processBatch call for assertions.
+     * Optionally throw exception in processBatch.
      */
     static class TestBatchAgent extends AbstractBatchAgent<String> {
 

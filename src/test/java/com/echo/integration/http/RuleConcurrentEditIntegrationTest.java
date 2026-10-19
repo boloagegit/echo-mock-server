@@ -13,11 +13,11 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 同時編輯同一條規則：用過時的版本存檔會被拒絕，不會蓋掉別人的修改（包含啟用／停用等快速操作）。 */
+/** Editing the same rule at the same time: saving with an outdated version will be rejected and will not overwrite other people's modifications (including quick operations such as enable/disable). */
 class RuleConcurrentEditIntegrationTest extends BaseIntegrationTest {
 
     @Test
-    @DisplayName("另一人修改後，用舊版本存檔回 409，規則保持別人的修改")
+    @DisplayName("Saving a stale version after another edit returns 409 and preserves the other edit")
     void staleSaveIsRejected() {
         RuleDto rule = createHttpRule("/api/concurrent-edit", "GET", "{\"v\":1}", null, 200,
                 null, null, null, null, null, 0, "original");
@@ -33,7 +33,7 @@ class RuleConcurrentEditIntegrationTest extends BaseIntegrationTest {
         assertThat(stale.getBody()).containsEntry("error", "OPTIMISTIC_LOCK_CONFLICT");
         assertThat(get(rule.getId()).getDescription()).isEqualTo("changed by someone else");
 
-        // 重新載入最新版本後可以正常存檔
+        // Saving can work normally after reloading the latest version
         RuleDto latest = get(rule.getId());
         latest.setDescription("my change");
         assertThat(put(latest).getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -41,7 +41,7 @@ class RuleConcurrentEditIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("編輯期間規則被停用：舊版本存檔被擋下，不會把它改回啟用")
+    @DisplayName("A stale save cannot re-enable a rule disabled during editing")
     void quickActionsAlsoChangeTheVersion() {
         RuleDto rule = createHttpRule("/api/concurrent-toggle", "GET", "{}", null, 200,
                 null, null, null, null, null, 0, "toggle");
@@ -58,7 +58,7 @@ class RuleConcurrentEditIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("沒有送版本的呼叫端維持原本的行為")
+    @DisplayName("Callers omitting the version retain existing behavior")
     void callersWithoutVersionStillUpdate() {
         RuleDto rule = createHttpRule("/api/concurrent-legacy", "GET", "{}", null, 200,
                 null, null, null, null, null, 0, "legacy");

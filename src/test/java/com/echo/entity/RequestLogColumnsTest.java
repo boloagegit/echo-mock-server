@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 寫入前讓值符合欄位：外部資料庫會拒絕過長的值與 NUL，一筆被拒絕就會擋住整批紀錄。 */
+/** Make the value fit into the field before writing: The external database will reject values that are too long and NUL, and a single rejected value will block the entire batch of records. */
 class RequestLogColumnsTest {
 
     @Test

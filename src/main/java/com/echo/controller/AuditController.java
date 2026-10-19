@@ -16,7 +16,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * 稽核紀錄：規則與回應的建立、修改、刪除歷程。稽核功能關閉時回傳空的結果。
+ * Audit records: the creation, modification, and deletion process of rules and responses. Empty results are returned when auditing is turned off.
  */
 @RestController
 @RequestMapping(value = "/api/admin", produces = "application/json")

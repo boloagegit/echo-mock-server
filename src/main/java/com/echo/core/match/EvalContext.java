@@ -7,15 +7,15 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 /**
- * 單一請求的評估狀態。同一個葉節點條件在同一請求內只評估一次，結果可跨規則重用。
+ * Evaluation status of a single request. The same leaf node condition is evaluated only once within the same request, and the results can be reused across rules.
  * <p>
- * 不是執行緒安全的；每個請求建立一個。
+ * Not thread-safe; one is created per request.
  */
 public final class EvalContext {
 
     private final RequestView request;
     private final Map<String, Boolean> outcomes;
-    /** 同一請求內可跨條件重用的中間結果（例如 JSONPath 取值），第一次使用時才建立。 */
+    /** Intermediate results that can be reused across conditions within the same request (such as the value of JSONPath) are created only when used for the first time. */
     private Map<Object, Object> values;
 
     public EvalContext(RequestView request) {
@@ -23,8 +23,8 @@ public final class EvalContext {
     }
 
     /**
-     * 與呼叫端共用結果暫存。舊版 {@code PreparedBody} 以同樣的 key（例如 {@code body:a=1}）暫存結果，
-     * 共用後新舊兩邊、以及 JMS 串流 XML 預先算好的結果都可以互相重用。
+     * Shared result buffer with caller. The old version {@code PreparedBody} temporarily stores the results with the same key (for example, {@code body:a=1}),
+     * After sharing, the old and new sides, as well as the pre-calculated results of JMS stream XML, can be reused with each other.
      */
     public EvalContext(RequestView request, Map<String, Boolean> sharedOutcomes) {
         this.request = Objects.requireNonNull(request, "request");
@@ -35,16 +35,16 @@ public final class EvalContext {
         return request;
     }
 
-    /** 目前已評估的葉節點結果（key 為 {@link CompiledMatcher#cacheKey()}）。 */
+    /** The currently evaluated leaf node results (key is {@link CompiledMatcher#cacheKey()}). */
     public Map<String, Boolean> outcomesSnapshot() {
         return Map.copyOf(outcomes);
     }
 
     /**
-     * 取得同一請求內共用的中間結果，不存在時以 {@code supplier} 計算並保存。
-     * 例如 30 條規則都檢查 {@code $.user.id} 但期望值不同時，JSONPath 只需評估一次。
+     * Obtain the intermediate result shared within the same request. If it does not exist, it will be calculated and saved as {@code supplier}.
+     * For example, when 30 rules all check {@code $.user.id} but the expected values are different, JSONPath only needs to be evaluated once.
      *
-     * @param key 呼叫端自訂、具 equals/hashCode 的 key；建議使用私有 record 避免與其他實作衝突
+     * @param key Caller-customized key with equals/hashCode; it is recommended to use private record to avoid conflicts with other implementations
      */
     @SuppressWarnings("unchecked")
     public <T> T cachedValue(Object key, Supplier<T> supplier) {
@@ -59,7 +59,7 @@ public final class EvalContext {
         return (T) cached;
     }
 
-    /** 已保存的中間結果數量（供測試與監控）。 */
+    /** Number of intermediate results saved (for testing and monitoring). */
     public int cachedValueCount() {
         return values == null ? 0 : values.size();
     }

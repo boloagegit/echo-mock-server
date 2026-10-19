@@ -144,12 +144,12 @@ public class RequestLogSpool {
     private final ReentrantReadWriteLock candidateSetLifecycleLock = new ReentrantReadWriteLock();
 
     private volatile String spoolId;
-    /** 只由寫入執行緒使用：Error 的錯誤訊息最多每 30 秒一次。 */
+    /** Writer-thread only: log Error failures at most once every 30 seconds. */
     private long lastWriterErrorLogNanos;
-    /** 測試用：每次提交前／提交後執行，用來模擬寫入時發生的錯誤。 */
+    /** Test hook: run before/after each commit to inject write failures. */
     volatile CommitHook beforeCommitForTest = () -> { };
     volatile CommitHook afterCommitForTest = () -> { };
-    /** 測試用：放棄一批並通知呼叫端之後執行，用來拉長通知與後續步驟之間的時間。 */
+    /** Test hook: run after abandoning a batch and notifying callers, widening the gap before subsequent cleanup. */
     volatile Runnable afterAbandonNotifiedForTest = () -> { };
 
     @FunctionalInterface
@@ -166,8 +166,8 @@ public class RequestLogSpool {
     }
 
     /**
-     * 放棄的記錄共用同一個例外：記憶體不足時不必再配置。
-     * 不記錄堆疊也不接受附加例外，所以共用不會累積任何狀態。
+     * Abandoned records share one exception to avoid allocating under memory pressure.
+     * It captures no stack trace and accepts no suppressed exceptions, so sharing it cannot accumulate state.
      */
     @SuppressWarnings("StaticAssignmentOfThrowable")
     private static final RequestLogUnavailableException WRITE_ABANDONED = new AbandonedWriteException();
@@ -713,8 +713,8 @@ public class RequestLogSpool {
     }
 
     /**
-     * 保留最新 {@code keep} 筆時可以略過的最後一個序號：由新到舊數第 {@code keep + 1} 筆的序號；
-     * 筆數不超過 {@code keep} 時回傳 0。
+     * Last sequence that can be skipped while retaining the newest {@code keep} records: the {@code keep + 1}-th newest record's sequence;
+     * return 0 if the record count does not exceed {@code keep}.
      */
     public long sequenceBeforeNewest(int keep) {
         String sql = "SELECT sequence_id FROM request_log_spool ORDER BY sequence_id DESC LIMIT 1 OFFSET ?";
@@ -730,7 +730,7 @@ public class RequestLogSpool {
         }
     }
 
-    /** 序號在 {@code afterExclusive}（不含）到 {@code throughInclusive}（含）之間的筆數。 */
+    /** Number of records with sequences in ({@code afterExclusive}, {@code throughInclusive}]. */
     public long countBetween(long afterExclusive, long throughInclusive) {
         String sql = "SELECT COUNT(*) FROM request_log_spool WHERE sequence_id > ? AND sequence_id <= ?";
         try (Connection connection = openConnection();
@@ -1097,16 +1097,16 @@ public class RequestLogSpool {
         }
     }
 
-    /** 記憶體不足時通知可以晚一點：等待中的寫入每 250 ms 會自己再檢查一次。 */
+    /** Notification may be deferred under memory pressure; waiting writers recheck their writes every 250 ms. */
     private void afterReleaseQuietly() {
         try {
             afterRelease();
         } catch (Error ignored) {
-            // 下一次容量變動時會再更新
+            // The next capacity change refreshes this state.
         }
     }
 
-    /** 釋放這筆保留的容量一次：釋放生效之後才算數，發生 Error 時可以重試。 */
+    /** Release reserved capacity exactly once; mark it only after release takes effect so an Error can safely be retried. */
     private boolean releaseOnce(PendingAppend pending, long pendingBytes, long itemCount, long inFlightBytes) {
         if (!pending.claimRelease()) {
             return false;
@@ -1176,7 +1176,7 @@ public class RequestLogSpool {
     }
 
     /**
-     * 只做容量的扣減：比較並交換成功後立即返回，所以發生 Error 時一定還沒生效，可以安全重試。
+     * Only decrement capacity: return immediately after successful compare-and-set. An Error therefore means it did not take effect and retrying is safe.
      */
     private void applyRelease(long pendingBytes, long itemCount, long inFlightBytes) {
         if (pendingBytes <= 0 && itemCount <= 0 && inFlightBytes <= 0) {
@@ -1269,8 +1269,8 @@ public class RequestLogSpool {
                         break;
                     }
                 } catch (Error e) {
-                    // 例如 OutOfMemoryError（收集這批時發生，尚未寫入）：這是唯一的寫入執行緒，
-                    // 結束就再也沒有記錄寫得進來，等待中的呼叫端也會一直等。放棄這批，稍後繼續。
+                    // For example, OutOfMemoryError while collecting the batch, before any write: this is the sole writer thread,
+                    // so terminating it would stop all future logging and leave callers waiting forever. Abandon this batch, then continue.
                     abandonUncommitted(batch, e);
                     batch.clear();
                     if (!pauseAfterWriterError()) {
@@ -1287,17 +1287,17 @@ public class RequestLogSpool {
     }
 
     /**
-     * 放棄一批確定沒有寫入的記錄（發生 Error 時）：換一條新連線，通知呼叫端失敗並釋放保留的容量，
-     * 並清掉「暫時無法寫入」的狀態，讓下一筆記錄重新試探暫存檔（否則所有新記錄都會被拒絕）。
-     * 每筆的結算可以重複執行，記憶體仍不足時重試到完成為止。
+     * Abandon a batch known not to have been written after an Error: discard the connection, notify callers of failure, and release reserved capacity.
+     * Clear the temporary storage-unavailable state so the next record retries the spool instead of rejecting every new record.
+     * Each cleanup step is idempotent; retry until complete if memory remains insufficient.
      */
     private void abandonUncommitted(List<PendingAppend> batch, Error error) {
         try {
             rollbackWriterConnection();
         } catch (Throwable ignored) {
-            // 關閉連線時一併丟棄未提交的資料
+            // Discard uncommitted data when closing the connection.
         }
-        // 一定要丟掉這條連線：沿用的話，這批未提交的資料可能跟著下一批一起提交
+        // Always discard this connection; reusing it could commit this batch's uncommitted data with the next batch.
         Connection abandoned = writerConnection;
         writerConnection = null;
         try {
@@ -1305,23 +1305,23 @@ public class RequestLogSpool {
                 abandoned.close();
             }
         } catch (Throwable ignored) {
-            // 已經不再使用
+            // No longer used
         }
-        // 先清狀態再通知：呼叫端一收到失敗就可能馬上送下一筆，那時狀態必須已經清掉
+        // Clear the state before notifying callers; a caller may send its next record immediately after receiving the failure.
         storageUnavailable.set(false);
         failUntilDone(batch);
         afterAbandonNotifiedForTest.run();
         try {
             updateBackpressureState();
         } catch (Throwable ignored) {
-            // 下一次容量變動時會再更新
+            // The next capacity change refreshes this state.
         }
         logWriterError(error, batch.size());
     }
 
     /**
-     * 已寫入的一批：一定回報成功。每一步都可以重複執行（容量的釋放生效之後才標記），
-     * 記憶體仍不足時重試到完成為止；不配置額外的物件，避免已寫入的一批被當成未寫入。
+     * The batch was written, so report success. Each step is idempotent; mark capacity released only after release takes effect.
+     * Retry until complete under memory pressure without allocating more objects, and never misclassify a written batch as unwritten.
      */
     private void settleCommittedUntilDone(List<PendingAppend> batch, Set<String> insertedCandidateSets,
                                           java.util.concurrent.atomic.AtomicBoolean duplicatesReleased) {
@@ -1348,7 +1348,7 @@ public class RequestLogSpool {
         afterReleaseQuietly();
     }
 
-    /** 放棄的一批：通知失敗並釋放容量，重試到完成為止。 */
+    /** Abandoned batch: report failure and release capacity, retrying until complete. */
     private void failUntilDone(List<PendingAppend> batch) {
         while (true) {
             try {
@@ -1378,11 +1378,11 @@ public class RequestLogSpool {
             log.error("Request-log spool writer hit {}; {} entries were not written; the writer keeps running",
                     error, entries);
         } catch (Throwable ignored) {
-            // 記錄失敗也不能讓寫入執行緒結束
+            // A logging failure must not terminate the writer thread.
         }
     }
 
-    /** 發生 Error 後稍等再繼續；停止中或被中斷時回傳 false。 */
+    /** Back off after an Error; return false on shutdown or interruption. */
     private boolean pauseAfterWriterError() {
         try {
             TimeUnit.MILLISECONDS.sleep(retryMillis);
@@ -1442,7 +1442,7 @@ public class RequestLogSpool {
                 return;
             } catch (Error e) {
                 if (committed) {
-                    // 已經寫入：一定回報成功，不能讓呼叫端重試（會重複）
+                    // Already written: report success so the caller does not retry and create duplicates.
                     settleCommittedUntilDone(batch, insertedCandidateSets, duplicatesReleased);
                     logWriterError(e, 0);
                 } else {
@@ -1519,7 +1519,7 @@ public class RequestLogSpool {
         return inserted;
     }
 
-    /** 已在暫存檔中的候選規則快照不必重複保留：回傳可以釋放的位元組。 */
+    /** Candidate snapshots already in the spool need not be retained twice; return the number of bytes that can be released. */
     private static long duplicateCandidateBytes(List<PendingAppend> batch, Set<String> insertedCandidateSets) {
         Set<String> retained = new java.util.HashSet<>();
         long released = 0;
@@ -1588,7 +1588,7 @@ public class RequestLogSpool {
         failBatch(pending, failure);
     }
 
-    /** 每筆只結算一次：可以重複執行（例如發生 Error 後重試），不會重複釋放容量。 */
+    /** Settle each record exactly once; retries, including after an Error, must not release capacity twice. */
     private void failBatch(List<PendingAppend> batch, RuntimeException failure) {
         for (PendingAppend pending : batch) {
             releaseOnce(pending, pending.reservedBytes(), 1, pending.reservedBytes());
@@ -1602,7 +1602,7 @@ public class RequestLogSpool {
         private final CandidateSetPayload candidateSet;
         private final long reservedBytes;
         private final CompletableFuture<Void> committed;
-        /** 保留的容量是否已經釋放（只釋放一次）。 */
+        /** Whether reserved capacity has already been released; release it only once. */
         private final java.util.concurrent.atomic.AtomicBoolean released = new java.util.concurrent.atomic.AtomicBoolean();
 
         private PendingAppend(
@@ -1630,12 +1630,12 @@ public class RequestLogSpool {
             return committed;
         }
 
-        /** 第一次呼叫回傳 true：由呼叫者釋放這筆保留的容量。 */
+        /** The first call returns true; that caller is responsible for releasing reserved capacity. */
         boolean claimRelease() {
             return released.compareAndSet(false, true);
         }
 
-        /** 釋放沒有生效（發生 Error）時撤回，讓重試再釋放一次。 */
+        /** Undo the marker if release did not take effect due to an Error, allowing a retry. */
         void unclaimRelease() {
             released.set(false);
         }
@@ -1705,7 +1705,7 @@ public class RequestLogSpool {
             String bodyCondition, String queryCondition, String headerCondition, int priority,
             String matchSpec) {
 
-        /** matchSpec 放在最後並可為 null：舊版寫入的紀錄沒有這個欄位，讀回時為 null。 */
+        /** Keep matchSpec last and nullable: records written by older versions lack this field and read it as null. */
         static CandidateRecord from(CandidateSnapshot candidate) {
             return new CandidateRecord(candidate.getRuleId(), candidate.getEndpoint(),
                     candidate.getDescription(), candidate.isEnabled(), candidate.getBodyCondition(),
@@ -1742,7 +1742,7 @@ public class RequestLogSpool {
         }
     }
 
-    /** 空欄位不寫入（讀回時為 null），每筆紀錄少佔約百位元組；舊格式的紀錄照常讀取。 */
+    /** Omit empty fields, which read back as null, saving roughly one hundred bytes per record; older records remain readable. */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private record SpoolTask(
             String ruleId, Protocol protocol, String method, String endpoint, boolean matched,

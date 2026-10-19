@@ -4,7 +4,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 /**
- * Agent 統計資訊，包含佇列大小、已處理數、已丟棄數。
+ * Agent statistics: queue size, processed count, and dropped count.
  */
 @Getter
 @Builder

@@ -10,49 +10,49 @@ import lombok.Getter;
 import java.util.Map;
 
 /**
- * 協定無關的請求 Value Object
+ * Protocol-independent request Value Object
  * <p>
- * 封裝 HTTP 或 JMS 請求的共用資訊，僅在 pipeline 執行期間存在，不持久化。
+ * The shared information encapsulated in HTTP or JMS requests only exists during the execution of pipeline and is not persistent.
  */
 @Getter
 @Builder
 public class MockRequest {
 
-    /** 協定類型 (HTTP / JMS) */
+    /** protocol type (HTTP / JMS) */
     private final Protocol protocol;
 
-    /** HTTP method，JMS 為 null */
+    /** HTTP method, JMS is null */
     private final String method;
 
-    /** HTTP path 或 JMS queue name */
+    /** HTTP path or JMS queue name */
     private final String path;
 
-    /** HTTP query string，JMS 為 null */
+    /** HTTP query string, JMS is null */
     private final String queryString;
 
-    /** 請求 body */
+    /** Request body */
     private final String body;
 
-    /** 客戶端 IP，JMS 為 "JMS" */
+    /** Client IP, JMS is "JMS" */
     private final String clientIp;
 
-    /** HTTP X-Original-Host 或 JMS target server */
+    /** HTTP X-Original-Host or JMS target server */
     private final String targetHost;
 
-    /** HTTP headers；JMS 為訊息標頭與屬性（JMSMessageID、JMSCorrelationID、自訂屬性等） */
+    /** HTTP headers; JMS is the message header and attributes (JMSMessageID, JMSCorrelationID, custom attributes, etc.) */
     private final Map<String, String> headers;
 
-    /** JMS endpoint-field 值，HTTP 為 null */
+    /** JMS endpoint-field value, HTTP is null */
     private final String endpointValue;
 
-    /** 預解析的 body */
+    /** Pre-parsed body */
     private final ConditionMatcher.PreparedBody preparedBody;
 
     /** Transient explicit context, not wire headers or persistence. */
     @Builder.Default
     private final Trace trace = Trace.NONE;
 
-    /** 回應模板使用的請求資料；各協定共用，見 {@link ResponseTemplateService#renderIfTemplate}。 */
+    /** Request data used by the response template; common to all protocols, see {@link ResponseTemplateService#renderIfTemplate}. */
     public ResponseTemplateService.TemplateContext templateContext() {
         return ResponseTemplateService.TemplateContext.of(path, method, queryString, headers, body);
     }

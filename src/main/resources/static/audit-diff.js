@@ -1,19 +1,19 @@
 /**
- * audit-diff.js - 修訂記錄的逐行比對。
+ * audit-diff.js - Line-by-line comparison of revision records.
  *
- * 純函式、不依賴 Vue，可在 Node 測試中直接載入。
- * 以 Myers 演算法找出最少的新增與刪除，再切成「有變更的區塊」，每塊前後各留幾行未變的內容。
- * 內容太大或差異太多時回傳 tooLarge，畫面改顯示前後全文，避免瀏覽器卡住。
+ * Pure function, does not depend on Vue, can be loaded directly in Node test.
+ * Use the Myers algorithm to find the minimum additions and deletions, and then cut them into "changed blocks", leaving a few lines of unchanged content before and after each block.
+ * When the content is too large or has too many differences, tooLarge is returned, and the screen is changed to display the full text before and after to prevent the browser from getting stuck.
  */
 const AuditDiff = (() => {
     const MAX_CHARS = 200000;
     const MAX_EDITS = 2000;
-    /** 「顯示全文」最多畫幾行；更長的內容只顯示有變更的區塊，避免一次產生太多元素。 */
+    /** "Show full text" can only draw a few lines; longer content only displays changed blocks to avoid generating too many elements at once. */
     const MAX_FULL_LINES = 5000;
 
     const splitLines = (text) => (text === null || text === undefined || text === '') ? [] : String(text).split('\n');
 
-    /** Myers 最短編輯路徑；回傳 [{type:' '|'-'|'+', text}]，差異超過上限時回傳 null。 */
+    /** Myers shortest editing path; return [{type:' '|'-'|'+', text}], return null when the difference exceeds the upper limit. */
     const editScript = (a, b, maxEdits) => {
         const n = a.length, m = b.length, max = Math.min(n + m, maxEdits);
         const offset = max + 1;
@@ -50,9 +50,9 @@ const AuditDiff = (() => {
     };
 
     /**
-     * 比對兩段文字。
+     * Compare two paragraphs of text.
      * @returns {{tooLarge:boolean, added:number, removed:number, lineCount:number, hunks:Array<{lines:Array<{type:string,text:string,oldNo:?number,newNo:?number}>}>}}
-     *   context 為 Infinity 時只有一個區塊，包含全文；超過 MAX_FULL_LINES 行時仍只回傳有變更的區塊。
+     *   When context is Infinity, there is only one block, including the full text; when it exceeds MAX_FULL_LINES, only the changed blocks are still returned.
      */
     const lines = (before, after, options = {}) => {
         const maxChars = options.maxChars ?? MAX_CHARS;
@@ -76,7 +76,7 @@ const AuditDiff = (() => {
             context = 3;
         }
 
-        // 留下有變更的行與前後 context 行，相連的合成同一區塊。
+        // Leave the changed lines and the context lines before and after them, and combine them into the same block.
         const keep = new Array(numbered.length).fill(false);
         numbered.forEach((line, i) => {
             if (line.type === ' ') { return; }

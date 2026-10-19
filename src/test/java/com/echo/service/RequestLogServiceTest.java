@@ -425,7 +425,7 @@ class RequestLogServiceTest {
         void setUp() {
             when(configService.isRequestLogMemoryMode()).thenReturn(false);
             when(configService.getRequestLogMaxRecords()).thenReturn(10000);
-            // LogAgent 不可用時 request log 必須丟棄，不得同步寫 DB。
+            // When LogAgent is unavailable, request and log must be discarded and DB must not be written simultaneously.
             service = new RequestLogService(requestLogRepository, configService, protocolHandlerRegistry, emptyProvider());
             service.init();
         }

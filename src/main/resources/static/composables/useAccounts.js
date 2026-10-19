@@ -1,5 +1,5 @@
 /**
- * useAccounts - 帳號管理 Composable
+ * useAccounts - Account Management Composable
  */
 const useAccounts = (deps) => {
     const { ref, computed, watch } = Vue;
@@ -69,9 +69,9 @@ const useAccounts = (deps) => {
         } catch { return t(fallbackKey); }
     };
 
-    /** 通用 API 操作：登入檢查 → 可選確認 → 呼叫 → toast → reload */
+    /** Generic API Operation: Login Check → Optional Confirmation → Call → toast → reload */
     const inFlight = createInFlight();
-    // 同一個帳號的同一個動作處理中時忽略重複點擊（以網址區分）。
+    // Repeated clicks (distinguished by URL) are ignored when the same action for the same account is being processed.
     const exec = (url, opts, successKey, failKey, confirm) => inFlight.run(url, async () => {
         if (!await requireLogin()) { return null; }
         if (confirm && !await showConfirm(confirm)) { return null; }
@@ -161,7 +161,7 @@ const useAccounts = (deps) => {
         return !!r;
     };
 
-    // 連按會產生兩組臨時密碼，畫面上先顯示的那組會失效，所以處理中忽略重複點擊。
+    // Double-clicking will generate two sets of temporary passwords. The one displayed first on the screen will become invalid, so repeated clicks are ignored during processing.
     const resetPassword = (account) => inFlight.run('reset:' + account.id, async () => {
         if (!await requireLogin()) { return null; }
         if (!await showConfirm({

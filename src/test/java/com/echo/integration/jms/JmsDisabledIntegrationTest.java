@@ -21,13 +21,13 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * JMS 停用時建立 JMS 規則被拒絕的整合測試
+ * Integration test rejected when creating JMS rule while JMS is disabled
  * <p>
- * 需要獨立的 Spring Context（echo.jms.enabled=false）。
- * 使用真正的服務與 Spring Boot 自動配置，確認停用時沒有內建 broker，HTTP 仍可使用。
+ * Requires independent Spring Context (echo.jms.enabled=false).
+ * Use the real service and Spring Boot auto-configuration; disabling JMS must leave no embedded broker while HTTP remains available.
  * <p>
- * 此時 ProtocolHandlerRegistry 不包含 JMS handler，
- * 因此 validateProtocolEnabled(JMS) 會拋出 IllegalArgumentException → 400。
+ * At this time ProtocolHandlerRegistry does not contain JMS handler,
+ * So validateProtocolEnabled(JMS) throws IllegalArgumentException → 400.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
@@ -45,7 +45,7 @@ class JmsDisabledIntegrationTest {
     }
 
     @Test
-    @DisplayName("JMS 停用時不啟動內建 broker 與 listener")
+    @DisplayName("Disabling JMS starts neither the embedded broker nor listeners")
     void disabledJmsDoesNotStartEmbeddedBrokerOrListener() {
         assertThat(context.getBeansOfType(EmbeddedActiveMQ.class)).isEmpty();
         assertThat(context.getBeansOfType(JmsConnectionManager.class)).isEmpty();
@@ -53,7 +53,7 @@ class JmsDisabledIntegrationTest {
     }
 
     @Test
-    @DisplayName("JMS 停用時 HTTP 模擬與 readiness 仍正常")
+    @DisplayName("HTTP mocks and readiness remain available with JMS disabled")
     void httpMockAndReadinessRemainAvailable() {
         RuleDto dto = RuleDto.builder()
                 .protocol(Protocol.HTTP).method("GET").matchKey("/jms-disabled/http")
@@ -69,7 +69,7 @@ class JmsDisabledIntegrationTest {
     }
 
     @Test
-    @DisplayName("JMS 停用時 POST JMS 規則 → 400，錯誤訊息包含 JMS")
+    @DisplayName("Creating a JMS rule while JMS is disabled returns 400 with a JMS-related error")
     @SuppressWarnings("unchecked")
     void createJmsRuleWhenDisabled_shouldReturn400() {
         RuleDto dto = RuleDto.builder()

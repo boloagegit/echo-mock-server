@@ -23,9 +23,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * HTTP 規則服務
+ * HTTP Rules Service
  * <p>
- * 負責 HTTP 規則的 CRUD 操作與請求匹配邏輯。
+ * Responsible for the CRUD operation and request matching logic of the HTTP rule.
  */
 @Service
 @RequiredArgsConstructor
@@ -60,25 +60,25 @@ public class HttpRuleService {
     }
 
     /**
-     * 從 host + method 的共用規則集篩出本次 path 候選。
-     * 動態 URL（例如 /users/1、/users/2）不再各自占用一個 Caffeine entry。
+     * Filter out this path candidate from the common rule set of host + method.
+     * Dynamic URL (such as /users/1, /users/2) no longer occupy one Caffeine entry each.
      */
     public List<HttpRule> findPreparedHttpRules(String host, String path, String method) {
-        // 直接建構 service 的單元測試／工具沒有 Spring proxy，維持原有查詢路徑。
+        // The unit test/tool that directly constructs service does not have Spring proxy, and the original query path is maintained.
         if (applicationContext == null) {
             return prepareHttpRules(httpHandler.findWithFallback(host, path, method));
         }
         return proxy().httpRuleSnapshot().candidates(host, method, path);
     }
 
-    /** host + method 的候選規則（已排序、未依路徑篩選），取自目前的規則快照。 */
+    /** Candidate rules for host + method (sorted, not filtered by path), taken from the current rule snapshot. */
     public List<HttpRule> findPreparedHttpRuleSet(String host, String method) {
         return proxy().httpRuleSnapshot().candidates(host, method);
     }
 
     /**
-     * 目前的 HTTP 規則快照（{@link RuleSnapshots}）：規則或 Response 異動清除 {@code httpRules} 快取時在背景重建，
-     * 重建期間請求繼續使用舊快照。沒有 Spring context 的單元測試直接建立。
+     * Current HTTP-rule snapshot ({@link RuleSnapshots}): rebuild in the background when rule or Response changes invalidate {@code httpRules};
+     * Request to continue using old snapshot during rebuild. There is no unit test for Spring context built directly.
      */
     public HttpRuleSnapshot httpRuleSnapshot() {
         RuleSnapshots snapshots = applicationContext == null ? null
@@ -86,7 +86,7 @@ public class HttpRuleService {
         return snapshots != null ? snapshots.http() : buildHttpRuleSnapshot();
     }
 
-    /** 從資料庫建立 HTTP 規則快照（由 {@link RuleSnapshots} 在背景呼叫）。 */
+    /** Create HTTP rule snapshot from database (called by {@link RuleSnapshots} in the background). */
     HttpRuleSnapshot buildHttpRuleSnapshot() {
         List<HttpRule> rules = httpRuleRepository.findByEnabledTrueOrderByIdAsc();
         Set<Long> validResponseIds = ruleService.getValidResponseIds(rules.stream()
@@ -98,7 +98,7 @@ public class HttpRuleService {
         return new HttpRuleSnapshot(valid, HTTP_RULE_ORDER, conditionMatcher);
     }
 
-    /** 候選規則優先順序：非萬用路徑 → priority 高 → 有指定 host → 建立時間新。 */
+    /** Candidate order: exact paths before wildcards, descending priority, explicit host before unspecified host, then newest creation time. */
     static final Comparator<HttpRule> HTTP_RULE_ORDER = Comparator
             .comparing((HttpRule r) -> "*".equals(r.getMatchKey()) ? 1 : 0)
             .thenComparing(Comparator.<HttpRule, Integer>comparing(

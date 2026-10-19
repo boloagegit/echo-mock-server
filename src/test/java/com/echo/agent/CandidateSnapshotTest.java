@@ -13,20 +13,20 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * CandidateSnapshot 單元測試。
+ * CandidateSnapshot unit test.
  * <p>
- * 驗證 Pipeline 整合中 Rule → CandidateSnapshot 的欄位映射與深拷貝正確性。
+ * Verify the correctness of field mapping and deep copy of Rule → CandidateSnapshot in Pipeline integration.
  * <p>
  * Validates: Requirements 11.1, 11.3
  */
 class CandidateSnapshotTest {
 
     @Nested
-    @DisplayName("HttpRule → CandidateSnapshot 欄位映射")
+    @DisplayName("HttpRule to CandidateSnapshot field mapping")
     class FromHttpRuleTest {
 
         @Test
-        @DisplayName("所有欄位正確映射")
+        @DisplayName("Maps every field correctly")
         void shouldMapAllFieldsFromHttpRule() {
             HttpRule rule = HttpRule.builder()
                     .id("http-001")
@@ -54,7 +54,7 @@ class CandidateSnapshotTest {
         }
 
         @Test
-        @DisplayName("null 條件欄位正確映射為 null")
+        @DisplayName("Maps null condition fields to null")
         void shouldMapNullConditionsFromHttpRule() {
             HttpRule rule = HttpRule.builder()
                     .id("http-002")
@@ -76,11 +76,11 @@ class CandidateSnapshotTest {
     }
 
     @Nested
-    @DisplayName("JmsRule → CandidateSnapshot 欄位映射")
+    @DisplayName("JmsRule to CandidateSnapshot field mapping")
     class FromJmsRuleTest {
 
         @Test
-        @DisplayName("所有欄位正確映射，queryCondition 與 headerCondition 為 null")
+        @DisplayName("Maps every field correctly with null queryCondition and headerCondition")
         void shouldMapAllFieldsFromJmsRule() {
             JmsRule rule = JmsRule.builder()
                     .id("jms-001")
@@ -105,7 +105,7 @@ class CandidateSnapshotTest {
         }
 
         @Test
-        @DisplayName("disabled JmsRule 正確映射 enabled=false")
+        @DisplayName("Maps a disabled JmsRule to enabled=false")
         void shouldMapDisabledJmsRule() {
             JmsRule rule = JmsRule.builder()
                     .id("jms-002")
@@ -122,11 +122,11 @@ class CandidateSnapshotTest {
     }
 
     @Nested
-    @DisplayName("toCandidateSnapshots 深拷貝與邊界條件")
+    @DisplayName("toCandidateSnapshots deep copies and edge cases")
     class ToCandidateSnapshotsTest {
 
         @Test
-        @DisplayName("null candidates 回傳空列表")
+        @DisplayName("Returns an empty list for null candidates")
         void shouldReturnEmptyListForNullCandidates() {
             List<CandidateSnapshot> result = CandidateSnapshot.toCandidateSnapshots(null);
 
@@ -134,7 +134,7 @@ class CandidateSnapshotTest {
         }
 
         @Test
-        @DisplayName("empty candidates 回傳空列表")
+        @DisplayName("Returns an empty list for empty candidates")
         void shouldReturnEmptyListForEmptyCandidates() {
             List<CandidateSnapshot> result = CandidateSnapshot.toCandidateSnapshots(Collections.emptyList());
 
@@ -142,7 +142,7 @@ class CandidateSnapshotTest {
         }
 
         @Test
-        @DisplayName("混合 HttpRule 與 JmsRule 正確轉換")
+        @DisplayName("Converts mixed HttpRule and JmsRule candidates correctly")
         void shouldConvertMixedRuleTypes() {
             HttpRule httpRule = HttpRule.builder()
                     .id("http-mix-1")
@@ -185,7 +185,7 @@ class CandidateSnapshotTest {
         }
 
         @Test
-        @DisplayName("深拷貝 — 修改原始 Rule 不影響 Snapshot")
+        @DisplayName("Deep copy: changing the original Rule does not affect the snapshot")
         void shouldDeepCopyIndependentFromOriginalRule() {
             HttpRule rule = HttpRule.builder()
                     .id("http-deep-1")
@@ -225,7 +225,7 @@ class CandidateSnapshotTest {
         }
 
         @Test
-        @DisplayName("深拷貝 — 修改原始 JmsRule 不影響 Snapshot")
+        @DisplayName("Deep copy: changing the original JmsRule does not affect the snapshot")
         void shouldDeepCopyJmsRuleIndependentFromOriginal() {
             JmsRule rule = JmsRule.builder()
                     .id("jms-deep-1")

@@ -31,10 +31,10 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * AbstractMockPipeline 單元測試
+ * AbstractMockPipeline unit test
  * <p>
- * 使用具體測試子類別 (TestPipeline) 驗證 Template Method 主流程、
- * 共用方法 (resolveResponseBody, applyDelay, recordLog) 及錯誤處理。
+ * Use the concrete TestPipeline subclass to verify the Template Method flow,
+ * Shared methods (resolveResponseBody, applyDelay, recordLog) and error handling.
  */
 @ExtendWith(MockitoExtension.class)
 class AbstractMockPipelineTest {
@@ -56,8 +56,8 @@ class AbstractMockPipelineTest {
     // ==================== Test Subclass ====================
 
     /**
-     * 具體測試子類別，繼承 AbstractMockPipeline<HttpRule>，
-     * 所有抽象方法以可控行為實作。
+     * Concrete test subclass extending AbstractMockPipeline<HttpRule>,
+     * All abstract methods are implemented with controlled behavior.
      */
     static class TestPipeline extends AbstractMockPipeline<HttpRule> {
 
@@ -67,7 +67,7 @@ class AbstractMockPipelineTest {
         boolean shouldForwardResult = false;
         MockResponse handleNoMatchResult;
 
-        // 追蹤呼叫順序
+        // Trace call sequence
         final List<String> callOrder = new ArrayList<>();
 
         TestPipeline(ConditionMatcher conditionMatcher,
@@ -162,11 +162,11 @@ class AbstractMockPipelineTest {
     // ==================== 1. execute() step execution order ====================
 
     @Nested
-    @DisplayName("execute() 步驟執行順序")
+    @DisplayName("execute() step ordering")
     class ExecuteStepOrder {
 
         @Test
-        @DisplayName("匹配成功：findCandidateRules → matchRule → buildResponse → recordLog")
+        @DisplayName("Matched: findCandidateRules, matchRule, buildResponse, then recordLog")
         void matchedFlow() {
             HttpRule rule = enabledRuleWithCondition("rule-1", "key=value", 1L);
             pipeline.candidateRules = List.of(rule);
@@ -184,11 +184,11 @@ class AbstractMockPipelineTest {
             assertThat(result.isMatched()).isTrue();
             assertThat(result.getRuleId()).isEqualTo("rule-1");
 
-            // 驗證呼叫順序
+            // Verify call sequence
             assertThat(pipeline.callOrder).containsExactly(
                     "findCandidateRules", "buildResponse");
 
-            // 驗證 recordLog 被呼叫
+            // Verify recordLog was called
             ServeEvent served = ServeEventCaptor.single(requestLogService);
             assertThat(served.getRuleId()).isEqualTo("rule-1");
             assertThat(served.getProtocol()).isEqualTo(Protocol.HTTP);
@@ -201,7 +201,7 @@ class AbstractMockPipelineTest {
             assertThat(served.getResponseStatus()).isEqualTo(200);
             assertThat(served.getRequestBody()).isEqualTo("{\"key\":\"value\"}");
             assertThat(served.getResponseBody()).isEqualTo("OK");
-            // 處理流程圖用：候選數與規則的模擬延遲（延遲在記錄之後才執行，不含在處理時間內）
+            // Processing flow chart: simulation delay of candidate number and rules (delay is executed after recording, not included in processing time)
             assertThat(served.getCandidateCount()).isEqualTo(1);
             assertThat(served.getMatchedByFallback()).isFalse();
             assertThat(served.getDelayMs()).isEqualTo(100);
@@ -210,7 +210,7 @@ class AbstractMockPipelineTest {
         }
 
         @Test
-        @DisplayName("未匹配且需轉發：findCandidateRules → matchRule → shouldForward → forward → recordLog")
+        @DisplayName("Unmatched with forwarding: findCandidateRules, matchRule, shouldForward, forward, then recordLog")
         void notMatchedForwardFlow() {
             pipeline.candidateRules = Collections.emptyList();
             pipeline.shouldForwardResult = true;
@@ -255,7 +255,7 @@ class AbstractMockPipelineTest {
         }
 
         @Test
-        @DisplayName("未匹配且不轉發：findCandidateRules → matchRule → shouldForward → handleNoMatch → recordLog")
+        @DisplayName("Unmatched without forwarding: findCandidateRules, matchRule, shouldForward, handleNoMatch, then recordLog")
         void notMatchedNoForwardFlow() {
             pipeline.candidateRules = Collections.emptyList();
             pipeline.shouldForwardResult = false;
@@ -295,7 +295,7 @@ class AbstractMockPipelineTest {
     class ResolveResponseBody {
 
         @Test
-        @DisplayName("正常查詢回傳 body")
+        @DisplayName("Returns the body for an existing Response")
         void normalQueryReturnsBody() {
             when(ruleService.findResponseBodyById(42L)).thenReturn(Optional.of("hello world"));
 
@@ -306,7 +306,7 @@ class AbstractMockPipelineTest {
         }
 
         @Test
-        @DisplayName("找不到 Response 回傳空字串")
+        @DisplayName("Returns an empty string when the Response is missing")
         void missingResponseReturnsEmpty() {
             when(ruleService.findResponseBodyById(99L)).thenReturn(Optional.empty());
 
@@ -316,7 +316,7 @@ class AbstractMockPipelineTest {
         }
 
         @Test
-        @DisplayName("responseId 為 null 回傳空字串")
+        @DisplayName("Returns an empty string for null responseId")
         void nullResponseIdReturnsEmpty() {
             String body = pipeline.resolveResponseBody(null);
 
@@ -332,18 +332,18 @@ class AbstractMockPipelineTest {
     class ApplyDelay {
 
         @Test
-        @DisplayName("delayMs > 0 時執行延遲")
+        @DisplayName("Applies a delay when delayMs > 0")
         void positiveDelayIsApplied() {
             long before = System.currentTimeMillis();
             pipeline.applyDelay(50);
             long elapsed = System.currentTimeMillis() - before;
 
-            // 至少等了 30ms（允許一些計時誤差）
+            // Waited at least 30ms (allow for some timing error)
             assertThat(elapsed).isGreaterThanOrEqualTo(30);
         }
 
         @Test
-        @DisplayName("delayMs = 0 時不延遲")
+        @DisplayName("Does not delay when delayMs = 0")
         void zeroDelayNoSleep() {
             long before = System.currentTimeMillis();
             pipeline.applyDelay(0);
@@ -353,7 +353,7 @@ class AbstractMockPipelineTest {
         }
 
         @Test
-        @DisplayName("delayMs < 0 時不延遲")
+        @DisplayName("Does not delay when delayMs < 0")
         void negativeDelayNoSleep() {
             long before = System.currentTimeMillis();
             pipeline.applyDelay(-100);
@@ -374,7 +374,7 @@ class AbstractMockPipelineTest {
                 .matched(true).responseTimeMs(150).clientIp("192.168.1.1").responseStatus(200).build();
 
         @Test
-        @DisplayName("請求紀錄收到同一個事件")
+        @DisplayName("Request logging receives the same event")
         void deliversEventToRequestLog() {
             pipeline.publish(event);
 
@@ -382,7 +382,7 @@ class AbstractMockPipelineTest {
         }
 
         @Test
-        @DisplayName("其他 listener 失敗只記錄、不影響回應；請求紀錄不會重複收到")
+        @DisplayName("Other listener failures are logged without affecting the reply or duplicating request logging")
         void otherListenerFailureIsIsolated() {
             ServeEventListener failing = mock(ServeEventListener.class);
             ServeEventListener other = mock(ServeEventListener.class);
@@ -399,7 +399,7 @@ class AbstractMockPipelineTest {
         }
 
         @Test
-        @DisplayName("請求紀錄失敗一定往上傳（HTTP 回 503、JMS 讓遞送失敗）")
+        @DisplayName("Request-log failures propagate: HTTP returns 503 and JMS delivery fails")
         void requestLogFailurePropagates() {
             ServeEventListener other = mock(ServeEventListener.class);
             pipeline.setServeEventListeners(List.of(other));
@@ -411,14 +411,14 @@ class AbstractMockPipelineTest {
         }
     }
 
-    // ==================== 5. PipelineResult 正確性 ====================
+    // ==================== 5. PipelineResult Correctness ====================
 
     @Nested
-    @DisplayName("PipelineResult 包含正確值")
+    @DisplayName("PipelineResult values")
     class PipelineResultValues {
 
         @Test
-        @DisplayName("匹配成功時 PipelineResult 包含 ruleId、matched、delayMs 等")
+        @DisplayName("A matched PipelineResult includes ruleId, matched, and delayMs")
         void matchedResultContainsCorrectValues() {
             HttpRule rule = enabledRuleWithCondition("rule-x", "field=val", 5L);
             rule.setDelayMs(200L);
@@ -445,7 +445,7 @@ class AbstractMockPipelineTest {
         }
 
         @Test
-        @DisplayName("未匹配時 PipelineResult ruleId 為 null、matched 為 false、delayMs 為 0")
+        @DisplayName("An unmatched PipelineResult has null ruleId, matched=false, and delayMs=0")
         void notMatchedResultValues() {
             pipeline.candidateRules = Collections.emptyList();
             pipeline.shouldForwardResult = false;
@@ -466,13 +466,13 @@ class AbstractMockPipelineTest {
     // ==================== 6. Error handling ====================
 
     @Nested
-    @DisplayName("錯誤處理")
+    @DisplayName("Error handling")
     class ErrorHandling {
 
         @Test
-        @DisplayName("findCandidateRules 拋出例外時回傳 500 error response")
+        @DisplayName("A findCandidateRules exception returns a 500 error response")
         void findCandidateRulesThrowsReturns500() {
-            // 建立一個會在 findCandidateRules 拋出例外的 pipeline
+            // Create a pipeline that will throw an exception at findCandidateRules
             TestPipeline errorPipeline = new TestPipeline(conditionMatcher, ruleService, requestLogService, scenarioService) {
                 @Override
                 protected List<HttpRule> findCandidateRules(MockRequest request) {
@@ -493,7 +493,7 @@ class AbstractMockPipelineTest {
         }
 
         @Test
-        @DisplayName("durable request log 無法接受時回傳 503，不假裝成功")
+        @DisplayName("Unavailable durable request logging returns 503 instead of reporting success")
         void durableLogUnavailableReturns503() {
             pipeline.candidateRules = Collections.emptyList();
             pipeline.shouldForwardResult = false;
@@ -526,7 +526,7 @@ class AbstractMockPipelineTest {
     class ScenarioTransitionTests {
 
         @Test
-        @DisplayName("情境狀態不符而略過的規則記入 scenarioSkipped（處理流程圖用）")
+        @DisplayName("Records scenario-state-mismatched rules in scenarioSkipped for the flow diagram")
         void skippedRulesAreRecordedForTheFlowView() {
             HttpRule gated = HttpRule.builder().id("gated").enabled(true).bodyCondition("key=value")
                     .responseId(1L).matchKey("/api/test").method("POST").priority(10)

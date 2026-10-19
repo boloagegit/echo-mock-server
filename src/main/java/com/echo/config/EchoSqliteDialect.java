@@ -8,15 +8,15 @@ import org.hibernate.exception.spi.SQLExceptionConversionDelegate;
 import java.sql.SQLException;
 
 /**
- * Hibernate 6.6 的社群版 {@link SQLiteDialect} 沒有把 {@code SQLITE_CONSTRAINT} 轉成
- * {@link ConstraintViolationException}，Spring 因此只會拋出 {@code JpaSystemException}，
- * 依賴 {@code DataIntegrityViolationException} 的程式（例如並行建立同名 Scenario）無法正確處理。
+ * Hibernate 6.6's community {@link SQLiteDialect} does not translate {@code SQLITE_CONSTRAINT} into
+ * {@link ConstraintViolationException}, so Spring throws only {@code JpaSystemException};
+ * code handling {@code DataIntegrityViolationException}, such as concurrent creation of same-named scenarios, cannot handle it correctly.
  * <p>
- * Xerial 驅動回傳延伸錯誤碼（例如 UNIQUE 為 2067），低 8 位元才是主錯誤碼 19。
+ * The Xerial driver returns an extended error code (for example, UNIQUE is 2067), and the lower 8 bits are the main error code 19.
  */
 public class EchoSqliteDialect extends SQLiteDialect {
 
-    /** SQLITE_CONSTRAINT：UNIQUE、NOT NULL、CHECK、FOREIGN KEY、PRIMARY KEY 都屬於這一類。 */
+    /** SQLITE_CONSTRAINT: UNIQUE, NOT NULL, CHECK, FOREIGN KEY, PRIMARY KEY all belong to this category. */
     static final int SQLITE_CONSTRAINT = 19;
 
     public EchoSqliteDialect() {

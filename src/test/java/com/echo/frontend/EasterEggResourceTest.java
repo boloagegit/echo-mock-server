@@ -7,9 +7,9 @@ import java.nio.charset.StandardCharsets;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 介面彩蛋：↑↑↓↓←→←→AB 或快速連點 Echo 圖示 5 下開啟 Echo Strike。只有觸發器常駐，遊戲在觸發後才載入；
- * 由伺服器設定（ECHO_UI_EASTER_EGG）開關，打字時不會誤觸，也不連到任何外部資源。
- * 行為細節（關卡、炸彈、接關、連點）由 src/test/js/echo-strike.test.cjs 實際執行驗證。
+ * Interface easter egg: ↑↑↓↓←→←→AB or quickly click the Echo icon 5 times to open Echo Strike. Only the trigger is resident, and the game is loaded after it is triggered;
+ * The switch (ECHO_UI_EASTER_EGG) is set by the server. It will not be accidentally touched when typing, nor will it be connected to any external resources.
+ * Behavior details (levels, bombs, transitions, connection points) are verified by the actual execution of src/test/js/echo-strike.test.cjs.
  */
 class EasterEggResourceTest {
     @Test

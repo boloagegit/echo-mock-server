@@ -1,13 +1,13 @@
 /**
- * SseEventsEditor - 規則編輯器的 SSE 事件清單。
+ * SseEventsEditor - Rules Editor's SSE event listing.
  *
- * 每個事件平常只佔一行（第幾秒送出、名稱、內容開頭、大小、跟前一個隔多久），點一下才展開編輯，
- * 一次只展開一個：打開時展開第一個，新增的事件自動展開。收起的事件只是文字，幾百個事件也不會
- * 同時有幾百個輸入框。延遲可用毫秒或秒輸入（存檔一律是毫秒），另有搜尋、延遲一次全改、
- * 整串貼上（JSON 或 text/event-stream 原文）與放大編輯單一事件。
+ * Each event usually only occupies one line (seconds to send, name, content start, size, how long since the previous one), click to expand the edit,
+ * Only expand one at a time: expand the first one when opening, and newly added events will be expanded automatically. The collapsed event is just text, hundreds of events will not
+ * There are hundreds of input boxes at the same time. The delay can be entered in milliseconds or seconds (saves are always in milliseconds). There are also search, delay, and full change at once.
+ * Paste the entire string (JSON or text/event-stream original text) and zoom in to edit a single event.
  *
- * 事件物件就地修改（與原本的表格相同）；新增、刪除與整串替換交給上層。
- * 規則編輯器與回應管理共用：回應沒有循環設定（loopable=false），放大由視窗本身處理（expandable=false）。
+ * The event object is modified in place (same as the original table); addition, deletion and whole string replacement are handed over to the upper layer.
+ * The rule editor is shared with response management: responses have no loop settings (loopable=false), and magnification is handled by the window itself (expandable=false).
  */
 const SseEventsEditor = {
   inject: ['t'],
@@ -41,7 +41,7 @@ const SseEventsEditor = {
     };
   },
   created() {
-    // 收起時顯示的內容開頭與大小：只在該事件的資料改變時重算
+    // The beginning and size of the content displayed when collapsed: only recalculated when the data of the event changes.
     this.rowCache = new WeakMap();
   },
   computed: {
@@ -49,7 +49,7 @@ const SseEventsEditor = {
     searching() { return this.query.trim().length > 0; },
     rows() {
       const { rows } = this.timeline;
-      // data 裡的物件讀出來是代理物件，比較前先取回原物件
+      // The object in data is read as a proxy object. The original object must be retrieved before comparison.
       const openRaw = Vue.toRaw(this.openRaw);
       const list = [];
       this.events.forEach((event, index) => {
@@ -76,17 +76,17 @@ const SseEventsEditor = {
       return this.events.find(event => Vue.toRaw(event) === target) || null;
     },
     focusIndex() { return this.focusEvent ? this.events.indexOf(this.focusEvent) : -1; },
-    /** 「整串貼上」開著、還沒套用：外層的存檔按鈕要能按（存檔前由 commitPending 套用或擋下）。 */
+    /** "Full string pasting" is on but not applied yet: the outer save button must be pressable (applied or blocked by commitPending before saving). */
     bulkPending() { return this.focus?.kind === 'bulk'; },
-    // 只在打開「原始內容」時才產生（幾百個事件時每次輸入都重算會拖慢打字）
+    // Only occurs when "original content" is opened (recalculating every input when hundreds of events will slow down typing)
     rawText() { return this.rawOpen ? SseEvents.rawStream(this.events, this.loopEnabled, this.t) : ''; },
     unitOptions() {
       return [{ value: 'ms', label: this.t('sseEditor.unitMs') }, { value: 's', label: this.t('sseEditor.unitSec') }];
     },
   },
   watch: {
-    // 換了一條規則或整串替換：展開第一個事件、清掉搜尋；只是換了順序（同一批事件）則保持原狀。
-    // 同一個陣列變長是「新增事件」：展開新的那個並把游標放進事件資料。
+    // Changed a rule or replaced the whole string: expand the first event and clear the search; just change the order (the same batch of events) and keep it as it is.
+    // The same array variable is "new event": expand the new one and put the cursor into the event data.
     eventsShape: {
       immediate: true,
       handler(shape, previous) {
@@ -109,7 +109,7 @@ const SseEventsEditor = {
       },
     },
     expanded(value) {
-      // 上層收回（例如按 Esc）時，放大編輯也一起結束
+      // When the upper layer is retracted (for example, pressing Esc), the enlarged editing is also ended.
       if (!value && this.focus) { this.focus = null; this.focusOwnsExpansion = false; }
     },
   },
@@ -128,8 +128,8 @@ const SseEventsEditor = {
     },
     timeLabel(ms) { return ms == null ? '' : SseEvents.formatDuration(ms, this.t); },
     /**
-     * 收起的事件內容沒變就不重畫：在幾百個事件的規則裡打字時，只有展開中的事件需要更新。
-     * 展開中的事件每次都重畫（新物件永遠不相等）。
+     * Collapsed events will not be redrawn if their content remains unchanged: When typing in rules for hundreds of events, only the expanding events need to be updated.
+     * Expanding events are redrawn every time (new objects are never equal).
      */
     memoKey(row) {
       if (row.open) return [{}];
@@ -150,7 +150,7 @@ const SseEventsEditor = {
       this.openRaw = row.open ? null : row.raw;
       if (!row.open) this.$nextTick(() => this.focusData(row.index));
     },
-    /** 打開時從內容開頭顯示，游標放在最前面；高度依內容（最多 8 行，超過在框內捲動）。 */
+    /** When opened, display from the beginning of the content, with the cursor at the front; height according to the content (up to 8 lines, more than scrolling in the box). */
     focusData(index) {
       const field = this.$el?.querySelector(`[data-sse-data="${index}"]`);
       if (!field) return;
@@ -166,7 +166,7 @@ const SseEventsEditor = {
       const height = field.scrollHeight + 2;
       field.style.height = (max ? Math.min(height, max) : height) + 'px';
     },
-    /** 收起的事件之間用 ↑ ↓ 移動焦點（展開中的事件沒有這顆按鈕，所以依按鈕本身的順序找）。 */
+    /** Use ↑ ↓ to move focus between collapsed events (expanding events do not have this button, so search in the order of the buttons themselves). */
     onRowKeydown(event) {
       if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
       event.preventDefault();
@@ -174,7 +174,7 @@ const SseEventsEditor = {
       const next = targets[targets.indexOf(event.currentTarget) + (event.key === 'ArrowDown' ? 1 : -1)];
       if (next) next.focus();
     },
-    /** 展開中的事件：Alt + ↑ ↓ 換到上一個／下一個（方向鍵本身留給輸入框）。 */
+    /** Expanding event: Alt + ↑ ↓ changes to the previous/next one (the arrow keys themselves are reserved for the input box). */
     onCardKeydown(event, position) {
       if (!event.altKey || (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')) return;
       event.preventDefault();
@@ -183,7 +183,7 @@ const SseEventsEditor = {
       this.openRaw = next.raw;
       this.$nextTick(() => this.focusData(next.index));
     },
-    /** 存檔前檢查用：清掉搜尋、收起放大編輯，展開第 index 個事件並把游標放在要修正的欄位。 */
+    /** To check before saving: clear the search, close the zoom edit, expand the index event and place the cursor in the field to be corrected. */
     reveal(index) {
       const event = this.events[index];
       if (!event) return;
@@ -207,7 +207,7 @@ const SseEventsEditor = {
       }
       this.$emit('remove', row.index);
     },
-    // 延遲：每個事件自己的單位（毫秒／秒），存的永遠是毫秒
+    // Delay: Each event has its own unit (milliseconds/second), and milliseconds are always stored.
     unitOf(event) { return this.units.get(Vue.toRaw(event)) || SseEvents.unitFor(event.delayMs); },
     delayInput(event) {
       const raw = Vue.toRaw(event);
@@ -215,8 +215,8 @@ const SseEventsEditor = {
       return Number.isFinite(event.delayMs) ? SseEvents.toUnit(event.delayMs, this.unitOf(event)) : '';
     },
     /**
-     * 打字時單位固定、輸入框保留原樣：不會因為打到 1000 就跳成「1 秒」，也不會把 "1." 改寫掉。
-     * 離開輸入框時才換回存好的值。
+     * The unit is fixed when typing, and the input box remains as it is: it will not jump to "1 second" just because it hits 1000, nor will "1." be rewritten.
+     * Only change the saved value when leaving the input box.
      */
     onDelayInput(event, value) {
       const raw = Vue.toRaw(event);
@@ -238,7 +238,7 @@ const SseEventsEditor = {
       return SseEvents.delayValid(event.delayMs) ? ''
         : this.t('sseEditor.delayInvalid', { max: SseEvents.formatDuration(SseEvents.MAX_DELAY_MS, this.t) });
     },
-    // 延遲一次全改
+    // Delay a full change
     openBulkDelay() {
       this.bulkDelayOpen = !this.bulkDelayOpen;
       this.bulkDelayError = '';
@@ -258,19 +258,19 @@ const SseEventsEditor = {
       });
       this.bulkDelayOpen = false;
     },
-    // 放大編輯（單一事件）與整串貼上：都佔用整個編輯區
+    // Zoom editing (single event) and entire string pasting: both occupy the entire editing area
     openFocus(focus) {
       this.focusOwnsExpansion = !this.expanded;
       this.focus = focus;
       if (!this.expanded) this.$emit('update:expanded', true);
-      // 游標直接放進編輯區：Esc 才會回到清單，而不是被外層當成「關閉視窗」
+      // Only when the cursor is placed directly into the editing area: Esc will it return to the list instead of being treated as a "close window" by the outer layer.
       this.$nextTick(() => this.$refs.focusCode?.cm?.focus());
     },
     openEventFocus(row) { this.openFocus({ kind: 'event', raw: row.raw }); },
     openBulk() {
       const invalid = this.events.findIndex(event => !SseEvents.delayValid(event.delayMs));
       if (invalid >= 0) {
-        // 先修正延遲：否則整串編輯會把無效的延遲寫成 null，再套用就默默變成 0
+        // Correct the delay first: otherwise the whole series of editors will write the invalid delay as null, and then it will become 0 silently.
         this.openRaw = Vue.toRaw(this.events[invalid]);
         this.query = '';
         this.$nextTick(() => this.$el?.querySelector('.sse-ev.is-open .sse-ed-delay-input')?.focus());
@@ -287,7 +287,7 @@ const SseEventsEditor = {
       this.focus = null;
       this.focusOwnsExpansion = false;
       if (owned && this.expanded) this.$emit('update:expanded', false);
-      // 回到清單後游標放回原處：放大的事件回到它的資料欄，整串貼上回到那顆按鈕
+      // After returning to the list, the cursor is returned to its original position: the zoomed event is returned to its data bar, and the entire string is pasted back to the button
       this.$nextTick(() => {
         if (this.focus) return;
         if (closed?.kind === 'event') {
@@ -298,7 +298,7 @@ const SseEventsEditor = {
       });
     },
     applyBulk() {
-      // 沒有改過就只是關掉，不換成新的事件物件
+      // Just turn it off without changing it, without replacing it with a new event object.
       if (this.bulkText === this.bulkOriginal) { this.closeFocus(); return true; }
       const result = SseEvents.parseBulk(this.bulkText);
       if (result.error) { this.bulkError = this.t(result.error.key, result.error.params); return false; }
@@ -307,8 +307,8 @@ const SseEventsEditor = {
       return true;
     },
     /**
-     * 外層存檔前呼叫：「整串貼上」還開著時先套用，否則會存到舊的事件、貼上的內容在關閉視窗時不見。
-     * 內容看不懂時留在原處顯示錯誤並回 false（不要存檔）。
+     * Call before outer save: Apply first when "Full string paste" is still open, otherwise the old event will be saved and the pasted content will disappear when the window is closed.
+     * On invalid input, stay in place, show the error, and return false without saving.
      */
     commitPending() {
       if (this.focus?.kind !== 'bulk') return true;
@@ -318,7 +318,7 @@ const SseEventsEditor = {
     },
     onFocusKeydown(event) {
       if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && this.focus?.kind === 'bulk') {
-        // 不讓外層的「儲存並關閉」在套用前存檔（貼上的事件會遺失）
+        // Prevent the outer Save and Close action from saving before pending paste is applied, which would lose pasted events.
         event.preventDefault();
         event.stopPropagation();
         this.applyBulk();
@@ -329,7 +329,7 @@ const SseEventsEditor = {
       event.stopPropagation();
       this.closeFocus();
     },
-    // 拖曳把手排序
+    // Drag handle sorting
     onDragStart(event, row) {
       this.dragIndex = row.index;
       event.dataTransfer.effectAllowed = 'move';
@@ -338,7 +338,7 @@ const SseEventsEditor = {
       if (item) event.dataTransfer.setDragImage(item, 16, 16);
     },
     onDrop(event, row) {
-      // 只處理拖曳把手；拖曳文字（例如在事件資料裡）照瀏覽器原本的行為
+      // Only handle drag handles; dragging text (e.g. in event data) behaves as native browser behavior
       if (this.dragIndex == null) return;
       event.preventDefault();
       const from = this.dragIndex;
@@ -353,7 +353,7 @@ const SseEventsEditor = {
   template: /* html */`
     <div class="sse-ed" :class="{'is-expanded': expanded, 'is-focused': !!focus}">
       <template v-if="!focus">
-        <!-- 標題、摘要與工具固定在上方：清單很長時捲動也看得到 -->
+        <!-- The title, abstract and tools are fixed at the top: even if the list is very long, it can be seen when scrolling -->
         <div class="sse-ed-sticky">
         <div class="sse-ed-head">
           <span class="rule-sse-heading"><span class="response-content-label">{{t('modal.sseEditor')}}</span>

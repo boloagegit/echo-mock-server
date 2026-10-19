@@ -1,29 +1,29 @@
 /**
  * useIssues - Issue Report Composable
  *
- * 管理 Issue Report 的載入、篩選、建立、回覆、狀態變更。
+ * Manage the loading, filtering, creation, reply, and status changes of Issue Report.
  *
- * @param {Object} deps - 依賴物件
- * @param {Function} deps.showToast - Toast 通知函式
- * @param {Function} deps.showConfirm - 確認對話框函式
- * @param {Function} deps.t - 翻譯函式
- * @param {Function} deps.requireLogin - 登入檢查函式
- * @param {Ref} deps.loading - 全域 loading 狀態
- * @param {Ref} deps.isAdmin - 是否為管理員
- * @param {Ref} deps.issueReportingEnabled - 後端是否啟用問題回報
+ * @param {Object} deps - Dependent objects
+ * @param {Function} deps.showToast - Toast notification function
+ * @param {Function} deps.showConfirm - Confirm dialog function
+ * @param {Function} deps.t - Translation function
+ * @param {Function} deps.requireLogin - Login check function
+ * @param {Ref} deps.loading - Global loading status
+ * @param {Ref} deps.isAdmin - Are you an administrator?
+ * @param {Ref} deps.issueReportingEnabled - Whether problem reporting is enabled on the backend
  */
 const useIssues = (deps) => {
     const { ref, computed, watch } = Vue;
     const { showToast, showConfirm, t, requireLogin, loading, isAdmin } = deps;
     const issueReportingEnabled = deps.issueReportingEnabled || ref(false);
 
-    // --- 資料快取 ---
+    // --- Data cache ---
     const dataLastLoaded = { issues: 0 };
     const DATA_TTL = 30000;
     const shouldLoad = () => !dataLastLoaded.issues || (Date.now() - dataLastLoaded.issues > DATA_TTL);
     const markLoaded = () => { dataLastLoaded.issues = Date.now(); };
 
-    // --- 狀態 ---
+    // --- Status ---
     const issues = ref([]);
     const issueFilter = ref({ status: '', keyword: '' });
     const issueSort = ref({ field: 'createdAt', asc: false });
@@ -35,7 +35,7 @@ const useIssues = (deps) => {
     let listRequestSequence = 0;
     let listAbortController = null;
 
-    // --- 篩選與分頁 ---
+    // --- Filtering and paging ---
     const filteredIssues = computed(() => issues.value);
     const pagedIssues = computed(() => issues.value);
     const issueTotalPages = computed(() => Math.max(1, issueServerTotalPages.value));
@@ -62,7 +62,7 @@ const useIssues = (deps) => {
         ? (issueSort.value.asc ? 'bi-caret-up-fill' : 'bi-caret-down-fill')
         : 'bi-arrow-down-up';
 
-    // --- 載入 ---
+    // --- Loading ---
     const loadIssues = async (force) => {
         if (!issueReportingEnabled.value) { return false; }
         if (!force && !shouldLoad()) { return; }
@@ -120,7 +120,7 @@ const useIssues = (deps) => {
         loading.value.issuesError = '';
     });
 
-    // --- 建立 ---
+    // --- Create ---
     const createIssue = async (title, description) => {
         if (!issueReportingEnabled.value) { return false; }
         if (!await requireLogin()) { return false; }
@@ -140,7 +140,7 @@ const useIssues = (deps) => {
         return false;
     };
 
-    // --- Admin 操作 ---
+    // --- Admin Operation ---
     const replyIssue = async (id, reply) => {
         if (!issueReportingEnabled.value) { return false; }
         if (!await requireLogin()) { return false; }
@@ -157,7 +157,7 @@ const useIssues = (deps) => {
         return false;
     };
 
-    // 同一個問題的動作處理中時忽略重複點擊。
+    // Repeated clicks are ignored when actions for the same question are being processed.
     const inFlight = createInFlight();
 
     const resolveIssue = (id) => inFlight.run('resolve:' + id, async () => {

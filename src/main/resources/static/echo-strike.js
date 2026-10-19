@@ -1,27 +1,27 @@
 /**
- * echo-strike.js - Echo Strike，隱藏彩蛋的縱向射擊小遊戲（由 easter-egg.js 在觸發後載入）
+ * echo-strike.js - Echo Strike, a vertical shooting mini-game with hidden Easter eggs (loaded by easter-egg.js after triggering)
  *
- * 原創內容：機體、敵人、名稱都是自己畫的。玩家機用部署主色（SIT 青綠／UAT 藍），
- * 敵人是 HTTP 方法造型，道具是「200 OK」膠囊，三關的 Boss 分別是 404、429、500。
+ * Original content: The aircraft, enemies, and names are all drawn by myself. The main color for player machine deployment (SIT green/UAT blue),
+ * The enemy is the HTTP method shape, the prop is the "200 OK" capsule, and the Boss of the three levels are 404, 429, and 500 respectively.
  *
- * 內容：
- * - 三關（STAGING → UAT → PRODUCTION），每關有中途強敵與 Boss，打完三關進入下一輪，速度更快。
- * - 八種敵人：GET、HEAD、POST、PUT、DELETE、PATCH、OPTIONS 砲台、TIMEOUT 定時雷。
- * - 道具：武器（WIDE／BEAM／SEEK，可升到 Lv4）、炸彈、護盾、MOCK 僚機、1UP。
- * - 連鎖：連續擊破提高倍率；每關結算擊破數、最高連鎖與無傷獎勵。
- * - 無限接關：生命用完時 10 秒內按 Z（或點一下）就從原地繼續，關卡與 Boss 進度保留；
- *   分數歸零重算（接關前的分數會先記為最高分），畫面顯示接關次數。
+ * Content:
+ * - Three levels (STAGING → UAT → PRODUCTION). Each level has strong enemies and Boss in the middle. After completing three levels, you will enter the next round, which will be faster.
+ * - Eight types of enemies: GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS turret, TIMEOUT time mine.
+ * - Items: Weapon (WIDE/BEAM/SEEK, can be upgraded to Lv4), bomb, shield, MOCK wingman, 1UP.
+ * - Chain: Continuous defeats increase the multiplier; each level calculates the number of defeats, the highest chain and no damage rewards.
+ * - Infinite level transition: when you run out of life, press Z (or click) within 10 seconds to continue from the same place, and the level and Boss progress will be retained;
+ *   The score will be reset to zero and recalculated (the score before connecting to the level will be recorded as the highest score first), and the screen will display the number of levels connected.
  *
- * 炸彈：鍵盤按 X；滑鼠或觸控按右下角的 BOMB 按鈕（觸控也可以點兩下）。
- * 會清掉畫面上所有敵彈、重創敵人，並短暫無敵。沒有炸彈時按鈕會提示。
+ * Bomb: Press X on the keyboard; press the BOMB button in the lower right corner with the mouse or touch (you can also click twice on the touch).
+ * Will clear all enemy bullets on the screen, severely damage enemies, and make them temporarily invincible. The button will indicate when there are no bombs.
  *
- * 效能：
- * - 遊戲本體只在觸發彩蛋後才下載，平常開網站不會載入。
- * - 遊戲邏輯固定每秒 60 次更新，畫面跟著 requestAnimationFrame 繪製；切到別的分頁或關閉就停止。
- * - 子彈、敵人、粒子、特效、文字都用物件池，遊戲中不產生新物件，不會因記憶體回收卡頓。
- * - 圖案在開始時畫進離屏 canvas 一次，之後只貼圖；不使用 shadowBlur 或 filter 這類昂貴效果。
- * - 依 devicePixelRatio 設定畫布解析度，高解析度螢幕不糊。
- * 系統設定「減少動態效果」時不閃光、不震動。
+ * Performance:
+ * - The game itself is only downloaded after the easter egg is triggered, and will not be loaded when the website is opened normally.
+ * - The game logic is fixed to update 60 times per second, and the screen is drawn according to requestAnimationFrame; it will stop when switching to another page or closing.
+ * - Bullets, enemies, particles, special effects, and text all use object pools. No new objects are generated in the game, and there will be no lag due to memory recycling.
+ * - The pattern is drawn into the off-screen canvas once at the beginning and then just textured; no expensive effects like shadowBlur or filter are used.
+ * - Set the canvas resolution according to devicePixelRatio, and the high-resolution screen will not be blurry.
+ * The system does not flash or vibrate when "reduce dynamic effects" is set.
  */
 (function () {
     'use strict';

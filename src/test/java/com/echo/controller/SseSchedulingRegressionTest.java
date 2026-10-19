@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-/** SSE 播放使用獨立的 scheduler，被阻塞的 SSE 寫入不會占用一般 HTTP 延遲回應的 worker。 */
+/** SSE playback uses an independent scheduler, and the blocked SSE write will not occupy the worker of the general HTTP delayed response. */
 class SseSchedulingRegressionTest {
     @Test
     void eightBlockedSseWritersDoNotBlockGeneralHttpDelayWorkers() throws Exception {

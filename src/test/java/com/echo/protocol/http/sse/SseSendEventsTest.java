@@ -162,7 +162,7 @@ class SseSendEventsTest {
         verify(emitter, never()).complete();
     }
 
-    // ===== Property 2: 驗證→執行一致性 =====
+    // ===== Property 2: Verification→Execution Consistency =====
 
     /**
      * Validates: Requirements 1.2

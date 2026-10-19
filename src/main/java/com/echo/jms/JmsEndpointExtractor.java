@@ -13,7 +13,7 @@ import javax.xml.stream.XMLStreamReader;
 import java.io.StringReader;
 
 /**
- * 從 JMS body 串流提取 endpoint 欄位，避免只為取得 ServiceName 就建立完整 XML DOM / JSON tree。
+ * Extract the endpoint field from the JMS body stream to avoid creating the complete XML DOM / JSON tree just to get ServiceName.
  */
 @Component
 @Slf4j

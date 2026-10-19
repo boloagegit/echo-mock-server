@@ -24,17 +24,17 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 規則服務 - 共用功能
+ * Rules Service - Shared Functions
  * <p>
- * 提供跨協定的共用操作：
+ * Provide common operations across protocols:
  * <ul>
- *   <li>Response body 快取管理</li>
- *   <li>批次啟用/停用規則</li>
- *   <li>標籤查詢</li>
+ *   <li>Response body Cache management</li>
+ *   <li>batch enable/disable rule</li>
+ *   <li>tag query</li>
  * </ul>
  * 
- * @see HttpRuleService HTTP 規則專用服務
- * @see JmsRuleService JMS 規則專用服務
+ * @see HttpRuleService HTTP Rule-specific service
+ * @see JmsRuleService JMS Rule-specific service
  */
 @Service
 @RequiredArgsConstructor
@@ -51,13 +51,13 @@ public class RuleService {
 
     // ==================== Response ====================
 
-    /** 依 ID 查詢 Response */
+    /** Query Response according to ID */
     public Optional<Response> findResponseById(Long id) {
         return responseRepository.findById(id);
     }
 
     /**
-     * 取得 Response body（含快取）
+     * Obtain Response body (including cache)
      */
     public Optional<String> findResponseBodyById(Long id) {
         if (id == null) {
@@ -80,18 +80,18 @@ public class RuleService {
         return body;
     }
 
-    /** 清除指定 Response 的 body 快取 */
+    /** Clearing body cache for specified Response */
     public void evictResponseBodyCache(Long id) {
         if (id != null) {
             responseBodyCache.invalidate(id);
         }
     }
 
-    // ==================== 批次操作 ====================
+    // ==================== Batch operation ====================
 
     /**
-     * 批次更新規則的啟用狀態。只有實際改變的規則才更新、記錄修訂並觸發規則重建；
-     * 全部都已是目標狀態時（例如連按兩下）什麼都不做，回傳 0。
+     * Enabled status of batch update rule. Only rules that actually changed are updated, recording revisions and triggering rule reconstruction;
+     * When everything is in the target state (for example, double-clicking), nothing is done and 0 is returned.
      */
     @Transactional
     @CacheEvict(cacheNames = { CacheConfig.HTTP_RULES_CACHE, CacheConfig.JMS_RULES_CACHE }, allEntries = true,
@@ -101,7 +101,7 @@ public class RuleService {
             return 0;
         }
         
-        // 批次記錄變更（一次查詢取代 N+1）
+        // Batch record change (one query replaces N+1)
         ruleAuditService.ifPresent(s -> {
             try {
                 List<BaseRule> rules = protocolHandlerRegistry.findAllByIds(ids);
@@ -113,8 +113,8 @@ public class RuleService {
                         continue;
                     }
                     try {
-                        // 不改動受管理的實體：改了會在下面的批次 UPDATE 前先被寫回資料庫，
-                        // 使 UPDATE 以為沒有變更而不觸發規則重建。
+                        // Do not change the managed entity: changes will be written back to the database before the following batch UPDATE,
+                        // Make UPDATE think that there are no changes and not trigger rule reconstruction.
                         String beforeJson = objectMapper.writeValueAsString(rule);
                         ObjectNode after = (ObjectNode) objectMapper.readTree(beforeJson);
                         after.put("enabled", enabled);
@@ -140,7 +140,7 @@ public class RuleService {
         return count;
     }
 
-    /** 批次更新保護狀態；已經是目標狀態的規則不更新，沒有實際變更時不清快取也不通知其他節點。 */
+    /** The protection status is updated in batches; rules that are already in the target status are not updated, and if there are no actual changes, the cache is not cached and other nodes are not notified. */
     @Transactional
     @CacheEvict(cacheNames = { CacheConfig.HTTP_RULES_CACHE, CacheConfig.JMS_RULES_CACHE }, allEntries = true,
             condition = "#result > 0")
@@ -156,7 +156,7 @@ public class RuleService {
     }
 
     /**
-     * 展延單一規則
+     * Extending a single rule
      */
     @Transactional
     @CacheEvict(cacheNames = { CacheConfig.HTTP_RULES_CACHE, CacheConfig.JMS_RULES_CACHE }, allEntries = true,
@@ -166,7 +166,7 @@ public class RuleService {
     }
 
     /**
-     * 批次展延規則
+     * Batch extension rules
      */
     @Transactional
     @CacheEvict(cacheNames = { CacheConfig.HTTP_RULES_CACHE, CacheConfig.JMS_RULES_CACHE }, allEntries = true,
@@ -179,7 +179,7 @@ public class RuleService {
     }
 
     /**
-     * 依標籤查詢規則 ID
+     * Query rules by tag ID
      */
     public List<String> findIdsByTag(String key, String value) {
         String escapedKey = escapeLikePattern(key);
@@ -195,7 +195,7 @@ public class RuleService {
     }
 
     /**
-     * 批次檢查哪些 responseId 存在（供 HttpRuleService / JmsRuleService 共用）
+     * Batch check which responseId exists (shared by HttpRuleService / JmsRuleService)
      */
     public Set<Long> getValidResponseIds(Set<Long> ids) {
         if (ids.isEmpty()) {
@@ -204,14 +204,14 @@ public class RuleService {
         if (ids.size() <= MAX_IN_LIST_IDS) {
             return Set.copyOf(responseRepository.findExistingIds(ids));
         }
-        // 大量 ID 時改讀全部主鍵再求交集：部分資料庫（例如 H2）會逐列線性比對 IN 清單（20,000 條規則時重建快照約 2 秒），
-        // 且 SQL Server（2,100 個參數）與 Oracle（IN 清單 1,000 筆）等資料庫有上限。
+        // When there are a large number of ID, read all primary keys and then find the intersection: some databases (such as H2) will linearly compare the IN list column by column (it takes about 2 seconds to rebuild the snapshot when there are 20,000 rules).
+        // And databases such as SQL Server (2,100 parameters) and Oracle (IN list 1,000 entries) have upper limits.
         Set<Long> existing = new HashSet<>(responseRepository.findAllIds());
         existing.retainAll(ids);
         return Set.copyOf(existing);
     }
 
-    /** 超過此數量的 ID 不再組成單一 IN 清單。 */
+    /** More than this number of ID no longer form a single IN list. */
     static final int MAX_IN_LIST_IDS = 500;
 
 }

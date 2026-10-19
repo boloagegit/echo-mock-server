@@ -1,7 +1,7 @@
 /**
- * SseEvents - 規則編輯器 SSE 事件清單用到的計算（不含畫面，可單獨測試）：
- * 每個事件第幾毫秒送出、總長度、時間與大小的顯示、毫秒／秒換算、搜尋，
- * 以及「整串貼上」：JSON 事件陣列或直接從串流複製的 text/event-stream 原文。
+ * SseEvents - Calculations used in the rule editor SSE event list (excluding screens, can be tested separately):
+ * The millisecond at which each event is sent, total length, time and size display, millisecond/second conversion, search,
+ * And "paste the whole string": JSON event array or text/event-stream original text copied directly from the stream.
  */
 const SseEvents = (() => {
   const MAX_DELAY_MS = 600000;
@@ -10,8 +10,8 @@ const SseEvents = (() => {
   const isTerminal = event => event?.type === 'error' || event?.type === 'abort';
 
   /**
-   * 事件依序送出，延遲是送出前的等待時間。錯誤事件送出後關閉連線，中止事件只等待不送出；
-   * 之後的事件都不會送出（state 'skipped'，沒有時間點）。
+   * Events are sent in order, and the delay is the waiting time before sending. The connection is closed after the error event is sent, and the abort event is only waited for without sending;
+   * Subsequent events will not be sent (state 'skipped', no time point).
    */
   const timeline = events => {
     let atMs = 0;
@@ -26,8 +26,8 @@ const SseEvents = (() => {
   };
 
   /**
-   * 規則詳細資料的一行摘要用：幾個事件、全長、會不會循環，以及在哪個事件結束連線。
-   * 有錯誤／中止事件時串流在那裡結束，即使開了循環也不會重播（與伺服器的播放器相同）。
+   * A one-line summary of the rule details: several events, full length, whether it loops, and at which event the connection ends.
+   * The stream ends there when there is an error/abort event, and it will not be replayed even if the loop is turned on (same as the server's player).
    */
   const summary = (events, loopEnabled) => {
     const list = Array.isArray(events) ? events : [];
@@ -38,7 +38,7 @@ const SseEvents = (() => {
   };
 
   const trimNumber = value => String(Math.round(value * 1000) / 1000);
-  /** 300 → 300 ms；1500 → 1.5 秒；90000 → 1 分 30 秒；600000 → 10 分鐘。 */
+  /** 300 → 300 ms; 1500 → 1.5 seconds; 90000 → 1 minute and 30 seconds; 600000 → 10 minutes. */
   const formatDuration = (ms, t) => {
     const value = Math.max(0, Math.round(Number(ms) || 0));
     if (value < 1000) return t('sseEditor.durationMs', { ms: value });
@@ -49,7 +49,7 @@ const SseEvents = (() => {
       : t('sseEditor.durationMin', { m: minutes });
   };
 
-  /** UTF-8 位元組數（不配置暫存陣列）。 */
+  /** UTF-8 byte count without allocating a temporary array. */
   const byteLength = text => {
     const value = text == null ? '' : String(text);
     let bytes = 0;
@@ -68,16 +68,16 @@ const SseEvents = (() => {
     return trimNumber(Math.round(bytes / 104857.6) / 10) + ' MB';
   };
 
-  /** 收起時顯示的一行：空白合併，只看開頭（幾 KB 的內容也只處理前面一小段）。 */
+  /** A line displayed when collapsed: merge blanks, only look at the beginning (only the first short paragraph of the content of KB is processed). */
   const previewLine = (text, max = 160) => {
     const head = String(text ?? '').slice(0, max * 4).replace(/\s+/g, ' ').trim();
     return head.length > max ? head.slice(0, max) + '…' : head;
   };
 
-  /** 打開時的單位：整秒（至少 1 秒）用秒，其他用毫秒。 */
+  /** Unit when turned on: seconds for whole seconds (at least 1 second), milliseconds for everything else. */
   const unitFor = ms => (Number.isInteger(ms) && ms >= 1000 && ms % 1000 === 0 ? 's' : 'ms');
   const toUnit = (ms, unit) => (unit === 's' ? Math.round(ms) / 1000 : ms);
-  /** 輸入框的值換成毫秒；看不懂時回 null。秒最多到毫秒（1.2345 秒 → 1235 毫秒）。 */
+  /** Convert the input to milliseconds; return null if parsing fails. Round seconds to millisecond precision, for example 1.2345 s becomes 1235 ms. */
   const fromUnit = (value, unit) => {
     if (value === '' || value == null) return null;
     const number = Number(value);
@@ -106,14 +106,14 @@ const SseEvents = (() => {
       if (!['normal', 'error', 'abort'].includes(type)) return fail('sseEditor.bulkBadType', { ...at, type: String(type) });
       const delayMs = item.delayMs == null ? 0 : item.delayMs;
       if (!delayValid(delayMs)) return fail('sseEditor.bulkBadDelay', { ...at, max: MAX_DELAY_MS });
-      // 物件形式的 data（{"data": {"a":1}}）照樣接受，存成 JSON 文字
+      // data in object form ({"data": {"a":1}}) is still accepted and saved as JSON text
       const data = item.data == null ? '' : (typeof item.data === 'string' ? item.data : JSON.stringify(item.data));
       events.push({ event: item.event == null ? '' : String(item.event), data,
         id: item.id == null ? '' : String(item.id), delayMs, type });
     }
     return checked(events);
   };
-  /** 與伺服器相同的規則：每個事件都要有資料，事件名稱與 ID 不可換行。 */
+  /** The same rules as the server: each event must have data, and the event name and ID cannot wrap. */
   const checked = events => {
     if (!events.length) return fail('sseEditor.bulkEmpty');
     for (let i = 0; i < events.length; i++) {
@@ -129,20 +129,20 @@ const SseEvents = (() => {
       id: event.id || '', delayMs: 0, type: 'normal' }));
     parser.push(text.endsWith('\n') ? text + '\n' : text + '\n\n');
     parser.finish();
-    // 連續的 id 只在改變時保留，不把上一個 id 複製到每一個事件
+    // Consecutive id are only retained when changing, do not copy the previous id to each event
     let lastId = '';
     events.forEach(event => { if (event.id === lastId) event.id = ''; else lastId = event.id; });
     return events.length ? checked(events) : fail('sseEditor.bulkUnreadable');
   };
-  /** 「整串貼上」：開頭是 [ 當 JSON 事件陣列，否則當 text/event-stream 原文（event: / data: / id:）。 */
+  /** "Post the whole string": The beginning is [ when JSON event array, otherwise when text/event-stream original text (event: / data: / id:). */
   const parseBulk = text => {
-    // 開頭的 BOM（從檔案複製時常見）先拿掉，JSON 與串流原文都一樣
+    // Remove the BOM at the beginning (common when copying from files). JSON is the same as the original streaming text.
     const source = String(text ?? '').replace(/^\uFEFF/, '');
     if (!source.trim()) return fail('sseEditor.bulkEmpty');
     return source.trimStart().startsWith('[') ? fromJson(source) : fromStream(source);
   };
 
-  /** 實際送出的串流原文（含延遲、錯誤／中止與循環的說明行），只在使用者打開「原始內容」時才產生。 */
+  /** The actual stream original text sent (including delay, error/abortion and loop description lines) is only generated when the user opens the "original content". */
   const rawStream = (events, loopEnabled, t) => {
     if (!events || !events.length) return '';
     const lines = [];

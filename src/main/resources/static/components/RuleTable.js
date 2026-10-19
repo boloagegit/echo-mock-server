@@ -1,8 +1,8 @@
 /**
- * RuleTable - 規則表格（列表檢視與分組檢視共用）
+ * RuleTable - Rule table (common to list view and group view)
  *
- * 一列一條規則：點一下列開啟右側詳情抽屜，雙擊或按編輯鈕開啟編輯器，
- * 啟用開關立即生效，其餘操作收在「⋯」選單。欄位依容器寬度逐步隱藏。
+ * One rule per column: Click a column to open the details drawer on the right, double-click or press the edit button to open the editor.
+ * Enabling the switch takes effect immediately, and other operations are closed in the "⋯" menu. Fields are gradually hidden based on the width of the container.
  */
 const RuleTable = {
   inject: ['t'],
@@ -17,7 +17,7 @@ const RuleTable = {
     ruleSort: { type: Object, default: () => ({}) },
     batchSelectMode: Boolean,
     selectedRules: { type: Array, default: () => [] },
-    // 一定輪不到的規則（id → 原因），見 RuleOrderService
+    // Definitely unreachable rules, mapped from id to reason; see RuleOrderService.
     orderIssues: { type: Object, default: () => ({}) },
   },
   emits: ['select', 'edit', 'toggle-enabled', 'menu', 'toggle-selection', 'toggle-select-all', 'sort'],

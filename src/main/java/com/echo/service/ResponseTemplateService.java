@@ -35,9 +35,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 /**
- * Response Template Service - WireMock 風格的回應模板引擎
+ * Response Template Service - WireMock style response template engine
  * 
- * 支援：
+ * Support:
  * - {{request.path}}, {{request.pathSegments.[n]}}
  * - {{request.method}}
  * - {{request.query.xxx}}
@@ -114,12 +114,12 @@ public class ResponseTemplateService {
         XPathFactory.newInstance().newXPath()
     );
 
-    /** 每個執行緒最多保留的已編譯 XPath 數；XPathExpression 不可跨執行緒共用。 */
+    /** The maximum number of compiled XPath reserved per thread; XPathExpression cannot be shared across threads. */
     private static final int MAX_COMPILED_XPATHS = 64;
 
     /**
-     * 只保留這個長度以內的運算式。模板裡寫死的 XPath 都很短；由請求內容組出的長運算式不保留，
-     * 避免每個執行緒長期留住請求大小的字串。
+     * Only keep expressions within this length. The hard-coded XPath in the template is very short; the long arithmetic expression composed of the request content is not retained.
+     * Avoid per-thread persistence of request-sized strings.
      */
     static final int MAX_CACHED_XPATH_LENGTH = 256;
 
@@ -131,7 +131,7 @@ public class ResponseTemplateService {
             }
         });
 
-    /** 模板裡的 XPath 字串固定，編譯一次後在同一執行緒重用。 */
+    /** The XPath string in the template is fixed and can be reused in the same thread after compilation once. */
     private static XPathExpression compiledXPath(String path) throws XPathExpressionException {
         Map<String, XPathExpression> compiled = COMPILED_XPATHS.get();
         XPathExpression expression = compiled.get(path);
@@ -146,7 +146,7 @@ public class ResponseTemplateService {
         return expression;
     }
 
-    /** 測試用：目前執行緒保留的已編譯 XPath 數。 */
+    /** For testing: The number of compiled XPath currently reserved by the execution thread. */
     static int compiledXPathCountForCurrentThread() {
         return COMPILED_XPATHS.get().size();
     }
@@ -213,7 +213,7 @@ public class ResponseTemplateService {
     }
 
     private void registerHelpers() {
-        // {{now}} 和 {{now format='xxx'}}
+        // {{now}} and {{now format='xxx'}}
         handlebars.registerHelper("now", (Helper<Object>) (context, options) -> {
             String format = options.hash("format", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
             Date now = new Date();
@@ -232,7 +232,7 @@ public class ResponseTemplateService {
             }
         });
 
-        // {{randomValue type='UUID'}} 或 {{randomValue length=10 type='ALPHANUMERIC'}}
+        // {{randomValue type='UUID'}} or {{randomValue length=10 type='ALPHANUMERIC'}}
         handlebars.registerHelper("randomValue", (Helper<Object>) (context, options) -> {
             String type = options.hash("type", "ALPHANUMERIC");
             int length = options.hash("length", 8);
@@ -246,7 +246,7 @@ public class ResponseTemplateService {
             };
         });
 
-        // Phase 2: 比較運算子
+        // Phase 2: Comparison operator
         
         // {{#if (eq a b)}}
         handlebars.registerHelper("eq", (Helper<Object>) (a, options) -> {
@@ -296,7 +296,7 @@ public class ResponseTemplateService {
             }
         });
 
-        // Phase 2: 字串處理
+        // Phase 2: String processing
         
         // {{#each (split str delimiter)}}
         handlebars.registerHelper("split", (Helper<Object>) (str, options) -> {
@@ -329,7 +329,7 @@ public class ResponseTemplateService {
                 return "";
             }
             try {
-                // 同一次渲染中相同內容只解析一次（見 ParsedBodies）；append() 會修改文件，改用獨立的解析結果
+                // The same content in the same rendering is only parsed once (see ParsedBodies); append() will modify the file and use independent parsing results instead
                 DocumentContext document = path.contains("append(")
                         ? JsonPath.parse(jsonStr) : parsed(options).json(jsonStr);
                 if (document == null) {
@@ -355,7 +355,7 @@ public class ResponseTemplateService {
                 return "";
             }
             try {
-                // 同一次渲染中相同內容只解析一次（見 ParsedBodies）
+                // The same content is only parsed once in the same rendering (see ParsedBodies)
                 Document doc = parsed(options).xml(xmlStr);
                 if (doc == null) {
                     return "";
@@ -429,7 +429,7 @@ public class ResponseTemplateService {
             if (min == max) {
                 return min;
             }
-            // 用 long 避免 max + 1 溢位，確保均勻分佈
+            // Use long to avoid max + 1 overflow and ensure even distribution
             return (int) ThreadLocalRandom.current().nextLong(min, (long) max + 1);
         });
     }
@@ -474,14 +474,14 @@ public class ResponseTemplateService {
     }
 
     /**
-     * 渲染模板
+     * Rendering template
      */
     public String render(String templateStr, TemplateContext context) {
         if (templateStr == null || templateStr.isEmpty()) {
             return "";
         }
 
-        // 快速檢查是否包含模板語法
+        // Quick check if template syntax is included
         if (!templateStr.contains("{{")) {
             return templateStr;
         }
@@ -504,7 +504,7 @@ public class ResponseTemplateService {
             }
         } catch (Exception e) {
             log.warn("Template rendering failed: {}", e.getMessage());
-            return templateStr; // 失敗時返回原始字串
+            return templateStr; // Return original string on failure
         }
     }
 
@@ -541,21 +541,21 @@ public class ResponseTemplateService {
         return Map.of("request", request);
     }
 
-    /** 一次渲染的解析結果放在 Handlebars context data 的這個 key。 */
+    /** The parsing result of one rendering is placed in key of Handlebars context data. */
     private static final String PARSED_BODIES = "echo.parsedBodies";
 
     private static ParsedBodies parsed(Options options) {
         ParsedBodies parsed = options.data(PARSED_BODIES);
-        // 不經 render() 的呼叫（理論上不會發生）退回每次解析
+        // Calling without going through render() (theoretically this will not happen) returns every parse
         return parsed != null ? parsed : new ParsedBodies();
     }
 
     /**
-     * 同一次渲染中已解析過的 XML / JSON 內容。模板裡多個 {@code xPath} 或 {@code jsonPath}
-     * 讀同一份內容時只解析一次；渲染結束即丟棄，不跨請求保留。渲染期間會同時留住已解析的內容
-     * （最多 4 份 XML 與 4 份 JSON），原本則是每次用完即丟，因此單次渲染的記憶體高峰可能略高。
-     * 解析失敗也會記住，之後同一內容的呼叫直接回傳空字串，與原本的結果一致。
-     * 只記住最近幾份不同內容，避免模板對大量不同字串呼叫時累積。
+     * Parsed XML / JSON content in the same render. Multiple {@code xPath} or {@code jsonPath} in the template
+     * When reading the same content, it is only parsed once; it is discarded after rendering and is not retained across requests. Parsed content is retained during rendering
+     * (up to 4 copies of XML and 4 copies of JSON). It is originally discarded after each use, so the memory peak of a single rendering may be slightly higher.
+     * Parsing failure will also be remembered, and subsequent calls with the same content will directly return an empty string, consistent with the original result.
+     * Only remember the last few different contents to avoid accumulation when the template is called for a large number of different strings.
      */
     static final class ParsedBodies {
         private static final int MAX_ENTRIES = 4;
@@ -601,16 +601,16 @@ public class ResponseTemplateService {
     }
 
     /**
-     * 檢查字串是否包含模板語法
+     * Check if string contains template syntax
      */
     public boolean hasTemplate(String str) {
         return str != null && str.contains("{{");
     }
 
     /**
-     * 各協定共用的渲染入口：只在內容含模板語法時才建立上下文並渲染；沒有 <code>{{</code> 時原樣回傳，
-     * 不做任何額外工作。新增協定時只要提供 {@link TemplateContext}，不需要另外支援模板。
-     * 經由 {@link #hasTemplate} 與 {@link #render} 實作，service 為 null 時不渲染。
+     * Rendering entry common to all protocols: the context is only established and rendered when the content contains template syntax; if there is no <code>{{</code>, it is returned as it is.
+     * No additional work is done. When adding a new protocol, you only need to provide {@link TemplateContext}, and no additional support template is required.
+     * Implemented by {@link #hasTemplate} and {@link #render}, service is not rendered when it is null.
      */
     public static String renderIfTemplate(ResponseTemplateService service, String templateStr,
                                           Supplier<TemplateContext> context) {
@@ -621,8 +621,8 @@ public class ResponseTemplateService {
     }
 
     /**
-     * 模板上下文：{@code request.path / method / query / headers / body}。
-     * 各協定把自己的請求轉成這五項（JMS 的訊息 ID、correlation ID 與屬性放在 headers）。
+     * Template context: {@code request.path / method / query / headers / body}.
+     * Each protocol converts its own request into these five items (JMS’s message ID, correlation ID and attributes are placed in headers).
      */
     public record TemplateContext(
             String path,
@@ -631,7 +631,7 @@ public class ResponseTemplateService {
             Map<String, String> headers,
             String body
     ) {
-        /** 由原始 query string 建立；query 只在需要渲染時才解析。 */
+        /** Created from original query string; query is only parsed when rendering is required. */
         public static TemplateContext of(String path, String method, String queryString,
                                          Map<String, String> headers, String body) {
             return new TemplateContext(path, method, parseQuery(queryString), headers, body);

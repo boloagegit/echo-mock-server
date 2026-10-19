@@ -15,7 +15,7 @@ public final class SseEventSequence {
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
     private static final Set<String> FIELDS = Set.of("data", "event", "id", "delayMs", "type");
     private static final Set<String> TYPES = Set.of("normal", "error", "abort");
-    /** 單一事件延遲上限（10 分鐘）；超過時自動調整為上限。 */
+    /** The upper limit of single event delay (10 minutes); automatically adjusted to the upper limit when exceeded. */
     public static final long MAX_EVENT_DELAY_MS = 600_000L;
     public static final long MAX_STREAM_DURATION_MS = 86_400_000L;
 

@@ -12,7 +12,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 審計日誌整合測試
+ * Audit log integration test
  */
 class AuditLogIntegrationTest extends BaseIntegrationTest {
 
@@ -40,7 +40,7 @@ class AuditLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("11.2 規則建立產生 CREATE 審計記錄")
+    @DisplayName("11.2 Creating a rule produces a CREATE audit record")
     void createRule_generatesCreateAudit() {
         RuleDto rule = createHttpRule("/api/audit-create", "GET", "{\"ok\":true}");
 
@@ -51,17 +51,17 @@ class AuditLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("11.3 規則更新產生 UPDATE 審計記錄（含 before/after）")
+    @DisplayName("11.3 Updating a rule produces an UPDATE audit record with before/after snapshots")
     void updateRule_generatesUpdateAudit() {
         RuleDto rule = createHttpRule("/api/audit-update", "GET", "{\"ok\":true}");
 
-        // 更新 description（使用 exchange + JSON Content-Type）
+        // Update description (use exchange + JSON Content-Type)
         rule.setDescription("已更新的描述");
         ResponseEntity<RuleDto> updateResp = updateRule(rule.getId(), rule);
         assertThat(updateResp.getStatusCode()).isEqualTo(HttpStatus.OK);
 
         List<Map<String, Object>> audits = getRuleAuditLogs(rule.getId());
-        // 應有 CREATE + UPDATE
+        // There should be CREATE + UPDATE
         assertThat(audits.size()).isGreaterThanOrEqualTo(2);
         Map<String, Object> updateAudit = audits.stream()
                 .filter(a -> "UPDATE".equals(a.get("action")))
@@ -71,17 +71,17 @@ class AuditLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("11.4 規則刪除產生 DELETE 審計記錄")
+    @DisplayName("11.4 Deleting a rule produces a DELETE audit record")
     void deleteRule_generatesDeleteAudit() {
         RuleDto rule = createHttpRule("/api/audit-delete", "GET", "{\"ok\":true}");
         String ruleId = rule.getId();
 
-        // 使用 exchange 確保 DELETE 帶認證
+        // Use exchange to ensure DELETE with authentication
         ResponseEntity<Void> delResp = adminClient().exchange(
                 "/api/admin/rules/" + ruleId, HttpMethod.DELETE, null, Void.class);
         assertThat(delResp.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
 
-        // 刪除後用全域審計查詢
+        // Use global audit query after deletion
         List<Map<String, Object>> allAudits = getAllAuditLogs(null);
         Map<String, Object> deleteAudit = allAudits.stream()
                 .filter(a -> ruleId.equals(a.get("ruleId")) && "DELETE".equals(a.get("action")))
@@ -91,7 +91,7 @@ class AuditLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("11.5 全部審計日誌查詢 + limit 參數")
+    @DisplayName("11.5 Queries all audit logs and supports the limit parameter")
     void getAllAuditLogs_withLimit() {
         createHttpRule("/api/audit-a", "GET", "{\"a\":true}");
         createHttpRule("/api/audit-b", "GET", "{\"b\":true}");
@@ -105,7 +105,7 @@ class AuditLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("11.5.1 修訂摘要分頁不含 JSON，單筆明細保留完整內容")
+    @DisplayName("11.5.1 Paginated revision summaries omit JSON while individual details retain the complete contents")
     void pagedAuditSummary_andLazyDetail() {
         RuleDto rule = createHttpRule("/api/audit-detail", "GET", "{\"ok\":true}");
         rule.setDescription("lazy-detail-description");
@@ -133,7 +133,7 @@ class AuditLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("11.5.2 修訂列表直接附上名稱與改了什麼，並可用路徑搜尋、依類型篩選")
+    @DisplayName("11.5.2 Revision lists include names and changes, support path search, and filter by type")
     @SuppressWarnings("unchecked")
     void pagedAuditSummary_carriesNameAndChangesForSearch() {
         RuleDto rule = createHttpRule("/api/audit-summary-path", "GET", "{\"ok\":true}");
@@ -165,7 +165,7 @@ class AuditLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("11.5.3 只改 SSE 回應內容時，摘要不會多出內容類型的變更；列表附上伺服器今天日期")
+    @DisplayName("11.5.3 An SSE-body-only update does not report a content-type change; lists include today's server date")
     @SuppressWarnings("unchecked")
     void sseResponseBodyEdit_listsOnlyTheBody() {
         HttpHeaders headers = new HttpHeaders();
@@ -192,7 +192,7 @@ class AuditLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("11.6 清除全部審計日誌")
+    @DisplayName("11.6 Clears all audit logs")
     void deleteAllAuditLogs() {
         createHttpRule("/api/audit-clear", "GET", "{\"ok\":true}");
 

@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * ResponseContentValidatorRegistry.getValidator() 單元測試。
+ * ResponseContentValidatorRegistry.getValidator() unit test.
  */
 class ResponseContentValidatorRegistryTest {
 

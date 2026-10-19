@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Worst case 記憶體測試
+Worst case memory test
 
-策略：
-  1. 建立 2000 條 HTTP 規則 + 2000 條 JMS 規則（各有不同 path/queue）
-  2. 每條規則的 response body 為 500KB（接近快取 threshold）
-  3. 觸發所有規則的快取載入
-  4. 填滿 request log（memory 模式 10,000 筆）
-  5. 查看 heap 使用量
+Strategy:
+  1. Create 2000 HTTP rules + 2000 JMS rules (each has different path/queue)
+  2. response body for each rule is 500KB (close to cache threshold)
+  3. Trigger cache loading of all rules
+  4. Fill the request log with 10,000 records in memory mode.
+  5. Check heap usage
 
-用法：python3 scripts/stress-test-memory.py [BASE_URL]
+Usage: python3 scripts/stress-test-memory.py [BASE_URL]
 """
 
 import json, os, sys, time, urllib.request, base64
@@ -48,7 +48,7 @@ def get_heap():
 def fmt_mb(b):
     return f"{b / 1024 / 1024:.0f}MB"
 
-# 大 response body（接近 500KB threshold）
+# Large response body (nearly 500KB threshold)
 BIG_BODY = json.dumps({"data": "x" * (400 * 1024), "padding": "y" * (90 * 1024)})
 BODY_SIZE = len(BIG_BODY)
 
@@ -58,11 +58,11 @@ print(f"  目標：{BASE}")
 print(f"  Response body 大小：{BODY_SIZE:,} bytes ({fmt_mb(BODY_SIZE)})")
 print("=" * 60)
 
-# 基準
+# Baseline
 used, max_h = get_heap()
 print(f"\n  基準 heap：{fmt_mb(used)} / {fmt_mb(max_h)}")
 
-# 清理
+# Cleanup
 api("DELETE", "/api/admin/rules/all")
 api("DELETE", "/api/admin/responses/orphans")
 api("DELETE", "/api/admin/logs/all")
@@ -71,7 +71,7 @@ time.sleep(1)
 used, _ = get_heap()
 print(f"  清理後 heap：{fmt_mb(used)}")
 
-# === Phase 1：建立 2000 條 HTTP 規則（大 body）===
+# === Phase 1: Create 2000 HTTP rules (large body) ===
 print(f"\n[Phase 1] 建立 2000 條 HTTP 規則（每條 {fmt_mb(BODY_SIZE)} body）...")
 HTTP_COUNT = 2000
 BATCH = 50
@@ -102,7 +102,7 @@ for s in range(0, HTTP_COUNT, BATCH):
 used, _ = get_heap()
 print(f"\n  HTTP 規則建立完成，heap：{fmt_mb(used)}")
 
-# === Phase 2：建立 2000 條 JMS 規則（大 body）===
+# === Phase 2: Create 2000 JMS rules (large body) ===
 _, status = api("GET", "/api/admin/status")
 jms_enabled = status.get("jmsEnabled", False) if isinstance(status, dict) else False
 
@@ -133,7 +133,7 @@ if jms_enabled:
 else:
     print("\n[Phase 2] JMS 未啟用，跳過")
 
-# === Phase 3：觸發快取載入（打 mock 請求）===
+# === Phase 3: Trigger cache loading (make mock request) ===
 print(f"\n[Phase 3] 觸發快取載入（打 200 個不同 path 的 mock 請求）...")
 for i in range(200):
     url = f"{BASE}/mock/mem/api-{i}"
@@ -149,7 +149,7 @@ time.sleep(2)
 used, _ = get_heap()
 print(f"  快取載入後 heap：{fmt_mb(used)}")
 
-# === Phase 4：填滿 request log ===
+# === Phase 4: Filled request log ===
 print(f"\n[Phase 4] 填滿 request log（打 1000 次請求）...")
 for i in range(1000):
     url = f"{BASE}/mock/mem/api-{i % HTTP_COUNT}"
@@ -165,7 +165,7 @@ time.sleep(2)
 used, _ = get_heap()
 print(f"  request log 填滿後 heap：{fmt_mb(used)}")
 
-# === 總結 ===
+# === Summary ===
 _, status = api("GET", "/api/admin/status")
 rule_count = status.get("ruleCount", "?") if isinstance(status, dict) else "?"
 response_count = status.get("responseCount", "?") if isinstance(status, dict) else "?"
@@ -183,7 +183,7 @@ print(f"  Response body 大小：{fmt_mb(BODY_SIZE)} x {response_count}")
 print(f"  Heap 使用：{fmt_mb(used)} / {fmt_mb(max_h)} ({used * 100 // max_h if max_h else 0}%)")
 print("=" * 60)
 
-# 清理
+# Cleanup
 print("\n清理...")
 api("DELETE", "/api/admin/rules/all")
 api("DELETE", "/api/admin/responses/orphans")

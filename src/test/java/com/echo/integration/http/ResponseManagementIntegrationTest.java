@@ -19,7 +19,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 回應管理整合測試
+ * Response to management integration test
  */
 @TestPropertySource(properties = "echo.features.bulk-import-export-enabled=true")
 class ResponseManagementIntegrationTest extends BaseIntegrationTest {
@@ -27,7 +27,7 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
     // ========== 9.2 Response CRUD ==========
 
     @Test
-    @DisplayName("建立 Response → 201，包含 id、description、bodySize")
+    @DisplayName("Creating a Response returns 201 with id, description, and bodySize")
     void createResponse_shouldReturn201() {
         Response req = Response.builder()
                 .description("測試回應")
@@ -46,7 +46,7 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("讀取 Response → 200，包含 body 內容")
+    @DisplayName("Reading a Response returns 200 with its body")
     void getResponse_shouldReturn200WithBody() {
         Response created = createResponse("讀取測試", "{\"data\":\"read\"}");
 
@@ -62,7 +62,7 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("更新 Response → 200，description 已更新")
+    @DisplayName("Updating a Response returns 200 with the changed description")
     void updateResponse_shouldReturn200() {
         Response created = createResponse("更新前", "{\"v\":1}");
 
@@ -90,7 +90,7 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("刪除 Response → 200，回傳 deletedRules")
+    @DisplayName("Deleting a Response returns 200 with deletedRules")
     @SuppressWarnings("unchecked")
     void deleteResponse_shouldReturn200() {
         Response created = createResponse("刪除測試", "{\"del\":true}");
@@ -107,10 +107,10 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
         assertThat(verify.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
-    // ========== 9.3 Response 列表與搜尋 ==========
+    // ========== 9.3 Response List and Search ==========
 
     @Test
-    @DisplayName("列表 Response → 回傳全部")
+    @DisplayName("Listing Responses returns all entries")
     void listResponses_shouldReturnAll() {
         createResponse("列表A", "{\"a\":1}");
         createResponse("列表B", "{\"b\":2}");
@@ -129,7 +129,7 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("搜尋 Response → 回傳符合 keyword 的")
+    @DisplayName("Searching Responses returns keyword matches")
     void searchResponses_shouldReturnMatching() {
         createResponse("訂單回應", "{\"order\":true}");
         createResponse("使用者回應", "{\"user\":true}");
@@ -144,10 +144,10 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
         assertThat(response.getBody()).allMatch(r -> r.getDescription().contains("訂單"));
     }
 
-    // ========== 9.4 Response 摘要（含使用數量） ==========
+    // ========== 9.4 Response Summary (including usage quantity) ==========
 
     @Test
-    @DisplayName("Response 摘要 → 回傳 id、description、bodySize、usageCount")
+    @DisplayName("Response summaries include id, description, bodySize, and usageCount")
     @SuppressWarnings("unchecked")
     void responseSummary_shouldReturnUsageCount() {
         Response resp = createResponse("摘要測試", "{\"summary\":true}");
@@ -181,7 +181,7 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("Response 摘要分頁 → 後端搜尋、使用狀態與分頁正確")
+    @DisplayName("Paginated Response summaries support server search, usage filters, and pagination")
     @SuppressWarnings("unchecked")
     void responseSummaryPage_shouldFilterAndPaginate() {
         Response used = createResponse("分頁搜尋-使用中", "{\"used\":true}");
@@ -211,7 +211,7 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("Response 摘要搜尋 → 支援精確 ID 且跳脫萬用字元")
+    @DisplayName("Response-summary search supports exact IDs and escapes wildcard characters")
     @SuppressWarnings("unchecked")
     void responseSummaryPage_shouldSearchByIdAndEscapeWildcards() {
         Response literal = createResponse("摘要-100%_完成", "{\"literal\":true}");
@@ -235,7 +235,7 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("Response 摘要內容類型 → SSE 與一般回應正確分開")
+    @DisplayName("Response-summary content-type filters distinguish SSE from ordinary responses")
     @SuppressWarnings("unchecked")
     void responseSummaryPage_shouldFilterSseContentType() {
         Response sse = Response.builder()
@@ -268,10 +268,10 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
                 .doesNotContain(sseId);
     }
 
-    // ========== 9.5 Response 關聯規則查詢 ==========
+    // ========== 9.5 Response Association Rule Query ==========
 
     @Test
-    @DisplayName("查詢 Response 關聯規則 → 回傳 HTTP + JMS 規則")
+    @DisplayName("Querying rules associated with a Response returns HTTP and JMS rules")
     void getResponseRules_shouldReturnAssociatedRules() {
         Response resp = createResponse("關聯規則測試", "{\"linked\":true}");
 
@@ -305,10 +305,10 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
                 && "LINKED.Q".equals(r.getMatchKey()));
     }
 
-    // ========== 9.6 刪除 Response 連帶刪除關聯規則 ==========
+    // ========== 9.6 Delete Response and delete the association rules ==========
 
     @Test
-    @DisplayName("刪除 Response → 關聯規則也被刪除")
+    @DisplayName("Deleting a Response also deletes its associated rules")
     @SuppressWarnings("unchecked")
     void deleteResponse_shouldCascadeDeleteRules() {
         Response resp = createResponse("級聯刪除測試", "{\"cascade\":true}");
@@ -349,10 +349,10 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
         assertThat(jmsVerify.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
-    // ========== 9.7 Response 批次刪除 ==========
+    // ========== 9.7 Response batch deletion ==========
 
     @Test
-    @DisplayName("批次刪除 Response → 確認刪除成功")
+    @DisplayName("Batch deletion removes Responses successfully")
     @SuppressWarnings("unchecked")
     void batchDeleteResponses_shouldDeleteAll() {
         Response r1 = createResponse("批次1", "{\"b\":1}");
@@ -379,10 +379,10 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
                 .getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
-    // ========== 9.8 Response 全部刪除 ==========
+    // ========== 9.8 Response Delete all ==========
 
     @Test
-    @DisplayName("全部刪除 Response → 確認清空（含關聯規則）")
+    @DisplayName("Deleting all Responses also removes associated rules")
     @SuppressWarnings("unchecked")
     void deleteAllResponses_shouldClearAll() {
         Response resp = createResponse("全刪測試", "{\"all\":true}");
@@ -412,10 +412,10 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
         assertThat(listResp.getBody()).isNotNull().isEmpty();
     }
 
-    // ========== 9.9 Response 匯出/匯入 ==========
+    // ========== 9.9 Response Export/Import ==========
 
     @Test
-    @DisplayName("匯出全部 Response → 回傳完整列表")
+    @DisplayName("Exporting all Responses returns the complete list")
     void exportResponses_shouldReturnAll() {
         createResponse("匯出A", "{\"export\":\"a\"}");
         createResponse("匯出B", "{\"export\":\"b\"}");
@@ -433,7 +433,7 @@ class ResponseManagementIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("批次匯入 Response → 匯入成功")
+    @DisplayName("Bulk import creates Responses successfully")
     @SuppressWarnings("unchecked")
     void importResponses_shouldImportAll() {
         List<Response> imports = List.of(

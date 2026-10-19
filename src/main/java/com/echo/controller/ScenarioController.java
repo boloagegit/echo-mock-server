@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 
 /**
- * 情境（Scenario）狀態的查詢與重設。需開啟 {@code echo.features.scenarios-enabled}；關閉時回 404。
+ * Query and reset situation (Scenario) status. {@code echo.features.scenarios-enabled} needs to be turned on; 404 will be returned when turned off.
  */
 @RestController
 @RequestMapping(value = "/api/admin", produces = "application/json")

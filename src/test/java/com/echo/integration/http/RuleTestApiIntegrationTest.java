@@ -11,12 +11,12 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 規則測試 API 整合測試
+ * Rule test API integration test
  */
 class RuleTestApiIntegrationTest extends BaseIntegrationTest {
 
     @Test
-    @DisplayName("13.2 HTTP 規則測試: POST /api/admin/rules/{id}/test → 回傳 status/body/elapsed")
+    @DisplayName("13.2 HTTP rule test: POST /api/admin/rules/{id}/test returns status, body, and elapsed")
     void testHttpRule() {
         RuleDto rule = createHttpRule("/api/test-endpoint", "GET",
                 "{\"result\":\"ok\"}", "test.host", 200);
@@ -46,9 +46,9 @@ class RuleTestApiIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("13.3 JMS 規則測試: POST /api/admin/rules/{id}/test → 回傳結果")
+    @DisplayName("13.3 JMS rule test: POST /api/admin/rules/{id}/test returns a result")
     void testJmsRule() {
-        // 送到 Echo 實際監聽的 queue：會收到規則的回應，不必等 30 秒逾時（舊寫法送到沒有人監聽的 TEST.QUEUE）
+        // Send to Echo queue, which is actually monitored: will receive the response of the rule, without waiting for the 30 seconds timeout (the old way of writing is sent to TEST.QUEUE, which is not monitored)
         RuleDto rule = createJmsRule("ECHO.REQUEST", "{\"jms\":\"response\"}");
 
         HttpHeaders headers = new HttpHeaders();

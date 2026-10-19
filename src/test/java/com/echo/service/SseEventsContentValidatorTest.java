@@ -8,8 +8,8 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * SseEventsContentValidator.validate() 單元測試。
- * 使用真實 ObjectMapper（不 mock）。
+ * SseEventsContentValidator.validate() unit test.
+ * Use real ObjectMapper (not mock).
  */
 class SseEventsContentValidatorTest {
 
@@ -20,7 +20,7 @@ class SseEventsContentValidatorTest {
         validator = new SseEventsContentValidator(new ObjectMapper());
     }
 
-    // --- 合法輸入 ---
+    // --- Legal input ---
 
     @Test
     void validate_singleEvent_doesNotThrow() {
@@ -46,7 +46,7 @@ class SseEventsContentValidatorTest {
         assertThatCode(() -> validator.validate(body)).doesNotThrowAnyException();
     }
 
-    // --- 非法輸入 ---
+    // --- Illegal input ---
 
     @Test
     void validate_null_throwsIllegalArgument() {

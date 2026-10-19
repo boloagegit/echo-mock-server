@@ -28,7 +28,7 @@ public class MatchChainEntry implements MatchChainInfo {
         this(ruleId, reason, endpoint, description, condition, score, detail, nearMiss, null);
     }
 
-    /** @param detailTree 樹狀比對說明的 JSON（見 {@link MatchExplanationJson}），可為 null */
+    /** @param detailTree JSON of tree comparison description (see {@link MatchExplanationJson}), can be null */
     public MatchChainEntry(String ruleId, String reason, String endpoint,
                            String description, String condition,
                            String score, String detail, boolean nearMiss, String detailTree) {

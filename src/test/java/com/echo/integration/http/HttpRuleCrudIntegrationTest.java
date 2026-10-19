@@ -19,7 +19,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * HTTP 一般規則 CRUD 整合測試
+ * HTTP General Rules CRUD Integration Test
  */
 class HttpRuleCrudIntegrationTest extends BaseIntegrationTest {
 
@@ -39,7 +39,7 @@ class HttpRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("建立 HTTP 規則 → 201，回傳 dto 包含 id、protocol、matchKey、responseId")
+    @DisplayName("Creating an HTTP rule returns 201 and a DTO with id, protocol, matchKey, and responseId")
     void createHttpRule_shouldReturn201WithCorrectFields() {
         RuleDto created = createHttpRule("/api/test", "GET", "{\"ok\":true}");
 
@@ -52,7 +52,7 @@ class HttpRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("讀取 HTTP 規則 → 200，欄位正確（含 responseBody）")
+    @DisplayName("Reading an HTTP rule returns 200 and correct fields, including responseBody")
     void getHttpRule_shouldReturn200WithResponseBody() {
         RuleDto created = createHttpRule("/api/read", "GET", "{\"data\":\"hello\"}");
 
@@ -71,11 +71,11 @@ class HttpRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("更新 HTTP 規則 description → 200，再 GET 確認已更新")
+    @DisplayName("Updating an HTTP rule description returns 200 and a subsequent GET confirms the change")
     void updateHttpRule_shouldUpdateDescription() {
         RuleDto created = createHttpRule("/api/update", "POST", "{\"updated\":false}");
 
-        // 先 GET 取得完整 dto（含 version）
+        // GET first to obtain complete dto (including version)
         ResponseEntity<RuleDto> getResponse = adminClient()
                 .getForEntity("/api/admin/rules/" + created.getId(), RuleDto.class);
         RuleDto toUpdate = getResponse.getBody();
@@ -91,7 +91,7 @@ class HttpRuleCrudIntegrationTest extends BaseIntegrationTest {
 
         assertThat(putResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
 
-        // 再 GET 確認
+        // Confirm again GET
         ResponseEntity<RuleDto> verifyResponse = adminClient()
                 .getForEntity("/api/admin/rules/" + created.getId(), RuleDto.class);
         assertThat(verifyResponse.getBody()).isNotNull();
@@ -101,7 +101,7 @@ class HttpRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("刪除 HTTP 規則 → 204，再 GET → 404")
+    @DisplayName("Deleting an HTTP rule returns 204 and a subsequent GET returns 404")
     void deleteHttpRule_shouldReturn204ThenGetReturns404() {
         RuleDto created = createHttpRule("/api/delete", "DELETE", "{\"deleted\":true}");
 
@@ -118,7 +118,7 @@ class HttpRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("建立 3 個規則 → GET /api/admin/rules 回傳 3 筆")
+    @DisplayName("Creating 3 rules makes GET /api/admin/rules return 3 entries")
     @SuppressWarnings("unchecked")
     void listRules_shouldReturnAllCreatedRules() {
         createHttpRule("/api/list/1", "GET", "{\"n\":1}");
@@ -134,7 +134,7 @@ class HttpRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("動態 URL 共用 host + method 規則快取，仍正確區分 exact 與 wildcard")
+    @DisplayName("Dynamic URLs share the host+method rule cache while preserving exact and wildcard matching")
     void dynamicPaths_shouldSharePreparedRuleSetCache() {
         createHttpRule("/users/*", "GET", "{\"kind\":\"wildcard\"}");
         RuleDto exact = createHttpRule("/users/42", "GET", "{\"kind\":\"exact\"}");
@@ -155,12 +155,12 @@ class HttpRuleCrudIntegrationTest extends BaseIntegrationTest {
         assertThat(springCache).isNotNull();
         var nativeCache = (com.github.benmanes.caffeine.cache.Cache<?, ?>)
                 springCache.getNativeCache();
-        // 不同的動態 URL 不各自占用快取項目；共用的規則集放在規則快照（RuleSnapshots）
+        // Different dynamic URL do not occupy cache items respectively; the shared rule set is placed in the rule snapshot (RuleSnapshots)
         assertThat(nativeCache.estimatedSize()).isZero();
     }
 
     @Test
-    @DisplayName("大型 Response body 只在單筆規則詳情載入，列表仍保留所有 metadata")
+    @DisplayName("Large response bodies load only in individual rule details while lists retain all metadata")
     void listRules_shouldExcludeLargeResponseBodyWithoutBreakingDetail() {
         String largeBody = "x".repeat(512 * 1024);
         RuleDto created = createHttpRule("/api/large-response", "GET", largeBody);
@@ -186,7 +186,7 @@ class HttpRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("未認證的 POST /api/admin/rules → 被拒絕（401 或 302 redirect to login）")
+    @DisplayName("Unauthenticated POST /api/admin/rules is rejected with 401 or a 302 login redirect")
     void createRuleWithoutAuth_shouldBeRejected() {
         RuleDto dto = RuleDto.builder()
                 .protocol(Protocol.HTTP)
@@ -198,20 +198,20 @@ class HttpRuleCrudIntegrationTest extends BaseIntegrationTest {
         ResponseEntity<String> response = restTemplate
                 .postForEntity("/api/admin/rules", dto, String.class);
 
-        // 自訂 noPopupEntryPoint 回傳 401，不會 redirect
+        // Customized noPopupEntryPoint returns 401, not redirect
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     @Test
-    @DisplayName("唯讀 API：分頁列表與狀態不需認證；一次取回全部規則與回應需要登入")
+    @DisplayName("Paginated lists and status allow anonymous reads; retrieving all rules or responses requires login")
     @SuppressWarnings("unchecked")
     void readOnlyEndpoints_shouldNotRequireAuth() {
-        // 畫面使用的分頁列表不需認證
+        // The paging list used in the screen does not require authentication.
         ResponseEntity<Map> pageResponse = restTemplate
                 .getForEntity("/api/admin/rules/page", Map.class);
         assertThat(pageResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
 
-        // 一次取回全部規則／全部回應內容需要登入
+        // Retrieving all rules/all response contents at one time requires logging in
         assertThat(restTemplate.getForEntity("/api/admin/rules", String.class).getStatusCode())
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(restTemplate.getForEntity("/api/admin/responses", String.class).getStatusCode())
@@ -220,7 +220,7 @@ class HttpRuleCrudIntegrationTest extends BaseIntegrationTest {
                 .getForEntity("/api/admin/rules", List.class);
         assertThat(rulesResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
 
-        // GET /api/admin/status 不需認證
+        // GET /api/admin/status does not require certification
         ResponseEntity<String> statusResponse = restTemplate
                 .getForEntity("/api/admin/status", String.class);
         assertThat(statusResponse.getStatusCode()).isEqualTo(HttpStatus.OK);

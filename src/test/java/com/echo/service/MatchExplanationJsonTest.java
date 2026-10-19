@@ -12,7 +12,7 @@ import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 匹配鏈的樹狀比對說明（detailTree）：結構、實際值與大小上限。 */
+/** Description of tree alignment of matching chains (detailTree): structure, actual values and upper size limit. */
 class MatchExplanationJsonTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -100,7 +100,7 @@ class MatchExplanationJsonTest {
 
     @Test
     void valuesThatCannotBeReadAreMarkedUnavailable() throws Exception {
-        // body 超過大小上限時不解析，body 條件取不到值
+        // body is not parsed when it exceeds the upper limit of size, and the body condition cannot obtain a value.
         JsonNode tree = MAPPER.readTree(MatchExplanationJson.toJson(
                 new MatchExplanation("leaf", false, "body(jsonPath: $.a) equals \"b\"", "unavailable", List.of())));
 

@@ -37,43 +37,43 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * 萬用 HTTP Mock 控制器
+ * wildcard HTTP Mock controller
  * <p>
- * 攔截所有 /mock/** 路徑的請求，根據規則回傳模擬回應：
+ * Intercept all requests for the /mock/** path and return simulated responses according to the rules:
  * <ol>
- *   <li>從 X-Original-Host 標頭取得目標主機</li>
- *   <li>依據 host + path + method 查詢匹配規則</li>
- *   <li>依據 body/query 條件進行精確匹配</li>
- *   <li>套用延遲後回傳模擬回應</li>
+ *   <li>gets target host  from X-Original-Host header</li>
+ *   <li>based on host + path + method query matching rule</li>
+ *   <li>accurately matches  based on body/query conditions</li>
+ *   <li>applies delay and then returns a simulated response</li>
  * </ol>
  * 
- * <h3>使用方式</h3>
- * 將原本的 API 請求改為：
+ * <h3>How to use</h3>
+ * Change the original API request to:
  * <pre>
- * 原本：GET https://api.example.com/users
- * 改為：GET http://localhost:8080/mock/users
+ * Original: GET https://api.example.com/users
+ * Change to: GET http://localhost:8080/mock/users
  *       Header: X-Original-Host: api.example.com
  * </pre>
  * 
- * @see RuleService 規則匹配邏輯
+ * @see RuleService rule matching logic
  */
 @RestController
 @RequestMapping("/mock")
 @Slf4j
 public class UniversalMockController {
 
-    /** 原始主機標頭名稱 */
+    /** Original host header name */
     private static final String ORIGINAL_HOST_HEADER = "X-Original-Host";
-    /** 預設主機（當未提供 X-Original-Host 時使用） */
+    /** Default host (used when X-Original-Host is not provided) */
     private static final String DEFAULT_HOST = "default";
-    /** 預設高於 pool 3 s + connect 5 s + response 30 s 的最壞情況。 */
+    /** Default timeout exceeds the worst-case pool wait of 3 s + connection timeout of 5 s + response timeout of 30 s. */
     private static final long DEFAULT_REQUEST_TIMEOUT_MS = 40_000L;
-    /** 延遲執行緒池大小 */
+    /** Delayed thread pool size */
     private static final int DELAY_THREAD_POOL_SIZE = 8;
 
     private final HttpMockPipeline httpMockPipeline;
     private final SseMockHandler sseHandler;
-    /** 由相容建構子自行建立的播放器需要在關機時一併停止；Spring bean 由容器管理。 */
+    /** Players created by compatibility constructors need explicit shutdown; the container manages Spring beans. */
     private final boolean ownsSsePlayer;
     private TransactionDiagnostics diagnostics;
 
@@ -83,7 +83,7 @@ public class UniversalMockController {
     @Value("${echo.http.request-timeout-ms:40000}")
     private long requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS;
     
-    /** 延遲回應排程器 */
+    /** Delayed response scheduler */
     private final ScheduledThreadPoolExecutor delayScheduler = createDelayScheduler("delay-scheduler");
 
     private static ScheduledThreadPoolExecutor createDelayScheduler(String threadName) {
@@ -103,7 +103,7 @@ public class UniversalMockController {
         this(httpMockPipeline, sseHandler, false);
     }
 
-    /** 嵌入式呼叫端與單元測試使用：自行建立 SSE 處理器與播放器。 */
+    /** For embedded callers and unit tests: create a dedicated SSE handler and player. */
     public UniversalMockController(RuleService ruleService,
                                    HttpRuleService httpRuleService,
                                    RequestLogService requestLogService,
@@ -141,11 +141,11 @@ public class UniversalMockController {
     }
 
     /**
-     * 處理 SSE 請求（Accept: text/event-stream），委派給 {@link SseMockHandler}。
+     * Processing SSE request (Accept: text/event-stream), delegated to {@link SseMockHandler}.
      * <p>
-     * 若匹配到 sseEnabled=true 的規則，回傳 SseEmitter；
-     * 若匹配到非 SSE 規則，建構一般 ResponseEntity 回傳；
-     * 若無匹配規則，GET/HEAD 保留 404；其他方法委派一般 HTTP pipeline。
+     * If the rule sseEnabled=true is matched, SseEmitter will be returned;
+     * If a non-SSE rule is matched, construct a general ResponseEntity return;
+     * If there is no matching rule, GET/HEAD retains 404; other methods delegate generally HTTP pipeline.
      */
     public Object handleSseRequest(HttpServletRequest request, HttpServletResponse response) {
         return handleSseRequest(request, response, null);
@@ -202,14 +202,14 @@ public class UniversalMockController {
     }
 
     /**
-     * 處理一般 HTTP Mock 請求，委派給 {@link HttpMockPipeline} 執行 pipeline。
+     * Process the general HTTP Mock request and delegate it to {@link HttpMockPipeline} to execute pipeline.
      * <p>
-     * Controller 僅負責：
+     * Controller is only responsible for:
      * <ol>
-     *   <li>解析 HttpServletRequest 為 MockRequest</li>
-     *   <li>呼叫 pipeline.execute()</li>
-     *   <li>將 PipelineResult 轉換為 ResponseEntity</li>
-     *   <li>使用 delayScheduler 排程延遲回應</li>
+     *   <li>resolves HttpServletRequest to MockRequest</li>
+     *   <li>calling pipeline.execute()</li>
+     *   <li>converts PipelineResult to ResponseEntity</li>
+     *   <li>uses delayScheduler to schedule delayed response</li>
      * </ol>
     */
     @RequestMapping("/**")
@@ -217,20 +217,20 @@ public class UniversalMockController {
     public Object handleRequest(HttpServletRequest request,
                                 HttpServletResponse httpResponse,
                                 @RequestBody(required = false) String body) {
-        // 1. 解析 HttpServletRequest 為 MockRequest
+        // 1. Parse HttpServletRequest into MockRequest
         Trace trace = diagnostics == null ? Trace.NONE : diagnostics.begin("HTTP");
         MockRequest mockRequest = toMockRequest(request, body, trace);
         trace.event("RECEIVED", "method", mockRequest.getMethod(), "path", mockRequest.getPath());
         log.debug("Mock request: host={}, path={}, method={}",
                 mockRequest.getTargetHost(), mockRequest.getPath(), mockRequest.getMethod());
 
-        // 2. Mock 直接完成；實際下游 I/O 使用非阻塞 client。
+        // 2. Mock is completed directly; the actual downstream I/O uses non-blocking client.
         CompletableFuture<PipelineResult> pipelineFuture =
                 httpMockPipeline.executeAsync(mockRequest).toCompletableFuture();
         Runnable connectionReset = captureConnectionReset(httpResponse);
 
-        // 一般 Mock／404 已在目前執行緒完成，直接回傳可省下 MVC async context、
-        // DeferredResult 與 callback 配置；轉發或延遲回應仍保留原非同步流程。
+        // Ordinary mock/404 responses already complete on the current thread. Return directly to avoid allocating an MVC async context,
+        // DeferredResult, and callbacks; forwarding and delayed replies retain the existing asynchronous flow.
         if (pipelineFuture.isDone()) {
             try {
                 PipelineResult immediate = pipelineFuture.join();
@@ -376,13 +376,13 @@ public class UniversalMockController {
     }
 
     /**
-     * 將 MockResponse 轉換為 ResponseEntity
+     * Convert MockResponse to ResponseEntity
      */
     private ResponseEntity<String> toResponseEntity(MockResponse mockResponse) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(detectContentType(mockResponse.getBody()));
 
-        // 套用自訂 response headers
+        // Apply custom response headers
         if (mockResponse.getHeaders() != null) {
             mockResponse.getHeaders().forEach(headers::add);
         }

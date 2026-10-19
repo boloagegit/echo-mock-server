@@ -5,12 +5,12 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 單元測試：驗證 EchoAgent 介面定義、AgentStatus 列舉值完整性、AgentStats builder 正確建構。
+ * Unit test: Verify EchoAgent interface definition, AgentStatus enumeration value integrity, AgentStats builder correctly constructed.
  * Validates: Requirements 1.1, 1.2, 1.3
  */
 class EchoAgentInterfaceTest {
 
-    // ── AgentStatus 列舉值完整性 (Requirement 1.2) ──
+    // ── AgentStatus enumeration value integrity (Requirement 1.2) ──
 
     @Test
     void agentStatus_shouldHaveExactlyFourValues() {
@@ -35,7 +35,7 @@ class EchoAgentInterfaceTest {
         assertThat(AgentStatus.valueOf("STOPPED")).isEqualTo(AgentStatus.STOPPED);
     }
 
-    // ── AgentStats builder 正確建構 (Requirement 1.3) ──
+    // ── AgentStats builder is constructed correctly (Requirement 1.3) ──
 
     @Test
     void agentStats_builder_shouldSetAllFields() {
@@ -72,7 +72,7 @@ class EchoAgentInterfaceTest {
         assertThat(stats.getDroppedCount()).isEqualTo(Long.MAX_VALUE);
     }
 
-    // ── EchoAgent 介面方法定義 (Requirement 1.1) ──
+    // ── EchoAgent interface method definition (Requirement 1.1) ──
 
     @Test
     void echoAgent_shouldDeclareAllRequiredMethods() throws NoSuchMethodException {

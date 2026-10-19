@@ -10,10 +10,10 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * matchesPreparedWithDetail 單元測試。
+ * matchesPreparedWithDetail unit test.
  * <p>
- * 測試各種條件組合（body only, query only, header only, 混合）、
- * detail 格式正確性、空條件與 null 條件的處理。
+ * Test various combinations of conditions (body only, query only, header only, mixed),
+ * detail format correctness, handling of null conditions and null conditions.
  * <p>
  * Validates: Requirements 7.2, 7.3
  */

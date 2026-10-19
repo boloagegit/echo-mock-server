@@ -18,8 +18,8 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 串流掃描（{@link XmlStreamScan}）與 DOM 取值必須得到相同結果：同一組 XML 與條件，
- * 以串流預先算出的結果要等於在 DOM 上實際評估的結果（舊版條件與 XPath 結構化條件都測）。
+ * Streaming scan ({@link XmlStreamScan}) and DOM values must get the same result: the same set of XML and conditions,
+ * The result pre-calculated by streaming must be equal to the actual evaluation result on DOM (both old version conditions and XPath structured conditions are measured).
  */
 class XmlStreamScanEquivalenceTest {
 
@@ -56,7 +56,7 @@ class XmlStreamScanEquivalenceTest {
                 legacy("Item==5"), xpath("//Item", "equals", "\"5\""), xpath("//Item/@sku", "equals", "\"S2\"")));
         assertEquivalent(relative, List.of(legacy("Order/Status=OPEN"), legacy("Order/Status==OPEN"),
                 xpath("Order/Status", "equals", "\"OPEN\"")));
-        // 統一後的結果：前綴不同的同名元素都算、相對路徑是結尾符合、== 視為 =
+        // The result after unification: elements with the same name with different prefixes are counted, relative paths have the same ending, == is regarded as =
         assertThat(domResult(mixed, legacy("Item=5"))).isTrue();
         assertThat(domResult(relative, legacy("Order/Status=OPEN"))).isTrue();
         assertThat(domResult(relative, legacy("Order/Status==OPEN"))).isTrue();
@@ -78,7 +78,7 @@ class XmlStreamScanEquivalenceTest {
         assertEquivalent(xml, matchers, 3);
     }
 
-    // ==================== 比對 ====================
+    // ==================== Comparison ====================
 
     private static void assertEquivalent(String xml, List<CompiledMatcher> matchers) {
         assertEquivalent(xml, matchers, MatcherLimits.DEFAULT.maxFieldValueLength());
@@ -92,13 +92,13 @@ class XmlStreamScanEquivalenceTest {
         try {
             streamed = XmlStreamScan.evaluate(xml, merged, maxValueLength);
         } catch (XMLStreamException e) {
-            return; // 串流無法處理時呼叫端改用 DOM，沒有可比較的串流結果
+            return; // When the stream cannot be processed, the caller uses DOM instead. There is no comparable streaming result.
         }
         RequestView request = RequestView.of("POST", "/", null, Map.of(), BodyView.of(xml, MatcherLimits.DEFAULT));
         for (CompiledMatcher matcher : matchers) {
             boolean dom = matcher.matches(new EvalContext(request));
             assertThat(streamed.get(matcher.cacheKey())).as("%s on %s", matcher.cacheKey(), xml).isEqualTo(dom);
-            // 預先填入串流結果後，比對直接使用該結果
+            // After pre-filling the streaming results, use the results directly for comparison
             boolean prefilled = matcher.matches(new EvalContext(request, new LinkedHashMap<>(streamed)));
             assertThat(prefilled).isEqualTo(dom);
         }
@@ -126,11 +126,11 @@ class XmlStreamScanEquivalenceTest {
         }
     }
 
-    // ==================== 產生器 ====================
+    // ==================== Generator ====================
 
     @Provide
     Arbitrary<String> documents() {
-        // 根元素宣告兩個前綴，所有元素與屬性的前綴都有效
+        // The root element declares two prefixes, the prefixes of all elements and attributes are valid
         return element(3).map(root -> root.replaceFirst(">", " xmlns:ns=\"urn:ns\" xmlns:x=\"urn:x\">"));
     }
 

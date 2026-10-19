@@ -1,7 +1,7 @@
 /**
- * AuditPage - 修訂記錄頁面
+ * AuditPage - Revision history page
  *
- * 顯示規則與回應的修訂記錄，支援篩選、排序、展開差異比對。
+ * Display the revision records of rules and responses, supporting filtering, sorting, and difference comparison.
  */
 const AuditPage = {
   props: {
@@ -39,7 +39,7 @@ const AuditPage = {
     return { fullDiff: {} };
   },
   watch: {
-    // 打開某筆記錄時，順便載入同一個規則／回應的最近記錄。
+    // When opening a record, the most recent record of the same rule/response is loaded.
     'shownLog.ruleId': {
       immediate: true,
       handler(ruleId) { if (ruleId) this.$emit('load-target-history', ruleId); }
@@ -47,7 +47,7 @@ const AuditPage = {
   },
   inject: ['t'],
   components: {
-    // 一列修訂記錄「改了什麼」的精簡列表；寬螢幕放在自己的欄位，窄螢幕放在名稱下方。
+    // A condensed list of "what changed" in a revision record; widescreen in its own column, narrowscreen below the name.
     'audit-change-summary': {
       props: { row: Object },
       inject: ['t'],
@@ -98,7 +98,7 @@ const AuditPage = {
     selectedLog() {
       return this.selectedIndex >= 0 ? this.pagedAudit[this.selectedIndex] : null;
     },
-    /** 時間軸只抓最新幾筆；打開的是更舊的記錄時把它補進去，並在前面標出中間略過的部分。 */
+    /** The timeline fetches only recent records; include an older opened record and mark the omitted gap before it. */
     shownHistory() {
       const log = this.shownLog;
       const history = log?.ruleId ? (this.targetHistory?.[log.ruleId] || null) : null;
@@ -110,7 +110,7 @@ const AuditPage = {
     groupedByDay() {
       return this.auditSort.field === 'timestamp';
     },
-    /** 列表內容：依日期分段（依時間排序時），每列附上顯示用摘要。 */
+    /** List content: segmented by date (when sorted by time), with a summary for display attached to each column. */
     auditRows() {
       const rows = [];
       let day = null;
@@ -140,7 +140,7 @@ const AuditPage = {
   },
   methods: {
     shortId, fmtTime,
-    /** 修訂時間是伺服器時區，所以「今天／昨天」以伺服器日期判斷；不知道時只顯示日期。 */
+    /** The revision time is the server time zone, so "today/yesterday" is judged by the server date; if it is not known, only the date is displayed. */
     dayLabel(key) {
       const today = this.auditToday;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(today || '')) return key;
@@ -150,7 +150,7 @@ const AuditPage = {
       if (key === prev) return this.t('audit.dayYesterday', {date: key});
       return key;
     },
-    /** 長內容的逐行比對；同一筆記錄同一欄位只算一次。 */
+    /** Line-by-line comparison of long content; the same field of the same record is only counted once. */
     diffOf(log, change) {
       const full = !!this.fullDiff[log.id + ':' + change.label];
       const key = log.id + ':' + change.label + ':' + (full ? 'full' : 'changed');
@@ -161,7 +161,7 @@ const AuditPage = {
       }
       return this._diffCache.get(key);
     },
-    /** 太多行的內容不提供「顯示全文」，避免一次畫出幾十萬行。 */
+    /** "Show full text" is not provided for content with too many lines to avoid drawing hundreds of thousands of lines at a time. */
     canShowFullDiff(diff) {
       return diff.lineCount <= AuditDiff.MAX_FULL_LINES;
     },

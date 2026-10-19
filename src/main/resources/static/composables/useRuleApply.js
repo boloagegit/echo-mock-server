@@ -1,5 +1,5 @@
 /**
- * useRuleApply - 宣告式規則設定流程與表單草稿轉換。
+ * useRuleApply - Declarative rule setting process and form draft conversion.
  */
 const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRules, markRulesDirty, scenariosEnabled }) => {
     const ruleApplyText = Vue.ref('');
@@ -11,7 +11,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
     const ruleApplySchemaError = Vue.ref('');
     const ruleApplyIdentity = Vue.ref(null);
     const ruleApplyValidationVisible = Vue.ref(false);
-    // 文件有 spec.match（結構化條件）時為 echo.mock/v2，否則維持 v1；由內容決定，不需要使用者修改
+    // When the file has spec.match (structural condition), it is echo.mock/v2, otherwise it remains v1; it is determined by the content and does not need to be modified by the user.
     const API_V1 = 'echo.mock/v1';
     const API_V2 = 'echo.mock/v2';
     const ruleApplyApiVersion = Vue.ref(API_V1);
@@ -174,10 +174,10 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         .map(condition => condition.field + (condition.operator || '=') + condition.value)
         .join(';') || null;
 
-    /** 文件的舊版條件轉成條件列（拆解規則與後端相同）；無法完整表示時回傳 null，改以進階模式的舊格式片段顯示。 */
+    /** The old condition of the file is converted into a condition column (the disassembly rules are the same as the backend); when it cannot be fully expressed, null is returned, and the old format fragment of the advanced mode is displayed instead. */
     const deserializeConditions = spec => MatchTree.toSimpleRows(spec.bodyCondition, spec.queryCondition, spec.headerCondition);
 
-    /** 只由舊格式片段組成的進階條件寫回三個舊欄位（與後端儲存時相同），文件維持 v1。 */
+    /** Advanced conditions consisting only of old format fragments write back the three old fields (the same as when saving in the backend), and the file remains v1. */
     const legacyStringsOf = matchSpec => {
         try { return MatchTree.toLegacyStrings(MatchTree.fromSpec(matchSpec)); } catch { return null; }
     };
@@ -236,7 +236,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
                 if (legacyStrings[key] && (http || key === 'bodyCondition')) { spec[key] = legacyStrings[key]; } else { delete spec[key]; }
             });
         } else if (matchSpec) {
-            // 結構化條件取代三個舊版條件欄位（兩者互斥）
+            // Structured conditions replace three legacy condition fields (both are mutually exclusive)
             delete spec.bodyCondition;
             delete spec.queryCondition;
             delete spec.headerCondition;
@@ -390,7 +390,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
         const specFields = new Set((ruleApplySchema.value?.fields || [])
             .filter(field => field.path.startsWith('spec.'))
             .map(field => field.path.substring(5)));
-        // 關閉功能後，既有 Scenario 規則仍可原樣保存；伺服器會拒絕任何狀態欄位變更。
+        // When the feature is turned off, existing Scenario rules can be saved as is; any status field changes will be rejected by the server.
         if (!scenariosEnabled?.value && document.metadata?.id) {
             ['scenarioName', 'requiredScenarioState', 'newScenarioState'].forEach(field => specFields.add(field));
         }
@@ -413,7 +413,7 @@ const useRuleApply = ({ showToast, showConfirm, t, requireLogin, login, loadRule
     const validateConditionValue = (errors, path, value) => {
         if (typeof value !== 'string' || !value.trim()) { return; }
         for (const raw of value.split(';')) {
-            // 與後端相同的拆解規則（第一個 =），例如 a=x!=y 是欄位 a、值 x!=y
+            // Same disassembly rules as backend (first =), for example a=x!=y is field a, value x!=y
             const parsed = MatchTree.parseLegacyCondition(raw.trim());
             if (!parsed || !parsed.field || !parsed.value) {
                 issue(errors, 'CONDITION_FORMAT', path);

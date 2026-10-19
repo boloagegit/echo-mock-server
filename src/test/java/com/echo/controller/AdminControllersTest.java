@@ -44,7 +44,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-/** 管理後台 API（/api/admin）各 controller 與共用規則儲存的單元測試。 */
+/** Unit test of admin backend API (/api/admin) for each controller and shared rule storage. */
 @ExtendWith(MockitoExtension.class)
 class AdminControllersTest {
 
@@ -106,7 +106,7 @@ class AdminControllersTest {
         ReflectionTestUtils.setField(ruleEditService, "scenariosEnabled", true);
         system = new SystemController(protocolHandlerRegistry, responseService, Optional.empty(), Optional.empty(),
                 requestLogService, Optional.empty(), Optional.empty(), builtinUserRepository, agentRegistry,
-                cacheManager, issueReportService);
+                cacheManager, issueReportService, new com.echo.service.BuildInfoService(Optional.empty()));
         ReflectionTestUtils.setField(system, "ldapEnabled", false);
         ReflectionTestUtils.setField(system, "ldapUrl", "");
         ReflectionTestUtils.setField(system, "sessionTimeout", "180d");
@@ -127,7 +127,7 @@ class AdminControllersTest {
         audit = new AuditController(Optional.of(ruleAuditService));
         scenarios = new ScenarioController(scenarioService);
         ReflectionTestUtils.setField(scenarios, "scenariosEnabled", true);
-        // 預設 HTTP 啟用，JMS 停用
+        // Default HTTP is enabled, JMS is disabled
         lenient().when(protocolHandlerRegistry.isEnabled(Protocol.HTTP)).thenReturn(true);
         lenient().when(protocolHandlerRegistry.isEnabled(Protocol.JMS)).thenReturn(false);
     }
@@ -143,6 +143,8 @@ class AdminControllersTest {
         assertThat(response.getBody().get("scenariosEnabled")).isEqualTo(true);
         assertThat(response.getBody()).doesNotContainKey("ruleDragSortEnabled");
         assertThat(response.getBody().get("issueReportingEnabled")).isEqualTo(false);
+        assertThat(response.getBody().get("build"))
+                .isEqualTo(new com.echo.service.BuildInfoService.Metadata(null, null, null, null));
     }
 
     @Test

@@ -7,8 +7,8 @@ import java.nio.charset.StandardCharsets;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 小細節：側欄選取指示平滑移動（只動 transform、尊重減少動態）、切頁保留列表捲動位置、
- * 主要搜尋欄顯示「/」快捷鍵提示。
+ * Small details: Smooth movement of sidebar selection instructions (only moves transform, respects the reduction of dynamics), retains the scroll position of the list when cutting pages,
+ * The main search bar displays the "/" shortcut key tip.
  */
 class MicroInteractionResourceTest {
     @Test

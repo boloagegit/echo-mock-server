@@ -28,10 +28,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * OpenAPI/Swagger 規格匯入服務
+ * OpenAPI/Swagger specification import service
  * <p>
- * 解析 OpenAPI 3.x / Swagger 2.x 規格檔案，為每個 path + method 組合
- * 產生 HttpRule + Response 預覽資料。
+ * Parse OpenAPI 3.x / Swagger 2.x specification files for each path + method combination
+ * Generate HttpRule + Response preview data.
  */
 @Slf4j
 @Service
@@ -51,20 +51,20 @@ public class OpenApiImportService {
     }
 
     /**
-     * 解析 OpenAPI spec 內容，產生規則預覽清單
+     * Parse the content of OpenAPI spec and generate a rule preview list
      * <p>
-     * 支援 OpenAPI 3.x 和 Swagger 2.x（自動偵測並轉換）
+     * Supports OpenAPI 3.x and Swagger 2.x (automatic detection and conversion)
      */
     public OpenApiParseResult parse(String content) {
         ParseOptions options = new ParseOptions();
         options.setResolve(true);
         options.setResolveFully(true);
 
-        // 先嘗試 OpenAPI 3.x，失敗再嘗試 Swagger 2.x
+        // Try OpenAPI 3.x first, if failed, try Swagger 2.x again.
         SwaggerParseResult result = new OpenAPIV3Parser().readContents(content, null, options);
 
         if (result.getOpenAPI() == null) {
-            // 嘗試 Swagger 2.x 轉換
+            // Try Swagger 2.x conversion
             try {
                 result = new SwaggerConverter().readContents(content, null, options);
             } catch (Exception e) {
@@ -121,7 +121,7 @@ public class OpenApiImportService {
     }
 
     private RuleDto buildRuleFromOperation(String path, String method, Operation operation) {
-        // 找最佳回應：優先 200/201，其次 2xx，最後取第一個
+        // Find the best response: 200/201 first, then 2xx, and finally the first one
         String statusCode = "200";
         ApiResponse bestResponse = null;
 
@@ -156,7 +156,7 @@ public class OpenApiImportService {
             httpStatus = 200;
         }
 
-        // 產生回應 body
+        // Generated response body
         String responseBody = "";
         String contentType = "application/json";
         if (bestResponse != null && bestResponse.getContent() != null) {
@@ -167,13 +167,13 @@ public class OpenApiImportService {
             }
         }
 
-        // 產生描述
+        // Generate description
         String desc = "[OpenAPI] " + method + " " + path;
         if (operation.getSummary() != null && !operation.getSummary().isBlank()) {
             desc += " - " + operation.getSummary();
         }
 
-        // 產生 Content-Type header
+        // Generate Content-Type header
         String responseHeaders = null;
         if (contentType != null && !contentType.equals("application/json")) {
             try {
@@ -183,7 +183,7 @@ public class OpenApiImportService {
             }
         }
 
-        // 產生標籤
+        // Generate label
         String tags = null;
         if (operation.getTags() != null && !operation.getTags().isEmpty()) {
             Map<String, String> tagMap = new LinkedHashMap<>();
@@ -219,7 +219,7 @@ public class OpenApiImportService {
     }
 
     /**
-     * 從 Content 中選取最佳 MediaType：優先 application/json，其次 application/xml，最後取第一個
+     * Select the best MediaType from Content: application/json first, then application/xml, and finally the first one
      */
     private Map.Entry<String, MediaType> pickMediaType(Content content) {
         if (content == null || content.isEmpty()) {
@@ -235,16 +235,16 @@ public class OpenApiImportService {
     }
 
     /**
-     * 從 MediaType 產生回應 body：優先 example → examples → schema
+     * Generate response body from MediaType: Priority example → examples → schema
      */
     @SuppressWarnings("unchecked")
     private String generateResponseBody(MediaType mediaType) {
-        // 1. 直接 example
+        // 1. Direct example
         if (mediaType.getExample() != null) {
             return toJsonString(mediaType.getExample());
         }
 
-        // 2. examples 中取第一個
+        // 2. Get the first one in examples
         if (mediaType.getExamples() != null && !mediaType.getExamples().isEmpty()) {
             var firstExample = mediaType.getExamples().values().iterator().next();
             if (firstExample.getValue() != null) {
@@ -252,7 +252,7 @@ public class OpenApiImportService {
             }
         }
 
-        // 3. 從 schema 產生範例
+        // 3. Generate example from schema
         if (mediaType.getSchema() != null) {
             Object generated = generateFromSchema(mediaType.getSchema(), 0);
             if (generated != null) {
@@ -264,7 +264,7 @@ public class OpenApiImportService {
     }
 
     /**
-     * 從 Schema 遞迴產生範例值
+     * Recursively generate example values from Schema
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
     private Object generateFromSchema(Schema<?> schema, int depth) {
@@ -272,12 +272,12 @@ public class OpenApiImportService {
             return null;
         }
 
-        // 有 example 直接用
+        // Use example directly
         if (schema.getExample() != null) {
             return schema.getExample();
         }
 
-        // 有 enum 取第一個
+        // There is enum, take the first one
         if (schema.getEnum() != null && !schema.getEnum().isEmpty()) {
             return schema.getEnum().get(0);
         }
@@ -290,7 +290,7 @@ public class OpenApiImportService {
             return item != null ? List.of(item) : List.of();
         }
 
-        // object 或有 properties
+        // object or properties
         if ("object".equals(type) || schema.getProperties() != null) {
             Map<String, Schema> props = schema.getProperties();
             if (props == null || props.isEmpty()) {

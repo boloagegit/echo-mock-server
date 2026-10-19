@@ -7,8 +7,8 @@ import java.nio.charset.StandardCharsets;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 部署環境主色（echo.ui.accent）的前端契約：
- * 主色與主題是兩個獨立維度，主色在 head 同步套用，並由 status API 覆寫。
+ * Deployment environment main color (echo.ui.accent) front-end contract:
+ * The main color and theme are two independent dimensions. The main color is applied simultaneously in head and overridden by status API.
  */
 class UiAccentResourceTest {
     @Test

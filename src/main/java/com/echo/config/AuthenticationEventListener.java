@@ -8,7 +8,7 @@ import org.springframework.security.authentication.event.AuthenticationSuccessEv
 import org.springframework.stereotype.Component;
 
 /**
- * 監聽認證成功事件，更新內建帳號的最後登入時間。
+ * Monitor the authentication success event and update the last login time of the built-in account.
  */
 @Component
 @RequiredArgsConstructor
@@ -20,7 +20,7 @@ public class AuthenticationEventListener {
     @EventListener
     public void onAuthenticationSuccess(AuthenticationSuccessEvent event) {
         String username = event.getAuthentication().getName();
-        // 只有內建帳號才需要更新 lastLoginAt，避免對 LDAP/in-memory 帳號做無意義的 DB 查詢
+        // Only built-in accounts need to update lastLoginAt to avoid meaningless DB queries for LDAP/in-memory accounts
         if (builtinUserRepository.existsByUsername(username)) {
             builtinUserService.updateLastLogin(username);
         }

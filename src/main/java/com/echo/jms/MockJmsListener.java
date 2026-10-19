@@ -21,7 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * JMS 訊息監聯器 - 攔截或轉發到目標 JMS Server
+ * JMS message listener: mock the request or forward it to the target JMS server.
  */
 @Component
 @ConditionalOnProperty(name = "echo.jms.enabled", havingValue = "true")
@@ -72,7 +72,7 @@ public class MockJmsListener {
                     "forwarded", result.getResponse() != null && result.getResponse().isForwarded(),
                     "fault", result.getFaultType(), "delayMs", result.getDelayMs());
 
-            // JMS 延遲同步執行
+            // Apply JMS delays synchronously.
             if (result.getDelayMs() > 0) {
                 Thread.sleep(result.getDelayMs());
             }
@@ -90,7 +90,7 @@ public class MockJmsListener {
                 return;
             }
 
-            // 根據結果回覆 JMS 訊息
+            // Reply to JMS message based on the result
             if (result.getResponse() != null) {
                 sendReply(message, result.getResponse().getBody(), trace);
             } else {
@@ -155,7 +155,7 @@ public class MockJmsListener {
         try {
             long encodedBodyBytes = encodedTextBodyBytes(message);
             if (encodedBodyBytes > 0) {
-                // getBodySize() 是完整訊息大小；不使用只代表目前已下載部分的 buffer size。
+                // getBodySize() is the complete message size; buffer size covers only the portion downloaded so far and must not be used.
                 requestReservation = memoryBudget.reserveEncodedBody(encodedBodyBytes);
             }
 
@@ -167,7 +167,7 @@ public class MockJmsListener {
             String queue = jmsProperties.getQueue();
             log.debug("JMS request received on queue: {}", queue);
 
-            // endpoint 只掃描到目標欄位；規則條件由 pipeline 再做一次單趟串流比對，均不建立 DOM。
+            // Endpoint extraction scans only the target field; the pipeline evaluates rule conditions in one streaming pass without building a DOM.
             String endpointValue = endpointExtractor.extract(body, jmsProperties.getEndpointField());
             String endpointLabel = (endpointValue != null && !endpointValue.isBlank())
                     ? queue + " | " + endpointValue : queue;
@@ -200,8 +200,8 @@ public class MockJmsListener {
     }
 
     /**
-     * 訊息標頭與屬性，放在共用請求的 headers，模板可用 <code>{{request.headers.JMSCorrelationID}}</code> 取得。
-     * 屬性值一律轉成字串；讀不到的標頭或屬性略過，不影響訊息處理。
+     * Copy message headers and properties into the shared request headers; templates can read them through <code>{{request.headers.JMSCorrelationID}}</code>.
+     * Convert property values to strings; ignore unreadable headers or properties without disrupting message processing.
      */
     static Map<String, String> messageHeaders(Message message, String queue) {
         Map<String, String> headers = new LinkedHashMap<>();
@@ -227,7 +227,7 @@ public class MockJmsListener {
         Object read() throws JMSException;
     }
 
-    /** 某些 broker 對特定標頭或屬性會拋例外；略過讀不到的項目，不影響訊息處理。 */
+    /** Some brokers throw for particular headers or properties; skip those unreadable entries without affecting message processing. */
     private static void putIfPresent(Map<String, String> headers, String name, JmsValue value) {
         try {
             Object read = value.read();

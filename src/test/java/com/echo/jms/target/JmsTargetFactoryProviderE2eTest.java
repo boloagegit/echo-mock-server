@@ -13,9 +13,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * E2E Integration Test — 策略模式 + Docker Artemis (port 61617)。
+ * E2E Integration Test — Strategy Mode + Docker Artemis (port 61617).
  * <p>
- * 前置條件：
+ * Prerequisites:
  * <pre>
  * docker run -d --name artemis-test -p 61617:61616 -p 8162:8161 \
  *   -e ARTEMIS_USER=admin -e ARTEMIS_PASSWORD=admin \

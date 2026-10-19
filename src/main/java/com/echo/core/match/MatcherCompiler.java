@@ -10,8 +10,8 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * 把 {@link MatchNode} 編譯成 {@link CompiledMatcher}，並依 {@link MatcherRegistry} 檢查運算子、
- * 來源與選項。所有錯誤都在編譯時（也就是儲存規則時）回報，不會留到請求進來才變成「不符合」。
+ * Compile {@link MatchNode} into {@link CompiledMatcher}, and check the operators according to {@link MatcherRegistry},
+ * Sources and options. All errors are reported at compile time (that is, when the rules are stored) and will not be left until the request comes in to become "non-conforming".
  */
 public final class MatcherCompiler {
 
@@ -28,18 +28,18 @@ public final class MatcherCompiler {
     }
 
     /**
-     * 解析並編譯 JSON 條件。
+     * Parse and compile JSON condition.
      *
-     * @throws InvalidMatchSpecException 條件不合法
+     * @throws InvalidMatchSpecException Illegal condition
      */
     public CompiledMatcher compile(JsonNode spec) {
         return compile(MatchSpecCodec.parse(spec));
     }
 
     /**
-     * 編譯條件樹。
+     * Compile condition tree.
      *
-     * @throws InvalidMatchSpecException 條件不合法
+     * @throws InvalidMatchSpecException Illegal condition
      */
     public CompiledMatcher compile(MatchNode node) {
         return compile(node, "$");
@@ -152,7 +152,7 @@ public final class MatcherCompiler {
         }
     }
 
-    /** 例如 {@code header[X-Tenant] equals "acme"}、{@code body(jsonPath: $.amount) gte 1000}。 */
+    /** For example, {@code header[X-Tenant] equals "acme"}, {@code body(jsonPath: $.amount) gte 1000}. */
     private static String describe(MatchNode.Leaf leaf) {
         StringBuilder text = new StringBuilder(leaf.source());
         if (leaf.name() != null) {

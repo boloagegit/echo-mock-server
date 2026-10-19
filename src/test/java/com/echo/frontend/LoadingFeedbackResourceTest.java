@@ -7,8 +7,8 @@ import java.nio.charset.StandardCharsets;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 快速載入不閃爍：讀取指示等到明顯需要等待才淡入、忙碌中的按鈕不變暗、
- * 抽屜在下一筆資料到齊前保留目前內容。行為由 loading-hold.test.cjs 驗證，這裡確認每個畫面都接上。
+ * Fast loading does not flicker: the read instructions wait until it is obvious that there is a need to wait before fading in, the busy button does not dim,
+ * The drawer retains the current content until the next data arrives. The behavior is verified by loading-hold.test.cjs, where every screen is confirmed to be connected.
  */
 class LoadingFeedbackResourceTest {
     @Test

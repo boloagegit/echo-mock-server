@@ -1,8 +1,8 @@
 /**
- * ResponseDetail - 回應詳情抽屜
+ * ResponseDetail - Response details drawer
  *
- * 顯示引用此回應的規則（可直接跳到規則）、回應內容與保留資訊。
- * 版面與 RuleDetail 相同：上方常用動作，其餘收在「⋯」。
+ * Display the rules that reference this response (you can jump directly to the rules), response content and retention information.
+ * The layout is the same as RuleDetail: common actions are at the top, and the rest are collected in "⋯".
  */
 const ResponseDetail = {
   inject: ['t'],

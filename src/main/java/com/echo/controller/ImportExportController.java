@@ -31,8 +31,8 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * 規則與回應的批次匯入／匯出（JSON、Excel、OpenAPI）。
- * 需開啟 {@code echo.features.bulk-import-export-enabled}；關閉時這些 API 一律回 404。
+ * Batch import/export of rules and responses (JSON, Excel, OpenAPI).
+ * {@code echo.features.bulk-import-export-enabled} needs to be turned on; when turned off, these API will all return 404.
  */
 @Slf4j
 @RestController
@@ -54,7 +54,7 @@ public class ImportExportController {
         return ResponseEntity.notFound().build();
     }
 
-    // ========== 規則 ==========
+    // ========== Rules ==========
 
     @GetMapping("/rules/export")
     public ResponseEntity<List<RuleDto>> exportAllRules() {
@@ -66,7 +66,7 @@ public class ImportExportController {
     public ResponseEntity<?> importRule(@RequestBody RuleDto dto) {
         if (!bulkImportExportEnabled) return featureUnavailable();
         ruleEditService.requireProtocolEnabled(dto.getProtocol());
-        // 保留原有 ID（若有），讓 UUID 可跨環境同步
+        // Keep the original ID (if any) so that UUID can be synchronized across environments
         dto.setVersion(null);
         return ResponseEntity.status(HttpStatus.CREATED).body(ruleEditService.save(dto).dto());
     }
@@ -79,7 +79,7 @@ public class ImportExportController {
             if (!protocolHandlerRegistry.isEnabled(dto.getProtocol())) {
                 continue;
             }
-            // 保留原有 ID（若有），讓 UUID 可跨環境同步
+            // Keep the original ID (if any) so that UUID can be synchronized across environments
             dto.setVersion(null);
             ruleEditService.save(dto);
             imported++;
@@ -169,7 +169,7 @@ public class ImportExportController {
         return ResponseEntity.ok(Map.of("imported", imported));
     }
 
-    // ========== 回應 ==========
+    // ========== Response ==========
 
     @GetMapping("/responses/export")
     public ResponseEntity<List<Response>> exportAllResponses() {

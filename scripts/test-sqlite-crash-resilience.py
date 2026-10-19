@@ -2,13 +2,13 @@
 """
 SQLite Crash Resilience Test
 
-模擬會讓 H2 chunk 損壞的情境，驗證 SQLite 不會發生：
-1. 大量寫入中途強制終止
-2. 反覆強制終止 + 重啟驗證資料完整性
-3. 並發寫入壓力下強制終止
+Simulate the situation that will damage H2 chunk and verify that SQLite will not happen:
+1. A large number of writes are forced to terminate midway.
+2. Repeated forced termination + restart to verify data integrity
+3. Forced termination under concurrent write pressure
 
-用法：python3 scripts/test-sqlite-crash-resilience.py
-前提：需要先 ./gradlew bootJar（Windows 使用 .\\gradlew.bat bootJar）產生 fat jar
+Usage: python3 scripts/test-sqlite-crash-resilience.py
+Prerequisite: ./gradlew bootJar (Windows uses .\\gradlew.bat bootJar) to generate fat jar
 """
 
 import base64
@@ -39,7 +39,7 @@ DB_FILE = Path()
 SPOOL_FILE = Path()
 JAR_FILE = Path()
 
-# ========== 工具函式 ==========
+# ========== Tool function ==========
 
 def api(method, path, data=None):
     url = f"{BASE_URL}{path}"
@@ -63,7 +63,7 @@ def api(method, path, data=None):
 
 
 def wait_for_server(timeout=30):
-    """等待 server 啟動"""
+    """Waiting for server to start"""
     for _ in range(timeout):
         try:
             req = urllib.request.Request(f"{BASE_URL}/api/admin/status")
@@ -92,7 +92,7 @@ def process_group_options():
 
 
 def start_server():
-    """啟動 Echo server (fat jar 模式)"""
+    """Start Echo server (fat jar mode)"""
     normalized_db = str(DB_FILE.resolve()).replace("\\", "/")
     proc = subprocess.Popen(
         [
@@ -116,7 +116,7 @@ def start_server():
 
 
 def kill_server(proc):
-    """模擬非正常關閉；Windows 使用 taskkill 終止整棵 process tree。"""
+    """Simulate abnormal shutdown; Windows uses taskkill to terminate the entire process tree."""
     if proc.poll() is not None:
         return
     if sys.platform == "win32":
@@ -140,7 +140,7 @@ def kill_server(proc):
 
 
 def stop_server(proc):
-    """正常停止整個測試 process group，必要時退回強制終止。"""
+    """Stop the entire test process group normally, and return to force termination if necessary."""
     if proc.poll() is not None:
         return
     if sys.platform == "win32":
@@ -162,7 +162,7 @@ def stop_server(proc):
 
 
 def check_db_integrity():
-    """使用 Python 標準 sqlite3 驗證，不要求 Windows 額外安裝 CLI。"""
+    """Verified using Python standard sqlite3, does not require Windows additional installation of CLI."""
     try:
         with closing(sqlite3.connect(DB_FILE, timeout=10)) as connection:
             result = connection.execute("PRAGMA integrity_check").fetchone()
@@ -172,19 +172,19 @@ def check_db_integrity():
 
 
 def count_rules():
-    """查詢目前規則數（WAL mode 需要 shm/wal 檔案存在才能讀取最新資料）"""
+    """Query the current number of rules (WAL mode requires the existence of the shm/wal file to read the latest data)"""
     try:
         with closing(sqlite3.connect(DB_FILE, timeout=10)) as connection:
             result = connection.execute("SELECT COUNT(*) FROM http_rules").fetchone()
         return int(result[0]) if result else 0
     except sqlite3.Error:
-        # 表可能不存在（WAL 未 checkpoint 時，schema 在 WAL 裡）
-        # 如果 integrity_check 通過就不算失敗
+        # The table may not exist (schema is in WAL when WAL is not checkpoint)
+        # If integrity_check passes, it is not considered a failure.
         return 0
 
 
 def create_rules_burst(count, prefix="crash-test"):
-    """快速建立多條規則"""
+    """Quickly create multiple rules"""
     created = 0
     for i in range(count):
         s, _ = api("POST", "/api/admin/rules", {
@@ -202,7 +202,7 @@ def create_rules_burst(count, prefix="crash-test"):
 
 
 def create_rule_single(prefix, i):
-    """單條規則建立（供並發用）"""
+    """Single rule creation (for concurrent use)"""
     s, _ = api("POST", "/api/admin/rules", {
         "protocol": "HTTP",
         "matchKey": f"/api/{prefix}/{i}",
@@ -215,31 +215,31 @@ def create_rule_single(prefix, i):
     return s == 201
 
 
-# ========== 測試情境 ==========
+# ========== Test Situation ==========
 
 def test_kill_during_write():
-    """情境 1：大量寫入中途強制終止"""
+    """Scenario 1: Large write force terminated midway"""
     print("\n" + "=" * 60)
     print("情境 1：大量寫入中途強制終止")
     print("  模擬：H2 在寫入 chunk 時被殺，最後一個 chunk 寫一半")
     print("=" * 60)
 
-    # 啟動 server
+    # Start server
     proc = start_server()
     if not wait_for_server():
         print("  ✗ Server 啟動失敗")
         kill_server(proc)
         return False
 
-    # 先寫一些資料確保 DB 有內容
+    # Write some information first to ensure that DB has content
     print("  → 寫入 30 條基準規則...")
     base_count = create_rules_burst(30, "base")
     print(f"  → 基準寫入完成: {base_count} 條")
 
-    # 開始大量寫入，在寫入過程中 kill
+    # Starting a large number of writes, kill in the process of writing
     print("  → 開始密集寫入 + 同時強制終止...")
 
-    # 用 thread 持續寫入
+    # Continuous writing with thread
     writing = True
     write_count = [0]
 
@@ -258,12 +258,12 @@ def test_kill_during_write():
             if s == 201:
                 write_count[0] += 1
             i += 1
-            time.sleep(0.01)  # 10ms 間隔密集寫入
+            time.sleep(0.01)  # 10ms interval intensive writes
 
     t = threading.Thread(target=writer, daemon=True)
     t.start()
 
-    # 等寫入進行一段時間
+    # Wait for some time for writing to proceed
     time.sleep(2)
 
     print(f"  → 已寫入 {write_count[0]} 條，執行強制終止...")
@@ -272,7 +272,7 @@ def test_kill_during_write():
     t.join(timeout=2)
     time.sleep(1)
 
-    # 驗證 DB 完整性
+    # Verify DB integrity
     print("  → 驗證資料庫完整性...")
     integrity = check_db_integrity()
     rule_count = count_rules()
@@ -281,7 +281,7 @@ def test_kill_during_write():
     print(f"  → 資料庫中規則數: {rule_count} (WAL 未 checkpoint 時可能為 0)")
     print(f"  → kill 前寫入數: {base_count + write_count[0]}")
 
-    # 最重要的驗證：重啟後能否正常讀取
+    # The most important verification: whether it can be read normally after restarting
     print("  → 重新啟動驗證...")
     proc2 = start_server()
     restart_ok = wait_for_server()
@@ -305,7 +305,7 @@ def test_kill_during_write():
 
 
 def test_repeated_crash_recovery():
-    """情境 2：反覆 crash + 重啟 (5 次)"""
+    """Scenario 2: Repeated crash + restart (5 times)"""
     print("\n" + "=" * 60)
     print("情境 2：反覆 crash + 重啟 (5 輪)")
     print("  模擬：H2 反覆非正常關閉後無法啟動")
@@ -329,12 +329,12 @@ def test_repeated_crash_recovery():
             _, status_data = api("GET", "/api/admin/status")
             initial_rules = status_data.get("ruleCount", 0) if isinstance(status_data, dict) else 0
 
-        # 每輪寫入 10 條
+        # Write 10 items per round
         created = create_rules_burst(10, f"round{round_num}")
         cumulative_rules += created
         print(f"  → 寫入 {created} 條，預期累計 >= {cumulative_rules}")
 
-        # 隨機等 0.5~2 秒後 kill
+        # Randomly wait 0.5~2 seconds before kill
         wait_time = random.uniform(0.5, 2.0)
         time.sleep(wait_time)
 
@@ -342,7 +342,7 @@ def test_repeated_crash_recovery():
         kill_server(proc)
         time.sleep(0.5)
 
-        # 每輪檢查完整性
+        # Check integrity every round
         integrity = check_db_integrity()
         current_count = count_rules()
         print(f"  → integrity: {'ok' if integrity else 'FAILED'}, rules: {current_count}")
@@ -353,7 +353,7 @@ def test_repeated_crash_recovery():
             success = False
             break
 
-    # 最終驗證：能否正常啟動並讀取所有資料
+    # Final verification: Can it start normally and read all data?
     print("\n  --- 最終驗證 ---")
     proc = start_server()
     if wait_for_server():
@@ -361,7 +361,7 @@ def test_repeated_crash_recovery():
         rule_count = data.get("ruleCount", 0) if isinstance(data, dict) else 0
         print(f"  → 最終啟動成功，規則數: {rule_count}")
 
-        # 驗證能正常寫入
+        # Verify that it can be written normally
         created = create_rules_burst(3, "final-verify")
         print(f"  → 最終寫入驗證: {created}/3 成功")
 
@@ -382,7 +382,7 @@ def test_repeated_crash_recovery():
 
 
 def test_concurrent_write_then_kill():
-    """情境 3：多執行緒並發寫入 + 強制終止"""
+    """Scenario 3: Multiple threads writing concurrently + forced termination"""
     print("\n" + "=" * 60)
     print("情境 3：多執行緒並發寫入 + 強制終止")
     print("  模擬：H2 HikariCP 多連線同時寫入時被殺")
@@ -397,11 +397,11 @@ def test_concurrent_write_then_kill():
     _, status_data = api("GET", "/api/admin/status")
     initial_rules = status_data.get("ruleCount", 0) if isinstance(status_data, dict) else 0
 
-    # 先寫入基準資料
+    # Write baseline data first
     base = create_rules_burst(20, "concurrent-base")
     print(f"  → 基準資料: {base} 條")
 
-    # 10 個 thread 同時寫入
+    # 10 thread written simultaneously
     print("  → 啟動 10 個並發寫入 thread...")
 
     stop_event = threading.Event()
@@ -424,7 +424,7 @@ def test_concurrent_write_then_kill():
         t.start()
         threads.append(t)
 
-    # 讓並發寫入跑 3 秒
+    # Let concurrent writes run for 3 seconds
     time.sleep(3)
 
     print(f"  → 並發寫入 {concurrent_count[0]} 條，執行強制終止...")
@@ -435,14 +435,14 @@ def test_concurrent_write_then_kill():
         t.join(timeout=2)
     time.sleep(1)
 
-    # 驗證
+    # Verify
     integrity = check_db_integrity()
     rule_count = count_rules()
     print(f"  → integrity_check: {'ok' if integrity else 'FAILED'}")
     print(f"  → 資料庫中規則數: {rule_count}")
     print(f"  → 基準 + 並發寫入: {base} + {concurrent_count[0]}")
 
-    # 確認能重新啟動
+    # Confirm that it can be restarted
     print("  → 重新啟動驗證...")
     proc2 = start_server()
     restart_ok = wait_for_server()
@@ -464,7 +464,7 @@ def test_concurrent_write_then_kill():
         return False
 
 
-# ========== 主程式 ==========
+# ========== Main program ==========
 
 if __name__ == "__main__":
     print("╔══════════════════════════════════════════════════════════════╗")

@@ -31,7 +31,7 @@ class CheckXmlConditionChangesTest(unittest.TestCase):
             self.findings(rule))
 
     def test_xpath_only_expressions_are_unchanged(self):
-        # Order/*=A 會拆成欄位 Order/、運算子 *=（與伺服器相同），空的路徑段不是簡單路徑
+        # Order/*=A will be split into fields Order/, operator *= (same as the server), and the empty path segment is not a simple path
         rule = {"bodyCondition": "Order/Item[1]=A;a/b/text()=c;ns:Order/Status=A;Order/*/Status=A;Order/*=A;a//b=c"}
         self.assertEqual([("relativePath", "a/b/text()=c")], self.findings(rule))
 

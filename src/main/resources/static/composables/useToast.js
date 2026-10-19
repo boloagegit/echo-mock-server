@@ -1,11 +1,11 @@
 /**
- * useToast - Toast 通知與確認對話框 Composable
+ * useToast - Toast Notification and confirmation dialog box Composable
  *
- * 管理 Toast 通知訊息與確認對話框（Confirm Modal）。
- * Toast 自動消失：成功／資訊 3 秒、錯誤 7 秒、帶動作（如「復原」）6 秒；最多同時顯示 3 則。
- * Confirm 支援 requireInput（需輸入確認）與 danger（危險操作）模式。
+ * Manage Toast notification messages and confirmation dialog boxes (Confirm Modal).
+ * Toast automatically disappears: 3 seconds for success/information, 7 seconds for error, 6 seconds for actions (such as "Restore"); up to 3 items can be displayed at the same time.
+ * Confirm supports requireInput (requires input confirmation) and danger (dangerous operation) modes.
  *
- * @param {Function} t - 翻譯函式（來自 useI18n）
+ * @param {Function} t - Translation function (from useI18n)
  * @returns {{ toasts: Ref<Array>, showToast: Function, confirmState: Ref<Object>, showConfirm: Function }}
  */
 const useToast = (t) => {
@@ -14,20 +14,20 @@ const useToast = (t) => {
     const toasts = ref([]);
 
     const TOAST_TYPES = ['success', 'error', 'info', 'warning'];
-    // 提醒（warning）通常要讀完一句說明，停留久一點
+    // Reminder (warning) usually requires you to read a sentence and stay longer.
     const toastDuration = (type, action) => type === 'warning' ? 9000 : action ? 6000 : type === 'error' ? 7000 : 3000;
     let toastSeq = 0;
 
     /**
-     * 顯示 Toast 通知
-     * @param {string} msg - 訊息內容
-     * @param {string} type - 類型（'success' | 'error' | 'info'）；其他值視為 info，'danger' 視為 error
-     * @param {{label: string, handler: Function}} [action] - 選用的動作按鈕（例如「復原」）
+     * Display Toast notification
+     * @param {string} msg - Message content
+     * @param {string} type - type ('success' | 'error' | 'info'); other values are treated as info, 'danger' is treated as error
+     * @param {{label: string, handler: Function}} [action] - Selected action button (e.g. "Revert")
      */
     const showToast = (msg, type, action = null) => {
         const id = Date.now() + (++toastSeq);
         const kind = type === 'danger' ? 'error' : (TOAST_TYPES.includes(type) ? type : 'info');
-        // msg 可以是 {title, detail}：標題加一行說明，動作按鈕放在說明下方
+        // msg can be {title, detail}: add a line of description to the title, and place the action button below the description
         const rich = msg && typeof msg === 'object';
         toasts.value.push({ id, msg: rich ? msg.detail : msg, title: rich ? msg.title : null, type: kind, action, leaving: false });
         if (toasts.value.length > 3) { toasts.value.shift(); }
@@ -35,7 +35,7 @@ const useToast = (t) => {
         return id;
     };
 
-    /** 執行 Toast 上的動作並立即關閉該則通知 */
+    /** Perform the action on Toast and close the notification immediately */
     const runToastAction = (id) => {
         const toast = toasts.value.find(item => item.id === id);
         if (!toast?.action || toast.leaving) { return; }
@@ -54,16 +54,16 @@ const useToast = (t) => {
     const confirmState = ref({ show: false, title: '', message: '', confirmText: '', cancelText: '', danger: false, requireInput: null, inputLabel: '', inputValue: '', onConfirm: null, onCancel: null });
 
     /**
-     * 顯示確認對話框，回傳 Promise<boolean>
-     * @param {Object} options - 對話框選項
-     * @param {string} options.title - 標題
-     * @param {string} options.message - 訊息
-     * @param {string} [options.confirmText] - 確認按鈕文字
-     * @param {string} [options.cancelText] - 取消按鈕文字
-     * @param {boolean} [options.danger=false] - 是否為危險操作模式
-     * @param {string|null} [options.requireInput=null] - 需輸入的確認文字
-     * @param {string} [options.inputLabel=''] - 輸入欄位標籤
-     * @returns {Promise<boolean>} 使用者確認回傳 true，取消回傳 false
+     * Display confirmation dialog box and return Promise<boolean>
+     * @param {Object} options - Dialog options
+     * @param {string} options.title - Title
+     * @param {string} options.message - Message
+     * @param {string} [options.confirmText] - Confirm button text
+     * @param {string} [options.cancelText] - Cancel button text
+     * @param {boolean} [options.danger=false] - Is it a dangerous operating mode?
+     * @param {string|null} [options.requireInput=null] - Confirmation text to be entered
+     * @param {string} [options.inputLabel=''] - Enter field label
+     * @returns {Promise<boolean>} The user confirms by replying true, and canceling the reply false
      */
     const showConfirm = ({ title, message, confirmText = t('confirm.ok'), cancelText = t('confirm.cancel'), danger = false, requireInput = null, inputLabel = '' }) => {
         return new Promise(resolve => {

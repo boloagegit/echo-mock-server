@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
-/** RuleApplyDocument 與既有 RuleDto 的唯一轉換入口。 */
+/** The only conversion entry between RuleApplyDocument and the existing RuleDto. */
 @Component
 @RequiredArgsConstructor
 public class RuleApplyMapper {
@@ -111,7 +111,7 @@ public class RuleApplyMapper {
             }
         }
 
-        // 使用結構化條件的規則無法用 v1 表達，改以 v2 輸出，避免條件在文件中消失
+        // Rules using structured conditions cannot be expressed in v1. They are output in v2 to avoid the conditions disappearing in the file.
         boolean advanced = dto.getMatchSpec() != null && !dto.getMatchSpec().isNull();
         if (advanced) {
             spec.match(dto.getMatchSpec());
@@ -172,7 +172,7 @@ public class RuleApplyMapper {
             try {
                 return objectMapper.readTree(value);
             } catch (JsonProcessingException ignored) {
-                // 非 JSON 內容仍要原樣保留為文字。
+                // Non-JSON content should still be left as text.
             }
         }
         return TextNode.valueOf(value);

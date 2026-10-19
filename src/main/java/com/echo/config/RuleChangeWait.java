@@ -18,15 +18,15 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 import java.io.IOException;
 
 /**
- * 請求中變更了規則時，回應前等到新的規則快照生效：透過 API 存檔後立刻送出的模擬請求一定用到新規則，
- * 而模擬請求本身不必等待重建（見 {@link RuleSnapshotCache}）。一次批次匯入只等一次。
+ * If a request changes rules, wait for the new snapshot before responding so mock requests sent immediately after an API save use the new rules,
+ * The simulation request itself does not have to wait for reconstruction (see {@link RuleSnapshotCache}). Only wait once for a batch import.
  */
 public final class RuleChangeWait {
 
     private RuleChangeWait() {
     }
 
-    /** 有回應內容時，在寫出內容前等待（內容較大時回應可能在請求結束前就已送出）。 */
+    /** When there is response content, wait before writing the content (if the content is large, the response may be sent before the request is completed). */
     @ControllerAdvice
     public static class BeforeBody implements ResponseBodyAdvice<Object> {
         @Override
@@ -43,7 +43,7 @@ public final class RuleChangeWait {
         }
     }
 
-    /** 沒有回應內容的請求在結束時等待；請求開始時丟掉同一執行緒上一個請求留下的狀態。 */
+    /** A request without response content is waited at the end; the state left by the previous request on the same thread is discarded when the request is started. */
     @Component
     public static class AtRequestEnd extends OncePerRequestFilter {
         @Override

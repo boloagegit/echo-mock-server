@@ -10,18 +10,18 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 建立非 root 用戶
+# Create a non-root user
 RUN useradd -m -s /bin/bash echo
 
-# 複製 JAR
+# Copy JAR
 COPY build/libs/echo-server-*.jar app.jar
 
-# 資料目錄
+# Data directory
 RUN mkdir -p /app/data /app/backups && chown -R echo:echo /app
 
 USER echo
 
-# 環境變數
+# Environment variables
 ENV JAVA_OPTS="-Xms256m -Xmx512m \
     -XX:+HeapDumpOnOutOfMemoryError \
     -XX:+ExitOnOutOfMemoryError \

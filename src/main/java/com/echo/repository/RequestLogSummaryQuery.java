@@ -121,10 +121,10 @@ public class RequestLogSummaryQuery {
                 row.get(20, Boolean.class), row.get(21, Boolean.class), row.get(22, Boolean.class), row.get(23, String.class));
     }
 
-    /** {@code from} 含、{@code to} 不含；null 表示不限。 */
+    /** {@code from} is included, {@code to} is not included; null means no limit. */
     /**
-     * {@code keyword} 是部分比對（網址、目標、診斷 ID、規則 ID）；{@code method} 與 {@code path}
-     * 是完全相同（流量概況點「看這些請求」時，列出的筆數要與統計的一致）。
+     * {@code keyword} is a partial comparison (URL, target, diagnosis ID, rule ID); {@code method} and {@code path}
+     * must be identical, so opening the requests for a traffic-overview cell returns the same count as its statistics.
      */
     public record Filter(String ruleId, Protocol protocol, Boolean matched,
                          String keyword, Long afterId, LocalDateTime from, LocalDateTime to,

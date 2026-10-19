@@ -28,11 +28,11 @@ import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.when;
 
 /**
- * 確認 JMS 不受 SSE 功能影響。
+ * Confirm that JMS is not affected by SSE functionality.
  * <p>
- * - JmsRule 無 sseEnabled 欄位
- * - JMS 規則的 RuleDto 中 sseEnabled 為 null
- * - JMS 規則匹配完全不受 SSE 功能影響
+ * - JmsRule No sseEnabled field
+ * - sseEnabled in RuleDto of JMS rule is null
+ * - JMS rule matching is completely unaffected by the SSE function
  *
  * Validates: Requirements 7.2, 7.4
  */
@@ -55,7 +55,7 @@ class JmsSseUnaffectedTest {
         jmsRuleService = new JmsRuleService(Optional.of(jmsHandler), ruleService, jmsRuleRepository, conditionMatcher, Optional.empty(), Optional.empty(), null);
     }
 
-    // --- JmsRule 無 sseEnabled 欄位 ---
+    // --- JmsRule No sseEnabled field ---
 
     @Test
     void jmsRule_doesNotHaveSseEnabledField() {
@@ -79,7 +79,7 @@ class JmsSseUnaffectedTest {
         assertThat(allFieldNames).doesNotContain("sseEnabled");
     }
 
-    // --- JMS 規則的 RuleDto 中 sseEnabled 為 null ---
+    // --- sseEnabled in RuleDto of JMS rule is null ---
 
     @Test
     void toDto_sseEnabled_isNull() {
@@ -131,19 +131,19 @@ class JmsSseUnaffectedTest {
                 .priority(0)
                 .enabled(true)
                 .delayMs(0L)
-                .sseEnabled(true) // 即使設定 sseEnabled=true，JMS 也應忽略
+                .sseEnabled(true) // JMS should be ignored even if sseEnabled=true is set
                 .build();
 
         BaseRule rule = jmsHandler.fromDto(dto);
 
         assertThat(rule).isInstanceOf(JmsRule.class);
         assertThat(rule.getProtocol()).isEqualTo(Protocol.JMS);
-        // JmsRule 沒有 sseEnabled 欄位，所以轉回 DTO 時應為 null
+        // JmsRule does not have a sseEnabled field, so when it is converted back to DTO it should be null
         RuleDto roundTripped = jmsHandler.toDto(rule, null, false);
         assertThat(roundTripped.getSseEnabled()).isNull();
     }
 
-    // --- JMS 規則匹配不受 SSE 影響 ---
+    // --- JMS rule matching is not affected by SSE ---
 
     @Test
     void jmsRuleMatching_worksNormally() {

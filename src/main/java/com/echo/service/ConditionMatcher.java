@@ -44,29 +44,29 @@ import java.util.Objects;
 import java.util.StringJoiner;
 
 /**
- * 條件匹配服務
+ * Condition matching service
  * <p>
- * 支援多種格式的請求內容匹配，類似 WireMock 風格：
+ * Supports request content matching in multiple formats, similar to WireMock style:
  *
- * <h3>支援的運算子</h3>
+ * <h3>Supported operators</h3>
  * <ul>
- *   <li>{@code field=value} - 等於（預設）</li>
- *   <li>{@code field~=pattern} - 正規表達式匹配</li>
- *   <li>{@code field*=substring} - 包含子字串</li>
- *   <li>{@code field!=value} - 不等於</li>
+ *   <li>{@code field=value} - equal to (default)</li>
+ *   <li>{@code field~=pattern} - Regular expression matching</li>
+ *   <li>{@code field*=substring} - contains the substring</li>
+ *   <li>{@code field!=value} - not equal to</li>
  * </ul>
  *
- * <h3>支援的路徑格式</h3>
+ * <h3>Supported path formats</h3>
  * <ul>
- *   <li>{@code $.jsonPath} - JSON Path 表達式</li>
- *   <li>{@code //xpath} - XPath 表達式</li>
- *   <li>{@code ?param} - Query 參數</li>
- *   <li>{@code field.nested} - JSON 欄位路徑</li>
+ *   <li>{@code $.jsonPath} - JSON Path expression</li>
+ *   <li>{@code //xpath} - XPath expression</li>
+ *   <li>{@code ?param} - Query Parameter</li>
+ *   <li>{@code field.nested} - JSON field path</li>
  * </ul>
  *
- * 條件一律由 {@code com.echo.core.match} 引擎評估：舊版字串條件經 {@link LegacyConditions} 轉成相容節點，
- * 結構化條件（{@code matchSpec}）直接編譯。這個類別負責請求層的工作：body 預先解析、JMS 串流 XML 預先計算、
- * 條件編譯結果的共用，以及把引擎的說明轉成匹配鏈格式。
+ * Conditions are always evaluated by the {@code com.echo.core.match} engine: the old string conditions are converted into compatible nodes by {@link LegacyConditions}.
+ * Compile structured conditions ({@code matchSpec}) directly. This class handles request-level work: body pre-parsing, JMS streaming-XML precomputation,
+ * sharing compiled conditions and adapting engine explanations to the matching-chain format.
  */
 @Service
 @Slf4j
@@ -76,20 +76,20 @@ public class ConditionMatcher {
 
     private static final int DEFAULT_MAX_FIELD_VALUE_LENGTH = 2 * 1024 * 1024;
 
-    /** 單一欄位值長度上限，超過則跳過比對（防止 base64 等大值拖慢匹配） */
+    /** Maximum field-value length; skip matching oversized values, such as base64 payloads, to prevent excessive matching cost. */
     private final int maxFieldValueLength;
 
     private final MatcherCompiler compiler;
     /**
-     * 條件字串 → {@link RuleConditions}，以弱參照保存：規則快照（{@code HttpRuleSnapshot}／{@code JmsQueueSnapshot}）
-     * 持有使用中的條件，因此不會被回收也不需要容量上限；快照被淘汰後，沒有人使用的條件由 GC 回收。
-     * 取代原本上限 10,000 筆的 LRU 快取，避免條件數超過上限時反覆重新編譯。
+     * Condition strings map to {@link RuleConditions} through weak references; rule snapshots ({@code HttpRuleSnapshot}/{@code JmsQueueSnapshot})
+     * Active conditions have strong references, so they cannot be reclaimed and need no capacity limit; after snapshot eviction, GC reclaims conditions no longer in use.
+     * This replaces the former 10,000-entry LRU cache, avoiding repeated recompilation when the condition count exceeds that limit.
      */
     private final Cache<ConditionKey, RuleConditions> conditionRegistry = Caffeine.newBuilder()
             .weakValues()
             .build();
 
-    /** 預設建構子，使用 2MB 上限（供測試及非 Spring 環境使用） */
+    /** Default constructor, use 2MB limit (for testing and non-Spring environments) */
     public ConditionMatcher() {
         this(DEFAULT_MAX_FIELD_VALUE_LENGTH);
     }
@@ -105,8 +105,8 @@ public class ConditionMatcher {
     }
 
     /**
-     * 一組規則條件（結構化條件，或舊版三個欄位）。第一次比對時才編譯，之後重用。
-     * 呼叫端（規則快照）持有此物件，就能讓編譯結果在快照的生命週期內保留。
+     * One rule's conditions, either structured or the three legacy strings; compile on first evaluation and reuse thereafter.
+     * The caller, usually a rule snapshot, retains this object to keep compiled results alive for the snapshot's lifetime.
      */
     public static final class RuleConditions {
 
@@ -119,7 +119,7 @@ public class ConditionMatcher {
             this.compiler = compiler;
         }
 
-        /** 這組條件對 body 的需求（見 {@link BodyRequirements}）。 */
+        /** Body requirements for these conditions; see {@link BodyRequirements}. */
         public BodyRequirements bodyRequirements() {
             return compiled().bodyRequirements();
         }
@@ -127,7 +127,7 @@ public class ConditionMatcher {
         private CompiledMatcher compiled() {
             CompiledMatcher result = compiled;
             if (result == null) {
-                // 並行時可能重複編譯一次；結果相同且不可變，因此不需加鎖
+                // Concurrent compilation may duplicate work once; results are identical and immutable, so no lock is needed.
                 result = key.matchSpec() != null
                         ? compileStored(key.matchSpec())
                         : compiler.compile(LegacyConditions.toMatchNode(key.body(), key.query(), key.header()));
@@ -137,8 +137,8 @@ public class ConditionMatcher {
         }
 
         /**
-         * 儲存時已檢查過；資料庫被直接修改等情況下仍無法編譯時，這條規則視為永遠不符合，
-         * 避免每個請求都因例外而失敗。
+         * Conditions are validated when saved; if direct database edits introduce invalid conditions, treat the rule as never matching
+         * rather than failing every request with an exception.
          */
         private CompiledMatcher compileStored(String matchSpec) {
             try {
@@ -153,8 +153,8 @@ public class ConditionMatcher {
     private static final ObjectMapper STORED_SPEC_READER = new ObjectMapper();
 
     /**
-     * 取得一組條件的共用物件；相同條件在使用期間回傳同一個物件。
-     * 規則快照應持有回傳值，讓編譯結果在快照存在期間不被回收。
+     * Get a common object for a set of conditions; the same condition returns the same object during use.
+     * Rule snapshots must hold the returned value, keeping compiled results alive for the snapshot's lifetime.
      */
     public RuleConditions conditions(String matchSpec, String bodyCondition, String queryCondition,
                                      String headerCondition) {
@@ -201,10 +201,10 @@ public class ConditionMatcher {
     // ==================== Prepared Body ====================
 
     /**
-     * 預先解析的 Body 容器
+     * Pre-parsed Body container
      * <p>
-     * 在批次匹配（多條規則比對同一個 body）時，先 parse 一次 body，
-     * 後續每條規則直接使用已 parse 的物件，避免重複 parse。
+     * When multiple rules evaluate the same body, parse it once before matching.
+     * Subsequent rules reuse that parsed object instead of parsing again.
      */
     public static class PreparedBody {
         private final String raw;
@@ -212,7 +212,7 @@ public class ConditionMatcher {
         private final JsonNode jsonNode;
         private final BodyType type;
         private final Map<String, Boolean> matchOutcomes = new HashMap<>();
-        /** 比對引擎的評估狀態，見 {@link #evalContext(String, Map)}。 */
+        /** Matching-engine evaluation state; see {@link #evalContext(String, Map)}. */
         private EvalContext compiledContext;
         private String contextQueryString;
         private Map<String, String> contextHeaders;
@@ -238,8 +238,8 @@ public class ConditionMatcher {
         }
 
         /**
-         * 保留原始內容供請求紀錄使用，但不建立 JSON tree 或 XML DOM。
-         * 僅在候選規則完全沒有 body 條件時使用。
+         * Keep the original content for request logging, but do not create JSON tree or XML DOM.
+         * Only used if the candidate rule has no body condition at all.
          */
         public static PreparedBody rawOnly(String raw) {
             if (raw == null || raw.isBlank()) {
@@ -254,17 +254,17 @@ public class ConditionMatcher {
             return prepared;
         }
 
-        /** 取得已解析的 XML Document，若非 XML 則為 null */
+        /** Obtain the parsed XML Document, if not XML it is null */
         public Document getXmlDoc() {
             return xmlDoc;
         }
 
-        /** 取得已解析的 JSON 節點，若非 JSON 則為 null */
+        /** Obtain the parsed JSON node, if it is not JSON, it is null */
         public JsonNode getJsonNode() {
             return jsonNode;
         }
 
-        /** 取得原始 body 字串 */
+        /** Get the original body string */
         public String getRaw() {
             return raw;
         }
@@ -280,16 +280,16 @@ public class ConditionMatcher {
             }
         }
 
-        /** 本請求已評估的 JSONPath 數量（保存在比對引擎的評估狀態中）。 */
+        /** Number of JSONPath evaluations for this request, stored in the matching-engine evaluation state. */
         int cachedJsonPathCount() {
             return compiledContext == null ? 0 : compiledContext.cachedValueCount();
         }
 
         /**
-         * 比對引擎的評估狀態。同一請求內 query／header 不變，因此重用同一個 context；
-         * 結果暫存直接共用 {@link #matchOutcomes}，JMS 串流 XML 預先算好的結果與背景分析還原的結果都直接重用。
+         * Matching-engine evaluation state. Query parameters and headers stay unchanged within a request, so reuse the same context;
+         * share cached outcomes directly with {@link #matchOutcomes}, reusing JMS streaming-XML results and outcomes restored for background analysis.
          */
-        @SuppressWarnings("ReferenceEquality") // 同一請求傳入的是同一個 headers 物件，比對身分即可
+        @SuppressWarnings("ReferenceEquality") // The same request passes the same headers object, so an identity check is sufficient.
         private EvalContext evalContext(String queryString, Map<String, String> headers) {
             if (compiledContext == null || !Objects.equals(contextQueryString, queryString)
                     || contextHeaders != headers) {
@@ -301,7 +301,7 @@ public class ConditionMatcher {
             return compiledContext;
         }
 
-        /** 把已解析的內容提供給比對引擎，不重新解析。 */
+        /** Expose parsed content to the matching engine without parsing again. */
         private final class PreparedBodyView implements BodyView {
 
             @Override
@@ -319,7 +319,7 @@ public class ConditionMatcher {
                 return jsonNode;
             }
 
-            /** 串流掃描過的 XML 沒有 DOM；真的需要（例如匹配鏈說明）時才解析，失敗也只試一次。 */
+            /** Streaming XML has no DOM; parse one only when needed, such as for matching-chain explanations, and attempt it only once even on failure. */
             @Override
             public Document xml() {
                 if (xmlDoc != null) {
@@ -332,7 +332,7 @@ public class ConditionMatcher {
                 return lazyXmlDoc;
             }
 
-            /** 同一請求內相同路徑只查找一次，多條規則共用。 */
+            /** Evaluate each path once per request and share its result across rules. */
             @Override
             public List<String> xmlValues(XmlPath path) {
                 Document doc = xml();
@@ -347,7 +347,7 @@ public class ConditionMatcher {
         }
     }
 
-    /** Header map 直接沿用呼叫端的物件（不複製），保留舊版依迭代順序取第一個 header 的行為。 */
+    /** Use the caller's header map without copying, preserving the legacy first-header-in-iteration-order behavior. */
     private record PreparedRequestView(String queryString, Map<String, String> headers, BodyView body)
             implements RequestView {
 
@@ -373,7 +373,7 @@ public class ConditionMatcher {
     }
 
     /**
-     * 預先解析 body，回傳 PreparedBody 供批次匹配使用
+     * Pre-parse body and return PreparedBody for batch matching.
      */
     public PreparedBody prepareBody(String body) {
         if (body == null || body.isBlank()) {
@@ -402,8 +402,8 @@ public class ConditionMatcher {
     }
 
     /**
-     * 依候選規則條件的需求準備 body（§4.5）：沒有條件讀 body 時不解析；XML body 且沒有條件需要 DOM 時，
-     * 以串流掃描一次算出所有可串流條件的結果，不建立 DOM；其他情況照常解析，所有規則共用。
+     * Prepare the body for candidate requirements (section 4.5): skip parsing if no condition reads it; for XML that requires no DOM,
+     * evaluate all streamable conditions in one pass without building a DOM. Otherwise parse normally and share the result across rules.
      */
     public PreparedBody prepareBody(String body, Collection<RuleConditions> candidates) {
         List<BodyRequirements> requirements = new ArrayList<>(candidates.size());
@@ -413,7 +413,7 @@ public class ConditionMatcher {
         return prepareBody(body, BodyRequirements.merge(requirements));
     }
 
-    /** 同上，需求已合併。 */
+    /** Same as above, the requirements have been merged. */
     public PreparedBody prepareBody(String body, BodyRequirements requirements) {
         if (!requirements.usesBody()) {
             return PreparedBody.rawOnly(body);
@@ -433,7 +433,7 @@ public class ConditionMatcher {
             return PreparedBody.streamingXml(trimmed,
                     XmlStreamScan.evaluate(trimmed, requirements, maxFieldValueLength));
         } catch (XMLStreamException | RuntimeException e) {
-            // 串流無法處理（不是合法 XML、namespace 前綴未宣告等）：改用一般解析，由它判斷是 XML 還是純文字
+            // If streaming fails, for example due to invalid XML or undeclared prefixes, fall back to normal parsing to classify XML versus plain text.
             return prepareBody(body);
         }
     }
@@ -448,9 +448,9 @@ public class ConditionMatcher {
     // ==================== Public Matching API ====================
 
     /**
-     * 快速布林匹配（使用預先解析的 body，不建立 detail 物件）
+     * Fast Boolean matching (use pre-parsed body, do not create detail objects)
      * <p>
-     * 用於規則匹配迴圈，效能最佳。
+     * Used for rule matching loops, with the best performance.
      */
     public boolean matchesPrepared(String bodyCondition, String queryCondition, String headerCondition,
                                    PreparedBody prepared, String queryString, Map<String, String> headers) {
@@ -458,8 +458,8 @@ public class ConditionMatcher {
     }
 
     /**
-     * 同 {@link #matchesPrepared(String, String, String, PreparedBody, String, Map)}，另外支援結構化條件；
-     * 有 {@code matchSpec} 時以它為準，忽略舊版三個欄位。
+     * Same as {@link #matchesPrepared(String, String, String, PreparedBody, String, Map)}, but also supports structured conditions;
+     * When {@code matchSpec} is present, it takes precedence over all three legacy fields.
      */
     public boolean matchesPrepared(String matchSpec, String bodyCondition, String queryCondition,
                                    String headerCondition, PreparedBody prepared, String queryString,
@@ -469,9 +469,9 @@ public class ConditionMatcher {
     }
 
     /**
-     * 結構化匹配（使用預先解析的 body，回傳每個條件的 PASS/FAIL 細節）
+     * Structured matching (using pre-parsed body, returning PASS/FAIL details for each condition)
      * <p>
-     * 用於匹配鏈分析，提供 near-miss 偵測所需的詳細資訊。
+     * Used for match chain analysis, providing detailed information required for near-miss detection.
      */
     public ConditionDetail matchesPreparedWithDetail(String bodyCondition, String queryCondition, String headerCondition,
                                                      PreparedBody prepared, String queryString, Map<String, String> headers) {
@@ -479,7 +479,7 @@ public class ConditionMatcher {
                 prepared, queryString, headers);
     }
 
-    /** 同上，另外支援結構化條件；有 {@code matchSpec} 時以它為準。 */
+    /** Same as above, in addition, structured conditions are supported; when there is {@code matchSpec}, it shall prevail. */
     public ConditionDetail matchesPreparedWithDetail(String matchSpec, String bodyCondition, String queryCondition,
                                                      String headerCondition, PreparedBody prepared,
                                                      String queryString, Map<String, String> headers) {
@@ -488,8 +488,8 @@ public class ConditionMatcher {
     }
 
     /**
-     * 樹狀的比對說明（每個群組與條件是否符合、實際取到的值），供匹配鏈顯示；
-     * 攤平成逐條結果請用 {@link #toConditionDetail(MatchExplanation)}。
+     * Tree-shaped explanation for matching-chain display: each group's outcome and the actual values extracted.
+     * Please use {@link #toConditionDetail(MatchExplanation)} to flatten the result into an item-by-item result.
      */
     public MatchExplanation explainPrepared(String matchSpec, String bodyCondition, String queryCondition,
                                             String headerCondition, PreparedBody prepared,
@@ -503,9 +503,9 @@ public class ConditionMatcher {
     }
 
     /**
-     * 舊版條件的說明文字與原本的實作完全相同（見測試的 LegacyConditionOracle）；
-     * 結構化條件則把每個條件（葉節點）攤平成一筆，type 為 {@code matchSpec}，
-     * 整體是否符合仍以整棵樹（含 any／not）的結果為準。
+     * The description text of the old version of the condition is exactly the same as the original implementation (see test LegacyConditionOracle);
+     * Flatten each structured condition leaf into one entry with type {@code matchSpec},
+     * The whole tree's outcome, including any/not groups, determines the overall match.
      */
     public static ConditionDetail toConditionDetail(MatchExplanation explanation) {
         List<ConditionResult> results = new ArrayList<>(explanation.children().size());
@@ -516,7 +516,7 @@ public class ConditionMatcher {
                 .build();
     }
 
-    /** {@code not} 底下的條件以「不符合才算通過」呈現，讓每一筆的 PASS／FAIL 與它對整體的貢獻一致。 */
+    /** Present descendants of {@code not} as passing only when their condition fails, keeping each PASS/FAIL consistent with its contribution to the whole. */
     private static void addConditionResults(MatchExplanation explanation, boolean negated,
                                             List<ConditionResult> results) {
         if (explanation.isCondition()) {
@@ -554,11 +554,11 @@ public class ConditionMatcher {
                 .build());
     }
 
-    /** 結構化條件在匹配鏈中的類型名稱。 */
+    /** The type name of the structured condition in the match chain. */
     public static final String MATCH_SPEC_TYPE = "matchSpec";
 
     /**
-     * 簡易匹配（自動解析 body）
+     * Simple matching (automatically parses body)
      */
     public boolean matches(String bodyCondition, String queryCondition, String headerCondition,
                           String body, String queryString, Map<String, String> headers) {
@@ -570,7 +570,7 @@ public class ConditionMatcher {
         return matches(bodyCondition, queryCondition, null, body, queryString, null);
     }
 
-    /** 單一條件字串：{@code ?} 開頭的是 query 條件，其餘是 body 條件。 */
+    /** Single condition string: The beginning of {@code ?} is the query condition, and the rest are body conditions. */
     public boolean matches(String condition, String body, String queryString) {
         if (condition == null || condition.isBlank()) {
             return true;
@@ -595,7 +595,7 @@ public class ConditionMatcher {
     // ==================== Structured Match Result Classes ====================
 
     /**
-     * 結構化匹配結果，包含所有條件的 PASS/FAIL 細節
+     * Structured match results, including PASS/FAIL details for all conditions
      */
     @Getter
     @Builder
@@ -617,13 +617,13 @@ public class ConditionMatcher {
     }
 
     /**
-     * 單一條件的匹配結果
+     * Match result of single condition
      */
     @Getter
     @Builder
     public static class ConditionResult {
         private final String type;       // "bodyCondition", "queryCondition", "headerCondition"
-        private final String condition;  // 原始條件字串
+        private final String condition;  // Original condition string
         private final boolean passed;
         private final String detail;     // e.g., "bodyCondition PASS (user.type=vip)"
     }

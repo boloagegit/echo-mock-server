@@ -29,7 +29,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * HTTP 協定處理器
+ * HTTP protocol processor
  */
 @Component
 @RequiredArgsConstructor
@@ -132,7 +132,7 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
                 .scenarioName(dto.getScenarioName())
                 .requiredScenarioState(dto.getRequiredScenarioState())
                 .newScenarioState(dto.getNewScenarioState())
-                .createdAt(dto.getCreatedAt()) // 保留建立時間
+                .createdAt(dto.getCreatedAt()) // Retain build time
                 .build();
     }
 
@@ -164,7 +164,7 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
 
     @Override
     public BaseRule save(BaseRule rule) {
-        // 立即寫入：在外層交易內也要讓回傳的規則帶上新的版本號
+        // Flush immediately: even within an outer transaction, the returned rule must carry its new version.
         return repository.saveAndFlush((HttpRule) rule);
     }
 
@@ -174,7 +174,7 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
     }
 
     /**
-     * 查詢 HTTP 規則（含萬用 fallback）
+     * Query HTTP rules (including wildcard fallback)
      */
     public List<HttpRule> findWithFallback(String targetHost, String matchKey, String method) {
         List<HttpRule> result = new ArrayList<>();
@@ -187,8 +187,8 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
     }
 
     /**
-     * 查詢指定來源主機與 HTTP 方法可能使用的規則，但不綁定實際 request path。
-     * 呼叫端可將此結果以 host + method 快取，避免動態 URL 每個 path 都建立一份快取。
+     * Query the specified source host and the rules that may be used by the HTTP method, but do not bind the actual request path.
+     * The calling end can cache this result as host + method to avoid creating a cache for each dynamic URL path.
      */
     public List<HttpRule> findByHostAndMethod(String targetHost, String method) {
         List<HttpRule> result = new ArrayList<>();
@@ -202,7 +202,7 @@ public class HttpProtocolHandler extends AbstractProtocolHandler {
         return result;
     }
 
-    /** 保留既有 exact、prefix wildcard 與全域 wildcard 的路徑語意。 */
+    /** Retain the existing path semantics of exact, prefix wildcard and global wildcard. */
     public boolean matchesRequestPath(String pattern, String path) {
         return HttpPathPattern.matches(pattern, path);
     }

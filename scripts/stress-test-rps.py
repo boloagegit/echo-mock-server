@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-RPS 壓力測試：測量 Echo Mock Server 的吞吐量
+RPS stress test: measuring throughput of Echo Mock Server
 
-測試場景：
-  1. 簡單 JSON（無條件匹配）
-  2. 複雜 JSON（多條件 + 模板渲染）
-  3. 小型 XML（~3KB + XPath 條件）
-  4. 大型 XML（~50KB + XPath 條件）
+Test scenario:
+  1. Simple JSON (unconditional match)
+  2. Complex JSON (multiple conditions + template rendering)
+  3. Small XML (~3KB + XPath condition)
+  4. Large XML (~50KB + XPath condition)
 
-每個場景用多執行緒並發打，測量 RPS、延遲分佈。
+Each scene is played concurrently with multiple threads, and RPS and delay distribution are measured.
 
-用法：python3 scripts/stress-test-rps.py [BASE_URL] [DURATION_SEC] [CONCURRENCY]
+Usage: python3 scripts/stress-test-rps.py [BASE_URL] [DURATION_SEC] [CONCURRENCY]
 
 The positional interface is intentionally kept compatible with the original
 script.  ``--json`` emits one machine-readable JSON document on stdout;
@@ -234,11 +234,11 @@ def generate_xml(item_count, extra_fields=5):
     return "\n".join(lines)
 
 
-# === 測試場景定義 ===
+# === Test scenario definition ===
 
 SCENARIOS = []
 
-# 場景 1：簡單 JSON，無條件
+# Scenario 1: Simple JSON, unconditional
 SCENARIOS.append({
     "name": "簡單 JSON（無條件）",
     "path": "/rps/simple-json",
@@ -253,7 +253,7 @@ SCENARIOS.append({
     "request_body": '{"hello":"world"}',
 })
 
-# 場景 2：複雜 JSON，多條件 + 模板
+# Scenario 2: Complex JSON, multiple conditions + template
 template_body = json.dumps({
     "orderId": "{{jsonPath request.body '$.orderId'}}",
     "customer": "{{jsonPath request.body '$.customer.name'}}",
@@ -268,7 +268,7 @@ complex_json_body = json.dumps({
     "items": [{"sku": "A1", "qty": 3}, {"sku": "B2", "qty": 1}],
 })
 
-# 候選規則（條件不匹配）+ 目標規則
+# Candidate rule (condition does not match) + target rule
 complex_json_rules = []
 for i in range(10):
     complex_json_rules.append({
@@ -301,7 +301,7 @@ SCENARIOS.append({
     "query": "?status=active",
 })
 
-# 場景 3：小型 XML ~3KB
+# Scenario 3: Small XML ~3KB
 small_xml = generate_xml(5, 3)
 small_xml_rules = []
 for i in range(10):
@@ -326,7 +326,7 @@ SCENARIOS.append({
     "request_body": small_xml,
 })
 
-# 場景 4：大型 XML ~50KB
+# Scenario 4: Large XML ~50KB
 large_xml = generate_xml(200, 8)
 large_xml_rules = []
 for i in range(10):
@@ -353,7 +353,7 @@ SCENARIOS.append({
 
 
 def run_scenario(scenario, base_url=None, duration=None, concurrency=None, verbose=True):
-    """執行單一場景的 RPS 測試，並將所有非 2xx 記為失敗。"""
+    """Executing a single scenario RPS test and marking all non-2xx as failures."""
     base_url = base_url or BASE_URL
     duration = DURATION if duration is None else duration
     concurrency = CONCURRENCY if concurrency is None else concurrency

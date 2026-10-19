@@ -14,19 +14,19 @@ import java.util.function.BooleanSupplier;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * AbstractBatchAgent 屬性測試（Property 1–5）。
+ * AbstractBatchAgent attribute test (Property 1–5).
  * <p>
  * Feature: agent-framework-log-agent
  * <p>
- * 使用 TestBatchAgent（extends AbstractBatchAgent&lt;String&gt;）作為測試子類別，
- * 驗證佇列管理、批次觸發、丟棄策略與關閉行為的正確性。
+ * Use TestBatchAgent (extends AbstractBatchAgent&lt;String&gt;) as the test subclass,
+ * Verify the correctness of queue management, batch triggering, discard policy and shutdown behavior.
  */
 class AbstractBatchAgentPropertyTest {
 
     // ==================== Test Subclass ====================
 
     /**
-     * 具體測試子類別，記錄所有 processBatch 呼叫以供驗證。
+     * Concrete test subclass recording every processBatch call for assertions.
      */
     static class TestBatchAgent extends AbstractBatchAgent<String> {
 
@@ -85,7 +85,7 @@ class AbstractBatchAgentPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 1: Submit rejected when agent not RUNNING
      * <p>
-     * 非 RUNNING 狀態下 submit 不增加佇列大小。
+     * submit does not increase the queue size in non-RUNNING state.
      * <p>
      * **Validates: Requirements 1.4**
      */
@@ -94,7 +94,7 @@ class AbstractBatchAgentPropertyTest {
             @ForAll @IntRange(min = 1, max = 50) int capacity,
             @ForAll @IntRange(min = 1, max = 20) int submitCount) {
 
-        // Agent 建立後預設為 STOPPED，不呼叫 start()
+        // Agent is defaulted to STOPPED after creation and does not call start()
         TestBatchAgent agent = new TestBatchAgent(capacity, 100, 60);
 
         assertThat(agent.getStatus()).isNotEqualTo(AgentStatus.RUNNING);
@@ -112,7 +112,7 @@ class AbstractBatchAgentPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 2: Queue bounded by capacity
      * <p>
-     * 任意 N 容量、M 次提交（M &gt; N），佇列大小不超過 N。
+     * For arbitrary capacity N and M submissions (M &gt; N), the queue size never exceeds N.
      * <p>
      * **Validates: Requirements 2.2**
      */
@@ -142,7 +142,7 @@ class AbstractBatchAgentPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 3: Batch size triggers flush
      * <p>
-     * 提交 B 筆後 processBatch 被呼叫。
+     * processBatch is called after B records have been submitted.
      * <p>
      * **Validates: Requirements 2.3**
      */
@@ -171,7 +171,7 @@ class AbstractBatchAgentPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 4: Queue full discards and increments dropped count
      * <p>
-     * 佇列滿後額外 K 次提交，droppedCount 增加 K。
+     * Submitting K additional tasks to a full queue increases droppedCount by K.
      * <p>
      * **Validates: Requirements 2.6**
      */
@@ -215,7 +215,7 @@ class AbstractBatchAgentPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 5: Shutdown flushes all remaining tasks
      * <p>
-     * shutdown 後所有剩餘任務被 flush，狀態轉為 STOPPED。
+     * All remaining tasks after shutdown are flush, and the status is changed to STOPPED.
      * <p>
      * **Validates: Requirements 2.7**
      */

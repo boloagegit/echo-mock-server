@@ -24,9 +24,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * JMS 規則服務
+ * JMS rule service
  * <p>
- * 負責 JMS 規則的 CRUD 操作與訊息匹配邏輯。
+ * Handle JMS-rule CRUD and message matching.
  */
 @Service
 @RequiredArgsConstructor
@@ -74,7 +74,7 @@ public class JmsRuleService {
         return requireJmsHandler().findAllRules();
     }
 
-    /** 該 queue 的候選規則（已排序），取自目前的規則快照。 */
+    /** Get sorted candidates for the queue from the current rule snapshot. */
     public List<JmsRule> findPreparedJmsRules(String queueName) {
         if (!isJmsEnabled()) {
             return Collections.emptyList();
@@ -82,7 +82,7 @@ public class JmsRuleService {
         return proxy().jmsQueueSnapshot(queueName).rules();
     }
 
-    /** 依 endpoint 值分桶後的候選規則，取自目前的規則快照；結果與原本逐一比對條件字串相同。 */
+    /** Get endpoint-bucketed candidates from the current snapshot, preserving the result of evaluating condition strings individually. */
     public List<JmsRule> findBucketedJmsRules(String queueName, String endpointValue) {
         if (!isJmsEnabled()) {
             return Collections.emptyList();
@@ -91,8 +91,8 @@ public class JmsRuleService {
     }
 
     /**
-     * 某一 queue 的 JMS 規則快照（{@link RuleSnapshots}；queue 名稱來自設定檔，數量有限）：
-     * 規則或 Response 異動清除 {@code jmsRules} 快取時在背景重建，重建期間訊息繼續使用舊快照。
+     * Queue-specific JMS snapshot ({@link RuleSnapshots}); configured queue names keep their count bounded:
+     * rebuild in the background when rule or Response changes invalidate {@code jmsRules}; messages keep using the old snapshot during rebuild.
      */
     public JmsQueueSnapshot jmsQueueSnapshot(String queueName) {
         RuleSnapshots snapshots = applicationContext == null ? null
@@ -100,7 +100,7 @@ public class JmsRuleService {
         return snapshots != null ? snapshots.jms(queueName) : buildJmsQueueSnapshot(queueName);
     }
 
-    /** 從資料庫建立某一 queue 的 JMS 規則快照（由 {@link RuleSnapshots} 在背景呼叫）。 */
+    /** Build a queue's JMS-rule snapshot from the database, called by {@link RuleSnapshots} in the background. */
     JmsQueueSnapshot buildJmsQueueSnapshot(String queueName) {
         log.debug("Building JMS rule snapshot: queue={}", queueName);
         List<JmsRule> rules = isJmsEnabled() ? requireJmsHandler().findWithFallback(queueName) : List.of();
@@ -112,7 +112,7 @@ public class JmsRuleService {
         return withValidResponses(rules).stream().sorted(JMS_RULE_ORDER).toList();
     }
 
-    /** 拿掉回應已被刪除的規則：比對時不會考慮它們（判斷順序也必須一致）。 */
+    /** Exclude rules whose responses have been deleted; preserve the original order of validity checks during matching. */
     public List<JmsRule> withValidResponses(List<JmsRule> rules) {
         if (rules.isEmpty()) {
             return rules;
@@ -124,7 +124,7 @@ public class JmsRuleService {
                 .toList();
     }
 
-    /** 候選規則優先順序：非萬用 queue → priority 高 → 建立時間新。 */
+    /** Candidate order: exact queue before wildcard, then descending priority, then newest creation time. */
     static final Comparator<JmsRule> JMS_RULE_ORDER = Comparator
             .comparing((JmsRule r) -> "*".equals(r.getQueueName()) ? 1 : 0)
             .thenComparing(Comparator.<JmsRule, Integer>comparing(
@@ -136,7 +136,7 @@ public class JmsRuleService {
     }
 
     /**
-     * 帶入已解析的 PreparedBody，避免重複 parse XML/JSON
+     * Pass the parsed PreparedBody to avoid parsing XML/JSON again.
      */
     public MatchResult<JmsRule> findMatchingJmsRuleWithCandidates(String queueName, String body,
                                                                    String endpointValue,

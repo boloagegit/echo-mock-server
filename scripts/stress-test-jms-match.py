@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-JMS 匹配效能測試：2000 條規則 + 20 欄位 XML body
+JMS matching performance test: 2000 rules + 20 fields XML body
 
-測試策略：
-  - 建立 2000 條 JMS 規則（同一個 queue）
-  - 其中大部分有 XPath 條件但不匹配（模擬匹配鏈遍歷）
-  - 1 條目標規則（XPath 條件匹配）
-  - 用不同的候選規則數量測試：10 / 50 / 100 / 200 / 500 / 1000 / 2000
-  - 透過 JMS test API 發送 XML 訊息，查詢日誌取得 matchTimeMs
+Test strategy:
+  - Create 2000 JMS rules (same queue)
+  - Most of them have XPath condition but do not match (simulating match chain traversal)
+  - 1 target rule (XPath condition match)
+  - Tested with different number of candidate rules: 10 / 50 / 100 / 200 / 500 / 1000 / 2000
+  - Send XML message through JMS test API, query the log to obtain matchTimeMs
 
-用法：python3 scripts/stress-test-jms-match.py [BASE_URL]
+Usage: python3 scripts/stress-test-jms-match.py [BASE_URL]
 """
 
 import json
@@ -46,7 +46,7 @@ def api(method, path, data=None, content_type="application/json"):
 
 
 def generate_xml_body(field_count=20):
-    """產生 20 欄位的 XML 訊息（模擬 ESB 訊息）"""
+    """Generate 20-field XML message (emulate ESB message)"""
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<ServiceRequest>',
@@ -74,7 +74,7 @@ def generate_xml_body(field_count=20):
         '    <Notes>Rush order - handle with care</Notes>',
         '    <Status>NEW</Status>',
     ]
-    # 補到指定欄位數
+    # Fill in the specified number of fields
     for i in range(field_count - 15):
         lines.append(f'    <ExtField{i+1}>ExtValue{i+1}</ExtField{i+1}>')
     lines.extend([
@@ -85,7 +85,7 @@ def generate_xml_body(field_count=20):
 
 
 def wait_for_jms_log(timeout=15):
-    """等待 JMS 日誌寫入"""
+    """Waiting for JMS log to be written"""
     for _ in range(timeout):
         time.sleep(1)
         _, logs = api("GET", "/api/admin/logs?protocol=JMS")
@@ -95,7 +95,7 @@ def wait_for_jms_log(timeout=15):
     return None
 
 
-# 測試的候選規則數量
+# Number of candidate rules tested
 CANDIDATE_COUNTS = [10, 50, 100, 200, 500, 1000, 2000]
 
 xml_body = generate_xml_body(20)
@@ -109,7 +109,7 @@ print(f"  XML body：{xml_size:,} bytes, 20 欄位")
 print(f"  測試候選數：{CANDIDATE_COUNTS}")
 print("=" * 60)
 
-# 確認 JMS 啟用
+# Confirm JMS enabled
 _, status = api("GET", "/api/admin/status")
 if not status.get("jmsEnabled"):
     print("\n  ⚠ JMS 未啟用，請設定 echo.jms.enabled=true")
@@ -123,13 +123,13 @@ for candidate_count in CANDIDATE_COUNTS:
     print(f"  候選規則數：{candidate_count}")
     print(f"{'─' * 60}")
 
-    # 清理
+    # Cleanup
     api("DELETE", "/api/admin/rules/all")
     api("DELETE", "/api/admin/responses/orphans")
     api("DELETE", "/api/admin/logs/all")
     time.sleep(0.5)
 
-    # 批次建立候選規則（XPath 條件不匹配）
+    # Batch creation candidate rule (XPath condition does not match)
     sys.stdout.write(f"  建立 {candidate_count} 條規則...")
     sys.stdout.flush()
 
@@ -139,8 +139,8 @@ for candidate_count in CANDIDATE_COUNTS:
         batch_end = min(batch_start + BATCH, candidate_count - 1)
         batch = []
         for i in range(batch_start, batch_end):
-            # 每條規則用不同的 ServiceName 值（模擬 500 種 endpoint）
-            # 這樣分桶後每桶只有少量規則
+            # Use different ServiceName values for each rule (simulating 500 endpoint)
+            # There are only a few rules in each bucket after bucketing.
             svc_name = f"Service_{i % 500}"
             batch.append({
                 "protocol": "JMS",
@@ -153,7 +153,7 @@ for candidate_count in CANDIDATE_COUNTS:
         api("POST", "/api/admin/rules/import-batch", batch)
         created += len(batch)
 
-    # 建立目標規則（最後建立，排序時 createdAt 最新）
+    # Create target rule (created last, createdAt is the latest when sorting)
     api("POST", "/api/admin/rules", {
         "protocol": "JMS",
         "matchKey": QUEUE,
@@ -164,7 +164,7 @@ for candidate_count in CANDIDATE_COUNTS:
     })
     print(f" 完成 ({created + 1} 條)")
 
-    # 清快取
+    # Clear cache
     _, rules = api("GET", "/api/admin/rules")
     if isinstance(rules, list) and rules:
         first_id = rules[0].get("id")
@@ -173,7 +173,7 @@ for candidate_count in CANDIDATE_COUNTS:
             api("PUT", f"/api/admin/rules/{first_id}/enable")
     time.sleep(0.5)
 
-    # 發送 5 次 JMS 測試訊息，取匹配時間
+    # Send JMS test message 5 times and get the matching time
     match_times = []
     response_times = []
 
@@ -181,10 +181,10 @@ for candidate_count in CANDIDATE_COUNTS:
         api("DELETE", "/api/admin/logs/all")
         time.sleep(0.3)
 
-        # 發送 JMS 測試訊息
+        # Send JMS test message
         api("POST", "/api/admin/jms/test", xml_body, content_type="application/xml")
 
-        # 等待日誌
+        # Waiting for log
         log_entry = wait_for_jms_log(timeout=15)
         if log_entry:
             log = log_entry.get("log", {})
@@ -197,7 +197,7 @@ for candidate_count in CANDIDATE_COUNTS:
                 response_times.append(rt)
 
             if run == 0:
-                # 第一次印詳細資訊
+                # First print details
                 desc = log.get("matchDescription", "")
                 chain_str = log.get("matchChain", "")
                 chain_len = 0
@@ -234,7 +234,7 @@ for candidate_count in CANDIDATE_COUNTS:
             "avg_match": -1, "min_match": -1, "max_match": -1, "avg_resp": -1,
         })
 
-# === 總結 ===
+# === Summary ===
 print()
 print("=" * 60)
 print("  總結：JMS 匹配效能 vs 候選規則數")
@@ -249,7 +249,7 @@ for r in all_results:
         print(f"  {r['candidates']:>8} {'N/A':>10} {'N/A':>8} {'N/A':>8} {'N/A':>10}")
 print("=" * 60)
 
-# 清理
+# Cleanup
 print()
 print("清理...")
 api("DELETE", "/api/admin/rules/all")

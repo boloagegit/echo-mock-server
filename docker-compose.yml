@@ -7,9 +7,9 @@ services:
       - "8080:8080"   # HTTP
       - "61616:61616" # JMS Artemis
     environment:
-      - ECHO_ADMIN_USERNAME=${ECHO_ADMIN_USERNAME:-admin}       # ⚠️ 生產環境請替換
-      - ECHO_ADMIN_PASSWORD=${ECHO_ADMIN_PASSWORD:-admin}       # ⚠️ 生產環境請替換，支援 bcrypt hash
-      - ECHO_REMEMBER_ME_KEY=${ECHO_REMEMBER_ME_KEY:-change-me} # ⚠️ 生產環境請替換
+      - ECHO_ADMIN_USERNAME=${ECHO_ADMIN_USERNAME:-admin}       # ⚠️ Please replace it in production environment
+      - ECHO_ADMIN_PASSWORD=${ECHO_ADMIN_PASSWORD:-admin}       # ⚠️ Please replace the production environment to support bcrypt hash
+      - ECHO_REMEMBER_ME_KEY=${ECHO_REMEMBER_ME_KEY:-change-me} # ⚠️ Please replace it in production environment
       - ECHO_ENV_LABEL=DOCKER
       - TZ=Asia/Taipei
     volumes:

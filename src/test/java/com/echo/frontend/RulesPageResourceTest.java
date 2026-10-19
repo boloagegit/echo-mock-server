@@ -16,7 +16,7 @@ class RulesPageResourceTest {
 
     @Test
     void dragSortingWasRemoved() throws IOException {
-        // 拖曳排序已移除：它只送出優先順序，整筆更新 API 一律拒絕，從未能正常運作。優先順序在編輯畫面設定。
+        // Drag sort has been removed: it only sent priority order, the entire update API was always rejected and never worked properly. The priority order is set on the edit screen.
         for (String file : new String[] {"static/composables/useRules.js", "static/components/RulesPage.js",
                 "static/components/RuleTable.js", "static/app.js", "static/index.html"}) {
             assertThat(resourceText(file)).doesNotContainIgnoringCase("drag");

@@ -14,7 +14,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
- * 開發環境測試資料初始化
+ * Development environment test data initialization
  */
 @Component
 @Profile("dev")

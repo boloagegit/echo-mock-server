@@ -4,15 +4,15 @@ import com.echo.config.JmsProperties;
 import jakarta.jms.ConnectionFactory;
 
 /**
- * JMS Target ConnectionFactory 策略介面。
- * 每種 JMS provider（Artemis、TIBCO、IBM MQ…）各自實作。
+ * JMS Target ConnectionFactory Strategy interface.
+ * Implement separately for each JMS provider, such as Artemis, TIBCO, or IBM MQ.
  */
 public interface JmsTargetFactoryProvider {
 
-    /** 是否支援指定的 type 名稱（不區分大小寫） */
+    /** Whether the specified type name is supported (case-insensitive) */
     boolean supports(String type);
 
-    /** 建立對應的 ConnectionFactory */
+    /** Create corresponding ConnectionFactory */
     ConnectionFactory create(JmsProperties.Target target) throws Exception;
 
     /** Outbound-specific limits. Source listener reconnection settings retain their own policy. */

@@ -16,7 +16,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 組合節點必須遵守布林代數的基本定律，避免巢狀條件出現意外結果。 */
+/** Combination nodes must obey the basic laws of Bollinger algebra to avoid unexpected results in nested conditions. */
 class MatcherPropertyTest {
 
     private static final JsonNodeFactory NODES = JsonNodeFactory.instance;

@@ -10,29 +10,29 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 某一 queue 的 JMS 規則不可變快照，存放在 {@code jmsRules} 快取中（key 為 queue 名稱，來自設定檔，數量有限）。
+ * Immutable JMS-rule snapshot for a queue, cached in {@code jmsRules}; queue names come from configuration, so the key count is bounded.
  * <p>
- * 依 endpoint 欄位值（例如 ServiceName）分桶時，只為規則條件中出現過的值建立桶；
- * 其他任意值（來自訊息內容，數量不受控）共用「沒有指定 endpoint 的規則」這一桶，因此快照大小只隨規則數量成長。
- * 桶的內容與原本 {@code findBucketedJmsRules} 相同。
+ * When bucketing by endpoint field, such as ServiceName, create buckets only for values present in rule conditions.
+ * All other message-derived values, which are unbounded, share the bucket for rules without an endpoint constraint, so snapshot size grows only with rule count.
+ * The contents of the bucket are the same as the original {@code findBucketedJmsRules}.
  */
 final class JmsQueueSnapshot {
 
     private final List<JmsRule> rules;
     private final String endpointField;
-    /** 與 {@link #rules} 對應：該規則條件中 endpoint 欄位的值；沒有提到時為 null。 */
+    /** Corresponding to {@link #rules}: the value of the endpoint field in the rule condition; if not mentioned, it is null. */
     private final List<String> endpointValues;
     private final Set<String> mentionedValues;
     private final List<JmsRule> unmentioned;
     private final Map<String, List<JmsRule>> buckets = new ConcurrentHashMap<>();
-    /** 只用來保持強參照，讓條件編譯結果與快照同生命週期。 */
+    /** Retain strong references so compiled conditions live as long as the snapshot. */
     @SuppressWarnings({"unused", "FieldCanBeLocal"})
     private final List<ConditionMatcher.RuleConditions> pinnedConditions;
 
     /**
-     * @param rules         已排序、Response 有效的規則
-     * @param endpointField 分桶用的欄位名稱；空白時不分桶
-     * @param conditions    用來取得並持有各規則的條件物件；可為 null（不持有）
+     * @param rules         Sorted rules with valid responses.
+     * @param endpointField The field name used for bucketing; if blank, no bucketing will be performed.
+     * @param conditions    Resolve and retain each rule's condition object; null disables retention.
      */
     JmsQueueSnapshot(List<JmsRule> rules, String endpointField, ConditionMatcher conditions) {
         this.rules = List.copyOf(rules);
@@ -67,7 +67,7 @@ final class JmsQueueSnapshot {
         return rules;
     }
 
-    /** 與原本 {@code findBucketedJmsRules} 相同：沒有提到 endpoint 欄位，或提到的值相同的規則，順序不變。 */
+    /** Same as the original {@code findBucketedJmsRules}: the endpoint field is not mentioned, or the rules with the same value are mentioned, and the order remains unchanged. */
     List<JmsRule> bucket(String endpointValue) {
         if (endpointValue == null || endpointValue.isBlank() || !bucketingEnabled()) {
             return rules;
@@ -78,7 +78,7 @@ final class JmsQueueSnapshot {
         return buckets.computeIfAbsent(endpointValue, this::computeBucket);
     }
 
-    /** 已建立的桶數（供測試確認不會隨任意 endpoint 值成長）。 */
+    /** The number of created buckets (for testing to confirm that it will not grow with any endpoint value). */
     int bucketCount() {
         return buckets.size();
     }
@@ -99,8 +99,8 @@ final class JmsQueueSnapshot {
     }
 
     /**
-     * 條件中第一個提到 endpoint 欄位（不分大小寫）的片段之值；沒有提到時回傳 null。
-     * 解析方式與原本 {@code bodyConditionMatchesEndpoint} 相同。
+     * The value of the fragment that first mentions the endpoint field (case-insensitive) in the condition; returns null if it is not mentioned.
+     * The parsing method is the same as the original {@code bodyConditionMatchesEndpoint}.
      */
     static String endpointValueOf(String bodyCondition, String endpointField) {
         if (bodyCondition == null || bodyCondition.isBlank()) {
@@ -124,7 +124,7 @@ final class JmsQueueSnapshot {
                 continue;
             }
             String value = normalized.substring(eqIdx + 1).trim();
-            // 單一個 " 時舊版會丟出例外並讓所有分桶失敗；這裡與新引擎一致，視為字面值
+            // An unmatched double quote used to throw and disable bucketing; treat it as a literal to match the new engine.
             if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
                 value = value.substring(1, value.length() - 1);
             }

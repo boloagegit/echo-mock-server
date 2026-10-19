@@ -11,17 +11,17 @@ import java.util.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * JMS 匹配行為等價性屬性測試（含 wildcard fallback）
+ * JMS matching behavior equivalence attribute test (including wildcard fallback)
  * <p>
- * Feature: protocol-pipeline-refactor, Property 3: JMS 匹配行為等價性（含 wildcard fallback）
+ * Feature: protocol-pipeline-refactor, Property 3: JMS matching behavior equivalence (including wildcard fallback)
  * <p>
- * 使用 jqwik 產生隨機 JmsRule 清單（含精確 queue、wildcard {@code *}、有條件/無條件規則），
- * 比較 {@code JmsMockPipeline.matchRule()} 與重構前 {@code JmsRuleService.matchJmsRules()}
- * 的結果，兩者應產生相同的匹配規則，包含三層 fallback 優先順序：
+ * Use jqwik to generate a random JmsRule list (including exact queue, wildcard {@code *}, conditional/unconditional rules),
+ * Compare {@code JmsMockPipeline.matchRule()} with {@code JmsRuleService.matchJmsRules()} before reconstruction
+ * results, both should produce the same matching rules, containing three layers of fallback precedence:
  * <ol>
- *   <li>條件匹配成功的精確 queue 規則</li>
- *   <li>無條件的精確 queue 規則（fallback）</li>
- *   <li>wildcard queue {@code *} 規則（last resort）</li>
+ *   <li>condition matched the exact queue rule  successfully</li>
+ *   <li>Unconditionally accurate queue Rule (fallback)</li>
+ *   <li>wildcard queue {@code *} Rule (last resort)</li>
  * </ol>
  *
  * <b>Validates: Requirements 1.9, 6.3</b>
@@ -31,8 +31,8 @@ class JmsMatchEquivalencePropertyTest {
     // ==================== Controllable ConditionMatcher ====================
 
     /**
-     * 可控的 ConditionMatcher：根據 matchingConditions 集合決定 bodyCondition 是否匹配。
-     * 兩條路徑（pipeline 和 old service）共用同一個實例，確保匹配決策一致。
+     * Controllable ConditionMatcher: Determine whether bodyCondition matches based on the matchingConditions set.
+     * The two paths (pipeline and old service) share the same instance to ensure consistent matching decisions.
      */
     static class ControllableConditionMatcher extends ConditionMatcher {
         private final Set<String> matchingBodyConditions;
@@ -61,9 +61,9 @@ class JmsMatchEquivalencePropertyTest {
     // ==================== Pipeline Under Test ====================
 
     /**
-     * 直接使用 JmsMockPipeline 的 matchRule()，但需要提供可控的依賴。
-     * 由於 JmsMockPipeline 需要 JmsRuleService 等 Spring bean，
-     * 我們建立一個測試替身，只覆寫 matchRule() 以外的抽象方法。
+     * Use matchRule() directly from JmsMockPipeline, but need to provide controllable dependencies.
+     * Since JmsMockPipeline requires JmsRuleService and so on Spring bean,
+     * We create a test double and only override abstract methods other than matchRule().
      */
     static class TestJmsPipeline extends AbstractMockPipeline<JmsRule> {
 
@@ -72,8 +72,8 @@ class JmsMatchEquivalencePropertyTest {
         }
 
         /**
-         * 覆寫 matchRule()，保留 JMS 特有的三層 fallback 邏輯。
-         * 此邏輯與 JmsMockPipeline.matchRule() 完全一致。
+         * Overwrite matchRule() and retain the unique three-layer fallback logic of JMS.
+         * This logic is completely consistent with JmsMockPipeline.matchRule().
          */
         @Override
         public MatchResult<JmsRule> matchRule(List<JmsRule> candidates,
@@ -168,8 +168,8 @@ class JmsMatchEquivalencePropertyTest {
     // ==================== Old Service Logic (Oracle) ====================
 
     /**
-     * 重構前 JmsRuleService.matchJmsRules() 的邏輯，
-     * 原封不動地複製過來作為 oracle，包含三層 fallback。
+     * The logic of JmsRuleService.matchJmsRules() before reconstruction,
+     * Copied intact as oracle, containing three layers of fallback.
      */
     static MatchResult<JmsRule> oldMatchJmsRules(List<JmsRule> rules,
                                                   ConditionMatcher conditionMatcher,
@@ -250,7 +250,7 @@ class JmsMatchEquivalencePropertyTest {
     // ==================== Helper ====================
 
     /**
-     * 從規則清單中收集所有 bodyCondition 值，隨機選擇子集作為匹配成功的條件
+     * Collect all bodyCondition values from the rule list and randomly select a subset as conditions for successful matching
      */
     private ControllableConditionMatcher buildMatcher(List<JmsRule> rules, Random random) {
         Set<String> allBody = new HashSet<>();
@@ -276,11 +276,11 @@ class JmsMatchEquivalencePropertyTest {
     // ==================== Property Tests ====================
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 3: JMS 匹配行為等價性（含 wildcard fallback）
+     * Feature: protocol-pipeline-refactor, Property 3: JMS matching behavior equivalence (including wildcard fallback)
      * <p>
-     * 對任意 JmsRule 清單與隨機匹配條件，JmsMockPipeline 的 matchRule() 結果
-     * 與重構前 JmsRuleService.matchJmsRules() 的結果完全一致
-     * （相同的 matchedRule ID 或同時無匹配）。
+     * matchRule() result for JmsMockPipeline for any JmsRule list with random match criteria
+     * completely consistent with the result of JmsRuleService.matchJmsRules() before reconstruction
+     * (Same matchedRule ID or both no matches).
      *
      * <b>Validates: Requirements 1.9, 6.3</b>
      */
@@ -293,14 +293,14 @@ class JmsMatchEquivalencePropertyTest {
         ControllableConditionMatcher matcher = buildMatcher(rules, random);
         ConditionMatcher.PreparedBody prepared = matcher.prepareBody(null);
 
-        // 新 pipeline 路徑
+        // New pipeline path
         TestJmsPipeline pipeline = new TestJmsPipeline(matcher);
         MatchResult<JmsRule> pipelineResult = pipeline.matchRule(rules, prepared, null, null);
 
-        // 舊 service 路徑（oracle）
+        // Old service path (oracle)
         MatchResult<JmsRule> oldResult = oldMatchJmsRules(rules, matcher, prepared);
 
-        // 比較結果
+        // Comparison results
         assertThat(pipelineResult.isMatched())
                 .as("Both should agree on whether a match was found")
                 .isEqualTo(oldResult.isMatched());
@@ -313,10 +313,10 @@ class JmsMatchEquivalencePropertyTest {
     }
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 3: JMS 匹配行為等價性（含 wildcard fallback）
+     * Feature: protocol-pipeline-refactor, Property 3: JMS matching behavior equivalence (including wildcard fallback)
      * <p>
-     * 當所有條件都匹配成功時，兩個實作應選擇相同的規則。
-     * 驗證條件匹配優先於 no-condition fallback 和 wildcard fallback。
+     * Both implementations should select the same rule when all conditions match successfully.
+     * Validation condition match takes precedence over no-condition fallback and wildcard fallback.
      *
      * <b>Validates: Requirements 1.9, 6.3</b>
      */
@@ -348,10 +348,10 @@ class JmsMatchEquivalencePropertyTest {
     }
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 3: JMS 匹配行為等價性（含 wildcard fallback）
+     * Feature: protocol-pipeline-refactor, Property 3: JMS matching behavior equivalence (including wildcard fallback)
      * <p>
-     * 當沒有任何條件匹配成功時，兩個實作應選擇相同的 fallback 規則
-     * （no-condition exact queue 優先於 wildcard queue，或同時無匹配）。
+     * Both implementations should select the same fallback rule when no condition matches successfully
+     * (no-condition exact queue takes precedence over wildcard queue, or both have no match).
      *
      * <b>Validates: Requirements 1.9, 6.3</b>
      */
@@ -376,10 +376,10 @@ class JmsMatchEquivalencePropertyTest {
     }
 
     /**
-     * Feature: protocol-pipeline-refactor, Property 3: JMS 匹配行為等價性（含 wildcard fallback）
+     * Feature: protocol-pipeline-refactor, Property 3: JMS matching behavior equivalence (including wildcard fallback)
      * <p>
-     * 三層 fallback 優先順序驗證：混合精確 queue 與 wildcard queue 規則時，
-     * 兩個實作的 fallback 選擇一致，且 wildcard 規則只在沒有更高優先的 fallback 時被選中。
+     * Three-tier fallback priority validation: when mixing exact queue and wildcard queue rules
+     * The fallback selection is consistent for both implementations, and the wildcard rule is only selected when there is no higher-priority fallback.
      *
      * <b>Validates: Requirements 1.9, 6.3</b>
      */
@@ -396,18 +396,18 @@ class JmsMatchEquivalencePropertyTest {
         MatchResult<JmsRule> pipelineResult = pipeline.matchRule(rules, prepared, null, null);
         MatchResult<JmsRule> oldResult = oldMatchJmsRules(rules, matcher, prepared);
 
-        // 驗證 fallback 優先順序一致
+        // Verify that the priority order of fallback is consistent
         assertThat(pipelineResult.isMatched())
                 .as("Both should agree on match status")
                 .isEqualTo(oldResult.isMatched());
 
         if (pipelineResult.isMatched() && oldResult.isMatched()) {
-            // 兩者選擇的規則 ID 必須相同
+            // The two selection rules ID must be the same
             assertThat(pipelineResult.getMatchedRule().getId())
                     .as("Wildcard fallback priority should be consistent between pipeline and old service")
                     .isEqualTo(oldResult.getMatchedRule().getId());
 
-            // 兩者選擇的 queueName 必須相同（驗證 wildcard vs exact 的選擇一致）
+            // The queueName selected by both must be the same (verify that the selection of wildcard vs exact is consistent)
             assertThat(pipelineResult.getMatchedRule().getQueueName())
                     .as("Both should select rule from the same queue type")
                     .isEqualTo(oldResult.getMatchedRule().getQueueName());

@@ -12,11 +12,11 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 規則判斷順序 API：一定輪不到的規則與單一規則的檢查順序（規則異動後立即反映）。 */
+/** Rule-order API: list definitely unreachable rules and a rule's evaluation order, reflecting rule changes immediately. */
 class RuleOrderIntegrationTest extends BaseIntegrationTest {
 
     @Test
-    @DisplayName("條件相同的較後規則被標為輪不到，判斷順序依實際排序列出")
+    @DisplayName("Later rules with identical conditions are unreachable and evaluation order matches actual sorting")
     @SuppressWarnings("unchecked")
     void duplicateRuleIsReportedAndOrderIsListed() {
         RuleDto vip = createHttpRule("/api/order-check", "POST", "{\"vip\":true}", null, 200,
@@ -34,7 +34,7 @@ class RuleOrderIntegrationTest extends BaseIntegrationTest {
                 .containsEntry("type", "duplicateConditions").containsEntry("byRuleId", vip.getId())
                 .containsEntry("route", "POST /api/order-check");
 
-        // 規則列表的「輪不到」篩選只回傳這些規則
+        // The unreachable filter returns only those rules.
         ResponseEntity<Map> filtered = adminClient().getForEntity("/api/admin/rules/page?unreachable=true", Map.class);
         assertThat(filtered.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat((List<Map<String, Object>>) filtered.getBody().get("results"))
@@ -49,7 +49,7 @@ class RuleOrderIntegrationTest extends BaseIntegrationTest {
                 .containsExactly(vip.getId(), copy.getId(), fallback.getId());
         assertThat(entries.get(2)).containsEntry("self", true).containsEntry("usedAsDefault", true);
 
-        // 刪掉重複的規則後，提示立即消失（快照重建）
+        // After deleting duplicate rules, the prompt disappears immediately (snapshot reconstruction)
         ResponseEntity<Void> deleted = adminClient().exchange("/api/admin/rules/" + copy.getId(),
                 org.springframework.http.HttpMethod.DELETE, null, Void.class);
         assertThat(deleted.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);

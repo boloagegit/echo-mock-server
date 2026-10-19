@@ -66,7 +66,7 @@ public class ResponseService {
         return responseRepository.findByDescriptionContainingIgnoreCase(keyword);
     }
 
-    /** 取得 Response 摘要（含使用數量）- 使用聚合查詢 */
+    /** Get Response summary (including usage quantity) - use aggregate query */
     public List<ResponseSummary> findAllWithUsage() {
         List<Object[]> summaries = responseRepository.findAllSummary();
         Map<Long, Long> usageMap = new HashMap<>();
@@ -91,7 +91,7 @@ public class ResponseService {
                 .toList();
     }
 
-    /** 取得回應摘要分頁；列表只載入當頁，不載入大型 body。 */
+    /** Get response summary pagination; the list only loads the current page, not the large body. */
     public ResponseSummaryPage findSummaryPage(String keyword, String usage, String contentType,
                                                int requestedPage, int requestedSize,
                                                String sortField, String direction) {
@@ -181,7 +181,7 @@ public class ResponseService {
         bodiesChanged(List.of(id));
     }
 
-    /** 刪除 Response 並連帶刪除引用的 Rule，回傳刪除的 Rule 數量 */
+    /** Delete Response and delete the referenced Rule, and return the number of deleted Rule */
     @Transactional
     public int deleteWithRules(Long id) {
         log.info("Deleting response with rules: id={}", id);
@@ -195,7 +195,7 @@ public class ResponseService {
         return rulesDeleted;
     }
 
-    /** 刪除全部 Response 和 Rule，回傳刪除數量 */
+    /** Delete all Response and Rule, return the deletion quantity */
     @Transactional
     public DeleteAllResult deleteAll() {
         int ruleCount = (int) protocolHandlerRegistry.getAllHandlers().stream()
@@ -214,7 +214,7 @@ public class ResponseService {
         return new DeleteAllResult(respCount, ruleCount);
     }
     
-    /** 清除本機的回應內容快取（提交後再清一次），並通知其他實例。 */
+    /** Invalidate the local response-body cache, repeat after commit, and notify other instances. */
     private void bodiesChanged(List<Long> ids) {
         responseBodyCache.invalidateAll(ids);
         AfterCommit.schedule(new Bodies(responseBodyCache, List.copyOf(ids)),
@@ -237,17 +237,17 @@ public class ResponseService {
         }
     }
 
-    /** 計算孤兒規則數量（responseId 指向不存在的 Response）- 使用 Registry */
+    /** Counting number of orphan rules (responseId points to non-existent Response) - use Registry */
     public long countOrphanRules() {
         return protocolHandlerRegistry.countOrphanRules();
     }
 
-    /** 計算孤兒回應數量（未被任何規則引用的 Response） */
+    /** Counting the number of orphan responses (Response not referenced by any rule) */
     public long countOrphanResponses() {
         return responseRepository.countOrphanResponses();
     }
 
-    /** 刪除所有孤兒回應（不考慮時間），回傳刪除數量 */
+    /** Delete all orphan responses (regardless of time) and return the deletion number */
     @Transactional
     public int deleteOrphanResponses() {
         List<Long> orphanIds = responseRepository.findAllOrphanResponseIds();
@@ -260,13 +260,13 @@ public class ResponseService {
         return orphanIds.size();
     }
 
-    /** 展延單一回應 */
+    /** Delayed single response */
     @Transactional
     public boolean extendResponse(Long id) {
         return extendResponses(List.of(id)) > 0;
     }
 
-    /** 批次展延回應 */
+    /** Batch extension response */
     @Transactional
     public int extendResponses(List<Long> ids) {
         if (ids.isEmpty()) {

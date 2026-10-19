@@ -117,7 +117,7 @@ function appDraftHarness() {
     newTag: Vue.ref({ key: '', value: '' }), newHeader: Vue.ref({ key: '', value: '' }),
     previewEditing: Vue.ref(false), previewEditBody: Vue.ref(''), previewResponseBody: Vue.ref(''),
     ruleApplyText: Vue.ref(''), ruleApplyDraftBaseline: Vue.ref(''),
-    // 簡易模式（沒有進階條件）；進階條件的草稿比較見 match-tree.test.cjs
+    // Easy mode (no advanced conditions); see match-tree.test.cjs for a draft comparison of advanced conditions
     currentMatchSpec: () => null,
   });
   vm.runInContext(source('composables/useRuleApply.js') + '\nconst { createDocumentFromForm } = useRuleApply(deps);', context);
@@ -155,7 +155,11 @@ test('actual app comparison follows the JMS queue; replies follow the request, s
 
 test('complete save interval locks both editor bodies and mode controls, including before and after the API response', () => {
   const app = source('app.js');
-  const declaration = app.slice(app.indexOf('const applyRuleSettings ='), app.indexOf('// === 帳號管理 composable'));
+  const start = app.indexOf('const applyRuleSettings =');
+  const end = app.indexOf('const accountsCtx = useAccounts(', start);
+  assert.ok(start >= 0, 'the declarative save handler exists');
+  assert.ok(end > start, 'the next composable bounds the save handler');
+  const declaration = app.slice(start, end);
   assert.ok(declaration.indexOf('ruleSaveInFlight.value = true') < declaration.indexOf('await applyRuleDocument()'));
   assert.ok(declaration.indexOf('finally { ruleSaveInFlight.value = false; }') > declaration.indexOf('markRuleDraftSaved()'));
   const index = source('index.html');
@@ -320,7 +324,7 @@ function formHarness(ok) {
         : { id: 'saved-rule', version: 1, responseId: 5 } };
     },
   });
-  // 與 index.html 相同：useRuleForm 需要 match-tree.js 與 utils.js 的 debounce
+  // Same as index.html: useRuleForm requires debounce from match-tree.js and utils.js
   vm.runInContext(source('match-tree.js') + '\nthis.MatchTree = MatchTree;', context);
   context.debounce = fn => Object.assign((...args) => fn(...args), { cancel() {} });
   vm.runInContext(source('composables/useRuleForm.js') + '\nthis.form = useRuleForm(deps);', context);

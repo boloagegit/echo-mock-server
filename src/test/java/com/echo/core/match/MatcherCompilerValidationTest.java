@@ -9,7 +9,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** 不合法的條件必須在編譯（儲存規則）時就被拒絕，並指出出錯位置。 */
+/** Illegal conditions must be rejected during compilation (storage rules) and the location of the error must be pointed out. */
 class MatcherCompilerValidationTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -17,7 +17,7 @@ class MatcherCompilerValidationTest {
 
     @ParameterizedTest
     @CsvSource(delimiter = '|', quoteCharacter = '"', value = {
-            // 來源
+            // Source
             "{'source': 'cookie', 'name': 'a', 'op': 'exists'}                    | $.source      | unknown source",
             "{'source': 'header', 'op': 'exists'}                                 | $.name        | is required",
             "{'source': 'method', 'name': 'x', 'op': 'exists'}                    | $.name        | is not allowed",
@@ -26,7 +26,7 @@ class MatcherCompilerValidationTest {
             "{'source': 'body', 'selector': {'jsonPath': '$[?(@.a'}, 'op': 'exists'} | $.selector | Invalid JSONPath",
             "{'source': 'body', 'selector': {'xpath': '//a['}, 'op': 'exists'}    | $.selector    | Invalid XPath",
             "{'source': 'body', 'selector': {'field': 'a..b'}, 'op': 'exists'}    | $.selector    | Invalid field path",
-            // 運算子
+            // Operator
             "{'source': 'header', 'name': 'a', 'op': 'like', 'value': 'x'}        | $.op          | unknown op",
             "{'source': 'header', 'name': 'a', 'op': 'equals'}                    | $.value       | is required",
             "{'source': 'header', 'name': 'a', 'op': 'exists', 'value': 'x'}      | $.value       | is not allowed",
@@ -39,7 +39,7 @@ class MatcherCompilerValidationTest {
             "{'source': 'header', 'name': 'a', 'op': 'matches', 'value': '(a'}    | $             | Invalid regex",
             "{'source': 'header', 'name': 'a', 'op': 'gt', 'value': 'ten'}        | $             | requires a number",
             "{'source': 'header', 'name': 'a', 'op': 'in', 'value': 'a'}          | $             | requires an array",
-            // 巢狀位置
+            // Nest location
             "{'all': [{'any': [{'source': 'header', 'name': 'a', 'op': 'nope', 'value': 1}]}]} | $.all[0].any[0].op | unknown op"
     })
     void rejectsInvalidLeaf(String spec, String expectedPath, String messageFragment) {

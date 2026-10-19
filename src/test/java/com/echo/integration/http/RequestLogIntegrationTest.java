@@ -12,13 +12,13 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 請求日誌整合測試
+ * Request log integration test
  */
 class RequestLogIntegrationTest extends BaseIntegrationTest {
 
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> queryLogs(String queryParams) {
-        // LogAgent 非同步寫入，需等待 flush 完成
+        // LogAgent asynchronous write, need to wait for flush to complete
         for (int attempt = 0; attempt < 10; attempt++) {
             ResponseEntity<Map> resp = adminClient().getForEntity(
                     "/api/admin/logs" + (queryParams != null ? "?" + queryParams : ""), Map.class);
@@ -34,7 +34,7 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
                 break;
             }
         }
-        // 最後一次查詢，讓 assertThat 在呼叫端處理
+        // Last query, let assertThat be processed on the calling side
         ResponseEntity<Map> resp = adminClient().getForEntity(
                 "/api/admin/logs" + (queryParams != null ? "?" + queryParams : ""), Map.class);
         return (List<Map<String, Object>>) resp.getBody().get("results");
@@ -46,14 +46,14 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("流量概況「看這些請求」：方法與網址完全相同才列出，與統計的筆數一致")
+    @DisplayName("Traffic-overview requests match method and URL exactly and agree with aggregate counts")
     void methodAndPathFilterMatchesTheTrafficCount() {
         HttpHeaders headers = new HttpHeaders();
         headers.set("X-Original-Host", "exact.test");
         restTemplate.exchange("/mock/api/exact-miss", HttpMethod.GET, new HttpEntity<>(headers), String.class);
         restTemplate.exchange("/mock/api/exact-miss", HttpMethod.POST, new HttpEntity<>("{}", headers), String.class);
         restTemplate.exchange("/mock/api/exact-miss/more", HttpMethod.GET, new HttpEntity<>(headers), String.class);
-        // 三筆都寫入後再查，避免只查到一部分
+        // Please write all three entries before checking to avoid checking only part of them.
         assertThat(queryLogs("protocol=HTTP&endpoint=/api/exact-miss")).hasSizeGreaterThanOrEqualTo(1);
         for (int attempt = 0; attempt < 20 && queryLogs("protocol=HTTP&endpoint=/api/exact-miss").size() < 3; attempt++) {
             try { Thread.sleep(100); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
@@ -68,7 +68,7 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("10.2a HTTP Mock 請求成功 → 日誌 matched=true")
+    @DisplayName("10.2a A successful HTTP mock request records matched=true")
     void httpMockMatched_logsMatchedTrue() {
         createHttpRule("/api/log-test", "GET", "{\"ok\":true}", "log.test");
 
@@ -86,7 +86,7 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("處理流程圖的資料（候選規則數、模擬延遲）存進紀錄並由詳細資料回傳")
+    @DisplayName("Records and returns flow-diagram data, including candidate counts and simulated delay")
     @SuppressWarnings("unchecked")
     void flowDetailsAreStoredAndReturnedWithTheDetail() {
         createHttpRule("/api/log-flow", "GET", "{\"ok\":true}", "flow.test");
@@ -109,7 +109,7 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("10.2b HTTP Mock 無匹配 → 日誌 matched=false")
+    @DisplayName("10.2b An unmatched HTTP mock request records matched=false")
     void httpMockUnmatched_logsMatchedFalse() {
         HttpHeaders headers = new HttpHeaders();
         headers.set("X-Original-Host", "nomatch.test");
@@ -123,7 +123,7 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("10.3 日誌篩選: protocol / matched / endpoint")
+    @DisplayName("10.3 Log filters: protocol, matched, and endpoint")
     void logFiltering() {
         createHttpRule("/api/filter-a", "GET", "{\"a\":true}", "filter.test");
         createHttpRule("/api/filter-b", "GET", "{\"b\":true}", "filter.test");
@@ -134,21 +134,21 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
                 new HttpEntity<>(headers), String.class);
         restTemplate.exchange("/mock/api/filter-b", HttpMethod.GET,
                 new HttpEntity<>(headers), String.class);
-        // 無匹配請求
+        // No matching request
         restTemplate.exchange("/mock/api/filter-none", HttpMethod.GET,
                 new HttpEntity<>(headers), String.class);
 
-        // 按 protocol 篩選
+        // Filter by protocol
         List<Map<String, Object>> httpLogs = queryLogs("protocol=HTTP");
         assertThat(httpLogs).isNotEmpty();
         httpLogs.forEach(r -> assertThat(getLogEntry(r).get("protocol")).isEqualTo("HTTP"));
 
-        // 按 matched=true 篩選
+        // Filter by matched=true
         List<Map<String, Object>> matchedLogs = queryLogs("matched=true&endpoint=filter-");
         assertThat(matchedLogs).isNotEmpty();
         matchedLogs.forEach(r -> assertThat(getLogEntry(r).get("matched")).isEqualTo(true));
 
-        // 按 endpoint 篩選
+        // Filter by endpoint
         List<Map<String, Object>> endpointLogs = queryLogs("endpoint=filter-a");
         assertThat(endpointLogs).isNotEmpty();
         endpointLogs.forEach(r ->
@@ -156,7 +156,7 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("10.4 日誌摘要: totalRequests / matchedRequests / matchRate")
+    @DisplayName("10.4 Log summary: totalRequests, matchedRequests, and matchRate")
     void logSummary() {
         createHttpRule("/api/summary-test", "GET", "{\"ok\":true}", "summary.test");
 
@@ -165,7 +165,7 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
         restTemplate.exchange("/mock/api/summary-test", HttpMethod.GET,
                 new HttpEntity<>(headers), String.class);
 
-        // LogAgent 非同步寫入，等待 flush 完成
+        // LogAgent asynchronous write, waiting for flush to complete
         Map<String, Object> summary = null;
         for (int attempt = 0; attempt < 10; attempt++) {
             ResponseEntity<Map> resp = adminClient().getForEntity("/api/admin/logs/summary", Map.class);
@@ -186,7 +186,7 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("10.5 日誌查詢: endpoint 篩選")
+    @DisplayName("10.5 Log queries support endpoint filtering")
     void logEndpointFilter() {
         createHttpRule("/api/limit-test", "GET", "{\"ok\":true}", "limit.test");
 
@@ -202,7 +202,7 @@ class RequestLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("10.6 日誌查詢: 後端分頁、排序與 afterId 增量查詢")
+    @DisplayName("10.6 Log queries support server pagination, sorting, and incremental afterId queries")
     @SuppressWarnings("unchecked")
     void logServerPaginationAndIncrementalQuery() {
         HttpHeaders headers = new HttpHeaders();

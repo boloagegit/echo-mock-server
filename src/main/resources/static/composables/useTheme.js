@@ -1,8 +1,8 @@
 /**
- * useTheme - 主題切換 Composable
+ * useTheme - Theme switch Composable
  *
- * 管理應用程式的主題狀態（light/dark/auto），支援系統偏好跟隨。
- * 主題值儲存於 localStorage，auto 模式下監聽系統 prefers-color-scheme 變化。
+ * Manage the theme status of the application (light/dark/auto) and support system preference following.
+ * The theme value is stored in localStorage, and the system prefers-color-scheme changes are monitored in auto mode.
  *
  * @returns {{ theme: Ref<string>, setTheme: Function, applyTheme: Function, cleanupTheme: Function }}
  */
@@ -12,18 +12,18 @@ const useTheme = () => {
     const theme = ref(localStorage.getItem('theme') || 'dark');
     const systemDarkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
-    /** 根據目前主題值套用至 DOM */
+    /** Apply to DOM based on current theme value */
     const applyTheme = () => {
         const effective = theme.value === 'auto' ? (systemDarkQuery.matches ? 'dark' : 'light') : theme.value;
         document.documentElement.setAttribute('data-theme', effective);
         document.documentElement.style.colorScheme = effective;
     };
 
-    /** 系統偏好變更時，auto 模式自動套用 */
+    /** When system preferences are changed, auto mode is automatically applied */
     const onSystemThemeChange = () => { if (theme.value === 'auto') { applyTheme(); } };
     systemDarkQuery.addEventListener('change', onSystemThemeChange);
 
-    /** 設定主題（dark / light / auto），未知值忽略 */
+    /** Set theme (dark / light / auto), unknown values are ignored */
     const setTheme = (value) => {
         if (!['dark', 'light', 'auto'].includes(value)) { return; }
         theme.value = value;
@@ -31,7 +31,7 @@ const useTheme = () => {
         applyTheme();
     };
 
-    /** 清除系統偏好監聽，供 onUnmounted 呼叫 */
+    /** Clear system preference listening for onUnmounted calls */
     const cleanupTheme = () => {
         systemDarkQuery.removeEventListener('change', onSystemThemeChange);
     };

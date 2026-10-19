@@ -32,10 +32,10 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 /**
- * 故障注入（Fault Injection）完整測試
+ * Fault injection (Fault Injection) complete test
  * <p>
- * 涵蓋 Pipeline 層、ProtocolHandler 層、Entity 預設值三個面向，
- * 確保 faultType 在整個生命週期中行為正確。
+ * Covers three aspects: Pipeline layer, ProtocolHandler layer, and Entity default value.
+ * Ensure faultType behaves correctly throughout its lifecycle.
  */
 @ExtendWith(MockitoExtension.class)
 class FaultInjectionTest {
@@ -43,7 +43,7 @@ class FaultInjectionTest {
     // ==================== Pipeline Layer ====================
 
     @Nested
-    @DisplayName("Pipeline 層故障注入")
+    @DisplayName("Pipeline fault injection")
     class PipelineLayer {
 
         @Mock
@@ -58,8 +58,8 @@ class FaultInjectionTest {
         private TestPipeline pipeline;
 
         /**
-         * 測試用 Pipeline 子類別，繼承 AbstractMockPipeline<HttpRule>，
-         * 所有抽象方法以可控行為實作。
+         * Test Pipeline subclass extending AbstractMockPipeline<HttpRule>,
+         * All abstract methods are implemented with controlled behavior.
          */
         static class TestPipeline extends AbstractMockPipeline<HttpRule> {
 
@@ -170,7 +170,7 @@ class FaultInjectionTest {
 
         // ---- Test 1 ----
         @Test
-        @DisplayName("faultType=NONE → 正常回應，faultType 為 null")
+        @DisplayName("faultType=NONE returns a normal response with null faultType")
         void faultTypeNone_normalResponse() {
             HttpRule rule = ruleWithFault(FaultType.NONE, 200, 1L);
             pipeline.candidateRules = List.of(rule);
@@ -185,7 +185,7 @@ class FaultInjectionTest {
 
         // ---- Test 2 ----
         @Test
-        @DisplayName("faultType=EMPTY_RESPONSE → body 清空，status 保留")
+        @DisplayName("faultType=EMPTY_RESPONSE clears the body and preserves the status")
         void faultTypeEmptyResponse_bodyCleared() {
             HttpRule rule = ruleWithFault(FaultType.EMPTY_RESPONSE, 200, 1L);
             pipeline.candidateRules = List.of(rule);
@@ -202,7 +202,7 @@ class FaultInjectionTest {
 
         // ---- Test 3 ----
         @Test
-        @DisplayName("faultType=CONNECTION_RESET → faultType 傳播，body 不變")
+        @DisplayName("faultType=CONNECTION_RESET propagates the fault and preserves the body")
         void faultTypeConnectionReset_propagated() {
             HttpRule rule = ruleWithFault(FaultType.CONNECTION_RESET, 200, 1L);
             pipeline.candidateRules = List.of(rule);
@@ -219,7 +219,7 @@ class FaultInjectionTest {
 
         // ---- Test 4 ----
         @Test
-        @DisplayName("faultType=null（舊規則向後相容）→ 視為 NONE")
+        @DisplayName("Legacy null faultType is treated as NONE")
         void faultTypeNull_backwardCompat() {
             HttpRule rule = ruleWithFault(null, 200, 1L);
             pipeline.candidateRules = List.of(rule);
@@ -233,7 +233,7 @@ class FaultInjectionTest {
 
         // ---- Test 5 ----
         @Test
-        @DisplayName("無匹配 → faultType 為 null")
+        @DisplayName("No match produces null faultType")
         void noMatch_faultTypeNull() {
             pipeline.candidateRules = Collections.emptyList();
 
@@ -246,7 +246,7 @@ class FaultInjectionTest {
 
         // ---- Test 6 ----
         @Test
-        @DisplayName("EMPTY_RESPONSE 保留 httpStatus（如 503）")
+        @DisplayName("EMPTY_RESPONSE preserves httpStatus, including 503")
         void emptyResponse_preservesHttpStatus() {
             HttpRule rule = ruleWithFault(FaultType.EMPTY_RESPONSE, 503, 1L);
             pipeline.candidateRules = List.of(rule);
@@ -263,7 +263,7 @@ class FaultInjectionTest {
     // ==================== Protocol Handler Layer ====================
 
     @Nested
-    @DisplayName("HttpProtocolHandler 故障注入轉換")
+    @DisplayName("HttpProtocolHandler fault-injection conversion")
     class ProtocolHandlerLayer {
 
         @Mock
@@ -278,7 +278,7 @@ class FaultInjectionTest {
 
         // ---- Test 7 ----
         @Test
-        @DisplayName("toDto: faultType=NONE → 字串 \"NONE\"")
+        @DisplayName("toDto maps faultType=NONE to the string NONE")
         void toDto_faultTypeNone_returnsNoneString() {
             HttpRule rule = HttpRule.builder()
                     .id("r1")
@@ -300,7 +300,7 @@ class FaultInjectionTest {
 
         // ---- Test 8 ----
         @Test
-        @DisplayName("toDto: faultType=null → 字串 \"NONE\"")
+        @DisplayName("toDto maps null faultType to the string NONE")
         void toDto_faultTypeNull_returnsNoneString() {
             HttpRule rule = HttpRule.builder()
                     .id("r1")
@@ -313,7 +313,7 @@ class FaultInjectionTest {
                     .sseEnabled(false)
                     .sseLoopEnabled(false)
                     .build();
-            // 強制設為 null 繞過 @Builder.Default
+            // Forced to null to bypass @Builder.Default
             rule.setFaultType(null);
 
             RuleDto dto = handler.toDto(rule, null, false);
@@ -386,7 +386,7 @@ class FaultInjectionTest {
     // ==================== Entity Default Layer ====================
 
     @Nested
-    @DisplayName("Entity 預設值")
+    @DisplayName("Entity defaults")
     class EntityDefaults {
 
         // ---- Test 13 ----
@@ -409,11 +409,11 @@ class FaultInjectionTest {
                     .matchKey("/api/test")
                     .httpStatus(200)
                     .build();
-            // 強制設為 null 模擬舊資料
+            // Forced to null to simulate old data
             rule.setFaultType(null);
             assertThat(rule.getFaultType()).isNull();
 
-            // 透過反射觸發 @PrePersist（protected method 在不同 package 無法直接呼叫）
+            // Triggered by reflection @PrePersist (protected method cannot be called directly in different package)
             java.lang.reflect.Method onCreate = HttpRule.class.getDeclaredMethod("onCreate");
             onCreate.setAccessible(true);
             onCreate.invoke(rule);

@@ -116,7 +116,7 @@ class ArtemisConfigTest {
     @Test
     void artemisConfigurationCustomizer_shouldUseDefaultPort() throws Exception {
         JmsProperties jmsProperties = new JmsProperties();
-        // 預設 port = 61616
+        // Default port = 61616
 
         ArtemisConfig config = new ArtemisConfig();
         ArtemisConfigurationCustomizer customizer = config.artemisConfigurationCustomizer(jmsProperties);

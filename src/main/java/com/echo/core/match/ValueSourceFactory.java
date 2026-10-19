@@ -3,30 +3,30 @@ package com.echo.core.match;
 import java.util.Set;
 
 /**
- * 取值來源的擴充點。內建來源見 {@link BuiltinSources}；協定可註冊自己的來源，
- * 例如 {@code jms.property}。
+ * The expansion point of the value source. For built-in sources, see {@link BuiltinSources}; the protocol can register its own sources.
+ * For example {@code jms.property}.
  */
 public interface ValueSourceFactory {
 
-    /** 條件 JSON 中 {@code source} 欄位的值。 */
+    /** The value of the {@code source} field in condition JSON. */
     String source();
 
-    /** 是否需要 {@code name}（例如 header、query）。 */
+    /** Is {@code name} required (e.g. header, query). */
     boolean requiresName();
 
-    /** 支援的 selector；空集合表示不接受 selector，非空時 selector 為必填。 */
+    /** selector is supported; an empty set means selector is not accepted, and selector is required if it is not empty. */
     Set<Selector.Kind> supportedSelectors();
 
     /**
-     * 建立取值器。參數已通過 {@link #requiresName()} 與 {@link #supportedSelectors()} 的檢查。
+     * Create a valuer. The parameters have passed the check of {@link #requiresName()} and {@link #supportedSelectors()}.
      *
-     * @throws IllegalArgumentException 參數不合法（例如 JSONPath 語法錯誤）
+     * @throws IllegalArgumentException The parameter is illegal (for example, JSONPath syntax error)
      */
     ValueExtractor create(String name, Selector selector, MatcherLimits limits);
 
     /**
-     * 取值是否會讀請求 body。預設 true，讓自行註冊、會讀 body 的來源得到完整解析的 body；
-     * 只讀 header、query 等的來源應回傳 false，讓沒有 body 條件的規則不必解析 body。
+     * Whether the value will read request body. The default is true, so that the source of self-registered and able to read body can be fully parsed body;
+     * Read-only sources of header, query, etc. should return false so that rules without body conditions do not have to parse body.
      */
     default boolean readsBody() {
         return true;

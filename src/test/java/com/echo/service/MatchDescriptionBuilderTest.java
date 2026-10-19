@@ -9,18 +9,18 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * MatchDescriptionBuilder 單元測試。
+ * MatchDescriptionBuilder unit test.
  *
- * <p>驗證 toMatchChainJson、escapeJson。
+ * <p>Verification toMatchChainJson, escapeJson.
  */
 class MatchDescriptionBuilderTest {
 
     @Nested
-    @DisplayName("toMatchChainJson 精簡匹配鏈")
+    @DisplayName("toMatchChainJson reduces matching-chain details")
     class MatchChainJsonTests {
 
         @Test
-        @DisplayName("匹配成功 → 只保留 match/fallback 條目")
+        @DisplayName("A match retains only match/fallback entries")
         void matchedOnlyKeepsMatchedEntries() {
             List<MatchChainEntry> chain = List.of(
                     new MatchChainEntry("r1", "condition_not_match", "/api", "規則A", "body: x=1"),
@@ -37,7 +37,7 @@ class MatchDescriptionBuilderTest {
         }
 
         @Test
-        @DisplayName("未匹配 → 回傳 null")
+        @DisplayName("No match returns null")
         void unmatchedReturnsNull() {
             List<MatchChainEntry> chain = List.of(
                     new MatchChainEntry("r1", "condition_not_match", "/api", "規則A", null),
@@ -49,7 +49,7 @@ class MatchDescriptionBuilderTest {
         }
 
         @Test
-        @DisplayName("fallback 匹配 → 保留 fallback 條目")
+        @DisplayName("A fallback match retains its fallback entry")
         void fallbackKeptWhenMatched() {
             List<MatchChainEntry> chain = List.of(
                     new MatchChainEntry("r1", "condition_not_match", "/api", "規則A", null),
@@ -64,7 +64,7 @@ class MatchDescriptionBuilderTest {
         }
 
         @Test
-        @DisplayName("空 chain → 回傳 null")
+        @DisplayName("An empty chain returns null")
         void emptyChainReturnsNull() {
             assertThat(MatchDescriptionBuilder.toMatchChainJson(List.of(), true)).isNull();
             assertThat(MatchDescriptionBuilder.toMatchChainJson(List.of(), false)).isNull();

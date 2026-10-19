@@ -1,9 +1,9 @@
 /**
- * ui-accent.js - 部署環境主色
+ * ui-accent.js - Main color of deployment environment
  *
- * 主色由伺服器設定 echo.ui.accent（環境變數 ECHO_UI_ACCENT）決定，
- * 透過 /api/admin/status 的 uiAccent 回傳，用來區分不同部署環境（例如 SIT 青綠、UAT 藍）。
- * 本檔在 <head> 同步載入：先套用上次暫存的主色，避免頁面載入時閃過預設色。
+ * The main color is determined by the server setting echo.ui.accent (environment variable ECHO_UI_ACCENT),
+ * uiAccent return through /api/admin/status, used to distinguish different deployment environments (such as SIT cyan, UAT blue).
+ * This file is loaded simultaneously in <head>: first apply the last temporarily saved main color to avoid flashing the default color when the page is loading.
  */
 (function () {
     var ACCENTS = ['teal', 'blue'];
@@ -21,7 +21,7 @@
     setAttribute(normalize(cached));
 
     window.EchoAccent = {
-        /** 套用伺服器回傳的主色並暫存；未知值回到 teal。 */
+        /** Apply the main color returned by the server and save it temporarily; the unknown value returns to teal. */
         apply: function (value) {
             var accent = normalize(value);
             setAttribute(accent);

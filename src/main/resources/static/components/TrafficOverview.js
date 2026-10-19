@@ -1,7 +1,7 @@
 /**
- * TrafficOverview - 請求紀錄頁上方的流量概況：精簡（預設）、展開、收合三種顯示，選擇存在瀏覽器。
- * 收合時不查詢；資料來自 GET /api/admin/logs/traffic（伺服器端統計並短暫共用，見 RequestLogTrafficService）。
- * 點一格長條 → emit select-time {from, to}；點「看這些請求」→ emit show-unmatched {protocol, method, endpoint, from, to}。
+ * TrafficOverview - Traffic overview at the top of the request record page: simplified (default), expanded, collapsed, choose to save in the browser.
+ * No query when collapsing; data comes from GET/api/admin/logs/traffic (server-side statistics and short-term sharing, see RequestLogTrafficService).
+ * Click on a long bar → emit select-time {from, to}; click "View these requests" → emit show-unmatched {protocol, method, endpoint, from, to}.
  */
 const TRAFFIC_MODE_KEY = 'echo.traffic.mode';
 const TRAFFIC_RANGE_KEY = 'echo.traffic.range';
@@ -10,14 +10,14 @@ const readTrafficPref = (key, allowed, fallback) => {
   try { return TrafficChart.normalize(localStorage.getItem(key), allowed, fallback); } catch { return fallback; }
 };
 const writeTrafficPref = (key, value) => {
-  try { localStorage.setItem(key, value); } catch { /* 無法儲存時只影響下次開啟的預設值 */ }
+  try { localStorage.setItem(key, value); } catch { /* If it cannot be saved, it will only affect the default value when it is opened next time. */ }
 };
 
 const TrafficOverview = {
   props: {
     httpLabel: { type: String, default: 'HTTP' },
     jmsLabel: { type: String, default: 'JMS' },
-    // 目前列表的時間篩選；剛好是某一格時標示那一格
+    // Time filtering of the current list; mark that cell when it happens to be a certain cell
     selectedFrom: { type: String, default: '' },
     selectedTo: { type: String, default: '' },
   },
@@ -85,7 +85,7 @@ const TrafficOverview = {
   mounted() { this.load(); },
   beforeUnmount() { if (this.abort) { this.abort.abort(); } },
   methods: {
-    /** 重新整理（列表的重新整理按鈕也會呼叫）。收合時不查詢。 */
+    /** Refresh (the list's refresh button will also be called). No query is performed when collapsing. */
     async load() {
       if (this.mode === 'collapsed') { return; }
       if (this.abort) { this.abort.abort(); }
@@ -124,7 +124,7 @@ const TrafficOverview = {
       this.$emit('select-time', { from: bar.bucket.start, to: TrafficChart.bucketEnd(this.traffic, bar.i) });
     },
     showUnmatched(item) {
-      // 結束時間是概況產生的時間：清單與統計的筆數涵蓋同一段時間，之後進來的請求不算
+      // The end time is the time when the profile is generated: the list and the number of statistics cover the same period, and requests that come in after that are not counted.
       this.$emit('show-unmatched', { protocol: item.protocol, method: item.method || '', endpoint: item.endpoint,
         from: this.traffic.from, to: this.traffic.generatedAt || this.traffic.to });
     },

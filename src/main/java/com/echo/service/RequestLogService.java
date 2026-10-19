@@ -32,16 +32,16 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * 請求記錄服務
+ * Request logging service.
  * 
- * 可用 {@code echo.request-log.enabled=false} 完全停止新增請求記錄。
- * 啟用時支援兩種儲存模式:
- * - memory: 純記憶體環形緩衝區
- * - database: 寫入 DB，定期清理超過 max-records 的舊資料
+ * Use {@code echo.request-log.enabled=false} to completely stop new request records.
+ * Two storage modes are supported when enabled:
+ * - memory: an in-memory ring buffer.
+ * - database: persist to the database and periodically remove records beyond max-records.
  *
- * Database 模式會先由 LogAgent 寫入獨立 durable spool，再由背景 worker
- * 批次送往主資料庫。只有 spool 確認落地後請求才算成功接受，主資料庫
- * 暫時不可用時不會靜默丟失紀錄。
+ * In database mode, LogAgent first writes to an independent durable spool; a background worker then
+ * persists batches to the main database. In strict mode, acceptance waits for the spool commit, so a temporary main-database
+ * outage cannot silently lose accepted records.
  */
 @Service
 @Slf4j
@@ -53,20 +53,20 @@ public class RequestLogService implements ServeEventListener {
     private final ObjectProvider<LogAgent> logAgentProvider;
     private final RequestLogSummaryQuery summaryQuery;
 
-    // ===== Memory 模式: 環形緩衝區 =====
+    // ===== Memory Mode: Ring Buffer =====
     private ConcurrentLinkedDeque<LogEntry> memoryBuffer;
     private final AtomicInteger bufferSize = new AtomicInteger(0);
     private volatile int maxRecords;
 
-    /** Memory 模式用的 ID 產生器 */
+    /** ID generator for Memory mode */
     private static final AtomicLong MEMORY_ID_SEQ = new AtomicLong(1);
 
-    /** 取得下一個 Memory 模式 ID（供 LogAgent 使用） */
+    /** Get the next Memory mode ID (for use by LogAgent) */
     public static long nextMemoryId() {
         return MEMORY_ID_SEQ.getAndIncrement();
     }
 
-    /** LogAgent 不可用時只 warn 一次，恢復後才允許再次提示。 */
+    /** Warn once while LogAgent is unavailable; allow another warning after recovery. */
     private final AtomicBoolean agentUnavailableWarned = new AtomicBoolean(false);
 
     @Autowired
@@ -127,7 +127,7 @@ public class RequestLogService implements ServeEventListener {
     }
 
     /**
-     * 依 ID 查詢單筆請求記錄
+     * Query single request record according to ID
      */
     public Optional<LogEntry> findById(long id) {
         if (configService.isRequestLogMemoryMode()) {
@@ -139,7 +139,7 @@ public class RequestLogService implements ServeEventListener {
     }
 
     /**
-     * 記錄請求
+     * Log a request.
      */
     public void record(String ruleId, Protocol protocol, String endpoint,
                        boolean matched, int responseTimeMs, String clientIp) {
@@ -178,14 +178,14 @@ public class RequestLogService implements ServeEventListener {
     }
 
     /**
-     * 記錄請求（含匹配上下文）
+     * Log a request with matching context.
      * <p>
-     * 當 LogAgent 可用時，延遲建構 LogTask 並交給 LogAgent：預設放進暫存區後立即返回，寫入跟不上時丟掉最舊的記錄；
-     * {@code echo.request-log.wait-for-write=true} 時等寫入 durable spool，無法寫入時 fail fast。
-     * Agent 不存在時 fail fast。
-     * 明確停用請求記錄時則在取得 Agent 或建立任何記錄資料前返回。
+     * Build LogTask lazily when LogAgent is available; by default return after buffering and drop the oldest records if writes cannot keep up.
+     * With {@code echo.request-log.wait-for-write=true}, wait for the durable-spool write and fail fast if it cannot be written.
+     * fail fast when Agent does not exist.
+     * Explicitly disabling request logging returns before obtaining Agent or creating any logging data.
      */
-    @SuppressWarnings("java:S107") // 參數數量多是因為需要傳遞完整的匹配上下文
+    @SuppressWarnings("java:S107") // The large number of parameters is due to the need to pass the complete matching context
     public <T extends BaseRule> void record(String ruleId, Protocol protocol, String method, String endpoint,
                        boolean matched, int responseTimeMs, String clientIp,
                        String matchChain, String targetHost,
@@ -202,7 +202,7 @@ public class RequestLogService implements ServeEventListener {
                 null, null, null, null);
     }
 
-    /** 記錄請求，並保留故障注入與 Scenario 狀態轉移資訊。 */
+    /** Log the request, including fault injection and Scenario state-transition information. */
     @SuppressWarnings("java:S107")
     public <T extends BaseRule> void record(String ruleId, Protocol protocol, String method, String endpoint,
                        boolean matched, int responseTimeMs, String clientIp,
@@ -225,7 +225,7 @@ public class RequestLogService implements ServeEventListener {
                 scenarioFromState, scenarioToState);
     }
 
-    /** 記錄請求，並保留轉發、故障注入與 Scenario 狀態轉移資訊。 */
+    /** Log the request, including forwarding, fault injection, and Scenario state-transition information. */
     @SuppressWarnings("java:S107")
     public <T extends BaseRule> void record(String ruleId, Protocol protocol, String method, String endpoint,
                        boolean matched, int responseTimeMs, String clientIp,
@@ -248,7 +248,7 @@ public class RequestLogService implements ServeEventListener {
                 queryString, headers, faultType, scenarioName, scenarioFromState, scenarioToState, null);
     }
 
-    /** 記錄請求，並保留轉發、故障注入與 Scenario 狀態轉移資訊。 */
+    /** Log the request, including forwarding, fault injection, and Scenario state-transition information. */
     @SuppressWarnings("java:S107")
     public <T extends BaseRule> void record(String ruleId, Protocol protocol, String method, String endpoint,
                        boolean matched, int responseTimeMs, String clientIp,
@@ -281,8 +281,8 @@ public class RequestLogService implements ServeEventListener {
     }
 
     /**
-     * 請求紀錄是 critical listener：無法接收時往上傳，HTTP 回 503、JMS 讓遞送失敗。
-     * 預設不等寫入（{@code echo.request-log.wait-for-write=false}）時，只有記錄元件不存在才會發生。
+     * Critical request-log listener: propagate admission failures, producing HTTP 503 or failing JMS delivery.
+     * With the default {@code echo.request-log.wait-for-write=false}, this occurs only when the logging component is missing.
      */
     @Override
     public void onServed(ServeEvent event) {
@@ -295,11 +295,11 @@ public class RequestLogService implements ServeEventListener {
     }
 
     /**
-     * 記錄一筆已處理的請求。
+     * Record a processed request.
      * <p>
-     * 當 LogAgent 可用時，延遲建構 LogTask 並委派給 durable spool。
-     * Agent 或 spool 不可用時 fail fast，避免回覆成功卻遺失請求紀錄。
-     * 明確停用請求記錄時則在取得 Agent 或建立任何記錄資料前返回。
+     * Build LogTask lazily and delegate to the durable spool when LogAgent is available.
+     * Fail fast if the agent or spool is unavailable, avoiding a successful reply with a silently lost request log.
+     * Explicitly disabling request logging returns before obtaining Agent or creating any logging data.
      */
     public void record(ServeEvent event) {
         if (configService.isRequestLogDisabled()) {
@@ -375,10 +375,10 @@ public class RequestLogService implements ServeEventListener {
                 .build();
     }
 
-    // ===== 查詢方法 =====
+    // ===== Query method =====
 
     /**
-     * 查詢請求記錄（支援篩選）
+     * Query request records (supports filtering)
      */
     public QueryResult query(QueryFilter filter) {
         Stream<LogEntry> stream = configService.isRequestLogMemoryMode()
@@ -386,7 +386,7 @@ public class RequestLogService implements ServeEventListener {
                 : requestLogRepository.findAllByOrderByRequestTimeDesc(PageRequest.of(0, maxRecords))
                         .stream().map(this::toEntry);
 
-        // 篩選
+        // Filter
         if (filter.getRuleId() != null) {
             stream = stream.filter(e -> filter.getRuleId().equals(e.getRuleId()));
         }
@@ -407,7 +407,7 @@ public class RequestLogService implements ServeEventListener {
 
         List<LogEntry> entries = stream.toList();
         
-        // 批次載入規則資訊 (避免 N+1)
+        // Batch loading rule information (avoid N+1)
         Set<String> ruleIds = entries.stream().map(LogEntry::getRuleId).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<String, RuleSummary> ruleCache = new HashMap<>();
         if (!ruleIds.isEmpty()) {
@@ -424,7 +424,7 @@ public class RequestLogService implements ServeEventListener {
     }
 
     /**
-     * 查詢請求記錄摘要（不含 body / matchChain，供列表顯示）
+     * Query request record summary (excluding body / matchChain, for list display)
      */
     public SummaryQueryResult querySummary(QueryFilter filter) {
         int pageNumber = Math.max(0, filter.getPage() != null ? filter.getPage() : 0);
@@ -463,7 +463,7 @@ public class RequestLogService implements ServeEventListener {
                 totalElements = resultPage.totalElements();
                 totalPages = resultPage.totalPages();
             } else {
-                // 只供保留 repository 測試接縫的建構式使用；正式環境一律走上面的 summaryQuery
+                // Compatibility constructor retaining the repository test seam; production uses summaryQuery above.
                 Page<Object[]> resultPage = requestLogRepository.findSummaryPage(
                         filter.getRuleId(), filter.getProtocol(), filter.getMatched(), endpoint,
                         filter.getAfterId(), filter.getFrom(), filter.getTo(),
@@ -474,7 +474,7 @@ public class RequestLogService implements ServeEventListener {
             }
         }
 
-        // 批次載入規則資訊 (避免 N+1)
+        // Batch loading rule information (avoid N+1)
         Set<String> ruleIds = entries.stream().map(LogSummaryEntry::getRuleId).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<String, RuleSummary> ruleCache = new HashMap<>();
         if (!ruleIds.isEmpty()) {
@@ -572,7 +572,7 @@ public class RequestLogService implements ServeEventListener {
     }
 
     /**
-     * 取得摘要統計（基於保留的記錄）
+     * Get summary statistics (based on retained records)
      */
     public Summary getSummary() {
         long total;
@@ -596,16 +596,16 @@ public class RequestLogService implements ServeEventListener {
     }
 
     /**
-     * 取得 memory 模式的環形緩衝區引用，供 LogAgent 在 memory 模式下寫入。
+     * Obtain the ring buffer reference in memory mode for LogAgent to write in memory mode.
      *
-     * @return memory buffer，若非 memory 模式則回傳 null
+     * @return The memory buffer, or null outside memory mode.
      */
     public ConcurrentLinkedDeque<LogEntry> getMemoryBuffer() {
         return memoryBuffer;
     }
 
     /**
-     * 取得 memory 模式的 bufferSize 計數器，供 LogAgent 維護環形緩衝區大小。
+     * Get the bufferSize counter in memory mode for LogAgent to maintain the ring buffer size.
      *
      * @return bufferSize AtomicInteger
      */
@@ -777,8 +777,8 @@ public class RequestLogService implements ServeEventListener {
     }
 
     /**
-     * 列表用摘要 DTO — 不含 requestBody / responseBody / matchChain，
-     * 減少列表查詢的傳輸量。
+     * Summary for list DTO — excluding requestBody / responseBody / matchChain,
+     * Reduce transfer volume for list queries.
      */
     @Getter @Builder
     public static class LogSummaryEntry {
@@ -803,11 +803,11 @@ public class RequestLogService implements ServeEventListener {
         private String scenarioName;
         private String scenarioFromState;
         private String scenarioToState;
-        /** 是否有 requestBody（供前端判斷是否需要 lazy load） */
+        /** Whether there is requestBody (for the front end to determine whether lazy load is needed) */
         private boolean hasRequestBody;
-        /** 是否有 responseBody */
+        /** Is there responseBody */
         private boolean hasResponseBody;
-        /** 是否有 matchChain */
+        /** Is there matchChain */
         private boolean hasMatchChain;
     }
 
@@ -855,18 +855,18 @@ public class RequestLogService implements ServeEventListener {
         private Protocol protocol;
         private Boolean matched;
         private String endpoint;
-        /** HTTP 方法，完全相同（不分大小寫）。 */
+        /** HTTP method, matched exactly ignoring case. */
         private String method;
-        /** 網址，完全相同（{@link #endpoint} 是部分比對的關鍵字）。 */
+        /** URL, matched exactly; {@link #endpoint} provides substring matching instead. */
         private String path;
         private Integer page;
         private Integer size;
         private String sortField;
         private String sortDirection;
         private Long afterId;
-        /** 請求時間下限（含）。 */
+        /** Lower limit of request time (inclusive). */
         private LocalDateTime from;
-        /** 請求時間上限（不含）。 */
+        /** Exclusive request-time upper bound. */
         private LocalDateTime to;
     }
 

@@ -18,7 +18,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 /**
- * 請求紀錄：查詢（可限定時間範圍）、明細、統計、流量概況、清除，以及從一筆紀錄產生規則草稿。
+ * Request records: query (can limit time range), details, statistics, traffic overview, clearing, and generate draft rules from a record.
  */
 @RestController
 @RequestMapping(value = "/api/admin", produces = "application/json")
@@ -62,14 +62,14 @@ public class RequestLogController {
         return ResponseEntity.ok(requestLogService.querySummary(filter));
     }
 
-    /** 保留給既有 Java 呼叫端與單元測試的相容入口。 */
+    /** Reserved for compatibility with existing Java call-side and unit tests. */
     public ResponseEntity<RequestLogService.SummaryQueryResult> queryLogs(
             String ruleId, String protocol, Boolean matched, String endpoint) {
         return queryLogs(ruleId, protocol, matched, endpoint,
                 null, null, null, null, null, null);
     }
 
-    /** 不限時間範圍的相容入口。 */
+    /** Compatible entry with no time range. */
     public ResponseEntity<RequestLogService.SummaryQueryResult> queryLogs(
             String ruleId, String protocol, Boolean matched, String endpoint, Integer page, Integer size,
             Integer limit, String sortField, String direction, Long afterId) {
@@ -78,8 +78,8 @@ public class RequestLogController {
     }
 
     /**
-     * 流量概況：{@code range} 為 1h、24h 或 7d。結果短暫共用（見 {@link RequestLogTrafficService}），
-     * 很多人同時開啟也只會統計一次。
+     * Traffic profile: {@code range} is 1h, 24h or 7d. The results are shared briefly (see {@link RequestLogTrafficService}),
+     * If many people turn it on at the same time, it will only be counted once.
      */
     @GetMapping("/logs/traffic")
     public ResponseEntity<RequestLogTrafficService.Traffic> getTraffic(

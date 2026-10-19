@@ -12,7 +12,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 規則啟用/停用、保護與展延整合測試
+ * Rule enablement/deactivation, protection and extended integration testing
  */
 class RuleLifecycleIntegrationTest extends BaseIntegrationTest {
 
@@ -41,29 +41,29 @@ class RuleLifecycleIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("12.2 停用規則後不參與 Mock 匹配")
+    @DisplayName("12.2 Disabled rules do not participate in mock matching")
     void disableRule_notMatchedByMock() {
-        // 不設 targetHost，避免 proxy forwarding 導致 502
+        // Do not set targetHost to avoid proxy forwarding causing 502
         RuleDto rule = createHttpRule("/api/lifecycle-dis", "GET", "{\"ok\":true}");
 
-        // 停用（使用 exchange）
+        // Disabled (using exchange)
         ResponseEntity<Map> disResp = putJson(
                 "/api/admin/rules/" + rule.getId() + "/disable", null);
         assertThat(disResp.getStatusCode()).isEqualTo(HttpStatus.OK);
         clearCaches();
 
-        // Mock 請求應不匹配（無 X-Original-Host → 回傳 404 而非 proxy）
+        // Mock request should not match (no X-Original-Host → return 404 instead of proxy)
         ResponseEntity<String> mockResp = restTemplate.getForEntity(
                 "/mock/api/lifecycle-dis", String.class);
         assertThat(mockResp.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     @Test
-    @DisplayName("12.3 重新啟用規則後恢復匹配")
+    @DisplayName("12.3 Re-enabling a rule restores matching")
     void enableRule_resumesMatching() {
         RuleDto rule = createHttpRule("/api/lifecycle-en", "GET", "{\"ok\":true}");
 
-        // 停用 → 啟用
+        // Disable → Enable
         putJson("/api/admin/rules/" + rule.getId() + "/disable", null);
         putJson("/api/admin/rules/" + rule.getId() + "/enable", null);
         clearCaches();
@@ -74,13 +74,13 @@ class RuleLifecycleIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("12.4 批次啟用/停用")
+    @DisplayName("12.4 Batch enable and disable")
     void batchEnableDisable() {
         RuleDto r1 = createHttpRule("/api/batch-a", "GET", "{\"a\":true}");
         RuleDto r2 = createHttpRule("/api/batch-b", "GET", "{\"b\":true}");
         List<String> ids = List.of(r1.getId(), r2.getId());
 
-        // 批次停用
+        // Batch deactivation
         ResponseEntity<Map> disResp = putJson("/api/admin/rules/batch/disable", ids);
         assertThat(disResp.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((Number) disResp.getBody().get("updated")).intValue()).isEqualTo(2);
@@ -88,7 +88,7 @@ class RuleLifecycleIntegrationTest extends BaseIntegrationTest {
         assertThat(getRule(r1.getId()).getEnabled()).isFalse();
         assertThat(getRule(r2.getId()).getEnabled()).isFalse();
 
-        // 批次啟用
+        // Batch enable
         ResponseEntity<Map> enResp = putJson("/api/admin/rules/batch/enable", ids);
         assertThat(enResp.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((Number) enResp.getBody().get("updated")).intValue()).isEqualTo(2);
@@ -98,7 +98,7 @@ class RuleLifecycleIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("12.5 規則保護與取消保護")
+    @DisplayName("12.5 Protect and unprotect rules")
     void protectAndUnprotect() {
         RuleDto rule = createHttpRule("/api/protect-test", "GET", "{\"ok\":true}");
 
@@ -114,7 +114,7 @@ class RuleLifecycleIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("12.6 批次保護/取消保護")
+    @DisplayName("12.6 Batch protect and unprotect")
     void batchProtectUnprotect() {
         RuleDto r1 = createHttpRule("/api/bp-a", "GET", "{\"a\":true}");
         RuleDto r2 = createHttpRule("/api/bp-b", "GET", "{\"b\":true}");
@@ -131,7 +131,7 @@ class RuleLifecycleIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("12.7 規則展延 → extendedAt 被更新")
+    @DisplayName("12.7 Extending a rule updates extendedAt")
     void extendRule_updatesExtendedAt() {
         RuleDto rule = createHttpRule("/api/extend-test", "GET", "{\"ok\":true}");
         assertThat(rule.getExtendedAt()).isNull();
@@ -145,7 +145,7 @@ class RuleLifecycleIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("12.8 批次展延 → 多個規則 extendedAt 被更新")
+    @DisplayName("12.8 Batch extension updates extendedAt for multiple rules")
     void batchExtend() {
         RuleDto r1 = createHttpRule("/api/bext-a", "GET", "{\"a\":true}");
         RuleDto r2 = createHttpRule("/api/bext-b", "GET", "{\"b\":true}");
@@ -160,9 +160,9 @@ class RuleLifecycleIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("12.9 按標籤啟用/停用")
+    @DisplayName("12.9 Enable and disable rules by tag")
     void enableDisableByTag() {
-        // 建立規則，然後更新 tags
+        // Create rules and then update tags
         RuleDto rule = createHttpRule("/api/tag-test", "GET", "{\"ok\":true}");
         rule.setTags("{\"env\":\"sit\"}");
         HttpHeaders jsonHeaders = new HttpHeaders();
@@ -172,7 +172,7 @@ class RuleLifecycleIntegrationTest extends BaseIntegrationTest {
                 new HttpEntity<>(rule, jsonHeaders), RuleDto.class);
         assertThat(updateResp.getStatusCode()).isEqualTo(HttpStatus.OK);
 
-        // 按標籤停用
+        // Deactivate by label
         ResponseEntity<Map> disResp = putJson(
                 "/api/admin/rules/tag/env/sit/disable", null);
         assertThat(disResp.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -180,7 +180,7 @@ class RuleLifecycleIntegrationTest extends BaseIntegrationTest {
         RuleDto disabled = getRule(rule.getId());
         assertThat(disabled.getEnabled()).isFalse();
 
-        // 按標籤啟用
+        // Enable by tag
         ResponseEntity<Map> enResp = putJson(
                 "/api/admin/rules/tag/env/sit/enable", null);
         assertThat(enResp.getStatusCode()).isEqualTo(HttpStatus.OK);

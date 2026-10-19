@@ -1,6 +1,6 @@
 /**
- * RequestFlowView - 請求紀錄的「處理流程」：收到請求 → 比對規則 → 模擬回應或轉發（沒走的路淡化）→ 回給呼叫端，
- * 以及處理時間的分配。資料由 {@link RequestFlow.build} 整理；容器夠寬時橫向排列，否則由上而下。
+ * RequestFlowView - "Processing flow" of request records: Receive request → Compare rules → Simulate response or forward (the road not taken is downplayed) → Return to the calling end,
+ * and allocation of processing time. The data is organized by {@link RequestFlow.build}; when the container is wide enough, it is arranged horizontally, otherwise it is arranged from top to bottom.
  */
 const RequestFlowView = {
   props: {
@@ -45,7 +45,7 @@ const RequestFlowView = {
   template: `
     <div class="rf" :class="{'is-forward': flow.route==='forward', 'is-not-found': flow.route==='notFound'}">
       <ol class="rf-steps" :aria-label="t('stats.flow.title')">
-        <!-- 1. 收到請求 -->
+        <!-- 1. Request received -->
         <li class="rf-step rf-received">
           <section class="rf-card is-ok">
             <h4 class="rf-title"><i class="bi bi-box-arrow-in-right" aria-hidden="true"></i>{{flow.received.jms ? t('stats.flow.receivedJms') : t('stats.flow.received')}}</h4>
@@ -55,7 +55,7 @@ const RequestFlowView = {
           </section>
         </li>
 
-        <!-- 2. 比對規則 -->
+        <!-- 2. Comparison rules -->
         <li class="rf-step rf-match">
           <section class="rf-card" :class="'is-' + flow.match.tone">
             <h4 class="rf-title"><i class="bi bi-funnel" aria-hidden="true"></i>{{t('stats.flow.match')}}</h4>
@@ -87,7 +87,7 @@ const RequestFlowView = {
           </section>
         </li>
 
-        <!-- 3. 模擬回應／轉發（或找不到規則） -->
+        <!-- 3. Simulated response/forwarding (or rule not found) -->
         <li class="rf-step rf-route">
           <div v-if="flow.route==='notFound'" class="rf-fork is-single">
             <section class="rf-card is-warn">
@@ -127,7 +127,7 @@ const RequestFlowView = {
           </div>
         </li>
 
-        <!-- 4. 回給呼叫端 -->
+        <!-- 4. Return to the calling party -->
         <li class="rf-step rf-reply">
           <section class="rf-card" :class="'is-' + flow.reply.tone">
             <h4 class="rf-title"><i class="bi bi-reply" aria-hidden="true"></i>{{flow.reply.jms ? t('stats.flow.replyJms') : t('stats.flow.reply')}}</h4>

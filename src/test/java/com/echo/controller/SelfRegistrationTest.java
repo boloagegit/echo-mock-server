@@ -22,10 +22,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
- * 自助註冊功能測試（啟用狀態）
+ * Self-service registration function test (enabled state)
  * <p>
- * 使用 @TestPropertySource 將 self-registration 設為 true，
- * 測試公開註冊端點的正常流程與錯誤處理。
+ * Use @TestPropertySource to set self-registration to true,
+ * Test the normal flow and error handling of public registration endpoints.
  */
 @WebMvcTest(BuiltinAccountController.class)
 @Import({SecurityConfig.class, LdapConfig.class})
@@ -100,7 +100,7 @@ class SelfRegistrationTest {
 
     @Test
     void selfRegister_shouldBeAccessibleWithoutAuth() throws Exception {
-        // 不帶任何認證，應該也能存取（公開 API）
+        // It should be able to access without any authentication (public API)
         BuiltinUser created = BuiltinUser.builder()
                 .id(1L).username("anonymous").role("ROLE_USER").enabled(true).build();
         when(builtinUserService.createUser("anonymous", "secret123")).thenReturn(created);

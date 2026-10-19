@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, '../../main/resources/static');
 
 function load() {
   const context = { window: {}, document: {}, Vue: {}, TextDecoder, setTimeout, clearTimeout };
-  // 與 index.html 相同：utils.js（createSseParser）在 sse-events.js 之前
+  // Same as index.html: utils.js (createSseParser) before sse-events.js
   vm.runInNewContext(fs.readFileSync(path.join(root, 'utils.js'), 'utf8') + '\n'
     + fs.readFileSync(path.join(root, 'sse-events.js'), 'utf8') + '\nthis.SseEvents = SseEvents;', context);
   return context.SseEvents;
@@ -100,7 +100,7 @@ test('ms/s units: opening unit, conversion both ways and the 10 minute limit', (
   assert.equal(S.delayValid(600001), false);
   assert.equal(S.delayValid(-1), false);
   assert.equal(S.delayValid(1.5), false);
-  // 切換單位時間不變：300 毫秒 → 0.3 秒 → 300 毫秒
+  // The switching unit time remains unchanged: 300 milliseconds → 0.3 seconds → 300 milliseconds
   assert.equal(S.fromUnit(String(S.toUnit(300, 's')), 's'), 300);
 });
 
@@ -127,7 +127,7 @@ test('bulk paste: JSON array, object data and validation errors with the event n
   assert.equal(S.parseBulk('[]').error.key, 'sseEditor.bulkEmpty');
   assert.equal(S.parseBulk('[{"data":').error.key, 'sseEditor.bulkJsonError');
   assert.equal(S.parseBulk('   ').error.key, 'sseEditor.bulkEmpty');
-  // 與伺服器相同：每個事件都要有資料，名稱與 ID 不可換行
+  // Same as the server: each event must have data, the name and ID cannot wrap
   assert.deepEqual(plain(S.parseBulk('[{"data":"a"},{"data":""}]').error), { key: 'sseEditor.bulkNoData', params: { index: 2 } });
   assert.equal(S.parseBulk('[{"data":"a","event":"x\\ny"}]').error.key, 'sseEditor.bulkMultiline');
 });
@@ -143,7 +143,7 @@ test('bulk paste: text/event-stream copied from a real stream', () => {
   assert.equal(S.parseBulk('\r\nevent: x\r\ndata: y\r\n\r\n').events[0].data, 'y');
   assert.equal(S.parseBulk('just some text').error.key, 'sseEditor.bulkUnreadable');
   assert.equal(S.parseBulk('data:\n\n').error.key, 'sseEditor.bulkNoData');
-  // 與伺服器相同：ID 不可含 NUL；開頭的 BOM（從檔案複製時常見）不影響解析
+  // Same as the server: ID cannot contain NUL; the beginning BOM (common when copying from files) does not affect parsing
   assert.equal(S.parseBulk('[{"data":"a","id":"x\\u0000"}]').error.key, 'sseEditor.bulkBadId');
   assert.equal(S.parseBulk('\uFEFF[{"data":"a"}]').events.length, 1);
   assert.equal(S.parseBulk('\uFEFFdata: a\n\n').events[0].data, 'a');
@@ -190,7 +190,7 @@ test('summary: count, total, loop, and where the connection ends', () => {
   assert.deepEqual(plain(S.summary([ev(300), ev(800)], true)),
     { count: 2, totalMs: 1100, endAt: 0, end: null, skipped: 0, loops: true });
   assert.equal(S.summary([ev(300)], false).loops, false);
-  // 錯誤／中止事件結束連線：開了循環也不會重播
+  // Error/Abort event ended connection: no replay even if loop is enabled
   assert.deepEqual(plain(S.summary([ev(100), ev(200, 'error'), ev(500)], true)),
     { count: 3, totalMs: 300, endAt: 2, end: 'error', skipped: 1, loops: false });
   assert.deepEqual(plain(S.summary([ev(100), ev(900, 'abort')], false)),
@@ -223,7 +223,7 @@ test('rule detail: SSE summary line in both languages, built from the loaded rul
       assert.equal(ended.end, 'Connection closes after event 2 (2 later events not sent)');
       assert.equal(aborted.end, 'Connection aborts at event 2');
     }
-    // 不是 SSE、JMS，或內容讀不到時不顯示
+    // It is not SSE, JMS, or it is not displayed when the content cannot be read.
     assert.equal(line([ev(0)], false, { sseEnabled: false }), null);
     assert.equal(computed.sse.call({ t, isHttp: false, view: { sseEnabled: true }, shownDetail: { _sseSummary: S.summary([ev(0)]) } }), null);
     assert.equal(computed.sse.call({ t, isHttp: true, view: { sseEnabled: true }, shownDetail: {} }), null);
@@ -243,7 +243,7 @@ test('responses page: SSE responses use the same event editor, without loop or i
   const editor = read('components/SseEventsEditor.js');
   assert.ok(editor.includes('<div v-if="loopable" class="form-check form-switch rule-sse-loop">'));
   assert.ok(editor.includes('<ui-button v-if="expandable" type="button"'));
-  // 規則編輯器維持原樣：預設有循環與放大
+  // The rules editor remains as is: looping and zooming in by default
   assert.ok(!read('components/RuleEditModal.js').includes(':loopable='));
 });
 
@@ -277,16 +277,16 @@ test('responses page: saving SSE with an unfinished event opens that event inste
   const badDelay = make([{ ...good, delayMs: 1.5 }]);
   await methods.requestSave.call(badDelay.self);
   assert.deepEqual(badDelay.revealed, [0]);
-  // 「整串貼上」的內容看不懂（commitPending 回 false）：不存檔
+  // Invalid bulk-paste input (commitPending returns false): do not save.
   const unreadable = make([good]);
   unreadable.self.pending = false;
   await methods.requestSave.call(unreadable.self);
   assert.deepEqual(unreadable.emitted, []);
-  // 一般文字回應不受 SSE 事件影響
+  // General text responses are not affected by the SSE event
   const text = make([{ ...good, data: '' }], 'text');
   await methods.requestSave.call(text.self);
   assert.deepEqual(text.emitted, [['save']]);
-  // 新增與刪除改同一個陣列（與規則編輯器相同）：編輯器才會展開新事件，刪除時保留搜尋。最後一個事件不能刪
+  // Add and delete the same array (same as the rule editor): the editor will expand new events, and the search will be retained when deleting. The last event cannot be deleted
   const list = [good];
   const edits = make(list);
   methods.addSseEvent.call(edits.self);
@@ -332,33 +332,33 @@ test('event editor: saving while "paste or edit all" is open applies it first, o
     self.applyBulk = methods.applyBulk.bind(self);
     return { self, emitted };
   };
-  // 沒有開著：直接可以存
+  // Not open: can be saved directly
   const idle = make('x');
   idle.self.focus = null;
   assert.equal(methods.commitPending.call(idle.self), true);
   assert.deepEqual(idle.emitted, []);
-  // 改過且看得懂：先套用再存
+  // Modified and understandable: apply first and then save
   const edited = make('[{"data":"new","delayMs":5}]');
   assert.equal(methods.commitPending.call(edited.self), true);
   assert.equal(edited.self.focus, null);
   assert.deepEqual(plain(edited.emitted), plain([['replace', [{ event: '', data: 'new', id: '', delayMs: 5, type: 'normal' }]]]));
-  // 沒改過：只是關掉，不換成新的事件物件
+  // No change: just turn it off, not replace it with a new event object
   const untouched = make('[1]', '[1]');
   assert.equal(methods.commitPending.call(untouched.self), true);
   assert.deepEqual(untouched.emitted, []);
-  // 看不懂：留在原處顯示錯誤，不存
+  // Unable to understand: error displayed when left in place, not saved
   const broken = make('[{"data":');
   assert.equal(methods.commitPending.call(broken.self), false);
   assert.equal(broken.self.focus.kind, 'bulk');
   assert.equal(broken.self.bulkError, 'sseEditor.bulkJsonError');
   assert.deepEqual(broken.emitted, []);
-  // 規則編輯器的兩個存檔按鈕也先經過 commitPending
+  // Both rule-editor save buttons also call commitPending first.
   const modal = read('components/RuleEditModal.js');
   assert.ok(modal.includes('if (sseEditor.value && !sseEditor.value.commitPending()) return;'));
   assert.ok(modal.includes('@click="requestSave(false)"') && modal.includes('@click="requestSave(true)"'));
   assert.ok(!modal.includes("@click=\"$emit('save',"));
   assert.ok(modal.includes('ref="sseEditor" class="sse-editor-wrap rule-sse-editor"'));
-  // 「整串貼上」開著時存檔按鈕可按：貼上的內容可能正好修好目前不能存的事件（新規則的空白事件）
+  // The save button can be pressed when "Full string pasting" is on: the pasted content may just fix the event that cannot be saved currently (blank event of the new rule)
   assert.equal(modal.split(':disabled="(!canSave && !sseBulkPending)||saving"').length - 1, 2);
   assert.ok(modal.includes('const sseBulkPending = Vue.computed(() => !!sseEditor.value?.bulkPending);'));
   const { computed } = context.SseEventsEditor;

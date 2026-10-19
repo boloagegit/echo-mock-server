@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-規則匹配情境完整測試
+Complete test of rule matching scenario
 
-涵蓋所有已實作功能的 E2E 驗證：
-  - 核心匹配邏輯（精確/萬用/priority/停用/fallback）
-  - 條件運算子（=, !=, *=, ~= 用於 header/body JSON/body XML）
-  - 模板渲染（Handlebars helpers）
-  - JSONPath / XPath 條件匹配
-  - SSE Server-Sent Events 串流
-  - 請求紀錄（matched / unmatched）
-  - JMS 協定匹配（需啟用 JMS）
-  - Faker 假資料 helpers（Phase 1-4）
+E2E verification covering all implemented functions:
+  - Core matching logic (accurate/wildcard/priority/disabled/fallback)
+  - Conditional operators (=, !=, *=, ~= for header/body JSON/body XML)
+  - Template rendering (Handlebars helpers)
+  - JSONPath / XPath condition matching
+  - SSE Server-Sent Events Streaming
+  - Request record (matched / unmatched)
+  - JMS protocol matching (JMS needs to be enabled)
+  - Faker fake information helpers (Phase 1-4)
   - Fault Injection（Phase 2-1: EMPTY_RESPONSE / CONNECTION_RESET）
-  - Delay Range（Phase 1-2: delayMs ~ maxDelayMs 隨機延遲）
-  - Stateful Scenarios（Phase 2-2: 狀態機匹配 + 狀態轉移）
+  - Delay Range (Phase 1-2: delayMs ~ maxDelayMs random delay)
+  - Stateful Scenarios (Phase 2-2: state machine matching + state transfer)
 
-用法：python3 scripts/test-match-scenarios.py [BASE_URL]
+Usage: python3 scripts/test-match-scenarios.py [BASE_URL]
 """
 
 import json
@@ -37,7 +37,7 @@ failed = 0
 errors = []
 
 
-# ========== 工具函式 ==========
+# ========== Tool function ==========
 
 def api(method, path, data=None, content_type="application/json"):
     url = f"{BASE_URL}{path}"
@@ -107,7 +107,7 @@ def wait_logs(timeout=12, **filters):
 
 
 def get_log_detail(log_id):
-    """取得單筆日誌詳情（含 responseBody / matchChain）"""
+    """Obtain single log details (including responseBody / matchChain)"""
     s, data = api("GET", f"/api/admin/logs/{log_id}/detail")
     return data if s == 200 and isinstance(data, dict) else {}
 
@@ -126,7 +126,7 @@ def check(name, condition, detail=""):
         errors.append(name)
 
 
-# ========== 測試開始 ==========
+# ========== Testing starts ==========
 
 print("=" * 60)
 print("  規則匹配情境完整測試")
@@ -142,11 +142,11 @@ except Exception as e:
     print(f"  ⚠ 無法連線：{e}")
     sys.exit(1)
 
-# 固定連本機未開放的 port，避免執行環境的 DNS wildcard / hijack 影響測試。
-# 規則有匹配時不會真的連線；沒有匹配時則能穩定驗證 Echo 回傳 502。
+# Fixed connection to port that is not open on this machine to avoid DNS wildcard / hijack in the execution environment from affecting the test.
+# When the rule matches, the connection will not actually occur; when there is no match, the Echo return 502 can be stably verified.
 HOST = "127.0.0.1:1"
 
-# --- 情境 1：精確條件匹配 ---
+# --- Scenario 1: Exact condition match ---
 print(f"\n{'─' * 60}")
 print("情境 1：精確條件匹配（body + query + header）")
 cleanup()
@@ -165,7 +165,7 @@ parsed = json.loads(body) if body else {}
 check("精確條件匹配 → exact-match", s == 200 and parsed.get("result") == "exact-match",
       f"status={s}, body={body[:100]}")
 
-# --- 情境 2：無條件 fallback ---
+# --- Scenario 2: Unconditional fallback ---
 print(f"\n{'─' * 60}")
 print("情境 2：無條件 fallback 匹配")
 cleanup()
@@ -180,7 +180,7 @@ parsed = json.loads(body) if body else {}
 check("條件不符 → fallback", s == 200 and parsed.get("result") == "fallback",
       f"status={s}, body={body[:100]}")
 
-# --- 情境 3：萬用 matchKey (*) ---
+# --- Scenario 3: wildcard matchKey (*) ---
 print(f"\n{'─' * 60}")
 print("情境 3：萬用 matchKey (*) fallback")
 cleanup()
@@ -192,7 +192,7 @@ parsed = json.loads(body) if body else {}
 check("任意路徑 → 萬用規則", s == 200 and parsed.get("result") == "wildcard",
       f"status={s}, body={body[:100]}")
 
-# --- 情境 4：priority 排序 ---
+# --- Scenario 4: priority Sorting ---
 print(f"\n{'─' * 60}")
 print("情境 4：優先順序（priority 大的優先）")
 cleanup()
@@ -207,7 +207,7 @@ parsed = json.loads(body) if body else {}
 check("priority=10 優先於 priority=1", s == 200 and parsed.get("result") == "high-priority",
       f"status={s}, body={body[:100]}")
 
-# --- 情境 5：停用規則跳過 ---
+# --- Scenario 5: Disable rule skip ---
 print(f"\n{'─' * 60}")
 print("情境 5：停用規則跳過")
 cleanup()
@@ -223,7 +223,7 @@ parsed = json.loads(body) if body else {}
 check("停用規則被跳過", s == 200 and parsed.get("result") == "enabled",
       f"status={s}, body={body[:100]}")
 
-# --- 情境 6：多條件 AND ---
+# --- Scenario 6: Multiple conditions AND ---
 print(f"\n{'─' * 60}")
 print("情境 6：多條件 AND（部分不符 → 不匹配）")
 cleanup()
@@ -253,7 +253,7 @@ parsed = json.loads(body) if body else {}
 check("6c: query 不符 → fallback", s == 200 and parsed.get("result") == "fallback",
       f"status={s}, body={body[:100]}")
 
-# --- 情境 7：targetHost 精確度 ---
+# --- Scenario 7: targetHost Accuracy ---
 print(f"\n{'─' * 60}")
 print("情境 7：targetHost 精確度")
 cleanup()
@@ -267,14 +267,14 @@ parsed = json.loads(body) if body else {}
 check("有 targetHost 的規則優先", s == 200 and parsed.get("result") == "with-host",
       f"status={s}, body={body[:100]}")
 
-# --- 情境 8：無匹配 → 404 ---
+# --- Scenario 8: No match → 404 ---
 print(f"\n{'─' * 60}")
 print("情境 8：無匹配 → 404")
 cleanup()
 s, body, _ = mock_req("/api/nothing", "GET", {"X-Original-Host": HOST})
 check("無規則 → 404 或 502（代理轉發失敗）", s in (404, 502), f"status={s}")
 
-# --- 情境 9：Header 條件運算子 ---
+# --- Scenario 9: Header conditional operator ---
 print(f"\n{'─' * 60}")
 print("情境 9：Header 條件運算子（=, !=, *=, ~=）")
 
@@ -321,7 +321,7 @@ check("9d: Header ~= 正則 → 匹配", s == 200 and parsed.get("op") == "regex
 s, _, _ = mock_req("/api/h-rx", "GET", {"X-Original-Host": HOST, "X-Version": "beta1"})
 check("9d-miss: Header ~= 不符 → 無匹配", s in (404, 502), f"status={s}")
 
-# --- 情境 10：Response Template ---
+# --- Scenario 10: Response Template ---
 print(f"\n{'─' * 60}")
 print("情境 10：Response Template 渲染")
 cleanup()
@@ -339,7 +339,7 @@ check("模板 request.query", p.get("q") == "Echo", f"q={p.get('q')}")
 check("模板 UUID 格式", p.get("uuid") and len(p.get("uuid", "")) == 36, f"uuid={p.get('uuid')}")
 check("模板 now 日期", p.get("date") and len(p.get("date", "")) == 10, f"date={p.get('date')}")
 
-# --- 情境 11：自訂狀態碼 + Headers ---
+# --- Scenario 11: Custom status code + Headers ---
 print(f"\n{'─' * 60}")
 print("情境 11：HTTP 回應狀態碼 + 自訂 Headers")
 cleanup()
@@ -352,7 +352,7 @@ check("回應狀態碼 201", s == 201, f"status={s}")
 check("自訂 header X-Custom", hdrs.get("X-Custom") == "hello", f"X-Custom={hdrs.get('X-Custom')}")
 check("自訂 header X-Req-Id", hdrs.get("X-Req-Id") == "t-123", f"X-Req-Id={hdrs.get('X-Req-Id')}")
 
-# --- 情境 12：延遲回應 ---
+# --- Scenario 12: Delayed response ---
 print(f"\n{'─' * 60}")
 print("情境 12：延遲回應 (delayMs)")
 cleanup()
@@ -364,7 +364,7 @@ s, body, _ = mock_req("/api/delay", "GET", {"X-Original-Host": HOST})
 elapsed = (time.time() - start) * 1000
 check("延遲回應 >= 400ms", s == 200 and elapsed >= 400, f"elapsed={elapsed:.0f}ms")
 
-# --- 情境 13：JSONPath 條件 ---
+# --- Scenario 13: JSONPath Condition ---
 print(f"\n{'─' * 60}")
 print("情境 13：JSONPath 條件匹配")
 cleanup()
@@ -384,7 +384,7 @@ s, body, _ = mock_req("/api/jp", "POST", {"X-Original-Host": HOST},
 parsed = json.loads(body) if body else {}
 check("13b: JSONPath type 不符 → fallback", s == 200 and parsed.get("result") == "fallback", f"body={body[:100]}")
 
-# --- 情境 14：XPath 條件 ---
+# --- Scenario 14: XPath Conditions ---
 print(f"\n{'─' * 60}")
 print("情境 14：XML / XPath 條件匹配 (HTTP)")
 cleanup()
@@ -418,7 +418,7 @@ except urllib.error.HTTPError as e:
     s2, body2 = e.code, e.read().decode() if e.fp else ""
 check("14b: XPath 不符 → fallback", s2 == 200 and "fallback" in body2, f"status={s2}, body={body2[:100]}")
 
-# --- 情境 15：精確路徑優先於萬用 ---
+# --- Scenario 15: Exact path takes precedence over wildcard ----
 print(f"\n{'─' * 60}")
 print("情境 15：精確路徑優先於萬用路徑")
 cleanup()
@@ -432,7 +432,7 @@ s, body, _ = mock_req("/api/exact", "GET", {"X-Original-Host": HOST})
 parsed = json.loads(body) if body else {}
 check("精確路徑優先於萬用 *", s == 200 and parsed.get("result") == "exact", f"body={body[:100]}")
 
-# --- 情境 16：請求紀錄驗證 ---
+# --- Scenario 16: Request record verification ---
 print(f"\n{'─' * 60}")
 print("情境 16：請求紀錄驗證")
 cleanup()
@@ -455,7 +455,7 @@ if results:
 else:
     check("日誌寫入", False, "超時未取得日誌")
 
-# --- 情境 17：未匹配請求紀錄 ---
+# --- Scenario 17: Unmatched request record ---
 print(f"\n{'─' * 60}")
 print("情境 17：未匹配請求紀錄")
 cleanup()
@@ -469,7 +469,7 @@ if results:
 else:
     check("未匹配日誌寫入", False, "超時未取得日誌")
 
-# --- JMS 情境 ---
+# --- JMS Situation ---
 if jms_enabled:
     JMS_Q = "ECHO.REQUEST"
 
@@ -516,7 +516,7 @@ else:
     print(f"\n{'─' * 60}")
     print("⚠ JMS 未啟用，跳過情境 18-20")
 
-# --- 情境 21：路徑萬用 /api/* ---
+# --- Scenario 21: Path wildcard /api/* ---
 print(f"\n{'─' * 60}")
 print("情境 21：路徑萬用匹配 (/api/*)")
 cleanup()
@@ -528,7 +528,7 @@ parsed = json.loads(body) if body else {}
 check("/api/* 匹配 /api/users/123", s == 200 and parsed.get("result") == "path-wc",
       f"status={s}, body={body[:100]}")
 
-# --- 情境 22：method 為空 → 匹配所有 ---
+# --- Scenario 22: method is empty → match all ---
 print(f"\n{'─' * 60}")
 print("情境 22：method 為空 → 匹配所有 method")
 cleanup()
@@ -540,7 +540,7 @@ for m in ["GET", "POST", "PUT", "DELETE"]:
     parsed = json.loads(body) if body else {}
     check(f"method 為空 → {m} 匹配", s == 200 and parsed.get("result") == "any-m", f"status={s}")
 
-# --- 情境 23：XML field 匹配（無 // 前綴）---
+# --- Scenario 23: XML field matches (no // prefix) ---
 print(f"\n{'─' * 60}")
 print("情境 23：XML field 匹配（無 // 前綴，走 getElementsByTagName）")
 cleanup()
@@ -567,7 +567,7 @@ check("23a: XML field 無// 匹配", s == 200 and "xml-field-match" in body, f"s
 s, body = xml_req("/api/xml-field", "<Req><OrderType>NORMAL</OrderType><Channel>WEB</Channel></Req>")
 check("23b: XML field 無// 不符 → fallback", s == 200 and "fallback" in body, f"status={s}, body={body[:80]}")
 
-# --- 情境 24：XPath 多層路徑 ---
+# --- Scenario 24: XPath Multilayer Path ---
 print(f"\n{'─' * 60}")
 print("情境 24：XPath 多層路徑（//Header/ServiceName）")
 cleanup()
@@ -585,7 +585,7 @@ s, body = xml_req("/api/xp-nested",
     "<Req><Header><ServiceName>OtherService</ServiceName></Header></Req>")
 check("24b: XPath 多層不符 → fallback", s == 200 and "fallback" in body, f"status={s}, body={body[:80]}")
 
-# --- 情境 25：Body 運算子 != / *= / ~=（JSON）---
+# --- Scenario 25: Body operator != / *= / ~= (JSON) ---
 print(f"\n{'─' * 60}")
 print("情境 25：Body 運算子（JSON）")
 
@@ -622,7 +622,7 @@ check("25c: Body ~= 正則 → 匹配", s == 200 and parsed.get("op") == "regex"
 s, _, _ = mock_req("/api/b-rx", "POST", {"X-Original-Host": HOST}, {"orderId": "INV-1234"})
 check("25c-miss: Body ~= 不符 → 無匹配", s in (404, 502), f"status={s}")
 
-# --- 情境 26：Body 運算子（XML XPath）---
+# --- Scenario 26: Body operator (XML XPath) ---
 print(f"\n{'─' * 60}")
 print("情境 26：Body 運算子（XML XPath != / *= / ~=）")
 
@@ -652,7 +652,7 @@ create_rule({"protocol": "HTTP", "matchKey": "/api/xp-rx", "method": "POST",
 s, body = xml_req("/api/xp-rx", "<Req><OrderId>ORD-5678</OrderId></Req>")
 check("26c: XPath ~= 正則 → 匹配", s == 200 and "xp-rx" in body, f"status={s}, body={body[:80]}")
 
-# --- 情境 27：JSON nested field ---
+# --- Scenario 27: JSON nested field ---
 print(f"\n{'─' * 60}")
 print("情境 27：JSON nested field（user.name=value）")
 cleanup()
@@ -673,7 +673,7 @@ parsed = json.loads(body) if body else {}
 check("27b: nested role 不符 → fallback", s == 200 and parsed.get("result") == "fallback",
       f"body={body[:100]}")
 
-# --- 情境 28：JSON array index ---
+# --- Scenario 28: JSON array index ---
 print(f"\n{'─' * 60}")
 print("情境 28：JSON array index（items[0].sku=value）")
 cleanup()
@@ -694,11 +694,11 @@ parsed = json.loads(body) if body else {}
 check("28b: items[0].sku 不符 → fallback", s == 200 and parsed.get("result") == "fallback",
       f"body={body[:100]}")
 
-# --- JMS 補充情境 ---
+# --- JMS Supplementary situation ---
 if jms_enabled:
     JMS_Q = "ECHO.REQUEST"
 
-    # --- 情境 29：JMS XML field 匹配（無 //）---
+    # --- Scenario 29: JMS XML field Match (none //) ---
     print(f"\n{'─' * 60}")
     print("情境 29：JMS XML field 匹配（無 // 前綴）")
     cleanup()
@@ -733,7 +733,7 @@ if jms_enabled:
     else:
         check("29b: JMS XML field 不符 → fallback", False, "超時")
 
-    # --- 情境 30：JMS body 運算子 ---
+    # --- Scenario 30: JMS body operator ---
     print(f"\n{'─' * 60}")
     print("情境 30：JMS body 運算子（!= / *= / ~=）")
     cleanup()
@@ -774,7 +774,7 @@ else:
     print(f"\n{'─' * 60}")
     print("⚠ JMS 未啟用，跳過情境 29-30")
 
-# --- 情境 31：同 priority 多條件規則都匹配 → 取 createdAt 較新 ---
+# --- Scenario 31: Same as priority. Multiple condition rules match → Take createdAt which is newer ---
 print(f"\n{'─' * 60}")
 print("情境 31：同 priority 多條件規則都匹配 → 取 createdAt 較新")
 cleanup()
@@ -792,8 +792,8 @@ parsed = json.loads(body) if body else {}
 check("同 priority 同條件 → 取較新規則", s == 200 and parsed.get("result") == "newer",
       f"status={s}, body={body[:100]}")
 
-# --- 情境 32：帶條件的星號規則 vs 精確路徑無條件規則 ---
-# 設計：有條件且匹配 > 無條件（不論 matchKey 精確度）
+# --- Scenario 32: Conditional Star Rule vs Exact Path Unconditional Rule ---
+# Design: Conditional and matching > Unconditional (regardless of matchKey accuracy)
 print(f"\n{'─' * 60}")
 print("情境 32：帶條件的星號規則（條件符合）優先於精確路徑無條件規則")
 cleanup()
@@ -808,7 +808,7 @@ parsed = json.loads(body) if body else {}
 check("32a: 萬用帶條件（符合）優先於精確無條件", s == 200 and parsed.get("result") == "wildcard-cond",
       f"status={s}, body={body[:100]}")
 
-# 條件不符時，應 fallback 到精確路徑無條件規則
+# When the conditions do not match, you should fallback to the exact path unconditional rule
 s, body, _ = mock_req("/api/wc-vs-exact", "POST", {"X-Original-Host": HOST}, {"type": "OTHER"})
 parsed = json.loads(body) if body else {}
 check("32b: 萬用帶條件（不符）→ fallback 精確無條件", s == 200 and parsed.get("result") == "exact-no-cond",
@@ -817,7 +817,7 @@ check("32b: 萬用帶條件（不符）→ fallback 精確無條件", s == 200 a
 if jms_enabled:
     JMS_Q = "ECHO.REQUEST"
 
-    # --- 情境 33：JMS 精確 queue 無條件 vs 萬用 queue 無條件 ---
+    # --- Scenario 33: JMS precise queue unconditional vs wildcard queue unconditional ---
     print(f"\n{'─' * 60}")
     print("情境 33：JMS 精確 queue 無條件 vs 萬用 queue 無條件")
     cleanup()
@@ -837,7 +837,7 @@ if jms_enabled:
     else:
         check("JMS 精確 queue 無條件優先於萬用", False, "超時")
 
-    # --- 情境 34：JMS 帶條件的萬用 queue vs 精確 queue 帶條件 ---
+    # --- Scenario 34: JMS wildcard with condition queue vs Exact queue with condition ---
     print(f"\n{'─' * 60}")
     print("情境 34：JMS 帶條件的萬用 queue vs 精確 queue 帶條件")
     cleanup()
@@ -859,7 +859,7 @@ if jms_enabled:
     else:
         check("JMS 精確 queue 帶條件優先於萬用帶條件", False, "超時")
 
-    # --- 情境 35：JMS priority 排序 ---
+    # --- Scenario 35: JMS priority Sort ---
     print(f"\n{'─' * 60}")
     print("情境 35：JMS priority 排序（大的優先）")
     cleanup()
@@ -884,12 +884,12 @@ else:
     print(f"\n{'─' * 60}")
     print("⚠ JMS 未啟用，跳過情境 33-35")
 
-# ========== SSE 情境 ==========
+# ========== SSE Situation ==========
 
 def sse_req(path, headers=None, timeout=10):
     """
-    發送 SSE 請求，讀取完整回應（直到連線關閉）。
-    回傳 (status, events, raw_body, response_headers)
+    Send SSE request, read full response (until connection is closed).
+    Return (status, events, raw_body, response_headers)
     events = [{"event": ..., "data": ..., "id": ...}, ...]
     """
     import http.client
@@ -926,7 +926,7 @@ def sse_req(path, headers=None, timeout=10):
     return status, events, raw, resp_headers
 
 
-# --- 情境 36：基本 SSE 串流 ---
+# --- Scenario 36: Basic SSE Streaming ---
 print(f"\n{'─' * 60}")
 print("情境 36：基本 SSE 串流（3 個 normal 事件）")
 cleanup()
@@ -948,7 +948,7 @@ check("36d: 第 1 個事件 data=event1", events[0]["data"] == "event1" if event
 check("36e: 第 3 個事件 data=event3", len(events) >= 3 and events[2]["data"] == "event3",
       f"data={events[2]['data'] if len(events) >= 3 else 'N/A'}")
 
-# --- 情境 37：SSE 事件含 event name 與 id ---
+# --- Scenario 37: SSE event contains event name and id ---
 print(f"\n{'─' * 60}")
 print("情境 37：SSE 事件含 event name 與 id")
 cleanup()
@@ -968,7 +968,7 @@ else:
     for label in ["37b", "37c", "37d"]:
         check(f"{label}: 無事件", False, "events 為空")
 
-# --- 情境 38：SSE 事件延遲 ---
+# --- Scenario 38: SSE event delayed ---
 print(f"\n{'─' * 60}")
 print("情境 38：SSE 事件延遲（delayMs）")
 cleanup()
@@ -985,7 +985,7 @@ elapsed = (time.time() - start) * 1000
 check("38a: 收到 2 個事件", s == 200 and len(events) == 2, f"status={s}, events={len(events)}")
 check("38b: 總耗時 >= 400ms", elapsed >= 400, f"elapsed={elapsed:.0f}ms")
 
-# --- 情境 39：SSE error 事件 ---
+# --- Scenario 39: SSE error Event ---
 print(f"\n{'─' * 60}")
 print("情境 39：SSE error 事件（收到 error 後連線關閉）")
 cleanup()
@@ -1008,7 +1008,7 @@ if len(events) >= 2:
     check("39e: error 後無更多事件（after-error 不出現）",
           all(e["data"] != "after-error-should-not-appear" for e in events))
 
-# --- 情境 40：SSE abort 事件 ---
+# --- Scenario 40: SSE abort Event ---
 print(f"\n{'─' * 60}")
 print("情境 40：SSE abort 事件（連線中斷）")
 cleanup()
@@ -1027,7 +1027,7 @@ check("40b: abort 後不再發送事件", len(events) <= 1,
 if events:
     check("40c: 第 1 個事件 data=before-abort", events[0]["data"] == "before-abort")
 
-# --- 情境 41：非 SSE 規則的 SSE 請求 fallback ---
+# --- Scenario 41: SSE request fallback for non-SSE rule ---
 print(f"\n{'─' * 60}")
 print("情境 41：非 SSE 規則的 SSE 請求 → fallback 到一般回應")
 cleanup()
@@ -1039,14 +1039,14 @@ check("41a: 狀態碼 200", s == 200, f"status={s}")
 check("41b: 回應為一般 JSON（非 SSE 事件格式）", '{"fallback":true}' in raw,
       f"raw={raw[:100]}")
 
-# --- 情境 42：SSE 無匹配規則 → 404 ---
+# --- Scenario 42: No matching rule for SSE → 404 ---
 print(f"\n{'─' * 60}")
 print("情境 42：SSE 無匹配規則 → 404")
 cleanup()
 s, events, raw, _ = sse_req("/api/sse/nonexistent", {"X-Original-Host": HOST})
 check("42: SSE 無匹配 → 404", s == 404, f"status={s}")
 
-# --- 情境 43：SSE 模板渲染 ---
+# --- Scenario 43: SSE template rendering ---
 print(f"\n{'─' * 60}")
 print("情境 43：SSE 模板渲染（事件 data 含 Handlebars 模板）")
 cleanup()
@@ -1070,7 +1070,7 @@ if len(events) >= 3:
     check("43d: UUID 格式正確（36 字元）", len(uuid_val) == 36,
           f"uuid={uuid_val}")
 
-# --- 情境 44：SSE 規則搭配條件匹配 ---
+# --- Scenario 44: SSE rule matching condition ---
 print(f"\n{'─' * 60}")
 print("情境 44：SSE 規則搭配條件匹配（bodyCondition 不適用 GET，用 header 條件）")
 cleanup()
@@ -1093,7 +1093,7 @@ check("44b: header 條件不符 → sse-fallback",
       s == 200 and len(events) == 1 and events[0]["data"] == "sse-fallback",
       f"status={s}, data={events[0]['data'] if events else 'N/A'}")
 
-# --- 情境 45：SSE 規則搭配 query 條件 ---
+# --- Scenario 45: SSE rule with query condition ---
 print(f"\n{'─' * 60}")
 print("情境 45：SSE 規則搭配 query 條件")
 cleanup()
@@ -1151,7 +1151,7 @@ check("45b: query 條件不符 → sse-query-fb",
       s == 200 and len(events) == 1 and events[0]["data"] == "sse-query-fb",
       f"status={s}, data={events[0]['data'] if events else 'N/A'}")
 
-# --- 情境 46：SSE 規則 priority 排序 ---
+# --- Scenario 46: SSE Rule priority Sort ---
 print(f"\n{'─' * 60}")
 print("情境 46：SSE 規則 priority 排序（大的優先）")
 cleanup()
@@ -1170,7 +1170,7 @@ check("46: SSE priority=10 優先於 priority=1",
       s == 200 and len(events) == 1 and events[0]["data"] == "sse-high-pri",
       f"status={s}, data={events[0]['data'] if events else 'N/A'}")
 
-# --- 情境 47：SSE 多事件含混合 type ---
+# --- Scenario 47: SSE Multiple events with mixed type ---
 print(f"\n{'─' * 60}")
 print("情境 47：SSE 多事件含混合 type（normal + 自訂 event name）")
 cleanup()
@@ -1191,7 +1191,7 @@ if len(events) >= 4:
     check("47d: 第 3 個 event=update, id=2", events[2]["event"] == "update" and events[2]["id"] == "2")
     check("47e: 第 4 個 event=complete", events[3]["event"] == "complete")
 
-# --- 情境 48：SSE 請求紀錄驗證 ---
+# --- Scenario 48: SSE request record verification ---
 print(f"\n{'─' * 60}")
 print("情境 48：SSE 請求紀錄驗證")
 cleanup()
@@ -1211,9 +1211,9 @@ if results:
 else:
     check("48: SSE 日誌寫入", False, "超時未取得日誌")
 
-# ========== Phase 1-4: Faker 假資料 helpers ==========
+# ========== Phase 1-4: Faker Fake information helpers ==========
 
-# --- 情境 49：Faker 假資料 helpers ---
+# --- Scenario 49: Faker Fake information helpers ---
 print(f"\n{'─' * 60}")
 print("情境 49：Faker 假資料 helpers（模板渲染）")
 cleanup()
@@ -1257,21 +1257,21 @@ check("49h: randomStreetAddress 含數字", any(c.isdigit() for c in p.get("addr
 check("49i: randomInt 在 1~999 範圍", p.get("score", "").isdigit() and 1 <= int(p.get("score", "0")) <= 999,
       f"score={p.get('score')}")
 
-# 驗證每次呼叫產生不同值（隨機性）
+# Verify that each call produces a different value (randomness)
 s2, body2, _ = mock_req("/api/faker", "GET", {"X-Original-Host": HOST})
 p2 = {}
 try:
     p2 = json.loads(body2) if body2 else {}
 except:
     pass
-# 至少有一個欄位不同（極低機率全部相同）
+# At least one field is different (very low chance that they are all the same)
 any_diff = any(p.get(k) != p2.get(k) for k in ["firstName", "lastName", "email", "phone", "score"])
 check("49j: 兩次呼叫至少有一個欄位不同（隨機性）", any_diff,
       f"first={p.get('firstName')}/{p2.get('firstName')}")
 
 # ========== Phase 2-1: Fault Injection ==========
 
-# --- 情境 50：Fault Injection — EMPTY_RESPONSE ---
+# --- Scenario 50: Fault Injection — EMPTY_RESPONSE ---
 print(f"\n{'─' * 60}")
 print("情境 50：Fault Injection — EMPTY_RESPONSE（回傳空 body）")
 cleanup()
@@ -1283,7 +1283,7 @@ s, body, _ = mock_req("/api/fault-empty", "GET", {"X-Original-Host": HOST})
 check("50a: EMPTY_RESPONSE 狀態碼 200", s == 200, f"status={s}")
 check("50b: EMPTY_RESPONSE body 為空", body.strip() == "", f"body={body[:100]}")
 
-# --- 情境 51：Fault Injection — CONNECTION_RESET ---
+# --- Scenario 51: Fault Injection — CONNECTION_RESET ---
 print(f"\n{'─' * 60}")
 print("情境 51：Fault Injection — CONNECTION_RESET（連線重置）")
 cleanup()
@@ -1300,21 +1300,21 @@ try:
     conn.request("GET", parsed_url.path, headers={"X-Original-Host": HOST})
     resp = conn.getresponse()
     resp_body = resp.read().decode()
-    # 如果能讀到回應，body 應該是空的（Undertow 關閉 outputStream 後可能回傳空 200）
+    # If the response can be read, body should be empty (Undertow may return empty 200 after closing outputStream)
     conn_reset = (resp_body.strip() == "")
     conn.close()
 except (ConnectionResetError, http.client.RemoteDisconnected, BrokenPipeError, OSError):
     conn_reset = True
 except Exception as ex:
-    # 其他連線異常也算 reset 成功
+    # Other connection abnormalities are also considered successful reset
     conn_reset = "connect" in str(ex).lower() or "reset" in str(ex).lower() or "closed" in str(ex).lower()
     if not conn_reset:
-        conn_reset = True  # 任何異常都表示連線被中斷
+        conn_reset = True  # Any exception indicates that the connection has been interrupted
 check("51: CONNECTION_RESET 連線中斷或空回應", conn_reset, "連線未被重置")
 
 # ========== Phase 1-2: Delay Range ==========
 
-# --- 情境 52：Delay Range（隨機延遲範圍）---
+# --- Scenario 52: Delay Range (random delay range) ---
 print(f"\n{'─' * 60}")
 print("情境 52：Delay Range（delayMs=200, maxDelayMs=800）")
 cleanup()
@@ -1336,7 +1336,7 @@ check("52b: 延遲 >= 150ms（含容差）", all(d >= 150 for d in delay_times),
       f"delays={[f'{d:.0f}' for d in delay_times]}")
 check("52c: 延遲 <= 1200ms（含容差）", all(d <= 1200 for d in delay_times),
       f"delays={[f'{d:.0f}' for d in delay_times]}")
-# 檢查是否有變異（非固定值），至少有 50ms 的差異
+# Check if there is a variation (non-fixed value), at least 50ms difference
 if len(delay_times) >= 2:
     spread = max(delay_times) - min(delay_times)
     check("52d: 延遲有變異（非固定值，spread > 30ms）", spread > 30,
@@ -1346,91 +1346,91 @@ else:
 
 # ========== Phase 2-2: Stateful Scenarios ==========
 
-# --- 情境 53：基本狀態機（Started → Paid）---
+# --- Scenario 53: Basic state machine (Started → Paid) ---
 print(f"\n{'─' * 60}")
 print("情境 53：Stateful Scenarios — 基本狀態機")
 cleanup()
-# 重置 scenario
+# Reset scenario
 api("PUT", "/api/admin/scenarios/e2e-order-flow/reset")
 
-# 規則 A：Started 狀態下 GET /order → pending，狀態不變
+# Rule A: GET /order → pending in Started state, the state remains unchanged
 create_rule({"protocol": "HTTP", "matchKey": "/api/order", "method": "GET",
     "targetHost": HOST, "responseBody": '{"status":"pending"}', "status": 200,
     "scenarioName": "e2e-order-flow", "requiredScenarioState": "Started", "newScenarioState": "Started",
     "priority": 10, "description": "Scenario: 查詢(待付款)", "sseEnabled": False})
-# 規則 B：Started 狀態下 POST /order/pay → 付款成功，狀態 → Paid
+# Rule B: Started in status POST /order/pay → payment successful, status → Paid
 create_rule({"protocol": "HTTP", "matchKey": "/api/order/pay", "method": "POST",
     "targetHost": HOST, "responseBody": '{"result":"payment-ok"}', "status": 200,
     "scenarioName": "e2e-order-flow", "requiredScenarioState": "Started", "newScenarioState": "Paid",
     "priority": 10, "description": "Scenario: 付款", "sseEnabled": False})
-# 規則 C：Paid 狀態下 GET /order → paid
+# Rule C: In Paid state GET /order → paid
 create_rule({"protocol": "HTTP", "matchKey": "/api/order", "method": "GET",
     "targetHost": HOST, "responseBody": '{"status":"paid"}', "status": 200,
     "scenarioName": "e2e-order-flow", "requiredScenarioState": "Paid", "newScenarioState": "Paid",
     "priority": 10, "description": "Scenario: 查詢(已付款)", "sseEnabled": False})
 
-# Step 1: 初始狀態 Started → GET /order → pending
+# Step 1: Initial state Started → GET /order → pending
 s, body, _ = mock_req("/api/order", "GET", {"X-Original-Host": HOST})
 p = json.loads(body) if body else {}
 check("53a: Started 狀態 GET → pending", s == 200 and p.get("status") == "pending",
       f"status={s}, body={body[:100]}")
 
-# Step 2: POST /order/pay → 付款成功，狀態轉為 Paid
+# Step 2: POST /order/pay → Payment successful, status changed to Paid
 s, body, _ = mock_req("/api/order/pay", "POST", {"X-Original-Host": HOST}, {"amount": 100})
 p = json.loads(body) if body else {}
 check("53b: Started 狀態 POST pay → payment-ok", s == 200 and p.get("result") == "payment-ok",
       f"status={s}, body={body[:100]}")
 
-# Step 3: 狀態已變為 Paid → GET /order → paid
+# Step 3: The status has changed to Paid → GET /order → paid
 s, body, _ = mock_req("/api/order", "GET", {"X-Original-Host": HOST})
 p = json.loads(body) if body else {}
 check("53c: Paid 狀態 GET → paid", s == 200 and p.get("status") == "paid",
       f"status={s}, body={body[:100]}")
 
-# Step 4: Paid 狀態下再次 POST /order/pay → 不匹配（requiredState=Started 不符）
+# Step 4: POST /order/pay → does not match again in Paid state (requiredState=Started does not match)
 s, body, _ = mock_req("/api/order/pay", "POST", {"X-Original-Host": HOST}, {"amount": 100})
 check("53d: Paid 狀態 POST pay → 不匹配（狀態不符）", s in (404, 502),
       f"status={s}")
 
-# --- 情境 54：Scenario Reset API ---
+# --- Scenario 54: Scenario Reset API ---
 print(f"\n{'─' * 60}")
 print("情境 54：Scenario Reset API（重置狀態後回到 Started）")
-# 目前狀態是 Paid（從情境 53 延續），重置後應回到 Started
+# The current state is Paid (continued from situation 53), it should return to Started after reset
 api("PUT", "/api/admin/scenarios/e2e-order-flow/reset")
 s, body, _ = mock_req("/api/order", "GET", {"X-Original-Host": HOST})
 p = json.loads(body) if body else {}
 check("54: Reset 後 GET → pending（回到 Started）", s == 200 and p.get("status") == "pending",
       f"status={s}, body={body[:100]}")
 
-# --- 情境 55：Scenario 無 requiredState 的規則（純狀態轉移）---
+# --- Scenario 55: Scenario has no rules for requiredState (pure state transfer) ---
 print(f"\n{'─' * 60}")
 print("情境 55：Scenario 無 requiredScenarioState（只設 newScenarioState）")
 cleanup()
 api("PUT", "/api/admin/scenarios/e2e-simple/reset")
-# 規則：任何狀態都匹配，匹配後將狀態設為 Done
+# Rule: Any status is matched. After matching, the status is set to Done
 create_rule({"protocol": "HTTP", "matchKey": "/api/scenario-simple", "method": "POST",
     "targetHost": HOST, "responseBody": '{"result":"triggered"}', "status": 200,
     "scenarioName": "e2e-simple", "newScenarioState": "Done",
     "priority": 5, "description": "Scenario: 無前置狀態", "sseEnabled": False})
-# 規則：Done 狀態才匹配
+# Rule: Match only if the status is Done
 create_rule({"protocol": "HTTP", "matchKey": "/api/scenario-simple/check", "method": "GET",
     "targetHost": HOST, "responseBody": '{"state":"done"}', "status": 200,
     "scenarioName": "e2e-simple", "requiredScenarioState": "Done", "newScenarioState": "Done",
     "priority": 5, "description": "Scenario: Done 狀態", "sseEnabled": False})
 
-# Step 1: POST → 觸發狀態轉移到 Done
+# Step 1: POST → The trigger state is transferred to Done
 s, body, _ = mock_req("/api/scenario-simple", "POST", {"X-Original-Host": HOST}, {"action": "go"})
 p = json.loads(body) if body else {}
 check("55a: 無前置狀態規則匹配", s == 200 and p.get("result") == "triggered",
       f"status={s}, body={body[:100]}")
 
-# Step 2: GET /check → Done 狀態匹配
+# Step 2: GET /check → Done status matching
 s, body, _ = mock_req("/api/scenario-simple/check", "GET", {"X-Original-Host": HOST})
 p = json.loads(body) if body else {}
 check("55b: 狀態已轉為 Done → 匹配", s == 200 and p.get("state") == "done",
       f"status={s}, body={body[:100]}")
 
-# ========== 總結 ==========
+# ========== Summary ==========
 print()
 print("=" * 60)
 total = passed + failed

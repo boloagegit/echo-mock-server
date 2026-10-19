@@ -20,12 +20,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 /**
- * 匹配鏈分析屬性測試（Property 13, 14, 15, 16, 17）。
+ * Match chain analysis property test (Property 13, 14, 15, 16, 17).
  * <p>
  * Feature: agent-framework-log-agent
  * <p>
- * 直接建構 LogAgent（analysisEnabled=true），使用真實 ConditionMatcher，
- * 呼叫 package-private analyzeMatchChain(task) 驗證分析結果。
+ * Directly construct LogAgent (analysisEnabled=true), using the real ConditionMatcher,
+ * Call package-private analyzeMatchChain(task) to verify the analysis results.
  */
 class MatchChainAnalysisPropertyTest {
 
@@ -36,7 +36,7 @@ class MatchChainAnalysisPropertyTest {
     // ==================== Helpers ====================
 
     /**
-     * 建立 LogAgent（analysisEnabled=true），使用真實 ConditionMatcher。
+     * Create LogAgent (analysisEnabled=true), use real ConditionMatcher.
      */
     private LogAgent createAnalysisAgent() {
         return new LogAgent(
@@ -52,7 +52,7 @@ class MatchChainAnalysisPropertyTest {
     }
 
     /**
-     * 建立 PreparedBody（JSON 格式）。
+     * Create PreparedBody (JSON format).
      */
     private ConditionMatcher.PreparedBody prepareJsonBody(String json) {
         return new ConditionMatcher().prepareBody(json);
@@ -63,10 +63,10 @@ class MatchChainAnalysisPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 13: Near-miss detection
      * <p>
-     * 部分條件通過時 reason="near-miss"，nearMiss=true，score 格式 "X/Y"
-     * 其中 X = passedCount, Y = totalCount, 0 < X < Y。
+     * When some conditions are passed, reason="near-miss", nearMiss=true, score format "X/Y"
+     * Where X = passedCount, Y = totalCount, 0 < X < Y.
      * <p>
-     * 策略：建立一個候選規則有 2 個 body 條件，其中只有 1 個匹配。
+     * Policy: Creating a candidate rule has 2 body conditions, only 1 of which matches.
      * <p>
      * **Validates: Requirements 8.1, 8.2, 8.3, 8.4**
      */
@@ -134,10 +134,10 @@ class MatchChainAnalysisPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 14: Shadowed rule detection
      * <p>
-     * 全部條件通過但非匹配規則時 reason="shadowed"。
+     * When all conditions are passed but the rule is not matched, reason="shadowed".
      * <p>
-     * 策略：建立 2 個候選規則，都匹配所有條件，但 ruleId 設為第一個。
-     * 第二個候選規則應被標記為 shadowed。
+     * Policy: Create 2 candidate rules, both matching all conditions, but ruleId set to first.
+     * The second candidate rule should be marked shadowed.
      * <p>
      * **Validates: Requirements 9.1, 9.2, 9.3**
      */
@@ -209,7 +209,7 @@ class MatchChainAnalysisPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 15: Disabled rule skipped in analysis
      * <p>
-     * enabled=false 時 reason="skipped"。
+     * reason="skipped" when enabled=false.
      * <p>
      * **Validates: Requirements 10.3**
      */
@@ -261,9 +261,9 @@ class MatchChainAnalysisPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 16: Match chain JSON structure and valid reason values
      * <p>
-     * JSON 包含 ruleId, endpoint, reason；reason 為合法值。
+     * JSON contains ruleId, endpoint, reason; reason is a legal value.
      * <p>
-     * 策略：建立混合場景（match + near-miss + skipped），驗證每個 entry 的結構。
+     * Strategy: Build a hybrid scenario (match + near-miss + skipped) and verify the structure of each entry.
      * <p>
      * **Validates: Requirements 10.1, 10.2**
      */
@@ -352,7 +352,7 @@ class MatchChainAnalysisPropertyTest {
     /**
      * Feature: agent-framework-log-agent, Property 17: Match chain JSON round-trip
      * <p>
-     * 序列化再反序列化後物件等價。
+     * Objects are equivalent after serialization and deserialization.
      * <p>
      * **Validates: Requirements 10.4**
      */

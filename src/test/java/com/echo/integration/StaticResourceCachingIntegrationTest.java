@@ -16,8 +16,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 靜態資源快取：瀏覽器可保留 CSS／JS／字型，但每次驗證（未變更回 304），
- * 讓重新整理不必重新下載；index.html 則永遠取最新版。
+ * Static resource cache: The browser can retain CSS/JS/font, but it will be verified every time (not changed back to 304),
+ * No need to re-download when reorganizing; index.html will always use the latest version.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

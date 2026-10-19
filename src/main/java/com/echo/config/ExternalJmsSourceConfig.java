@@ -12,14 +12,14 @@ import org.springframework.jms.connection.CachingConnectionFactory;
 import java.util.List;
 
 /**
- * 從外部 broker（例如公司 ESB 上的 TIBCO EMS 或 Artemis）接收 JMS 請求。
+ * Receive JMS requests from an external broker, such as TIBCO EMS or an Artemis broker on the company ESB.
  *
- * <p>多台 Echo 監聽 broker 上同一個 queue（{@code echo.jms.queue}）時，broker 會把每則訊息只交給其中一台，
- * 達到分擔量與備援；回覆送到訊息的 JMSReplyTo，也在同一個 broker 上。
- * 此時不啟動內建 Artemis，也不開啟 {@code echo.jms.port}。</p>
+ * <p>When multiple Echo instances listen on the same broker queue ({@code echo.jms.queue}), the broker delivers each message to just one instance,
+ * providing shared capacity and failover. The message's JMSReplyTo destination resides on the same broker.
+ * Neither embedded Artemis nor {@code echo.jms.port} is started in this mode.</p>
  *
- * <p>連線與內建模式一樣包一層 {@link CachingConnectionFactory}（Spring Boot 內建模式的預設），
- * 讓回覆與測試發送重用同一條連線；連線中斷時由它與 listener container 重新建立。</p>
+ * <p>Wrap the connection in {@link CachingConnectionFactory}, as Spring Boot does by default in embedded mode,
+ * so replies and test sends reuse the connection. Recover it with the listener container after a disconnect.</p>
  */
 @Configuration
 @ConditionalOnProperty(name = "echo.jms.enabled", havingValue = "true")

@@ -1,15 +1,15 @@
 /**
- * MatchExplainTree - 匹配鏈中一條規則的條件樹（後端 MatchExplanationJson 產生的 detailTree）。
+ * MatchExplainTree - Condition tree matching a rule in the chain (detailTree produced by backend MatchExplanationJson).
  *
- * 每個群組與條件標示是否通過、條件旁列出實際取到的值。沒過的群組預設展開、已通過的群組收起；
- * 造成整條規則沒過的條件以紅色標示「卡在這裡」。NOT 底下的條件以「對整體是否有幫助」著色。
+ * Each group and condition indicate whether it passed or not, and the actual value obtained is listed next to the condition. Groups that failed will be expanded by default, and groups that have passed will be collapsed by default;
+ * Conditions that cause the entire rule to fail are marked "Stuck here" in red. The conditions below NOT are colored by "Whether it is helpful to the overall situation".
  */
 const MatchExplainNode = {
   name: 'match-explain-node',
   props: {
     node: { type: Object, required: true },
     negated: { type: Boolean, default: false },
-    // 這個節點的所有上層都沒過（它沒過就是整條規則沒過的原因之一）
+    // All upper layers of this node have failed (its failure is one of the reasons why the entire rule has failed)
     failPath: { type: Boolean, default: false }
   },
   inject: ['t'],
@@ -35,7 +35,7 @@ const MatchExplainNode = {
       if (this.node.missing) { return this.t('stats.matchTree.missing'); }
       if (this.node.unavailable) { return this.t('stats.matchTree.unavailable'); }
       let value = this.node.actual ?? '';
-      // 結構化條件的單一值帶引號（多個值為清單），與舊格式條件一致改為不帶引號
+      // The single value of the structured condition is quoted (multiple values are a list), which is consistent with the old format condition and changed to unquoted.
       if (this.node.node === 'leaf' && value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
         value = value.slice(1, -1);
       }

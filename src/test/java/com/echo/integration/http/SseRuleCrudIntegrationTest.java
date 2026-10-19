@@ -15,19 +15,19 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * HTTP SSE 規則 CRUD 整合測試
+ * HTTP SSE Rule CRUD Integration Test
  * <p>
- * 測試 SSE 規則的建立、更新、body 驗證，以及非 SSE 規則不觸發 SSE 驗證。
+ * Test the creation, update, and body verification of SSE rules, and non-SSE rules do not trigger SSE verification.
  */
 class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
 
     private static final String VALID_SSE_BODY =
             "[{\"type\":\"normal\",\"data\":\"hello\"},{\"type\":\"normal\",\"data\":\"world\"}]";
 
-    // ========== 4.2 測試建立 SSE 規則 ==========
+    // ========== 4.2 Test establishment of SSE rules ==========
 
     @Test
-    @DisplayName("建立 SSE 規則：sseEnabled=true + 合法 SSE JSON body → 201，dto 包含 sseEnabled=true、sseLoopEnabled=false、responseContentType=SSE_EVENTS")
+    @DisplayName("Creating an SSE rule with valid events returns 201, sseEnabled=true, sseLoopEnabled=false, and responseContentType=SSE_EVENTS")
     void createSseRule_shouldReturn201WithCorrectFields() {
         RuleDto created = createSseRule("/api/sse/test", VALID_SSE_BODY);
 
@@ -40,21 +40,21 @@ class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
         assertThat(created.getResponseId()).isNotNull();
     }
 
-    // ========== 4.3 測試更新 SSE 規則 ==========
+    // ========== 4.3 Test Update SSE Rules ==========
 
     @Test
-    @DisplayName("更新 SSE 規則：修改 sseLoopEnabled=true → 確認更新成功")
+    @DisplayName("Updating an SSE rule sets sseLoopEnabled=true successfully")
     void updateSseRule_shouldUpdateSseLoopEnabled() {
         RuleDto created = createSseRule("/api/sse/update", VALID_SSE_BODY);
 
-        // GET 取得完整 dto（含 version）
+        // GET Obtain complete dto (including version)
         ResponseEntity<RuleDto> getResponse = adminClient()
                 .getForEntity("/api/admin/rules/" + created.getId(), RuleDto.class);
         RuleDto toUpdate = getResponse.getBody();
         assertThat(toUpdate).isNotNull();
 
         toUpdate.setSseLoopEnabled(true);
-        // 更新時需帶 responseBody，否則會因為 responseBody 為空而使用現有 responseId
+        // responseBody is required when updating, otherwise the existing responseId will be used because responseBody is empty.
         toUpdate.setResponseBody(VALID_SSE_BODY);
 
         ResponseEntity<RuleDto> putResponse = adminClient().exchange(
@@ -69,14 +69,14 @@ class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
         assertThat(updated.getSseLoopEnabled()).isTrue();
         assertThat(updated.getSseEnabled()).isTrue();
 
-        // 再 GET 確認
+        // Confirm again GET
         ResponseEntity<RuleDto> verifyResponse = adminClient()
                 .getForEntity("/api/admin/rules/" + created.getId(), RuleDto.class);
         assertThat(verifyResponse.getBody()).isNotNull();
         assertThat(verifyResponse.getBody().getSseLoopEnabled()).isTrue();
     }
 
-    // ========== 4.4 測試 SSE body 驗證（端對端）==========
+    // ========== 4.4 Test SSE body Verification (end-to-end) ==========
 
     @Test
     void sseBodyValidation_blankOrNullBody_shouldReturn400() {
@@ -89,7 +89,7 @@ class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("SSE body 驗證：非 JSON 陣列（純字串）→ 400")
+    @DisplayName("SSE validation rejects a JSON string instead of an array with 400")
     void sseBodyValidation_notJsonArray_shouldReturn400() {
         RuleDto dto = RuleDto.builder()
                 .protocol(Protocol.HTTP)
@@ -107,7 +107,7 @@ class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("SSE body 驗證：JSON 物件（非陣列）→ 400")
+    @DisplayName("SSE validation rejects a JSON object instead of an array with 400")
     void sseBodyValidation_jsonObjectNotArray_shouldReturn400() {
         RuleDto dto = RuleDto.builder()
                 .protocol(Protocol.HTTP)
@@ -125,7 +125,7 @@ class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("SSE body 驗證：空陣列 [] → 400")
+    @DisplayName("SSE validation rejects an empty event array with 400")
     void sseBodyValidation_emptyArray_shouldReturn400() {
         RuleDto dto = RuleDto.builder()
                 .protocol(Protocol.HTTP)
@@ -143,7 +143,7 @@ class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("SSE body 驗證：事件 data 為空 → 400")
+    @DisplayName("SSE validation rejects empty event data with 400")
     void sseBodyValidation_emptyEventData_shouldReturn400() {
         RuleDto dto = RuleDto.builder()
                 .protocol(Protocol.HTTP)
@@ -161,7 +161,7 @@ class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("SSE body 驗證：無效 type → 400")
+    @DisplayName("SSE validation rejects an invalid event type with 400")
     void sseBodyValidation_invalidType_shouldReturn400() {
         RuleDto dto = RuleDto.builder()
                 .protocol(Protocol.HTTP)
@@ -178,12 +178,12 @@ class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
-    // ========== 4.5 測試非 SSE 規則不觸發 SSE 驗證 ==========
+    // ========== 4.5 Testing non-SSE rules does not trigger SSE verification ==========
 
     @Test
-    @DisplayName("非 SSE 規則不觸發 SSE 驗證：sseEnabled=false + 任意 body → 不被 SSE 驗證器拒絕")
+    @DisplayName("Non-SSE rules skip SSE validation for arbitrary bodies")
     void nonSseRule_shouldNotTriggerSseValidation() {
-        // 使用不合法的 SSE body（但對一般 HTTP 規則來說是合法的純文字）
+        // Use of illegal SSE body (but legal plain text for general HTTP rules)
         RuleDto created = createHttpRule("/api/non-sse", "GET", "this is not a json array");
 
         assertThat(created.getId()).isNotBlank();
@@ -192,7 +192,7 @@ class SseRuleCrudIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("非 SSE 規則：sseEnabled=false + 空陣列 body → 建立成功（不觸發 SSE 驗證）")
+    @DisplayName("Non-SSE rules accept an empty array body without SSE validation")
     void nonSseRule_withEmptyArrayBody_shouldSucceed() {
         RuleDto created = createHttpRule("/api/non-sse-array", "GET", "[]");
 

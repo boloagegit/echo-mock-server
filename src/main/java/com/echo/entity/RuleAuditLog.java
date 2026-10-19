@@ -11,7 +11,7 @@ import org.hibernate.Length;
 import java.time.LocalDateTime;
 
 /**
- * 規則修訂記錄
+ * Rule revision history
  */
 @Entity
 @Table(name = "rule_audit_logs", indexes = {
@@ -47,19 +47,19 @@ public class RuleAuditLog {
     @Column(nullable = false)
     private LocalDateTime timestamp;
 
-    /** 列表用摘要：HTTP、JMS 或 RESPONSE。舊資料為 null，由服務逐筆補算。 */
+    /** Summary for list views: HTTP, JMS, or RESPONSE. Older rows have null summaries, which the service backfills individually. */
     @Column(length = 16)
     private String targetProtocol;
 
-    /** 列表用摘要：路徑、佇列名稱或回應說明。 */
+    /** Summary for list: path, queue name, or response description. */
     @Column(length = 255)
     private String targetName;
 
-    /** 列表用摘要：規則說明。 */
+    /** Summary for list: Rule description. */
     @Column(length = 255)
     private String targetDescription;
 
-    /** 列表用摘要 JSON（方法、主機、改了哪些欄位等），null 表示尚未計算。列表 API 會轉成物件回傳，明細不重複輸出。 */
+    /** The list uses summary JSON (method, host, changed fields, etc.), null means it has not been calculated yet. The list API will be converted into an object and returned, and the details will not be output repeatedly. */
     @JsonIgnore
     @Column(length = 1000)
     private String summary;

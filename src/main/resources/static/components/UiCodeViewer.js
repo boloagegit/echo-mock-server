@@ -1,14 +1,14 @@
 /**
- * UiCodeViewer - 長內容檢視器，抽屜與規則編輯器共用
+ * UiCodeViewer - Long content viewer, drawer shared with rules editor
  *
- * 行號、換行切換、格式化（JSON／XML）、複製與全文搜尋（Enter／Shift+Enter 跳下一筆／上一筆）。
- * 高度依內容，最多 maxHeight（抽屜加寬時更高），超過就在檢視器內捲動；CodeMirror 只繪製
- * 看得到的行，幾百 KB 的內容也不必截斷。
+ * Line number, line feed switching, formatting (JSON/XML), copying and full-text search (Enter/Shift+Enter skip to next/previous item).
+ * The height depends on the content, up to maxHeight (higher when the drawer is widened). If it exceeds the height, it will scroll in the viewer; CodeMirror only draws
+ * There is no need to truncate the content of hundreds of KB in visible lines.
  *
- * editable：可編輯（規則編輯器的回應內容），以 update:value 回報。格式化只改變顯示：開啟時是
- * 唯讀的排版檢視，關閉才編輯原文，存檔永遠是原文（模板語法不會被改寫）。
- * fill：高度填滿父層，不依內容伸縮。同一個 CodeMirror 實例在檢視、編輯、格式化之間切換，
- * 不重建，所以切換時不會閃一下空白。
+ * editable: Editable (response content of the rule editor), reported as update:value. Formatting only changes the display: when turned on it is
+ * Read-only typesetting view, edit the original text only after closing it, and the save will always be the original text (template syntax will not be rewritten).
+ * fill: The height fills the parent layer and does not scale according to the content. The same CodeMirror instance switches between viewing, editing, and formatting,
+ * No rebuilding, so it won't flash blank when switching.
  */
 const CODE_VIEWER_MARK_LIMIT = 2000;
 const CODE_VIEWER_FORMAT_LIMIT = 2000000;

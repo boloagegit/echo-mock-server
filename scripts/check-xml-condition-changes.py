@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 """
-XML 條件調整影響檢查
+XML condition adjustment impact check
 
-2026-10 起，XML body 條件在 HTTP 與 JMS 的比對方式統一（見 CHANGELOG v2026.10.16「XML body conditions behave the same…」）。
-這個工具讀取伺服器上所有規則，列出用到「行為有改變」寫法的規則，讓你確認新的結果是否符合預期：
+Starting from 2026-10, the comparison method of XML body conditions in HTTP and JMS is unified (see CHANGELOG v2026.10.16 "XML body conditions behave the same…”).
+This tool reads all the rules on the server and lists the rules that use the "behavior changes" wording, allowing you to confirm whether the new results are as expected:
 
-  1. 相對路徑（例如 Order/Status=OPEN、Item/@sku=S1，開頭沒有 /）
-     以前：HTTP 一定比不到；JMS 要看同一個 queue 的其他規則而定。
-     現在：路徑結尾符合就比得到（例如 <Root><Order><Status>）。
-  2. XML 條件用了 ==（例如 Status==OPEN）
-     以前：HTTP 把第二個 = 當成期望值的一部分（期望 "=OPEN"），所以比不到；JMS 看情況。
-     現在：== 視為 =。JSON 欄位條件本來就這樣處理，只有收到 XML 的請求會不同。
+  1. Relative path (for example, Order/Status=OPEN, Item/@sku=S1, without / at the beginning)
+     Previously, HTTP never matched these paths; JMS behavior depended on other rules for the same queue.
+     Now: The end of the path matches the result (for example, <Root><Order><Status>).
+  2. The XML condition uses == (for example, Status==OPEN)
+     Previously: HTTP regarded the second = as part of the expected value (expected "=OPEN"), so it was not comparable; JMS depends on the situation.
+     Now: == treated as =. The JSON field condition is originally handled this way, only the request for XML will be different.
 
-另外有一項無法只看規則判斷，只在報告最後提醒：沒有前綴的名稱（例如 Item）現在也會比到有命名空間前綴的
-元素（例如 <ns:Item>）。只有 XML 內容使用前綴時才有影響。
+There is another item that cannot be judged by just looking at the rules. It is only reminded at the end of the report: names without prefixes (such as Item) will now be compared to names with namespace prefixes.
+element (e.g. <ns:Item>). It only affects if the XML content uses the prefix.
 
-只讀取規則，不會修改任何資料。
+Only the rules are read and no data will be modified.
 
-用法：
+Usage:
   python3 scripts/check-xml-condition-changes.py [BASE_URL] [--json]
-帳號密碼（伺服器要求登入時）：ECHO_TEST_USERNAME / ECHO_TEST_PASSWORD 環境變數，預設 admin／admin。
+Account password (when the server requires login): ECHO_TEST_USERNAME / ECHO_TEST_PASSWORD environment variables, default admin / admin.
 """
 
 import base64
@@ -31,12 +31,12 @@ import urllib.request
 RELATIVE_PATH = "relativePath"
 DOUBLE_EQUALS = "doubleEquals"
 
-# 與伺服器的 XmlPath 相同：含這些字元的是一般 XPath（由 XPath 引擎處理，行為沒有改變）
+# Same as server's XmlPath: containing these characters is a generic XPath (handled by the XPath engine, no change in behavior)
 XPATH_ONLY_CHARS = set("[]()*|:")
 
 
 def condition_parts(fragment):
-    """與伺服器相同的拆法：第一個 = 之前是欄位；= 前一個字元是 ! * ~ 時是 != *= ~=。沒有 = 時回傳 None。"""
+    """The same decomposition method as the server: the first = is the field before it; = when the previous character is ! * ~, it is != *= ~=. When there is no =, None is returned."""
     eq = fragment.find("=")
     if eq <= 0:
         return None
@@ -48,7 +48,7 @@ def condition_parts(fragment):
 
 
 def is_relative_simple_path(path):
-    """開頭不是 / 而且有兩層以上的簡單路徑（例如 Order/Status、Item/@sku）；判斷方式與伺服器的 XmlPath 相同。"""
+    """It does not start with / and has a simple path with more than two levels (such as Order/Status, Item/@sku); the judgment method is the same as the server's XmlPath."""
     if not path or path.startswith("/") or path.startswith("$."):
         return False
     path = path.strip()
@@ -68,7 +68,7 @@ def is_relative_simple_path(path):
 
 
 def legacy_findings(condition, where):
-    """一段舊格式 body 條件（以 ; 分隔）中行為有改變的片段。"""
+    """A fragment with changed behavior in the old format body condition (separated by ;)."""
     findings = []
     for fragment in (condition or "").split(";"):
         fragment = fragment.strip()
@@ -77,7 +77,7 @@ def legacy_findings(condition, where):
             continue
         field, operator, value = parts
         if field.startswith("$."):
-            continue  # JSONPath 不受影響
+            continue  # JSONPath is not affected
         if is_relative_simple_path(field):
             findings.append({"type": RELATIVE_PATH, "where": where, "condition": fragment})
         if operator == "=" and value.startswith("="):
@@ -86,7 +86,7 @@ def legacy_findings(condition, where):
 
 
 def match_spec_findings(node, where="match"):
-    """結構化條件（matchSpec）中的 body xpath 相對路徑，以及其中的舊格式 body 片段。"""
+    """body xpath relative path in structured condition (matchSpec), with old format body fragment within it."""
     findings = []
     if isinstance(node, list):
         for item in node:
@@ -110,7 +110,7 @@ def match_spec_findings(node, where="match"):
 
 
 def rule_findings(rule):
-    """一條規則中所有行為有改變的條件。"""
+    """All behaviors in a rule have conditions to change."""
     findings = legacy_findings(rule.get("bodyCondition"), "body")
     spec = rule.get("matchSpec")
     if isinstance(spec, str):
@@ -130,7 +130,7 @@ def describe_route(rule):
 
 
 def analyse(rules):
-    """回傳 {checked, affected: [{rule, route, protocol, enabled, findings}]}。"""
+    """Return {checked, affected: [{rule, route, protocol, enabled, findings}]}."""
     affected = []
     for rule in rules:
         findings = rule_findings(rule)

@@ -19,13 +19,13 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * JMS 協定的 MockPipeline 實作
+ * MockPipeline implementation of JMS protocol
  * <p>
- * 實作 JMS 特有的 pipeline 步驟：
+ * Implement JMS-specific pipeline steps:
  * <ul>
- *   <li>候選規則查詢：委派給 {@link JmsRuleService} 的 prepared/bucketed 查詢</li>
- *   <li>匹配規則：以 {@link RuleSelector.FallbackPolicy#EXACT_BEFORE_WILDCARD} 保留 JMS 三層 fallback</li>
- *   <li>轉發：委派給 {@link JmsTargetForwarder}</li>
+ *   <li>Candidate lookup: delegate prepared/bucketed queries to {@link JmsRuleService}.</li>
+ *   <li>Rule selection: {@link RuleSelector.FallbackPolicy#EXACT_BEFORE_WILDCARD} preserves JMS's three-level fallback.</li>
+ *   <li>Forwarding: delegate to {@link JmsTargetForwarder}.</li>
  * </ul>
  */
 @Component
@@ -61,18 +61,18 @@ public class JmsMockPipeline extends AbstractMockPipeline<JmsRule> {
         return jmsRuleService.findPreparedJmsRules(queueName);
     }
 
-    /** JMS 的候選清單取自規則快照（queue 與分桶清單），快照存在期間是同一個物件。 */
+    /** JMS candidate lists come from the rule snapshot's queue and bucket lists; their identity remains stable for the snapshot's lifetime. */
     @Override
     protected boolean candidateListsAreStable() {
         return true;
     }
 
     /**
-     * JMS 特有的三層 fallback：
+     * JMS-specific three-level fallback:
      * <ol>
-     *   <li>Layer 1: 有條件且條件匹配成功的規則</li>
-     *   <li>Layer 2: 無條件的精確 queue 規則</li>
-     *   <li>Layer 3: 無條件的 wildcard queue {@code *} 規則（last resort）</li>
+     *   <li>Level 1: a conditional rule whose conditions match.</li>
+     *   <li>Level 2: an unconditional rule for the exact queue.</li>
+     *   <li>Level 3: an unconditional wildcard queue {@code *} rule, as a last resort.</li>
      * </ol>
      */
     @Override

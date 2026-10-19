@@ -1,9 +1,9 @@
 /**
- * TrafficChart - 流量概況的純計算（不碰 DOM）：刻度、堆疊長條、時間標籤、沒有資料的格子。
- * 時間一律是伺服器的本地時間字串（YYYY-MM-DDTHH:mm:ss），只做字串切割，不經過瀏覽器時區換算。
+ * TrafficChart - Pure calculation of traffic profile (without touching DOM): ticks, stacked bars, time labels, grids with no data.
+ * The time is always the local time string of the server (YYYY-MM-DDTHH:mm:ss). It only performs string cutting without going through browser time zone conversion.
  */
 const TrafficChart = (() => {
-    /** 堆疊順序（由下而上）。 */
+    /** Stacking order (bottom up). */
     const KINDS = ['mocked', 'forwarded', 'unmatched', 'forwardFailed'];
     const RANGES = ['1h', '24h', '7d'];
     const MODES = ['compact', 'expanded', 'collapsed'];
@@ -13,7 +13,7 @@ const TrafficChart = (() => {
 
     const total = bucket => KINDS.reduce((sum, kind) => sum + (bucket[kind] || 0), 0);
 
-    /** 刻度上限取 1、2、5 × 10ⁿ，最少 4；回傳上限與刻度。 */
+    /** The upper limit of the scale is 1, 2, 5 × 10ⁿ, with a minimum of 4; the upper limit and scale are returned. */
     const scale = (max, steps = 4) => {
         const target = Math.max(4, max);
         const rough = target / steps;
@@ -22,10 +22,10 @@ const TrafficChart = (() => {
         return { max: step * steps, ticks: Array.from({ length: steps + 1 }, (_, i) => i * step) };
     };
 
-    /** 第 i 格的結束時間（下一格的開始，最後一格為 to）。 */
+    /** The end time of the i grid (the beginning of the next grid, the last grid is to). */
     const bucketEnd = (traffic, i) => i + 1 < traffic.buckets.length ? traffic.buckets[i + 1].start : traffic.to;
 
-    /** 顯示用的時間區間，例如「14:00 – 14:30」；跨日或 7 天範圍帶日期。 */
+    /** Display the time interval, such as "14:00 – 14:30"; cross-day or 7-day range with date. */
     const rangeText = (start, end, withDay) => {
         const sameDay = (start || '').substring(0, 10) === (end || '').substring(0, 10)
             || clock(end) === '00:00';
@@ -34,7 +34,7 @@ const TrafficChart = (() => {
         return from + ' – ' + to;
     };
 
-    /** x 軸要標示的格子：1 小時每 10 分鐘、24 小時每 3 小時、7 天每天 0 點。 */
+    /** The grid to be marked on the x axis: every 10 minutes for 1 hour, every 3 hours for 24 hours, and 0 o'clock every day for 7 days. */
     const isLabelled = (traffic, bucket) => {
         const [hh, mm] = clock(bucket.start).split(':').map(Number);
         if (traffic.range === '1h') return mm % 10 === 0;
@@ -44,12 +44,12 @@ const TrafficChart = (() => {
     const axisLabel = (traffic, bucket) => traffic.range === '7d' ? day(bucket.start) : clock(bucket.start);
 
     /**
-     * 格子是否沒有資料：已達筆數上限、更早的紀錄被刪除時，整格都早於最早紀錄的格子沒有資料（不是沒有流量）。
+     * Is there no data in the grid: When the maximum number of records has been reached and the earlier record is deleted, the entire grid earlier than the earliest record will have no data (not no traffic).
      */
     const isMissing = (traffic, i) => !!(traffic.truncated && traffic.earliestRecord
         && bucketEnd(traffic, i) <= traffic.earliestRecord);
 
-    /** 長條各段的高度（佔圖高的百分比，由下而上）。 */
+    /** The height of each segment of the bar (as a percentage of the image height, from bottom to top). */
     const segments = (bucket, max) => KINDS
         .filter(kind => bucket[kind] > 0)
         .map(kind => ({ kind, value: bucket[kind], percent: max > 0 ? bucket[kind] / max * 100 : 0 }));
@@ -57,7 +57,7 @@ const TrafficChart = (() => {
     const matchRate = totals => totals && totals.requests > 0
         ? Math.round((totals.requests - totals.unmatched) / totals.requests * 1000) / 10 : null;
 
-    /** 提示框的水平位置：靠左右邊緣時不超出圖表。 */
+    /** The horizontal position of the prompt box: does not exceed the chart when it is close to the left and right edges. */
     const tipAlign = (i, count) => i < count * 0.2 ? 'start' : i >= count * 0.8 ? 'end' : 'center';
 
     const normalize = (value, allowed, fallback) => allowed.includes(value) ? value : fallback;

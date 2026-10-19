@@ -15,17 +15,17 @@ const _app = createApp({
         // The page on screen; switches wait briefly for the next page's data (see useRouter).
         const shownPage = ref('rules');
 
-        // === 基礎 composables（必須最先初始化，其他 composable 依賴這些） ===
-        // i18n 國際化（useI18n composable）
+        // === Basic composables (must be initialized first, other composable depends on these) ===
+        // i18n Internationalization (useI18n composable)
         const { locale, messages, t, switchLocale, loadLocale } = useI18n();
         _t = t;
-        // Toast 通知與確認對話框（useToast composable）
+        // Toast notification and confirmation dialog box (useToast composable)
         const { toasts, showToast, dismissToast, runToastAction, confirmState, showConfirm } = useToast(t);
         _showToast = showToast;
-        // 認證與權限管理（useAuth composable）
+        // Authentication and authority management (useAuth composable)
         const { isAdmin, isLoggedIn, login, logout, requireLogin, verifyAdminResourceAccess } = useAuth(showConfirm, t);
 
-        // === 獨立工具 composables ===
+        // === Standalone tool composables ===
         const themeCtx = useTheme();
         const { theme, setTheme } = themeCtx;
 
@@ -91,15 +91,15 @@ const _app = createApp({
         const editorCtx = useEditor(t);
         const { detectMode } = editorCtx;
 
-        // === 資料 composables ===
-        // 請求記錄統計（useStats composable）
+        // === Information composables ===
+        // Request record statistics (useStats composable)
         const statsCtx = useStats({ showToast, t, loading, httpLabel, jmsLabel });
         const { logs, logSummary, logFilter, logSort, logPage, logPageSize, pagedLogs, totalPages, toggleSort, sortIcon, onPageSizeChange, loadLogs, toggleMatchChain, logDetailExpanded, toggleLogDetail, logFilterChips, removeLogChip, clearLogFilters, cleanupStats } = statsCtx;
-        // 修訂記錄（useAudit composable）
+        // Revision record (useAudit composable)
         const auditCtx = useAudit({ showToast, showConfirm, t, requireLogin, loading });
         const { auditLogs, selectedAudit, auditFilter, auditSort, auditPage, auditPageSize, auditTotalElements, filteredAudit: _filteredAudit, sortedAudit: _sortedAudit, pagedAudit, auditTotalPages, auditTruncated, toggleAuditSort, auditSortIcon, onAuditPageSizeChange, loadAudit, toggleAuditDetail, deleteAllAuditLogs, formatAuditJson, getAuditChanges, getAuditTarget, getAuditDescription, getAuditProtocol, getAuditChangeCount, describeAuditRow, auditToday, targetHistory, loadTargetHistory, filterAuditTarget, auditFilterChips, removeAuditChip, clearAuditFilters } = auditCtx;
 
-        // === 業務 composables ===
+        // === Business composables ===
         const RULE_EDITOR_MODE_STORAGE_KEY = 'echo_rule_editor_mode';
         const normalizeRuleEditorMode = mode => mode === 'declarative' ? 'declarative' : 'form';
         const readRuleEditorModePreference = () => {
@@ -114,16 +114,16 @@ const _app = createApp({
         // Preserve a declarative draft when the form has not changed between visits.
         const ruleApplyFormSource = ref('');
         const ruleApplyDraftBaseline = ref('');
-        // 規則管理（useRules composable）
+        // Rule management (useRules composable)
         const rulesCtx = useRules({ showToast, showConfirm, t, requireLogin, login, isLoggedIn, loading, page, httpLabel, jmsLabel, openEdit: r => openEdit(r) });
         const { rules, ruleFilter, ruleSort, rulePage, rulePageSize, ruleTotalElements, filteredRules, pagedRules, ruleTotalPages, toggleRuleSort, ruleSortIcon, selectedRules, batchSelectMode, toggleSelectAll, ruleViewMode, expandedTagGroups, toggleTagGroup, expandedTagSubgroups, toggleTagSubgroup, tagKeys, rulesByTag, rulesByTagGroup, groupCounts, groupLoading, groupVisibleLimit, getGroupLimit, showMoreGroup, showAllGroup, loadRules, deleteRule, extendRule, toggleEnabled, exportRules, batchProtect, deleteSelectedRules, deleteAllRules, showImportModal, importFormat, importFile, importFileName, handleImportFile, doImport, ruleDetailId, rulePreviewCache, rulePreviewLoading, rulePreviewError, loadRuleDetail, openRuleDetail, closeRuleDetail, ruleFilterChips, removeRuleChip, clearRuleFilters, showPriorityHelp, helpTab, clipCopy, exportRuleJson, goToRule, showDataDropdown, toggleDataDropdown, closeDataDropdown, triggerResponseImport, showOpenApiPreview, openApiPreviewTitle, openApiPreviewVersion, openApiPreviewRules, openApiImporting, confirmOpenApiImport } = rulesCtx;
         const ruleApplyCtx = useRuleApply({ showToast, showConfirm, t, requireLogin, login, loadRules, markRulesDirty: rulesCtx.markDirty, scenariosEnabled });
         const { ruleApplyText, ruleApplyLoading, ruleApplySaving, ruleApplyError, ruleApplyOperation, ruleApplySchema, ruleApplySchemaError, ruleApplySystemFields, ruleApplyValidationErrors: rawRuleApplyValidationErrors, ruleApplyValidationVisible, createDocumentFromForm, createFormDraftFromDocument, setRuleApplyDocument, updateRuleApplyText, readRuleApplyDocument, resetRuleApply, loadRuleApplySchema, replaceRuleApplyTemplate, applyRuleDocument } = ruleApplyCtx;
         const ruleApplyValidationErrors = computed(() => ruleApplyValidationVisible.value ? rawRuleApplyValidationErrors.value : []);
-        // 回應管理（useResponses composable）
+        // Response management (useResponses composable)
         const responsesCtx = useResponses({ showToast, showConfirm, t, requireLogin, loading, page, onRulesDirty: () => { rulesCtx.markDirty(); loadRules(true); }, onResponseSaved: () => { rulePreviewCache.value = {}; if (rulesCtx.ruleDetailId.value) { rulesCtx.loadRuleDetail(rulesCtx.ruleDetailId.value); } } });
         const { responseSummary, responseOptions, responseFilter, responseSort, responsePage, responsePageSize, responseTotalElements, filteredResponseSummary, pagedResponseSummary, responseTotalPages, toggleResponseSort, responseSortIcon, onResponsePageSizeChange, showResponseModal, editingResponse, responseForm, responseSseEvents, loadResponseSummary, loadResponseOptions, openResponseModal, saveResponse, deleteResponse, selectedResponses, batchSelectResponseMode, toggleSelectAllResponses, exportResponses, importResponses, deleteSelectedResponses, deleteAllResponses, toggleResponseRules, responseUsageFilter: responseUsageFilter, responseContentTypeFilter, responseFilterChips, removeResponseChip, clearResponseFilters, goToResponse, showResponseDataDropdown, toggleResponseDataDropdown, closeResponseDataDropdown, triggerResponseImport2, extendResponse, deleteOrphanResponses , responseDetailId, responseDetailCache, responseDetailLoading, responseDetailError, loadResponseDetail, openResponseDetail, closeResponseDetail } = responsesCtx;
-        // 規則表單（useRuleForm composable）
+        // Rule form (useRuleForm composable)
         const ruleFormCtx = useRuleForm({ showToast, showConfirm, t, requireLogin, login, loadRules, rulePreviewCache, ruleDetailId: rulesCtx.ruleDetailId, loadRuleDetail: rulesCtx.loadRuleDetail, rulesMarkDirty: rulesCtx.markDirty, responsesMarkDirty: responsesCtx.markDirty, responseSseEvents, jmsEnabled, openRuleOrder: id => { page.value = 'rules'; rulesCtx.openRuleDetail({ id }); } });
         const { matchMode, matchTree, matchError, matchSwitchPending, matchSources, setMatchMode, confirmSimpleMatchMode, cancelSimpleMatchMode, currentMatchSpec, applyMatchDraft } = ruleFormCtx;
         const { showModal, editing, form, conditions, conditionsExpanded, formErrors, saving, canSave, validateForm, showCatchAllWarning, catchAllConfirmed, showBodyConditionWarning, sseEvents, addSseEvent, removeSseEvent, setProtocol, openCreate: openCreateForm, copyRule: copyRuleForm, createFromLog: createFromLogForm, openEdit: openEditForm, closeModal: closeRuleFormModal, saveRule: saveRuleForm, onResponseModeChange, testExpanded, testParams, testResult, testLoading, testSseEvents, testSseMode, runTest, stopSseTest, generateTestData, previewResponseId, previewResponseBody, previewResponseLoading, previewResponseLoadFailed, previewEditing, previewEditBody, previewResponseUsageCount, previewSaving, togglePreviewEditing, savePreviewResponse, responsePickerSearch, responseDropdownOpen, filteredResponsePicker, responsePickerSseOnly, responsePickerSummary, responsePickerPage, responsePickerTotalElements, responsePickerTotalPages, responsePickerLoading, responsePickerError, openResponsePickerDrawer, submitResponsePickerSearch, setResponsePickerSseOnly, changeResponsePickerPage, selectResponseOption, clearResponseSelection, newTag, addTag, removeTag, newHeader, addHeader, removeHeader, ruleModalMaximized, responseModalMaximized, setupFormWatchers, closeResponseDropdown, httpTargetConnections, loadHttpTargetConnections, jmsTargetConnections, loadJmsTargetConnections } = ruleFormCtx;
@@ -174,7 +174,7 @@ const _app = createApp({
             ...readRuleDraft(), declarative: null,
             pendingTag: { key: '', value: '' }, pendingHeader: { key: '', value: '' }
         });
-        /** 編輯期間規則被別人改過：詢問要載入最新版本，或保留自己的修改（表單不動）。 */
+        /** The rules were changed by others during editing: Ask to load the latest version or keep your own changes (the form does not move). */
         const resolveRuleSaveConflict = async ruleId => {
             const reload = await showConfirm({
                 title: t('rules.conflict.title'), message: t('rules.conflict.message'),
@@ -356,7 +356,7 @@ const _app = createApp({
             } finally { ruleSaveInFlight.value = false; }
         };
 
-        // === 帳號管理 composable ===
+        // === Account Management composable ===
         const accountsCtx = useAccounts({ showToast, showConfirm, t, requireLogin, login, loading });
         const { accounts, searchKeyword: accountSearchKeyword, filteredAccounts, loadAccounts, createAccount, deleteAccount, enableAccount, disableAccount, resetPassword } = accountsCtx;
 
@@ -364,13 +364,13 @@ const _app = createApp({
         const issuesCtx = useIssues({ showToast, showConfirm, t, requireLogin, loading, isAdmin, issueReportingEnabled });
         const { issues, issueFilter, issueSort, issuePage, issuePageSize, issueTotalElements, filteredIssues, pagedIssues, issueTotalPages, openCount: openIssueCount, toggleIssueSort, issueSortIcon, loadIssues, createIssue, replyIssue, resolveIssue, reopenIssue, deleteIssue } = issuesCtx;
 
-        // === 路由（依賴 filters） ===
+        // === Routing (depends on filters) ===
         const loadBackupStatus = async () => {
             const r = await apiCall('/api/admin/backup/status', {}, { silent: true });
             if (r && r.ok) { backupStatus.value = await r.json(); }
         };
 
-        // === app.js 專屬邏輯 ===
+        // === app.js exclusive logic ===
         const autoResize = e => { const el = e.target; el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 300) + 'px' };
         let statusLastLoaded = 0;
         // The last status is cached per tab so a reload can draw the signed-in sidebar
@@ -458,7 +458,7 @@ const _app = createApp({
             setTimeout(() => shell.remove(), 180);
         };
 
-        // === 強制改密碼 Modal ===
+        // === Force password change Modal ===
         const showForceChangePassword = ref(false);
         const forceChangePwdForm = ref({ oldPassword: '', newPassword: '' });
         const forceChangePwdError = ref('');
@@ -496,7 +496,7 @@ const _app = createApp({
             }
         };
 
-        // === 路由（依賴 loadStatus, loadBackupStatus, filters） ===
+        // === Routing (depends on loadStatus, loadBackupStatus, filters) ===
         const routerCtx = useRouter({ page, shownPage, ruleFilter, responseFilter, logFilter, auditFilter, isAdmin, issueReportingEnabled, loadRules: () => loadRules(), loadLogs, loadAudit, loadResponseSummary: () => loadResponseSummary(), loadBackupStatus, loadStatus, loadAccounts, loadIssues });
         const { applyUrlParams } = routerCtx;
         // Each page keeps its list scroll position, so coming back lands where you left off.
@@ -530,7 +530,7 @@ const _app = createApp({
         // === Watchers ===
         routerCtx.setupRouterWatchers();
         setupFormWatchers();
-        // 回應編輯 Modal watchers
+        // Response to editor Modal watchers
         watch(() => responseForm.value.contentType, (ct, oldCt) => {
             if (ct === 'sse' && oldCt === 'text') {
                 responseSseEvents.value = deserializeSseEvents(responseForm.value.body);
@@ -625,7 +625,7 @@ const _app = createApp({
             window.removeEventListener('pagehide', savePageSnapshot);
         });
 
-        // 從請求記錄建立規則
+        // Creating rules from request records
         const applyTemplate = (type) => {
             const templates = {
                 json: '{\n  "status": "ok",\n  "data": {}\n}',
@@ -647,7 +647,7 @@ const _app = createApp({
             }
         };
 
-        // 清除全部請求記錄
+        // Clear all request records
         const deleteAllLogs = async () => {
             if (!await requireLogin()) { return; }
             if (!await showConfirm({ title: t('confirm.deleteAllLogs'), message: t('confirm.deleteAllLogsMsg'), confirmText: t('confirm.deleteAll'), danger: true, requireInput: 'DELETE', inputLabel: t('confirm.deleteAllLogsInputLabel') })) { return; }

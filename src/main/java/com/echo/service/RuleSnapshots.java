@@ -15,14 +15,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
- * HTTP 與 JMS 規則快照（見 {@link RuleSnapshotCache}）：規則或回應變更清除規則快取時，
- * 在一條背景執行緒重建，請求繼續使用舊快照，不必等待。
+ * HTTP and JMS rule snapshots (see {@link RuleSnapshotCache}): When rules or response changes clear the rule cache,
+ * Rebuilding in a background thread, requesting to continue using the old snapshot without waiting.
  */
 @Component
 @Slf4j
 public final class RuleSnapshots {
 
-    /** 單例 key：HTTP 只有一份快照。 */
+    /** Singleton key: HTTP has only one snapshot. */
     private static final String HTTP_KEY = "http";
 
     private final ExecutorService builder = Executors.newSingleThreadExecutor(r -> {
@@ -59,7 +59,7 @@ public final class RuleSnapshots {
         return jms.get(queueName);
     }
 
-    /** 管理 API 的請求中做出的變更在回應前等待；其他執行緒（多台同步、排程）當下等待。 */
+    /** The changes made in the request to manage API are waiting before responding; other execution threads (multiple synchronization, scheduling) are currently waiting. */
     private static boolean inWebRequest() {
         return RequestContextHolder.getRequestAttributes() != null;
     }

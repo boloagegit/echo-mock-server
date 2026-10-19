@@ -1,12 +1,12 @@
 /**
- * RuleOrderView - 規則詳細資料的「判斷順序」：同一種請求會依什麼順序檢查哪些規則，
- * 先依序檢查有條件的規則，都不成立時才用第一條沒設條件的規則；並標出一定輪不到的規則與原因。
- * 資料來自 GET /api/admin/rules/{id}/order（與實際比對相同的排序）。
+ * RuleOrderView - "Judgment order" of rule details: Which rules will be checked in which order for the same request?
+ * Evaluate conditional rules in order, then use the first unconditional fallback only if none match; show definitely unreachable rules and their reasons.
+ * Data comes from GET /api/admin/rules/{id}/order (same order as the actual comparison).
  */
 const RuleOrderView = {
   props: {
     ruleId: { type: String, required: true },
-    // 規則內容變更後（版本改變）重新載入
+    // Reload after the rule content is changed (version change)
     version: { type: [String, Number], default: null }
   },
   emits: ['open-rule'],
@@ -30,7 +30,7 @@ const RuleOrderView = {
     },
     defaultNumber() { return this.numbered.find(entry => entry.usedAsDefault)?.number || null; },
     self() { return this.numbered.find(entry => entry.self) || null; },
-    /** 一定要顯示的項目：這條規則、擋住它的規則、預設回應。 */
+    /** Items that must be displayed: this rule, the rules blocking it, and the default response. */
     keepIds() {
       return [this.self?.id, this.self?.issue?.byRuleId, this.numbered.find(entry => entry.usedAsDefault)?.id]
         .filter(Boolean);
@@ -77,7 +77,7 @@ const RuleOrderView = {
       const host = entry.targetHost && entry.targetHost !== 'default' ? ' @' + entry.targetHost : '';
       return (entry.method || this.t('rules.order.anyMethod')) + ' ' + entry.path + host;
     },
-    /** 只適用部分請求時，列出它限定的 method、路徑與 host（host 為 default 也要寫出來）。 */
+    /** When only applicable to some requests, list its limited method, path and host (host must also be written out for default). */
     partialScope(entry) {
       if (entry.queueName != null) { return entry.queueName; }
       const host = entry.targetHost ? ' · Host: ' + entry.targetHost : '';

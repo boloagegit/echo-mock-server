@@ -34,18 +34,18 @@ import java.util.function.BooleanSupplier;
 import java.util.regex.Pattern;
 
 /**
- * 舊版字串條件比對的原始實作，只用於測試：差異測試以它為標準答案，確認新引擎的舊語法相容層
- * （{@code com.echo.core.match.LegacyConditionMatcher}）結果、說明文字、分數與暫存 key 完全相同。
+ * The original implementation of the old version of string condition comparison, only used for testing: the difference test uses it as the standard answer to confirm the old syntax compatibility layer of the new engine
+ * ({@code com.echo.core.match.LegacyConditionMatcher}) The results, description text, and scores are exactly the same as the temporary key.
  * <p>
- * 內容凍結自移除 {@code echo.engine.matcher=legacy} 前的 {@link ConditionMatcher}（只去掉 JMS 串流 XML
- * 與新引擎相關的部分），不要為了讓測試通過而修改；正式程式一律使用新引擎。
+ * Content freeze since removing {@link ConditionMatcher} before {@code echo.engine.matcher=legacy} (only removes JMS streaming XML
+ * Parts related to the new engine), do not modify them in order to pass the test; official programs will always use the new engine.
  * <p>
- * 唯一的例外是刻意的語意調整，以 {@code [B1]} 標示（設計文件 §7.2.9）：XML body 的條件原本在 JMS 串流掃描與完整解析
- * 之間結果不同，統一成串流掃描的結果——
+ * The only exception is a deliberate semantic adjustment, marked as {@code [B1]} (Design Document §7.2.9): The conditions for XML body were originally in JMS Streaming Scan and Full Parsing
+ * The results are different, unified into the results of the stream scan——
  * <ol>
- *   <li>簡單路徑（例如 {@code Item}、{@code Order/Status}、{@code //Item/@sku}）一律以 local name 比對，
- *       不再先找完全相同的帶前綴名稱；相對路徑是「路徑結尾符合」；</li>
- *   <li>XML 元素條件把 {@code ==} 當成 {@code =}。</li>
+ *   <li>simple paths (such as {@code Item}, {@code Order/Status}, {@code //Item/@sku}) are always compared with local name.
+ *       No longer look for exactly the same prefixed name first; the relative path is "the end of the path matches";</li>
+ *   <li>The XML element condition treats {@code ==} as {@code =}.</li>
  * </ol>
  */
 public final class LegacyConditionOracle {
@@ -60,7 +60,7 @@ public final class LegacyConditionOracle {
 
     private static final int DEFAULT_MAX_FIELD_VALUE_LENGTH = 2 * 1024 * 1024;
 
-    /** 單一欄位值長度上限，超過則跳過比對（防止 base64 等大值拖慢匹配） */
+    /** Maximum field-value length; skip matching oversized values, such as base64 payloads, to prevent excessive matching cost. */
     private final int maxFieldValueLength;
 
     public LegacyConditionOracle() {
@@ -148,7 +148,7 @@ public final class LegacyConditionOracle {
         return evaluateXPath(xpath, doc);
     }
 
-    /** 預先解析的 body；與舊版相同，記錄本請求已評估的條件結果（暫存 key）。 */
+    /** Pre-parsed body; the same as the old version, records the evaluated condition results of this request (temporarily store key). */
     public static final class PreparedBody {
         private final String raw;
         private final Document xmlDoc;
@@ -205,7 +205,7 @@ public final class LegacyConditionOracle {
     }
 
     /**
-     * 預先解析 body，回傳 PreparedBody 供批次匹配使用
+     * Pre-parse body and return PreparedBody for batch matching.
      */
     public PreparedBody prepareBody(String body) {
         if (body == null || body.isBlank()) {
@@ -266,9 +266,9 @@ public final class LegacyConditionOracle {
     }
 
     /**
-     * 結構化匹配（使用預先解析的 body，回傳每個條件的 PASS/FAIL 細節）
+     * Structured matching (using pre-parsed body, returning PASS/FAIL details for each condition)
      * <p>
-     * 用於匹配鏈分析，提供 near-miss 偵測所需的詳細資訊。
+     * Used for match chain analysis, providing detailed information required for near-miss detection.
      */
     public ConditionDetail matchesPreparedWithDetail(String bodyCondition, String queryCondition,
                                                      String headerCondition, PreparedBody prepared,
@@ -302,7 +302,7 @@ public final class LegacyConditionOracle {
     }
 
     /**
-     * 拆分條件字串並逐一評估，將結果加入 results 列表。
+     * Split the condition string and evaluate them one by one, and add the results to the results list.
      */
     private void evaluateConditions(String conditionStr, String type, List<ConditionResult> results,
                                     java.util.function.Predicate<String> matcher,
@@ -499,7 +499,7 @@ public final class LegacyConditionOracle {
     }
 
     private boolean matchXmlNodesPrepared(String condition, Document doc) {
-        var parsed = parseCondition(condition.replace("==", "=")); // [B1] 2. XML 元素條件把 == 當成 =
+        var parsed = parseCondition(condition.replace("==", "=")); // [B1] 2. XML element condition treats == as =
         try {
             NodeList nodes = findXmlNodes(parsed.field(), doc);
             for (int i = 0; i < nodes.getLength(); i++) {
@@ -752,9 +752,9 @@ public final class LegacyConditionOracle {
     private record ParsedCondition(String field, String value, Op op) {}
 
 
-    // ==================== [B1] 1. 簡單路徑以 local name 比對（與正式程式分開實作） ====================
+    // ==================== [B1] 1. Simple path comparison with local name (implemented separately from the formal program) ====================
 
-    /** 簡單路徑的節點（元素或屬性），依文件順序；不是簡單路徑時回傳 null，維持原本的查找方式。 */
+    /** The nodes (elements or attributes) of simple paths are in file order; if they are not simple paths, null is returned, maintaining the original search method. */
     private static NodeList b1SimplePathNodes(String field, Document doc) {
         String path = field.trim();
         if (path.endsWith("/text()")) {

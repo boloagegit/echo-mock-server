@@ -113,7 +113,7 @@ test('usesBody, hasConditions and remove walk nested groups', () => {
   assert.equal(MatchTree.findParent(tree, tree.children[1].children[0].id), tree.children[1]);
 });
 
-// 與後端 LegacyConditionsTest 共用同一份案例，確保前端拆解條件的方式與比對時相同
+// Share the same case with the backend LegacyConditionsTest to ensure that the front-end disassembly conditions are the same as during comparison
 const FIXTURE = JSON.parse(fs.readFileSync(
   path.resolve(__dirname, '../resources/fixtures/legacy-condition-parts.json'), 'utf8'));
 
@@ -136,7 +136,7 @@ test('simple rows keep // paths and refuse conditions they cannot represent exac
     { type: 'query', field: 'page', operator: '!=', value: '2' },
     { type: 'header', field: 'X-Type', operator: '~=', value: 'v.*' },
   ]);
-  // 一個片段無法表示就整組交給進階模式，不能只丟掉那一個
+  // If one fragment cannot be expressed, the whole group is handed over to the advanced mode. You cannot just throw away that one.
   assert.equal(MatchTree.toSimpleRows('a=1;hello', null, null), null);
   assert.deepEqual(plain(MatchTree.toSimpleRows(null, ' ; ', '')), []);
 });
@@ -146,7 +146,7 @@ test('equality conditions whose extra = is kept are flagged (JSONPath, query and
   assert.equal(MatchTree.hasDoubleEquals('$.a==b'), true);
   assert.equal(MatchTree.hasDoubleEquals('x-type==vip', 'header'), true);
   assert.equal(MatchTree.hasDoubleEquals('page==1', 'query'), true);
-  // JSON 欄位路徑與 XML 路徑會把 == 當成 =
+  // JSON field path and XML path will treat == as =
   for (const condition of ['//Status==OPEN', 'type==vip', 'Order/Status==OPEN', 'a = =b']) {
     assert.equal(MatchTree.hasDoubleEquals(condition), false, condition);
   }
@@ -158,7 +158,7 @@ test('equality conditions whose extra = is kept are flagged (JSONPath, query and
   assert.deepEqual(plain(MatchTree.doubleEqualsConditions(tree)), ['$.a==b', 'X==y']);
 });
 
-// ==================== 匹配鏈的樹狀比對說明（detailTree） ====================
+// ==================== Tree comparison description of matching chain (detailTree) ====================
 
 const EXPLAINED = {
   node: 'all', passed: false, children: [

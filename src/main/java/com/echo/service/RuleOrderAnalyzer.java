@@ -13,25 +13,25 @@ import java.util.Objects;
 import java.util.TreeMap;
 
 /**
- * 找出「一定輪不到」的規則，並列出一條規則的判斷順序。規則挑選見 {@code RuleSelector}：
- * 先依順序檢查有條件的規則，第一條成立的就用它；都不成立時才用第一條沒有條件的規則。
+ * Find definitely unreachable rules and list a rule's evaluation order. {@code RuleSelector} selects rules as follows:
+ * Evaluate conditional rules in order and use the first that matches; only if none match, use the first unconditional rule.
  * <p>
- * 只判斷確定的情況：較早的規則 E 適用於規則 R 的所有請求（{@link Route#covers}），E 不受情境狀態限制，而且
+ * Report only certain cases: an earlier rule E covers every request of rule R ({@link Route#covers}), E has no scenario-state restriction, and
  * <ul>
- *   <li>R 與 E 都有條件且條件完全相同：E 一定先命中（{@link #DUPLICATE_CONDITIONS}）；</li>
- *   <li>R 與 E 都沒有條件：E 一定先被當成預設規則（{@link #EARLIER_DEFAULT}）。</li>
+ *   <li>R and E both have identical conditions, so E always matches first ({@link #DUPLICATE_CONDITIONS}); or</li>
+ *   <li>R and E are both unconditional, so E is always the first default ({@link #EARLIER_DEFAULT}).</li>
  * </ul>
- * 條件寫法不同但意思重疊的情況不判斷。
+ * Do not infer semantic overlap between differently written conditions.
  * <p>
- * 規則多時的效能：每條規則的條件只轉成一次比對用的文字（{@link Route#conditionKey}），規則依路徑（或 queue）與條件分組，
- * 判斷一條規則時只看可能涵蓋它、而且條件相同（或同樣沒有條件）的那一組，並在遇到排在它之後的規則時停止。
+ * For large rule sets, compute each rule's {@link Route#conditionKey} once, then group rules by path or queue and condition key.
+ * Check only groups that may cover the rule and have identical conditions, or are both unconditional; stop on reaching a later rule.
  */
 final class RuleOrderAnalyzer {
 
     static final String DUPLICATE_CONDITIONS = "duplicateConditions";
     static final String EARLIER_DEFAULT = "earlierDefault";
 
-    /** 沒有條件的規則共用的分組（條件文字不會是這個值）。 */
+    /** Shared group key for unconditional rules; condition text cannot equal this value. */
     private static final String NO_CONDITIONS = "\u0000none";
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -39,52 +39,52 @@ final class RuleOrderAnalyzer {
     private RuleOrderAnalyzer() {
     }
 
-    /** 協定特有的部分：排序、適用範圍與條件。 */
+    /** Protocol-specific ordering, coverage, and conditions. */
     interface Route<R extends BaseRule> {
 
-        /** 與實際比對相同的候選順序（不含排序條件相同時的先後，見 {@link Index}）。 */
+        /** Candidate order matching actual evaluation, except tie-breaking handled by {@link Index}. */
         Comparator<R> order();
 
-        /** {@code broader} 是否一定是 {@code narrower} 所有請求的候選規則。 */
+        /** Whether {@code broader} is a candidate for every request covered by {@code narrower}. */
         boolean covers(R broader, R narrower);
 
         /**
-         * {@code other} 是否至少是 {@code rule} 一部分請求的候選規則，而且範圍不比它窄（路徑或 queue 涵蓋它）；
-         * 例如只限某個 host 或 method 的較寬路徑規則。判斷順序列出這些規則，但不用它們判定輪不到。
+         * Whether {@code other} is a candidate for some requests covered by {@code rule} and its path or queue covers the rule's scope;
+         * for example, a broader path limited to one host or method. Show these rules in evaluation order, but do not use them to prove unreachability.
          */
         boolean overlaps(R other, R rule);
 
         boolean conditional(R rule);
 
-        /** 條件的比對用文字：兩條規則的條件完全相同（不判斷寫法不同但意思相同）時文字相同。只對有條件的規則呼叫。 */
+        /** Comparison key equal only for identically written conditions, without inferring semantic equivalence; called only for conditional rules. */
         String conditionKey(R rule);
 
-        /** 規則所在的分組（HTTP 路徑、JMS queue）。 */
+        /** The group the rule belongs to (HTTP path, JMS queue). */
         String group(R rule);
 
-        /** 可能涵蓋 {@code rule} 的規則所在的分組，包含它自己的分組。 */
+        /** Groups containing rules that may cover {@code rule}, including its own group. */
         List<String> coveringGroups(R rule);
     }
 
-    /** 規則被判定輪不到的原因與擋住它的規則。 */
+    /** Reason a rule is unreachable, including the earlier rule that shadows it. */
     record Issue<R>(String type, R by) {
     }
 
-    /** 一組啟用中規則的索引：實際檢查的先後、依分組與條件分好的規則。建立一次，可重複查詢。 */
+    /** Reusable index of enabled rules, retaining evaluation order and grouping by route and condition. */
     static final class Index<R extends BaseRule> {
 
         private final Route<R> route;
         private final Map<String, Integer> position = new HashMap<>();
-        /** 分組 → 條件文字 → 規則（依檢查先後）。 */
+        /** Group → Conditional text → Rules (in order of checking). */
         private final Map<String, Map<String, List<R>>> byGroupAndCondition = new HashMap<>();
-        /** 分組 → 規則（依檢查先後）。 */
+        /** Group → Rules (in order of inspection). */
         private final Map<String, List<R>> byGroup = new HashMap<>();
         private final Comparator<R> ranked;
 
         Index(List<R> active, Route<R> route) {
             this.route = route;
             List<R> sorted = new ArrayList<>(active);
-            // 與實際比對相同：穩定排序，排序條件相同時維持規則來源的順序
+            // Same as the actual comparison: stable sorting, maintaining the order of the rule source when the sorting conditions are the same
             sorted.sort(route.order());
             for (int i = 0; i < sorted.size(); i++) {
                 R rule = sorted.get(i);
@@ -97,7 +97,7 @@ final class RuleOrderAnalyzer {
             this.ranked = route.order().thenComparingInt(this::positionOf);
         }
 
-        /** {@code rule} 輪不到時回傳原因（擋住它的是最前面的那條），否則回傳 null。 */
+        /** Return why {@code rule} is unreachable, identifying the earliest shadowing rule; return null otherwise. */
         Issue<R> issueOf(R rule) {
             int rulePosition = positionOf(rule);
             String key = keyOf(rule);
@@ -126,7 +126,7 @@ final class RuleOrderAnalyzer {
             return new Issue<>(route.conditional(rule) ? DUPLICATE_CONDITIONS : EARLIER_DEFAULT, earliest);
         }
 
-        /** 判斷 {@code rule} 時會一起考慮的規則（含它自己與只適用部分請求的規則），依實際檢查順序排列。 */
+        /** Rules considered alongside {@code rule}, including itself and partially overlapping rules, in actual evaluation order. */
         List<R> orderFor(R rule) {
             List<R> ordered = new ArrayList<>();
             ordered.add(rule);
@@ -141,7 +141,7 @@ final class RuleOrderAnalyzer {
             return ordered;
         }
 
-        /** 不在索引中的規則（例如已停用）排在排序條件相同的規則之後。 */
+        /** Rules that are not in the index (for example, are disabled) are ranked after rules with the same sort criteria. */
         private int positionOf(R rule) {
             return position.getOrDefault(rule.getId(), Integer.MAX_VALUE);
         }
@@ -151,12 +151,12 @@ final class RuleOrderAnalyzer {
         }
     }
 
-    /** 需要情境狀態符合才會被檢查的規則（狀態不符時直接略過，所以不能確定它會擋住後面的規則）。 */
+    /** Scenario-dependent rules are skipped when their required state differs, so they cannot be assumed to shadow later rules. */
     static boolean gated(BaseRule rule) {
         return notBlank(rule.getScenarioName()) && notBlank(rule.getRequiredScenarioState());
     }
 
-    /** 結構化條件的比對用文字：JSON 物件的欄位依名稱排序（欄位順序不同視為相同）；不是合法 JSON 時用原文。 */
+    /** Structured-condition comparison key: sort JSON object fields by name so field order does not matter; use the original text for invalid JSON. */
     static String matchSpecKey(String matchSpec) {
         try {
             return "spec:" + canonical(MAPPER.readTree(matchSpec));
@@ -165,7 +165,7 @@ final class RuleOrderAnalyzer {
         }
     }
 
-    /** 舊格式條件的比對用文字：每個欄位去除前後空白，空白視為沒有條件。 */
+    /** Legacy-condition comparison key: trim each field and treat blank fields as absent conditions. */
     static String legacyKey(String... conditions) {
         StringBuilder key = new StringBuilder("legacy");
         for (String condition : conditions) {

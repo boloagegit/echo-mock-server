@@ -23,7 +23,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
-/** 實際 SQLite：被資料庫拒絕的紀錄會被辨識為「資料本身的問題」，背景寫入只會跳過那一筆。 */
+/** Actual SQLite: Records rejected by the database will be identified as "problems with the data itself", and background writing will only skip that record. */
 @DataJpaTest
 @TestExecutionListeners(listeners = SqliteTestDatabaseCleanupListener.class,
         mergeMode = TestExecutionListeners.MergeMode.MERGE_WITH_DEFAULTS)
@@ -58,7 +58,7 @@ class RequestLogRejectedRowSqliteTest {
         assertThat(writer.findCheckpoint("spool")).isZero();
         assertThat(repository.count()).isZero();
 
-        // 跳過該筆：只推進進度
+        // Skip this record and advance only the checkpoint.
         writer.persist("spool", 1, List.of(), 1_000);
         assertThat(writer.findCheckpoint("spool")).isEqualTo(1);
     }

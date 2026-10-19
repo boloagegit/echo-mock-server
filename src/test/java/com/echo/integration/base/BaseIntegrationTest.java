@@ -17,14 +17,14 @@ import org.springframework.test.context.ActiveProfiles;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 整合測試基底類別
+ * Integration-test base class.
  * <p>
- * 提供共用的測試基礎設施：
+ * Provide shared testing infrastructure:
  * <ul>
- *   <li>Spring Boot 隨機埠啟動</li>
+ *   <li>Spring Boot Random port starts</li>
  *   <li>Basic Auth admin client</li>
- *   <li>規則/回應建立 helper methods</li>
- *   <li>每個測試後自動清理資料</li>
+ *   <li>rule/response established helper methods</li>
+ *   <li>Automatically clear data after each test</li>
  * </ul>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -42,7 +42,7 @@ public abstract class BaseIntegrationTest {
     protected CacheManager cacheManager;
 
     /**
-     * 取得帶 Basic Auth (admin/admin) 的 TestRestTemplate
+     * Get TestRestTemplate with Basic Auth (admin/admin)
      */
     protected TestRestTemplate adminClient() {
         return restTemplate.withBasicAuth(ADMIN_USERNAME, ADMIN_PASSWORD);
@@ -51,18 +51,18 @@ public abstract class BaseIntegrationTest {
     @AfterEach
     void cleanupTestData() {
         TestRestTemplate admin = adminClient();
-        // TestRestTemplate.delete 會吞掉錯誤；清理失敗時資料會留給下一個共用同一個 Spring context 的測試，
-        // 因此檢查狀態碼，讓問題出現在造成它的測試上
+        // TestRestTemplate.delete will swallow errors; when cleanup fails, the data will be left to the next test that shares the same Spring context.
+        // So check the status code and let the problem occur in the test that caused it
         for (String path : List.of("/rules/all", "/responses/all", "/audit/all")) {
             ResponseEntity<String> response = admin.exchange(ADMIN_API_BASE + path, HttpMethod.DELETE, null, String.class);
             assertThat(response.getStatusCode().is2xxSuccessful())
                     .as("cleanup DELETE %s returned %s: %s", path, response.getStatusCode(), response.getBody())
                     .isTrue();
         }
-        // 清理後確認真的沒有規則；若之後又出現，代表有背景工作或其他測試在同一個 context 建立規則
+        // After cleaning, it is confirmed that there are really no rules; if it appears again later, it means that there is background work or other tests to establish rules in the same context
         ResponseEntity<String> remaining = admin.getForEntity(ADMIN_API_BASE + "/rules", String.class);
         assertThat(remaining.getBody()).as("rules left after cleanup").isEqualTo("[]");
-        // 清除規則快取，避免 JMS 等非同步處理使用到已刪除的規則
+        // Clear the rule cache to avoid using deleted rules for asynchronous processing such as JMS
         cacheManager.getCacheNames().forEach(name -> {
             var cache = cacheManager.getCache(name);
             if (cache != null) {
@@ -74,7 +74,7 @@ public abstract class BaseIntegrationTest {
     // ========== HTTP Rule Helpers ==========
 
     /**
-     * 建立 HTTP 規則（完整參數）
+     * Create HTTP rule (complete parameters)
      */
     protected RuleDto createHttpRule(String matchKey, String method, String responseBody,
                                      String targetHost, Integer status, String bodyCondition,
@@ -106,7 +106,7 @@ public abstract class BaseIntegrationTest {
     }
 
     /**
-     * 建立 HTTP 規則（簡易版：matchKey + method + responseBody）
+     * Create HTTP rule (simplified version: matchKey + method + responseBody)
      */
     protected RuleDto createHttpRule(String matchKey, String method, String responseBody) {
         return createHttpRule(matchKey, method, responseBody, null, 200,
@@ -114,7 +114,7 @@ public abstract class BaseIntegrationTest {
     }
 
     /**
-     * 建立 HTTP 規則（含 targetHost）
+     * Create HTTP rule (including targetHost)
      */
     protected RuleDto createHttpRule(String matchKey, String method, String responseBody,
                                      String targetHost) {
@@ -123,7 +123,7 @@ public abstract class BaseIntegrationTest {
     }
 
     /**
-     * 建立 HTTP 規則（含 targetHost + status）
+     * Create HTTP rule (including targetHost + status)
      */
     protected RuleDto createHttpRule(String matchKey, String method, String responseBody,
                                      String targetHost, Integer status) {
@@ -134,19 +134,19 @@ public abstract class BaseIntegrationTest {
     // ========== SSE Rule Helpers ==========
 
     /**
-     * 建立 SSE 規則
+     * Create SSE rule
      *
-     * @param matchKey  URI 路徑
-     * @param sseEvents SSE 事件 JSON 陣列字串，例如：
+     * @param matchKey  URI path
+     * @param sseEvents SSE event JSON array string, for example:
      *                  [{"type":"normal","data":"hello"},{"type":"normal","data":"world"}]
-     * @return 建立的 RuleDto
+     * @return RuleDto created
      */
     protected RuleDto createSseRule(String matchKey, String sseEvents) {
         return createSseRule(matchKey, sseEvents, null, false);
     }
 
     /**
-     * 建立 SSE 規則（含 targetHost 與 loopEnabled）
+     * Create SSE rule (including targetHost and loopEnabled)
      */
     protected RuleDto createSseRule(String matchKey, String sseEvents,
                                      String targetHost, boolean loopEnabled) {
@@ -171,7 +171,7 @@ public abstract class BaseIntegrationTest {
     // ========== JMS Rule Helpers ==========
 
     /**
-     * 建立 JMS 規則（完整參數）
+     * Create JMS rule (complete parameters)
      */
     protected RuleDto createJmsRule(String queueName, String responseBody,
                                     String bodyCondition, Integer priority,
@@ -193,7 +193,7 @@ public abstract class BaseIntegrationTest {
     }
 
     /**
-     * 建立 JMS 規則（簡易版：queueName + responseBody）
+     * Create JMS rule (simplified version: queueName + responseBody)
      */
     protected RuleDto createJmsRule(String queueName, String responseBody) {
         return createJmsRule(queueName, responseBody, null, null, null);
@@ -202,7 +202,7 @@ public abstract class BaseIntegrationTest {
     // ========== Response Helpers ==========
 
     /**
-     * 建立共用 Response
+     * Creating share Response
      */
     protected Response createResponse(String description, String body) {
         Response req = Response.builder()

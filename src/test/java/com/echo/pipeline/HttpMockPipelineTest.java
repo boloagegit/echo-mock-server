@@ -33,10 +33,10 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * HttpMockPipeline 單元測試
+ * HttpMockPipeline unit test
  * <p>
- * 驗證 HTTP 協定 pipeline 的各項行為：匹配回應、模板渲染、proxy 轉發、
- * 無匹配處理、shouldForward 決策、日誌記錄。
+ * Verify various behaviors of HTTP protocol pipeline: matching response, template rendering, proxy forwarding,
+ * No match processing, shouldForward decision, logging.
  */
 @ExtendWith(MockitoExtension.class)
 class HttpMockPipelineTest {
@@ -106,11 +106,11 @@ class HttpMockPipelineTest {
     // ==================== 1. Normal match with template rendering and custom headers ====================
 
     @Nested
-    @DisplayName("正常匹配回應（含模板渲染與自訂 headers）")
+    @DisplayName("Matched response with template rendering and custom headers")
     class NormalMatchWithTemplate {
 
         @Test
-        @DisplayName("匹配成功時回傳渲染後的 body 與自訂 headers")
+        @DisplayName("A match returns the rendered body and custom headers")
         void matchedWithTemplateAndHeaders() {
             HttpRule rule = buildRule("rule-1", "name=test", 10L, 201,
                     "{\"X-Custom\":\"hello\",\"X-Trace\":\"abc\"}");
@@ -145,11 +145,11 @@ class HttpMockPipelineTest {
     // ==================== 2. Normal match without template ====================
 
     @Nested
-    @DisplayName("正常匹配回應（無模板語法）")
+    @DisplayName("Matched response without template syntax")
     class NormalMatchWithoutTemplate {
 
         @Test
-        @DisplayName("body 不含 {{ 時直接回傳原始 body，不呼叫模板渲染")
+        @DisplayName("Bodies without {{ are returned unchanged without invoking template rendering")
         void matchedWithoutTemplate() {
             HttpRule rule = buildRule("rule-2", "name=test", 20L, 200, null);
             String plainBody = "plain response body";
@@ -171,7 +171,7 @@ class HttpMockPipelineTest {
             assertThat(response.getBody()).isEqualTo(plainBody);
             assertThat(response.isMatched()).isTrue();
 
-            // 不應呼叫 render
+            // render should not be called
             verify(templateService, never()).render(anyString(), any());
         }
     }
@@ -179,11 +179,11 @@ class HttpMockPipelineTest {
     // ==================== 3. Proxy forwarding success ====================
 
     @Nested
-    @DisplayName("Proxy 轉發成功")
+    @DisplayName("Successful proxy forwarding")
     class ProxyForwardingSuccess {
 
         @Test
-        @DisplayName("無匹配且有 targetHost 時轉發成功，回傳 forwarded=true")
+        @DisplayName("No match with targetHost forwards successfully and returns forwarded=true")
         void proxyForwardSuccess() {
             MockRequest request = MockRequest.builder()
                     .protocol(Protocol.HTTP)
@@ -219,11 +219,11 @@ class HttpMockPipelineTest {
     // ==================== 4. Proxy forwarding failure ====================
 
     @Nested
-    @DisplayName("Proxy 轉發失敗")
+    @DisplayName("Proxy forwarding failure")
     class ProxyForwardingFailure {
 
         @Test
-        @DisplayName("RestTemplate 拋出例外時回傳 502 與 proxyError")
+        @DisplayName("A RestTemplate exception returns 502 and proxyError")
         void proxyForwardFailure() {
             MockRequest request = MockRequest.builder()
                     .protocol(Protocol.HTTP)
@@ -254,11 +254,11 @@ class HttpMockPipelineTest {
     // ==================== 5. No match and no target host → 404 ====================
 
     @Nested
-    @DisplayName("無匹配且無目標主機 → 404")
+    @DisplayName("No match and no target host returns 404")
     class NoMatchNoForward {
 
         @Test
-        @DisplayName("空候選清單且 targetHost=default 時回傳 404")
+        @DisplayName("Empty candidates with targetHost=default return 404")
         void noMatchReturns404() {
             when(httpRuleService.findPreparedHttpRules("default", "/api/users", "POST"))
                     .thenReturn(Collections.emptyList());
@@ -277,7 +277,7 @@ class HttpMockPipelineTest {
     // ==================== 6. shouldForward() decision logic ====================
 
     @Nested
-    @DisplayName("shouldForward() 決策邏輯")
+    @DisplayName("shouldForward() decisions")
     class ShouldForwardDecision {
 
         @Test
@@ -311,11 +311,11 @@ class HttpMockPipelineTest {
     // ==================== 7. RequestLogService.record() called with correct params ====================
 
     @Nested
-    @DisplayName("RequestLogService.record() 參數正確性")
+    @DisplayName("RequestLogService.record() arguments")
     class RecordLogVerification {
 
         @Test
-        @DisplayName("匹配成功時 record() 傳入正確的 ruleId、protocol、matched 等參數")
+        @DisplayName("A matched record() call receives the expected ruleId, protocol, and matched values")
         void recordCalledOnMatch() {
             HttpRule rule = buildRule("rule-log", "name=test", 30L, 200, null);
             rule.setDelayMs(0L);
@@ -349,7 +349,7 @@ class HttpMockPipelineTest {
         }
 
         @Test
-        @DisplayName("無匹配且不轉發時 record() 傳入 ruleId=null、matched=false")
+        @DisplayName("An unmatched, unforwarded record() call receives ruleId=null and matched=false")
         void recordCalledOnNoMatch() {
             when(httpRuleService.findPreparedHttpRules("default", "/api/users", "POST"))
                     .thenReturn(Collections.emptyList());

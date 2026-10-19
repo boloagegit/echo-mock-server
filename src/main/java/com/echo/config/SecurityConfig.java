@@ -45,7 +45,7 @@ public class SecurityConfig {
     private Duration rememberMeValidity;
 
     /**
-     * 唯讀開放，修改需登入
+     * Open for reading only, you need to log in to modify
      */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, 
@@ -58,20 +58,20 @@ public class SecurityConfig {
             .authenticationProvider(ldapAuthenticationProvider)
             .authenticationProvider(daoAuthenticationProvider)
             .authorizeHttpRequests(auth -> auth
-                // 完全開放
+                // Fully open
                 .requestMatchers("/webjars/**", "/login.html", "/*.css", "/*.js", "/composables/*.js", "/favicon.svg", "/favicon.ico", "/i18n/**", "/components/**", "/api/auth/**").permitAll()
                 .requestMatchers(HttpMethod.GET,
                         "/actuator/health/liveness", "/actuator/health/readiness").permitAll()
-                // 忘記密碼、自助註冊 — 公開（必須在 builtin-users/** 之前）
+                // Forgot password, self-service registration - public (must be before builtin-users/**)
                 .requestMatchers("/api/admin/builtin-users/forgot-password", "/api/admin/builtin-users/register").permitAll()
-                // 內建帳號管理 — 僅 ADMIN
+                // Built-in account management - ADMIN only
                 .requestMatchers("/api/admin/builtin-users/**").hasRole("ADMIN")
                 .requestMatchers("/api/admin/resources", "/api/admin/resources/**").hasRole("ADMIN")
-                // 已登入使用者可選擇安全的唯讀連線 DTO；管理與測試仍僅限 ADMIN
+                // Logged-in users can choose the secure read-only connection DTO; management and testing are still limited to ADMIN
                 .requestMatchers(HttpMethod.GET,
                         "/api/admin/jms-target-connections",
                         "/api/admin/http-target-connections").authenticated()
-                // 請求日誌可能包含下游位址與請求內容，不可公開讀取
+                // The request log may contain the downstream address and request content and is not publicly readable.
                 .requestMatchers(HttpMethod.GET,
                         "/api/admin/logs",
                         "/api/admin/logs/summary",
@@ -79,21 +79,21 @@ public class SecurityConfig {
                         "/api/admin/logs/*/detail").authenticated()
                 .requestMatchers("/api/admin/jms-target-connections/**").hasRole("ADMIN")
                 .requestMatchers("/api/admin/http-target-connections/**").hasRole("ADMIN")
-                // Issue Report — 回覆/resolve/reopen/刪除 僅 ADMIN
+                // Issue Report — reply/resolve/reopen/delete only ADMIN
                 .requestMatchers("/api/admin/issues/*/reply", "/api/admin/issues/*/resolve", "/api/admin/issues/*/reopen").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/admin/issues/*").hasRole("ADMIN")
-                // Issue Report — 建立/列表/查看 需登入
+                // Issue Report — Create/List/View Login required
                 .requestMatchers("/api/admin/issues/**").authenticated()
-                // 使用者自行修改密碼 — 已登入即可
+                // User can change password by himself - already logged in
                 .requestMatchers("/api/account/change-password").authenticated()
-                // 批次操作僅 ADMIN (必須在 permitAll 之前)
+                // Batch operation only ADMIN (must precede permitAll)
                 .requestMatchers("/api/admin/rules/export", "/api/admin/rules/import-batch", "/api/admin/rules/import-excel", "/api/admin/rules/batch", "/api/admin/rules/batch/*", "/api/admin/rules/tag/*/*/*", "/api/admin/rules/all", "/api/admin/responses/all", "/api/admin/responses/export", "/api/admin/audit/all", "/api/admin/setup").hasRole("ADMIN")
-                // 一次取回全部規則／全部回應內容需要登入：資料量隨規則與回應增加，未登入的大量呼叫可能耗盡記憶體。
-                // 畫面使用的是下方開放的分頁與摘要 API
+                // Retrieving all rules/all response contents at one time requires logging in: the amount of data increases with rules and responses, and a large number of calls without logging in may exhaust memory.
+                // The screen uses the pagination and summary open below API
                 .requestMatchers(HttpMethod.GET, "/api/admin/rules", "/api/admin/responses").authenticated()
-                // 唯讀 API 開放
+                // Read only API open
                 .requestMatchers(HttpMethod.GET, "/", "/index.html", "/api/admin/status", "/api/admin/rules/*", "/api/admin/rules/import-template", "/api/admin/rules/*/audit", "/api/admin/rules/*/order", "/api/admin/audit", "/api/admin/responses/*", "/api/admin/responses/*/rules", "/api/admin/responses/summary").permitAll()
-                // 其他需登入 (POST/PUT/DELETE)
+                // Others require login (POST/PUT/DELETE)
                 .anyRequest().authenticated()
             )
             .exceptionHandling(ex -> ex
@@ -124,7 +124,7 @@ public class SecurityConfig {
     }
 
     /**
-     * /mock/** 完全繞過 Security Filter Chain，避免 Authorization header 被攔截
+     * /mock/** completely bypasses Security Filter Chain to prevent Authorization header from being intercepted
      */
     @Bean
     public WebSecurityCustomizer webSecurityCustomizer() {
@@ -134,7 +134,7 @@ public class SecurityConfig {
     @Bean
     public UserDetailsService inMemoryUserDetailsService(PasswordEncoder passwordEncoder,
                                                          BuiltinUserRepository builtinUserRepository) {
-        // 支援 {bcrypt} 或 {noop} 前綴，若無前綴則視為明碼
+        // Supports {bcrypt} or {noop} prefix, if there is no prefix, it will be regarded as clear code
         String password = adminPassword.startsWith("{") ? adminPassword : "{noop}" + adminPassword;
         var admin = User.builder()
                 .username(adminUsername)
@@ -142,7 +142,7 @@ public class SecurityConfig {
                 .roles("ADMIN")
                 .build();
 
-        // 測試用 USER 帳號
+        // USER account for testing
         var user = User.builder()
                 .username("user")
                 .password("{bcrypt}$2a$10$P90qs9C/P5LWb/qpUWrVu.rt5qjUNi1VHFtZF4baRU12XJY77u8C6")
@@ -151,13 +151,13 @@ public class SecurityConfig {
 
         InMemoryUserDetailsManager inMemory = new InMemoryUserDetailsManager(admin, user);
 
-        // 組合式 UserDetailsService：BuiltinUserRepository → InMemory admin → LDAP 預設
+        // Combined UserDetailsService: BuiltinUserRepository → InMemory admin → LDAP Default
         return username -> {
-            // 1. 先查 BuiltinUserRepository
+            // 1. Check BuiltinUserRepository first
             Optional<BuiltinUser> builtinUser = builtinUserRepository.findByUsername(username);
             if (builtinUser.isPresent()) {
                 BuiltinUser bu = builtinUser.get();
-                // 角色去掉 ROLE_ 前綴，Spring Security 的 roles() 會自動加回
+                // The ROLE_ prefix is removed from the character, and the roles() of Spring Security will be automatically added back.
                 String role = bu.getRole().startsWith("ROLE_")
                         ? bu.getRole().substring(5)
                         : bu.getRole();
@@ -169,11 +169,11 @@ public class SecurityConfig {
                         .build();
             }
 
-            // 2. 再查 InMemory（admin 帳號等）
+            // 2. Check InMemory (admin account number, etc.)
             try {
                 return inMemory.loadUserByUsername(username);
             } catch (UsernameNotFoundException e) {
-                // 3. LDAP 用戶：建立預設權限的 UserDetails（remember-me 用）
+                // 3. LDAP user: Create UserDetails with default permissions (for remember-me)
                 return User.builder()
                         .username(username)
                         .password("{noop}")
@@ -197,8 +197,8 @@ public class SecurityConfig {
     }
 
     /**
-     * 自訂 EntryPoint：回傳 401 JSON 但不帶 WWW-Authenticate header，
-     * 避免瀏覽器彈出原生 Basic Auth 登入框。
+     * Customized EntryPoint: Returns 401 JSON without WWW-Authenticate header,
+     * Prevent the browser from popping up the native Basic Auth login box.
      */
     private AuthenticationEntryPoint noPopupEntryPoint() {
         return (request, response, authException) -> {

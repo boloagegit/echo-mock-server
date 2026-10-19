@@ -1,11 +1,11 @@
 /**
- * useAuth - 認證與權限管理 Composable
+ * useAuth - Authentication and authority management Composable
  *
- * 管理使用者登入狀態、管理員權限，以及登入/登出跳轉。
- * `requireLogin` 在未登入時彈出確認對話框，引導使用者前往登入頁面。
+ * Manage user login status, administrator permissions, and login/logout jumps.
+ * `requireLogin` Pops up a confirmation dialog box when not logged in, guiding the user to the login page.
  *
- * @param {Function} showConfirm - 確認對話框函式（來自 useToast）
- * @param {Function} t - 翻譯函式（來自 useI18n）
+ * @param {Function} showConfirm - Confirm dialog function (from useToast)
+ * @param {Function} t - Translation function (from useI18n)
  * @returns {{ isAdmin: Ref<boolean>, isLoggedIn: Ref<boolean>, login: Function, logout: Function, requireLogin: Function }}
  */
 const useAuth = (showConfirm, t) => {
@@ -28,10 +28,10 @@ const useAuth = (showConfirm, t) => {
         } finally { clearTimeout(deadline); }
     };
 
-    /** 跳轉至登入頁面 */
+    /** Jump to login page */
     const login = () => { window.location.href = '/login.html'; };
 
-    /** 登出並跳轉 */
+    /** Log out and jump */
     const logout = () => {
         // Drop the cached identity and page snapshot so the next load cannot briefly show signed-in content.
         try {
@@ -42,8 +42,8 @@ const useAuth = (showConfirm, t) => {
     };
 
     /**
-     * 檢查是否已登入，未登入時彈出確認對話框
-     * @returns {Promise<boolean>} 已登入回傳 true，未登入且取消回傳 false
+     * Check whether you are logged in, and a confirmation dialog box will pop up if you are not logged in.
+     * @returns {Promise<boolean>} true if logged in; false if login was required and cancelled.
      */
     const requireLogin = async () => {
         if (!isLoggedIn.value) {

@@ -42,9 +42,9 @@ public final class HttpTransportConfiguration {
                     java.time.Duration.ofSeconds(workerIdleSeconds));
         }
 
-        // 不當預設候選：否則 Spring Boot 看到已有 ScheduledExecutorService／Executor，就不建立自己的
-        // 排程器與 applicationTaskExecutor，所有 @Scheduled 工作都會跑在這組計時執行緒上。
-        // 只給下面的原生 HTTP 入口指名使用。
+        // Do not make this a default candidate: otherwise Spring Boot sees an existing ScheduledExecutorService/Executor and skips creating its own
+        // scheduler and applicationTaskExecutor, causing all @Scheduled work to run on these timer threads.
+        // Expose it by name only, for the native HTTP entry point below.
         @Bean(destroyMethod = "shutdownNow", defaultCandidate = false)
         ScheduledThreadPoolExecutor nativeHttpScheduler() {
             var scheduler = new ScheduledThreadPoolExecutor(8, runnable -> {

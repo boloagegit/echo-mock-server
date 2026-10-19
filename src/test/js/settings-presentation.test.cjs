@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
-// utils.js 的共用小工具（元件在瀏覽器中直接取用全域函式）。
+// utils.js's shared gadget (the component directly accesses global functions in the browser).
 const utilsContext = { Vue: { ref: v => ({ value: v }), computed: fn => ({ get value() { return fn(); } }), watch() {}, reactive: v => v } };
 vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../../main/resources/static/utils.js'), 'utf8') + '\nthis.createInFlight = createInFlight;', utilsContext);
 const { createInFlight } = utilsContext;

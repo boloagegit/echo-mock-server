@@ -21,7 +21,7 @@ import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-/** 客戶端連著但不讀資料時，不能拖累其他串流；卡住的寫入在逾時後關閉連線。 */
+/** When the client is connected but not reading data, it cannot drag other streams; stuck writes close the connection after timeout. */
 class SseStalledClientTest {
 
     private static final SsePlayer.RequestContext REQUEST =
@@ -33,7 +33,7 @@ class SseStalledClientTest {
         CountDownLatch release = new CountDownLatch(1);
         CountDownLatch blocked = new CountDownLatch(12);
         try {
-            // 比原本 8 條排程執行緒更多的卡住寫入
+            // More stuck writes than originally 8 scheduled threads
             for (int i = 0; i < 12; i++) {
                 SseEmitter emitter = mock(SseEmitter.class);
                 doAnswer(call -> { blocked.countDown(); release.await(10, TimeUnit.SECONDS); return null; })
@@ -67,7 +67,7 @@ class SseStalledClientTest {
         CountDownLatch closed = new CountDownLatch(1);
         SseEmitter emitter = mock(SseEmitter.class);
         doAnswer(call -> {
-            // 跟真實連線一樣：連線被關閉後，卡住的寫入才以 IOException 結束
+            // Just like a real connection: the stuck write ends with IOException after the connection is closed
             if (!closed.await(10, TimeUnit.SECONDS)) throw new AssertionError("connection was not closed");
             throw new IOException("connection closed");
         }).when(emitter).send(any(SseEmitter.SseEventBuilder.class));

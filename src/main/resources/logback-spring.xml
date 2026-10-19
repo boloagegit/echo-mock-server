@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <!-- 從 Spring 環境讀取配置 -->
+    <!-- Reading configuration from Spring environment -->
     <springProperty scope="context" name="LOG_PATH" source="logging.file.path" defaultValue="./logs"/>
     <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="echo"/>
     
@@ -12,7 +12,7 @@
         </encoder>
     </appender>
     
-    <!-- File Appender - 一般日誌 -->
+    <!-- File Appender - General log -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_PATH}/${APP_NAME}.log</file>
         <encoder>
@@ -27,7 +27,7 @@
         </rollingPolicy>
     </appender>
     
-    <!-- Error Log - 只記錄錯誤 -->
+    <!-- Error Log - only log errors -->
     <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_PATH}/${APP_NAME}-error.log</file>
         <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
@@ -45,28 +45,28 @@
         </rollingPolicy>
     </appender>
     
-    <!-- Async Appender - 提升效能 -->
+    <!-- Async Appender - Improved performance -->
     <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
         <appender-ref ref="FILE"/>
         <queueSize>512</queueSize>
         <discardingThreshold>0</discardingThreshold>
     </appender>
     
-    <!-- Logger 配置 -->
+    <!-- Logger configuration -->
     <logger name="com.echo" level="INFO"/>
     <logger name="org.springframework.web" level="INFO"/>
     <logger name="org.springframework.security" level="INFO"/>
     <logger name="org.hibernate" level="WARN"/>
     <logger name="org.apache.activemq" level="WARN"/>
     
-    <!-- dev 環境：只輸出到 console -->
+    <!-- dev environment: only output to console -->
     <springProfile name="dev">
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
         </root>
     </springProfile>
     
-    <!-- sit 環境：console + file -->
+    <!-- sit Environment: console + file -->
     <springProfile name="sit">
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
@@ -75,7 +75,7 @@
         </root>
     </springProfile>
     
-    <!-- uat 環境：file only -->
+    <!-- uat Environment: file only -->
     <springProfile name="uat">
         <root level="INFO">
             <appender-ref ref="ASYNC_FILE"/>
@@ -83,7 +83,7 @@
         </root>
     </springProfile>
     
-    <!-- 預設環境 (非 dev/sit/uat)：console + file -->
+    <!-- Default environment (not dev/sit/uat): console + file -->
     <springProfile name="!dev &amp; !sit &amp; !uat">
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>

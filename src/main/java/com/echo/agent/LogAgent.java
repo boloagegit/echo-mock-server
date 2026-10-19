@@ -38,16 +38,16 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.function.Supplier;
 
 /**
- * Log Agent — 非同步批次寫入請求日誌。
+ * Log Agent: writes request logs asynchronously in batches.
  * <p>
- * 支援兩種儲存模式：
+ * Supports two storage modes:
  * <ul>
- *   <li>Database 模式：批次 saveAll + 超過 max-records 時 deleteOldest</li>
- *   <li>Memory 模式：寫入 RequestLogService 的 memory ring buffer</li>
+ *   <li>Database mode: batch saveAll, then deleteOldest when max-records is exceeded.</li>
+ *   <li>Memory mode: write to the RequestLogService memory ring buffer.</li>
  * </ul>
  * <p>
- * 當 {@code echo.agent.analysis.enabled=true} 時，在正常負載下於背景執行匹配鏈分析；
- * queue 積壓時會暫停這項可選分析，優先保護 Mock／轉發流量。
+ * When {@code echo.agent.analysis.enabled=true}, analyze the matching chain in the background under normal load;
+ * pause this optional analysis when the queue backs up to protect mock and forwarding traffic.
  */
 @Component
 @ConditionalOnProperty(name = "echo.request-log.enabled", havingValue = "true", matchIfMissing = true)
@@ -56,13 +56,13 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
 
     private static final String AGENT_NAME = "log-agent";
     private static final long DURABLE_CLEANUP_INTERVAL = 1_000;
-    /** 檢查待寫入量是否超過保留上限的間隔。 */
+    /** Interval for checking whether pending records exceed the retention limit. */
     private static final long BACKLOG_CHECK_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(1);
     private static final long SKIP_WARNING_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(30);
-    // 以下只由 durable consumer 執行緒使用
+    // Accessed only by the durable consumer thread.
     private long nextBacklogCheckNanos = System.nanoTime();
     private long skippedSinceWarning;
-    /** 跳過時的保留上限（警告裡顯示；停止時不必再讀設定）。 */
+    /** Retention limit used when skipping records, for warnings without rereading settings during shutdown. */
     private int skippedMaxRecords;
     private long lastSkipWarningNanos;
 
@@ -81,7 +81,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     private final AtomicLong storageRetryCount = new AtomicLong();
     private final Semaphore durableWorkAvailable = new Semaphore(0);
     private ExecutorService durableConsumerExecutor;
-    /** 不等記錄寫入就回應時的暫存區；嚴格模式（等寫入才回應）或 memory 模式為 null。 */
+    /** Buffer for replies that do not wait for log writes; null in strict mode (wait for the write) or memory mode. */
     private final RequestLogHandoff handoff;
 
     @Autowired
@@ -107,7 +107,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 waitForWrite ? null : new BufferLimits(bufferMaxEntries, (long) Math.max(1, bufferMaxMb) * 1024 * 1024));
     }
 
-    /** 不等記錄寫入時暫存區的上限。 */
+    /** Maximum buffer capacity when replies do not wait for log writes. */
     record BufferLimits(int maxEntries, long maxBytes) {
     }
 
@@ -144,7 +144,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 analysisEnabled, maxWriteRatePerSecond, null);
     }
 
-    /** {@code buffer} 為 null：等記錄寫入暫存檔才回應（嚴格模式）。 */
+    /** A null {@code buffer} selects strict mode: wait for the record to reach the spool before replying. */
     LogAgent(
             RequestLogRepository requestLogRepository,
             SystemConfigService configService,
@@ -202,9 +202,9 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     }
 
     /**
-     * 接收一筆請求記錄。預設（{@code echo.request-log.wait-for-write=false}）放進暫存區後立即返回，
-     * 永不失敗：寫入跟不上時丟掉最舊的記錄。{@code wait-for-write=true} 時等記錄寫入暫存檔才返回，
-     * 無法寫入時拋出 {@link RequestLogUnavailableException}。Memory 模式維持原本的盡力而為。
+     * Accept a request log. By default ({@code echo.request-log.wait-for-write=false}), return immediately after buffering it.
+     * This mode never fails: drop the oldest records if writes cannot keep up. {@code wait-for-write=true} waits for the spool write,
+     * throwing {@link RequestLogUnavailableException} if it fails. Memory mode retains its existing best-effort behavior.
      */
     public void submitDurably(Supplier<? extends LogTask> taskSupplier) {
         Objects.requireNonNull(taskSupplier, "taskSupplier");
@@ -285,7 +285,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 .storageRetryCount(storageRetryCount.get() + durableSpool.getStorageRetryCount())
                 .queueBytes(durable.pendingBytes())
                 .queueCapacityBytes(durable.pendingByteLimit())
-                // 暫存區（等待寫入的記錄）與暫存檔的序列化資料都在記憶體中
+                // The pending-record buffer and the spool's serialized payloads both consume memory.
                 .inFlightBytes(durable.inFlightBytes() + (handoff == null ? 0 : handoff.bytes()))
                 .inFlightByteLimit(durable.inFlightByteLimit() + (handoff == null ? 0 : handoff.maxBytes()))
                 .waitingProducers(durable.waitingProducers())
@@ -342,7 +342,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     }
 
     /**
-     * Database 模式：convert LogTask to RequestLog entity, saveAll + deleteOldest。
+     * Database mode: convert LogTask to RequestLog entity, saveAll + deleteOldest.
      */
     private void processDatabaseMode(List<LogTask> batch, boolean detailedAnalysis) {
         try {
@@ -393,12 +393,12 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     }
 
     /**
-     * 主資料庫只保留最新 max-records 筆。待寫入的紀錄超過這個數量時，較舊的那些寫入後也會立刻被保留上限刪掉，
-     * 所以直接跳過：在同一個交易中推進進度（不寫入資料列），再從 spool 刪除並釋放空間。
-     * 這樣請求量長時間超過寫入速度時，待寫入的量維持在 max-records 左右，不會塞滿 spool 而卡住請求；
-     * 留下的仍是最新的紀錄。跳過的筆數計入 dropped 並記一筆警告。
+     * The main database retains only the latest max-records entries. Older pending entries beyond this limit would be deleted immediately after insertion,
+     * so skip them: advance the checkpoint in the same transaction without inserting rows, then delete them from the spool and release capacity.
+     * If traffic exceeds write throughput for a prolonged period, this keeps the backlog near max-records instead of filling the spool and blocking requests.
+     * The newest records are still retained. Skipped records count as dropped and produce a warning.
      *
-     * @return 跳過後的進度；沒有跳過時回傳原本的進度
+     * @return The checkpoint after skipping, or the original checkpoint if nothing was skipped
      */
     private long skipBacklogBeyondRetention(long checkpoint) {
         int maxRecords = configService.getRequestLogMaxRecords();
@@ -419,9 +419,9 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     }
 
     /**
-     * 跳過的筆數寫進警告：持續過載時每秒都會跳過，最多每 30 秒彙總一次；第一次跳過立即記錄。
-     * 累積的筆數在間隔到了時寫出（即使之後沒有再跳過），停止時（force）一律寫出，
-     * 所以警告裡的筆數加總等於實際跳過的筆數。
+     * Report skipped records in warnings. Sustained overload may skip records every second, so aggregate warnings at most once every 30 seconds; report the first skip immediately.
+     * Flush the accumulated count when the interval expires, even if no further records are skipped, and always flush on shutdown (force),
+     * so warning counts sum to the actual number of skipped records.
      */
     private void reportSkipped(long now, boolean force) {
         if (skippedSinceWarning == 0) {
@@ -437,8 +437,8 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     }
 
     /**
-     * 逐筆寫入一批紀錄：被資料庫拒絕的那筆只推進進度、不寫入（記一筆警告並計入 dropped），
-     * 其他錯誤（例如資料庫無法連線）照常拋出，由外層等待後重試，不會跳過任何紀錄。
+     * Write a batch one record at a time: for a record rejected by the database, advance the checkpoint without inserting it, warn, and count it as dropped.
+     * Propagate other failures, such as an unavailable database, so the outer loop waits and retries without skipping records.
      */
     private void persistOneByOne(List<RequestLogSpool.SpoolEntry> batch, boolean detailedAnalysis) {
         int maxRecords = configService.getRequestLogMaxRecords();
@@ -458,7 +458,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
         }
     }
 
-    /** 資料本身不被接受（長度、NUL、NOT NULL 等限制），重試也不會成功。 */
+    /** The data itself violates constraints such as length, NUL, or NOT NULL; retrying cannot succeed. */
     public static boolean isRejectedData(Throwable error) {
         for (Throwable t = error; t != null; t = t.getCause() == t ? null : t.getCause()) {
             if (t instanceof DataIntegrityViolationException
@@ -502,7 +502,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                         checkpoint = skippedThrough;
                         lastCleanedCheckpoint = skippedThrough;
                     }
-                    // 過載結束後不會再有新的跳過：累積的筆數也要在間隔到了時寫進記錄
+                    // Once overload ends, no new skips trigger warnings; flush the accumulated count when the interval expires anyway.
                     reportSkipped(now, false);
                 }
 
@@ -534,7 +534,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                     if (!isRejectedData(e)) {
                         throw e;
                     }
-                    // 資料本身被資料庫拒絕（不是連不上）：逐筆重寫，只跳過被拒絕的那筆，其餘照常寫入
+                    // The database rejected the data itself, rather than the connection: retry individually, skipping only rejected records and writing the rest normally.
                     persistOneByOne(batch, detailedAnalysis);
                 }
                 checkpoint = lastSequence;
@@ -558,14 +558,14 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 break;
             } catch (Exception | Error e) {
                 storageRetryCount.incrementAndGet();
-                // Error（例如 OutOfMemoryError）也不能讓這個唯一的寫入執行緒結束，否則從此不再有新的請求記錄。
-                // 從資料庫重新讀取已確認的進度（逐筆重寫可能已前進一部分）；未寫入的資料留在暫存檔，稍後重試
+                // Even Error (such as OutOfMemoryError) must not terminate the sole writer thread, which would prevent all future request logging.
+                // Reload the confirmed checkpoint from the database, since individual retries may have advanced it; leave unwritten data in the spool for a later retry.
                 checkpoint = null;
                 try {
                     log.warn("Durable request-log persistence paused; data remains in spool: {}",
                             e instanceof Error ? e.toString() : e.getMessage());
                 } catch (Throwable ignored) {
-                    // 記錄失敗也要繼續
+                    // Continue even if recording fails
                 }
                 try {
                     awaitDurableWork();
@@ -575,7 +575,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 }
             }
         }
-        // 停止時把還沒寫進記錄的跳過筆數補上，警告的總數才會等於 dropped 計數裡跳過的部分
+        // On shutdown, flush any unreported skip count so warning totals match the skipped portion of the dropped counter.
         reportSkipped(System.nanoTime(), true);
     }
 
@@ -586,7 +586,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     }
 
     /**
-     * Memory 模式：寫入 RequestLogService 的 memory ring buffer。
+     * Memory mode: write to the RequestLogService memory ring buffer.
      */
     private void processMemoryMode(List<LogTask> batch, boolean detailedAnalysis) {
         ConcurrentLinkedDeque<RequestLogService.LogEntry> buffer = requestLogService.getMemoryBuffer();
@@ -613,15 +613,15 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     }
 
     /**
-     * 匹配鏈分析。
+     * Matching-chain analysis.
      * <p>
-     * 當 {@code echo.agent.analysis.enabled=true} 時，遍歷 LogTask 的候選規則，
-     * 對每個 enabled 規則呼叫 {@code conditionMatcher.matchesPreparedWithDetail()} 取得結構化結果，
-     * 判斷 match / shadowed / near-miss / mismatch / skipped / fallback，
-     * 序列化為 JSON 回傳。
+     * When {@code echo.agent.analysis.enabled=true}, traverse the candidate rules of LogTask,
+     * Call {@code conditionMatcher.matchesPreparedWithDetail()} for each enabled rule to get structured results,
+     * Determine match / shadowed / near-miss / mismatch / skipped / fallback,
+     * Serialize the results as JSON and return them.
      *
      * @param task LogTask
-     * @return 分析後的 matchChain 字串
+     * @return Analyzed matchChain string
      */
     String analyzeMatchChain(LogTask task) {
         return analyzeMatchChain(task, analysisEnabled);
@@ -715,7 +715,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     }
 
     /**
-     * 判斷候選規則是否有任何條件（body/query/header）。
+     * Determine whether the candidate rule has any conditions (body/query/header).
      */
     private boolean hasAnyCondition(CandidateSnapshot candidate) {
         return isNotBlank(candidate.getMatchSpec())
@@ -725,7 +725,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     }
 
     /**
-     * 從 CandidateSnapshot 建構條件描述字串。
+     * Construct condition description string from CandidateSnapshot.
      */
     private String buildConditionString(CandidateSnapshot candidate) {
         StringBuilder sb = new StringBuilder();
@@ -746,7 +746,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     }
 
     /**
-     * 將 ConditionResult 列表的 detail 以 "; " 串接（避免 stream + Collectors.joining 的額外開銷）。
+     * Join ConditionResult details with "; " to avoid the overhead of stream + Collectors.joining.
      */
     private static String joinDetails(List<ConditionMatcher.ConditionResult> results) {
         if (results.isEmpty()) {
@@ -770,7 +770,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     }
 
     /**
-     * 將 LogTask 轉換為 RequestLog entity（Database 模式用）。
+     * Convert LogTask to RequestLog entity (for Database mode).
      */
     private RequestLog toEntity(LogTask task, boolean detailedAnalysis) {
         String matchChain = analyzeMatchChain(task, detailedAnalysis);
@@ -807,7 +807,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     }
 
     /**
-     * 將 LogTask 轉換為 RequestLogService.LogEntry（Memory 模式用）。
+     * Convert LogTask to RequestLogService.LogEntry (for Memory mode).
      */
     private RequestLogService.LogEntry toLogEntry(LogTask task, String matchChain) {
         return RequestLogService.LogEntry.builder()

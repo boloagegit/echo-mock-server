@@ -11,128 +11,128 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * 協定處理器介面
+ * Protocol handler interface
  * <p>
- * 定義各協定（HTTP、JMS 等）的規則操作，新增協定只需實作此介面。
+ * Define the rule operations of each protocol (HTTP, JMS, etc.). To add a new protocol, you only need to implement this interface.
  */
 public interface ProtocolHandler {
 
     /**
-     * 取得此處理器支援的協定
+     * Get the protocols supported by this processor
      */
     Protocol getProtocol();
 
     /**
-     * 協定無關程式（規則查詢、快取失效）需要的協定資訊
+     * Protocol information required by protocol-independent programs (rule query, cache invalidation)
      */
     ProtocolDescriptor descriptor();
 
     /**
-     * 查詢所有規則
+     * Query all rules
      */
     List<? extends BaseRule> findAllRules();
 
     /**
-     * 依 ID 查詢規則
+     * Query rules according to ID
      */
     Optional<? extends BaseRule> findById(String id);
 
     /**
-     * 依 ID 批次查詢規則
+     * According to ID batch query rules
      */
     List<? extends BaseRule> findAllByIds(List<String> ids);
 
 
     /**
-     * 儲存規則
+     * Storage rules
      */
     BaseRule save(BaseRule rule);
 
     /**
-     * 刪除規則
+     * Delete rule
      */
     void deleteById(String id);
 
     /**
-     * 刪除所有規則
+     * Delete all rules
      */
     int deleteAll();
 
     /**
-     * 計算規則數量
+     * Counting the number of rules
      */
     long count();
 
     /**
-     * 刪除過期規則
+     * Delete expired rules
      */
     int deleteExpiredRules(LocalDateTime cutoff);
 
     /**
-     * 批次更新啟用狀態
+     * Batch update enabled status
      */
     int updateEnabled(List<String> ids, boolean enabled, LocalDateTime updatedAt, String updatedBy);
 
     /**
-     * 批次更新保護狀態
+     * Batch update protection status
      */
     int updateProtected(List<String> ids, boolean isProtected, LocalDateTime updatedAt, String updatedBy);
 
     /**
-     * 批次更新展延時間
+     * Batch update extension time
      */
     int extendRules(List<String> ids, LocalDateTime extendedAt, String updatedBy);
 
     /**
-     * 依 responseId 分組計數
+     * Count by group responseId
      */
     List<Object[]> countGroupByResponseId();
 
     /**
-     * 依 responseId 刪除規則
+     * Delete rule according to responseId
      */
     int deleteByResponseId(Long responseId);
 
     /**
-     * 依 responseId 查詢規則
+     * Query rules according to responseId
      */
     List<? extends BaseRule> findByResponseId(Long responseId);
 
     /**
-     * 計算孤兒規則數量（responseId 指向不存在的 Response）
+     * Counting the number of orphan rules (responseId points to non-existent Response)
      */
     long countOrphanRules();
 
     /**
-     * 將 Rule 轉換為 DTO
+     * Convert Rule to DTO
      */
     RuleDto toDto(BaseRule rule, Response response, boolean includeBody);
 
     /**
-     * 將 DTO 轉換為 Rule
+     * Convert DTO to Rule
      */
     BaseRule fromDto(RuleDto dto);
 
     /**
-     * 測試規則
-     * @return 測試結果 Map，包含 status, body, elapsed
+     * Test rules
+     * @return Test result Map, including status, body, elapsed
      */
     Map<String, Object> testRule(BaseRule rule, Map<String, Object> request);
 
     /**
-     * 此協定是否啟用
+     * Is this protocol enabled?
      */
     default boolean isEnabled() {
         return true;
     }
 
     /**
-     * 產生規則描述（用於自動建立 Response）
+     * Generate rule description (used to automatically create Response)
      */
     String generateDescription(RuleDto dto);
 
     /**
-     * 依標籤 pattern 查詢規則 ID（避免全表載入）
+     * Query rule ID based on label pattern (avoid full table loading)
      */
     List<String> findIdsByTagPattern(String pattern);
 }
