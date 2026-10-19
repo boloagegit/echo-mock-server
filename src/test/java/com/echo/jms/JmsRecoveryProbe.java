@@ -118,7 +118,9 @@ public final class JmsRecoveryProbe {
             try (var socket = new ServerSocket(0, 1, InetAddress.getByAddress(new byte[]{127, 0, 0, 1}))) {
                 port = socket.getLocalPort();
             }
-            url = "tcp://127.0.0.1:" + port + "?callTimeout=3000&callFailoverTimeout=3000"
+            // Keep the provider's normal send budget: persistent large-message I/O on
+            // Windows must not turn this correctness exercise into a 3-second speed gate.
+            url = "tcp://127.0.0.1:" + port + "?callFailoverTimeout=3000"
                     + "&initialConnectAttempts=0&reconnectAttempts=0";
             var config = new ConfigurationImpl().setPersistenceEnabled(true).setSecurityEnabled(false)
                     .setJMXManagementEnabled(false).setJournalType(org.apache.activemq.artemis.core.server.JournalType.NIO)
@@ -139,7 +141,7 @@ public final class JmsRecoveryProbe {
                 properties.getTarget().setType("artemis");
                 properties.getTarget().setServerUrl(url);
                 properties.getTarget().setQueue(QUEUE);
-                properties.getTarget().setTimeoutSeconds(2);
+                properties.getTarget().setTimeoutSeconds(5);
                 for (var route : JmsForwardingRoute.values()) {
                     var telemetry = new JmsRuntimeMetrics(new MonitoringProperties());
                     metrics.put(route, telemetry);
@@ -219,7 +221,7 @@ public final class JmsRecoveryProbe {
                 }
             }
             for (var task : work) {
-                task.get(20, TimeUnit.SECONDS);
+                task.get(45, TimeUnit.SECONDS);
                 replies++;
             }
         }

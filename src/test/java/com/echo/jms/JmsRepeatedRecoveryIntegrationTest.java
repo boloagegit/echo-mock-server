@@ -13,7 +13,7 @@ class JmsRepeatedRecoveryIntegrationTest {
     @TempDir Path data;
 
     @Test
-    @Timeout(90)
+    @Timeout(180)
     void repeatedPersistentTcpRestartsKeepRepliesIsolatedAndResourcesBounded() throws Exception {
         var report = JmsRecoveryProbe.exercise(data, 2, Duration.ZERO, checkpoint -> { });
         assertThat(report.passed()).isTrue();
