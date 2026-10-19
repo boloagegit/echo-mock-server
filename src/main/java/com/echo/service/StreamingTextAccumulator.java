@@ -10,9 +10,11 @@ import java.nio.charset.CodingErrorAction;
 final class StreamingTextAccumulator {
 
     private static final byte[] EMPTY_BYTES = new byte[0];
+    private static final int MAX_DECODE_CHARACTERS = 8 * 1024;
 
     private final CharsetDecoder decoder;
     private final StringBuilder text = new StringBuilder(8 * 1024);
+    private CharBuffer output;
     private byte[] remainder = EMPTY_BYTES;
     private boolean finished;
 
@@ -51,28 +53,36 @@ final class StreamingTextAccumulator {
     }
 
     private void decode(ByteBuffer input, boolean endOfInput) {
-        int capacity = Math.max(32,
-                (int) Math.ceil(Math.max(1, input.remaining()) * decoder.maxCharsPerByte()));
-        CharBuffer output = CharBuffer.allocate(capacity);
+        prepareOutput(Math.min(MAX_DECODE_CHARACTERS, Math.max(32,
+                (int) Math.ceil(Math.max(1, input.remaining()) * decoder.maxCharsPerByte()))));
         while (true) {
             var result = decoder.decode(input, output, endOfInput);
-            appendDecoded(output);
+            appendDecoded();
             if (!result.isOverflow()) return;
         }
     }
 
     private void flush() {
-        CharBuffer output = CharBuffer.allocate(32);
+        prepareOutput(32);
         while (true) {
             var result = decoder.flush(output);
-            appendDecoded(output);
+            appendDecoded();
             if (!result.isOverflow()) return;
         }
     }
 
-    private void appendDecoded(CharBuffer output) {
-        output.flip();
-        text.append(output);
+    private void prepareOutput(int capacity) {
+        // Per response, bounded and grown only when needed. Small responses do not
+        // pay for the maximum-sized buffer; large chunks reuse it on overflow.
+        if (output == null || output.capacity() < capacity) {
+            output = CharBuffer.allocate(capacity);
+        }
+    }
+
+    private void appendDecoded() {
+        // StringBuilder.append(CharBuffer) reads through CharSequence.charAt().
+        // The array overload copies in bulk and preserves the decoder's output.
+        text.append(output.array(), 0, output.position());
         output.clear();
     }
 
