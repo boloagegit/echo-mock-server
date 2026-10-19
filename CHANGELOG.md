@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - SQLite online backups now pass destination paths directly to the driver, so paths containing spaces or apostrophes work without the driver's limited command parser. Snapshot integrity checks and atomic publication remain in place.
 
 ### Fixed
+- HTTP forwarding decodes response chunks through a bounded per-response scratch buffer and appends characters in bulk, reducing temporary allocations while preserving charset handling, response limits and cancellation behavior.
 - Async database request-log handoff batches stop at 16 MiB estimated task bytes or 500 entries, releasing large-body batches sooner. An admitted task larger than the batch budget is written alone; buffer limits, log contents, retries and JMS ACK/transaction behavior are unchanged.
 - Native HTTP reads request bodies in bounded blocks and decodes them on workers, avoiding the per-byte receiver loop and an extra whole-body copy. Cumulative upload limits, charset handling, deadlines, disconnect cleanup and decoded-length headers are preserved; JMS transaction and acknowledgement logic is unchanged.
 - Request-log spool reads reuse one payload query per nonempty batch instead of preparing it per row. Per-row byte admission, corruption handling, read order and statement cleanup are preserved; idle polls do not prepare an extra query.

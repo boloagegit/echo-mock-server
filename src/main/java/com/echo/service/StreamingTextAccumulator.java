@@ -10,10 +10,12 @@ import java.nio.charset.CodingErrorAction;
 final class StreamingTextAccumulator {
 
     private static final byte[] EMPTY_BYTES = new byte[0];
+    private static final int MAX_DECODE_CHARS = 4 * 1024;
 
     private final CharsetDecoder decoder;
     private final StringBuilder text = new StringBuilder(8 * 1024);
     private byte[] remainder = EMPTY_BYTES;
+    private CharBuffer decoded;
     private boolean finished;
 
     StreamingTextAccumulator(Charset charset) {
@@ -51,9 +53,9 @@ final class StreamingTextAccumulator {
     }
 
     private void decode(ByteBuffer input, boolean endOfInput) {
-        int capacity = Math.max(32,
-                (int) Math.ceil(Math.max(1, input.remaining()) * decoder.maxCharsPerByte()));
-        CharBuffer output = CharBuffer.allocate(capacity);
+        int capacity = Math.min(MAX_DECODE_CHARS, Math.max(32,
+                (int) Math.ceil(Math.max(1, input.remaining()) * decoder.maxCharsPerByte())));
+        CharBuffer output = decodeBuffer(capacity);
         while (true) {
             var result = decoder.decode(input, output, endOfInput);
             appendDecoded(output);
@@ -62,7 +64,7 @@ final class StreamingTextAccumulator {
     }
 
     private void flush() {
-        CharBuffer output = CharBuffer.allocate(32);
+        CharBuffer output = decodeBuffer(32);
         while (true) {
             var result = decoder.flush(output);
             appendDecoded(output);
@@ -71,9 +73,17 @@ final class StreamingTextAccumulator {
     }
 
     private void appendDecoded(CharBuffer output) {
-        output.flip();
-        text.append(output);
+        // Use StringBuilder's bulk char-array path instead of CharSequence.charAt per character.
+        text.append(output.array(), 0, output.position());
         output.clear();
+    }
+
+    private CharBuffer decodeBuffer(int capacity) {
+        // Per-response ownership avoids cross-request state and keeps scratch memory bounded.
+        if (decoded == null || decoded.capacity() < capacity) {
+            decoded = CharBuffer.allocate(capacity);
+        }
+        return decoded;
     }
 
     private void retainRemainder(ByteBuffer input) {

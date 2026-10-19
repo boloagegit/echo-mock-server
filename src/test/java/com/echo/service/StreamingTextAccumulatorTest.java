@@ -13,6 +13,20 @@ import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 class StreamingTextAccumulatorTest {
 
     @Test
+    void preservesAsciiPrefixWhenLaterChunksRequireUtf16AndEndWithMalformedInput() {
+        String prefix = "ASCII".repeat(8_000);
+        String suffix = "銀行😀".repeat(4_000);
+        byte[] tail = (suffix + "A").getBytes(StandardCharsets.UTF_8);
+        tail[tail.length - 1] = (byte) 0xE6;
+        var accumulator = new StreamingTextAccumulator(StandardCharsets.UTF_8);
+        accumulator.append(prefix.getBytes(StandardCharsets.UTF_8));
+        for (int offset = 0; offset < tail.length; offset += 257) {
+            accumulator.append(Arrays.copyOfRange(tail, offset, Math.min(tail.length, offset + 257)));
+        }
+        assertThat(accumulator.finish()).isEqualTo(prefix + new String(tail, StandardCharsets.UTF_8));
+    }
+
+    @Test
     void decodesUtf8CharacterSplitAcrossChunks() {
         byte[] encoded = "A測試B".getBytes(StandardCharsets.UTF_8);
         StreamingTextAccumulator accumulator =
