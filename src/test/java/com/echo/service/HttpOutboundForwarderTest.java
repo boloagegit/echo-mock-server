@@ -7,6 +7,8 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -14,6 +16,8 @@ import java.io.ByteArrayOutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -441,13 +445,14 @@ class HttpOutboundForwarderTest {
         assertThat(first.get(2, TimeUnit.SECONDS).getBody()).isEqualTo("capacity-ok");
     }
 
-    @Test
-    void globalResponseBufferBudgetRejectsConcurrentHeapGrowthAndReleasesBytes() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void globalResponseBufferBudgetRejectsConcurrentHeapGrowthAndReleasesBytes(boolean declaredLength) throws Exception {
         CountDownLatch firstChunkSent = new CountDownLatch(1);
         CountDownLatch finishFirst = new CountDownLatch(1);
         server.createContext("/budget-first", exchange -> {
             try {
-                exchange.sendResponseHeaders(200, 0);
+                exchange.sendResponseHeaders(200, declaredLength ? 8 : 0);
                 exchange.getResponseBody().write("123456".getBytes(StandardCharsets.UTF_8));
                 exchange.getResponseBody().flush();
                 firstChunkSent.countDown();
@@ -461,7 +466,7 @@ class HttpOutboundForwarderTest {
         });
         server.createContext("/budget-second", exchange -> {
             byte[] response = "abcdefgh".getBytes(StandardCharsets.UTF_8);
-            exchange.sendResponseHeaders(200, 0);
+            exchange.sendResponseHeaders(200, declaredLength ? response.length : 0);
             exchange.getResponseBody().write(response);
             exchange.close();
         });
@@ -669,6 +674,116 @@ class HttpOutboundForwarderTest {
 
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(response.getBody()).isEqualTo("café");
+    }
+
+    @Test
+    void compressedContentLengthCannotBypassDecodedResponseLimit() throws Exception {
+        byte[] compressed;
+        try (var output = new ByteArrayOutputStream(); var gzip = new GZIPOutputStream(output)) {
+            gzip.write(new byte[512 * 1024]);
+            gzip.finish();
+            compressed = output.toByteArray();
+        }
+        assertThat(compressed.length).isLessThan(1_024);
+        server.createContext("/gzip-too-large", exchange -> {
+            exchange.getResponseHeaders().set("Content-Encoding", "gzip");
+            exchange.sendResponseHeaders(200, compressed.length);
+            try (var output = exchange.getResponseBody()) {
+                output.write(compressed);
+            } finally {
+                exchange.close();
+            }
+        });
+        replaceForwarderWithResponseLimit(1_024);
+        var target = new HttpTargetConnectionService.ResolvedTarget(14L, 1L, "Compressed limit",
+                "http://127.0.0.1:" + server.getAddress().getPort(), "NONE", null, null,
+                5, 30, false);
+        when(connectionService.resolveEnabled(14L)).thenReturn(target);
+        var request = MockRequest.builder().protocol(Protocol.HTTP).method("GET")
+                .path("/gzip-too-large").headers(Map.of()).build();
+        assertResponseTooLarge(forwarder.forward(request, 14L, false), "profile:14");
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void fragmentedResponsesMatchWholeBodyDecodingAcrossCharsets(boolean declaredLength) {
+        for (String name : new String[]{"UTF-8", "UTF-16", "GB18030", "ISO-2022-JP"}) {
+            Charset charset = Charset.forName(name);
+            byte[] encoded = ("ASCII".repeat(2_000) + "銀行😀".repeat(2_000)).getBytes(charset);
+            byte[] truncated = Arrays.copyOf(encoded, encoded.length - 1);
+            String path = "/fragmented-" + name;
+            server.createContext(path, exchange -> {
+                exchange.getResponseHeaders().set("Content-Type", "text/plain;charset=" + name);
+                exchange.sendResponseHeaders(200, declaredLength ? truncated.length : 0);
+                try (var output = exchange.getResponseBody()) {
+                    for (int offset = 0; offset < truncated.length; offset += 257) {
+                        output.write(truncated, offset, Math.min(257, truncated.length - offset));
+                        output.flush();
+                    }
+                } finally {
+                    exchange.close();
+                }
+            });
+            var target = new HttpTargetConnectionService.ResolvedTarget(14L, 1L, "Fragmented",
+                    "http://127.0.0.1:" + server.getAddress().getPort(), "NONE", null, null,
+                    5, 30, false);
+            when(connectionService.resolveEnabled(14L)).thenReturn(target);
+            var request = MockRequest.builder().protocol(Protocol.HTTP).method("GET")
+                    .path(path).headers(Map.of()).build();
+            MockResponse response = forwarder.forward(request, 14L, false);
+            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.getBody()).as("%s, declared length %s", name, declaredLength)
+                    .isEqualTo(new String(truncated, charset));
+        }
+    }
+
+    @Test
+    void cancellationReleasesPartiallyAggregatedResponseAndAllowsLaterRequests() throws Exception {
+        CountDownLatch firstChunk = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        server.createContext("/partial-known", exchange -> {
+            try {
+                exchange.sendResponseHeaders(200, 8);
+                exchange.getResponseBody().write(new byte[]{'a', 'b', 'c'});
+                exchange.getResponseBody().flush();
+                firstChunk.countDown();
+                release.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            } finally {
+                exchange.close();
+            }
+        });
+        var target = new HttpTargetConnectionService.ResolvedTarget(14L, 1L, "Partial",
+                "http://127.0.0.1:" + server.getAddress().getPort(), "NONE", null, null,
+                5, 30, false);
+        when(connectionService.resolveEnabled(14L)).thenReturn(target);
+        var request = MockRequest.builder().protocol(Protocol.HTTP).method("GET")
+                .path("/partial-known").headers(Map.of()).build();
+        var pending = forwarder.forwardAsync(request, 14L, false).toCompletableFuture();
+        try {
+            assertThat(firstChunk.await(2, TimeUnit.SECONDS)).isTrue();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (forwarder.metricsSnapshot().pool().bufferedResponseBytes() < 3
+                    && System.nanoTime() < deadline) {
+                Thread.sleep(5);
+            }
+            assertThat(forwarder.metricsSnapshot().pool().bufferedResponseBytes()).isEqualTo(3);
+            assertThat(pending.cancel(true)).isTrue();
+            deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while ((forwarder.metricsSnapshot().activeForwards() != 0
+                    || forwarder.metricsSnapshot().pool().bufferedResponseBytes() != 0)
+                    && System.nanoTime() < deadline) {
+                Thread.sleep(5);
+            }
+            assertThat(forwarder.metricsSnapshot().activeForwards()).isZero();
+            assertThat(forwarder.metricsSnapshot().pool().bufferedResponseBytes()).isZero();
+            var next = MockRequest.builder().protocol(Protocol.HTTP).method("GET")
+                    .path("/base/orders").headers(Map.of()).build();
+            assertThat(forwarder.forward(next, 14L, false).getBody()).isEqualTo("downstream-ok");
+        } finally {
+            release.countDown();
+        }
     }
 
     @Test

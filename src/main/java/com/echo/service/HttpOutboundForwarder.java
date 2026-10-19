@@ -21,7 +21,6 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
-import reactor.core.publisher.SynchronousSink;
 import reactor.netty.ByteBufFlux;
 import reactor.netty.http.client.HttpClient;
 import reactor.netty.resources.ConnectionPoolMetrics;
@@ -68,6 +67,7 @@ public final class HttpOutboundForwarder {
     private static final int DEFAULT_MAX_PENDING_REQUESTS = 1_000;
     private static final int DEFAULT_MAX_RESPONSE_BODY_BYTES = 10 * 1024 * 1024;
     private static final int DEFAULT_MAX_BUFFERED_RESPONSE_BYTES = 128 * 1024 * 1024;
+    private static final int SMALL_RESPONSE_BYTES = 256 * 1024;
     private static final int DEFAULT_POOL_ACQUIRE_TIMEOUT_MS = 3_000;
     private static final int DEFAULT_LEGACY_CONNECT_TIMEOUT_SECONDS = 5;
     private static final int DEFAULT_LEGACY_READ_TIMEOUT_SECONDS = 30;
@@ -447,7 +447,8 @@ public final class HttpOutboundForwarder {
                 return Mono.error(new ResponseBodyTooLargeException(maxResponseBodyBytes));
             }
             return readResponseBody(responseBody, contentCharset(
-                            response.responseHeaders().get(HttpHeaderNames.CONTENT_TYPE)))
+                            response.responseHeaders().get(HttpHeaderNames.CONTENT_TYPE)),
+                            isSmallResponse(declaredLength))
                     .map(value -> new ForwardResponse(status, value))
                     .switchIfEmpty(Mono.just(new ForwardResponse(status, null)));
         }).single();
@@ -461,26 +462,40 @@ public final class HttpOutboundForwarder {
         }
     }
 
-    private Mono<String> readResponseBody(ByteBufFlux responseBody, Charset charset) {
+    private static boolean isSmallResponse(String declaredLength) {
+        if (declaredLength == null) return false;
+        try {
+            long length = Long.parseLong(declaredLength);
+            return length > 0 && length <= SMALL_RESPONSE_BYTES;
+        } catch (NumberFormatException ignored) {
+            return false;
+        }
+    }
+
+    private Mono<String> readResponseBody(ByteBufFlux responseBody, Charset charset, boolean smallResponse) {
         AtomicInteger receivedBytes = new AtomicInteger();
         ResponseBufferBudget.Reservation reservation = responseBufferBudget.openReservation();
+        ByteBufFlux boundedBody = ByteBufFlux.fromInbound(responseBody.doOnNext(chunk -> {
+            int bytes = chunk.readableBytes();
+            long nextSize = (long) receivedBytes.get() + bytes;
+            if (nextSize > maxResponseBodyBytes) {
+                throw new ResponseBodyTooLargeException(maxResponseBodyBytes);
+            }
+            if (!reservation.tryReserve(bytes)) {
+                throw new ResponseBufferCapacityException(responseBufferBudget.maximumBytes());
+            }
+            receivedBytes.set((int) nextSize);
+        }));
+        if (smallResponse) {
+            // Reactor owns and releases the aggregated buffers on completion, error and cancellation.
+            // Larger or unknown-length responses keep incremental text decoding below.
+            return boundedBody.aggregate().asString(charset)
+                    .filter(ignored -> receivedBytes.get() > 0)
+                    .doFinally(ignored -> reservation.close());
+        }
         StreamingTextAccumulator output = new StreamingTextAccumulator(charset);
-        return responseBody.asByteArray()
-                .handle((byte[] chunk, SynchronousSink<Integer> sink) -> {
-                    long nextSize = (long) receivedBytes.get() + chunk.length;
-                    if (nextSize > maxResponseBodyBytes) {
-                        sink.error(new ResponseBodyTooLargeException(maxResponseBodyBytes));
-                        return;
-                    }
-                    if (!reservation.tryReserve(chunk.length)) {
-                        sink.error(new ResponseBufferCapacityException(
-                                responseBufferBudget.maximumBytes()));
-                        return;
-                    }
-                    output.append(chunk);
-                    receivedBytes.set((int) nextSize);
-                    sink.next(chunk.length);
-                })
+        return boundedBody.asByteArray()
+                .doOnNext(output::append)
                 .then(Mono.defer(() -> receivedBytes.get() == 0
                         ? Mono.empty()
                         : Mono.fromSupplier(output::finish)))
