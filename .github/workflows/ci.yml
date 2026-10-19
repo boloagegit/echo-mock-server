@@ -120,6 +120,25 @@ jobs:
       - name: Build, test and analyze from a path containing spaces
         run: .\gradlew.bat build jacocoTestReport -PtestForks=2 --no-daemon
 
+      - name: Summarize failed Java tests
+        if: failure()
+        run: |
+          $reported = 0
+          Get-ChildItem build/test-results -Recurse -Filter 'TEST-*.xml' -ErrorAction SilentlyContinue | ForEach-Object {
+            [xml]$suite = Get-Content $_.FullName -Raw
+            foreach ($test in $suite.testsuite.testcase) {
+              foreach ($failure in @($test.failure) + @($test.error)) {
+                if ($null -eq $failure -or $reported -ge 20) { continue }
+                $message = [string]$failure.message
+                if ($message.Length -gt 2000) {
+                  $message = $message.Substring(0, 800) + ' ... [truncated] ... ' + $message.Substring($message.Length - 1000)
+                }
+                Write-Output "$($test.classname).$($test.name): $message"
+                $reported++
+              }
+            }
+          }
+
       - name: Upload Windows test and analysis reports
         if: always()
         uses: actions/upload-artifact@v7

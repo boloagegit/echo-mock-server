@@ -208,7 +208,14 @@ public final class JmsRecoveryProbe {
             for (var route : JmsForwardingRoute.values()) {
                 for (int worker = 0; worker < CALLERS_PER_ROUTE; worker++) {
                     String request = ++requestSequence + ":" + cycle + ":" + route + ":" + worker + ":" + PAYLOAD;
-                    work.add(callers.submit(() -> assertThat(route.forward(forwarders.get(route), request)).isEqualTo(request)));
+                    work.add(callers.submit(() -> {
+                        String reply = route.forward(forwarders.get(route), request);
+                        String prefix = reply == null ? "<null>" : reply.substring(0, Math.min(160, reply.length()));
+                        assertThat(reply).withFailMessage(
+                                "JMS recovery reply mismatch: route=%s cycle=%d expectedPrefix=%s actualChars=%d actualPrefix=%s",
+                                route, cycle, request.substring(0, 64), reply == null ? -1 : reply.length(), prefix)
+                                .isEqualTo(request);
+                    }));
                 }
             }
             for (var task : work) {
