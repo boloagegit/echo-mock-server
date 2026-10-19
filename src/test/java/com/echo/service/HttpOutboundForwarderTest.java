@@ -739,13 +739,43 @@ class HttpOutboundForwarderTest {
         }
     }
 
-    @Test
-    void cancellationReleasesPartiallyAggregatedResponseAndAllowsLaterRequests() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void largeFragmentedUtf8ResponsesPreserveTextAndMalformedReplacement(boolean declaredLength) {
+        byte[] body = ("ASCII".repeat(30_000) + "銀行😀".repeat(100_000)).getBytes(StandardCharsets.UTF_8);
+        body[body.length - 1] = (byte) 0xFF;
+        server.createContext("/large-fragmented", exchange -> {
+            exchange.getResponseHeaders().set("Content-Type", "text/plain;charset=UTF-8");
+            exchange.sendResponseHeaders(200, declaredLength ? body.length : 0);
+            try (var output = exchange.getResponseBody()) {
+                for (int offset = 0; offset < body.length; offset += 8_191) {
+                    output.write(body, offset, Math.min(8_191, body.length - offset));
+                    output.flush();
+                }
+            } finally {
+                exchange.close();
+            }
+        });
+        var target = new HttpTargetConnectionService.ResolvedTarget(14L, 1L, "Large fragmented",
+                "http://127.0.0.1:" + server.getAddress().getPort(), "NONE", null, null,
+                5, 30, false);
+        when(connectionService.resolveEnabled(14L)).thenReturn(target);
+        var request = MockRequest.builder().protocol(Protocol.HTTP).method("GET")
+                .path("/large-fragmented").headers(Map.of()).build();
+        MockResponse response = forwarder.forward(request, 14L, false);
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(response.getBody()).isEqualTo(new String(body, StandardCharsets.UTF_8));
+        assertThat(forwarder.metricsSnapshot().pool().bufferedResponseBytes()).isZero();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void cancellationReleasesPartialResponseAndAllowsLaterRequests(boolean declaredLength) throws Exception {
         CountDownLatch firstChunk = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         server.createContext("/partial-known", exchange -> {
             try {
-                exchange.sendResponseHeaders(200, 8);
+                exchange.sendResponseHeaders(200, declaredLength ? 8 : 0);
                 exchange.getResponseBody().write(new byte[]{'a', 'b', 'c'});
                 exchange.getResponseBody().flush();
                 firstChunk.countDown();
@@ -770,7 +800,8 @@ class HttpOutboundForwarderTest {
                     && System.nanoTime() < deadline) {
                 Thread.sleep(5);
             }
-            assertThat(forwarder.metricsSnapshot().pool().bufferedResponseBytes()).isEqualTo(8);
+            assertThat(forwarder.metricsSnapshot().pool().bufferedResponseBytes())
+                    .isEqualTo(declaredLength ? 8 : 3);
             assertThat(pending.cancel(true)).isTrue();
             deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
             while ((forwarder.metricsSnapshot().activeForwards() != 0

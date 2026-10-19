@@ -1,21 +1,26 @@
 package com.echo.service;
 
+import io.netty.buffer.ByteBuf;
+
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
+import java.util.StringJoiner;
 
 /** Decodes response chunks without retaining a second full byte-array copy of the body. */
 final class StreamingTextAccumulator {
 
     private static final byte[] EMPTY_BYTES = new byte[0];
     private static final int MAX_DECODE_CHARS = 4 * 1024;
+    private static final int MAX_COPY_BYTES = 8 * 1024;
 
     private final CharsetDecoder decoder;
-    private final StringBuilder text = new StringBuilder(8 * 1024);
+    private final StringJoiner text = new StringJoiner("");
     private byte[] remainder = EMPTY_BYTES;
     private CharBuffer decoded;
+    private byte[] copyBuffer;
     private boolean finished;
 
     StreamingTextAccumulator(Charset charset) {
@@ -27,14 +32,43 @@ final class StreamingTextAccumulator {
     void append(byte[] chunk) {
         if (finished) throw new IllegalStateException("response body already finished");
         if (chunk == null || chunk.length == 0) return;
+        append(chunk, 0, chunk.length);
+    }
 
+    /** Copies synchronously without retaining incoming buffers or changing their reader index. */
+    void appendBuffer(ByteBuf chunk) {
+        if (finished) {
+            throw new IllegalStateException("response body already finished");
+        }
+        int remaining = chunk.readableBytes();
+        if (remaining == 0) {
+            return;
+        }
+        if (chunk.hasArray()) {
+            append(chunk.array(), chunk.arrayOffset() + chunk.readerIndex(), remaining);
+            return;
+        }
+        if (copyBuffer == null) {
+            copyBuffer = new byte[MAX_COPY_BYTES];
+        }
+        int index = chunk.readerIndex();
+        while (remaining > 0) {
+            int length = Math.min(remaining, copyBuffer.length);
+            chunk.getBytes(index, copyBuffer, 0, length);
+            append(copyBuffer, 0, length);
+            index += length;
+            remaining -= length;
+        }
+    }
+
+    private void append(byte[] chunk, int offset, int length) {
         ByteBuffer input;
         if (remainder.length == 0) {
-            input = ByteBuffer.wrap(chunk);
+            input = ByteBuffer.wrap(chunk, offset, length);
         } else {
-            byte[] combined = new byte[remainder.length + chunk.length];
+            byte[] combined = new byte[remainder.length + length];
             System.arraycopy(remainder, 0, combined, 0, remainder.length);
-            System.arraycopy(chunk, 0, combined, remainder.length, chunk.length);
+            System.arraycopy(chunk, offset, combined, remainder.length, length);
             remainder = EMPTY_BYTES;
             input = ByteBuffer.wrap(combined);
         }
@@ -53,18 +87,18 @@ final class StreamingTextAccumulator {
     }
 
     private void decode(ByteBuffer input, boolean endOfInput) {
-        int capacity = Math.min(MAX_DECODE_CHARS, Math.max(32,
-                (int) Math.ceil(Math.max(1, input.remaining()) * decoder.maxCharsPerByte())));
-        CharBuffer output = decodeBuffer(capacity);
+        CharBuffer output = decodeBuffer();
         while (true) {
             var result = decoder.decode(input, output, endOfInput);
+            if (!result.isOverflow()) {
+                return;
+            }
             appendDecoded(output);
-            if (!result.isOverflow()) return;
         }
     }
 
     private void flush() {
-        CharBuffer output = decodeBuffer(32);
+        CharBuffer output = decodeBuffer();
         while (true) {
             var result = decoder.flush(output);
             appendDecoded(output);
@@ -73,15 +107,18 @@ final class StreamingTextAccumulator {
     }
 
     private void appendDecoded(CharBuffer output) {
-        // Use StringBuilder's bulk char-array path instead of CharSequence.charAt per character.
-        text.append(output.array(), 0, output.position());
+        if (output.position() == 0) {
+            return;
+        }
+        // Keep bounded text segments; StringJoiner allocates the final string once without growth copies.
+        text.add(new String(output.array(), 0, output.position()));
         output.clear();
     }
 
-    private CharBuffer decodeBuffer(int capacity) {
+    private CharBuffer decodeBuffer() {
         // Per-response ownership avoids cross-request state and keeps scratch memory bounded.
-        if (decoded == null || decoded.capacity() < capacity) {
-            decoded = CharBuffer.allocate(capacity);
+        if (decoded == null) {
+            decoded = CharBuffer.allocate(MAX_DECODE_CHARS);
         }
         return decoded;
     }

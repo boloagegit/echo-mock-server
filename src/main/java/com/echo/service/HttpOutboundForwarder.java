@@ -485,7 +485,8 @@ public final class HttpOutboundForwarder {
         }
         AtomicInteger receivedBytes = new AtomicInteger();
         ResponseBufferBudget.Reservation reservation = responseBufferBudget.openReservation();
-        ByteBufFlux boundedBody = ByteBufFlux.fromInbound(responseBody.doOnNext(chunk -> {
+        StreamingTextAccumulator output = new StreamingTextAccumulator(charset);
+        return responseBody.doOnNext(chunk -> {
             int bytes = chunk.readableBytes();
             long nextSize = (long) receivedBytes.get() + bytes;
             if (nextSize > maxResponseBodyBytes) {
@@ -495,10 +496,8 @@ public final class HttpOutboundForwarder {
                 throw new ResponseBufferCapacityException(responseBufferBudget.maximumBytes());
             }
             receivedBytes.set((int) nextSize);
-        }));
-        StreamingTextAccumulator output = new StreamingTextAccumulator(charset);
-        return boundedBody.asByteArray()
-                .doOnNext(output::append)
+            output.appendBuffer(chunk);
+        })
                 .then(Mono.defer(() -> receivedBytes.get() == 0
                         ? Mono.empty()
                         : Mono.fromSupplier(output::finish)))
