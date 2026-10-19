@@ -55,6 +55,21 @@ class StreamingTextAccumulatorTest {
     }
 
     @Test
+    void tinyFirstDirectSliceCanBeFollowedByLargeDirectInputWithoutLosingPendingCharacters() {
+        String tail = ("銀行😀" + "b".repeat(8_191)).repeat(16);
+        ByteBuf source = Unpooled.directBuffer().writeByte('a').writeBytes(tail.getBytes(StandardCharsets.UTF_8));
+        var accumulator = new StreamingTextAccumulator(StandardCharsets.UTF_8);
+        try {
+            accumulator.appendBuffer(source.readSlice(1));
+            accumulator.appendBuffer(source);
+            source.setZero(0, source.capacity());
+        } finally {
+            source.release();
+        }
+        assertThat(accumulator.finish()).isEqualTo("a" + tail);
+    }
+
+    @Test
     void emptyBuffersPreserveDecoderStateAndFinishedAccumulatorsRejectFurtherBuffers() {
         var accumulator = new StreamingTextAccumulator(StandardCharsets.UTF_8);
         accumulator.appendBuffer(Unpooled.EMPTY_BUFFER);

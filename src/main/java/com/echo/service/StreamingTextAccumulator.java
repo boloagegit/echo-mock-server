@@ -48,8 +48,11 @@ final class StreamingTextAccumulator {
             append(chunk.array(), chunk.arrayOffset() + chunk.readerIndex(), remaining);
             return;
         }
-        if (copyBuffer == null) {
-            copyBuffer = new byte[MAX_COPY_BYTES];
+        int required = Math.min(MAX_COPY_BYTES, remaining);
+        if (copyBuffer == null || copyBuffer.length < required) {
+            int capacity = copyBuffer == null ? required
+                    : Math.max(required, Math.min(MAX_COPY_BYTES, copyBuffer.length * 2));
+            copyBuffer = new byte[capacity];
         }
         int index = chunk.readerIndex();
         while (remaining > 0) {
@@ -87,18 +90,21 @@ final class StreamingTextAccumulator {
     }
 
     private void decode(ByteBuffer input, boolean endOfInput) {
-        CharBuffer output = decodeBuffer();
+        int capacity = Math.min(MAX_DECODE_CHARS, Math.max(32,
+                (int) Math.ceil(Math.max(1, input.remaining()) * decoder.maxCharsPerByte())));
+        CharBuffer output = decodeBuffer(capacity);
         while (true) {
             var result = decoder.decode(input, output, endOfInput);
             if (!result.isOverflow()) {
                 return;
             }
             appendDecoded(output);
+            output = decodeBuffer(Math.min(MAX_DECODE_CHARS, output.capacity() * 2));
         }
     }
 
     private void flush() {
-        CharBuffer output = decodeBuffer();
+        CharBuffer output = decodeBuffer(32);
         while (true) {
             var result = decoder.flush(output);
             appendDecoded(output);
@@ -115,10 +121,15 @@ final class StreamingTextAccumulator {
         output.clear();
     }
 
-    private CharBuffer decodeBuffer() {
+    private CharBuffer decodeBuffer(int capacity) {
         // Per-response ownership avoids cross-request state and keeps scratch memory bounded.
         if (decoded == null) {
-            decoded = CharBuffer.allocate(MAX_DECODE_CHARS);
+            decoded = CharBuffer.allocate(capacity);
+        } else if (decoded.capacity() < capacity) {
+            CharBuffer expanded = CharBuffer.allocate(capacity);
+            decoded.flip();
+            expanded.put(decoded);
+            decoded = expanded;
         }
         return decoded;
     }
