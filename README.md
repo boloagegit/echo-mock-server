@@ -138,6 +138,30 @@ The [HTTP acceleration guide](docs/native-http.md) covers capacity limits, compa
 
 With a 512 MiB heap, 128 KiB padding and request recording enabled, upgrading Artemis from 2.40 to 2.57 improves mean JMS mock throughput by 91.9% and forwarding by 20.4% across four fresh JVMs. This compares Echo before and after the upgrade. The [existing validation report](docs/artemis-large-message-validation-2026-10-18.md) includes interoperability, latency and ten-minute mixed-load observations, including the thread-count warning and its analysis. These results apply to Artemis paths; TIBCO EMS is not benchmarked.
 
+Additional validation on 2026-10-19 ([Echo source 7570db0](https://github.com/boloagegit/echo-mock-server/commit/7570db0c8c0670675afff39dca5c063c58ddd8ba)) used Linux, Java 17, a shared four-CPU quota, 512 MiB heap, G1 and NMT on both products. With recording **off**, 16 connections and four rules, these are means from two fresh JVMs per product: 20 s initial warmup, then 10 s warmup and 20 s measurement per case. Every received response was checked; no response or socket errors occurred.
+
+| Scenario | Echo req/s | WireMock 3.13.2 req/s | Ratio |
+|---|---:|---:|---:|
+| Fixed response | 73,430 | 55,506 | 1.32× |
+| Template | 70,268 | 28,589 | 2.46× |
+| Repeated 16 KiB XML, field near the start | 39,991 | 19,449 | 2.06× |
+| 16 KiB forwarding | 12,364 | 8,488 | 1.46× |
+
+XML uses a simple predicate on a valid document: Echo can finish streaming matching early, so this is not a full-document validation comparison. With 64 KiB forwarding, the ratio was 1.18×. These conditions differ from the older Java 21 / 1 GiB comparison above.
+
+With recording **on**, a separate ten-minute run sustained 200 req/s per product: 20% each fixed/template/XML16KiB/forward16KiB/delay10ms, eight callers, live rule edits, JMS off. Each product completed 120,000 main requests without errors. Echo confirmed all main and probe logs with no drops or retries; WireMock retained 10,000 journal entries. Both passed the declared heap/native/RSS/thread/file-descriptor growth checks. CPU includes monitoring and rule edits; memory below is after drain and diagnostic GC outside measured traffic.
+
+| Recorded-load metric | Echo | WireMock 3.13.2 |
+|---|---:|---:|
+| Forwarding P99 (ms) | 13.8 | 15.9 |
+| Server CPU (µs/mock reply) | 1485.2 | 2561.7 |
+| Heap after GC (MiB) | 49.9 | 129.6 |
+| Process RAM, RSS (MiB) | 888.8 | 685.2 |
+
+Echo uses asynchronous SQLite (10,000-row limit, default 1,000/s writer cap); WireMock uses an in-memory journal with a 10,000-entry limit. Persistence and overload policies differ: Echo drops logs under saturation, so recording-on peak reply throughput is **not** complete-journal throughput. Process RAM is higher for Echo in this run. Ten minutes is a finite regression observation, not proof of indefinite stability.
+
+Separately, ten logged-in browser sessions queried log pages/details/traffic during 120,000 mixed HTTP/JMS requests with 128 KiB bodies, a 512 MiB heap and backups enabled: no request errors, log drops or write retries; all seven resource-growth checks passed. Mean page/detail times were 19.9/9.9 ms. JMS validation uses Artemis, not TIBCO EMS.
+
 ## Documentation
 
 | Guide | Covers |
