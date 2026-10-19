@@ -6,6 +6,7 @@ import com.echo.service.RequestLogUnavailableException;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
+import com.fasterxml.jackson.databind.ObjectWriter;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import jakarta.annotation.PostConstruct;
@@ -106,6 +107,8 @@ public class RequestLogSpool {
 
     private final ObjectMapper objectMapper;
     private final ObjectReader spoolTaskReader;
+    private final ObjectWriter largeTaskWriter;
+    private final AtomicBoolean largeSerializationActive = new AtomicBoolean();
     private final Path spoolPath;
     private final ArrayBlockingQueue<PendingAppend> appendQueue;
     private final int appendBatchSize;
@@ -240,6 +243,8 @@ public class RequestLogSpool {
         // only spool reads use this bounded recycler. Never mutate the shared mapper.
         this.spoolTaskReader = objectMapper.readerFor(SpoolTask.class).with(
                 objectMapper.getFactory().copy().setRecyclerPool(new SpoolReadBufferPool()));
+        this.largeTaskWriter = objectMapper.writerFor(SpoolTask.class).with(
+                objectMapper.getFactory().copy().setRecyclerPool(new SpoolWriteBufferPool()));
         this.spoolPath = Path.of(spoolPath).toAbsolutePath().normalize();
         this.appendQueue = new ArrayBlockingQueue<>(Math.max(1, queueCapacity));
         this.appendBatchSize = Math.max(1, appendBatchSize);
@@ -394,7 +399,7 @@ public class RequestLogSpool {
             final byte[] payload;
             final CandidateSetPayload candidateSet;
             try {
-                payload = objectMapper.writeValueAsBytes(SpoolTask.from(task));
+                payload = serializeTask(task, serializationBytes);
                 candidateSet = candidateSetFor(task);
             } catch (IOException e) {
                 throw new RequestLogRejectedException("Cannot serialize request log", e);
@@ -428,6 +433,21 @@ public class RequestLogSpool {
             lifecycleLock.readLock().unlock();
         }
         return pending;
+    }
+
+    private byte[] serializeTask(LogTask task, long reservedBytes) throws IOException {
+        SpoolTask stored = SpoolTask.from(task);
+        // Small writes keep their small buffers. A busy large writer must not
+        // make concurrent producers wait or allocate another 512 KiB buffer.
+        if (reservedBytes >= SpoolWriteBufferPool.MIN_SERIALIZATION_RESERVATION
+                && largeSerializationActive.compareAndSet(false, true)) {
+            try {
+                return largeTaskWriter.writeValueAsBytes(stored);
+            } finally {
+                largeSerializationActive.set(false);
+            }
+        }
+        return objectMapper.writeValueAsBytes(stored);
     }
 
     private static void await(PendingAppend pending) {
