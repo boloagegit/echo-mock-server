@@ -24,6 +24,8 @@ final class RequestLogHandoff {
 
     /** 一次交給寫入端的筆數。 */
     static final int BATCH_SIZE = 500;
+    /** Limit simultaneous task retention during serialization/commit; an admitted larger entry goes alone. */
+    static final long MAX_BATCH_ESTIMATED_BYTES = 16L * 1024 * 1024;
     private static final long DROP_WARNING_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(30);
 
     /** 寫入一批，回傳從頭算起處理完的筆數與其中沒存到的筆數；之後的會再交一次。 */
@@ -259,8 +261,14 @@ final class RequestLogHandoff {
             }
             int count = Math.min(BATCH_SIZE, entries.size());
             List<Entry> batch = new ArrayList<>(count);
+            long batchBytes = 0;
             for (int i = 0; i < count; i++) {
+                Entry next = entries.getFirst();
+                if (!batch.isEmpty() && next.bytes() > MAX_BATCH_ESTIMATED_BYTES - batchBytes) {
+                    break;
+                }
                 batch.add(entries.removeFirst());
+                batchBytes += next.bytes();
             }
             writing = true;
             inFlight = batch.size();

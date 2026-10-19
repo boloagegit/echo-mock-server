@@ -83,6 +83,48 @@ class RequestLogHandoffTest {
     }
 
     @Test
+    void largeBodiesAreSplitIntoOrderedBatchesWithoutRejectingAnAdmittedLargeEntry() throws Exception {
+        CountDownLatch gate = new CountDownLatch(1);
+        CountDownLatch entered = new CountDownLatch(1);
+        List<List<LogTask>> batches = Collections.synchronizedList(new ArrayList<>());
+        handoff = new RequestLogHandoff(1_000, 64L * 1024 * 1024, batch -> {
+            if (batches.isEmpty()) {
+                entered.countDown();
+                try {
+                    gate.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            batches.add(List.copyOf(batch));
+            return new RequestLogSpool.AppendResult(batch.size(), 0);
+        }, 10, System::nanoTime);
+        handoff.start();
+        handoff.offer(task("/first"));
+        assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+        String body = "x".repeat(2 * 1024 * 1024);
+        for (int i = 0; i < 6; i++) {
+            handoff.offer(LogTask.builder().endpoint("/" + i).requestBody(body).build());
+        }
+        handoff.offer(task("/larger-than-batch", 9 * 1024 * 1024));
+        handoff.offer(task("/last"));
+        gate.countDown();
+
+        assertThat(handoff.awaitIdle(5_000)).isTrue();
+        assertThat(batches.stream().flatMap(List::stream).map(LogTask::getEndpoint).toList())
+                .containsExactly("/first", "/0", "/1", "/2", "/3", "/4", "/5", "/larger-than-batch", "/last");
+        assertThat(batches).hasSize(5);
+        for (List<LogTask> batch : batches) {
+            if (batch.size() > 1) {
+                assertThat(batch.stream().mapToLong(RequestLogHandoff::estimateBytes).sum())
+                        .isLessThanOrEqualTo(RequestLogHandoff.MAX_BATCH_ESTIMATED_BYTES);
+            }
+        }
+        assertThat(handoff.droppedCount()).isZero();
+        assertThat(handoff.bytes()).isZero();
+    }
+
+    @Test
     @DisplayName("超過筆數上限：丟掉最舊的，保留最新的")
     void dropsTheOldestOverTheEntryLimit() throws Exception {
         CountDownLatch gate = new CountDownLatch(1);
