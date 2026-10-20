@@ -68,6 +68,7 @@ public final class NativeHttpResources implements AutoCloseable {
         private boolean closed;
         private long reserved;
         private long responseBodyBytes;
+        private long encodedBodyBytes;
         private final List<Runnable> cleanup = new ArrayList<>(3);
 
         synchronized boolean closed() { return closed; }
@@ -84,14 +85,25 @@ public final class NativeHttpResources implements AutoCloseable {
         }
 
         synchronized boolean reserveResponseBody(long bytes) {
+            if (!replaceReservation(responseBodyBytes, bytes)) return false;
+            responseBodyBytes = bytes;
+            return true;
+        }
+
+        synchronized boolean reserveEncodedBody(long bytes) {
+            if (!replaceReservation(encodedBodyBytes, bytes)) return false;
+            encodedBodyBytes = bytes;
+            return true;
+        }
+
+        private boolean replaceReservation(long previous, long bytes) {
             if (closed || bytes < 0) return false;
-            long additional = bytes - responseBodyBytes;
+            long additional = bytes - previous;
             if (additional > 0 && !reserve(additional)) return false;
             if (additional < 0) {
                 buffered.addAndGet(additional);
                 reserved += additional;
             }
-            responseBodyBytes = bytes;
             return true;
         }
 

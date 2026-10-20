@@ -363,7 +363,7 @@ final class NativeMockHttpHandler implements HttpHandler {
                 && !exchange.getResponseHeaders().contains(Headers.TRANSFER_ENCODING)) {
             exchange.setResponseContentLength(encoded.length());
         }
-        exchange.getResponseSender().send(encoded.first(), new IoCallback() {
+        exchange.getResponseSender().send(encoded.stream().batch(), new IoCallback() {
             @Override
             public void onComplete(HttpServerExchange completed, Sender sender) {
                 if (encoded.stream().finished()) {
@@ -371,9 +371,9 @@ final class NativeMockHttpHandler implements HttpHandler {
                 } else if (available(completed)) {
                     // Reuse the buffer only after the previous send completed. Encoding never blocks an I/O thread.
                     submit(completed, () -> {
-                        ByteBuffer next = encoded.stream().next();
+                        encoded.stream().prepareBatch();
                         completed.getIoThread().execute(() -> {
-                            if (available(completed)) sender.send(next, this);
+                            if (available(completed)) sender.send(encoded.stream().batch(), this);
                         });
                     });
                 }
@@ -396,21 +396,42 @@ final class NativeMockHttpHandler implements HttpHandler {
         }
         MockResponse response = result.getResponse();
         String value = response.getBody() == null ? "" : response.getBody();
-        int length = value.length() > resources.maxBodyBytes ? -1
-                : Utf8ResponseBody.encodedLength(value, resources.maxBodyBytes);
-        if (length < 0) {
+        if (value.length() > resources.maxBodyBytes) {
             fail(exchange, 502, "Response body exceeds native HTTP limit");
             return null;
         }
-        boolean streamed = length > 256 * 1024 && response.getStatus() >= 200
+        var lease = exchange.getAttachment(LEASE);
+        boolean streamCandidate = value.length() > 256 * 1024 && response.getStatus() >= 200
                 && response.getStatus() != 204 && response.getStatus() != 304;
-        if (!exchange.getAttachment(LEASE).reserve(streamed ? Utf8ResponseBody.BUFFER_BYTES : length)) {
+        if (!streamCandidate) return encodeSinglePass(exchange, response, value, 0);
+        if (!lease.reserveEncodedBody(Utf8ResponseBody.BUFFER_BYTES)) {
             fail(exchange, 503, "Native HTTP buffer capacity exhausted");
             return null;
         }
-        if (!streamed) return encode(response);
         Utf8ResponseBody body = new Utf8ResponseBody(value);
-        return new EncodedResponse(body.next(), body, length, responseContentType(value));
+        if (body.needsSinglePass()) {
+            return encodeSinglePass(exchange, response, value, Utf8ResponseBody.BUFFER_BYTES);
+        }
+        body.prepareBatch();
+        // No UTF-8 expansion: every consumed UTF-16 unit produced exactly one byte.
+        return new EncodedResponse(null, body, value.length(), responseContentType(value));
+    }
+
+    private EncodedResponse encodeSinglePass(HttpServerExchange exchange, MockResponse response,
+                                             String value, int preflightBytes) {
+        var lease = exchange.getAttachment(LEASE);
+        // JDK Unicode encoding may trim its initial allocation; cover both arrays until it returns.
+        if (!lease.reserveEncodedBody(6L * value.length() + preflightBytes)) {
+            fail(exchange, 503, "Native HTTP buffer capacity exhausted");
+            return null;
+        }
+        EncodedResponse encoded = encode(response);
+        if (encoded.length() > resources.maxBodyBytes) {
+            fail(exchange, 502, "Response body exceeds native HTTP limit");
+            return null;
+        }
+        if (!lease.reserveEncodedBody(encoded.length())) return null;
+        return encoded;
     }
 
     private final class Work implements Runnable {
