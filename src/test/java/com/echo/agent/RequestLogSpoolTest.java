@@ -702,6 +702,34 @@ class RequestLogSpoolTest {
     }
 
     @Test
+    void batchMetadataDistinguishesByteBacklogFromExactEofAndCountLimits() {
+        spool = createSpoolWithMemory(tempDir.resolve("read-metadata.sqlite"),
+                64 * 1024, 64 * 1024 * 1024);
+        spool.start();
+        for (int i = 0; i < 60; i++) spool.append(minimalTask("item-" + i));
+        List<RequestLogSpool.SpoolEntry> all = spool.readAfter(0, 100);
+        long first31Bytes = all.subList(0, 31).stream().mapToLong(RequestLogSpool.SpoolEntry::payloadBytes).sum();
+        var first = spool.readBatchAfter(0, 51, first31Bytes);
+        assertThat(first.entries()).hasSize(31);
+        assertThat(first.byteLimitReached()).isTrue();
+
+        var remainder = spool.readBatchAfter(first.entries().get(30).sequence(), 51, Long.MAX_VALUE);
+        assertThat(remainder.entries()).hasSize(29);
+        assertThat(remainder.byteLimitReached()).isFalse();
+
+        long totalBytes = all.stream().mapToLong(RequestLogSpool.SpoolEntry::payloadBytes).sum();
+        var exact = spool.readBatchAfter(0, 100, totalBytes);
+        assertThat(exact.entries()).hasSize(60);
+        assertThat(exact.byteLimitReached()).isFalse();
+        var counted = spool.readBatchAfter(0, 51, Long.MAX_VALUE);
+        assertThat(counted.entries()).hasSize(51);
+        assertThat(counted.byteLimitReached()).isFalse();
+        var empty = spool.readBatchAfter(all.get(59).sequence(), 51, totalBytes);
+        assertThat(empty.entries()).isEmpty();
+        assertThat(empty.byteLimitReached()).isFalse();
+    }
+
+    @Test
     void readBatchByteBudgetStopsBeforeMaterializingFollowingRows() {
         spool = createSpoolWithMemory(tempDir.resolve("read-budget.sqlite"),
                 64 * 1024, 64 * 1024 * 1024);

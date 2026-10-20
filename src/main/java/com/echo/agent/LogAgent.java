@@ -512,9 +512,10 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                     reportSkipped(now, false);
                 }
 
-                List<RequestLogSpool.SpoolEntry> fetched =
-                        durableSpool.readAfter(checkpoint, durableBatchSize + 1,
+                RequestLogSpool.ReadBatch fetchedBatch =
+                        durableSpool.readBatchAfter(checkpoint, durableBatchSize + 1,
                                 durableSpool.statusSnapshot().inFlightByteLimit());
+                List<RequestLogSpool.SpoolEntry> fetched = fetchedBatch.entries();
                 if (fetched.isEmpty()) {
                     if (checkpoint > lastCleanedCheckpoint) {
                         durableSpool.deleteThrough(checkpoint);
@@ -524,8 +525,9 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                     continue;
                 }
 
-                boolean hasBacklog = fetched.size() > durableBatchSize;
-                List<RequestLogSpool.SpoolEntry> batch = hasBacklog
+                boolean countBacklog = fetched.size() > durableBatchSize;
+                boolean hasBacklog = countBacklog || fetchedBatch.byteLimitReached();
+                List<RequestLogSpool.SpoolEntry> batch = countBacklog
                         ? fetched.subList(0, durableBatchSize) : fetched;
                 boolean detailedAnalysis = analysisEnabled && !hasBacklog;
                 long startedAt = System.nanoTime();

@@ -581,6 +581,17 @@ public class RequestLogSpool {
      * the spool for operator recovery; it is never silently deleted.
      */
     public List<SpoolEntry> readAfter(long sequence, int limit, long maxBytes) {
+        return readBatchAfter(sequence, limit, maxBytes).entries();
+    }
+
+    /** Why a batch stopped matters: fewer rows do not necessarily mean the spool is drained. */
+    public record ReadBatch(List<SpoolEntry> entries, boolean byteLimitReached) {
+        public ReadBatch {
+            entries = List.copyOf(entries);
+        }
+    }
+
+    public ReadBatch readBatchAfter(long sequence, int limit, long maxBytes) {
         String sql = "SELECT spool.sequence_id, spool.candidate_set_id, "
                 + "length(spool.payload), length(candidates.payload) "
                 + "FROM request_log_spool spool "
@@ -595,10 +606,11 @@ public class RequestLogSpool {
             Map<String, List<CandidateRecord>> candidateCache = new LinkedHashMap<>();
             long byteBudget = maxBytes <= 0 ? 1 : maxBytes;
             long loadedBytes = 0;
+            boolean byteLimitReached = false;
             try (ResultSet rows = statement.executeQuery()) {
                 // Do not prepare a payload query for an empty/idle poll.
                 if (!rows.next()) {
-                    return result;
+                    return new ReadBatch(result, false);
                 }
                 // Reuse one statement within this read snapshot, while checking each
                 // row's byte budget before loading its BLOB.
@@ -633,6 +645,7 @@ public class RequestLogSpool {
                                         rowBytes, byteBudget,
                                         "Request-log spool head row exceeds the read byte limit", null);
                             }
+                            byteLimitReached = true;
                             break;
                         }
                         if (payloadBytes > Integer.MAX_VALUE) {
@@ -661,7 +674,7 @@ public class RequestLogSpool {
                     } while (rows.next());
                 }
             }
-            return result;
+            return new ReadBatch(result, byteLimitReached);
         } catch (UnrecoverableSpoolEntryException e) {
             throw e;
         } catch (SQLException e) {
