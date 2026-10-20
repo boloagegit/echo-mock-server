@@ -74,6 +74,29 @@ class HttpOutboundForwarderTest {
     }
 
     @Test
+    void transportBodyAdmissionReportsLocalOverloadAndLeavesTheNextRequestUsable() {
+        server.createContext("/transport-budget", exchange -> {
+            byte[] response = "complete-body".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, response.length);
+            try (var output = exchange.getResponseBody()) { output.write(response); }
+        });
+        var target = new HttpTargetConnectionService.ResolvedTarget(31L, 1L, "Transport budget",
+                "http://127.0.0.1:" + server.getAddress().getPort(), "NONE", null, null, 5, 30, false);
+        when(connectionService.resolveEnabled(31L)).thenReturn(target);
+        var rejected = MockRequest.builder().protocol(Protocol.HTTP).method("GET")
+                .path("/transport-budget").headers(Map.of()).responseBodyMemory(bytes -> false).build();
+
+        var response = forwarder.forward(rejected, 31L, false);
+        assertThat(response.getStatus()).isEqualTo(503);
+        assertThat(response.getProxyError()).isEqualTo("HTTP_TRANSPORT_RESPONSE_CAPACITY_EXHAUSTED");
+        assertThat(forwarder.metricsSnapshot().pool().bufferedResponseBytes()).isZero();
+        assertThat(forwarder.metricsSnapshot().targets().get("profile:31").capacityRejected()).isEqualTo(1);
+        var admitted = MockRequest.builder().protocol(Protocol.HTTP).method("GET")
+                .path("/transport-budget").headers(Map.of()).build();
+        assertThat(forwarder.forward(admitted, 31L, false).getBody()).isEqualTo("complete-body");
+    }
+
+    @Test
     void forwardsThroughSelectedProfileWithPathQueryBodyAndBasicAuth() throws Exception {
         int port = server.getAddress().getPort();
         var target = new HttpTargetConnectionService.ResolvedTarget(3L, 1L, "Local",

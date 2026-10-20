@@ -508,7 +508,7 @@ public final class HttpOutboundForwarder {
             long received = bodyBytes.addAndGet(chunk.readableBytes());
             if (received > maxResponseBodyBytes) throw new ResponseBodyTooLargeException(maxResponseBodyBytes);
             if (!bodyMemory.tryReserve((long) Math.ceil(received * maximumCharsPerByte) * 4)) {
-                throw new ResponseBufferCapacityException(responseBufferBudget.maximumBytes());
+                throw new TransportResponseCapacityException();
             }
         }));
         if (bufferedLength > 0) {
@@ -542,7 +542,7 @@ public final class HttpOutboundForwarder {
 
     private String retainedBody(String value, ResponseBodyMemory bodyMemory) {
         if (!bodyMemory.tryReserve(value == null ? 0 : 2L * value.length())) {
-            throw new ResponseBufferCapacityException(responseBufferBudget.maximumBytes());
+            throw new TransportResponseCapacityException();
         }
         return value;
     }
@@ -673,7 +673,8 @@ public final class HttpOutboundForwarder {
                     Throwable cause = unwrap(error);
                     trace.failure("FORWARD_FAILED", cause);
                     if (cause instanceof ReactiveConnectionLimiter.CapacityException
-                            || cause instanceof ResponseBufferCapacityException) {
+                            || cause instanceof ResponseBufferCapacityException
+                            || cause instanceof TransportResponseCapacityException) {
                         rejectedForwards.increment();
                         warnRejectedForward();
                     }
@@ -875,7 +876,7 @@ public final class HttpOutboundForwarder {
                                            String forwardTarget) {
         String error = safeError(exception);
         return MockResponse.builder()
-                .status(502)
+                .status(exception instanceof TransportResponseCapacityException ? 503 : 502)
                 .body("Proxy error: " + error)
                 .matched(matched)
                 .forwarded(true)
@@ -1095,6 +1096,9 @@ public final class HttpOutboundForwarder {
             if (current instanceof ResponseBufferCapacityException) {
                 return FailureKind.CAPACITY;
             }
+            if (current instanceof TransportResponseCapacityException) {
+                return FailureKind.CAPACITY;
+            }
             if (current instanceof ConnectTimeoutException) {
                 return FailureKind.CONNECT_TIMEOUT;
             }
@@ -1165,6 +1169,13 @@ public final class HttpOutboundForwarder {
     private static final class ResponseBufferCapacityException extends RuntimeException {
         private ResponseBufferCapacityException(long maximumBytes) {
             super("HTTP_RESPONSE_BUFFER_CAPACITY_EXHAUSTED: max=" + maximumBytes);
+        }
+    }
+
+    /** Adapter admission is local overload; retain the existing 502 contract for other forwarding failures. */
+    private static final class TransportResponseCapacityException extends RuntimeException {
+        private TransportResponseCapacityException() {
+            super("HTTP_TRANSPORT_RESPONSE_CAPACITY_EXHAUSTED");
         }
     }
 
