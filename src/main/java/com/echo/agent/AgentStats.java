@@ -32,4 +32,9 @@ public class AgentStats {
     private final int waitingProducers;
     /** Hysteresis state for durable/heap backpressure. */
     private final boolean backpressureActive;
+    /** Durable consumer state; meaningful when the log agent uses database storage. */
+    private final boolean durableConsumerRunning;
+    private final long lastSuccessfulWriteEpochMillis;
+    /** A retained corrupt/oversized record stopped the consumer here; zero means no terminal record. */
+    private final long stoppedAtSequence;
 }

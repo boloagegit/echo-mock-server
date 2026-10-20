@@ -79,6 +79,8 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
     private final AtomicBoolean analysisShedUntilQueueDrained = new AtomicBoolean(false);
     private final AtomicBoolean durableConsumerRunning = new AtomicBoolean(false);
     private final AtomicLong storageRetryCount = new AtomicLong();
+    private volatile long lastSuccessfulWriteEpochMillis;
+    private volatile long stoppedAtSequence;
     private final Semaphore durableWorkAvailable = new Semaphore(0);
     private ExecutorService durableConsumerExecutor;
     /** Buffer for replies that do not wait for log writes; null in strict mode (wait for the write) or memory mode. */
@@ -290,6 +292,9 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 .inFlightByteLimit(durable.inFlightByteLimit() + (handoff == null ? 0 : handoff.maxBytes()))
                 .waitingProducers(durable.waitingProducers())
                 .backpressureActive(durable.backpressureActive())
+                .durableConsumerRunning(durableConsumerRunning.get())
+                .lastSuccessfulWriteEpochMillis(lastSuccessfulWriteEpochMillis)
+                .stoppedAtSequence(stoppedAtSequence)
                 .build();
     }
 
@@ -371,6 +376,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
             thread.setDaemon(true);
             return thread;
         });
+        stoppedAtSequence = 0;
         durableConsumerExecutor.execute(this::durableConsumeLoop);
     }
 
@@ -538,6 +544,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                     persistOneByOne(batch, detailedAnalysis);
                 }
                 checkpoint = lastSequence;
+                lastSuccessfulWriteEpochMillis = System.currentTimeMillis();
                 if (checkpoint - lastCleanedCheckpoint >= DURABLE_CLEANUP_INTERVAL) {
                     durableSpool.deleteThrough(checkpoint);
                     lastCleanedCheckpoint = checkpoint;
@@ -554,6 +561,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 log.error("Durable request-log consumer stopped at sequence {} ({}) {}; "
                                 + "the spool row was retained for recovery",
                         e.sequence(), e.kind(), e.getMessage(), e);
+                stoppedAtSequence = e.sequence();
                 durableConsumerRunning.set(false);
                 break;
             } catch (Exception | Error e) {

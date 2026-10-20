@@ -202,6 +202,8 @@ echo:
       # Buffer at most 128 MiB across all in-flight downstream responses, preventing 1000 concurrent connections from exhausting the heap.
       max-buffered-response-bytes: ${ECHO_HTTP_FORWARD_MAX_BUFFERED_RESPONSE_BYTES:134217728}
       pool-acquire-timeout-ms: ${ECHO_HTTP_FORWARD_POOL_ACQUIRE_TIMEOUT_MS:3000}
+      # Overall admin connection-test deadline, including pool wait, redirects and a continuously dripping body.
+      test-timeout-seconds: ${ECHO_HTTP_FORWARD_TEST_TIMEOUT_SECONDS:30}
   stats:
     retention-days: 7  # Number of days to retain statistical data
   request-log:
@@ -277,6 +279,8 @@ management:
         liveness:
           include: livenessState
         readiness:
+          # Add requestLog to this list when durable logging is required for traffic admission.
+          # It is observable in overall health; liveness never restarts the process for retained log data.
           include: readinessState,db,diskSpace,jmsSource
   health:
     # Observe only existing listeners; probes must not create additional TIBCO/Artemis connections.

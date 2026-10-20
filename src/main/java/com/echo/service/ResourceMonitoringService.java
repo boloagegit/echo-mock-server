@@ -252,6 +252,8 @@ public class ResourceMonitoringService {
             values.put("backpressureActive", stats.isBackpressureActive());
             values.put("storageUnavailable", agent.isStorageUnavailable());
             values.put("consumerRunning", agent.isDurableConsumerRunning());
+            values.put("lastSuccessfulWriteEpochMillis", stats.getLastSuccessfulWriteEpochMillis());
+            values.put("stoppedAtSequence", stats.getStoppedAtSequence());
             values.putAll(agent.diskReserveMetrics());
         }
         return values;

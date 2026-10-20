@@ -350,6 +350,11 @@ public class RequestLogSpool {
                 // Unexpected and specific to this task: retrying it would fail the same way
                 rejected++;
                 log.debug("Request log could not be admitted: {}", e.toString());
+            } catch (Error e) {
+                // Preserve the accepted prefix. The handoff retries only the unaccepted suffix,
+                // including this task, after transient failures such as memory pressure.
+                log.debug("Request-log batch admission interrupted by an error", e);
+                break;
             }
             handled++;
         }
@@ -380,6 +385,7 @@ public class RequestLogSpool {
         long reservedPayloadBytes = 0;
         long serializationBytes = 0;
         boolean serializationReservationActive = false;
+        boolean transferredToWriter = false;
         long admissionDeadlineNanos = System.nanoTime()
                 + TimeUnit.MILLISECONDS.toNanos(queueOfferTimeoutMillis);
         lifecycleLock.readLock().lock();
@@ -414,23 +420,22 @@ public class RequestLogSpool {
 
             pending = new PendingAppend(payload, candidateSet, bytes, new CompletableFuture<>());
             enqueue(pending, admissionDeadlineNanos);
-        } catch (RequestLogUnavailableException e) {
-            if (reservedPayloadBytes > 0) {
-                releaseReservation(reservedPayloadBytes, 1, reservedPayloadBytes);
-            } else if (serializationReservationActive) {
-                releaseSerialization(serializationBytes);
-            }
-            throw e;
+            transferredToWriter = true;
         } catch (InterruptedException e) {
-            if (reservedPayloadBytes > 0) {
-                releaseReservation(reservedPayloadBytes, 1, reservedPayloadBytes);
-            } else if (serializationReservationActive) {
-                releaseSerialization(serializationBytes);
-            }
             Thread.currentThread().interrupt();
             throw new RequestLogUnavailableException("Interrupted while accepting request log", e);
         } finally {
-            lifecycleLock.readLock().unlock();
+            try {
+                if (!transferredToWriter) {
+                    if (reservedPayloadBytes > 0) {
+                        releaseReservation(reservedPayloadBytes, 1, reservedPayloadBytes);
+                    } else if (serializationReservationActive) {
+                        releaseSerialization(serializationBytes);
+                    }
+                }
+            } finally {
+                lifecycleLock.readLock().unlock();
+            }
         }
         return pending;
     }
@@ -1574,12 +1579,28 @@ public class RequestLogSpool {
     }
 
     private Connection openConnection() throws SQLException {
-        Connection connection = DriverManager.getConnection("jdbc:sqlite:" + spoolPath);
+        return initializeConnection(DriverManager.getConnection("jdbc:sqlite:" + spoolPath));
+    }
+
+    static Connection initializeConnection(Connection connection) throws SQLException {
+        try {
+            configureConnection(connection);
+            return connection;
+        } catch (SQLException | RuntimeException | Error failure) {
+            try {
+                connection.close();
+            } catch (SQLException | RuntimeException | Error closeFailure) {
+                if (failure != closeFailure) failure.addSuppressed(closeFailure);
+            }
+            throw failure;
+        }
+    }
+
+    private static void configureConnection(Connection connection) throws SQLException {
         try (Statement statement = connection.createStatement()) {
             statement.execute("PRAGMA busy_timeout=10000");
             statement.execute("PRAGMA journal_size_limit=67108864");
         }
-        return connection;
     }
 
     private void failPending(RuntimeException failure) {

@@ -3,6 +3,7 @@ package com.echo.service;
 import com.echo.dto.HttpForwardMetricsDto;
 import com.echo.pipeline.MockRequest;
 import com.echo.pipeline.MockResponse;
+import com.echo.pipeline.ResponseBodyMemory;
 import com.echo.util.CancellableStages;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -60,6 +61,19 @@ import java.util.function.Supplier;
 @Component
 @Slf4j
 public final class HttpOutboundForwarder {
+
+    private volatile int testTimeoutSeconds = 30;
+
+    /** A complete admin probe has a deadline even when the peer keeps sending small fragments. */
+    @Autowired
+    void configureTestTimeout(@Value("${echo.http.forward.test-timeout-seconds:30}") int seconds) {
+        requirePositive("testTimeoutSeconds", seconds);
+        testTimeoutSeconds = seconds;
+    }
+
+    public long testTimeoutMillis() {
+        return TimeUnit.SECONDS.toMillis(testTimeoutSeconds);
+    }
 
     private static final String ORIGINAL_HOST_HEADER = "X-Original-Host";
     /** Zero preserves compatibility by disabling the application-level concurrency cap. */
@@ -278,21 +292,28 @@ public final class HttpOutboundForwarder {
     }
 
     public ConnectionTestResult test(Long id) {
+        return testAsync(id).join();
+    }
+
+    public CompletableFuture<ConnectionTestResult> testAsync(Long id) {
         long started = System.nanoTime();
         try {
             HttpTargetConnectionService.ResolvedTarget target = connectionService.resolveEnabled(id);
             ClientUse holder = clientFor(target);
             HttpHeaders headers = new HttpHeaders();
             applyAuthentication(headers, target);
-            ForwardResponse response = exchangeResponse(
-                    holder, URI.create(target.baseUrl()), HttpMethod.GET, headers, null)
-                    .toFuture().join();
-            return new ConnectionTestResult(true, elapsedMillis(started), response.status(), null);
+            return exchangeResponse(
+                    holder, URI.create(target.baseUrl()), HttpMethod.GET, headers, null, ResponseBodyMemory.UNBOUNDED)
+                    .timeout(Duration.ofSeconds(testTimeoutSeconds))
+                    .map(response -> new ConnectionTestResult(true, elapsedMillis(started), response.status(), null))
+                    .onErrorResume(error -> Mono.just(new ConnectionTestResult(false, elapsedMillis(started),
+                            null, safeError(unwrap(error)))))
+                    .toFuture();
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
-            return new ConnectionTestResult(false, elapsedMillis(started), null,
-                    safeError(unwrap(e)));
+            return CompletableFuture.completedFuture(new ConnectionTestResult(false, elapsedMillis(started), null,
+                    safeError(unwrap(e))));
         }
     }
 
@@ -307,7 +328,7 @@ public final class HttpOutboundForwarder {
         HttpHeaders headers = copyHeaders(request.getHeaders(), true);
         applyAuthentication(headers, target);
         HttpMethod method = HttpMethod.valueOf(request.getMethod().toUpperCase(Locale.ROOT));
-        return exchangeResponse(clientFor(target), URI.create(url), method, headers, request.getBody())
+        return exchangeResponse(clientFor(target), URI.create(url), method, headers, request.getBody(), request.getResponseBodyMemory())
                 .doOnNext(response -> request.getTrace().event("HTTP_TARGET_RESPONSE", "status", response.status()))
                 .map(response -> MockResponse.builder()
                         .status(response.status())
@@ -400,7 +421,7 @@ public final class HttpOutboundForwarder {
         if (client == null) {
             return Mono.error(new IllegalStateException("HTTP_CLIENT_CLOSED"));
         }
-        return exchangeResponse(client, URI.create(url), method, headers, request.getBody())
+        return exchangeResponse(client, URI.create(url), method, headers, request.getBody(), request.getResponseBodyMemory())
                 .doOnNext(response -> request.getTrace().event("HTTP_TARGET_RESPONSE", "status", response.status()))
                 .map(response -> MockResponse.builder()
                         .status(response.status())
@@ -415,10 +436,10 @@ public final class HttpOutboundForwarder {
                                                     URI uri,
                                                     HttpMethod method,
                                                     HttpHeaders headers,
-                                                    String body) {
+                                                    String body, ResponseBodyMemory bodyMemory) {
         return connectionLimiter.acquire(Duration.ofMillis(poolAcquireTimeoutMs))
                 .flatMap(permit -> exchangeResponseWithPermit(
-                        holder, uri, method, headers, body)
+                        holder, uri, method, headers, body, bodyMemory)
                         .doFinally(ignored -> permit.close()))
                 .doFinally(ignored -> holder.close());
     }
@@ -427,7 +448,7 @@ public final class HttpOutboundForwarder {
                                                               URI uri,
                                                               HttpMethod method,
                                                               HttpHeaders headers,
-                                                              String body) {
+                                                              String body, ResponseBodyMemory bodyMemory) {
         byte[] payload = body == null ? null : body.getBytes(contentCharset(headers));
         HttpClient.RequestSender request = holder.httpClient()
                 .headers(outbound -> {
@@ -449,7 +470,7 @@ public final class HttpOutboundForwarder {
             }
             return readResponseBody(responseBody, contentCharset(
                             response.responseHeaders().get(HttpHeaderNames.CONTENT_TYPE)),
-                            smallResponseLength(declaredLength))
+                            smallResponseLength(declaredLength), bodyMemory)
                     .map(value -> new ForwardResponse(status, value))
                     .switchIfEmpty(Mono.just(new ForwardResponse(status, null)));
         }).single();
@@ -475,18 +496,32 @@ public final class HttpOutboundForwarder {
         }
     }
 
-    private Mono<String> readResponseBody(ByteBufFlux responseBody, Charset charset, int bufferedLength) {
+    private Mono<String> readResponseBody(ByteBufFlux responseBody, Charset charset, int bufferedLength,
+                                          ResponseBodyMemory bodyMemory) {
+        // Account for decoded UTF-16 storage and the final join while fragments still exist.
+        // The transport keeps the final estimate after the downstream reader releases its own buffers.
+        double maximumCharsPerByte = bodyMemory == ResponseBodyMemory.UNBOUNDED
+                ? 0 : charset.newDecoder().maxCharsPerByte();
+        AtomicLong bodyBytes = new AtomicLong();
+        ByteBufFlux accounted = bodyMemory == ResponseBodyMemory.UNBOUNDED ? responseBody
+                : ByteBufFlux.fromInbound(responseBody.doOnNext(chunk -> {
+            long received = bodyBytes.addAndGet(chunk.readableBytes());
+            if (received > maxResponseBodyBytes) throw new ResponseBodyTooLargeException(maxResponseBodyBytes);
+            if (!bodyMemory.tryReserve((long) Math.ceil(received * maximumCharsPerByte) * 4)) {
+                throw new ResponseBufferCapacityException(responseBufferBudget.maximumBytes());
+            }
+        }));
         if (bufferedLength > 0) {
             BufferedResponseBody output = new BufferedResponseBody(
                     bufferedLength, maxResponseBodyBytes, responseBufferBudget);
-            return responseBody.doOnNext(output::append)
-                    .then(Mono.fromSupplier(() -> output.decode(charset)))
+            return accounted.doOnNext(output::append)
+                    .then(Mono.fromSupplier(() -> retainedBody(output.decode(charset), bodyMemory)))
                     .doFinally(ignored -> output.close());
         }
         AtomicInteger receivedBytes = new AtomicInteger();
         ResponseBufferBudget.Reservation reservation = responseBufferBudget.openReservation();
         StreamingTextAccumulator output = new StreamingTextAccumulator(charset);
-        return responseBody.doOnNext(chunk -> {
+        return accounted.doOnNext(chunk -> {
             int bytes = chunk.readableBytes();
             long nextSize = (long) receivedBytes.get() + bytes;
             if (nextSize > maxResponseBodyBytes) {
@@ -500,8 +535,15 @@ public final class HttpOutboundForwarder {
         })
                 .then(Mono.defer(() -> receivedBytes.get() == 0
                         ? Mono.empty()
-                        : Mono.fromSupplier(output::finish)))
+                        : Mono.fromSupplier(() -> retainedBody(output.finish(), bodyMemory))))
                 .doFinally(ignored -> reservation.close());
+    }
+
+    private String retainedBody(String value, ResponseBodyMemory bodyMemory) {
+        if (!bodyMemory.tryReserve(value == null ? 0 : 2L * value.length())) {
+            throw new ResponseBufferCapacityException(responseBufferBudget.maximumBytes());
+        }
+        return value;
     }
 
     /** One owned buffer, independent of incoming fragment count and parent-buffer sizes. */

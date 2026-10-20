@@ -84,10 +84,11 @@ class NativeHttpTlsIntegrationTest {
         assertThat(protectedApi.statusCode()).isEqualTo(401);
     }
 
-    @Test
-    void tlsCompressionKeepsTheCompleteUnicodeBody() throws Exception {
+    @ParameterizedTest
+    @ValueSource(ints = {1000, 100000})
+    void tlsCompressionKeepsTheCompleteUnicodeBody(int repetitions) throws Exception {
         HttpClient client = client("TLSv1.3", HttpClient.Version.HTTP_1_1);
-        String body = "有內容的回應".repeat(1000);
+        String body = "有內容的回應".repeat(repetitions);
         createRule(client, "/tls-compression", body);
         double before = nativeRequests();
         var response = client.send(request("/mock/tls-compression").header("Accept-Encoding", "gzip").build(),

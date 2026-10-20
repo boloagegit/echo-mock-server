@@ -30,6 +30,23 @@ import static org.mockito.Mockito.*;
 @org.mockito.junit.jupiter.MockitoSettings(strictness = org.mockito.quality.Strictness.LENIENT)
 class MockJmsListenerExtendedTest {
 
+    @Test
+    void pipelineErrorReleasesInputBudgetAndStillPropagatesForContainerRecovery() throws Exception {
+        var manager = mock(JmsConnectionManager.class);
+        var pipeline = mock(JmsMockPipeline.class);
+        var message = mock(TextMessage.class);
+        when(message.getText()).thenReturn("request");
+        var failure = new OutOfMemoryError("simulated pipeline failure");
+        when(pipeline.execute(any())).thenThrow(failure);
+        var budget = new JmsMessageMemoryBudget(1024 * 1024, 8);
+        var listener = new MockJmsListener(manager, new JmsProperties(), pipeline,
+                new JmsEndpointExtractor(), budget);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> listener.onMessage(message)).isSameAs(failure);
+        assertThat(budget.reservedBytes()).isZero();
+        verify(message, never()).acknowledge();
+    }
+
     @Mock
     private JmsConnectionManager connectionManager;
 

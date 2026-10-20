@@ -109,9 +109,9 @@ public class MockJmsListener {
             // This is a deterministic poison input: it can never fit the hard
             // processing budget. Return an explicit error (when a reply address
             // exists) and acknowledge the failed request rather than creating
-            // an endless redelivery hot-loop. The message is never parsed or
-            // forwarded before this admission decision.
-            if (!trace.enabled()) log.warn("JMS message exceeds processing budget and was not forwarded: {}",
+            // an endless redelivery hot-loop. Input admission precedes forwarding,
+            // but reply admission occurs after the pipeline: downstream work may already have executed.
+            if (!trace.enabled()) log.warn("JMS message or reply exceeds processing budget; processing may already have occurred: {}",
                     e.getMessage());
             sendErrorReply(message, "JMS message exceeds the configured processing capacity", trace);
         } catch (JmsMessageMemoryBudget.JmsMessageMemoryBudgetClosedException e) {
@@ -188,7 +188,7 @@ public class MockJmsListener {
                     : null;
             replyReservation = memoryBudget.tryReserveReplyText(replyBody);
             return new ReservedPipelineResult(result, requestReservation, replyReservation);
-        } catch (RuntimeException | JMSException | InterruptedException e) {
+        } catch (RuntimeException | JMSException | InterruptedException | Error e) {
             if (replyReservation != null) {
                 replyReservation.close();
             }

@@ -39,6 +39,26 @@ class JmsTargetForwarderTest {
     }
 
     @Test
+    void preparedDefaultForwardResolvesOnlyOnceAndUsesTheSelectedRevision() {
+        var service = mock(com.echo.service.JmsTargetConnectionService.class);
+        var first = new com.echo.service.JmsTargetConnectionService.ResolvedTarget(
+                "db:1:1", "First", jmsProperties.getTarget(), false);
+        when(service.resolveActive()).thenReturn(java.util.Optional.of(first), java.util.Optional.empty());
+        var preparedForwarder = new JmsTargetForwarder(service, List.of());
+
+        var action = preparedForwarder.prepareDefaultForward("request", null,
+                com.echo.diagnostics.TransactionDiagnostics.Trace.NONE).orElseThrow();
+        var reply = action.get();
+
+        assertThat(reply.target()).startsWith("First |");
+        verify(service, times(1)).resolveActive();
+        assertThat(preparedForwarder.prepareDefaultForward("next", null,
+                com.echo.diagnostics.TransactionDiagnostics.Trace.NONE)).isEmpty();
+        verify(service, times(2)).resolveActive();
+        preparedForwarder.cleanup();
+    }
+
+    @Test
     void forward_shouldReturnError_whenConnectionFails() {
         // Use port, which is not monitored by this machine, to test error handling to avoid testing dependencies on DNS timeout.
         jmsProperties.getTarget().setServerUrl("tcp://127.0.0.1:19999");

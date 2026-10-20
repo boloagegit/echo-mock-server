@@ -110,6 +110,10 @@ Anonymous `GET /actuator/health/liveness` and `GET /actuator/health/readiness` r
 
 ## HTTP acceleration
 
+Overall health also includes `requestLog`: a stopped durable consumer or unavailable spool reports DOWN without deleting retained records. Admin agent statistics expose `durableConsumerRunning`, `lastSuccessfulWriteEpochMillis` (zero until the first persisted batch), and `stoppedAtSequence` (zero unless a corrupt/oversized row stopped consumption). Readiness keeps its existing default policy. To require durable logging before admitting traffic, set `management.endpoint.health.group.readiness.include=readinessState,db,diskSpace,jmsSource,requestLog`; keep request logging out of liveness.
+
+HTTP target connection tests run asynchronously and have a complete deadline controlled by `ECHO_HTTP_FORWARD_TEST_TIMEOUT_SECONDS` (default 30). This includes waiting for pool capacity, redirects and reading a continuously dripping response; per-target connect/read timeouts remain active.
+
 The native HTTP/1.1 path is enabled by default. Its configurable limits are 10 MiB per request or response body, 512 active requests and 128 MiB of estimated buffering. Special requests and custom Servlet extensions keep Servlet handling. Set `ECHO_HTTP_TRANSPORT=servlet` and restart to use the original entry point. See [HTTP acceleration](native-http.md) for limits, timeouts, observations and compatibility, and [HTTP I/O tuning](http-io-tuning.md) for the I/O thread setting.
 
 ## Authentication

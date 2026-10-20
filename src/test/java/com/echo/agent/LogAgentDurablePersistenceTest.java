@@ -70,6 +70,33 @@ class LogAgentDurablePersistenceTest {
     }
 
     @Test
+    void corruptHeadStopsConsumerAndReportsHealthWithoutDeletingRetainedRows() throws Exception {
+        when(batchWriter.findCheckpoint(anyString())).thenReturn(0L);
+        spool.append(task("one", "/one"));
+        spool.append(task("two", "/two"));
+        long firstSequence = spool.readAfter(0, 1).get(0).sequence();
+        try (var connection = java.sql.DriverManager.getConnection("jdbc:sqlite:" + tempDir.resolve("spool.sqlite"));
+             var update = connection.prepareStatement("UPDATE request_log_spool SET payload = ? WHERE sequence_id = ?")) {
+            update.setBytes(1, new byte[]{'{'});
+            update.setLong(2, firstSequence);
+            update.executeUpdate();
+        }
+        startAgent();
+        org.awaitility.Awaitility.await().atMost(3, TimeUnit.SECONDS).untilAsserted(() -> {
+            assertThat(agent.isDurableConsumerRunning()).isFalse();
+            assertThat(agent.getStats().getStoppedAtSequence()).isEqualTo(firstSequence);
+        });
+        var factory = new org.springframework.beans.factory.support.StaticListableBeanFactory();
+        factory.addBean("logAgent", agent);
+        var indicator = new com.echo.service.RequestLogHealthIndicator(configService,
+                factory.getBeanProvider(LogAgent.class));
+        assertThat(indicator.health().getStatus()).isEqualTo(org.springframework.boot.actuate.health.Status.DOWN);
+        assertThat(spool.countBetween(0, Long.MAX_VALUE)).isEqualTo(2);
+        org.mockito.Mockito.verify(batchWriter, org.mockito.Mockito.never())
+                .persist(anyString(), anyLong(), anyList(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
     void mainDatabaseFailureRetriesWithoutDeletingSpoolRow() throws Exception {
         when(batchWriter.findCheckpoint(anyString())).thenReturn(0L);
         AtomicInteger attempts = new AtomicInteger();

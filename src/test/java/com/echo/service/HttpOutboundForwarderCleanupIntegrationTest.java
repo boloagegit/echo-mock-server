@@ -62,6 +62,42 @@ class HttpOutboundForwarderCleanupIntegrationTest {
     }
 
     @Test
+    void adminProbeHasATotalDeadlineAndReleasesResourcesDuringADrippingReply() throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        server.createContext("/drip", exchange -> {
+            exchange.sendResponseHeaders(200, 0);
+            try (var output = exchange.getResponseBody()) {
+                started.countDown();
+                for (int index = 0; index < 50; index++) {
+                    output.write('x');
+                    output.flush();
+                    LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(200));
+                    if (Thread.currentThread().isInterrupted()) break;
+                }
+            } catch (java.io.IOException ignored) {
+                // Cancellation closes the client connection before the peer finishes its reply.
+            }
+        });
+        forwarder = new HttpOutboundForwarder(connectionService,
+                1, 1, 1, 1024, 1_000, 1, 1, 0, 1);
+        forwarder.configureTestTimeout(2);
+        var target = new HttpTargetConnectionService.ResolvedTarget(25L, 1L, "Dripping",
+                "http://127.0.0.1:" + server.getAddress().getPort() + "/drip", "NONE", null, null,
+                1, 1, false);
+        when(connectionService.resolveEnabled(25L)).thenReturn(target);
+
+        var probe = forwarder.testAsync(25L);
+        assertThat(started.await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(probe.isDone()).isFalse();
+        var result = probe.get(4, TimeUnit.SECONDS);
+        assertThat(result.success()).isFalse();
+        assertThat(result.elapsedMs()).isBetween(1_500L, 3_500L);
+        awaitCondition("probe resources released", () ->
+                forwarder.metricsSnapshot().pool().leased() == 0
+                        && forwarder.metricsSnapshot().pool().bufferedResponseBytes() == 0, 3);
+    }
+
+    @Test
     void automaticallyDisposesEmptyPoolsAndMetricsAcrossRedirectTargets() throws Exception {
         forwarder = new HttpOutboundForwarder(connectionService,
                 0, 8, 8, 1024, 1_000, 2, 5, 0, 1);

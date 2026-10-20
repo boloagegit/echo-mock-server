@@ -922,6 +922,8 @@
       "backpressureActive": "Backpressure active",
       "storageUnavailable": "Storage unavailable",
       "consumerRunning": "Durable consumer running",
+      "lastSuccessfulWriteEpochMillis": "Last successful log write",
+      "stoppedAtSequence": "Stopped record sequence (0 = none)",
       "queueUsed": "Queue occupancy",
       "queueCapacity": "Queue capacity",
       "started": "Appender started",

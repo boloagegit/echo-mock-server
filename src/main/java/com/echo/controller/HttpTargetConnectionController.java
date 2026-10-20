@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.context.request.async.DeferredResult;
 
 import java.util.Map;
 
@@ -68,8 +69,30 @@ public class HttpTargetConnectionController {
     }
 
     @PostMapping("/{id}/test")
-    public ResponseEntity<?> test(@PathVariable Long id) {
-        return handle(() -> ResponseEntity.ok(forwarder.test(id)));
+    @SuppressWarnings("FutureReturnValueIgnored")
+    public DeferredResult<ResponseEntity<?>> test(@PathVariable Long id) {
+        // Keep servlet workers available while the asynchronous HTTP probe waits on its peer.
+        var result = new DeferredResult<ResponseEntity<?>>(forwarder.testTimeoutMillis() + 1_000);
+        try {
+            var probe = forwarder.testAsync(id);
+            result.onCompletion(() -> probe.cancel(true));
+            result.onTimeout(() -> {
+                result.setResult(ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT)
+                        .body(Map.of("error", "HTTP_CONNECTION_TEST_TIMEOUT")));
+                probe.cancel(true);
+            });
+            result.onError(error -> {
+                result.setErrorResult(error);
+                probe.cancel(true);
+            });
+            probe.whenComplete((response, error) -> {
+                if (error == null) result.setResult(ResponseEntity.ok(response));
+                else result.setErrorResult(error);
+            });
+        } catch (IllegalArgumentException e) {
+            result.setResult(handle(() -> { throw e; }));
+        }
+        return result;
     }
 
     private ResponseEntity<?> handle(Action action) {

@@ -56,7 +56,9 @@ I/O 執行緒計時，並持續到回應送完；客戶端停止讀取，也會�
 資源監控新增 `nativeWorkerActive` 與 `nativeWorkerCapacity`，用來確認實際忙碌的工作
 執行緒。不能只看 `nativeActive` 或緩衝歸零，就推論所有工作已結束。
 
-緩衝容量是 adapter 的保守預留，不是整個 JVM heap 的硬上限：規則、pipeline 產生的字串、日誌、TLS、資料庫與下游 client 仍有各自的記憶體需求。這個逾時也不是對同步 CPU／資料庫工作的強制中斷。
+轉送回應的解碼儲存量在讀取前逐步預留；完成解碼後，字串的估計額度會保留到排隊與送出結束。這補上了下游讀完、worker 尚未處理回應時的計算缺口，因此大型回應在容量不足時可能較早收到 503。超過 256 KiB 的一般回應使用固定 32 KiB bytes 與 16 KiB chars 緩衝分段編碼，送完上一段才重用；完整 UTF-8 長度與上限在送出標頭前確認。小回應保留原本的一次編碼路徑。
+
+緩衝容量是 adapter 的保守預留，不是整個 JVM heap 的硬上限：共用規則、模板產生中的字串、日誌、TLS、資料庫與下游 client 仍有各自的記憶體需求。這個逾時也不是對同步 CPU／資料庫工作的強制中斷。
 
 可觀察的 metrics：`echo.http.native.requests`、`echo.http.native.active`、`echo.http.native.buffered.bytes`、`echo.http.native.queued`。請求完成、斷線、逾時及容量拒絕皆有釋放驗證；單一清理 callback 失敗不能阻止其他 callback 釋放資源。
 

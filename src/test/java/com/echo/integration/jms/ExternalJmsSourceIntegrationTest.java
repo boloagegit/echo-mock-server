@@ -34,9 +34,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.net.ServerSocket;
-import java.net.Socket;
 import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
@@ -58,7 +56,10 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
 
     private static final String QUEUE = "ESB.ECHO.IN";
     private static final int ESB_PORT = freePort();
-    private static final int UNUSED_EMBEDDED_PORT = freePort();
+    // Hold the port through context startup: an accidental embedded bind must fail,
+    // and unrelated parallel test servers cannot steal a supposedly unused probe port.
+    private static final ServerSocket UNUSED_EMBEDDED_PORT_RESERVATION = reservePort();
+    private static final int UNUSED_EMBEDDED_PORT = UNUSED_EMBEDDED_PORT_RESERVATION.getLocalPort();
     private static EmbeddedActiveMQ esb = startEsb();
 
     @Autowired
@@ -79,9 +80,11 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
 
     @AfterAll
     static void stopEsb(@Autowired JmsListenerEndpointRegistry listeners) throws Exception {
-        listeners.stop();
-        if (esb != null) {
-            esb.stop();
+        try {
+            listeners.stop();
+            if (esb != null) esb.stop();
+        } finally {
+            UNUSED_EMBEDDED_PORT_RESERVATION.close();
         }
     }
 
@@ -89,11 +92,8 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
     @DisplayName("External mode starts neither embedded Artemis nor echo.jms.port")
     void embeddedBrokerIsNotStarted() {
         assertThat(context.getBeanProvider(EmbeddedActiveMQ.class).getIfAvailable()).isNull();
-        assertThatThrownBy(() -> {
-            try (Socket socket = new Socket()) {
-                socket.connect(new InetSocketAddress("127.0.0.1", UNUSED_EMBEDDED_PORT), 500);
-            }
-        }).isInstanceOf(IOException.class);
+        assertThat(UNUSED_EMBEDDED_PORT_RESERVATION.isBound()).isTrue();
+        assertThat(UNUSED_EMBEDDED_PORT_RESERVATION.isClosed()).isFalse();
     }
 
     @Test
@@ -357,6 +357,14 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
     private static int freePort() {
         try (ServerSocket socket = new ServerSocket(0)) {
             return socket.getLocalPort();
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static ServerSocket reservePort() {
+        try {
+            return new ServerSocket(0);
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }

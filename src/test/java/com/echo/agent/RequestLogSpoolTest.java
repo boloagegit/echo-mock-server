@@ -45,6 +45,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class RequestLogSpoolTest {
 
@@ -52,6 +54,60 @@ class RequestLogSpoolTest {
     Path tempDir;
 
     private RequestLogSpool spool;
+
+    @Test
+    void failedConnectionInitializationClosesConnectionAndPreservesFailure() throws Exception {
+        Connection connection = mock(Connection.class);
+        var failure = new java.sql.SQLException("initialization failed");
+        var closeFailure = new java.sql.SQLException("close failed");
+        when(connection.createStatement()).thenThrow(failure);
+        org.mockito.Mockito.doThrow(closeFailure).when(connection).close();
+
+        assertThatThrownBy(() -> RequestLogSpool.initializeConnection(connection))
+                .isSameAs(failure).hasSuppressedException(closeFailure);
+        verify(connection).close();
+    }
+
+    @Test
+    void failedSerializationReleasesAdmissionCapacity() throws Exception {
+        ObjectMapper mapper = spy(new ObjectMapper().findAndRegisterModules());
+        doAnswer(invocation -> { throw new AssertionError("serialization failed"); })
+                .when(mapper).writeValueAsBytes(any());
+        spool = new RequestLogSpool(mapper, tempDir.resolve("serialization-failure.sqlite").toString(),
+                256, 32, 2, 2_000, 25, 16 * 1024 * 1024);
+        spool.start();
+
+        assertThatThrownBy(() -> spool.append(task("rule", "/failure")))
+                .isInstanceOf(AssertionError.class);
+        assertThat(spool.statusSnapshot().inFlightBytes()).isZero();
+        assertThat(spool.pendingBytes()).isZero();
+    }
+
+    @Test
+    void batchPreservesAcceptedPrefixWhenLaterSerializationFailsWithAnError() throws Exception {
+        ObjectMapper mapper = spy(new ObjectMapper().findAndRegisterModules());
+        AtomicInteger calls = new AtomicInteger();
+        doAnswer(invocation -> {
+            if (calls.incrementAndGet() == 2) {
+                throw new AssertionError("transient serialization failure");
+            }
+            return invocation.callRealMethod();
+        }).when(mapper).writeValueAsBytes(any());
+        spool = new RequestLogSpool(mapper, tempDir.resolve("batch-error.sqlite").toString(),
+                256, 32, 2, 2_000, 25, 16 * 1024 * 1024);
+        spool.start();
+        List<LogTask> tasks = List.of(
+                taskBuilder("one", "/one").candidates(List.of()).build(),
+                taskBuilder("two", "/two").candidates(List.of()).build(),
+                taskBuilder("three", "/three").candidates(List.of()).build());
+
+        RequestLogSpool.AppendResult first = spool.appendAll(tasks);
+        assertThat(first).isEqualTo(new RequestLogSpool.AppendResult(1, 0));
+        assertThat(spool.appendAll(tasks.subList(first.handled(), tasks.size())))
+                .isEqualTo(new RequestLogSpool.AppendResult(2, 0));
+        assertThat(spool.readAfter(0, 10)).extracting(entry -> entry.task().getEndpoint())
+                .containsExactly("/one", "/two", "/three");
+    }
 
     @AfterEach
     void tearDown() {

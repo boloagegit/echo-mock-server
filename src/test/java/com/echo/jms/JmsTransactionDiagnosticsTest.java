@@ -37,12 +37,13 @@ class JmsTransactionDiagnosticsTest {
             var forwarder = mock(JmsTargetForwarder.class);
             var rules = mock(com.echo.service.JmsRuleService.class);
             when(rules.findBucketedJmsRules("ECHO.REQUEST", "CreateOrder")).thenReturn(List.of());
-            when(forwarder.hasActiveTarget()).thenReturn(true);
-            when(forwarder.forwardWithMetadata(eq("PRIVATE_BODY"), isNull(), any(TransactionDiagnostics.Trace.class)))
+            when(forwarder.prepareDefaultForward(eq("PRIVATE_BODY"), isNull(), any(TransactionDiagnostics.Trace.class)))
                     .thenAnswer(call -> {
                         TransactionDiagnostics.Trace trace = call.getArgument(2);
-                        trace.event("REPLY_WAIT_END", "outcome", "NO_REPLY", "waitMs", 30000);
-                        return new JmsTargetForwarder.ForwardResult("<error>JMS response timeout</error>", "fixture-target");
+                        return java.util.Optional.of((java.util.function.Supplier<JmsTargetForwarder.ForwardResult>) () -> {
+                            trace.event("REPLY_WAIT_END", "outcome", "NO_REPLY", "waitMs", 30000);
+                            return new JmsTargetForwarder.ForwardResult("<error>JMS response timeout</error>", "fixture-target");
+                        });
                     });
             var pipeline = new JmsMockPipeline(mock(com.echo.service.ConditionMatcher.class),
                     mock(com.echo.service.RuleService.class), mock(com.echo.service.RequestLogService.class),
@@ -56,7 +57,7 @@ class JmsTransactionDiagnosticsTest {
             assertThat(lines.get(0)).contains("endpoint=CreateOrder", "mode=FORWARD", "waitResult=NO_REPLY")
                     .doesNotContain("PRIVATE_BODY");
             assertThat(result.getResponse().getBody()).isEqualTo("<error>JMS response timeout</error>");
-            verify(forwarder).forwardWithMetadata("PRIVATE_BODY", null, trace);
+            verify(forwarder).prepareDefaultForward("PRIVATE_BODY", null, trace);
         }
     }
 

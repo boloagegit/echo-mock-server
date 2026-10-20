@@ -11,6 +11,22 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class NativeHttpResourcesTest {
     @Test
+    void responseStorageCanShrinkWithoutReleasingOtherRequestReservations() {
+        try (var resources = new NativeHttpResources(1, 2, 1024, 4096)) {
+            var lease = resources.acquire();
+            assertThat(lease.reserve(100)).isTrue();
+            assertThat(lease.reserveResponseBody(3000)).isTrue();
+            assertThat(lease.reserveResponseBody(4096)).isFalse();
+            assertThat(resources.bufferedBytes()).isEqualTo(3100);
+            assertThat(lease.reserveResponseBody(1000)).isTrue();
+            assertThat(resources.bufferedBytes()).isEqualTo(1100);
+            lease.close();
+            assertThat(resources.bufferedBytes()).isZero();
+            assertThat(lease.reserveResponseBody(100)).isFalse();
+        }
+    }
+
+    @Test
     void workersRetireAtIdleAndNewRequestsStillRunWithinTheSameCapacity() throws Exception {
         try (var resources = new NativeHttpResources(2, 2, 1024, 4096, Duration.ofMillis(50))) {
             assertThat(resources.workers.submit(() -> "before").get(2, TimeUnit.SECONDS)).isEqualTo("before");

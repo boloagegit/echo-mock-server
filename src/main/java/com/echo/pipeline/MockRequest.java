@@ -52,6 +52,10 @@ public class MockRequest {
     @Builder.Default
     private final Trace trace = Trace.NONE;
 
+    /** Transient HTTP transport accounting; JMS and standalone callers retain their existing budgets. */
+    @Builder.Default
+    private final ResponseBodyMemory responseBodyMemory = ResponseBodyMemory.UNBOUNDED;
+
     /** Request data used by the response template; common to all protocols, see {@link ResponseTemplateService#renderIfTemplate}. */
     public ResponseTemplateService.TemplateContext templateContext() {
         return ResponseTemplateService.TemplateContext.of(path, method, queryString, headers, body);

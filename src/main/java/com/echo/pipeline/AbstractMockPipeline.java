@@ -163,11 +163,11 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                 ruleId = null;
                 delayMs = 0;
                 // 5. No match: determine whether to forward
-                boolean forward = shouldForward(request);
-                request.getTrace().event("ROUTE", "ruleId", null, "mode", forward ? "FORWARD" : "UNMATCHED",
+                var forwarding = forwardingAction(request);
+                request.getTrace().event("ROUTE", "ruleId", null, "mode", forwarding != null ? "FORWARD" : "UNMATCHED",
                         "endpoint", request.getEndpointValue() != null ? request.getEndpointValue() : request.getPath());
-                if (forward) {
-                    responseStage = forwardAsync(request);
+                if (forwarding != null) {
+                    responseStage = forwarding.get();
                 } else {
                     immediateResponse = handleNoMatch(request);
                 }
@@ -634,6 +634,11 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
 
     /** Determine whether it should be forwarded */
     protected abstract boolean shouldForward(MockRequest request);
+
+    /** Resolve the routing decision once; protocol adapters may capture the selected target. */
+    protected java.util.function.Supplier<CompletionStage<MockResponse>> forwardingAction(MockRequest request) {
+        return shouldForward(request) ? () -> forwardAsync(request) : null;
+    }
 
     /** Handling no match situation */
     protected abstract MockResponse handleNoMatch(MockRequest request);

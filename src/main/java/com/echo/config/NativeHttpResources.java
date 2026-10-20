@@ -67,6 +67,7 @@ public final class NativeHttpResources implements AutoCloseable {
     final class Lease implements AutoCloseable {
         private boolean closed;
         private long reserved;
+        private long responseBodyBytes;
         private final List<Runnable> cleanup = new ArrayList<>(3);
 
         synchronized boolean closed() { return closed; }
@@ -79,6 +80,18 @@ public final class NativeHttpResources implements AutoCloseable {
                 if (bytes > maxBufferedBytes - used) return false;
             } while (!buffered.compareAndSet(used, used + bytes));
             reserved += bytes;
+            return true;
+        }
+
+        synchronized boolean reserveResponseBody(long bytes) {
+            if (closed || bytes < 0) return false;
+            long additional = bytes - responseBodyBytes;
+            if (additional > 0 && !reserve(additional)) return false;
+            if (additional < 0) {
+                buffered.addAndGet(additional);
+                reserved += additional;
+            }
+            responseBodyBytes = bytes;
             return true;
         }
 
