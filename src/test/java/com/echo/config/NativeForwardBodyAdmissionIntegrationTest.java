@@ -49,10 +49,14 @@ class NativeForwardBodyAdmissionIntegrationTest extends BaseIntegrationTest {
         downstream = HttpServer.create(new InetSocketAddress(loopback(), 0), 0);
         downstream.createContext("/", exchange -> {
             boolean held = exchange.getRequestURI().getPath().equals("/hold");
-            byte[] body = held ? large : small;
+            boolean empty = exchange.getRequestURI().getPath().equals("/empty");
+            byte[] body = held ? large : empty ? new byte[0] : small;
             exchange.getResponseHeaders().set("Content-Type", "text/plain;charset=UTF-8");
-            exchange.sendResponseHeaders(200, exchange.getRequestURI().getPath().equals("/known") ? body.length : 0);
-            try (var output = exchange.getResponseBody()) { output.write(body); }
+            exchange.sendResponseHeaders(200, empty ? -1
+                    : exchange.getRequestURI().getPath().equals("/known") ? body.length : 0);
+            try (var output = exchange.getResponseBody()) {
+                if (body.length > 0) output.write(body);
+            }
             finally { exchange.close(); }
         });
         downstream.start();
@@ -76,6 +80,9 @@ class NativeForwardBodyAdmissionIntegrationTest extends BaseIntegrationTest {
                 await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> assertBodies(1, 0));
             }
             assertSmall("/known");
+            var empty = client.send(request("/empty"), HttpResponse.BodyHandlers.ofString());
+            assertThat(empty.statusCode()).isEqualTo(200);
+            assertThat(empty.body()).isEmpty();
             assertBodies(1, 0);
             assertThat(resources.bufferedBytes()).isGreaterThanOrEqualTo(LARGE_BYTES);
             var queued = client.sendAsync(request("/after-close"), HttpResponse.BodyHandlers.ofString());

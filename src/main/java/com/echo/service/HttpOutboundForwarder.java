@@ -528,6 +528,8 @@ public final class HttpOutboundForwarder {
         }
         try {
             long length = Long.parseLong(declaredLength);
+            // Distinguish declared-empty replies from unknown lengths without allocating a read buffer.
+            if (length == 0) return -1;
             return length > 0 && length <= SMALL_RESPONSE_BYTES ? (int) length : 0;
         } catch (NumberFormatException ignored) {
             return 0;
