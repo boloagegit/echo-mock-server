@@ -24,7 +24,7 @@ public final class HttpPathPattern {
         if (pattern.equals(path)) {
             return true;
         }
-        return isPrefix(pattern) && path.startsWith(prefixOf(pattern));
+        return isPrefix(pattern) && path.regionMatches(0, pattern, 0, pattern.length() - 1);
     }
 
     /** Only match the request path that is exactly the same as itself (not {@code *}, not {@code /x/*}). */
