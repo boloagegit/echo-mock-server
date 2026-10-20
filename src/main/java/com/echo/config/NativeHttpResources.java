@@ -80,7 +80,7 @@ public final class NativeHttpResources implements AutoCloseable {
     final class Lease implements AutoCloseable, RequestWorkContext {
         private volatile boolean closed;
         private volatile NativeHttpDeadline deadline;
-        private int runningWork;
+        private final AtomicInteger runningWork = new AtomicInteger();
         private boolean released;
         private boolean drainingCounted;
         private long reserved;
@@ -94,16 +94,20 @@ public final class NativeHttpResources implements AutoCloseable {
 
         @Override
         public void checkActive() {
-            NativeHttpDeadline current = deadline;
-            if (closed || (current != null && current.expired())) {
+            if (!available()) {
                 throw new CancellationException("HTTP request cancelled or deadline exceeded");
             }
+        }
+
+        boolean available() {
+            NativeHttpDeadline current = deadline;
+            return !closed && (current == null || !current.expired());
         }
 
         @Override
         public synchronized Scope begin() {
             checkActive();
-            runningWork++;
+            runningWork.incrementAndGet();
             return new WorkScope();
         }
 
@@ -111,15 +115,16 @@ public final class NativeHttpResources implements AutoCloseable {
             private boolean finished;
 
             @Override
-            public void close() {
-                finishWork(this);
+            public synchronized void close() {
+                if (finished) return;
+                finished = true;
+                // Normal work completion needs no transport lock. Only the last
+                // user of an already-closed request needs to release reservations.
+                if (runningWork.decrementAndGet() == 0 && closed) releaseClosedWork();
             }
         }
 
-        private synchronized void finishWork(WorkScope scope) {
-            if (scope.finished) return;
-            scope.finished = true;
-            runningWork--;
+        private synchronized void releaseClosedWork() {
             releaseIfFinished();
         }
 
@@ -173,7 +178,7 @@ public final class NativeHttpResources implements AutoCloseable {
             synchronized (this) {
                 if (closed) return;
                 closed = true;
-                if (runningWork > 0) {
+                if (runningWork.get() > 0) {
                     drainingCounted = true;
                     draining.incrementAndGet();
                 }
@@ -187,7 +192,7 @@ public final class NativeHttpResources implements AutoCloseable {
 
         /** Called under this lease's lock; cancellation callbacks still run promptly outside it. */
         private void releaseIfFinished() {
-            if (!closed || runningWork != 0 || released) return;
+            if (!closed || runningWork.get() != 0 || released) return;
             released = true;
             buffered.addAndGet(-reserved);
             active.decrementAndGet();

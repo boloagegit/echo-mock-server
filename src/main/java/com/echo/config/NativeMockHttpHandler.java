@@ -55,7 +55,6 @@ final class NativeMockHttpHandler implements HttpHandler {
     private final NativeHttpResources resources;
     private final long timeoutMs;
     private static final AttachmentKey<NativeHttpResources.Lease> LEASE = AttachmentKey.create(NativeHttpResources.Lease.class);
-    private static final AttachmentKey<NativeHttpDeadline> DEADLINE = AttachmentKey.create(NativeHttpDeadline.class);
     private static final AttachmentKey<CloseWatch> CLOSE_WATCH = AttachmentKey.create(CloseWatch.class);
 
     private static final class CloseWatch {
@@ -126,7 +125,6 @@ final class NativeMockHttpHandler implements HttpHandler {
         watchConnection(exchange, lease);
         var deadline = new NativeHttpDeadline(exchange, lease, timeoutMs);
         lease.deadline(deadline);
-        exchange.putAttachment(DEADLINE, deadline);
         Charset bodyCharset = charset;
         long contentLength = exchange.getRequestContentLength();
         if (contentLength > resources.maxBodyBytes) {
@@ -229,14 +227,12 @@ final class NativeMockHttpHandler implements HttpHandler {
 
     private static boolean available(HttpServerExchange exchange) {
         var lease = exchange.getAttachment(LEASE);
-        var deadline = exchange.getAttachment(DEADLINE);
-        return (lease == null || !lease.closed()) && (deadline == null || !deadline.expired());
+        return lease == null || lease.available();
     }
 
     private void execute(HttpServerExchange exchange, String body) {
-        if (!available(exchange)) {
-            return;
-        }
+        // Work.run has just checked the same transport; the pipeline checks again
+        // before its first stage, after this bounded request-metadata extraction.
         Trace trace = services.obtain().diagnostics().begin("HTTP");
         var headers = new HashMap<String, String>();
         exchange.getRequestHeaders().forEach(h -> headers.put(h.getHeaderName().toString(), h.getFirst()));

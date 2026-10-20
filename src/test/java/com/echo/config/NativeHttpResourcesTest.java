@@ -11,6 +11,38 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class NativeHttpResourcesTest {
     @Test
+    void concurrentTransportCloseAndLastUsersNeverLoseOrDoubleReleaseCapacity() throws Exception {
+        var racers = java.util.concurrent.Executors.newFixedThreadPool(3);
+        try (var resources = new NativeHttpResources(1, 1, 1024, 4096)) {
+            for (int iteration = 0; iteration < 2000; iteration++) {
+                var lease = resources.acquire();
+                assertThat(lease).isNotNull();
+                assertThat(lease.reserve(1000)).isTrue();
+                var first = lease.begin();
+                var second = lease.begin();
+                var start = new java.util.concurrent.CyclicBarrier(3);
+                var close = racers.submit(() -> { await(start); lease.close(); lease.close(); });
+                var finishFirst = racers.submit(() -> { await(start); first.close(); first.close(); });
+                var finishSecond = racers.submit(() -> { await(start); second.close(); second.close(); });
+                close.get(2, TimeUnit.SECONDS);
+                finishFirst.get(2, TimeUnit.SECONDS);
+                finishSecond.get(2, TimeUnit.SECONDS);
+                assertThat(resources.active()).isZero();
+                assertThat(resources.bufferedBytes()).isZero();
+                assertThat(resources.resourceMetricsSnapshot()).containsEntry("nativeDrainingRequests", 0);
+            }
+        } finally {
+            racers.shutdownNow();
+            assertThat(racers.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    private static void await(java.util.concurrent.CyclicBarrier barrier) {
+        try { barrier.await(2, TimeUnit.SECONDS); }
+        catch (Exception error) { throw new IllegalStateException(error); }
+    }
+
+    @Test
     void shutdownDiscardsOwnedQueuedWorkWithoutLosingItsReservation() throws Exception {
         var resources = new NativeHttpResources(1, 1, 1024, 4096);
         CountDownLatch entered = new CountDownLatch(1);
