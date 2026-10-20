@@ -24,7 +24,7 @@ class Utf8ResponseBodyTest {
             while (!encoder.finished()) {
                 var buffer = encoder.next();
                 assertThat(buffer.remaining()).isLessThanOrEqualTo(Utf8ResponseBody.BYTE_CAPACITY);
-                output.write(buffer.array(), buffer.position(), buffer.remaining());
+                output.write(buffer.array(), buffer.arrayOffset() + buffer.position(), buffer.remaining());
             }
             assertThat(output.toByteArray()).isEqualTo(expected);
             Utf8ResponseBody gathered = new Utf8ResponseBody(body);
@@ -34,7 +34,7 @@ class Utf8ResponseBodyTest {
                 gathered.prepareBatch();
                 for (var buffer : gathered.batch()) {
                     assertThat(buffer.remaining()).isLessThanOrEqualTo(Utf8ResponseBody.BYTE_CAPACITY);
-                    batches.write(buffer.array(), buffer.position(), buffer.remaining());
+                    batches.write(buffer.array(), buffer.arrayOffset() + buffer.position(), buffer.remaining());
                 }
             }
             assertThat(batches.toByteArray()).isEqualTo(expected);

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -84,14 +85,19 @@ class NativeHttpTlsIntegrationTest {
         assertThat(protectedApi.statusCode()).isEqualTo(401);
     }
 
+    static java.util.stream.Stream<String> compressionBodies() {
+        return java.util.stream.Stream.of("有內容的回應".repeat(1000),
+                "有內容的回應".repeat(100000), "payload".repeat(100000));
+    }
+
     @ParameterizedTest
-    @ValueSource(ints = {1000, 100000})
-    void tlsCompressionKeepsTheCompleteUnicodeBody(int repetitions) throws Exception {
+    @MethodSource("compressionBodies")
+    void tlsCompressionKeepsTheCompleteBody(String body) throws Exception {
         HttpClient client = client("TLSv1.3", HttpClient.Version.HTTP_1_1);
-        String body = "有內容的回應".repeat(repetitions);
-        createRule(client, "/tls-compression", body);
+        String path = "/tls-compression-" + body.length();
+        createRule(client, path, body);
         double before = nativeRequests();
-        var response = client.send(request("/mock/tls-compression").header("Accept-Encoding", "gzip").build(),
+        var response = client.send(request("/mock" + path).header("Accept-Encoding", "gzip").build(),
                 HttpResponse.BodyHandlers.ofByteArray());
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.headers().firstValue("Content-Encoding")).contains("gzip");

@@ -20,6 +20,10 @@ class NativeHttpResourcesTest {
             assertThat(resources.bufferedBytes()).isEqualTo(3100);
             assertThat(lease.reserveResponseBody(1000)).isTrue();
             assertThat(resources.bufferedBytes()).isEqualTo(1100);
+            assertThat(lease.reserveEncodedBody(1500)).isTrue();
+            assertThat(lease.reserveEncodedBody(500)).isTrue();
+            assertThat(lease.reserveEncodedBody(4096)).isFalse();
+            assertThat(resources.bufferedBytes()).isEqualTo(1600);
             lease.close();
             assertThat(resources.bufferedBytes()).isZero();
             assertThat(lease.reserveResponseBody(100)).isFalse();
