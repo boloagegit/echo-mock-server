@@ -201,15 +201,17 @@ public class ConditionMatcher {
     // ==================== Prepared Body ====================
 
     /**
-     * Pre-parsed Body container
+     * Request-confined body container with shared parsing and predicate results.
      * <p>
-     * When multiple rules evaluate the same body, parse it once before matching.
-     * Subsequent rules reuse that parsed object instead of parsing again.
+     * JSON is parsed only on first access; RAW conditions never need a tree.
+     * Subsequent rules reuse successful or failed parsing, just like lazy XML.
      */
     public static class PreparedBody {
         private final String raw;
         private final Document xmlDoc;
-        private final JsonNode jsonNode;
+        private JsonNode jsonNode;
+        private final ObjectMapper jsonReader;
+        private boolean jsonParsed;
         private final BodyType type;
         private final Map<String, Boolean> matchOutcomes = new HashMap<>();
         /** Matching-engine evaluation state; see {@link #evalContext(String, Map)}. */
@@ -223,10 +225,16 @@ public class ConditionMatcher {
         enum BodyType { XML, JSON, PLAIN, EMPTY, TOO_LARGE }
 
         private PreparedBody(String raw, Document xmlDoc, JsonNode jsonNode, BodyType type) {
+            this(raw, xmlDoc, jsonNode, type, null);
+        }
+
+        private PreparedBody(String raw, Document xmlDoc, JsonNode jsonNode, BodyType type,
+                             ObjectMapper jsonReader) {
             this.raw = raw;
             this.xmlDoc = xmlDoc;
             this.jsonNode = jsonNode;
             this.type = type;
+            this.jsonReader = jsonReader;
         }
 
         public static PreparedBody empty() {
@@ -261,6 +269,15 @@ public class ConditionMatcher {
 
         /** Obtain the parsed JSON node, if it is not JSON, it is null */
         public JsonNode getJsonNode() {
+            if (jsonReader != null && !jsonParsed) {
+                jsonParsed = true;
+                try {
+                    jsonNode = jsonReader.readTree(raw);
+                } catch (Exception e) {
+                    // Retain the existing warning format and the terminal failed result.
+                    log.warn("Failed to prepare body: {}", e.getMessage());
+                }
+            }
             return jsonNode;
         }
 
@@ -316,7 +333,7 @@ public class ConditionMatcher {
 
             @Override
             public JsonNode json() {
-                return jsonNode;
+                return getJsonNode();
             }
 
             /** Streaming XML has no DOM; parse one only when needed, such as for matching-chain explanations, and attempt it only once even on failure. */
@@ -392,8 +409,7 @@ public class ConditionMatcher {
                 return new PreparedBody(trimmed, doc, null, PreparedBody.BodyType.XML);
             }
             if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-                JsonNode node = objectMapper.readTree(trimmed);
-                return new PreparedBody(trimmed, null, node, PreparedBody.BodyType.JSON);
+                return new PreparedBody(trimmed, null, null, PreparedBody.BodyType.JSON, objectMapper);
             }
         } catch (Exception e) {
             log.warn("Failed to prepare body: {}", e.getMessage());
