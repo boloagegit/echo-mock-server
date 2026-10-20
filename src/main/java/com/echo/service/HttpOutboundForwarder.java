@@ -512,31 +512,32 @@ public final class HttpOutboundForwarder {
             }
         }));
         if (bufferedLength > 0) {
-            BufferedResponseBody output = new BufferedResponseBody(
-                    bufferedLength, maxResponseBodyBytes, responseBufferBudget);
-            return accounted.doOnNext(output::append)
-                    .then(Mono.fromSupplier(() -> retainedBody(output.decode(charset), bodyMemory)))
-                    .doFinally(ignored -> output.close());
+            // Eager cleanup precedes the terminal signal. The transport already owns the
+            // decoded-body reservation, so no reader quota lingers after the caller completes.
+            return Mono.using(
+                    () -> new BufferedResponseBody(bufferedLength, maxResponseBodyBytes, responseBufferBudget),
+                    output -> accounted.doOnNext(output::append)
+                            .then(Mono.fromSupplier(() -> retainedBody(output.decode(charset), bodyMemory))),
+                    BufferedResponseBody::close, true);
         }
-        AtomicInteger receivedBytes = new AtomicInteger();
-        ResponseBufferBudget.Reservation reservation = responseBufferBudget.openReservation();
-        StreamingTextAccumulator output = new StreamingTextAccumulator(charset);
-        return accounted.doOnNext(chunk -> {
-            int bytes = chunk.readableBytes();
-            long nextSize = (long) receivedBytes.get() + bytes;
-            if (nextSize > maxResponseBodyBytes) {
-                throw new ResponseBodyTooLargeException(maxResponseBodyBytes);
-            }
-            if (!reservation.tryReserve(bytes)) {
-                throw new ResponseBufferCapacityException(responseBufferBudget.maximumBytes());
-            }
-            receivedBytes.set((int) nextSize);
-            output.appendBuffer(chunk);
-        })
-                .then(Mono.defer(() -> receivedBytes.get() == 0
-                        ? Mono.empty()
-                        : Mono.fromSupplier(() -> retainedBody(output.finish(), bodyMemory))))
-                .doFinally(ignored -> reservation.close());
+        return Mono.using(responseBufferBudget::openReservation, reservation -> {
+            AtomicInteger receivedBytes = new AtomicInteger();
+            StreamingTextAccumulator output = new StreamingTextAccumulator(charset);
+            return accounted.doOnNext(chunk -> {
+                int bytes = chunk.readableBytes();
+                long nextSize = (long) receivedBytes.get() + bytes;
+                if (nextSize > maxResponseBodyBytes) {
+                    throw new ResponseBodyTooLargeException(maxResponseBodyBytes);
+                }
+                if (!reservation.tryReserve(bytes)) {
+                    throw new ResponseBufferCapacityException(responseBufferBudget.maximumBytes());
+                }
+                receivedBytes.set((int) nextSize);
+                output.appendBuffer(chunk);
+            }).then(Mono.defer(() -> receivedBytes.get() == 0
+                    ? Mono.empty()
+                    : Mono.fromSupplier(() -> retainedBody(output.finish(), bodyMemory))));
+        }, ResponseBufferBudget.Reservation::close, true);
     }
 
     private String retainedBody(String value, ResponseBodyMemory bodyMemory) {
