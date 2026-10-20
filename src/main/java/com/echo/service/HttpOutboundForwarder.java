@@ -81,7 +81,7 @@ public final class HttpOutboundForwarder {
     private static final int DEFAULT_MAX_CONCURRENT = 0;
     private static final int DEFAULT_MAX_CONNECTIONS = 1_000;
     private static final int DEFAULT_MAX_PENDING_REQUESTS = 1_000;
-    private static final int DEFAULT_MAX_UTF8_BODIES = 16;
+    private static final int DEFAULT_MAX_UTF8_BODIES = 8;
     private static final int DEFAULT_MAX_RESPONSE_BODY_BYTES = 10 * 1024 * 1024;
     private static final int DEFAULT_MAX_BUFFERED_RESPONSE_BYTES = 128 * 1024 * 1024;
     private static final int SMALL_RESPONSE_BYTES = 256 * 1024;
@@ -207,7 +207,7 @@ public final class HttpOutboundForwarder {
             @Value("${echo.http.forward.legacy-read-timeout-seconds:30}") int legacyReadTimeoutSeconds,
             @Value("${echo.http.forward.overload-backoff-ms:50}") int overloadBackoffMs,
             @Value("${echo.http.forward.idle-connection-timeout-seconds:30}") int idleConnectionTimeoutSeconds,
-            @Value("${echo.http.native.max-forwarding-bodies:16}") int maxUtf8Bodies) {
+            @Value("${echo.http.native.max-forwarding-bodies:8}") int maxUtf8Bodies) {
         if (maxConcurrent < 0) {
             throw new IllegalArgumentException("maxConcurrent must not be negative");
         }

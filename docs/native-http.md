@@ -43,8 +43,7 @@ TLS、壓縮與 graceful shutdown 使用 Spring Boot 原本的 Undertow 設定�
 | `echo.http.native.max-requests` | 512 | 含延遲與轉送在內的進行中請求上限 |
 | `echo.http.native.max-body-bytes` | 10485760 | 單筆 request／response 的編碼 bytes 上限 |
 | `echo.http.native.max-buffered-bytes` | 134217728 | adapter 為讀取、解碼與編碼保留的估計總容量 |
-| `echo.http.native.segmented-forwarding-enabled` | true | 符合條件的 UTF-8 轉送回應保留 bytes；重啟後可關閉 |
-| `echo.http.native.max-forwarding-bodies` | 16 | 同時讀取至傳送結束的分段轉送回應數；其餘非阻塞等待 |
+| `echo.http.native.max-forwarding-bodies` | 8 | 同時讀取至傳送結束的分段轉送回應數；其餘非阻塞等待 |
 | `echo.http.native.segmented-forwarding-enabled` | true | 符合條件的 UTF-8 HTTP 轉送回應保留分段 bytes；false 在重啟後使用文字通路 |
 | `echo.http.request-timeout-ms` | 40000 | 從接收請求至回應傳送完成的總期限，包含上傳、排隊、pipeline 與延遲 |
 
