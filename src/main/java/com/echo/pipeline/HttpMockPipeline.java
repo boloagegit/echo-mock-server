@@ -120,6 +120,7 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
         }
         return CancellableStages.thenCompose(
                 outboundForwarder.forwardDefaultAsync(request), defaultForward -> {
+            request.getWorkContext().checkActive();
             if (defaultForward.isPresent()) {
                 return CompletableFuture.completedFuture(defaultForward.orElseThrow());
             }

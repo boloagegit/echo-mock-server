@@ -56,6 +56,10 @@ public class MockRequest {
     @Builder.Default
     private final ResponseBodyMemory responseBodyMemory = ResponseBodyMemory.UNBOUNDED;
 
+    /** Native HTTP cancellation/accounting; other protocols keep their existing lifecycle. */
+    @Builder.Default
+    private final RequestWorkContext workContext = RequestWorkContext.NONE;
+
     /** Request data used by the response template; common to all protocols, see {@link ResponseTemplateService#renderIfTemplate}. */
     public ResponseTemplateService.TemplateContext templateContext() {
         return ResponseTemplateService.TemplateContext.of(path, method, queryString, headers, body);

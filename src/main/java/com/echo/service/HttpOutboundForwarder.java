@@ -4,6 +4,7 @@ import com.echo.dto.HttpForwardMetricsDto;
 import com.echo.pipeline.MockRequest;
 import com.echo.pipeline.MockResponse;
 import com.echo.pipeline.ResponseBodyMemory;
+import com.echo.pipeline.RequestWorkContext;
 import com.echo.util.CancellableStages;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -303,7 +304,8 @@ public final class HttpOutboundForwarder {
             HttpHeaders headers = new HttpHeaders();
             applyAuthentication(headers, target);
             return exchangeResponse(
-                    holder, URI.create(target.baseUrl()), HttpMethod.GET, headers, null, ResponseBodyMemory.UNBOUNDED)
+                    holder, URI.create(target.baseUrl()), HttpMethod.GET, headers, null,
+                    ResponseBodyMemory.UNBOUNDED, RequestWorkContext.NONE)
                     .timeout(Duration.ofSeconds(testTimeoutSeconds))
                     .map(response -> new ConnectionTestResult(true, elapsedMillis(started), response.status(), null))
                     .onErrorResume(error -> Mono.just(new ConnectionTestResult(false, elapsedMillis(started),
@@ -328,7 +330,8 @@ public final class HttpOutboundForwarder {
         HttpHeaders headers = copyHeaders(request.getHeaders(), true);
         applyAuthentication(headers, target);
         HttpMethod method = HttpMethod.valueOf(request.getMethod().toUpperCase(Locale.ROOT));
-        return exchangeResponse(clientFor(target), URI.create(url), method, headers, request.getBody(), request.getResponseBodyMemory())
+        return exchangeResponse(clientFor(target), URI.create(url), method, headers, request.getBody(),
+                request.getResponseBodyMemory(), request.getWorkContext())
                 .doOnNext(response -> request.getTrace().event("HTTP_TARGET_RESPONSE", "status", response.status()))
                 .map(response -> MockResponse.builder()
                         .status(response.status())
@@ -421,7 +424,8 @@ public final class HttpOutboundForwarder {
         if (client == null) {
             return Mono.error(new IllegalStateException("HTTP_CLIENT_CLOSED"));
         }
-        return exchangeResponse(client, URI.create(url), method, headers, request.getBody(), request.getResponseBodyMemory())
+        return exchangeResponse(client, URI.create(url), method, headers, request.getBody(),
+                request.getResponseBodyMemory(), request.getWorkContext())
                 .doOnNext(response -> request.getTrace().event("HTTP_TARGET_RESPONSE", "status", response.status()))
                 .map(response -> MockResponse.builder()
                         .status(response.status())
@@ -436,10 +440,11 @@ public final class HttpOutboundForwarder {
                                                     URI uri,
                                                     HttpMethod method,
                                                     HttpHeaders headers,
-                                                    String body, ResponseBodyMemory bodyMemory) {
+                                                    String body, ResponseBodyMemory bodyMemory,
+                                                    RequestWorkContext workContext) {
         return connectionLimiter.acquire(Duration.ofMillis(poolAcquireTimeoutMs))
                 .flatMap(permit -> exchangeResponseWithPermit(
-                        holder, uri, method, headers, body, bodyMemory)
+                        holder, uri, method, headers, body, bodyMemory, workContext)
                         .doFinally(ignored -> permit.close()))
                 .doFinally(ignored -> holder.close());
     }
@@ -448,32 +453,37 @@ public final class HttpOutboundForwarder {
                                                               URI uri,
                                                               HttpMethod method,
                                                               HttpHeaders headers,
-                                                              String body, ResponseBodyMemory bodyMemory) {
-        byte[] payload = body == null ? null : body.getBytes(contentCharset(headers));
-        HttpClient.RequestSender request = holder.httpClient()
-                .headers(outbound -> {
-                    headers.forEach(outbound::set);
-                    if (payload != null) {
-                        outbound.setInt(HttpHeaderNames.CONTENT_LENGTH, payload.length);
+                                                              String body, ResponseBodyMemory bodyMemory,
+                                                              RequestWorkContext workContext) {
+        return Mono.defer(() -> {
+            try (var work = workContext.begin()) {
+                byte[] payload = body == null ? null : body.getBytes(contentCharset(headers));
+                HttpClient.RequestSender request = holder.httpClient()
+                        .headers(outbound -> {
+                            headers.forEach(outbound::set);
+                            if (payload != null) {
+                                outbound.setInt(HttpHeaderNames.CONTENT_LENGTH, payload.length);
+                            }
+                        })
+                        .request(io.netty.handler.codec.http.HttpMethod.valueOf(method.name()))
+                        .uri(uri);
+                HttpClient.ResponseReceiver<?> prepared = payload == null
+                        ? request
+                        : request.send(Mono.fromSupplier(() -> Unpooled.wrappedBuffer(payload)));
+                return prepared.response((response, responseBody) -> {
+                    int status = response.status().code();
+                    String declaredLength = response.responseHeaders().get(HttpHeaderNames.CONTENT_LENGTH);
+                    if (declaredLength != null && exceedsResponseLimit(declaredLength)) {
+                        return Mono.error(new ResponseBodyTooLargeException(maxResponseBodyBytes));
                     }
-                })
-                .request(io.netty.handler.codec.http.HttpMethod.valueOf(method.name()))
-                .uri(uri);
-        HttpClient.ResponseReceiver<?> prepared = payload == null
-                ? request
-                : request.send(Mono.fromSupplier(() -> Unpooled.wrappedBuffer(payload)));
-        return prepared.response((response, responseBody) -> {
-            int status = response.status().code();
-            String declaredLength = response.responseHeaders().get(HttpHeaderNames.CONTENT_LENGTH);
-            if (declaredLength != null && exceedsResponseLimit(declaredLength)) {
-                return Mono.error(new ResponseBodyTooLargeException(maxResponseBodyBytes));
+                    return readResponseBody(responseBody, contentCharset(
+                                    response.responseHeaders().get(HttpHeaderNames.CONTENT_TYPE)),
+                                    smallResponseLength(declaredLength), bodyMemory, workContext)
+                            .map(value -> new ForwardResponse(status, value))
+                            .switchIfEmpty(Mono.just(new ForwardResponse(status, null)));
+                }).single();
             }
-            return readResponseBody(responseBody, contentCharset(
-                            response.responseHeaders().get(HttpHeaderNames.CONTENT_TYPE)),
-                            smallResponseLength(declaredLength), bodyMemory)
-                    .map(value -> new ForwardResponse(status, value))
-                    .switchIfEmpty(Mono.just(new ForwardResponse(status, null)));
-        }).single();
+        });
     }
 
     private boolean exceedsResponseLimit(String declaredLength) {
@@ -497,7 +507,7 @@ public final class HttpOutboundForwarder {
     }
 
     private Mono<String> readResponseBody(ByteBufFlux responseBody, Charset charset, int bufferedLength,
-                                          ResponseBodyMemory bodyMemory) {
+                                          ResponseBodyMemory bodyMemory, RequestWorkContext workContext) {
         // Account for decoded UTF-16 storage and the final join while fragments still exist.
         // The transport keeps the final estimate after the downstream reader releases its own buffers.
         double maximumCharsPerByte = bodyMemory == ResponseBodyMemory.UNBOUNDED
@@ -516,27 +526,39 @@ public final class HttpOutboundForwarder {
             // decoded-body reservation, so no reader quota lingers after the caller completes.
             return Mono.using(
                     () -> new BufferedResponseBody(bufferedLength, maxResponseBodyBytes, responseBufferBudget),
-                    output -> accounted.doOnNext(output::append)
-                            .then(Mono.fromSupplier(() -> retainedBody(output.decode(charset), bodyMemory))),
+                    output -> accounted.doOnNext(chunk -> {
+                                try (var work = workContext.begin()) { output.append(chunk); }
+                            })
+                            .then(Mono.fromSupplier(() -> {
+                                try (var work = workContext.begin()) {
+                                    return retainedBody(output.decode(charset), bodyMemory);
+                                }
+                            })),
                     BufferedResponseBody::close, true);
         }
         return Mono.using(responseBufferBudget::openReservation, reservation -> {
             AtomicInteger receivedBytes = new AtomicInteger();
             StreamingTextAccumulator output = new StreamingTextAccumulator(charset);
             return accounted.doOnNext(chunk -> {
-                int bytes = chunk.readableBytes();
-                long nextSize = (long) receivedBytes.get() + bytes;
-                if (nextSize > maxResponseBodyBytes) {
-                    throw new ResponseBodyTooLargeException(maxResponseBodyBytes);
+                try (var work = workContext.begin()) {
+                    int bytes = chunk.readableBytes();
+                    long nextSize = (long) receivedBytes.get() + bytes;
+                    if (nextSize > maxResponseBodyBytes) {
+                        throw new ResponseBodyTooLargeException(maxResponseBodyBytes);
+                    }
+                    if (!reservation.tryReserve(bytes)) {
+                        throw new ResponseBufferCapacityException(responseBufferBudget.maximumBytes());
+                    }
+                    receivedBytes.set((int) nextSize);
+                    output.appendBuffer(chunk);
                 }
-                if (!reservation.tryReserve(bytes)) {
-                    throw new ResponseBufferCapacityException(responseBufferBudget.maximumBytes());
-                }
-                receivedBytes.set((int) nextSize);
-                output.appendBuffer(chunk);
             }).then(Mono.defer(() -> receivedBytes.get() == 0
                     ? Mono.empty()
-                    : Mono.fromSupplier(() -> retainedBody(output.finish(), bodyMemory))));
+                    : Mono.fromSupplier(() -> {
+                        try (var work = workContext.begin()) {
+                            return retainedBody(output.finish(), bodyMemory);
+                        }
+                    })));
         }, ResponseBufferBudget.Reservation::close, true);
     }
 

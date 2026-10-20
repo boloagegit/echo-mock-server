@@ -11,6 +11,71 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class NativeHttpResourcesTest {
     @Test
+    void shutdownDiscardsOwnedQueuedWorkWithoutLosingItsReservation() throws Exception {
+        var resources = new NativeHttpResources(1, 1, 1024, 4096);
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        try {
+            resources.workers.execute(() -> {
+                entered.countDown();
+                try { release.await(3, TimeUnit.SECONDS); }
+                catch (InterruptedException error) { Thread.currentThread().interrupt(); }
+            });
+            assertThat(entered.await(2, TimeUnit.SECONDS)).isTrue();
+            var lease = resources.acquire();
+            assertThat(lease.reserve(1000)).isTrue();
+            var work = lease.begin();
+            AtomicInteger discarded = new AtomicInteger();
+            resources.workers.execute(new NativeHttpResources.QueuedWork() {
+                @Override public void run() { throw new AssertionError("queued task must not run"); }
+                @Override public void discard() { discarded.incrementAndGet(); work.close(); }
+            });
+            lease.close();
+            assertThat(resources.active()).isEqualTo(1);
+            resources.close();
+            assertThat(discarded).hasValue(1);
+            assertThat(resources.active()).isZero();
+            assertThat(resources.bufferedBytes()).isZero();
+        } finally {
+            release.countDown();
+            resources.close();
+            assertThat(resources.workers.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    @Test
+    void closedTransportRetainsItsReservationsUntilEveryWorkScopeExits() {
+        try (var resources = new NativeHttpResources(1, 1, 1024, 4096)) {
+            var lease = resources.acquire();
+            assertThat(lease.reserve(1000)).isTrue();
+            var first = lease.begin();
+            var second = lease.begin();
+            AtomicInteger cancelled = new AtomicInteger();
+            lease.onClose(cancelled::incrementAndGet);
+            lease.close();
+            lease.close();
+            assertThat(cancelled).hasValue(1);
+            assertThat(resources.active()).isEqualTo(1);
+            assertThat(resources.bufferedBytes()).isEqualTo(1000);
+            assertThat(resources.resourceMetricsSnapshot()).containsEntry("nativeDrainingRequests", 1);
+            assertThat(resources.acquire()).isNull();
+            org.assertj.core.api.Assertions.assertThatThrownBy(lease::begin)
+                    .isInstanceOf(java.util.concurrent.CancellationException.class);
+            first.close();
+            first.close();
+            assertThat(resources.active()).isEqualTo(1);
+            second.close();
+            second.close();
+            assertThat(resources.active()).isZero();
+            assertThat(resources.bufferedBytes()).isZero();
+            assertThat(resources.resourceMetricsSnapshot()).containsEntry("nativeDrainingRequests", 0);
+            var next = resources.acquire();
+            assertThat(next).isNotNull();
+            next.close();
+        }
+    }
+
+    @Test
     void responseStorageCanShrinkWithoutReleasingOtherRequestReservations() {
         try (var resources = new NativeHttpResources(1, 2, 1024, 4096)) {
             var lease = resources.acquire();

@@ -13,9 +13,11 @@ import java.util.concurrent.TimeoutException;
 final class NativeHttpDeadline {
     private static final byte[] TIMEOUT_BODY = "Request timeout".getBytes(StandardCharsets.UTF_8);
     private volatile boolean expired;
+    private final long deadlineNanos;
 
     NativeHttpDeadline(HttpServerExchange exchange, NativeHttpResources.Lease lease,
                        long timeoutMs) {
+        deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
         // XNIO owns this connection and its timer queue. Fast responses register/cancel on
         // the same I/O thread, avoiding a contended global scheduler on every request.
         var task = exchange.getIoThread().executeAfter(() -> {
@@ -44,6 +46,7 @@ final class NativeHttpDeadline {
     }
 
     boolean expired() {
-        return expired;
+        // Stage guards must not depend on an I/O timer getting CPU time first.
+        return expired || System.nanoTime() - deadlineNanos >= 0;
     }
 }

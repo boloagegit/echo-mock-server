@@ -7,6 +7,7 @@ import com.echo.pipeline.HttpMockPipeline;
 import com.echo.pipeline.MockRequest;
 import com.echo.pipeline.MockResponse;
 import com.echo.pipeline.PipelineResult;
+import com.echo.pipeline.RequestWorkContext;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.observation.ObservationRegistry;
@@ -29,6 +30,7 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -122,7 +124,9 @@ final class NativeMockHttpHandler implements HttpHandler {
         exchange.putAttachment(LEASE, lease);
         lease.onClose(() -> observation.stop(!exchange.isComplete()));
         watchConnection(exchange, lease);
-        exchange.putAttachment(DEADLINE, new NativeHttpDeadline(exchange, lease, timeoutMs));
+        var deadline = new NativeHttpDeadline(exchange, lease, timeoutMs);
+        lease.deadline(deadline);
+        exchange.putAttachment(DEADLINE, deadline);
         Charset bodyCharset = charset;
         long contentLength = exchange.getRequestContentLength();
         if (contentLength > resources.maxBodyBytes) {
@@ -242,7 +246,8 @@ final class NativeMockHttpHandler implements HttpHandler {
                 .queryString(exchange.getQueryString().isEmpty() ? null : exchange.getQueryString())
                 .headers(headers).body(body).targetHost(host == null || host.isBlank() ? "default" : host.trim())
                 .clientIp(exchange.getSourceAddress().getAddress().getHostAddress()).trace(trace)
-                .responseBodyMemory(exchange.getAttachment(LEASE)::reserveResponseBody).build();
+                .responseBodyMemory(exchange.getAttachment(LEASE)::reserveResponseBody)
+                .workContext(exchange.getAttachment(LEASE)).build();
         trace.event("RECEIVED", "method", request.getMethod(), "path", request.getPath());
         CompletableFuture<PipelineResult> future = services.obtain().pipeline().executeAsync(request).toCompletableFuture();
         exchange.getAttachment(LEASE).onClose(() -> {
@@ -434,14 +439,16 @@ final class NativeMockHttpHandler implements HttpHandler {
         return encoded;
     }
 
-    private final class Work implements Runnable {
+    private final class Work implements NativeHttpResources.QueuedWork {
         private final HttpServerExchange exchange;
+        private final RequestWorkContext.Scope ownership;
         private Runnable command;
         private volatile boolean started;
 
-        private Work(HttpServerExchange exchange, Runnable command) {
+        private Work(HttpServerExchange exchange, Runnable command, RequestWorkContext.Scope ownership) {
             this.exchange = exchange;
             this.command = command;
+            this.ownership = ownership;
         }
 
         @Override
@@ -449,10 +456,13 @@ final class NativeMockHttpHandler implements HttpHandler {
             started = true;
             Runnable task = command;
             command = null; // Cleanup must not retain an uploaded byte array until a slow response ends.
-            if (!available(exchange)) {
-                return;
+            try (var work = ownership) {
+                if (!available(exchange)) return;
+                try (var scope = NativeHttpObservation.scope(exchange)) { task.run(); }
             }
-            try (var scope = NativeHttpObservation.scope(exchange)) { task.run(); }
+            catch (CancellationException cancelled) {
+                // The deadline/connection close owns the wire response. Work exits here.
+            }
             catch (RuntimeException failure) {
                 NativeHttpObservation.error(exchange, failure);
                 fail(exchange, 500, "Pipeline error");
@@ -461,20 +471,30 @@ final class NativeMockHttpHandler implements HttpHandler {
 
         private void removeIfQueued() {
             if (!started && resources.workers.remove(this)) {
-                command = null;
+                discard();
             }
+        }
+
+        @Override
+        public void discard() {
+            command = null;
+            ownership.close();
         }
     }
 
     private void submit(HttpServerExchange exchange, Runnable command) {
-        var work = new Work(exchange, command);
+        var lease = exchange.getAttachment(LEASE);
+        RequestWorkContext.Scope ownership;
+        try { ownership = lease.begin(); }
+        catch (CancellationException cancelled) { return; }
+        // Own the queue-to-worker handoff too: dequeued work may not have started
+        // when cancellation tries to unlink it from the executor queue.
+        var work = new Work(exchange, command, ownership);
         try {
             resources.workers.execute(work);
-            var lease = exchange.getAttachment(LEASE);
-            if (lease != null) {
-                lease.onClose(work::removeIfQueued);
-            }
+            lease.onClose(work::removeIfQueued);
         } catch (RejectedExecutionException rejected) {
+            work.discard();
             fail(exchange, 503, "Native HTTP worker capacity exhausted");
         }
     }

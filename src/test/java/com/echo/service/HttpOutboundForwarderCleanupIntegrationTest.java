@@ -3,6 +3,7 @@ package com.echo.service;
 import com.echo.entity.Protocol;
 import com.echo.pipeline.MockRequest;
 import com.echo.pipeline.MockResponse;
+import com.echo.pipeline.RequestWorkContext;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,6 +60,32 @@ class HttpOutboundForwarderCleanupIntegrationTest {
                 }
             }
         }
+    }
+
+    @Test
+    void cancelledWorkBeforeExchangeCreationStillReturnsTheOnlyPermit() throws Exception {
+        server.createContext("/ok", exchange -> {
+            exchange.sendResponseHeaders(200, 2);
+            try (var output = exchange.getResponseBody()) { output.write(new byte[]{'o', 'k'}); }
+            finally { exchange.close(); }
+        });
+        forwarder = new HttpOutboundForwarder(connectionService,
+                0, 1, 2, 1024, 100, 1, 1, 0, 1);
+        var target = new HttpTargetConnectionService.ResolvedTarget(27L, 1L, "Cancellation",
+                "http://127.0.0.1:" + server.getAddress().getPort(), "NONE", null, null, 1, 1, false);
+        when(connectionService.resolveEnabled(27L)).thenReturn(target);
+        RequestWorkContext cancelled = new RequestWorkContext() {
+            @Override public void checkActive() { throw new java.util.concurrent.CancellationException("cancelled test request"); }
+            @Override public Scope begin() { checkActive(); return () -> { }; }
+        };
+        MockRequest stopped = MockRequest.builder().protocol(Protocol.HTTP).method("GET").path("/ok")
+                .headers(Map.of()).workContext(cancelled).build();
+        assertThat(forwarder.forward(stopped, 27L, false).getStatus()).isNotEqualTo(200);
+        MockRequest next = MockRequest.builder().protocol(Protocol.HTTP).method("GET").path("/ok")
+                .headers(Map.of()).build();
+        assertThat(forwarder.forward(next, 27L, false).getBody()).isEqualTo("ok");
+        awaitCondition("cancelled exchange released capacity", () ->
+                forwarder.metricsSnapshot().pool().leased() == 0, 2);
     }
 
     @Test

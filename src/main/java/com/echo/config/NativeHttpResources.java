@@ -1,5 +1,7 @@
 package com.echo.config;
 
+import com.echo.pipeline.RequestWorkContext;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -7,6 +9,7 @@ import java.time.Duration;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -18,6 +21,7 @@ public final class NativeHttpResources implements AutoCloseable {
     private final int maxRequests;
     private final long maxBufferedBytes;
     private final AtomicInteger active = new AtomicInteger();
+    private final AtomicInteger draining = new AtomicInteger();
     private final AtomicLong buffered = new AtomicLong();
 
     NativeHttpResources(int threads, int maxRequests, int maxBodyBytes, long maxBufferedBytes) {
@@ -58,20 +62,66 @@ public final class NativeHttpResources implements AutoCloseable {
                 "nativeQueued", workers.getQueue().size(), "nativeCapacity", maxRequests,
                 "nativeWorkerActive", workers.getActiveCount(), "nativeWorkerCapacity", workers.getCorePoolSize(),
                 "nativeWorkerThreads", workers.getPoolSize(),
-                "nativeBufferLimitBytes", maxBufferedBytes);
+                "nativeBufferLimitBytes", maxBufferedBytes, "nativeDrainingRequests", draining.get());
     }
 
     @Override
-    public void close() { workers.shutdownNow(); }
+    public void close() {
+        for (Runnable queued : workers.shutdownNow()) {
+            if (queued instanceof QueuedWork owned) owned.discard();
+        }
+    }
 
-    final class Lease implements AutoCloseable {
-        private boolean closed;
+    /** Only adapter-owned queue entries have lifecycle cleanup on rejection or shutdown. */
+    interface QueuedWork extends Runnable {
+        void discard();
+    }
+
+    final class Lease implements AutoCloseable, RequestWorkContext {
+        private volatile boolean closed;
+        private volatile NativeHttpDeadline deadline;
+        private int runningWork;
+        private boolean released;
+        private boolean drainingCounted;
         private long reserved;
         private long responseBodyBytes;
         private long encodedBodyBytes;
         private final List<Runnable> cleanup = new ArrayList<>(3);
 
-        synchronized boolean closed() { return closed; }
+        boolean closed() { return closed; }
+
+        void deadline(NativeHttpDeadline value) { deadline = value; }
+
+        @Override
+        public void checkActive() {
+            NativeHttpDeadline current = deadline;
+            if (closed || (current != null && current.expired())) {
+                throw new CancellationException("HTTP request cancelled or deadline exceeded");
+            }
+        }
+
+        @Override
+        public synchronized Scope begin() {
+            checkActive();
+            runningWork++;
+            return new WorkScope();
+        }
+
+        private final class WorkScope implements Scope {
+            private boolean finished;
+
+            @Override
+            public void close() {
+                finishWork(this);
+            }
+        }
+
+        private synchronized void finishWork(WorkScope scope) {
+            if (scope.finished) return;
+            scope.finished = true;
+            runningWork--;
+            releaseIfFinished();
+        }
 
         synchronized boolean reserve(long bytes) {
             if (closed || bytes < 0 || bytes > maxBufferedBytes) return false;
@@ -123,13 +173,25 @@ public final class NativeHttpResources implements AutoCloseable {
             synchronized (this) {
                 if (closed) return;
                 closed = true;
-                buffered.addAndGet(-reserved);
-                active.decrementAndGet();
+                if (runningWork > 0) {
+                    drainingCounted = true;
+                    draining.incrementAndGet();
+                }
+                releaseIfFinished();
                 actions = List.copyOf(cleanup);
                 cleanup.clear();
             }
             // Internal callbacks cancel tasks/futures and unlink the connection's close watch.
             for (Runnable action : actions) runCleanup(action);
+        }
+
+        /** Called under this lease's lock; cancellation callbacks still run promptly outside it. */
+        private void releaseIfFinished() {
+            if (!closed || runningWork != 0 || released) return;
+            released = true;
+            buffered.addAndGet(-reserved);
+            active.decrementAndGet();
+            if (drainingCounted) draining.decrementAndGet();
         }
     }
 
