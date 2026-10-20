@@ -10,6 +10,7 @@ import java.util.function.Supplier;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.withSettings;
 
 /** Shared entry-point setup only; broker resources and assertions belong to each test. */
 enum JmsForwardingRoute {
@@ -23,7 +24,9 @@ enum JmsForwardingRoute {
                                       JmsRuntimeMetrics metrics) {
         if (this == LEGACY) return new JmsTargetForwarder(properties, providers, metrics);
 
-        JmsTargetConnectionService service = mock(JmsTargetConnectionService.class);
+        // These fixtures only resolve targets; retaining every invocation would make
+        // long-running recovery probes measure Mockito history instead of Echo.
+        JmsTargetConnectionService service = mock(JmsTargetConnectionService.class, withSettings().stubOnly());
         // Resolve a fresh defensive snapshot so a probe's per-phase receive budget
         // applies to all routes, while its connection identity/revision stays fixed.
         Supplier<JmsTargetConnectionService.ResolvedTarget> resolved = () ->
