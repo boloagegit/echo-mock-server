@@ -2,6 +2,7 @@ package com.echo.jms;
 
 import com.echo.config.JmsProperties;
 import com.echo.config.MonitoringProperties;
+import com.echo.config.ExternalJmsSourceConfig;
 import com.echo.jms.target.ArtemisFactoryProvider;
 import com.echo.jms.target.JmsTargetFactoryProvider;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,6 +14,7 @@ import org.apache.activemq.artemis.core.config.impl.ConfigurationImpl;
 import org.apache.activemq.artemis.core.server.ActiveMQServer;
 import org.apache.activemq.artemis.core.server.ActiveMQServers;
 import org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory;
+import org.springframework.jms.connection.CachingConnectionFactory;
 
 import java.net.InetAddress;
 import java.net.ServerSocket;
@@ -27,6 +29,7 @@ import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -80,6 +83,7 @@ public final class JmsRecoveryProbe {
             int baselineCycle = fixture.cycle;
             long baselineReplies = fixture.replies;
             long baselineFailures = fixture.expectedFailures;
+            long baselineSourceReplies = fixture.sourceReplies;
             long started = System.nanoTime();
             do {
                 fixture.cycle();
@@ -87,15 +91,16 @@ public final class JmsRecoveryProbe {
             } while (System.nanoTime() - started < duration.toNanos());
             return new Report(true, fixture.cycle - baselineCycle, (System.nanoTime() - started) / 1e9,
                     fixture.replies - baselineReplies, fixture.expectedFailures - baselineFailures,
-                    fixture.provider.created, fixture.checkpoint());
+                    fixture.sourceReplies - baselineSourceReplies, fixture.provider.created, fixture.checkpoint());
         }
     }
 
     public record Checkpoint(int cycle, int connections, int sessions, int liveFactories,
-                             long checkedReplies, long expectedFailureReplies, long heapUsedBytes,
+                             long checkedReplies, long expectedFailureReplies, long sourceCheckedReplies, long heapUsedBytes,
                              long directBytes, int liveThreads) { }
     public record Report(boolean passed, int measuredCycles, double measuredSeconds, long checkedReplies,
-                         long expectedFailureReplies, int factoriesCreatedIncludingWarmup, Checkpoint finalCheckpoint) { }
+                         long expectedFailureReplies, long sourceCheckedReplies,
+                         int factoriesCreatedIncludingWarmup, Checkpoint finalCheckpoint) { }
 
     private static final class Fixture implements AutoCloseable {
         private final ActiveMQServer broker;
@@ -109,9 +114,12 @@ public final class JmsRecoveryProbe {
         private final AtomicReference<Throwable> responderFailure = new AtomicReference<>();
         private volatile CountDownLatch interruptedReceived;
         private Responder responder;
+        private CachingConnectionFactory sourceFactory;
+        private ActiveMQConnectionFactory sourceProvider;
         private int cycle;
         private long replies;
         private long expectedFailures;
+        private long sourceReplies;
         private long requestSequence;
 
         private Fixture(Path data) throws Exception {
@@ -141,6 +149,11 @@ public final class JmsRecoveryProbe {
                 properties.getTarget().setType("artemis");
                 properties.getTarget().setServerUrl(url);
                 properties.getTarget().setQueue(QUEUE);
+                properties.getSource().setType("artemis");
+                properties.getSource().setServerUrl(url);
+                sourceFactory = (CachingConnectionFactory) new ExternalJmsSourceConfig()
+                        .jmsConnectionFactory(properties, List.of(new ArtemisFactoryProvider()));
+                sourceProvider = (ActiveMQConnectionFactory) Objects.requireNonNull(sourceFactory.getTargetConnectionFactory());
                 for (var route : JmsForwardingRoute.values()) {
                     var telemetry = new JmsRuntimeMetrics(new MonitoringProperties());
                     metrics.put(route, telemetry);
@@ -155,6 +168,7 @@ public final class JmsRecoveryProbe {
         private void cycle() throws Exception {
             cycle++;
             healthyBurst();
+            sourceRoundTrip();
             exerciseReceiveTimeouts();
             assertDrained();
 
@@ -169,6 +183,16 @@ public final class JmsRecoveryProbe {
             broker.stop();
             broker.start();
             responder = new Responder();
+            long sourceDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            while (true) {
+                try {
+                    sourceRoundTrip();
+                    break;
+                } catch (jakarta.jms.JMSException unavailable) {
+                    assertThat(System.nanoTime()).as("same-source recovery deadline").isLessThan(sourceDeadline);
+                    Thread.sleep(20);
+                }
+            }
             // Reuse the same forwarders/revision, allowing recovery to overlap old cleanup.
             for (var route : JmsForwardingRoute.values()) {
                 long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
@@ -192,9 +216,35 @@ public final class JmsRecoveryProbe {
             healthyBurst();
             assertDrained();
             assertThat(responderFailure.get()).isNull();
-            assertThat(broker.getActiveMQServerControl().getConnectionCount()).isEqualTo(4);
+            assertThat(broker.getActiveMQServerControl().getConnectionCount()).isEqualTo(5);
             assertThat(broker.getSessions().size()).isLessThanOrEqualTo(30);
             assertThat(provider.liveCount()).isEqualTo(3);
+            assertThat(sourceProvider.getServerLocator().isClosed()).isFalse();
+        }
+
+        /** Exercise the same external source wrapper before and after each real broker restart. */
+        private void sourceRoundTrip() throws Exception {
+            String body = "source:" + cycle + ":" + sourceReplies + ":" + PAYLOAD;
+            String correlation = "source-correlation:" + cycle + ":" + sourceReplies;
+            try (var connection = sourceFactory.createConnection();
+                 var session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)) {
+                var queue = session.createTemporaryQueue();
+                try {
+                    try (var producer = session.createProducer(queue); var consumer = session.createConsumer(queue)) {
+                        connection.start();
+                        var request = session.createTextMessage(body);
+                        request.setJMSCorrelationID(correlation);
+                        producer.send(request);
+                        var response = consumer.receive(10_000);
+                        assertThat(response).isInstanceOf(TextMessage.class);
+                        assertThat(((TextMessage) response).getText()).isEqualTo(body);
+                        assertThat(response.getJMSCorrelationID()).isEqualTo(correlation);
+                    }
+                } finally {
+                    queue.delete();
+                }
+            }
+            sourceReplies++;
         }
 
         private void exerciseReceiveTimeouts() throws Exception {
@@ -261,7 +311,7 @@ public final class JmsRecoveryProbe {
 
         private Checkpoint checkpoint() {
             return new Checkpoint(cycle, broker.getActiveMQServerControl().getConnectionCount(), broker.getSessions().size(),
-                    provider.liveCount(), replies, expectedFailures,
+                    provider.liveCount(), replies, expectedFailures, sourceReplies,
                     ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed(),
                     ManagementFactory.getPlatformMXBeans(BufferPoolMXBean.class).stream()
                             .filter(pool -> "direct".equals(pool.getName())).mapToLong(BufferPoolMXBean::getMemoryUsed).sum(),
@@ -275,7 +325,12 @@ public final class JmsRecoveryProbe {
                 assertThat(provider.liveCount()).isZero();
             } finally {
                 try {
-                    if (responder != null) responder.close();
+                    try {
+                        if (sourceFactory != null) sourceFactory.destroy();
+                        if (sourceProvider != null) assertThat(sourceProvider.getServerLocator().isClosed()).isTrue();
+                    } finally {
+                        if (responder != null) responder.close();
+                    }
                 } finally {
                     try { broker.stop(); }
                     finally {

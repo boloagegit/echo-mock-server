@@ -50,6 +50,7 @@ echo:
 
 - 不啟動內建 Artemis，也不開啟 `echo.jms.port`。
 - broker 沒開時 Echo 照樣啟動並持續重連；**系統設定 → 服務設定**會顯示 JMS 是否正在接收。
+- 連線恢復會沿用來源 provider factory；應用程式最終關閉時，先回收快取資源，再關閉實作 `AutoCloseable` 的 provider factory。
 - 訊息在交易內處理：某台處理到一半停止或當機，broker 會把訊息交給另一台。若當機剛好發生在回覆送出後、提交前，發送端可能收到兩次回覆（至少一次傳遞）。
 - 重送延遲、次數上限與 dead-letter 由 broker 自己的設定決定；`echo.jms.redelivery-*`、`max-delivery-attempts`、paging 與磁碟設定只適用於內建 broker。
 - TIBCO EMS 需要 EMS 10.3 以上的 client（`tibjms.jar`，`jakarta.jms`）放在 `libs/`，與轉送功能相同。

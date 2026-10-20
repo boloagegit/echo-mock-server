@@ -50,6 +50,7 @@ echo:
 
 - The embedded Artemis is not started and `echo.jms.port` is not opened.
 - Echo starts even when the broker is down and keeps reconnecting; **System Settings → Service Configuration** shows whether JMS is receiving.
+- Connection recovery reuses the source provider factory. Final application shutdown closes cached resources and then the provider factory when it implements `AutoCloseable`.
 - Messages are consumed in a transaction: if an instance stops or crashes mid-message, the broker gives the message to another instance. A crash after the reply was sent but before the commit can produce a second reply (at-least-once delivery).
 - Redelivery delays, attempt limits and dead-letter handling are the broker's own settings; `echo.jms.redelivery-*`, `max-delivery-attempts`, paging and disk settings only apply to the embedded broker.
 - TIBCO EMS needs the EMS 10.3+ client (`tibjms.jar`, `jakarta.jms`) in `libs/`, the same as for forwarding.

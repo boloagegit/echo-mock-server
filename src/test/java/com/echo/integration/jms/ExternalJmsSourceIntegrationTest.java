@@ -154,21 +154,31 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
         waitUntilReceiving();
         assertThat(request("<req/>").body()).isEqualTo("<reply>again</reply>");
 
-        esb.stop();
-        try {
-            waitUntil(() -> jmsConnectionManager.listenerState() == JmsConnectionManager.ListenerState.RECONNECTING, 10_000);
+        for (int cycle = 0; cycle < 3; cycle++) {
+            esb.stop();
+            try {
+                waitUntil(() -> jmsConnectionManager.listenerState() == JmsConnectionManager.ListenerState.RECONNECTING, 10_000);
+                assertThat(restTemplate.getForEntity("/actuator/health/readiness", String.class).getStatusCode().value())
+                        .isEqualTo(503);
+                assertThat(restTemplate.getForEntity("/actuator/health/liveness", String.class).getStatusCode().value())
+                        .isEqualTo(200);
+            } finally {
+                esb = startEsb();
+            }
+            waitUntilReceiving();
+            var reply = request("<req cycle=\"" + cycle + "\"/>");
+            assertThat(reply.body()).isEqualTo("<reply>again</reply>");
+            assertThat(reply.correlationId()).isEqualTo(reply.requestId());
             assertThat(restTemplate.getForEntity("/actuator/health/readiness", String.class).getStatusCode().value())
-                    .isEqualTo(503);
-            assertThat(restTemplate.getForEntity("/actuator/health/liveness", String.class).getStatusCode().value())
                     .isEqualTo(200);
-        } finally {
-            esb = startEsb();
+            waitUntil(() -> {
+                var budget = context.getBean(com.echo.jms.JmsMessageMemoryBudget.class).snapshot();
+                var metrics = context.getBean(JmsRuntimeMetrics.class).snapshot();
+                return budget.reservedBytes() == 0 && budget.waitingThreads() == 0
+                        && ((Number) metrics.get("listenerActive")).intValue() == 0
+                        && ((Number) metrics.get("forwardActive")).intValue() == 0;
+            }, 5_000);
         }
-        waitUntilReceiving();
-
-        assertThat(request("<req/>").body()).isEqualTo("<reply>again</reply>");
-        assertThat(restTemplate.getForEntity("/actuator/health/readiness", String.class).getStatusCode().value())
-                .isEqualTo(200);
     }
 
     @Test

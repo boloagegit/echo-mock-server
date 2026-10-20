@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.jms.connection.CachingConnectionFactory;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Receive JMS requests from an external broker, such as TIBCO EMS or an Artemis broker on the company ESB.
@@ -45,10 +46,37 @@ public class ExternalJmsSourceConfig {
                 .orElseThrow(() -> new IllegalStateException("Unsupported echo.jms.source.type: " + type
                         + " (use embedded, artemis or tibco)"));
         ConnectionFactory target = provider.create(source.asConnectionTarget());
-        CachingConnectionFactory caching = new CachingConnectionFactory(target);
+        CachingConnectionFactory caching = new OwnedSourceConnectionFactory(target);
         caching.setReconnectOnException(true);
         log.info("JMS requests are received from external {} broker {} queue {}; embedded Artemis is not started",
                 type, source.getServerUrl(), properties.getQueue());
         return caching;
+    }
+
+    /** Own the provider created above; Spring's wrapper only owns its cached sessions and connection. */
+    private static final class OwnedSourceConnectionFactory extends CachingConnectionFactory {
+        private final AtomicBoolean destroyed = new AtomicBoolean();
+
+        private OwnedSourceConnectionFactory(ConnectionFactory target) {
+            super(target);
+        }
+
+        @Override
+        public void destroy() {
+            if (!destroyed.compareAndSet(false, true)) return;
+            try {
+                super.destroy();
+            } finally {
+                // resetConnection() remains reusable for broker recovery. Only final destruction
+                // closes the provider, after Spring has closed the sessions and physical connection.
+                if (getTargetConnectionFactory() instanceof AutoCloseable closeable) {
+                    try {
+                        closeable.close();
+                    } catch (Exception failure) {
+                        log.warn("Failed to close external JMS provider factory", failure);
+                    }
+                }
+            }
+        }
     }
 }
