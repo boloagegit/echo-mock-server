@@ -59,6 +59,9 @@ java {
     }
 }
 
+// Version-checked upstream source fix; see CONTRIBUTING.md before upgrading Artemis.
+apply from: 'gradle/artemis-heartbeat-patch.gradle'
+
 configurations {
     compileOnly {
         extendsFrom annotationProcessor

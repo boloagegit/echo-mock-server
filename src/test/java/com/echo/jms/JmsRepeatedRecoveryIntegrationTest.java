@@ -21,5 +21,6 @@ class JmsRepeatedRecoveryIntegrationTest {
         assertThat(report.expectedFailureReplies()).isGreaterThanOrEqualTo(6);
         assertThat(report.sourceCheckedReplies()).isEqualTo(2);
         assertThat(report.finalCheckpoint().liveFactories()).isEqualTo(3);
+        assertThat(report.finalCheckpoint().heartbeatTasks()).isEqualTo(5);
     }
 }

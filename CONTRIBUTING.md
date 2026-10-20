@@ -11,6 +11,8 @@ Thank you for your interest in contributing! Here's how to get started.
 
 Windows is a supported development environment; deployment and performance acceptance run on Linux. Ordinary development does not require WSL, Git Bash or Docker. Set the IDE's Gradle JVM to JDK 17 and keep project files in UTF-8. Java compilation explicitly uses UTF-8, including on Windows JDK 17 with a legacy default code page.
 
+The build applies a temporary source-level fix to Artemis 2.57.0: its terminal, non-reconnecting disconnect path must cancel heartbeat work before destroying the connection. [The artifact transform](gradle/artemis-heartbeat-patch.gradle) verifies the upstream source and class hashes, recompiles only the affected class with the JDK 17 toolchain, and retains the rest of the upstream JAR and license metadata. All Gradle compile/runtime consumers use the same result. The first build downloads the approximately 674 KB source archive; Gradle caches it and the patched artifact for offline builds. No external `patch` tool or shell is required on Windows. Review or remove the transform when upgrading Artemis; an unexpected version or source fails the build. Keep the heartbeat cleanup and recovery-semantics regression tests when removing the workaround.
+
 ### Windows / PowerShell
 
 Use a short local checkout path, such as `C:\src\echo`, and run these commands from the repository root:

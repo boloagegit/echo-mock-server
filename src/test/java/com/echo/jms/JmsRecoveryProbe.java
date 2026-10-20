@@ -14,6 +14,7 @@ import org.apache.activemq.artemis.core.config.impl.ConfigurationImpl;
 import org.apache.activemq.artemis.core.server.ActiveMQServer;
 import org.apache.activemq.artemis.core.server.ActiveMQServers;
 import org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory;
+import org.apache.activemq.artemis.api.core.client.ActiveMQClient;
 import org.springframework.jms.connection.CachingConnectionFactory;
 
 import java.net.InetAddress;
@@ -30,10 +31,14 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -95,7 +100,8 @@ public final class JmsRecoveryProbe {
         }
     }
 
-    public record Checkpoint(int cycle, int connections, int sessions, int liveFactories,
+    public record Checkpoint(int cycle, int connections, int sessions, int liveFactories, int heartbeatTasks,
+                             int scheduledQueueEntries,
                              long checkedReplies, long expectedFailureReplies, long sourceCheckedReplies, long heapUsedBytes,
                              long directBytes, int liveThreads) { }
     public record Report(boolean passed, int measuredCycles, double measuredSeconds, long checkedReplies,
@@ -106,7 +112,8 @@ public final class JmsRecoveryProbe {
         private final ActiveMQServer broker;
         private final String url;
         private final JmsProperties properties = new JmsProperties();
-        private final TrackingProvider provider = new TrackingProvider();
+        private final TrackingScheduler scheduler = new TrackingScheduler();
+        private final TrackingProvider provider = new TrackingProvider(scheduler);
         private final Map<JmsForwardingRoute, JmsTargetForwarder> forwarders = new EnumMap<>(JmsForwardingRoute.class);
         private final Map<JmsForwardingRoute, JmsRuntimeMetrics> metrics = new EnumMap<>(JmsForwardingRoute.class);
         private final java.util.concurrent.ExecutorService callers = Executors.newFixedThreadPool(
@@ -154,6 +161,7 @@ public final class JmsRecoveryProbe {
                 sourceFactory = (CachingConnectionFactory) new ExternalJmsSourceConfig()
                         .jmsConnectionFactory(properties, List.of(new ArtemisFactoryProvider()));
                 sourceProvider = (ActiveMQConnectionFactory) Objects.requireNonNull(sourceFactory.getTargetConnectionFactory());
+                useScheduler(sourceProvider, scheduler);
                 for (var route : JmsForwardingRoute.values()) {
                     var telemetry = new JmsRuntimeMetrics(new MonitoringProperties());
                     metrics.put(route, telemetry);
@@ -220,6 +228,10 @@ public final class JmsRecoveryProbe {
             assertThat(broker.getSessions().size()).isLessThanOrEqualTo(30);
             assertThat(provider.liveCount()).isEqualTo(3);
             assertThat(sourceProvider.getServerLocator().isClosed()).isFalse();
+            assertThat(scheduler.periodicTaskCount()).isEqualTo(5);
+            // Cancelled futures can wait until their next 30-second deadline in the
+            // default executor. Live periodic work must still stay at five tasks.
+            assertThat(scheduler.getQueue().size()).isLessThanOrEqualTo(100);
         }
 
         /** Exercise the same external source wrapper before and after each real broker restart. */
@@ -311,7 +323,8 @@ public final class JmsRecoveryProbe {
 
         private Checkpoint checkpoint() {
             return new Checkpoint(cycle, broker.getActiveMQServerControl().getConnectionCount(), broker.getSessions().size(),
-                    provider.liveCount(), replies, expectedFailures, sourceReplies,
+                    provider.liveCount(), scheduler.periodicTaskCount(), scheduler.getQueue().size(),
+                    replies, expectedFailures, sourceReplies,
                     ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed(),
                     ManagementFactory.getPlatformMXBeans(BufferPoolMXBean.class).stream()
                             .filter(pool -> "direct".equals(pool.getName())).mapToLong(BufferPoolMXBean::getMemoryUsed).sum(),
@@ -331,11 +344,17 @@ public final class JmsRecoveryProbe {
                     } finally {
                         if (responder != null) responder.close();
                     }
+                    assertThat(scheduler.periodicTaskCount()).as("no heartbeat work after all clients close").isZero();
                 } finally {
                     try { broker.stop(); }
                     finally {
-                        callers.shutdownNow();
-                        assertThat(callers.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+                        try {
+                            callers.shutdownNow();
+                            assertThat(callers.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+                        } finally {
+                            scheduler.shutdownNow();
+                            assertThat(scheduler.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+                        }
                     }
                 }
             }
@@ -347,6 +366,7 @@ public final class JmsRecoveryProbe {
 
             private Responder() throws Exception {
                 try {
+                    useScheduler(factory, scheduler);
                     connection = factory.createConnection();
                     for (int worker = 0; worker < 2; worker++) {
                         var session = connection.createSession(true, Session.SESSION_TRANSACTED);
@@ -382,14 +402,20 @@ public final class JmsRecoveryProbe {
 
     private static final class TrackingProvider implements JmsTargetFactoryProvider {
         private final ArtemisFactoryProvider delegate = new ArtemisFactoryProvider();
+        private final TrackingScheduler scheduler;
         private final ConcurrentLinkedQueue<ActiveMQConnectionFactory> factories = new ConcurrentLinkedQueue<>();
         private int created;
+
+        private TrackingProvider(TrackingScheduler scheduler) {
+            this.scheduler = scheduler;
+        }
 
         @Override public boolean supports(String type) { return delegate.supports(type); }
 
         @Override
         public synchronized ConnectionFactory create(JmsProperties.Target target) {
             var factory = (ActiveMQConnectionFactory) delegate.create(target);
+            useScheduler(factory, scheduler);
             factories.add(factory);
             created++;
             return factory;
@@ -398,6 +424,42 @@ public final class JmsRecoveryProbe {
         private int liveCount() {
             factories.removeIf(factory -> factory.getServerLocator().isClosed());
             return factories.size();
+        }
+    }
+
+    private static void useScheduler(ActiveMQConnectionFactory factory, TrackingScheduler scheduler) {
+        // Isolate the fixture's counters without changing retry or heartbeat settings,
+        // or resetting shared client pools belonging to other tests/applications.
+        assertThat(factory.getServerLocator().setThreadPools(ActiveMQClient.getGlobalThreadPool(),
+                scheduler, ActiveMQClient.getGlobalFlowControlThreadPool())).isTrue();
+    }
+
+    private static final class TrackingScheduler extends ScheduledThreadPoolExecutor {
+        private final Set<ScheduledFuture<?>> periodic = ConcurrentHashMap.newKeySet();
+
+        private TrackingScheduler() {
+            super(ActiveMQClient.getGlobalScheduledThreadPoolSize());
+        }
+
+        @Override
+        public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialDelay, long delay, TimeUnit unit) {
+            var future = super.scheduleWithFixedDelay(command, initialDelay, delay, unit);
+            periodic.add(future);
+            return future;
+        }
+
+        @Override
+        public ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period, TimeUnit unit) {
+            var future = super.scheduleAtFixedRate(command, initialDelay, period, unit);
+            periodic.add(future);
+            return future;
+        }
+
+        private int periodicTaskCount() {
+            // Bound the diagnostic registry too; cancelled tasks must not become
+            // an artificial leak in the tool used to detect lifetime defects.
+            periodic.removeIf(future -> future.isCancelled() || future.isDone());
+            return periodic.size();
         }
     }
 }
