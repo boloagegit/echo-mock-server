@@ -252,7 +252,9 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                 .forwarded(response.isForwarded()).forwardTarget(response.getForwardTarget())
                 .proxyStatus(proxyStatus).proxyError(response.getProxyError())
                 .responseStatus(loggedResponseStatus).matchTimeMs(matchTimeMs)
-                .requestBody(request.getBody()).responseBody(response.getBody())
+                .requestBody(request.getBody())
+                .responseBody(response.getUtf8Body() == null ? response.getBody() : null)
+                .utf8ResponseBody(response.getUtf8Body())
                 .candidates(candidates).preparedBody(preparedBody)
                 .queryString(request.getQueryString()).headers(request.getHeaders())
                 .faultType(faultType).scenarioName(scenarioName)
@@ -541,6 +543,10 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     /** Give the processing result to listener (the request record is critical, and upload it when it fails). */
     protected void publish(ServeEvent event) {
         serveEvents.dispatch(event);
+    }
+
+    protected boolean requiresFullResponseBody() {
+        return serveEvents.requiresFullResponseBody();
     }
 
     // ==================== Responder ====================

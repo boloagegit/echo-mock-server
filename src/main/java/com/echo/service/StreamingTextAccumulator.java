@@ -17,7 +17,7 @@ final class StreamingTextAccumulator {
     private static final int MAX_COPY_BYTES = 8 * 1024;
 
     private final CharsetDecoder decoder;
-    private final StringJoiner text = new StringJoiner("");
+    private StringJoiner text = new StringJoiner("");
     private byte[] remainder = EMPTY_BYTES;
     private CharBuffer decoded;
     private byte[] copyBuffer;
@@ -84,9 +84,17 @@ final class StreamingTextAccumulator {
         finished = true;
         ByteBuffer input = ByteBuffer.wrap(remainder);
         remainder = EMPTY_BYTES;
-        decode(input, true);
-        flush();
-        return text.toString();
+        try {
+            decode(input, true);
+            flush();
+            return text.toString();
+        } finally {
+            // Completion can synchronously enter listeners and the sender. They must
+            // retain only the result, not the fragments used to construct it.
+            text = null;
+            decoded = null;
+            copyBuffer = null;
+        }
     }
 
     private void decode(ByteBuffer input, boolean endOfInput) {

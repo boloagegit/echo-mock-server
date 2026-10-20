@@ -8,6 +8,8 @@ import com.echo.repository.HttpTargetConnectionRepository;
 import com.echo.service.HttpTargetConnectionService;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.TestPropertySource;
@@ -41,8 +43,9 @@ class NativeHttpRunningWorkIntegrationTest extends BaseIntegrationTest {
     @Autowired HttpTargetConnectionRepository targetRepository;
     @MockitoSpyBean HttpMockPipeline pipeline;
 
-    @Test
-    void timedOutAsyncCompletionRetainsItsBodyUntilTheListenerActuallyReturns() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void timedOutAsyncCompletionRetainsItsBodyUntilTheListenerActuallyReturns(boolean segmented) throws Exception {
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         HttpServer downstream = HttpServer.create(new InetSocketAddress(
@@ -50,7 +53,7 @@ class NativeHttpRunningWorkIntegrationTest extends BaseIntegrationTest {
         byte[] body = new byte[65536];
         java.util.Arrays.fill(body, (byte) 'x');
         downstream.createContext("/", exchange -> {
-            exchange.sendResponseHeaders(200, body.length);
+            exchange.sendResponseHeaders(200, segmented ? 0 : body.length);
             try (var output = exchange.getResponseBody()) { output.write(body); }
             finally { exchange.close(); }
         });
@@ -60,11 +63,15 @@ class NativeHttpRunningWorkIntegrationTest extends BaseIntegrationTest {
                     "http://127.0.0.1:" + downstream.getAddress().getPort(), "NONE", null, null,
                     false, 1, 1, true, true, true));
             // Deliberately violate the non-blocking listener contract to model uncooperative work.
-            pipeline.setServeEventListeners(List.of(event -> {
-                if (!event.getEndpoint().equals("/after-downstream")) return;
-                entered.countDown();
-                try { assertThat(release.await(10, TimeUnit.SECONDS)).isTrue(); }
-                catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new IllegalStateException(error); }
+            pipeline.setServeEventListeners(List.of(new com.echo.service.ServeEventListener() {
+                @Override public boolean requiresFullResponseBody() { return !segmented; }
+                @Override public void onServed(com.echo.service.ServeEvent event) {
+                    if (!event.getEndpoint().equals("/after-downstream")) return;
+                    assertThat(event.getUtf8ResponseBody() != null).isEqualTo(segmented);
+                    entered.countDown();
+                    try { assertThat(release.await(10, TimeUnit.SECONDS)).isTrue(); }
+                    catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new IllegalStateException(error); }
+                }
             }));
             var reply = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build()
                     .sendAsync(request("/after-downstream").build(), HttpResponse.BodyHandlers.ofString());
@@ -73,7 +80,12 @@ class NativeHttpRunningWorkIntegrationTest extends BaseIntegrationTest {
             assertThat(resources.workers.getActiveCount()).isZero();
             assertThat(resources.active()).isEqualTo(1);
             assertThat(resources.bufferedBytes()).isGreaterThanOrEqualTo(body.length);
-            assertThat(resources.resourceMetricsSnapshot()).containsEntry("nativeDrainingRequests", 1);
+            // The client can receive 504 before the exchange-complete listener closes the lease.
+            await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> {
+                assertThat(resources.active()).isEqualTo(1);
+                assertThat(resources.bufferedBytes()).isGreaterThanOrEqualTo(body.length);
+                assertThat(resources.resourceMetricsSnapshot()).containsEntry("nativeDrainingRequests", 1);
+            });
             release.countDown();
             await().atMost(Duration.ofSeconds(3)).untilAsserted(() -> {
                 assertThat(resources.active()).isZero();

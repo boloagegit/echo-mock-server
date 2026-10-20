@@ -15,7 +15,7 @@ import java.util.Map;
  * The shared information encapsulated in HTTP or JMS requests only exists during the execution of pipeline and is not persistent.
  */
 @Getter
-@Builder
+@Builder(toBuilder = true)
 public class MockRequest {
 
     /** protocol type (HTTP / JMS) */
@@ -59,6 +59,12 @@ public class MockRequest {
     /** Native HTTP cancellation/accounting; other protocols keep their existing lifecycle. */
     @Builder.Default
     private final RequestWorkContext workContext = RequestWorkContext.NONE;
+
+    /** Native transport capability; other adapters never opt in. */
+    private final boolean acceptsUtf8ForwardBody;
+
+    /** Pipeline permission after checking its listeners; captured before starting downstream I/O. */
+    private final boolean useUtf8ForwardBody;
 
     /** Request data used by the response template; common to all protocols, see {@link ResponseTemplateService#renderIfTemplate}. */
     public ResponseTemplateService.TemplateContext templateContext() {

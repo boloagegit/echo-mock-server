@@ -188,6 +188,10 @@ echo:
     # Enabled by default; set ECHO_HTTP_TRANSPORT=servlet and restart to switch back to the original entrance.
     transport: ${ECHO_HTTP_TRANSPORT:native}
     native:
+      # Keep validated UTF-8 forwarding responses in bounded segments; false restores the text path after restart.
+      segmented-forwarding-enabled: ${ECHO_HTTP_NATIVE_SEGMENTED_FORWARDING_ENABLED:true}
+      # Eligible response bodies wait after headers, retaining a slot until delivery finishes.
+      max-forwarding-bodies: ${ECHO_HTTP_NATIVE_MAX_FORWARDING_BODIES:16}
       # Retire only idle worker threads, leaving busy workers alone; 0 preserves the previous behavior of keeping idle threads.
       worker-idle-timeout-seconds: ${ECHO_HTTP_NATIVE_WORKER_IDLE_TIMEOUT_SECONDS:60}
     # Total HTTP request budget; connection settings for pool wait + connect + read must sum to less than this value.

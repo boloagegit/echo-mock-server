@@ -55,6 +55,14 @@ public final class ServeEventDispatcher {
         }
     }
 
+    public boolean requiresFullResponseBody() {
+        if (primary != null && primary.requiresFullResponseBody()) return true;
+        for (ServeEventListener listener : others) {
+            if (listener.requiresFullResponseBody()) return true;
+        }
+        return false;
+    }
+
     int size() {
         return (primary != null ? 1 : 0) + others.size();
     }

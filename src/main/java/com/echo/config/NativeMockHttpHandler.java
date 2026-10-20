@@ -54,6 +54,7 @@ final class NativeMockHttpHandler implements HttpHandler {
     private final ScheduledExecutorService scheduler;
     private final NativeHttpResources resources;
     private final long timeoutMs;
+    private final boolean segmentedForwarding;
     private static final AttachmentKey<NativeHttpResources.Lease> LEASE = AttachmentKey.create(NativeHttpResources.Lease.class);
     private static final AttachmentKey<CloseWatch> CLOSE_WATCH = AttachmentKey.create(CloseWatch.class);
 
@@ -66,7 +67,7 @@ final class NativeMockHttpHandler implements HttpHandler {
                          ObjectProvider<MeterRegistry> registries, ObjectProvider<ObservationRegistry> observations,
                          java.util.function.Supplier<NativeHttpCompatibility> compatibility,
                          ScheduledExecutorService scheduler,
-                         NativeHttpResources resources, long timeoutMs, String mode) {
+                         NativeHttpResources resources, long timeoutMs, String mode, boolean segmentedForwarding) {
         this.next = next;
         this.compatibility = SingletonSupplier.of(compatibility);
         this.services = SingletonSupplier.of(() -> {
@@ -80,6 +81,7 @@ final class NativeMockHttpHandler implements HttpHandler {
         this.scheduler = scheduler;
         this.resources = resources;
         this.timeoutMs = timeoutMs;
+        this.segmentedForwarding = segmentedForwarding;
     }
 
     @Override
@@ -242,7 +244,8 @@ final class NativeMockHttpHandler implements HttpHandler {
                 .queryString(exchange.getQueryString().isEmpty() ? null : exchange.getQueryString())
                 .headers(headers).body(body).targetHost(host == null || host.isBlank() ? "default" : host.trim())
                 .clientIp(exchange.getSourceAddress().getAddress().getHostAddress()).trace(trace)
-                .responseBodyMemory(exchange.getAttachment(LEASE)::reserveResponseBody)
+                .responseBodyMemory(exchange.getAttachment(LEASE))
+                .acceptsUtf8ForwardBody(segmentedForwarding)
                 .workContext(exchange.getAttachment(LEASE)).build();
         trace.event("RECEIVED", "method", request.getMethod(), "path", request.getPath());
         CompletableFuture<PipelineResult> future = services.obtain().pipeline().executeAsync(request).toCompletableFuture();
@@ -332,12 +335,59 @@ final class NativeMockHttpHandler implements HttpHandler {
         write(exchange, response, encode(response));
     }
 
-    private record EncodedResponse(ByteBuffer first, Utf8ResponseBody stream, int length, String contentType) {}
+    private interface ResponseChunks {
+        void prepareBatch();
+        ByteBuffer[] batch();
+        boolean finished();
+        default void release() {}
+    }
+
+    private record TextChunks(Utf8ResponseBody text) implements ResponseChunks {
+        @Override
+        public void prepareBatch() { text.prepareBatch(); }
+        @Override
+        public ByteBuffer[] batch() { return text.batch(); }
+        @Override
+        public boolean finished() { return text.finished(); }
+    }
+
+    private static final class ForwardChunks implements ResponseChunks {
+        private com.echo.service.Utf8ForwardBody body;
+        private final int segments;
+        private int next;
+        private ByteBuffer[] batch;
+
+        private ForwardChunks(com.echo.service.Utf8ForwardBody body) {
+            this.body = body;
+            segments = body.segmentCount();
+        }
+        @Override
+        public void prepareBatch() {
+            var retained = body;
+            if (retained == null) throw new CancellationException("Forward response already released");
+            batch = retained.batch(next, 8);
+            next += batch.length;
+        }
+        @Override
+        public ByteBuffer[] batch() { return batch; }
+        @Override
+        public boolean finished() { return next == segments; }
+        @Override
+        public void release() {
+            body = null;
+            batch = null;
+        }
+    }
+
+    private record EncodedResponse(ByteBuffer first, ResponseChunks stream, int length, String contentType) {}
 
     private static String responseContentType(String value) {
         int first = 0;
         while (first < value.length() && value.charAt(first) <= ' ') first++;
-        char character = first == value.length() ? 0 : value.charAt(first);
+        return responseContentType(first == value.length() ? 0 : value.charAt(first));
+    }
+
+    private static String responseContentType(char character) {
         return character == '{' || character == '[' ? "application/json" :
                 character == '<' ? "application/xml;charset=UTF-8" : "text/plain;charset=UTF-8";
     }
@@ -368,6 +418,7 @@ final class NativeMockHttpHandler implements HttpHandler {
             @Override
             public void onComplete(HttpServerExchange completed, Sender sender) {
                 if (encoded.stream().finished()) {
+                    encoded.stream().release();
                     completed.endExchange();
                 } else if (available(completed)) {
                     // Reuse the buffer only after the previous send completed. Encoding never blocks an I/O thread.
@@ -382,6 +433,7 @@ final class NativeMockHttpHandler implements HttpHandler {
 
             @Override
             public void onException(HttpServerExchange failed, Sender sender, IOException exception) {
+                encoded.stream().release();
                 NativeHttpObservation.error(failed, exception);
                 IoUtils.safeClose(failed.getConnection());
                 failed.getAttachment(LEASE).close();
@@ -396,6 +448,23 @@ final class NativeMockHttpHandler implements HttpHandler {
             return new EncodedResponse(ByteBuffer.allocate(0), null, 0, "text/plain");
         }
         MockResponse response = result.getResponse();
+        if (response.getUtf8Body() != null) {
+            var body = response.getUtf8Body();
+            if (body.byteLength() > resources.maxBodyBytes || body.characterLength() > resources.maxBodyBytes) {
+                fail(exchange, 502, "Response body exceeds native HTTP limit");
+                return null;
+            }
+            var lease = exchange.getAttachment(LEASE);
+            if (!lease.reserveResponseBody(body.retainedBytes())
+                    || !lease.reserveEncodedBody(4096L + 64L * body.segmentCount())) {
+                fail(exchange, 503, "Native HTTP buffer capacity exhausted");
+                return null;
+            }
+            ForwardChunks chunks = new ForwardChunks(body);
+            chunks.prepareBatch();
+            return new EncodedResponse(null, chunks, body.byteLength(),
+                    responseContentType(body.firstSignificantCharacter()));
+        }
         String value = response.getBody() == null ? "" : response.getBody();
         if (value.length() > resources.maxBodyBytes) {
             fail(exchange, 502, "Response body exceeds native HTTP limit");
@@ -415,7 +484,7 @@ final class NativeMockHttpHandler implements HttpHandler {
         }
         body.prepareBatch();
         // No UTF-8 expansion: every consumed UTF-16 unit produced exactly one byte.
-        return new EncodedResponse(null, body, value.length(), responseContentType(value));
+        return new EncodedResponse(null, new TextChunks(body), value.length(), responseContentType(value));
     }
 
     private EncodedResponse encodeSinglePass(HttpServerExchange exchange, MockResponse response,

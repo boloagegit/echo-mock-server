@@ -1,6 +1,7 @@
 package com.echo.config;
 
 import com.echo.pipeline.RequestWorkContext;
+import com.echo.pipeline.ResponseBodyMemory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -77,7 +78,7 @@ public final class NativeHttpResources implements AutoCloseable {
         void discard();
     }
 
-    final class Lease implements AutoCloseable, RequestWorkContext {
+    final class Lease implements AutoCloseable, RequestWorkContext, ResponseBodyMemory {
         private volatile boolean closed;
         private volatile NativeHttpDeadline deadline;
         private final AtomicInteger runningWork = new AtomicInteger();
@@ -142,6 +143,17 @@ public final class NativeHttpResources implements AutoCloseable {
         synchronized boolean reserveResponseBody(long bytes) {
             if (!replaceReservation(responseBodyBytes, bytes)) return false;
             responseBodyBytes = bytes;
+            return true;
+        }
+
+        @Override
+        public boolean tryReserve(long bytes) {
+            return reserveResponseBody(bytes);
+        }
+
+        @Override
+        public boolean retainUntilComplete(Runnable action) {
+            onClose(action);
             return true;
         }
 

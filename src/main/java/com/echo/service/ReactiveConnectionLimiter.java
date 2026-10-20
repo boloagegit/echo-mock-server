@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Non-blocking application-wide admission control for outbound HTTP requests.
+ * Non-blocking application-wide admission control for outbound HTTP resources.
  * It keeps one configurable total limit independent of Reactor Netty's
  * per-remote-host pools and provides an active deadline while waiting for capacity.
  */
@@ -36,6 +36,10 @@ final class ReactiveConnectionLimiter {
 
     int pendingCount() {
         return total.pendingCount();
+    }
+
+    int activeCount() {
+        return total.maximum - total.available.get();
     }
 
     record Lease(AsyncPermitPool.Slot total) implements AutoCloseable {

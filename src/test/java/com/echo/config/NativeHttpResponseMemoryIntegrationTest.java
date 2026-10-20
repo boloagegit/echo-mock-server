@@ -3,6 +3,8 @@ package com.echo.config;
 import com.echo.integration.base.BaseIntegrationTest;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.TestPropertySource;
@@ -23,6 +25,7 @@ import static org.awaitility.Awaitility.await;
 
 @TestPropertySource(properties = {
         "echo.http.transport=native", "echo.http.request-timeout-ms=5000",
+        "echo.http.native.segmented-forwarding-enabled=true",
         "echo.http.forward.pool-acquire-timeout-ms=500",
         "echo.http.native.workers=1", "echo.http.native.max-requests=8",
         "echo.http.native.max-body-bytes=2097152", "echo.http.native.max-buffered-bytes=8388608"
@@ -33,8 +36,9 @@ class NativeHttpResponseMemoryIntegrationTest extends BaseIntegrationTest {
     @Autowired com.echo.service.HttpTargetConnectionService targets;
     @Autowired com.echo.repository.HttpTargetConnectionRepository targetRepository;
 
-    @Test
-    void forwardingBodyRemainsAccountedWhileEncodingWorkerIsBlocked() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void forwardingBodyRemainsAccountedWhileEncodingWorkerIsBlocked(boolean segmented) throws Exception {
         CountDownLatch downstreamReady = new CountDownLatch(1);
         CountDownLatch releaseDownstream = new CountDownLatch(1);
         CountDownLatch workerBlocked = new CountDownLatch(1);
@@ -45,7 +49,7 @@ class NativeHttpResponseMemoryIntegrationTest extends BaseIntegrationTest {
             downstreamReady.countDown();
             try {
                 if (!releaseDownstream.await(3, TimeUnit.SECONDS)) throw new IllegalStateException("test timed out");
-                exchange.sendResponseHeaders(200, body.length);
+                exchange.sendResponseHeaders(200, segmented ? 0 : body.length);
                 try (var output = exchange.getResponseBody()) { output.write(body); }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

@@ -114,7 +114,8 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
     }
 
     @Override
-    protected CompletionStage<MockResponse> forwardAsync(MockRequest request) {
+    protected CompletionStage<MockResponse> forwardAsync(MockRequest originalRequest) {
+        MockRequest request = prepareForwardRequest(originalRequest);
         if (outboundForwarder == null) {
             return CompletableFuture.completedFuture(forward(request));
         }
@@ -234,6 +235,7 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
         if (outboundForwarder == null) {
             return CompletableFuture.completedFuture(forwardMatchedRule(rule, request));
         }
+        request = prepareForwardRequest(request);
         HttpForwardTargetMode mode = rule.getForwardTargetMode() == null
                 ? HttpForwardTargetMode.ORIGINAL_HOST : rule.getForwardTargetMode();
         if (mode == HttpForwardTargetMode.ORIGINAL_HOST) {
@@ -241,6 +243,12 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
         }
         return outboundForwarder.forwardAsync(request, rule.getHttpTargetConnectionId(),
                 mode == HttpForwardTargetMode.DEFAULT_CONNECTION);
+    }
+
+    private MockRequest prepareForwardRequest(MockRequest request) {
+        boolean useBytes = request.isAcceptsUtf8ForwardBody() && !requiresFullResponseBody();
+        return useBytes == request.isUseUtf8ForwardBody() ? request
+                : request.toBuilder().useUtf8ForwardBody(useBytes).build();
     }
 
     @Override

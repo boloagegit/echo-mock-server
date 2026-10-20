@@ -37,6 +37,18 @@ public class ServeEvent {
     Integer responseStatus;
     String requestBody;
     String responseBody;
+    Utf8ForwardBody utf8ResponseBody;
+
+    public String getResponseBody() {
+        return utf8ResponseBody == null ? responseBody : utf8ResponseBody.text();
+    }
+
+    /** Include one extra code unit so the existing truncation rule can detect a longer body. */
+    public String responseBodyForCapture(int maximumCharacters) {
+        if (utf8ResponseBody == null) return responseBody;
+        int limit = maximumCharacters == Integer.MAX_VALUE ? maximumCharacters : maximumCharacters + 1;
+        return utf8ResponseBody.prefix(limit);
+    }
     /** Candidate rules to participate in comparison (for matching chain analysis); if not available, it is null or empty. */
     List<? extends BaseRule> candidates;
     ConditionMatcher.PreparedBody preparedBody;
