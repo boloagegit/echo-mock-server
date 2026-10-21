@@ -255,7 +255,7 @@ class MockJmsListenerExtendedTest {
     }
 
     @Test
-    void shouldNotSendReply_whenJmsTemplateIsNull() throws Exception {
+    void shouldRetainDelivery_whenReplyTemplateIsUnavailable() throws Exception {
         when(connectionManager.getJmsTemplate()).thenReturn(null);
 
         TextMessage message = mock(TextMessage.class);
@@ -270,7 +270,9 @@ class MockJmsListenerExtendedTest {
                         .response(MockResponse.builder().status(200).body("<ok/>").matched(true).forwarded(false).build())
                         .ruleId("uuid-notpl").matched(true).matchTimeMs(1).responseTimeMs(2).delayMs(0).build());
 
-        listener.onMessage(message);
+        assertThatThrownBy(() -> listener.onMessage(message))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("JMS reply delivery failed");
 
         verify(jmsMockPipeline).execute(any(MockRequest.class));
         verify(jmsTemplate, never()).send(any(Destination.class), any(MessageCreator.class));
