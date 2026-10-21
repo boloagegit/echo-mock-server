@@ -232,7 +232,8 @@ class JmsTransactionDiagnosticsTest {
             });
             listener.onMessage(request);
             doThrow(new java.lang.IllegalStateException("secret-provider-message")).when(template).send(eq(replyTo), any(MessageCreator.class));
-            listener.onMessage(request);
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> listener.onMessage(request))
+                    .hasMessage("JMS reply delivery failed");
             await().atMost(2, TimeUnit.SECONDS).until(() -> lines.size() == 1);
             String log = String.join("\n", lines);
             assertThat(log).contains("inId=ID:inbound", "deliveryCount=2", "redelivered=true",
