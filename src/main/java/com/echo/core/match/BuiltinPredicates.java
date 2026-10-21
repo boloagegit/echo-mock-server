@@ -108,6 +108,8 @@ public final class BuiltinPredicates {
                 return pattern.matcher(new InterruptibleCharSequence(text, limits.regexTimeoutMs())).matches();
             } catch (InterruptibleCharSequence.RegexTimeoutException e) {
                 return false;
+            } catch (StackOverflowError exhausted) {
+                throw new RegexStackCapacityException(exhausted);
             }
         };
     }
