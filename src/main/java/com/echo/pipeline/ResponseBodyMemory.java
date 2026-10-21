@@ -8,7 +8,7 @@ public interface ResponseBodyMemory {
     /** Replace the previous estimate; a closed or exhausted transport rejects the new reservation. */
     boolean tryReserve(long bytes);
 
-    /** Transfer cleanup to the response transport; false means this adapter cannot own delivery resources. */
+    /** Transfer cleanup until delivery and all cancelled synchronous users finish; false means unsupported. */
     default boolean retainUntilComplete(Runnable cleanup) {
         return false;
     }

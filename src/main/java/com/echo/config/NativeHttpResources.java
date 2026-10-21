@@ -88,6 +88,7 @@ public final class NativeHttpResources implements AutoCloseable {
         private long responseBodyBytes;
         private long encodedBodyBytes;
         private final List<Runnable> cleanup = new ArrayList<>(3);
+        private List<Runnable> completionCleanup;
 
         boolean closed() { return closed; }
 
@@ -125,8 +126,12 @@ public final class NativeHttpResources implements AutoCloseable {
             }
         }
 
-        private synchronized void releaseClosedWork() {
-            releaseIfFinished();
+        private void releaseClosedWork() {
+            List<Runnable> actions;
+            synchronized (this) {
+                actions = releaseIfFinished();
+            }
+            for (Runnable action : actions) runCleanup(action);
         }
 
         synchronized boolean reserve(long bytes) {
@@ -153,7 +158,14 @@ public final class NativeHttpResources implements AutoCloseable {
 
         @Override
         public boolean retainUntilComplete(Runnable action) {
-            onClose(action);
+            synchronized (this) {
+                if (!released) {
+                    if (completionCleanup == null) completionCleanup = new ArrayList<>(1);
+                    completionCleanup.add(action);
+                    return true;
+                }
+            }
+            runCleanup(action);
             return true;
         }
 
@@ -187,6 +199,7 @@ public final class NativeHttpResources implements AutoCloseable {
         @Override
         public void close() {
             List<Runnable> actions;
+            List<Runnable> completed;
             synchronized (this) {
                 if (closed) return;
                 closed = true;
@@ -194,21 +207,25 @@ public final class NativeHttpResources implements AutoCloseable {
                     drainingCounted = true;
                     draining.incrementAndGet();
                 }
-                releaseIfFinished();
+                completed = releaseIfFinished();
                 actions = List.copyOf(cleanup);
                 cleanup.clear();
             }
             // Internal callbacks cancel tasks/futures and unlink the connection's close watch.
             for (Runnable action : actions) runCleanup(action);
+            for (Runnable action : completed) runCleanup(action);
         }
 
-        /** Called under this lease's lock; cancellation callbacks still run promptly outside it. */
-        private void releaseIfFinished() {
-            if (!closed || runningWork.get() != 0 || released) return;
+        /** Detach completion resources under the lock; run them only after leaving it. */
+        private List<Runnable> releaseIfFinished() {
+            if (!closed || runningWork.get() != 0 || released) return List.of();
             released = true;
             buffered.addAndGet(-reserved);
             active.decrementAndGet();
             if (drainingCounted) draining.decrementAndGet();
+            List<Runnable> actions = completionCleanup;
+            completionCleanup = null;
+            return actions == null ? List.of() : actions;
         }
     }
 
