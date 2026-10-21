@@ -25,6 +25,9 @@ public class JmsProperties {
     /** Queue listened to on Echo's embedded Artemis, where external services send requests. */
     private String queue = "ECHO.REQUEST";
 
+    /** Opt in to source rollback after reply delivery failure; false preserves the legacy commit/skip policy. */
+    private boolean rollbackOnReplyFailure = false;
+
     /** Endpoint-identifying field extracted from the JMS body: XML element name or JSON key. */
     private String endpointField = "ServiceName";
 

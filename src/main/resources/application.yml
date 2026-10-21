@@ -153,6 +153,8 @@ echo:
       # Preserve the provider's connection, retry, and failover policies by default; validate actual ESB failure behavior before enabling this option.
       bounded-waits-enabled: ${ECHO_JMS_FORWARD_BOUNDED_WAITS_ENABLED:false}
     queue: ECHO.REQUEST      # Source queue listened to by Echo; external services send messages here.
+    # Opt in to source rollback when a reply fails. Redelivery can repeat processing and downstream effects.
+    rollback-on-reply-failure: ${ECHO_JMS_ROLLBACK_ON_REPLY_FAILURE:false}
     source:
       # Where to receive JMS: embedded (built-in Artemis, default) | artemis | tibco (external shared broker, such as ESB)
       # When multiple Echo instances share an external queue, the broker delivers each message to just one instance.
