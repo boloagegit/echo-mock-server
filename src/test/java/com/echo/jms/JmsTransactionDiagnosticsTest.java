@@ -13,6 +13,7 @@ import jakarta.jms.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.jms.core.JmsTemplate;
 import org.springframework.jms.core.MessageCreator;
 
@@ -201,12 +202,14 @@ class JmsTransactionDiagnosticsTest {
         }
     }
 
-    @Test
-    void listenerCorrelatesRedeliveryAttemptsAndReplyFailuresWithoutReadingBodyForDiagnostics() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void listenerCorrelatesRedeliveryAttemptsAndReplyFailuresWithoutReadingBodyForDiagnostics(boolean rollbackOnReplyFailure) throws Exception {
         List<String> lines = new CopyOnWriteArrayList<>();
         try (var diagnostics = new TransactionDiagnostics(new DiagnosticProperties(), lines::add)) {
             diagnostics.start();
             var properties = new JmsProperties();
+            properties.setRollbackOnReplyFailure(rollbackOnReplyFailure);
             var manager = mock(JmsConnectionManager.class);
             var pipeline = mock(JmsMockPipeline.class);
             var template = mock(JmsTemplate.class);
@@ -232,7 +235,12 @@ class JmsTransactionDiagnosticsTest {
             });
             listener.onMessage(request);
             doThrow(new java.lang.IllegalStateException("secret-provider-message")).when(template).send(eq(replyTo), any(MessageCreator.class));
-            listener.onMessage(request);
+            if (rollbackOnReplyFailure) {
+                org.assertj.core.api.Assertions.assertThatThrownBy(() -> listener.onMessage(request))
+                        .hasMessage("JMS reply delivery failed");
+            } else {
+                listener.onMessage(request);
+            }
             await().atMost(2, TimeUnit.SECONDS).until(() -> lines.size() == 1);
             String log = String.join("\n", lines);
             assertThat(log).contains("inId=ID:inbound", "deliveryCount=2", "redelivered=true",

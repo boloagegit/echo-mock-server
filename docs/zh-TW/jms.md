@@ -22,9 +22,25 @@ Echo 可作為 JMS Proxy，在開發環境攔截 JMS 訊息：
 
 Artemis 大訊息讀取已採用官方批次複製修正，見[升級驗證](artemis-large-message-validation-2026-10-18.md)。先保留 client 預設的編碼後 100 KiB 門檻。提高發送端 URL 的 `minLargeMessageSize`（例如 `524288`）可減少大訊息檔案 I/O，但更多訊息本文會留在記憶體，尤其小 heap 必須先依本文大小與併發量實測。套用這次升級不需要更改門檻；這是**發送端**設定，不是 Echo 的 `application.yml`。
 
+## 回覆失敗處理政策
+
+`echo.jms.rollback-on-reply-failure` 預設為 `false`，保留原本政策：回覆送出失敗仍記錄錯誤與失敗次數，但不因此要求來源 listener rollback；回覆元件不存在時則略過。因此，即使呼叫端沒有收到回覆，來源交易仍可能提交。中斷、暫時記憶體不足或請求紀錄無法寫入等其他既有 rollback 條件維持不變。
+
+要開啟時，設定下列內容，或將環境變數 `ECHO_JMS_ROLLBACK_ON_REPLY_FAILURE` 設為 `true`，再重新啟動 Echo：
+
+```yaml
+echo:
+  jms:
+    rollback-on-reply-failure: true
+```
+
+開啟後，回覆失敗（包含回覆元件不存在、錯誤回覆送出失敗）才會把錯誤交回來源 listener 的交易管理者，要求 rollback；不會因送出失敗再嘗試第二份回覆。兩種設定下，正常回覆、沒有 `JMSReplyTo`、刻意注入 `CONNECTION_RESET` 的既有政策都不變。這是啟動設定，適用於內建及外部 JMS 來源，並非 UI 即時切換；改回 `false` 並重新啟動即可恢復原本的回覆失敗政策。
+
+開啟 rollback 後，重送可能重複執行 mock／Scenario、寫入紀錄及下游副作用；send 返回不代表已 commit，跨 broker 也不保證 exactly-once。永久刪除的回覆目標應由來源 broker 設定有限重試與 DLQ。內建 Artemis 預設保留失敗訊息並無限退避重送；外部 broker 使用自己的政策。開啟此選項時，Echo 不會默默丟棄永久回覆失敗。兩種模式已用 Artemis 與 JMS 替身驗證，TIBCO EMS 仍需獨立驗收。
+
 ## 轉送資源重用
 
-轉送預設為每個目標保留最多 8 個 idle Session（`echo.jms.forward.session-cache-size`；設為 `0` 停用重用）。每筆請求仍使用自己的暫存回覆 Queue 與 Consumer，避免遲到或重複回覆成為另一筆請求的答案。來源交易與重送行為不變。量測與資源生命週期檢查見 [JMS 效能與正確性](../jms-performance-and-correctness.md)。
+轉送預設為每個目標保留最多 8 個 idle Session（`echo.jms.forward.session-cache-size`；設為 `0` 停用重用）。每筆請求仍使用自己的暫存回覆 Queue 與 Consumer，避免遲到或重複回覆成為另一筆請求的答案。Session 重用保留來源交易的管理者；回覆失敗與重送政策如上所述。量測與資源生命週期檢查見 [JMS 效能與正確性](../jms-performance-and-correctness.md)。
 
 ## 從共用 broker 接收 JMS（多實例）
 

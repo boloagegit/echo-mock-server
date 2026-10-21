@@ -16,6 +16,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jms.annotation.JmsListener;
 import org.springframework.stereotype.Component;
 
+import java.lang.IllegalStateException;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -97,6 +98,10 @@ public class MockJmsListener {
                 trace.event("REPLY_SKIPPED", "reason", "NO_RESPONSE");
             }
 
+        } catch (JmsReplyDeliveryException e) {
+            outcome = "REDELIVERY_REPLY_FAILED";
+            // The opt-in policy delegates rollback to the source session owner; do not attempt another reply.
+            throw e;
         } catch (InterruptedException e) {
             outcome = "INTERRUPTED";
             trace.failure("PROCESSING_FAILED", e);
@@ -271,15 +276,19 @@ public class MockJmsListener {
                 return;
             }
 
-            if (connectionManager.getJmsTemplate() == null) {
-                trace.event("REPLY_SKIPPED", "reason", "NO_TEMPLATE");
-                return;
+            var template = connectionManager.getJmsTemplate();
+            if (template == null) {
+                if (!jmsProperties.isRollbackOnReplyFailure()) {
+                    trace.event("REPLY_SKIPPED", "reason", "NO_TEMPLATE");
+                    return;
+                }
+                throw new IllegalStateException("JMS reply template is unavailable");
             }
 
             java.util.concurrent.atomic.AtomicReference<TextMessage> sent = trace.enabled()
                     ? new java.util.concurrent.atomic.AtomicReference<>() : null;
             if (trace.enabled()) trace.event("REPLY_SEND_BEGIN", "replyTo", JmsDiagnosticMetadata.destination(replyTo));
-            connectionManager.getJmsTemplate().send(replyTo, session -> {
+            template.send(replyTo, session -> {
                 TextMessage reply = session.createTextMessage(responseBody);
                 reply.setJMSCorrelationID(request.getJMSMessageID());
                 if (sent != null) sent.set(reply);
@@ -292,11 +301,20 @@ public class MockJmsListener {
             trace.failure("REPLY_SEND_FAILED", e);
             if (metrics != null) metrics.replyFailed();
             if (!trace.enabled()) log.error("Failed to send reply: {}", e.getMessage());
+            if (jmsProperties.isRollbackOnReplyFailure()) {
+                throw new JmsReplyDeliveryException(e);
+            }
         }
     }
 
     private void sendErrorReply(Message request, String error, Trace trace) {
         sendReply(request, "<error>" + error + "</error>", trace);
+    }
+
+    private static final class JmsReplyDeliveryException extends RuntimeException {
+        private JmsReplyDeliveryException(Exception cause) {
+            super("JMS reply delivery failed", cause);
+        }
     }
 
     private static final class JmsProcessingInterruptedException extends RuntimeException {

@@ -27,6 +27,7 @@ class JmsPropertiesTest {
         assertThat(props.getUsername()).isEqualTo("admin");
         assertThat(props.getPassword()).isEqualTo("admin");
         assertThat(props.getQueue()).isEqualTo("ECHO.REQUEST");
+        assertThat(props.isRollbackOnReplyFailure()).isFalse();
         assertThat(props.getProcessingMemoryPercent()).isEqualTo(25);
         assertThat(props.getXmlMemoryExpansionFactor()).isEqualTo(8);
         assertThat(props.getBrokerMemoryPercent()).isEqualTo(15);
