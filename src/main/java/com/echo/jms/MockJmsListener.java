@@ -17,7 +17,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jms.annotation.JmsListener;
 import org.springframework.stereotype.Component;
 
-import java.lang.IllegalStateException;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.Map;

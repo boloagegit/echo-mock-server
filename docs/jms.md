@@ -28,7 +28,7 @@ Reply delivery failures now propagate to the source listener's transaction owner
 
 Redelivery can repeat mock/scenario processing, log entries and downstream side effects. A send returning successfully is not proof of commit, and cross-broker forwarding is not exactly-once. Configure finite retries and a dead-letter queue on the source broker for permanently deleted reply destinations. Embedded Artemis retains failed messages indefinitely by default, with backoff; external brokers use their own retry/DLQ settings. Echo does not silently discard a permanent reply failure. These semantics are tested with Artemis and JMS substitutes; TIBCO EMS still needs separate acceptance.
 
-Outbound forwarding keeps up to 8 idle sessions per target by default (`echo.jms.forward.session-cache-size`; set to `0` to disable reuse). Each request still owns its temporary reply queue and consumer, so late or duplicate replies cannot become another request's response. Source transactions and redelivery behavior are unchanged. See [JMS performance and correctness](jms-performance-and-correctness.md) for measurements and lifecycle checks.
+Outbound forwarding keeps up to 8 idle sessions per target by default (`echo.jms.forward.session-cache-size`; set to `0` to disable reuse). Each request still owns its temporary reply queue and consumer, so late or duplicate replies cannot become another request's response. Session reuse preserves source transaction ownership; reply failure and redelivery policy are described above. See [JMS performance and correctness](jms-performance-and-correctness.md) for measurements and lifecycle checks.
 
 ## Receiving JMS from a Shared Broker (Multi-Instance)
 
