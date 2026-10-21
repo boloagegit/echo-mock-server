@@ -977,7 +977,8 @@ public final class HttpOutboundForwarder {
                                            String forwardTarget) {
         String error = safeError(exception);
         return MockResponse.builder()
-                .status(exception instanceof TransportResponseCapacityException ? 503 : 502)
+                .status(exception instanceof TransportResponseCapacityException
+                        || exception instanceof ResponseBufferCapacityException ? 503 : 502)
                 .body("Proxy error: " + error)
                 .matched(matched)
                 .forwarded(true)

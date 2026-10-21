@@ -521,7 +521,7 @@ class HttpOutboundForwarderTest {
                     .isGreaterThanOrEqualTo(6);
 
             MockResponse rejected = forwarder.forward(secondRequest, 21L, false);
-            assertThat(rejected.getStatus()).isEqualTo(502);
+            assertThat(rejected.getStatus()).isEqualTo(503);
             assertThat(rejected.getProxyError())
                     .startsWith("HTTP_RESPONSE_BUFFER_CAPACITY_EXHAUSTED");
             assertThat(forwarder.metricsSnapshot().targets().get("profile:21").capacityRejected())
