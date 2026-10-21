@@ -28,7 +28,7 @@ Artemis 大訊息讀取已採用官方批次複製修正，見[升級驗證](art
 
 重送可能重複執行 mock／Scenario、寫入紀錄及下游副作用；send 返回不代表已 commit，跨 broker 也不保證 exactly-once。永久刪除的回覆目標應由來源 broker 設定有限重試與 DLQ。內建 Artemis 預設保留失敗訊息並無限退避重送；外部 broker 使用自己的政策，Echo 不會默默丟棄永久回覆失敗。上述語義已用 Artemis 與 JMS 替身驗證，TIBCO EMS 仍需獨立驗收。
 
-轉送預設為每個目標保留最多 8 個 idle Session（`echo.jms.forward.session-cache-size`；設為 `0` 停用重用）。每筆請求仍使用自己的暫存回覆 Queue 與 Consumer，避免遲到或重複回覆成為另一筆請求的答案。來源交易與重送行為不變。量測與資源生命週期檢查見 [JMS 效能與正確性](../jms-performance-and-correctness.md)。
+轉送預設為每個目標保留最多 8 個 idle Session（`echo.jms.forward.session-cache-size`；設為 `0` 停用重用）。每筆請求仍使用自己的暫存回覆 Queue 與 Consumer，避免遲到或重複回覆成為另一筆請求的答案。Session 重用保留來源交易的管理者；回覆失敗與重送政策如上所述。量測與資源生命週期檢查見 [JMS 效能與正確性](../jms-performance-and-correctness.md)。
 
 ## 從共用 broker 接收 JMS（多實例）
 
