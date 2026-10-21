@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /** Live-port checks: prove native handling by default and exercise boundaries MVC-only tests cannot cover. */
-@TestPropertySource(properties = "echo.http.request-timeout-ms=250")
+@TestPropertySource(properties = "echo.http.request-timeout-ms=2000")
 @org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability
 class NativeHttpTransportIntegrationTest extends BaseIntegrationTest {
     @Autowired MeterRegistry meters;
@@ -86,12 +86,15 @@ class NativeHttpTransportIntegrationTest extends BaseIntegrationTest {
         createHttpRule("/delayed", "GET", "delayed", null, 200, null, null, null, null, 50L, null, null);
         long start = System.nanoTime();
         var delayed = restTemplate.getForEntity("/mock/delayed", String.class);
+        assertThat(delayed.getStatusCode().value()).isEqualTo(200);
         assertThat(delayed.getBody()).isEqualTo("delayed");
         assertThat(Duration.ofNanos(System.nanoTime() - start).toMillis()).isGreaterThanOrEqualTo(45);
         createHttpRule("/timeout", "GET", "too late", null, 200, null, null, null, null, 10000L, null, null);
+        long timeoutStart = System.nanoTime();
         var timeout = restTemplate.getForEntity("/mock/timeout", String.class);
         assertThat(timeout.getStatusCode().value()).isEqualTo(504);
         assertThat(timeout.getBody()).isEqualTo("Request timeout");
+        assertThat(Duration.ofNanos(System.nanoTime() - timeoutStart)).isLessThan(Duration.ofSeconds(5));
         assertThat(restTemplate.getForObject("/mock/delayed", String.class)).isEqualTo("delayed");
     }
 
