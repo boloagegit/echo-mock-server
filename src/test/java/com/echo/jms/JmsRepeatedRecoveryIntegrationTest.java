@@ -19,6 +19,7 @@ class JmsRepeatedRecoveryIntegrationTest {
         assertThat(report.passed()).isTrue();
         assertThat(report.checkedReplies()).isEqualTo(27);
         assertThat(report.expectedFailureReplies()).isGreaterThanOrEqualTo(6);
+        assertThat(report.sourceCheckedReplies()).isEqualTo(2);
         assertThat(report.finalCheckpoint().liveFactories()).isEqualTo(3);
     }
 }

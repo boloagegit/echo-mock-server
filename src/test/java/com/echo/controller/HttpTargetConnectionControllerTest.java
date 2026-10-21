@@ -15,6 +15,29 @@ import static org.mockito.Mockito.when;
 class HttpTargetConnectionControllerTest {
 
     @Test
+    void waitingForAConnectionProbeDoesNotOccupyTheServletRequestThread() throws Exception {
+        var service = mock(HttpTargetConnectionService.class);
+        var forwarder = mock(HttpOutboundForwarder.class);
+        var probe = new java.util.concurrent.CompletableFuture<HttpOutboundForwarder.ConnectionTestResult>();
+        when(forwarder.testTimeoutMillis()).thenReturn(2_000L);
+        when(forwarder.testAsync(1L)).thenReturn(probe);
+        var mvc = org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup(
+                new HttpTargetConnectionController(service, forwarder)).build();
+        var pending = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .post("/api/admin/http-target-connections/1/test"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.request().asyncStarted())
+                .andReturn();
+        assertThat(probe.isDone()).isFalse();
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/admin/http-target-connections"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk());
+        probe.complete(new HttpOutboundForwarder.ConnectionTestResult(true, 123L, 200, null));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch(pending))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.success").value(true));
+    }
+
+    @Test
     void exposesForwardingAndPoolMetrics() {
         HttpTargetConnectionService service = mock(HttpTargetConnectionService.class);
         HttpOutboundForwarder forwarder = mock(HttpOutboundForwarder.class);

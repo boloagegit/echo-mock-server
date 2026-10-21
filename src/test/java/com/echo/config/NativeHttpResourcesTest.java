@@ -11,6 +11,123 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class NativeHttpResourcesTest {
     @Test
+    void concurrentTransportCloseAndLastUsersNeverLoseOrDoubleReleaseCapacity() throws Exception {
+        var racers = java.util.concurrent.Executors.newFixedThreadPool(3);
+        try (var resources = new NativeHttpResources(1, 1, 1024, 4096)) {
+            for (int iteration = 0; iteration < 2000; iteration++) {
+                var lease = resources.acquire();
+                assertThat(lease).isNotNull();
+                assertThat(lease.reserve(1000)).isTrue();
+                var first = lease.begin();
+                var second = lease.begin();
+                var start = new java.util.concurrent.CyclicBarrier(3);
+                var close = racers.submit(() -> { await(start); lease.close(); lease.close(); });
+                var finishFirst = racers.submit(() -> { await(start); first.close(); first.close(); });
+                var finishSecond = racers.submit(() -> { await(start); second.close(); second.close(); });
+                close.get(2, TimeUnit.SECONDS);
+                finishFirst.get(2, TimeUnit.SECONDS);
+                finishSecond.get(2, TimeUnit.SECONDS);
+                assertThat(resources.active()).isZero();
+                assertThat(resources.bufferedBytes()).isZero();
+                assertThat(resources.resourceMetricsSnapshot()).containsEntry("nativeDrainingRequests", 0);
+            }
+        } finally {
+            racers.shutdownNow();
+            assertThat(racers.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    private static void await(java.util.concurrent.CyclicBarrier barrier) {
+        try { barrier.await(2, TimeUnit.SECONDS); }
+        catch (Exception error) { throw new IllegalStateException(error); }
+    }
+
+    @Test
+    void shutdownDiscardsOwnedQueuedWorkWithoutLosingItsReservation() throws Exception {
+        var resources = new NativeHttpResources(1, 1, 1024, 4096);
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        try {
+            resources.workers.execute(() -> {
+                entered.countDown();
+                try { release.await(3, TimeUnit.SECONDS); }
+                catch (InterruptedException error) { Thread.currentThread().interrupt(); }
+            });
+            assertThat(entered.await(2, TimeUnit.SECONDS)).isTrue();
+            var lease = resources.acquire();
+            assertThat(lease.reserve(1000)).isTrue();
+            var work = lease.begin();
+            AtomicInteger discarded = new AtomicInteger();
+            resources.workers.execute(new NativeHttpResources.QueuedWork() {
+                @Override public void run() { throw new AssertionError("queued task must not run"); }
+                @Override public void discard() { discarded.incrementAndGet(); work.close(); }
+            });
+            lease.close();
+            assertThat(resources.active()).isEqualTo(1);
+            resources.close();
+            assertThat(discarded).hasValue(1);
+            assertThat(resources.active()).isZero();
+            assertThat(resources.bufferedBytes()).isZero();
+        } finally {
+            release.countDown();
+            resources.close();
+            assertThat(resources.workers.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    @Test
+    void closedTransportRetainsItsReservationsUntilEveryWorkScopeExits() {
+        try (var resources = new NativeHttpResources(1, 1, 1024, 4096)) {
+            var lease = resources.acquire();
+            assertThat(lease.reserve(1000)).isTrue();
+            var first = lease.begin();
+            var second = lease.begin();
+            AtomicInteger cancelled = new AtomicInteger();
+            lease.onClose(cancelled::incrementAndGet);
+            lease.close();
+            lease.close();
+            assertThat(cancelled).hasValue(1);
+            assertThat(resources.active()).isEqualTo(1);
+            assertThat(resources.bufferedBytes()).isEqualTo(1000);
+            assertThat(resources.resourceMetricsSnapshot()).containsEntry("nativeDrainingRequests", 1);
+            assertThat(resources.acquire()).isNull();
+            org.assertj.core.api.Assertions.assertThatThrownBy(lease::begin)
+                    .isInstanceOf(java.util.concurrent.CancellationException.class);
+            first.close();
+            first.close();
+            assertThat(resources.active()).isEqualTo(1);
+            second.close();
+            second.close();
+            assertThat(resources.active()).isZero();
+            assertThat(resources.bufferedBytes()).isZero();
+            assertThat(resources.resourceMetricsSnapshot()).containsEntry("nativeDrainingRequests", 0);
+            var next = resources.acquire();
+            assertThat(next).isNotNull();
+            next.close();
+        }
+    }
+
+    @Test
+    void responseStorageCanShrinkWithoutReleasingOtherRequestReservations() {
+        try (var resources = new NativeHttpResources(1, 2, 1024, 4096)) {
+            var lease = resources.acquire();
+            assertThat(lease.reserve(100)).isTrue();
+            assertThat(lease.reserveResponseBody(3000)).isTrue();
+            assertThat(lease.reserveResponseBody(4096)).isFalse();
+            assertThat(resources.bufferedBytes()).isEqualTo(3100);
+            assertThat(lease.reserveResponseBody(1000)).isTrue();
+            assertThat(resources.bufferedBytes()).isEqualTo(1100);
+            assertThat(lease.reserveEncodedBody(1500)).isTrue();
+            assertThat(lease.reserveEncodedBody(500)).isTrue();
+            assertThat(lease.reserveEncodedBody(4096)).isFalse();
+            assertThat(resources.bufferedBytes()).isEqualTo(1600);
+            lease.close();
+            assertThat(resources.bufferedBytes()).isZero();
+            assertThat(lease.reserveResponseBody(100)).isFalse();
+        }
+    }
+
+    @Test
     void workersRetireAtIdleAndNewRequestsStillRunWithinTheSameCapacity() throws Exception {
         try (var resources = new NativeHttpResources(2, 2, 1024, 4096, Duration.ofMillis(50))) {
             assertThat(resources.workers.submit(() -> "before").get(2, TimeUnit.SECONDS)).isEqualTo("before");

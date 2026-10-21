@@ -68,12 +68,13 @@ public final class HttpTransportConfiguration {
                 Environment environment,
                 NativeHttpResources resources,
                 @Qualifier("nativeHttpScheduler") ScheduledThreadPoolExecutor nativeHttpScheduler,
-                @Value("${echo.http.request-timeout-ms:40000}") long timeoutMs) {
+                @Value("${echo.http.request-timeout-ms:40000}") long timeoutMs,
+                @Value("${echo.http.native.segmented-forwarding-enabled:true}") boolean segmentedForwarding) {
             if (timeoutMs < 1) throw new IllegalArgumentException("HTTP request timeout must be positive");
             return factory -> factory.addDeploymentInfoCustomizers(info -> info.addInitialHandlerChainWrapper(next ->
                     new NativeMockHttpHandler(next, pipeline, diagnostics, metrics, observations,
                             () -> new NativeHttpCompatibility(applicationContext, servletContexts.getObject(), environment),
-                            nativeHttpScheduler, resources, timeoutMs, "native")));
+                            nativeHttpScheduler, resources, timeoutMs, "native", segmentedForwarding)));
         }
     }
 }

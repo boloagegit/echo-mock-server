@@ -6,6 +6,8 @@ import com.echo.jms.target.JmsTargetFactoryProvider;
 import jakarta.jms.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -135,8 +137,9 @@ class JmsMonitoringLifecycleTest {
         } finally { monitored.cleanup(); }
     }
 
-    @Test
-    void pureMockReplyFailureIsNotReportedAsReplySent() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void pureMockReplyFailureIsNotReportedAsReplySent(boolean rollbackOnReplyFailure) throws Exception {
         var manager = mock(JmsConnectionManager.class);
         var pipeline = mock(com.echo.pipeline.JmsMockPipeline.class);
         var template = mock(org.springframework.jms.core.JmsTemplate.class);
@@ -148,8 +151,16 @@ class JmsMonitoringLifecycleTest {
         when(pipeline.execute(any())).thenReturn(com.echo.pipeline.PipelineResult.builder().response(
                 com.echo.pipeline.MockResponse.builder().body("{}").status(200).build()).build());
         doThrow(new java.lang.IllegalStateException("send failed")).when(template).send(eq(destination), any(org.springframework.jms.core.MessageCreator.class));
-        new MockJmsListener(manager, new JmsProperties(), pipeline, new JmsEndpointExtractor(),
-                new JmsMessageMemoryBudget(1024 * 1024, 1), metrics).onMessage(message);
+        var properties = new JmsProperties();
+        properties.setRollbackOnReplyFailure(rollbackOnReplyFailure);
+        var listener = new MockJmsListener(manager, properties, pipeline, new JmsEndpointExtractor(),
+                new JmsMessageMemoryBudget(1024 * 1024, 1), metrics);
+        if (rollbackOnReplyFailure) {
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> listener.onMessage(message))
+                    .hasMessage("JMS reply delivery failed");
+        } else {
+            listener.onMessage(message);
+        }
         assertThat(metrics.snapshot()).containsEntry("listenerActive", 0).containsEntry("listenerExits", 1L)
                 .containsEntry("replyFailures", 1L).containsEntry("replySent", 0L);
     }

@@ -30,6 +30,23 @@ import static org.mockito.Mockito.*;
 @org.mockito.junit.jupiter.MockitoSettings(strictness = org.mockito.quality.Strictness.LENIENT)
 class MockJmsListenerExtendedTest {
 
+    @Test
+    void pipelineErrorReleasesInputBudgetAndStillPropagatesForContainerRecovery() throws Exception {
+        var manager = mock(JmsConnectionManager.class);
+        var pipeline = mock(JmsMockPipeline.class);
+        var message = mock(TextMessage.class);
+        when(message.getText()).thenReturn("request");
+        var failure = new OutOfMemoryError("simulated pipeline failure");
+        when(pipeline.execute(any())).thenThrow(failure);
+        var budget = new JmsMessageMemoryBudget(1024 * 1024, 8);
+        var listener = new MockJmsListener(manager, new JmsProperties(), pipeline,
+                new JmsEndpointExtractor(), budget);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> listener.onMessage(message)).isSameAs(failure);
+        assertThat(budget.reservedBytes()).isZero();
+        verify(message, never()).acknowledge();
+    }
+
     @Mock
     private JmsConnectionManager connectionManager;
 
@@ -238,7 +255,8 @@ class MockJmsListenerExtendedTest {
     }
 
     @Test
-    void shouldNotSendReply_whenJmsTemplateIsNull() throws Exception {
+    void shouldRetainDelivery_whenReplyTemplateIsUnavailable() throws Exception {
+        jmsProperties.setRollbackOnReplyFailure(true);
         when(connectionManager.getJmsTemplate()).thenReturn(null);
 
         TextMessage message = mock(TextMessage.class);
@@ -253,7 +271,9 @@ class MockJmsListenerExtendedTest {
                         .response(MockResponse.builder().status(200).body("<ok/>").matched(true).forwarded(false).build())
                         .ruleId("uuid-notpl").matched(true).matchTimeMs(1).responseTimeMs(2).delayMs(0).build());
 
-        listener.onMessage(message);
+        assertThatThrownBy(() -> listener.onMessage(message))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("JMS reply delivery failed");
 
         verify(jmsMockPipeline).execute(any(MockRequest.class));
         verify(jmsTemplate, never()).send(any(Destination.class), any(MessageCreator.class));

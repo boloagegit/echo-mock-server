@@ -2,6 +2,7 @@ package com.echo.pipeline;
 
 import lombok.Builder;
 import lombok.Getter;
+import com.echo.service.Utf8ForwardBody;
 
 import java.util.Map;
 
@@ -19,6 +20,14 @@ public class MockResponse {
 
     /** response body */
     private final String body;
+
+    /** Validated owned bytes, used only by the native HTTP forwarding adapter. */
+    private final Utf8ForwardBody utf8Body;
+
+    /** Preserve the text contract for callers that explicitly need the entire body. */
+    public String getBody() {
+        return utf8Body == null ? body : utf8Body.text();
+    }
 
     /** HTTP response headers */
     private final Map<String, String> headers;

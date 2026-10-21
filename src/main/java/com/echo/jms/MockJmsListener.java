@@ -1,6 +1,7 @@
 package com.echo.jms;
 
 import com.echo.config.JmsProperties;
+import com.echo.core.match.RegexStackCapacityException;
 import com.echo.diagnostics.TransactionDiagnostics;
 import com.echo.diagnostics.TransactionDiagnostics.Trace;
 import com.echo.diagnostics.JmsDiagnosticMetadata;
@@ -16,6 +17,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jms.annotation.JmsListener;
 import org.springframework.stereotype.Component;
 
+import java.lang.IllegalStateException;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -97,6 +99,10 @@ public class MockJmsListener {
                 trace.event("REPLY_SKIPPED", "reason", "NO_RESPONSE");
             }
 
+        } catch (JmsReplyDeliveryException e) {
+            outcome = "REDELIVERY_REPLY_FAILED";
+            // The opt-in policy delegates rollback to the source session owner; do not attempt another reply.
+            throw e;
         } catch (InterruptedException e) {
             outcome = "INTERRUPTED";
             trace.failure("PROCESSING_FAILED", e);
@@ -109,9 +115,9 @@ public class MockJmsListener {
             // This is a deterministic poison input: it can never fit the hard
             // processing budget. Return an explicit error (when a reply address
             // exists) and acknowledge the failed request rather than creating
-            // an endless redelivery hot-loop. The message is never parsed or
-            // forwarded before this admission decision.
-            if (!trace.enabled()) log.warn("JMS message exceeds processing budget and was not forwarded: {}",
+            // an endless redelivery hot-loop. Input admission precedes forwarding,
+            // but reply admission occurs after the pipeline: downstream work may already have executed.
+            if (!trace.enabled()) log.warn("JMS message or reply exceeds processing budget; processing may already have occurred: {}",
                     e.getMessage());
             sendErrorReply(message, "JMS message exceeds the configured processing capacity", trace);
         } catch (JmsMessageMemoryBudget.JmsMessageMemoryBudgetClosedException e) {
@@ -136,6 +142,10 @@ public class MockJmsListener {
             // the JMS message on the broker until its durable hand-off recovers.
             if (!trace.enabled()) log.warn("JMS delivery retained because request logging is unavailable: {}",
                     e.getMessage());
+            throw e;
+        } catch (RegexStackCapacityException e) {
+            outcome = "REDELIVERY_REGEX_CAPACITY";
+            trace.failure("PROCESSING_FAILED", e);
             throw e;
         } catch (Exception e) {
             outcome = "PROCESSING_FAILED";
@@ -188,7 +198,7 @@ public class MockJmsListener {
                     : null;
             replyReservation = memoryBudget.tryReserveReplyText(replyBody);
             return new ReservedPipelineResult(result, requestReservation, replyReservation);
-        } catch (RuntimeException | JMSException | InterruptedException e) {
+        } catch (RuntimeException | JMSException | InterruptedException | Error e) {
             if (replyReservation != null) {
                 replyReservation.close();
             }
@@ -271,15 +281,19 @@ public class MockJmsListener {
                 return;
             }
 
-            if (connectionManager.getJmsTemplate() == null) {
-                trace.event("REPLY_SKIPPED", "reason", "NO_TEMPLATE");
-                return;
+            var template = connectionManager.getJmsTemplate();
+            if (template == null) {
+                if (!jmsProperties.isRollbackOnReplyFailure()) {
+                    trace.event("REPLY_SKIPPED", "reason", "NO_TEMPLATE");
+                    return;
+                }
+                throw new IllegalStateException("JMS reply template is unavailable");
             }
 
             java.util.concurrent.atomic.AtomicReference<TextMessage> sent = trace.enabled()
                     ? new java.util.concurrent.atomic.AtomicReference<>() : null;
             if (trace.enabled()) trace.event("REPLY_SEND_BEGIN", "replyTo", JmsDiagnosticMetadata.destination(replyTo));
-            connectionManager.getJmsTemplate().send(replyTo, session -> {
+            template.send(replyTo, session -> {
                 TextMessage reply = session.createTextMessage(responseBody);
                 reply.setJMSCorrelationID(request.getJMSMessageID());
                 if (sent != null) sent.set(reply);
@@ -292,11 +306,20 @@ public class MockJmsListener {
             trace.failure("REPLY_SEND_FAILED", e);
             if (metrics != null) metrics.replyFailed();
             if (!trace.enabled()) log.error("Failed to send reply: {}", e.getMessage());
+            if (jmsProperties.isRollbackOnReplyFailure()) {
+                throw new JmsReplyDeliveryException(e);
+            }
         }
     }
 
     private void sendErrorReply(Message request, String error, Trace trace) {
         sendReply(request, "<error>" + error + "</error>", trace);
+    }
+
+    private static final class JmsReplyDeliveryException extends RuntimeException {
+        private JmsReplyDeliveryException(Exception cause) {
+            super("JMS reply delivery failed", cause);
+        }
     }
 
     private static final class JmsProcessingInterruptedException extends RuntimeException {

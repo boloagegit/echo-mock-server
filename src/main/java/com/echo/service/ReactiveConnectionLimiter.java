@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Non-blocking application-wide admission control for outbound HTTP requests.
+ * Non-blocking application-wide admission control for outbound HTTP resources.
  * It keeps one configurable total limit independent of Reactor Netty's
  * per-remote-host pools and provides an active deadline while waiting for capacity.
  */
@@ -29,12 +29,17 @@ final class ReactiveConnectionLimiter {
 
     Mono<Lease> acquire(Duration timeout) {
         return Mono.defer(() -> total.acquire(System.nanoTime() + timeout.toNanos())
+                .doOnDiscard(AsyncPermitPool.Slot.class, AsyncPermitPool.Slot::close)
                 .map(Lease::new)
                 .doOnDiscard(Lease.class, Lease::close));
     }
 
     int pendingCount() {
         return total.pendingCount();
+    }
+
+    int activeCount() {
+        return total.maximum - total.available.get();
     }
 
     record Lease(AsyncPermitPool.Slot total) implements AutoCloseable {
@@ -62,13 +67,20 @@ final class ReactiveConnectionLimiter {
         }
 
         private Mono<Slot> acquire(long deadlineNanos) {
-            return Mono.create(sink -> acquire(sink, deadlineNanos));
+            return Mono.defer(() -> {
+                Handoff handoff = new Handoff();
+                // Observe cancellation outside MonoCreate as well: it can already have
+                // marked success while its value is still travelling to the subscriber.
+                return Mono.<Slot>create(sink -> acquire(sink, deadlineNanos, handoff))
+                        .doOnCancel(handoff::cancel);
+            });
         }
 
-        private void acquire(MonoSink<Slot> sink, long deadlineNanos) {
+        private void acquire(MonoSink<Slot> sink, long deadlineNanos, Handoff handoff) {
             if (tryAcquire()) {
                 Slot slot = new Slot(this);
-                sink.onCancel(slot::close);
+                handoff.dispatch(slot);
+                sink.onCancel(handoff::cancel);
                 sink.success(slot);
                 return;
             }
@@ -78,9 +90,14 @@ final class ReactiveConnectionLimiter {
                         "HTTP_FORWARD_PENDING_CAPACITY_EXHAUSTED"));
                 return;
             }
-            Waiter waiter = new Waiter(this, sink);
+            Waiter waiter = new Waiter(this, sink, handoff);
             sink.onCancel(waiter::cancel);
             waiters.add(waiter);
+            // Cancellation may run synchronously while registering the callback.
+            if (!waiter.pending.get()) {
+                waiters.remove(waiter);
+                return;
+            }
 
             // A permit can be released between the first failed CAS and queue insertion.
             if (tryAcquire()) {
@@ -153,18 +170,23 @@ final class ReactiveConnectionLimiter {
         private static final class Waiter {
             private final AsyncPermitPool owner;
             private final MonoSink<Slot> sink;
+            private final Handoff handoff;
             private final AtomicBoolean pending = new AtomicBoolean(true);
             private volatile ScheduledFuture<?> timeoutTask;
 
-            private Waiter(AsyncPermitPool owner, MonoSink<Slot> sink) {
+            private Waiter(AsyncPermitPool owner, MonoSink<Slot> sink, Handoff handoff) {
                 this.owner = owner;
                 this.sink = sink;
+                this.handoff = handoff;
             }
 
             private boolean complete(Slot permit) {
                 if (!pending.compareAndSet(true, false)) return false;
                 owner.pendingWaiters.decrementAndGet();
                 cancelTimeout();
+                // Keep ownership visible until MonoCreate accepts the signal. A concurrent
+                // cancellation can otherwise drop it after pending has already become false.
+                handoff.dispatch(permit);
                 sink.success(permit);
                 return true;
             }
@@ -178,10 +200,12 @@ final class ReactiveConnectionLimiter {
             }
 
             private void cancel() {
-                if (!pending.compareAndSet(true, false)) return;
-                owner.waiters.remove(this);
-                owner.pendingWaiters.decrementAndGet();
-                cancelTimeout();
+                handoff.cancel();
+                if (pending.compareAndSet(true, false)) {
+                    owner.waiters.remove(this);
+                    owner.pendingWaiters.decrementAndGet();
+                    cancelTimeout();
+                }
             }
 
             private void setTimeoutTask(ScheduledFuture<?> task) {
@@ -192,6 +216,23 @@ final class ReactiveConnectionLimiter {
             private void cancelTimeout() {
                 ScheduledFuture<?> task = timeoutTask;
                 if (task != null) task.cancel(false);
+            }
+        }
+
+        /** A cancelled handoff and a dispatched slot must always find each other. */
+        private static final class Handoff {
+            private volatile boolean cancelled;
+            private volatile Slot dispatched;
+
+            private void dispatch(Slot permit) {
+                dispatched = permit;
+                if (cancelled) permit.close();
+            }
+
+            private void cancel() {
+                cancelled = true;
+                Slot permit = dispatched;
+                if (permit != null) permit.close();
             }
         }
     }

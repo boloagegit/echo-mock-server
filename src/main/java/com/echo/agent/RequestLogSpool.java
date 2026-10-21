@@ -350,6 +350,11 @@ public class RequestLogSpool {
                 // Unexpected and specific to this task: retrying it would fail the same way
                 rejected++;
                 log.debug("Request log could not be admitted: {}", e.toString());
+            } catch (Error e) {
+                // Preserve the accepted prefix. The handoff retries only the unaccepted suffix,
+                // including this task, after transient failures such as memory pressure.
+                log.debug("Request-log batch admission interrupted by an error", e);
+                break;
             }
             handled++;
         }
@@ -380,6 +385,7 @@ public class RequestLogSpool {
         long reservedPayloadBytes = 0;
         long serializationBytes = 0;
         boolean serializationReservationActive = false;
+        boolean transferredToWriter = false;
         long admissionDeadlineNanos = System.nanoTime()
                 + TimeUnit.MILLISECONDS.toNanos(queueOfferTimeoutMillis);
         lifecycleLock.readLock().lock();
@@ -414,23 +420,22 @@ public class RequestLogSpool {
 
             pending = new PendingAppend(payload, candidateSet, bytes, new CompletableFuture<>());
             enqueue(pending, admissionDeadlineNanos);
-        } catch (RequestLogUnavailableException e) {
-            if (reservedPayloadBytes > 0) {
-                releaseReservation(reservedPayloadBytes, 1, reservedPayloadBytes);
-            } else if (serializationReservationActive) {
-                releaseSerialization(serializationBytes);
-            }
-            throw e;
+            transferredToWriter = true;
         } catch (InterruptedException e) {
-            if (reservedPayloadBytes > 0) {
-                releaseReservation(reservedPayloadBytes, 1, reservedPayloadBytes);
-            } else if (serializationReservationActive) {
-                releaseSerialization(serializationBytes);
-            }
             Thread.currentThread().interrupt();
             throw new RequestLogUnavailableException("Interrupted while accepting request log", e);
         } finally {
-            lifecycleLock.readLock().unlock();
+            try {
+                if (!transferredToWriter) {
+                    if (reservedPayloadBytes > 0) {
+                        releaseReservation(reservedPayloadBytes, 1, reservedPayloadBytes);
+                    } else if (serializationReservationActive) {
+                        releaseSerialization(serializationBytes);
+                    }
+                }
+            } finally {
+                lifecycleLock.readLock().unlock();
+            }
         }
         return pending;
     }
@@ -576,6 +581,17 @@ public class RequestLogSpool {
      * the spool for operator recovery; it is never silently deleted.
      */
     public List<SpoolEntry> readAfter(long sequence, int limit, long maxBytes) {
+        return readBatchAfter(sequence, limit, maxBytes).entries();
+    }
+
+    /** Why a batch stopped matters: fewer rows do not necessarily mean the spool is drained. */
+    public record ReadBatch(List<SpoolEntry> entries, boolean byteLimitReached) {
+        public ReadBatch {
+            entries = List.copyOf(entries);
+        }
+    }
+
+    public ReadBatch readBatchAfter(long sequence, int limit, long maxBytes) {
         String sql = "SELECT spool.sequence_id, spool.candidate_set_id, "
                 + "length(spool.payload), length(candidates.payload) "
                 + "FROM request_log_spool spool "
@@ -590,10 +606,11 @@ public class RequestLogSpool {
             Map<String, List<CandidateRecord>> candidateCache = new LinkedHashMap<>();
             long byteBudget = maxBytes <= 0 ? 1 : maxBytes;
             long loadedBytes = 0;
+            boolean byteLimitReached = false;
             try (ResultSet rows = statement.executeQuery()) {
                 // Do not prepare a payload query for an empty/idle poll.
                 if (!rows.next()) {
-                    return result;
+                    return new ReadBatch(result, false);
                 }
                 // Reuse one statement within this read snapshot, while checking each
                 // row's byte budget before loading its BLOB.
@@ -628,6 +645,7 @@ public class RequestLogSpool {
                                         rowBytes, byteBudget,
                                         "Request-log spool head row exceeds the read byte limit", null);
                             }
+                            byteLimitReached = true;
                             break;
                         }
                         if (payloadBytes > Integer.MAX_VALUE) {
@@ -656,7 +674,7 @@ public class RequestLogSpool {
                     } while (rows.next());
                 }
             }
-            return result;
+            return new ReadBatch(result, byteLimitReached);
         } catch (UnrecoverableSpoolEntryException e) {
             throw e;
         } catch (SQLException e) {
@@ -1574,12 +1592,28 @@ public class RequestLogSpool {
     }
 
     private Connection openConnection() throws SQLException {
-        Connection connection = DriverManager.getConnection("jdbc:sqlite:" + spoolPath);
+        return initializeConnection(DriverManager.getConnection("jdbc:sqlite:" + spoolPath));
+    }
+
+    static Connection initializeConnection(Connection connection) throws SQLException {
+        try {
+            configureConnection(connection);
+            return connection;
+        } catch (SQLException | RuntimeException | Error failure) {
+            try {
+                connection.close();
+            } catch (SQLException | RuntimeException | Error closeFailure) {
+                if (failure != closeFailure) failure.addSuppressed(closeFailure);
+            }
+            throw failure;
+        }
+    }
+
+    private static void configureConnection(Connection connection) throws SQLException {
         try (Statement statement = connection.createStatement()) {
             statement.execute("PRAGMA busy_timeout=10000");
             statement.execute("PRAGMA journal_size_limit=67108864");
         }
-        return connection;
     }
 
     private void failPending(RuntimeException failure) {

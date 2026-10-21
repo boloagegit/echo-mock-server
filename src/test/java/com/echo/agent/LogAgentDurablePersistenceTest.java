@@ -70,6 +70,83 @@ class LogAgentDurablePersistenceTest {
     }
 
     @Test
+    void corruptHeadStopsConsumerAndReportsHealthWithoutDeletingRetainedRows() throws Exception {
+        when(batchWriter.findCheckpoint(anyString())).thenReturn(0L);
+        spool.append(task("one", "/one"));
+        spool.append(task("two", "/two"));
+        long firstSequence = spool.readAfter(0, 1).get(0).sequence();
+        try (var connection = java.sql.DriverManager.getConnection("jdbc:sqlite:" + tempDir.resolve("spool.sqlite"));
+             var update = connection.prepareStatement("UPDATE request_log_spool SET payload = ? WHERE sequence_id = ?")) {
+            update.setBytes(1, new byte[]{'{'});
+            update.setLong(2, firstSequence);
+            update.executeUpdate();
+        }
+        startAgent();
+        org.awaitility.Awaitility.await().atMost(3, TimeUnit.SECONDS).untilAsserted(() -> {
+            assertThat(agent.isDurableConsumerRunning()).isFalse();
+            assertThat(agent.getStats().getStoppedAtSequence()).isEqualTo(firstSequence);
+        });
+        var factory = new org.springframework.beans.factory.support.StaticListableBeanFactory();
+        factory.addBean("logAgent", agent);
+        var indicator = new com.echo.service.RequestLogHealthIndicator(configService,
+                factory.getBeanProvider(LogAgent.class));
+        assertThat(indicator.health().getStatus()).isEqualTo(org.springframework.boot.actuate.health.Status.DOWN);
+        assertThat(spool.countBetween(0, Long.MAX_VALUE)).isEqualTo(2);
+        org.mockito.Mockito.verify(batchWriter, org.mockito.Mockito.never())
+                .persist(anyString(), anyLong(), anyList(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
+    void byteLimitedBacklogShedsAnalysisForThatBatchAndResumesAtTheTail() throws Exception {
+        when(batchWriter.findCheckpoint(anyString())).thenReturn(0L);
+        var matcher = org.mockito.Mockito.spy(new ConditionMatcher());
+        var candidates = List.of(CandidateSnapshot.builder().ruleId("rule").endpoint("/body")
+                .enabled(true).bodyCondition("n=1").build());
+        String body = "{\"n\":1,\"padding\":\"" + "x".repeat(2048) + "\"}";
+        for (int i = 0; i < 60; i++) {
+            spool.append(LogTask.builder().ruleId("rule").endpoint("/" + i)
+                    .protocol(i % 2 == 0 ? Protocol.HTTP : Protocol.JMS)
+                    .requestTime(LocalDateTime.now()).responseStatus(200).matched(true)
+                    .requestBody(body).responseBody("ok").analysisBody(body)
+                    .candidates(candidates).matchChain("[]").build());
+        }
+        long first31Bytes;
+        try (var connection = java.sql.DriverManager.getConnection("jdbc:sqlite:" + tempDir.resolve("spool.sqlite"));
+             var query = connection.createStatement();
+             var rows = query.executeQuery("SELECT sum(bytes) FROM (SELECT length(s.payload) + length(c.payload) AS bytes "
+                     + "FROM request_log_spool s JOIN candidate_snapshot_sets c ON c.candidate_set_id=s.candidate_set_id "
+                     + "ORDER BY s.sequence_id LIMIT 31)")) {
+            assertThat(rows.next()).isTrue();
+            first31Bytes = rows.getLong(1);
+        }
+        org.springframework.test.util.ReflectionTestUtils.setField(spool, "maxInMemoryBytes", first31Bytes);
+        List<RequestLog> persisted = new java.util.concurrent.CopyOnWriteArrayList<>();
+        List<Integer> batches = new java.util.concurrent.CopyOnWriteArrayList<>();
+        CountDownLatch done = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            List<RequestLog> logs = invocation.getArgument(2);
+            persisted.addAll(logs);
+            batches.add(logs.size());
+            if (persisted.size() == 60) done.countDown();
+            return null;
+        }).when(batchWriter).persist(anyString(), anyLong(), anyList(), eq(1_000));
+        agent = new LogAgent(mock(RequestLogRepository.class), configService, matcher,
+                mock(RequestLogService.class), spool, batchWriter, 128, 50, 1, true, 10_000);
+        agent.init();
+        assertThat(done.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(batches).containsExactly(31, 29);
+        verify(matcher, times(29)).prepareBody(anyString(), org.mockito.ArgumentMatchers.anyMap());
+        assertThat(persisted).hasSize(60).allSatisfy(row -> {
+            assertThat(row.getRequestBody()).isEqualTo(body);
+            assertThat(row.getResponseBody()).isEqualTo("ok");
+            assertThat(row.getResponseStatus()).isEqualTo(200);
+        });
+        assertThat(persisted.subList(0, 31)).allSatisfy(row -> assertThat(row.getMatchChain()).isEqualTo("[]"));
+        assertThat(persisted).extracting(RequestLog::getEndpoint).doesNotHaveDuplicates();
+        awaitSpoolEmpty();
+    }
+
+    @Test
     void mainDatabaseFailureRetriesWithoutDeletingSpoolRow() throws Exception {
         when(batchWriter.findCheckpoint(anyString())).thenReturn(0L);
         AtomicInteger attempts = new AtomicInteger();

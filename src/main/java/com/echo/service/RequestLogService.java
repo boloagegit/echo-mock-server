@@ -290,6 +290,11 @@ public class RequestLogService implements ServeEventListener {
     }
 
     @Override
+    public boolean requiresFullResponseBody() {
+        return false;
+    }
+
+    @Override
     public boolean critical() {
         return true;
     }
@@ -318,7 +323,6 @@ public class RequestLogService implements ServeEventListener {
 
     private LogTask buildLogTask(ServeEvent event) {
         String requestBody = event.getRequestBody();
-        String responseBody = event.getResponseBody();
         ConditionMatcher.PreparedBody preparedBody = event.getPreparedBody();
         List<CandidateSnapshot> candidateSnapshots = CandidateSnapshot.toCandidateSnapshots(event.getCandidates());
         String reqBody = null;
@@ -326,7 +330,7 @@ public class RequestLogService implements ServeEventListener {
         int maxSize = configService.getRequestLogMaxBodySize();
         if (configService.isRequestLogIncludeBody()) {
             reqBody = truncateBody(requestBody, maxSize);
-            resBody = truncateBody(responseBody, maxSize);
+            resBody = truncateBody(event.responseBodyForCapture(maxSize), maxSize);
         }
         String rawAnalysisBody = preparedBody != null ? preparedBody.getRaw() : requestBody;
         // Detailed near-miss analysis is optional. Never retain an oversized source body

@@ -10,6 +10,14 @@ public interface ServeEventListener {
 
     void onServed(ServeEvent event);
 
+    /**
+     * Unknown extensions keep the existing text path. Return false only when the listener ignores the
+     * response body or uses {@link ServeEvent#responseBodyForCapture(int)} with a bounded limit.
+     */
+    default boolean requiresFullResponseBody() {
+        return true;
+    }
+
     default boolean critical() {
         return false;
     }

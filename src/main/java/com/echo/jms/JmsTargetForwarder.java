@@ -131,6 +131,22 @@ public final class JmsTargetForwarder {
         }
     }
 
+    /** Select once for an unmatched request; execution keeps the same connection and reply semantics. */
+    public Optional<Supplier<ForwardResult>> prepareDefaultForward(String body, Message originalMessage, Trace trace) {
+        return targetResolver.get().map(resolved -> () -> {
+            if (metrics != null) metrics.forwardStarted();
+            try {
+                return new ForwardResult(forwardResolved(body, originalMessage, resolved, trace),
+                        describeTarget(resolved));
+            } catch (RuntimeException e) {
+                if (metrics != null) metrics.forwardFailed();
+                throw e;
+            } finally {
+                if (metrics != null) metrics.forwardExited();
+            }
+        });
+    }
+
     private ForwardResult forwardDefaultWithMetadata(String body, Message originalMessage, Trace trace) {
         Optional<JmsTargetConnectionService.ResolvedTarget> selected = targetResolver.get();
         if (selected.isEmpty()) {

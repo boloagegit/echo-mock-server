@@ -613,6 +613,8 @@ final class LegacyConditionMatcher implements CompiledMatcher {
                 return pattern.matcher(new InterruptibleCharSequence(input, limits.regexTimeoutMs())).matches();
             } catch (InterruptibleCharSequence.RegexTimeoutException e) {
                 return false;
+            } catch (StackOverflowError exhausted) {
+                throw new RegexStackCapacityException(exhausted);
             }
         }
 

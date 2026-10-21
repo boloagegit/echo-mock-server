@@ -3,7 +3,10 @@ package com.echo.service;
 import com.echo.dto.HttpForwardMetricsDto;
 import com.echo.pipeline.MockRequest;
 import com.echo.pipeline.MockResponse;
+import com.echo.pipeline.ResponseBodyMemory;
+import com.echo.pipeline.RequestWorkContext;
 import com.echo.util.CancellableStages;
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelOption;
 import io.netty.handler.codec.http.HttpHeaderNames;
@@ -21,7 +24,6 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
-import reactor.core.publisher.SynchronousSink;
 import reactor.netty.ByteBufFlux;
 import reactor.netty.http.client.HttpClient;
 import reactor.netty.resources.ConnectionPoolMetrics;
@@ -61,13 +63,28 @@ import java.util.function.Supplier;
 @Slf4j
 public final class HttpOutboundForwarder {
 
+    private volatile int testTimeoutSeconds = 30;
+
+    /** A complete admin probe has a deadline even when the peer keeps sending small fragments. */
+    @Autowired
+    void configureTestTimeout(@Value("${echo.http.forward.test-timeout-seconds:30}") int seconds) {
+        requirePositive("testTimeoutSeconds", seconds);
+        testTimeoutSeconds = seconds;
+    }
+
+    public long testTimeoutMillis() {
+        return TimeUnit.SECONDS.toMillis(testTimeoutSeconds);
+    }
+
     private static final String ORIGINAL_HOST_HEADER = "X-Original-Host";
     /** Zero preserves compatibility by disabling the application-level concurrency cap. */
     private static final int DEFAULT_MAX_CONCURRENT = 0;
     private static final int DEFAULT_MAX_CONNECTIONS = 1_000;
     private static final int DEFAULT_MAX_PENDING_REQUESTS = 1_000;
+    private static final int DEFAULT_MAX_UTF8_BODIES = 8;
     private static final int DEFAULT_MAX_RESPONSE_BODY_BYTES = 10 * 1024 * 1024;
     private static final int DEFAULT_MAX_BUFFERED_RESPONSE_BYTES = 128 * 1024 * 1024;
+    private static final int SMALL_RESPONSE_BYTES = 256 * 1024;
     private static final int DEFAULT_POOL_ACQUIRE_TIMEOUT_MS = 3_000;
     private static final int DEFAULT_LEGACY_CONNECT_TIMEOUT_SECONDS = 5;
     private static final int DEFAULT_LEGACY_READ_TIMEOUT_SECONDS = 30;
@@ -89,6 +106,8 @@ public final class HttpOutboundForwarder {
     private final LongAdder cancelledForwards = new LongAdder();
     private final ScheduledExecutorService forwardScheduler;
     private final ReactiveConnectionLimiter connectionLimiter;
+    private final ReactiveConnectionLimiter utf8BodyLimiter;
+    private final int maxUtf8Bodies;
     private final ClientHolder originalHostClient;
     private final int maxConnections;
     private final int maxPendingRequests;
@@ -157,6 +176,24 @@ public final class HttpOutboundForwarder {
                 overloadBackoffMs, idleConnectionTimeoutSeconds);
     }
 
+    public HttpOutboundForwarder(
+            HttpTargetConnectionService connectionService,
+            int maxConcurrent,
+            int maxConnections,
+            int maxPendingRequests,
+            int maxResponseBodyBytes,
+            int maxBufferedResponseBytes,
+            int poolAcquireTimeoutMs,
+            int legacyConnectTimeoutSeconds,
+            int legacyReadTimeoutSeconds,
+            int overloadBackoffMs,
+            int idleConnectionTimeoutSeconds) {
+        this(connectionService, maxConcurrent, maxConnections, maxPendingRequests,
+                maxResponseBodyBytes, maxBufferedResponseBytes, poolAcquireTimeoutMs,
+                legacyConnectTimeoutSeconds, legacyReadTimeoutSeconds, overloadBackoffMs,
+                idleConnectionTimeoutSeconds, DEFAULT_MAX_UTF8_BODIES);
+    }
+
     @Autowired
     public HttpOutboundForwarder(
             HttpTargetConnectionService connectionService,
@@ -169,7 +206,8 @@ public final class HttpOutboundForwarder {
             @Value("${echo.http.forward.legacy-connect-timeout-seconds:5}") int legacyConnectTimeoutSeconds,
             @Value("${echo.http.forward.legacy-read-timeout-seconds:30}") int legacyReadTimeoutSeconds,
             @Value("${echo.http.forward.overload-backoff-ms:50}") int overloadBackoffMs,
-            @Value("${echo.http.forward.idle-connection-timeout-seconds:30}") int idleConnectionTimeoutSeconds) {
+            @Value("${echo.http.forward.idle-connection-timeout-seconds:30}") int idleConnectionTimeoutSeconds,
+            @Value("${echo.http.native.max-forwarding-bodies:8}") int maxUtf8Bodies) {
         if (maxConcurrent < 0) {
             throw new IllegalArgumentException("maxConcurrent must not be negative");
         }
@@ -181,12 +219,14 @@ public final class HttpOutboundForwarder {
         requirePositive("legacyConnectTimeoutSeconds", legacyConnectTimeoutSeconds);
         requirePositive("legacyReadTimeoutSeconds", legacyReadTimeoutSeconds);
         requirePositive("idleConnectionTimeoutSeconds", idleConnectionTimeoutSeconds);
+        requirePositive("maxUtf8Bodies", maxUtf8Bodies);
         if (overloadBackoffMs < 0) {
             throw new IllegalArgumentException("overloadBackoffMs must not be negative");
         }
         this.connectionService = connectionService;
         this.maxConnections = maxConnections;
         this.maxPendingRequests = maxPendingRequests;
+        this.maxUtf8Bodies = maxUtf8Bodies;
         this.maxResponseBodyBytes = maxResponseBodyBytes;
         this.responseBufferBudget = new ResponseBufferBudget(maxBufferedResponseBytes);
         this.poolAcquireTimeoutMs = poolAcquireTimeoutMs;
@@ -205,6 +245,7 @@ public final class HttpOutboundForwarder {
         });
         this.connectionLimiter = new ReactiveConnectionLimiter(
                 maxConnections, maxPendingRequests, forwardScheduler);
+        this.utf8BodyLimiter = new ReactiveConnectionLimiter(maxUtf8Bodies, maxPendingRequests, forwardScheduler);
         this.originalHostClient = createClient(
                 legacyConnectTimeoutSeconds, legacyReadTimeoutSeconds, false);
     }
@@ -277,21 +318,29 @@ public final class HttpOutboundForwarder {
     }
 
     public ConnectionTestResult test(Long id) {
+        return testAsync(id).join();
+    }
+
+    public CompletableFuture<ConnectionTestResult> testAsync(Long id) {
         long started = System.nanoTime();
         try {
             HttpTargetConnectionService.ResolvedTarget target = connectionService.resolveEnabled(id);
             ClientUse holder = clientFor(target);
             HttpHeaders headers = new HttpHeaders();
             applyAuthentication(headers, target);
-            ForwardResponse response = exchangeResponse(
-                    holder, URI.create(target.baseUrl()), HttpMethod.GET, headers, null)
-                    .toFuture().join();
-            return new ConnectionTestResult(true, elapsedMillis(started), response.status(), null);
+            return exchangeResponse(
+                    holder, URI.create(target.baseUrl()), HttpMethod.GET, headers, null,
+                    ResponseBodyMemory.UNBOUNDED, RequestWorkContext.NONE, false)
+                    .timeout(Duration.ofSeconds(testTimeoutSeconds))
+                    .map(response -> new ConnectionTestResult(true, elapsedMillis(started), response.status(), null))
+                    .onErrorResume(error -> Mono.just(new ConnectionTestResult(false, elapsedMillis(started),
+                            null, safeError(unwrap(error)))))
+                    .toFuture();
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
-            return new ConnectionTestResult(false, elapsedMillis(started), null,
-                    safeError(unwrap(e)));
+            return CompletableFuture.completedFuture(new ConnectionTestResult(false, elapsedMillis(started), null,
+                    safeError(unwrap(e))));
         }
     }
 
@@ -306,11 +355,13 @@ public final class HttpOutboundForwarder {
         HttpHeaders headers = copyHeaders(request.getHeaders(), true);
         applyAuthentication(headers, target);
         HttpMethod method = HttpMethod.valueOf(request.getMethod().toUpperCase(Locale.ROOT));
-        return exchangeResponse(clientFor(target), URI.create(url), method, headers, request.getBody())
+        return exchangeResponse(clientFor(target), URI.create(url), method, headers, request.getBody(),
+                request.getResponseBodyMemory(), request.getWorkContext(), request.isUseUtf8ForwardBody())
                 .doOnNext(response -> request.getTrace().event("HTTP_TARGET_RESPONSE", "status", response.status()))
                 .map(response -> MockResponse.builder()
                         .status(response.status())
                         .body(response.body())
+                        .utf8Body(response.utf8Body())
                         .matched(matched)
                         .forwarded(true)
                         .forwardTarget(describeTarget(target))
@@ -399,11 +450,13 @@ public final class HttpOutboundForwarder {
         if (client == null) {
             return Mono.error(new IllegalStateException("HTTP_CLIENT_CLOSED"));
         }
-        return exchangeResponse(client, URI.create(url), method, headers, request.getBody())
+        return exchangeResponse(client, URI.create(url), method, headers, request.getBody(),
+                request.getResponseBodyMemory(), request.getWorkContext(), request.isUseUtf8ForwardBody())
                 .doOnNext(response -> request.getTrace().event("HTTP_TARGET_RESPONSE", "status", response.status()))
                 .map(response -> MockResponse.builder()
                         .status(response.status())
                         .body(response.body())
+                        .utf8Body(response.utf8Body())
                         .matched(matched)
                         .forwarded(true)
                         .forwardTarget(sanitizeOriginalHost(targetHost))
@@ -414,10 +467,11 @@ public final class HttpOutboundForwarder {
                                                     URI uri,
                                                     HttpMethod method,
                                                     HttpHeaders headers,
-                                                    String body) {
+                                                    String body, ResponseBodyMemory bodyMemory,
+                                                    RequestWorkContext workContext, boolean useUtf8Body) {
         return connectionLimiter.acquire(Duration.ofMillis(poolAcquireTimeoutMs))
                 .flatMap(permit -> exchangeResponseWithPermit(
-                        holder, uri, method, headers, body)
+                        holder, uri, method, headers, body, bodyMemory, workContext, useUtf8Body)
                         .doFinally(ignored -> permit.close()))
                 .doFinally(ignored -> holder.close());
     }
@@ -426,31 +480,38 @@ public final class HttpOutboundForwarder {
                                                               URI uri,
                                                               HttpMethod method,
                                                               HttpHeaders headers,
-                                                              String body) {
-        byte[] payload = body == null ? null : body.getBytes(contentCharset(headers));
-        HttpClient.RequestSender request = holder.httpClient()
-                .headers(outbound -> {
-                    headers.forEach(outbound::set);
-                    if (payload != null) {
-                        outbound.setInt(HttpHeaderNames.CONTENT_LENGTH, payload.length);
+                                                              String body, ResponseBodyMemory bodyMemory,
+                                                              RequestWorkContext workContext, boolean useUtf8Body) {
+        return Mono.defer(() -> {
+            try (var work = workContext.begin()) {
+                byte[] payload = body == null ? null : body.getBytes(contentCharset(headers));
+                HttpClient.RequestSender request = holder.httpClient()
+                        .headers(outbound -> {
+                            headers.forEach(outbound::set);
+                            if (payload != null) {
+                                outbound.setInt(HttpHeaderNames.CONTENT_LENGTH, payload.length);
+                            }
+                        })
+                        .request(io.netty.handler.codec.http.HttpMethod.valueOf(method.name()))
+                        .uri(uri);
+                HttpClient.ResponseReceiver<?> prepared = payload == null
+                        ? request
+                        : request.send(Mono.fromSupplier(() -> Unpooled.wrappedBuffer(payload)));
+                return prepared.response((response, responseBody) -> {
+                    int status = response.status().code();
+                    String declaredLength = response.responseHeaders().get(HttpHeaderNames.CONTENT_LENGTH);
+                    if (declaredLength != null && exceedsResponseLimit(declaredLength)) {
+                        return Mono.error(new ResponseBodyTooLargeException(maxResponseBodyBytes));
                     }
-                })
-                .request(io.netty.handler.codec.http.HttpMethod.valueOf(method.name()))
-                .uri(uri);
-        HttpClient.ResponseReceiver<?> prepared = payload == null
-                ? request
-                : request.send(Mono.fromSupplier(() -> Unpooled.wrappedBuffer(payload)));
-        return prepared.response((response, responseBody) -> {
-            int status = response.status().code();
-            String declaredLength = response.responseHeaders().get(HttpHeaderNames.CONTENT_LENGTH);
-            if (declaredLength != null && exceedsResponseLimit(declaredLength)) {
-                return Mono.error(new ResponseBodyTooLargeException(maxResponseBodyBytes));
+                    return readResponseBody(responseBody, contentCharset(
+                                    response.responseHeaders().get(HttpHeaderNames.CONTENT_TYPE)),
+                                    smallResponseLength(declaredLength), bodyMemory, workContext,
+                                    useUtf8Body && status >= 200 && status != 204 && status != 304)
+                            .map(value -> new ForwardResponse(status, value.text(), value.bytes()))
+                            .switchIfEmpty(Mono.just(new ForwardResponse(status, null, null)));
+                }).single();
             }
-            return readResponseBody(responseBody, contentCharset(
-                            response.responseHeaders().get(HttpHeaderNames.CONTENT_TYPE)))
-                    .map(value -> new ForwardResponse(status, value))
-                    .switchIfEmpty(Mono.just(new ForwardResponse(status, null)));
-        }).single();
+        });
     }
 
     private boolean exceedsResponseLimit(String declaredLength) {
@@ -461,30 +522,203 @@ public final class HttpOutboundForwarder {
         }
     }
 
-    private Mono<String> readResponseBody(ByteBufFlux responseBody, Charset charset) {
-        AtomicInteger receivedBytes = new AtomicInteger();
-        ResponseBufferBudget.Reservation reservation = responseBufferBudget.openReservation();
-        StreamingTextAccumulator output = new StreamingTextAccumulator(charset);
-        return responseBody.asByteArray()
-                .handle((byte[] chunk, SynchronousSink<Integer> sink) -> {
-                    long nextSize = (long) receivedBytes.get() + chunk.length;
+    private static int smallResponseLength(String declaredLength) {
+        if (declaredLength == null) {
+            return 0;
+        }
+        try {
+            long length = Long.parseLong(declaredLength);
+            // Distinguish declared-empty replies from unknown lengths without allocating a read buffer.
+            if (length == 0) return -1;
+            return length > 0 && length <= SMALL_RESPONSE_BYTES ? (int) length : 0;
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
+    }
+
+    private Mono<Utf8ForwardAccumulator.Result> readResponseBody(ByteBufFlux responseBody, Charset charset, int bufferedLength,
+                                          ResponseBodyMemory bodyMemory, RequestWorkContext workContext, boolean useUtf8Body) {
+        if (useUtf8Body && bufferedLength == 0 && StandardCharsets.UTF_8.equals(charset)) {
+            // Admit after headers so downstream response latency does not consume a body slot.
+            // The transport retains the slot through logging, queueing and actual delivery.
+            return utf8BodyLimiter.acquire(Duration.ofMillis(poolAcquireTimeoutMs))
+                    .onErrorMap(error -> error instanceof ConnectionRequestTimeoutException
+                            || error instanceof ReactiveConnectionLimiter.CapacityException,
+                            error -> new TransportResponseCapacityException())
+                    .flatMap(permit -> {
+                        if (!bodyMemory.retainUntilComplete(permit::close)) {
+                            permit.close();
+                            return readResponseBody(responseBody, charset, bufferedLength, bodyMemory, workContext, false);
+                        }
+                        return readUtf8Body(responseBody, bodyMemory, workContext);
+                    });
+        }
+        // Account for decoded UTF-16 storage and the final join while fragments still exist.
+        // The transport keeps the final estimate after the downstream reader releases its own buffers.
+        double maximumCharsPerByte = bodyMemory == ResponseBodyMemory.UNBOUNDED
+                ? 0 : charset.newDecoder().maxCharsPerByte();
+        AtomicLong bodyBytes = new AtomicLong();
+        ByteBufFlux accounted = bodyMemory == ResponseBodyMemory.UNBOUNDED ? responseBody
+                : ByteBufFlux.fromInbound(responseBody.doOnNext(chunk -> {
+            long received = bodyBytes.addAndGet(chunk.readableBytes());
+            if (received > maxResponseBodyBytes) throw new ResponseBodyTooLargeException(maxResponseBodyBytes);
+            if (!bodyMemory.tryReserve((long) Math.ceil(received * maximumCharsPerByte) * 4)) {
+                throw new TransportResponseCapacityException();
+            }
+        }));
+        if (bufferedLength > 0) {
+            // Eager cleanup precedes the terminal signal. The transport already owns the
+            // decoded-body reservation, so no reader quota lingers after the caller completes.
+            return Mono.using(
+                    () -> new BufferedResponseBody(bufferedLength, maxResponseBodyBytes, responseBufferBudget),
+                    output -> accounted.doOnNext(chunk -> {
+                                try (var work = workContext.begin()) { output.append(chunk); }
+                            })
+                            .then(Mono.fromSupplier(() -> {
+                                try (var work = workContext.begin()) {
+                                    return new Utf8ForwardAccumulator.Result(retainedBody(output.decode(charset), bodyMemory), null);
+                                }
+                            })),
+                    BufferedResponseBody::close, true);
+        }
+        return Mono.using(responseBufferBudget::openReservation, reservation -> {
+            AtomicInteger receivedBytes = new AtomicInteger();
+            StreamingTextAccumulator output = new StreamingTextAccumulator(charset);
+            return accounted.doOnNext(chunk -> {
+                try (var work = workContext.begin()) {
+                    int bytes = chunk.readableBytes();
+                    long nextSize = (long) receivedBytes.get() + bytes;
                     if (nextSize > maxResponseBodyBytes) {
-                        sink.error(new ResponseBodyTooLargeException(maxResponseBodyBytes));
-                        return;
+                        throw new ResponseBodyTooLargeException(maxResponseBodyBytes);
                     }
-                    if (!reservation.tryReserve(chunk.length)) {
-                        sink.error(new ResponseBufferCapacityException(
-                                responseBufferBudget.maximumBytes()));
-                        return;
+                    if (!reservation.tryReserve(bytes)) {
+                        throw new ResponseBufferCapacityException(responseBufferBudget.maximumBytes());
                     }
-                    output.append(chunk);
                     receivedBytes.set((int) nextSize);
-                    sink.next(chunk.length);
-                })
-                .then(Mono.defer(() -> receivedBytes.get() == 0
-                        ? Mono.empty()
-                        : Mono.fromSupplier(output::finish)))
-                .doFinally(ignored -> reservation.close());
+                    output.appendBuffer(chunk);
+                }
+            }).then(Mono.defer(() -> receivedBytes.get() == 0
+                    ? Mono.empty()
+                    : Mono.fromSupplier(() -> {
+                        try (var work = workContext.begin()) {
+                            return new Utf8ForwardAccumulator.Result(retainedBody(output.finish(), bodyMemory), null);
+                        }
+                    })));
+        }, ResponseBufferBudget.Reservation::close, true);
+    }
+
+    private Mono<Utf8ForwardAccumulator.Result> readUtf8Body(ByteBufFlux responseBody,
+                                                            ResponseBodyMemory bodyMemory,
+                                                            RequestWorkContext workContext) {
+        return Mono.using(responseBufferBudget::openReservation, reservation -> {
+            Utf8ForwardAccumulator output = new Utf8ForwardAccumulator();
+            long[] receivedAndCapacity = new long[2];
+            return responseBody.doOnNext(chunk -> {
+                try (var work = workContext.begin()) {
+                    long received = receivedAndCapacity[0] + chunk.readableBytes();
+                    if (received > maxResponseBodyBytes) throw new ResponseBodyTooLargeException(maxResponseBodyBytes);
+                    long capacity = Utf8ForwardAccumulator.capacityFor(received);
+                    // Keep room for the text fallback and synchronous log snapshots until the
+                    // native encoder takes over. A limit failure never retries without a budget.
+                    if (!bodyMemory.tryReserve(capacity * 4)) throw new TransportResponseCapacityException();
+                    if (!reservation.tryReserve(capacity - receivedAndCapacity[1])) {
+                        throw new ResponseBufferCapacityException(responseBufferBudget.maximumBytes());
+                    }
+                    receivedAndCapacity[0] = received;
+                    receivedAndCapacity[1] = capacity;
+                    output.append(chunk);
+                }
+            }).then(Mono.defer(() -> receivedAndCapacity[0] == 0 ? Mono.empty() : Mono.fromSupplier(() -> {
+                try (var work = workContext.begin()) {
+                    var result = output.finish();
+                    if (result.bytes() == null) retainedBody(result.text(), bodyMemory);
+                    return result;
+                }
+            })));
+        }, ResponseBufferBudget.Reservation::close, true);
+    }
+
+    private String retainedBody(String value, ResponseBodyMemory bodyMemory) {
+        if (!bodyMemory.tryReserve(value == null ? 0 : 2L * value.length())) {
+            throw new TransportResponseCapacityException();
+        }
+        return value;
+    }
+
+    /** One owned buffer, independent of incoming fragment count and parent-buffer sizes. */
+    static final class BufferedResponseBody implements AutoCloseable {
+        private final int initialCapacity;
+        private final int maximumBytes;
+        private final ResponseBufferBudget budget;
+        private final ResponseBufferBudget.Reservation reservation;
+        private ByteBuf buffer;
+        private boolean closed;
+
+        BufferedResponseBody(int initialCapacity, int maximumBytes, ResponseBufferBudget budget) {
+            if (initialCapacity < 1 || initialCapacity > maximumBytes) {
+                throw new IllegalArgumentException("Invalid initial HTTP response buffer capacity");
+            }
+            this.initialCapacity = initialCapacity;
+            this.maximumBytes = maximumBytes;
+            this.budget = budget;
+            this.reservation = budget.openReservation();
+        }
+
+        synchronized void append(ByteBuf chunk) {
+            if (closed || !chunk.isReadable()) {
+                return;
+            }
+            long needed = (buffer == null ? 0L : buffer.writerIndex()) + chunk.readableBytes();
+            if (needed > maximumBytes) {
+                throw new ResponseBodyTooLargeException(maximumBytes);
+            }
+            int capacity = buffer == null ? 0 : buffer.capacity();
+            int desired = buffer == null ? Math.max(initialCapacity, (int) needed)
+                    : (int) Math.min(maximumBytes, Math.max(needed, 2L * capacity));
+            if (buffer == null || needed > capacity) {
+                if (!reservation.tryReserve(desired - capacity)) {
+                    throw new ResponseBufferCapacityException(budget.maximumBytes());
+                }
+                if (buffer == null) {
+                    buffer = chunk.alloc().heapBuffer(desired, maximumBytes);
+                } else {
+                    buffer.capacity(desired);
+                }
+            }
+            // Do not retain source slices: a tiny slice can otherwise pin a large parent allocation.
+            buffer.writeBytes(chunk, chunk.readerIndex(), chunk.readableBytes());
+        }
+
+        synchronized String decode(Charset charset) {
+            if (buffer == null) {
+                return null;
+            }
+            // Keep JDK replacement semantics, including malformed US-ASCII input.
+            // Netty's US-ASCII shortcut treats high-bit bytes as Latin-1 instead.
+            if (buffer.hasArray()) {
+                return new String(buffer.array(), buffer.arrayOffset() + buffer.readerIndex(),
+                        buffer.readableBytes(), charset);
+            }
+            byte[] bytes = new byte[buffer.readableBytes()];
+            buffer.getBytes(buffer.readerIndex(), bytes);
+            return new String(bytes, charset);
+        }
+
+        @Override
+        public synchronized void close() {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            try {
+                if (buffer != null) {
+                    buffer.release();
+                }
+            } finally {
+                buffer = null;
+                reservation.close();
+            }
+        }
     }
 
     private static Charset contentCharset(HttpHeaders headers) {
@@ -537,7 +771,8 @@ public final class HttpOutboundForwarder {
                     Throwable cause = unwrap(error);
                     trace.failure("FORWARD_FAILED", cause);
                     if (cause instanceof ReactiveConnectionLimiter.CapacityException
-                            || cause instanceof ResponseBufferCapacityException) {
+                            || cause instanceof ResponseBufferCapacityException
+                            || cause instanceof TransportResponseCapacityException) {
                         rejectedForwards.increment();
                         warnRejectedForward();
                     }
@@ -650,6 +885,9 @@ public final class HttpOutboundForwarder {
         values.put("poolCapacity", capacity);
         values.put("bufferedBytes", responseBufferBudget.reservedBytes());
         values.put("bufferLimitBytes", responseBufferBudget.maximumBytes());
+        values.put("utf8BodiesActive", utf8BodyLimiter.activeCount());
+        values.put("utf8BodiesPending", utf8BodyLimiter.pendingCount());
+        values.put("utf8BodiesCapacity", maxUtf8Bodies);
         values.put("coverageComplete", complete);
         return Map.copyOf(values);
     }
@@ -739,7 +977,8 @@ public final class HttpOutboundForwarder {
                                            String forwardTarget) {
         String error = safeError(exception);
         return MockResponse.builder()
-                .status(502)
+                .status(exception instanceof TransportResponseCapacityException
+                        || exception instanceof ResponseBufferCapacityException ? 503 : 502)
                 .body("Proxy error: " + error)
                 .matched(matched)
                 .forwarded(true)
@@ -940,7 +1179,7 @@ public final class HttpOutboundForwarder {
     private record PoolSnapshot(int acquired, int pending, int idle, int capacity) {
     }
 
-    private record ForwardResponse(int status, String body) {
+    private record ForwardResponse(int status, String body, Utf8ForwardBody utf8Body) {
     }
 
     private enum FailureKind {
@@ -957,6 +1196,9 @@ public final class HttpOutboundForwarder {
                 return FailureKind.CAPACITY;
             }
             if (current instanceof ResponseBufferCapacityException) {
+                return FailureKind.CAPACITY;
+            }
+            if (current instanceof TransportResponseCapacityException) {
                 return FailureKind.CAPACITY;
             }
             if (current instanceof ConnectTimeoutException) {
@@ -1029,6 +1271,13 @@ public final class HttpOutboundForwarder {
     private static final class ResponseBufferCapacityException extends RuntimeException {
         private ResponseBufferCapacityException(long maximumBytes) {
             super("HTTP_RESPONSE_BUFFER_CAPACITY_EXHAUSTED: max=" + maximumBytes);
+        }
+    }
+
+    /** Adapter admission is local overload; retain the existing 502 contract for other forwarding failures. */
+    private static final class TransportResponseCapacityException extends RuntimeException {
+        private TransportResponseCapacityException() {
+            super("HTTP_TRANSPORT_RESPONSE_CAPACITY_EXHAUSTED");
         }
     }
 

@@ -34,9 +34,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.net.ServerSocket;
-import java.net.Socket;
 import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,9 +55,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
 
     private static final String QUEUE = "ESB.ECHO.IN";
-    private static final int ESB_PORT = freePort();
-    private static final int UNUSED_EMBEDDED_PORT = freePort();
+    private static int esbPort;
     private static EmbeddedActiveMQ esb = startEsb();
+    // Hold the port through context startup: an accidental embedded bind must fail,
+    // and unrelated parallel test servers cannot steal a supposedly unused probe port.
+    private static final ServerSocket UNUSED_EMBEDDED_PORT_RESERVATION = reservePort();
+    private static final int UNUSED_EMBEDDED_PORT = UNUSED_EMBEDDED_PORT_RESERVATION.getLocalPort();
 
     @Autowired
     private ApplicationContext context;
@@ -79,9 +80,11 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
 
     @AfterAll
     static void stopEsb(@Autowired JmsListenerEndpointRegistry listeners) throws Exception {
-        listeners.stop();
-        if (esb != null) {
-            esb.stop();
+        try {
+            listeners.stop();
+            if (esb != null) esb.stop();
+        } finally {
+            UNUSED_EMBEDDED_PORT_RESERVATION.close();
         }
     }
 
@@ -89,11 +92,8 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
     @DisplayName("External mode starts neither embedded Artemis nor echo.jms.port")
     void embeddedBrokerIsNotStarted() {
         assertThat(context.getBeanProvider(EmbeddedActiveMQ.class).getIfAvailable()).isNull();
-        assertThatThrownBy(() -> {
-            try (Socket socket = new Socket()) {
-                socket.connect(new InetSocketAddress("127.0.0.1", UNUSED_EMBEDDED_PORT), 500);
-            }
-        }).isInstanceOf(IOException.class);
+        assertThat(UNUSED_EMBEDDED_PORT_RESERVATION.isBound()).isTrue();
+        assertThat(UNUSED_EMBEDDED_PORT_RESERVATION.isClosed()).isFalse();
     }
 
     @Test
@@ -154,21 +154,31 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
         waitUntilReceiving();
         assertThat(request("<req/>").body()).isEqualTo("<reply>again</reply>");
 
-        esb.stop();
-        try {
-            waitUntil(() -> jmsConnectionManager.listenerState() == JmsConnectionManager.ListenerState.RECONNECTING, 10_000);
+        for (int cycle = 0; cycle < 3; cycle++) {
+            esb.stop();
+            try {
+                waitUntil(() -> jmsConnectionManager.listenerState() == JmsConnectionManager.ListenerState.RECONNECTING, 10_000);
+                assertThat(restTemplate.getForEntity("/actuator/health/readiness", String.class).getStatusCode().value())
+                        .isEqualTo(503);
+                assertThat(restTemplate.getForEntity("/actuator/health/liveness", String.class).getStatusCode().value())
+                        .isEqualTo(200);
+            } finally {
+                esb = startEsb();
+            }
+            waitUntilReceiving();
+            var reply = request("<req cycle=\"" + cycle + "\"/>");
+            assertThat(reply.body()).isEqualTo("<reply>again</reply>");
+            assertThat(reply.correlationId()).isEqualTo(reply.requestId());
             assertThat(restTemplate.getForEntity("/actuator/health/readiness", String.class).getStatusCode().value())
-                    .isEqualTo(503);
-            assertThat(restTemplate.getForEntity("/actuator/health/liveness", String.class).getStatusCode().value())
                     .isEqualTo(200);
-        } finally {
-            esb = startEsb();
+            waitUntil(() -> {
+                var budget = context.getBean(com.echo.jms.JmsMessageMemoryBudget.class).snapshot();
+                var metrics = context.getBean(JmsRuntimeMetrics.class).snapshot();
+                return budget.reservedBytes() == 0 && budget.waitingThreads() == 0
+                        && ((Number) metrics.get("listenerActive")).intValue() == 0
+                        && ((Number) metrics.get("forwardActive")).intValue() == 0;
+            }, 5_000);
         }
-        waitUntilReceiving();
-
-        assertThat(request("<req/>").body()).isEqualTo("<reply>again</reply>");
-        assertThat(restTemplate.getForEntity("/actuator/health/readiness", String.class).getStatusCode().value())
-                .isEqualTo(200);
     }
 
     @Test
@@ -336,7 +346,7 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
     }
 
     private static String esbUrl() {
-        return "tcp://127.0.0.1:" + ESB_PORT;
+        return "tcp://127.0.0.1:" + esbPort;
     }
 
     private static EmbeddedActiveMQ startEsb() {
@@ -348,15 +358,22 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
             EmbeddedActiveMQ broker = new EmbeddedActiveMQ();
             broker.setConfiguration(configuration);
             broker.start();
+            // Let the OS reserve the initial port atomically; restarts reuse that bound endpoint.
+            var acceptor = broker.getActiveMQServer().getRemotingService().getAcceptor("tcp");
+            if (!acceptor.isStarted() || acceptor.getActualPort() <= 0) {
+                broker.stop();
+                throw new IllegalStateException("test ESB acceptor did not bind");
+            }
+            esbPort = acceptor.getActualPort();
             return broker;
         } catch (Exception e) {
             throw new IllegalStateException("could not start test ESB broker", e);
         }
     }
 
-    private static int freePort() {
-        try (ServerSocket socket = new ServerSocket(0)) {
-            return socket.getLocalPort();
+    private static ServerSocket reservePort() {
+        try {
+            return new ServerSocket(0);
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }

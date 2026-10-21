@@ -22,4 +22,7 @@ public class AgentStatusDto {
     private final long inFlightByteLimit;
     private final int waitingProducers;
     private final boolean backpressureActive;
+    private final boolean durableConsumerRunning;
+    private final long lastSuccessfulWriteEpochMillis;
+    private final long stoppedAtSequence;
 }

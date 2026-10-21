@@ -7,12 +7,16 @@ import com.echo.pipeline.HttpMockPipeline;
 import com.echo.pipeline.MockRequest;
 import com.echo.pipeline.MockResponse;
 import com.echo.pipeline.PipelineResult;
+import com.echo.pipeline.RequestWorkContext;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.observation.ObservationRegistry;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.io.Receiver;
+import io.undertow.io.IoCallback;
+import io.undertow.io.Sender;
+import java.io.IOException;
 import io.undertow.util.Headers;
 import io.undertow.util.HttpString;
 import io.undertow.util.AttachmentKey;
@@ -26,6 +30,7 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -49,8 +54,8 @@ final class NativeMockHttpHandler implements HttpHandler {
     private final ScheduledExecutorService scheduler;
     private final NativeHttpResources resources;
     private final long timeoutMs;
+    private final boolean segmentedForwarding;
     private static final AttachmentKey<NativeHttpResources.Lease> LEASE = AttachmentKey.create(NativeHttpResources.Lease.class);
-    private static final AttachmentKey<NativeHttpDeadline> DEADLINE = AttachmentKey.create(NativeHttpDeadline.class);
     private static final AttachmentKey<CloseWatch> CLOSE_WATCH = AttachmentKey.create(CloseWatch.class);
 
     private static final class CloseWatch {
@@ -62,7 +67,7 @@ final class NativeMockHttpHandler implements HttpHandler {
                          ObjectProvider<MeterRegistry> registries, ObjectProvider<ObservationRegistry> observations,
                          java.util.function.Supplier<NativeHttpCompatibility> compatibility,
                          ScheduledExecutorService scheduler,
-                         NativeHttpResources resources, long timeoutMs, String mode) {
+                         NativeHttpResources resources, long timeoutMs, String mode, boolean segmentedForwarding) {
         this.next = next;
         this.compatibility = SingletonSupplier.of(compatibility);
         this.services = SingletonSupplier.of(() -> {
@@ -76,6 +81,7 @@ final class NativeMockHttpHandler implements HttpHandler {
         this.scheduler = scheduler;
         this.resources = resources;
         this.timeoutMs = timeoutMs;
+        this.segmentedForwarding = segmentedForwarding;
     }
 
     @Override
@@ -119,7 +125,8 @@ final class NativeMockHttpHandler implements HttpHandler {
         exchange.putAttachment(LEASE, lease);
         lease.onClose(() -> observation.stop(!exchange.isComplete()));
         watchConnection(exchange, lease);
-        exchange.putAttachment(DEADLINE, new NativeHttpDeadline(exchange, lease, timeoutMs));
+        var deadline = new NativeHttpDeadline(exchange, lease, timeoutMs);
+        lease.deadline(deadline);
         Charset bodyCharset = charset;
         long contentLength = exchange.getRequestContentLength();
         if (contentLength > resources.maxBodyBytes) {
@@ -222,14 +229,12 @@ final class NativeMockHttpHandler implements HttpHandler {
 
     private static boolean available(HttpServerExchange exchange) {
         var lease = exchange.getAttachment(LEASE);
-        var deadline = exchange.getAttachment(DEADLINE);
-        return (lease == null || !lease.closed()) && (deadline == null || !deadline.expired());
+        return lease == null || lease.available();
     }
 
     private void execute(HttpServerExchange exchange, String body) {
-        if (!available(exchange)) {
-            return;
-        }
+        // Work.run has just checked the same transport; the pipeline checks again
+        // before its first stage, after this bounded request-metadata extraction.
         Trace trace = services.obtain().diagnostics().begin("HTTP");
         var headers = new HashMap<String, String>();
         exchange.getRequestHeaders().forEach(h -> headers.put(h.getHeaderName().toString(), h.getFirst()));
@@ -238,7 +243,10 @@ final class NativeMockHttpHandler implements HttpHandler {
                 .method(exchange.getRequestMethod().toString()).path(exchange.getRequestURI().substring(5))
                 .queryString(exchange.getQueryString().isEmpty() ? null : exchange.getQueryString())
                 .headers(headers).body(body).targetHost(host == null || host.isBlank() ? "default" : host.trim())
-                .clientIp(exchange.getSourceAddress().getAddress().getHostAddress()).trace(trace).build();
+                .clientIp(exchange.getSourceAddress().getAddress().getHostAddress()).trace(trace)
+                .responseBodyMemory(exchange.getAttachment(LEASE))
+                .acceptsUtf8ForwardBody(segmentedForwarding)
+                .workContext(exchange.getAttachment(LEASE)).build();
         trace.event("RECEIVED", "method", request.getMethod(), "path", request.getPath());
         CompletableFuture<PipelineResult> future = services.obtain().pipeline().executeAsync(request).toCompletableFuture();
         exchange.getAttachment(LEASE).onClose(() -> {
@@ -310,7 +318,7 @@ final class NativeMockHttpHandler implements HttpHandler {
         if (task != null) task.cancel(false);
     }
 
-    private static void respond(HttpServerExchange exchange, PipelineResult result, Trace trace, EncodedResponse encoded) {
+    private void respond(HttpServerExchange exchange, PipelineResult result, Trace trace, EncodedResponse encoded) {
         if ("CONNECTION_RESET".equals(result.getFaultType())) {
             trace.end("FAULT_CONNECTION_RESET");
             IoUtils.safeClose(exchange.getConnection());
@@ -323,65 +331,189 @@ final class NativeMockHttpHandler implements HttpHandler {
         catch (RuntimeException error) { fail(exchange, 500, "Pipeline error"); }
     }
 
-    private static void write(HttpServerExchange exchange, MockResponse response) {
+    private void write(HttpServerExchange exchange, MockResponse response) {
         write(exchange, response, encode(response));
     }
 
-    // Internal ownership carrier, never compared or exposed to application code.
-    @SuppressWarnings("ArrayRecordComponent")
-    private record EncodedResponse(byte[] bytes, String contentType) {}
+    private interface ResponseChunks {
+        void prepareBatch();
+        ByteBuffer[] batch();
+        boolean finished();
+        default void release() {}
+    }
+
+    private record TextChunks(Utf8ResponseBody text) implements ResponseChunks {
+        @Override
+        public void prepareBatch() { text.prepareBatch(); }
+        @Override
+        public ByteBuffer[] batch() { return text.batch(); }
+        @Override
+        public boolean finished() { return text.finished(); }
+    }
+
+    private static final class ForwardChunks implements ResponseChunks {
+        private com.echo.service.Utf8ForwardBody body;
+        private final int segments;
+        private int next;
+        private ByteBuffer[] batch;
+
+        private ForwardChunks(com.echo.service.Utf8ForwardBody body) {
+            this.body = body;
+            segments = body.segmentCount();
+        }
+        @Override
+        public void prepareBatch() {
+            var retained = body;
+            if (retained == null) throw new CancellationException("Forward response already released");
+            batch = retained.batch(next, 8);
+            next += batch.length;
+        }
+        @Override
+        public ByteBuffer[] batch() { return batch; }
+        @Override
+        public boolean finished() { return next == segments; }
+        @Override
+        public void release() {
+            body = null;
+            batch = null;
+        }
+    }
+
+    private record EncodedResponse(ByteBuffer first, ResponseChunks stream, int length, String contentType) {}
+
+    private static String responseContentType(String value) {
+        int first = 0;
+        while (first < value.length() && value.charAt(first) <= ' ') first++;
+        return responseContentType(first == value.length() ? 0 : value.charAt(first));
+    }
+
+    private static String responseContentType(char character) {
+        return character == '{' || character == '[' ? "application/json" :
+                character == '<' ? "application/xml;charset=UTF-8" : "text/plain;charset=UTF-8";
+    }
 
     private static EncodedResponse encode(MockResponse response) {
         String value = response.getBody() == null ? "" : response.getBody();
-        String trimmed = value.trim();
-        String contentType = trimmed.startsWith("{") || trimmed.startsWith("[") ? "application/json" :
-                trimmed.startsWith("<") ? "application/xml;charset=UTF-8" : "text/plain;charset=UTF-8";
-        return new EncodedResponse(value.getBytes(StandardCharsets.UTF_8), contentType);
+        byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+        return new EncodedResponse(ByteBuffer.wrap(bytes), null, bytes.length, responseContentType(value));
     }
 
-    private static void write(HttpServerExchange exchange, MockResponse response, EncodedResponse encoded) {
-        if (!available(exchange)) {
-            return;
-        }
+    private void write(HttpServerExchange exchange, MockResponse response, EncodedResponse encoded) {
+        if (!available(exchange)) return;
         exchange.setStatusCode(response.getStatus());
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, encoded.contentType());
         // Match the current MVC adapter's default Content-Type followed by additional rule headers.
         if (response.getHeaders() != null) {
             response.getHeaders().forEach((name, val) -> exchange.getResponseHeaders().add(new HttpString(name), val));
         }
-        exchange.getResponseSender().send(ByteBuffer.wrap(encoded.bytes()));
+        if (encoded.stream() == null) {
+            exchange.getResponseSender().send(encoded.first());
+            return;
+        }
+        if (!exchange.getResponseHeaders().contains(Headers.CONTENT_LENGTH)
+                && !exchange.getResponseHeaders().contains(Headers.TRANSFER_ENCODING)) {
+            exchange.setResponseContentLength(encoded.length());
+        }
+        exchange.getResponseSender().send(encoded.stream().batch(), new IoCallback() {
+            @Override
+            public void onComplete(HttpServerExchange completed, Sender sender) {
+                if (encoded.stream().finished()) {
+                    encoded.stream().release();
+                    completed.endExchange();
+                } else if (available(completed)) {
+                    // Reuse the buffer only after the previous send completed. Encoding never blocks an I/O thread.
+                    submit(completed, () -> {
+                        encoded.stream().prepareBatch();
+                        completed.getIoThread().execute(() -> {
+                            if (available(completed)) sender.send(encoded.stream().batch(), this);
+                        });
+                    });
+                }
+            }
+
+            @Override
+            public void onException(HttpServerExchange failed, Sender sender, IOException exception) {
+                encoded.stream().release();
+                NativeHttpObservation.error(failed, exception);
+                IoUtils.safeClose(failed.getConnection());
+                failed.getAttachment(LEASE).close();
+                failed.endExchange();
+            }
+        });
     }
 
     private EncodedResponse encodeResult(HttpServerExchange exchange, PipelineResult result) {
         // A reset sends no body. A configured body must not change this fault into a 502/503.
-        if ("CONNECTION_RESET".equals(result.getFaultType())) return new EncodedResponse(new byte[0], "text/plain");
+        if ("CONNECTION_RESET".equals(result.getFaultType())) {
+            return new EncodedResponse(ByteBuffer.allocate(0), null, 0, "text/plain");
+        }
         MockResponse response = result.getResponse();
+        if (response.getUtf8Body() != null) {
+            var body = response.getUtf8Body();
+            if (body.byteLength() > resources.maxBodyBytes || body.characterLength() > resources.maxBodyBytes) {
+                fail(exchange, 502, "Response body exceeds native HTTP limit");
+                return null;
+            }
+            var lease = exchange.getAttachment(LEASE);
+            if (!lease.reserveResponseBody(body.retainedBytes())
+                    || !lease.reserveEncodedBody(4096L + 64L * body.segmentCount())) {
+                fail(exchange, 503, "Native HTTP buffer capacity exhausted");
+                return null;
+            }
+            ForwardChunks chunks = new ForwardChunks(body);
+            chunks.prepareBatch();
+            return new EncodedResponse(null, chunks, body.byteLength(),
+                    responseContentType(body.firstSignificantCharacter()));
+        }
         String value = response.getBody() == null ? "" : response.getBody();
         if (value.length() > resources.maxBodyBytes) {
             fail(exchange, 502, "Response body exceeds native HTTP limit");
             return null;
         }
-        // UTF-8 needs at most three bytes per UTF-16 code unit. Reserve before allocation.
-        if (!exchange.getAttachment(LEASE).reserve(3L * value.length())) {
+        var lease = exchange.getAttachment(LEASE);
+        boolean streamCandidate = value.length() > 256 * 1024 && response.getStatus() >= 200
+                && response.getStatus() != 204 && response.getStatus() != 304;
+        if (!streamCandidate) return encodeSinglePass(exchange, response, value, 0);
+        if (!lease.reserveEncodedBody(Utf8ResponseBody.BUFFER_BYTES)) {
+            fail(exchange, 503, "Native HTTP buffer capacity exhausted");
+            return null;
+        }
+        Utf8ResponseBody body = new Utf8ResponseBody(value);
+        if (body.needsSinglePass()) {
+            return encodeSinglePass(exchange, response, value, Utf8ResponseBody.BUFFER_BYTES);
+        }
+        body.prepareBatch();
+        // No UTF-8 expansion: every consumed UTF-16 unit produced exactly one byte.
+        return new EncodedResponse(null, new TextChunks(body), value.length(), responseContentType(value));
+    }
+
+    private EncodedResponse encodeSinglePass(HttpServerExchange exchange, MockResponse response,
+                                             String value, int preflightBytes) {
+        var lease = exchange.getAttachment(LEASE);
+        // JDK Unicode encoding may trim its initial allocation; cover both arrays until it returns.
+        if (!lease.reserveEncodedBody(6L * value.length() + preflightBytes)) {
             fail(exchange, 503, "Native HTTP buffer capacity exhausted");
             return null;
         }
         EncodedResponse encoded = encode(response);
-        if (encoded.bytes().length > resources.maxBodyBytes) {
+        if (encoded.length() > resources.maxBodyBytes) {
             fail(exchange, 502, "Response body exceeds native HTTP limit");
             return null;
         }
+        if (!lease.reserveEncodedBody(encoded.length())) return null;
         return encoded;
     }
 
-    private final class Work implements Runnable {
+    private final class Work implements NativeHttpResources.QueuedWork {
         private final HttpServerExchange exchange;
+        private final RequestWorkContext.Scope ownership;
         private Runnable command;
         private volatile boolean started;
 
-        private Work(HttpServerExchange exchange, Runnable command) {
+        private Work(HttpServerExchange exchange, Runnable command, RequestWorkContext.Scope ownership) {
             this.exchange = exchange;
             this.command = command;
+            this.ownership = ownership;
         }
 
         @Override
@@ -389,10 +521,13 @@ final class NativeMockHttpHandler implements HttpHandler {
             started = true;
             Runnable task = command;
             command = null; // Cleanup must not retain an uploaded byte array until a slow response ends.
-            if (!available(exchange)) {
-                return;
+            try (var work = ownership) {
+                if (!available(exchange)) return;
+                try (var scope = NativeHttpObservation.scope(exchange)) { task.run(); }
             }
-            try (var scope = NativeHttpObservation.scope(exchange)) { task.run(); }
+            catch (CancellationException cancelled) {
+                // The deadline/connection close owns the wire response. Work exits here.
+            }
             catch (RuntimeException failure) {
                 NativeHttpObservation.error(exchange, failure);
                 fail(exchange, 500, "Pipeline error");
@@ -401,26 +536,41 @@ final class NativeMockHttpHandler implements HttpHandler {
 
         private void removeIfQueued() {
             if (!started && resources.workers.remove(this)) {
-                command = null;
+                discard();
             }
+        }
+
+        @Override
+        public void discard() {
+            command = null;
+            ownership.close();
         }
     }
 
     private void submit(HttpServerExchange exchange, Runnable command) {
-        var work = new Work(exchange, command);
+        var lease = exchange.getAttachment(LEASE);
+        RequestWorkContext.Scope ownership;
+        try { ownership = lease.begin(); }
+        catch (CancellationException cancelled) { return; }
+        // Own the queue-to-worker handoff too: dequeued work may not have started
+        // when cancellation tries to unlink it from the executor queue.
+        var work = new Work(exchange, command, ownership);
         try {
             resources.workers.execute(work);
-            var lease = exchange.getAttachment(LEASE);
-            if (lease != null) {
-                lease.onClose(work::removeIfQueued);
-            }
+            lease.onClose(work::removeIfQueued);
         } catch (RejectedExecutionException rejected) {
+            work.discard();
             fail(exchange, 503, "Native HTTP worker capacity exhausted");
         }
     }
 
-    private static void fail(HttpServerExchange exchange, int status, String message) {
+    private void fail(HttpServerExchange exchange, int status, String message) {
         Runnable send = () -> {
+            if (exchange.isResponseStarted()) {
+                IoUtils.safeClose(exchange.getConnection());
+                exchange.endExchange();
+                return;
+            }
             var lease = exchange.getAttachment(LEASE);
             if (lease != null && lease.closed()) return;
             // Do not drain a rejected or incomplete body and wait on a slow uploader.

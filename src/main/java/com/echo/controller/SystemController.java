@@ -295,20 +295,26 @@ public class SystemController {
     @GetMapping("/agents")
     public ResponseEntity<List<AgentStatusDto>> getAgentStatus() {
         List<AgentStatusDto> result = agentRegistry.getAll().stream()
-                .map(a -> AgentStatusDto.builder()
+                .map(a -> {
+                    var stats = a.getStats();
+                    return AgentStatusDto.builder()
                         .name(a.getName())
                         .description(a.getDescription())
                         .status(a.getStatus().name())
-                        .queueSize(a.getStats().getQueueSize())
-                        .processedCount(a.getStats().getProcessedCount())
-                        .droppedCount(a.getStats().getDroppedCount())
-                        .queueBytes(a.getStats().getQueueBytes())
-                        .queueCapacityBytes(a.getStats().getQueueCapacityBytes())
-                        .inFlightBytes(a.getStats().getInFlightBytes())
-                        .inFlightByteLimit(a.getStats().getInFlightByteLimit())
-                        .waitingProducers(a.getStats().getWaitingProducers())
-                        .backpressureActive(a.getStats().isBackpressureActive())
-                        .build())
+                        .queueSize(stats.getQueueSize())
+                        .processedCount(stats.getProcessedCount())
+                        .droppedCount(stats.getDroppedCount())
+                        .queueBytes(stats.getQueueBytes())
+                        .queueCapacityBytes(stats.getQueueCapacityBytes())
+                        .inFlightBytes(stats.getInFlightBytes())
+                        .inFlightByteLimit(stats.getInFlightByteLimit())
+                        .waitingProducers(stats.getWaitingProducers())
+                        .backpressureActive(stats.isBackpressureActive())
+                        .durableConsumerRunning(stats.isDurableConsumerRunning())
+                        .lastSuccessfulWriteEpochMillis(stats.getLastSuccessfulWriteEpochMillis())
+                        .stoppedAtSequence(stats.getStoppedAtSequence())
+                        .build();
+                })
                 .toList();
         return ResponseEntity.ok(result);
     }

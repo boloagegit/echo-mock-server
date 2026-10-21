@@ -922,6 +922,8 @@
       "backpressureActive": "背壓啟用",
       "storageUnavailable": "儲存暫時不可用",
       "consumerRunning": "持久化處理者運行",
+      "lastSuccessfulWriteEpochMillis": "最近一次紀錄寫入成功",
+      "stoppedAtSequence": "停止紀錄序號（0＝無）",
       "queueUsed": "佇列使用量",
       "queueCapacity": "佇列容量",
       "started": "Appender 已啟動",

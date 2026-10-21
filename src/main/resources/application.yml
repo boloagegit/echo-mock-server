@@ -153,6 +153,8 @@ echo:
       # Preserve the provider's connection, retry, and failover policies by default; validate actual ESB failure behavior before enabling this option.
       bounded-waits-enabled: ${ECHO_JMS_FORWARD_BOUNDED_WAITS_ENABLED:false}
     queue: ECHO.REQUEST      # Source queue listened to by Echo; external services send messages here.
+    # Opt in to source rollback when a reply fails. Redelivery can repeat processing and downstream effects.
+    rollback-on-reply-failure: ${ECHO_JMS_ROLLBACK_ON_REPLY_FAILURE:false}
     source:
       # Where to receive JMS: embedded (built-in Artemis, default) | artemis | tibco (external shared broker, such as ESB)
       # When multiple Echo instances share an external queue, the broker delivers each message to just one instance.
@@ -188,6 +190,10 @@ echo:
     # Enabled by default; set ECHO_HTTP_TRANSPORT=servlet and restart to switch back to the original entrance.
     transport: ${ECHO_HTTP_TRANSPORT:native}
     native:
+      # Keep validated UTF-8 forwarding responses in bounded segments; false restores the text path after restart.
+      segmented-forwarding-enabled: ${ECHO_HTTP_NATIVE_SEGMENTED_FORWARDING_ENABLED:true}
+      # Eligible response bodies wait after headers, retaining a slot until delivery finishes.
+      max-forwarding-bodies: ${ECHO_HTTP_NATIVE_MAX_FORWARDING_BODIES:8}
       # Retire only idle worker threads, leaving busy workers alone; 0 preserves the previous behavior of keeping idle threads.
       worker-idle-timeout-seconds: ${ECHO_HTTP_NATIVE_WORKER_IDLE_TIMEOUT_SECONDS:60}
     # Total HTTP request budget; connection settings for pool wait + connect + read must sum to less than this value.
@@ -202,6 +208,8 @@ echo:
       # Buffer at most 128 MiB across all in-flight downstream responses, preventing 1000 concurrent connections from exhausting the heap.
       max-buffered-response-bytes: ${ECHO_HTTP_FORWARD_MAX_BUFFERED_RESPONSE_BYTES:134217728}
       pool-acquire-timeout-ms: ${ECHO_HTTP_FORWARD_POOL_ACQUIRE_TIMEOUT_MS:3000}
+      # Overall admin connection-test deadline, including pool wait, redirects and a continuously dripping body.
+      test-timeout-seconds: ${ECHO_HTTP_FORWARD_TEST_TIMEOUT_SECONDS:30}
   stats:
     retention-days: 7  # Number of days to retain statistical data
   request-log:
@@ -277,6 +285,8 @@ management:
         liveness:
           include: livenessState
         readiness:
+          # Add requestLog to this list when durable logging is required for traffic admission.
+          # It is observable in overall health; liveness never restarts the process for retained log data.
           include: readinessState,db,diskSpace,jmsSource
   health:
     # Observe only existing listeners; probes must not create additional TIBCO/Artemis connections.

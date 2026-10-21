@@ -17,6 +17,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.function.Supplier;
 
 /**
  * MockPipeline implementation of JMS protocol
@@ -134,6 +137,14 @@ public class JmsMockPipeline extends AbstractMockPipeline<JmsRule> {
     @Override
     protected boolean shouldForward(MockRequest request) {
         return targetForwarder.hasActiveTarget();
+    }
+
+    @Override
+    protected Supplier<CompletionStage<MockResponse>> forwardingAction(MockRequest request) {
+        var prepared = targetForwarder.prepareDefaultForward(request.getBody(), null, request.getTrace());
+        if (prepared.isEmpty()) return null;
+        var forwarding = prepared.get();
+        return () -> CompletableFuture.completedFuture(forwardedResponse(forwarding.get(), false));
     }
 
     @Override

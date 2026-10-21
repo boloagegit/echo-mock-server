@@ -42,8 +42,9 @@ springBoot {
 // Required by the current SpotBugs/BCEL toolchain and backward-compatible with
 // Spring Boot 3.5's managed Commons Lang API.
 ext['commons-lang3.version'] = '3.20.0'
-// Artemis 2.57's supported Netty 4.1 patch level; also used by outbound HTTP.
-ext['netty.version'] = '4.1.137.Final'
+// Keep the Netty 4.1 modules aligned; 4.1.139 fixes compressed response truncation
+// and the subsequent decompression-buffer-limit regression.
+ext['netty.version'] = '4.1.139.Final'
 
 // Artemis moved its Maven group in 2.50. Keep the client and embedded broker
 // together; 2.54+ fixes byte-at-a-time copies when reading large messages.

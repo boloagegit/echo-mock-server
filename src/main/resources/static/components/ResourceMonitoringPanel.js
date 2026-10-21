@@ -44,6 +44,7 @@ const ResourceMonitoringPanel = {
         requestLog: ['queueItems', 'processed', 'dropped', 'retentionSkipped', 'bufferOverflowDropped',
           'writeNotConfirmed', 'otherDropped', 'storageRetries', 'queueBytes', 'capacityBytes', 'inFlightBytes',
           'byteLimit', 'waitingProducers', 'backpressureActive', 'storageUnavailable', 'consumerRunning',
+          'lastSuccessfulWriteEpochMillis', 'stoppedAtSequence',
           'diskReserveBytes', 'diskUsableBytes', 'diskSpaceBlocked', 'diskSpaceProbeFailures'],
         applicationLog: ['queueUsed', 'queueCapacity', 'started', 'diagnosticEnabled', 'diagnosticRunning',
           'diagnosticDetailed', 'diagnosticFileWriteAttempted', 'diagnosticFileAvailable', 'diagnosticQueueUsed', 'diagnosticQueueCapacity',

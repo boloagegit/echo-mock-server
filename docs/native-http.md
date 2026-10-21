@@ -43,6 +43,8 @@ TLS、壓縮與 graceful shutdown 使用 Spring Boot 原本的 Undertow 設定�
 | `echo.http.native.max-requests` | 512 | 含延遲與轉送在內的進行中請求上限 |
 | `echo.http.native.max-body-bytes` | 10485760 | 單筆 request／response 的編碼 bytes 上限 |
 | `echo.http.native.max-buffered-bytes` | 134217728 | adapter 為讀取、解碼與編碼保留的估計總容量 |
+| `echo.http.native.max-forwarding-bodies` | 8 | 同時讀取至傳送結束的分段轉送回應數；其餘非阻塞等待 |
+| `echo.http.native.segmented-forwarding-enabled` | true | 符合條件的 UTF-8 HTTP 轉送回應保留分段 bytes；false 在重啟後使用文字通路 |
 | `echo.http.request-timeout-ms` | 40000 | 從接收請求至回應傳送完成的總期限，包含上傳、排隊、pipeline 與延遲 |
 
 容量不足回 503，request 過大回 413，response 過大回 502，非同步回應逾時回 504。尚未讀完的 HTTP/1 request 拒絕後關閉連線，不為了重用連線而等待惡意或卡住的上傳。Servlet fallback 使用原本的 Servlet／轉送限制，不共用原生 admission 計數。
@@ -50,15 +52,24 @@ TLS、壓縮與 graceful shutdown 使用 Spring Boot 原本的 Undertow 設定�
 本文使用 Undertow 非阻塞接收：等待上傳資料時不占用應用工作執行緒。期限使用該連線的
 I/O 執行緒計時，並持續到回應送完；客戶端停止讀取，也會釋放名額與緩衝。尚未送出回應且
 本文已完整收到時，逾時回 504；本文未收完或回應已送出一部分時，逾時關閉連線。
-過期排隊工作會移出佇列，已開始的任意 CPU／資料庫操作無法安全地強制中斷。
+過期排隊工作會移出佇列。已開始的 CPU／資料庫操作無法安全地強制中斷，其請求名額與已保留的本文額度會繼續占用，直到工作實際退出；非同步轉送完成後的 pipeline／listener 處理也納入相同計帳。取消與期限檢查會阻止已觀察到取消後的後續階段，已提交的紀錄或情境狀態不回滾。
 極慢的一般下載須調整總期限；明確要求 SSE 的請求仍走原有 Servlet 路徑。
 
-資源監控新增 `nativeWorkerActive` 與 `nativeWorkerCapacity`，用來確認實際忙碌的工作
-執行緒。不能只看 `nativeActive` 或緩衝歸零，就推論所有工作已結束。
+資源監控提供 `nativeWorkerActive` 與 `nativeWorkerCapacity`，用來確認實際忙碌的工作執行緒；`nativeDrainingRequests` 表示連線已結束、仍有工作尚未退出的請求數。這些請求仍包含在 `nativeActive` 與已保留的緩衝用量中；非同步完成處理也可能占用額度，即使 native worker 已空閒。
 
-緩衝容量是 adapter 的保守預留，不是整個 JVM heap 的硬上限：規則、pipeline 產生的字串、日誌、TLS、資料庫與下游 client 仍有各自的記憶體需求。這個逾時也不是對同步 CPU／資料庫工作的強制中斷。
+轉送回應的解碼儲存量在讀取前逐步預留；完成解碼後，字串的估計額度會保留到排隊與送出結束。這補上了下游讀完、worker 尚未處理回應時的計算缺口，因此大型回應在容量不足時可能較早收到 503。超過 256 Ki 個 UTF-16 code unit 且 UTF-8 不膨脹的一般回應，使用最多八個 32 KiB bytes 緩衝批次送出，另有預檢與 chars 緩衝，估計預留共約 324 KiB；送完上一組才重用。非 ASCII 與小回應保留 JDK 較快的一次編碼路徑，配置前會保留暫存陣列的保守額度，完成後縮到實際送出大小。兩條路徑都在送出標頭前確認完整 UTF-8 長度與上限。
 
-可觀察的 metrics：`echo.http.native.requests`、`echo.http.native.active`、`echo.http.native.buffered.bytes`、`echo.http.native.queued`。請求完成、斷線、逾時及容量拒絕皆有釋放驗證；單一清理 callback 失敗不能阻止其他 callback 釋放資源。
+緩衝容量是 adapter 的保守預留，不是整個 JVM heap 的硬上限：共用規則、模板產生中的字串、日誌、TLS、資料庫與下游 client 仍有各自的記憶體需求。這個逾時也不是對同步 CPU／資料庫工作的強制中斷。
+
+原生 HTTP 轉送可將合法 UTF-8 回應保留在最多 32 KiB 的自有 heap 分段中，完成接收、字元驗證及大小檢查後才送出，省去完整字串的合併與重新編碼。已知 Content-Length 的小回應保留既有文字通路；非 UTF-8、非法 UTF-8、204／304、需要全文的 `ServeEventListener` 也保留文字處理與原有替換行為。JMS、Servlet、mock／template／fault 不使用此通路。
+
+請求紀錄只解碼設定上限所需的前綴，維持 UTF-16 code unit 截斷與 `...(truncated)` 標記；不存本文或停用紀錄時不建立回應文字快照。背景 LogTask 只接收文字快照，不保留整份分段本文。未知 listener 預設需要全文；只有明確不使用回應本文，或透過 `ServeEvent.responseBodyForCapture(maxChars)` 擷取有限前綴的 listener，才可將 `requiresFullResponseBody()` 覆寫為 false。
+
+讀取與 listener 執行期間保留保守額度，原生 sender 接手後改為分段容量與 metadata 的估計用量，直到送出或取消後的工作實際退出才釋放。分段以每批最多 256 KiB 交給 Undertow 非阻塞寫入；內容驗證已完成，後續批次仍在有限的 worker 準備，再交給 I/O 執行緒送出；傳送結束或失敗時清除 sender 持有的本文參照。容量不足仍回 503，不以文字 fallback 繞過限制；高併發的大本文仍需依 heap 和負載量測容量。可設定 `ECHO_HTTP_NATIVE_SEGMENTED_FORWARDING_ENABLED=false` 後重啟關閉此功能；PowerShell 使用 `$env:ECHO_HTTP_NATIVE_SEGMENTED_FORWARDING_ENABLED = 'false'`。
+
+符合此路徑的回應在收到下游標頭後，才取得本文處理名額，因此下游等待標頭的時間不占用本文名額。名額持續到傳送完成或連線取消；取消後仍在執行的同步工作，另外由原本的本文額度與 `nativeDrainingRequests` 計帳。等待使用既有的 `echo.http.forward.max-pending-requests` 與 `echo.http.forward.pool-acquire-timeout-ms`，滿載或等待逾時回 503；原生 HTTP 的總期限也包含這段等待。大量慢速的符合條件回應可能讓其他符合條件回應排隊；小型已知長度、非 UTF-8、Servlet 與 JMS 路徑不使用這組名額。`ECHO_HTTP_NATIVE_MAX_FORWARDING_BODIES` 須為正整數，重啟後生效；增加前須重新測量 heap、GC 與延遲。
+
+可觀察的 metrics：`echo.http.native.requests`、`echo.http.native.active`、`echo.http.native.buffered.bytes`、`echo.http.native.queued`。HTTP 資源快照另提供 `utf8BodiesActive`、`utf8BodiesPending`、`utf8BodiesCapacity`。請求完成、斷線、逾時及容量拒絕皆有釋放驗證；單一清理 callback 失敗不能阻止其他 callback 釋放資源。
 
 效能設定必須依部署量測。四核心比較使用 2 個 I/O、8 個 worker；這不是所有機器的通用最佳值。現行驗證見 [正式整合與驗證](native-http-validation-2026-10-16.md)，比較與持續負載腳本位於 [scripts/bench/2026-10-16-native](../scripts/bench/2026-10-16-native/)，歷史結果見 [效能與穩定性報告](performance-hardening-2026-10-16.md)。
 

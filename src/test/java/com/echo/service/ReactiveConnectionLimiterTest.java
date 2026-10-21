@@ -13,6 +13,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -93,6 +95,56 @@ class ReactiveConnectionLimiterTest {
         waiting.cancel(true);
         first.close();
         assertThat(limiter.pendingCount()).isZero();
+    }
+
+    @Test
+    void cancellationRacingWithDispatchNeverLosesThePermit() throws Exception {
+        var racers = Executors.newFixedThreadPool(2);
+        try {
+            for (int iteration = 0; iteration < 30_000; iteration++) {
+                var first = limiter.acquire(Duration.ofSeconds(1)).block();
+                AtomicReference<ReactiveConnectionLimiter.Lease> delivered = new AtomicReference<>();
+                AtomicReference<Throwable> failure = new AtomicReference<>();
+                var subscription = limiter.acquire(Duration.ofSeconds(5)).subscribe(delivered::set, failure::set);
+                CyclicBarrier start = new CyclicBarrier(2);
+                var cancellation = racers.submit(() -> { await(start); subscription.dispose(); });
+                var release = racers.submit(() -> { await(start); first.close(); });
+                cancellation.get(2, TimeUnit.SECONDS);
+                release.get(2, TimeUnit.SECONDS);
+                var received = delivered.get();
+                if (received != null) received.close();
+                assertThat(failure.get()).as("race error at iteration %s", iteration).isNull();
+                assertThat(limiter.pendingCount()).isZero();
+                var next = limiter.acquire(Duration.ofMillis(100)).toFuture();
+                assertThat(next.get(1, TimeUnit.SECONDS)).as("capacity after race %s", iteration).isNotNull().satisfies(
+                        ReactiveConnectionLimiter.Lease::close);
+            }
+        } finally {
+            racers.shutdownNow();
+            assertThat(racers.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    @Test
+    void handedOffPermitRemainsHeldUntilItsOwnerClosesIt() {
+        var first = limiter.acquire(Duration.ofSeconds(1)).block();
+        var second = limiter.acquire(Duration.ofSeconds(5)).toFuture();
+        first.close();
+        var owned = second.join();
+        var third = limiter.acquire(Duration.ofSeconds(5)).toFuture();
+        assertThat(third).isNotDone();
+        assertThat(limiter.pendingCount()).isEqualTo(1);
+        owned.close();
+        var last = third.join();
+        last.close();
+        last.close();
+        assertThat(limiter.acquire(Duration.ofMillis(100)).block()).isNotNull()
+                .satisfies(ReactiveConnectionLimiter.Lease::close);
+    }
+
+    private static void await(CyclicBarrier barrier) {
+        try { barrier.await(2, TimeUnit.SECONDS); }
+        catch (Exception error) { throw new IllegalStateException(error); }
     }
 
     @Test

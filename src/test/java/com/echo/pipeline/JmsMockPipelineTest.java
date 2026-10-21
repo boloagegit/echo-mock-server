@@ -188,16 +188,15 @@ class JmsMockPipelineTest {
         @Test
         @DisplayName("No match with an enabled target forwards successfully with forwarded=true")
         void forwardSuccess() {
-            when(targetForwarder.hasActiveTarget()).thenReturn(true);
             when(jmsProperties.getQueue()).thenReturn("ORDER.REQUEST");
 
             when(jmsRuleService.findPreparedJmsRules("ORDER.REQUEST"))
                     .thenReturn(Collections.emptyList());
 
             String forwardedBody = "<Response>Forwarded OK</Response>";
-            when(targetForwarder.forwardWithMetadata(anyString(), isNull()))
-                    .thenReturn(new JmsTargetForwarder.ForwardResult(
-                            forwardedBody, "Primary | tcp://broker:61616 | TARGET.REQUEST"));
+            when(targetForwarder.prepareDefaultForward(anyString(), isNull(), any()))
+                    .thenReturn(java.util.Optional.of(() -> new JmsTargetForwarder.ForwardResult(
+                            forwardedBody, "Primary | tcp://broker:61616 | TARGET.REQUEST")));
 
             PipelineResult result = pipeline.execute(defaultRequest());
 
@@ -247,16 +246,15 @@ class JmsMockPipelineTest {
         @Test
         @DisplayName("A forwarding response containing <error> sets proxyError")
         void forwardWithErrorResponse() {
-            when(targetForwarder.hasActiveTarget()).thenReturn(true);
             when(jmsProperties.getQueue()).thenReturn("ORDER.REQUEST");
 
             when(jmsRuleService.findPreparedJmsRules("ORDER.REQUEST"))
                     .thenReturn(Collections.emptyList());
 
             String errorBody = "<error>JMS forward error: Connection refused</error>";
-            when(targetForwarder.forwardWithMetadata(anyString(), isNull()))
-                    .thenReturn(new JmsTargetForwarder.ForwardResult(
-                            errorBody, "Primary | tcp://broker:61616 | TARGET.REQUEST"));
+            when(targetForwarder.prepareDefaultForward(anyString(), isNull(), any()))
+                    .thenReturn(java.util.Optional.of(() -> new JmsTargetForwarder.ForwardResult(
+                            errorBody, "Primary | tcp://broker:61616 | TARGET.REQUEST")));
 
             PipelineResult result = pipeline.execute(defaultRequest());
 
