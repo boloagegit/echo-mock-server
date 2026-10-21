@@ -55,12 +55,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
 
     private static final String QUEUE = "ESB.ECHO.IN";
-    private static final int ESB_PORT = freePort();
+    private static int esbPort;
+    private static EmbeddedActiveMQ esb = startEsb();
     // Hold the port through context startup: an accidental embedded bind must fail,
     // and unrelated parallel test servers cannot steal a supposedly unused probe port.
     private static final ServerSocket UNUSED_EMBEDDED_PORT_RESERVATION = reservePort();
     private static final int UNUSED_EMBEDDED_PORT = UNUSED_EMBEDDED_PORT_RESERVATION.getLocalPort();
-    private static EmbeddedActiveMQ esb = startEsb();
 
     @Autowired
     private ApplicationContext context;
@@ -346,7 +346,7 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
     }
 
     private static String esbUrl() {
-        return "tcp://127.0.0.1:" + ESB_PORT;
+        return "tcp://127.0.0.1:" + esbPort;
     }
 
     private static EmbeddedActiveMQ startEsb() {
@@ -358,17 +358,16 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
             EmbeddedActiveMQ broker = new EmbeddedActiveMQ();
             broker.setConfiguration(configuration);
             broker.start();
+            // Let the OS reserve the initial port atomically; restarts reuse that bound endpoint.
+            var acceptor = broker.getActiveMQServer().getRemotingService().getAcceptor("tcp");
+            if (!acceptor.isStarted() || acceptor.getActualPort() <= 0) {
+                broker.stop();
+                throw new IllegalStateException("test ESB acceptor did not bind");
+            }
+            esbPort = acceptor.getActualPort();
             return broker;
         } catch (Exception e) {
             throw new IllegalStateException("could not start test ESB broker", e);
-        }
-    }
-
-    private static int freePort() {
-        try (ServerSocket socket = new ServerSocket(0)) {
-            return socket.getLocalPort();
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
         }
     }
 
