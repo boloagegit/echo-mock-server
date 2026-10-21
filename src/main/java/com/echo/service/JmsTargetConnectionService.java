@@ -194,7 +194,7 @@ public class JmsTargetConnectionService {
         }
     }
 
-    @Transactional(readOnly = true)
+    // Repository reads finish before provider I/O, which may block independently of the database.
     public ConnectionTestResult test(String id) {
         long started = System.nanoTime();
         try {
