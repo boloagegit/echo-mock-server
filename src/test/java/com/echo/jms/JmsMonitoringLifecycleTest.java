@@ -148,8 +148,10 @@ class JmsMonitoringLifecycleTest {
         when(pipeline.execute(any())).thenReturn(com.echo.pipeline.PipelineResult.builder().response(
                 com.echo.pipeline.MockResponse.builder().body("{}").status(200).build()).build());
         doThrow(new java.lang.IllegalStateException("send failed")).when(template).send(eq(destination), any(org.springframework.jms.core.MessageCreator.class));
-        new MockJmsListener(manager, new JmsProperties(), pipeline, new JmsEndpointExtractor(),
-                new JmsMessageMemoryBudget(1024 * 1024, 1), metrics).onMessage(message);
+        var listener = new MockJmsListener(manager, new JmsProperties(), pipeline, new JmsEndpointExtractor(),
+                new JmsMessageMemoryBudget(1024 * 1024, 1), metrics);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> listener.onMessage(message))
+                .hasMessage("JMS reply delivery failed");
         assertThat(metrics.snapshot()).containsEntry("listenerActive", 0).containsEntry("listenerExits", 1L)
                 .containsEntry("replyFailures", 1L).containsEntry("replySent", 0L);
     }

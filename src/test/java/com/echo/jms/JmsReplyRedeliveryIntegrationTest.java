@@ -100,7 +100,8 @@ class JmsReplyRedeliveryIntegrationTest {
                 assertThat(attempts).hasValue(2);
                 assertThat(sends).hasValue(2);
                 assertThat(redelivered).containsExactly(false, true);
-                assertThat(failures).hasSize(1);
+                org.awaitility.Awaitility.await().atMost(java.time.Duration.ofSeconds(5))
+                        .untilAsserted(() -> assertThat(failures).hasSize(1));
                 assertThat(budget.reservedBytes()).isZero();
             } finally { replyTo.delete(); }
         }
@@ -121,7 +122,9 @@ class JmsReplyRedeliveryIntegrationTest {
             assertThat(failed.getJMSMessageID()).isEqualTo(id);
             assertThat(attempts).hasValue(2);
             assertThat(redelivered).containsExactly(false, true);
-            assertThat(failures).hasSize(2);
+            // Rollback can publish to DLQ before the listener's ErrorHandler is called.
+            org.awaitility.Awaitility.await().atMost(java.time.Duration.ofSeconds(5))
+                    .untilAsserted(() -> assertThat(failures).hasSize(2));
             assertThat(budget.reservedBytes()).isZero();
         }
     }
