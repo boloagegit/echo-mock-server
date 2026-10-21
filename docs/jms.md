@@ -22,11 +22,23 @@ and Request Log correlation IDs. See the linked guide for configuration, quotas 
 
 Artemis large-message reads use the official bulk-copy fix; see the [upgrade validation](artemis-large-message-validation-2026-10-18.md). Keep the client's default 100 KiB encoded-size threshold as the starting point. Raising the sender URL's `minLargeMessageSize`, for example to `524288`, can reduce large-message file I/O but holds more message bodies in memory. Measure payload size and concurrency before making that tradeoff, especially with a small heap. The upgrade does not require changing this **sender-side** setting; it is not an Echo `application.yml` property.
 
+## Reply failure policy
+
+`echo.jms.rollback-on-reply-failure` defaults to `false`, preserving the existing policy: reply-send failures are logged and counted without asking the source listener to roll back, and an unavailable reply template is skipped. The source transaction can therefore commit even if the caller receives no reply. Other reasons for source rollback, including interruption, temporary memory pressure and unavailable request logging, are unchanged.
+
+To opt in, configure the following or set the environment variable `ECHO_JMS_ROLLBACK_ON_REPLY_FAILURE` to `true`, then restart Echo:
+
+```yaml
+echo:
+  jms:
+    rollback-on-reply-failure: true
+```
+
+When enabled, reply delivery failures (including an unavailable template or a failed error reply) propagate to the source listener's transaction owner for rollback. Echo does not attempt a second reply after a send failure. Successful replies, missing `JMSReplyTo` and intentional `CONNECTION_RESET` faults keep their existing policy in either mode. This startup setting applies to both embedded and external JMS sources; it is not a live UI toggle. Set it back to `false` and restart to restore the legacy reply-failure policy.
+
+Enabling rollback can repeat mock/scenario processing, log entries and downstream side effects on redelivery. A send returning successfully is not proof of commit, and cross-broker forwarding is not exactly-once. Configure finite retries and a dead-letter queue on the source broker for permanently deleted reply destinations. Embedded Artemis retains failed messages indefinitely by default, with backoff; external brokers use their own retry/DLQ settings. With this option enabled, Echo does not silently discard a permanent reply failure. Both modes are tested with Artemis and JMS substitutes; TIBCO EMS still needs separate acceptance.
+
 ## Forwarding resource reuse
-
-Reply delivery failures now propagate to the source listener's transaction owner instead of acknowledging a request whose reply failed. A missing `JMSReplyTo` and intentional `CONNECTION_RESET` fault still follow the existing no-reply policy. Failed error replies also roll back; Echo does not attempt a second reply after a send failure.
-
-Redelivery can repeat mock/scenario processing, log entries and downstream side effects. A send returning successfully is not proof of commit, and cross-broker forwarding is not exactly-once. Configure finite retries and a dead-letter queue on the source broker for permanently deleted reply destinations. Embedded Artemis retains failed messages indefinitely by default, with backoff; external brokers use their own retry/DLQ settings. Echo does not silently discard a permanent reply failure. These semantics are tested with Artemis and JMS substitutes; TIBCO EMS still needs separate acceptance.
 
 Outbound forwarding keeps up to 8 idle sessions per target by default (`echo.jms.forward.session-cache-size`; set to `0` to disable reuse). Each request still owns its temporary reply queue and consumer, so late or duplicate replies cannot become another request's response. Session reuse preserves source transaction ownership; reply failure and redelivery policy are described above. See [JMS performance and correctness](jms-performance-and-correctness.md) for measurements and lifecycle checks.
 

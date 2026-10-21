@@ -256,6 +256,7 @@ class MockJmsListenerExtendedTest {
 
     @Test
     void shouldRetainDelivery_whenReplyTemplateIsUnavailable() throws Exception {
+        jmsProperties.setRollbackOnReplyFailure(true);
         when(connectionManager.getJmsTemplate()).thenReturn(null);
 
         TextMessage message = mock(TextMessage.class);

@@ -100,7 +100,7 @@ public class MockJmsListener {
 
         } catch (JmsReplyDeliveryException e) {
             outcome = "REDELIVERY_REPLY_FAILED";
-            // A failed reply must reach the source session owner; do not attempt another reply here.
+            // The opt-in policy delegates rollback to the source session owner; do not attempt another reply.
             throw e;
         } catch (InterruptedException e) {
             outcome = "INTERRUPTED";
@@ -278,6 +278,10 @@ public class MockJmsListener {
 
             var template = connectionManager.getJmsTemplate();
             if (template == null) {
+                if (!jmsProperties.isRollbackOnReplyFailure()) {
+                    trace.event("REPLY_SKIPPED", "reason", "NO_TEMPLATE");
+                    return;
+                }
                 throw new IllegalStateException("JMS reply template is unavailable");
             }
 
@@ -297,7 +301,9 @@ public class MockJmsListener {
             trace.failure("REPLY_SEND_FAILED", e);
             if (metrics != null) metrics.replyFailed();
             if (!trace.enabled()) log.error("Failed to send reply: {}", e.getMessage());
-            throw new JmsReplyDeliveryException(e);
+            if (jmsProperties.isRollbackOnReplyFailure()) {
+                throw new JmsReplyDeliveryException(e);
+            }
         }
     }
 

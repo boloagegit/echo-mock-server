@@ -15,8 +15,10 @@ import org.apache.activemq.artemis.core.settings.impl.AddressSettings;
 import org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.jms.config.SimpleJmsListenerEndpoint;
 import org.springframework.jms.core.JmsTemplate;
@@ -28,6 +30,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -70,9 +73,14 @@ class JmsReplyRedeliveryIntegrationTest {
         if (broker != null) broker.stop();
     }
 
+    static Stream<Arguments> replyFailures() {
+        return Stream.of((Boolean) null, false, true).flatMap(rollback ->
+                Stream.of(false, true).map(afterSend -> Arguments.of(rollback, afterSend)));
+    }
+
     @ParameterizedTest
-    @ValueSource(booleans = {false, true})
-    void transientFailureBeforeOrAfterSendRollsBackAndRedeliversOnlyOneReply(boolean afterSend) throws Exception {
+    @MethodSource("replyFailures")
+    void replyFailureBeforeOrAfterSendUsesConfiguredTransactionPolicy(Boolean rollbackOnReplyFailure, boolean afterSend) throws Exception {
         var sends = new AtomicInteger();
         var template = new JmsTemplate(connectionFactory) {
             @Override
@@ -85,31 +93,51 @@ class JmsReplyRedeliveryIntegrationTest {
                 if (attempt == 1) throw new JMSException("injected after transactional reply send");
             }
         };
-        startListener(template);
+        startListener(template, rollbackOnReplyFailure);
         try (Connection connection = connectionFactory.createConnection();
              Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)) {
             connection.start();
             TemporaryQueue replyTo = session.createTemporaryQueue();
             try (MessageConsumer replies = session.createConsumer(replyTo)) {
                 String id = send(session, replyTo);
-                TextMessage reply = (TextMessage) replies.receive(10000);
-                assertThat(reply).isNotNull();
-                assertThat(reply.getText()).isEqualTo("reply");
-                assertThat(reply.getJMSCorrelationID()).isEqualTo(id);
-                assertThat(replies.receive(200)).isNull();
-                assertThat(attempts).hasValue(2);
-                assertThat(sends).hasValue(2);
-                assertThat(redelivered).containsExactly(false, true);
-                org.awaitility.Awaitility.await().atMost(java.time.Duration.ofSeconds(5))
-                        .untilAsserted(() -> assertThat(failures).hasSize(1));
+                if (Boolean.TRUE.equals(rollbackOnReplyFailure)) {
+                    assertReply(replies, id);
+                    awaitSourceAcknowledgements(1);
+                    assertThat(replies.receive(200)).isNull();
+                    assertThat(attempts).hasValue(2);
+                    assertThat(sends).hasValue(2);
+                    assertThat(redelivered).containsExactly(false, true);
+                    org.awaitility.Awaitility.await().atMost(java.time.Duration.ofSeconds(5))
+                            .untilAsserted(() -> assertThat(failures).hasSize(1));
+                } else {
+                    awaitSourceAcknowledgements(1);
+                    if (afterSend) assertReply(replies, id);
+                    else assertThat(replies.receive(200)).isNull();
+                    assertThat(attempts).hasValue(1);
+                    assertThat(sends).hasValue(1);
+                    assertThat(redelivered).containsExactly(false);
+                    assertThat(failures).isEmpty();
+
+                    // A later healthy request must still succeed after the swallowed failure.
+                    String nextId = send(session, replyTo);
+                    assertReply(replies, nextId);
+                    awaitSourceAcknowledgements(2);
+                    assertThat(attempts).hasValue(2);
+                    assertThat(sends).hasValue(2);
+                    assertThat(redelivered).containsExactly(false, false);
+                    assertThat(replies.receive(200)).isNull();
+                    assertThat(failures).isEmpty();
+                }
                 assertThat(budget.reservedBytes()).isZero();
             } finally { replyTo.delete(); }
         }
     }
 
-    @Test
-    void deletedReplyDestinationUsesFiniteBrokerRedeliveryAndDeadLetterPolicy() throws Exception {
-        startListener(new JmsTemplate(connectionFactory));
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(booleans = {false, true})
+    void deletedReplyDestinationUsesConfiguredTransactionPolicy(Boolean rollbackOnReplyFailure) throws Exception {
+        startListener(new JmsTemplate(connectionFactory), rollbackOnReplyFailure);
         try (Connection connection = connectionFactory.createConnection();
              Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
              MessageConsumer deadLetters = session.createConsumer(session.createQueue("DLQ"))) {
@@ -117,31 +145,41 @@ class JmsReplyRedeliveryIntegrationTest {
             TemporaryQueue deletedReplyTo = session.createTemporaryQueue();
             deletedReplyTo.delete();
             String id = send(session, deletedReplyTo);
-            Message failed = deadLetters.receive(10000);
-            assertThat(failed).isNotNull();
-            assertThat(failed.getJMSMessageID()).isEqualTo(id);
-            assertThat(attempts).hasValue(2);
-            assertThat(redelivered).containsExactly(false, true);
-            // Rollback can publish to DLQ before the listener's ErrorHandler is called.
-            org.awaitility.Awaitility.await().atMost(java.time.Duration.ofSeconds(5))
-                    .untilAsserted(() -> assertThat(failures).hasSize(2));
+            if (Boolean.TRUE.equals(rollbackOnReplyFailure)) {
+                Message failed = deadLetters.receive(10000);
+                assertThat(failed).isNotNull();
+                assertThat(failed.getJMSMessageID()).isEqualTo(id);
+                assertThat(attempts).hasValue(2);
+                assertThat(redelivered).containsExactly(false, true);
+                // Rollback can publish to DLQ before the listener's ErrorHandler is called.
+                org.awaitility.Awaitility.await().atMost(java.time.Duration.ofSeconds(5))
+                        .untilAsserted(() -> assertThat(failures).hasSize(2));
+            } else {
+                awaitSourceAcknowledgements(1);
+                assertThat(deadLetters.receive(200)).isNull();
+                assertThat(attempts).hasValue(1);
+                assertThat(redelivered).containsExactly(false);
+                assertThat(failures).isEmpty();
+            }
             assertThat(budget.reservedBytes()).isZero();
         }
     }
 
-    private void startListener(JmsTemplate template) {
+    private void startListener(JmsTemplate template, Boolean rollbackOnReplyFailure) {
         var manager = mock(JmsConnectionManager.class);
         when(manager.getJmsTemplate()).thenReturn(template);
         var pipeline = mock(JmsMockPipeline.class);
         when(pipeline.execute(any())).thenReturn(PipelineResult.builder().response(
                 MockResponse.builder().status(200).body("reply").build()).build());
-        var listener = new MockJmsListener(manager, new JmsProperties(), pipeline,
+        var properties = new JmsProperties();
+        if (rollbackOnReplyFailure != null) properties.setRollbackOnReplyFailure(rollbackOnReplyFailure);
+        var listener = new MockJmsListener(manager, properties, pipeline,
                 new JmsEndpointExtractor(), budget);
         var endpoint = new SimpleJmsListenerEndpoint();
         endpoint.setId("reply-rollback");
         endpoint.setDestination("SOURCE");
         endpoint.setMessageListener(listener::onMessage);
-        container = new JmsConfig().jmsListenerContainerFactory(connectionFactory, new JmsProperties(), "1-1")
+        container = new JmsConfig().jmsListenerContainerFactory(connectionFactory, properties, "1-1")
                 .createListenerContainer(endpoint);
         container.setMessageListener((SessionAwareMessageListener<Message>) (message, session) -> {
             sourceSession.set(session);
@@ -152,6 +190,23 @@ class JmsReplyRedeliveryIntegrationTest {
         container.setErrorHandler(failures::add);
         container.initialize();
         container.start();
+    }
+
+    private void awaitSourceAcknowledgements(long expected) {
+        var source = broker.getActiveMQServer().locateQueue(SimpleString.of("SOURCE"));
+        org.awaitility.Awaitility.await().atMost(java.time.Duration.ofSeconds(5))
+                .untilAsserted(() -> {
+                    assertThat(source.getMessagesAcknowledged()).isEqualTo(expected);
+                    assertThat(source.getDeliveringCount()).isZero();
+                    assertThat(source.getMessageCount()).isZero();
+                });
+    }
+
+    private static void assertReply(MessageConsumer replies, String id) throws JMSException {
+        TextMessage reply = (TextMessage) replies.receive(10000);
+        assertThat(reply).isNotNull();
+        assertThat(reply.getText()).isEqualTo("reply");
+        assertThat(reply.getJMSCorrelationID()).isEqualTo(id);
     }
 
     private String send(Session session, Destination replyTo) throws JMSException {
