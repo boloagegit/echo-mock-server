@@ -39,6 +39,7 @@ import static org.mockito.Mockito.doAnswer;
 class NativeHttpRunningWorkIntegrationTest extends BaseIntegrationTest {
     @LocalServerPort int port;
     @Autowired NativeHttpResources resources;
+    @Autowired com.echo.service.HttpOutboundForwarder forwarder;
     @Autowired HttpTargetConnectionService targets;
     @Autowired HttpTargetConnectionRepository targetRepository;
     @MockitoSpyBean HttpMockPipeline pipeline;
@@ -85,12 +86,15 @@ class NativeHttpRunningWorkIntegrationTest extends BaseIntegrationTest {
                 assertThat(resources.active()).isEqualTo(1);
                 assertThat(resources.bufferedBytes()).isGreaterThanOrEqualTo(body.length);
                 assertThat(resources.resourceMetricsSnapshot()).containsEntry("nativeDrainingRequests", 1);
+                assertThat(forwarder.resourceMetricsSnapshot())
+                        .containsEntry("utf8BodiesActive", segmented ? 1 : 0);
             });
             release.countDown();
             await().atMost(Duration.ofSeconds(3)).untilAsserted(() -> {
                 assertThat(resources.active()).isZero();
                 assertThat(resources.bufferedBytes()).isZero();
                 assertThat(resources.resourceMetricsSnapshot()).containsEntry("nativeDrainingRequests", 0);
+                assertThat(forwarder.resourceMetricsSnapshot()).containsEntry("utf8BodiesActive", 0);
             });
         } finally {
             release.countDown();
