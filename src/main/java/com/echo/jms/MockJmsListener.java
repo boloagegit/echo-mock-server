@@ -1,6 +1,7 @@
 package com.echo.jms;
 
 import com.echo.config.JmsProperties;
+import com.echo.core.match.RegexStackCapacityException;
 import com.echo.diagnostics.TransactionDiagnostics;
 import com.echo.diagnostics.TransactionDiagnostics.Trace;
 import com.echo.diagnostics.JmsDiagnosticMetadata;
@@ -136,6 +137,10 @@ public class MockJmsListener {
             // the JMS message on the broker until its durable hand-off recovers.
             if (!trace.enabled()) log.warn("JMS delivery retained because request logging is unavailable: {}",
                     e.getMessage());
+            throw e;
+        } catch (RegexStackCapacityException e) {
+            outcome = "REDELIVERY_REGEX_CAPACITY";
+            trace.failure("PROCESSING_FAILED", e);
             throw e;
         } catch (Exception e) {
             outcome = "PROCESSING_FAILED";

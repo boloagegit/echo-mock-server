@@ -1,6 +1,7 @@
 package com.echo.pipeline;
 
 import com.echo.core.engine.RuleSelector;
+import com.echo.core.match.RegexStackCapacityException;
 import com.echo.core.match.BodyRequirements;
 import com.echo.entity.BaseRule;
 import com.echo.entity.FaultType;
@@ -282,6 +283,10 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
 
     private PipelineResult pipelineError(MockRequest request, long startTime, Throwable error) {
         if (error instanceof CancellationException cancelled) throw cancelled;
+        if (error instanceof RegexStackCapacityException exhausted && request.getProtocol() == Protocol.JMS) {
+            // Preserve the source listener's existing rollback policy for regex stack failures.
+            throw exhausted;
+        }
         request.getTrace().failure("PIPELINE_FAILED", error);
         if (!request.getTrace().enabled()) log.error("Pipeline execution error: {}", error.getMessage(), error);
         int responseTimeMs = (int) (System.currentTimeMillis() - startTime);
