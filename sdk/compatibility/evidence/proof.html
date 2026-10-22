@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-Hant">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Echo SDK — Live AP evidence</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f5f8;color:#172334;font-family:Arial,"Noto Sans CJK TC",sans-serif;line-height:1.5}main{max-width:1320px;margin:auto;padding:30px 40px}header{display:flex;align-items:center;justify-content:space-between;gap:20px}h1{font-size:28px;line-height:1.2;margin:6px 0 10px}h2{font-size:17px;margin:0 0 10px}.eyebrow{font-size:12px;font-weight:bold;letter-spacing:1px;color:#536779}.muted{color:#536779;font-size:13px}section{background:white;border:1px solid #d6dfe8;border-radius:9px;padding:20px;margin-top:18px}.badge{display:inline-block;border-radius:5px;padding:7px 11px;background:#e7effa;color:#1a4e86;font-size:14px;font-weight:bold}.off{background:#fff0d6;color:#85540a}.pass{background:#def4e7;color:#146841}dl{display:grid;grid-template-columns:190px 1fr;gap:6px 12px;font-size:13px;margin:0}dt{color:#536779}dd{margin:0;overflow-wrap:anywhere;font-family:monospace}.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.grid section{margin-top:0}.cards{margin-top:18px}pre{font-size:13px;background:#f5f7fa;border:1px solid #e4e9ef;padding:13px;white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0 0;min-height:245px}a{color:#195ab0}button{border:0;background:#1c568b;color:white;border-radius:5px;padding:10px 16px;font-size:14px;cursor:pointer}.flow{font-family:monospace;font-size:14px;padding:12px 0 0}.status{font-weight:bold;font-size:14px}.footer{font-size:12px;color:#536779;margin-top:15px}.ok{color:#146841}.error{color:#a51e28}@media(max-width:850px){main{padding:20px}.grid{grid-template-columns:1fr}}
+</style>
+<main>
+  <header><div><div class="eyebrow">LIVE TEST HARNESS · ACTUAL FEIGN HTTP CALLS</div><h1 id="title">載入 AP runtime…</h1><div class="muted">這是獨立測試 AP 的證明頁；下方回應來自即時 Feign 呼叫。Echo 產品頁面另附截圖。</div></div><span class="badge" id="enabled">讀取中</span></header>
+  <section><h2>實際載入的 SDK 與設定</h2><dl id="meta"></dl><div class="flow">Browser → AP Controller → @FeignClient → SDK → Echo / Original backend</div></section>
+  <div class="cards grid">
+    <section><h2>選定的 client · contextId = routed</h2><div class="muted" id="selected-expect"></div><pre id="selected">呼叫中…</pre><p class="status" id="selected-status"></p></section>
+    <section><h2>未選定的 client · contextId = unselected</h2><div class="muted">預期回到 ORIGINAL；使用相同的原始下游 URL。</div><pre id="unselected">呼叫中…</pre><p class="status" id="unselected-status"></p></section>
+  </div>
+  <p class="footer" id="stamp"></p><button id="again">重新發送兩個真實請求</button> <a href="/api/proof/meta" target="_blank">原始 runtime JSON</a>
+</main>
+<script>
+window.proofEvidence = {complete:false};
+async function run(){
+  document.getElementById('again').disabled=true;
+  const meta=await fetch('/api/proof/meta',{cache:'no-store'}).then(r=>r.json());
+  document.getElementById('title').textContent='Spring Boot '+meta.boot+' · SDK '+(meta.sdkEnabled?'啟用':'停用對照');
+  document.getElementById('enabled').textContent=meta.sdkEnabled?'SDK ON':'SDK OFF · CONTROL';
+  document.getElementById('enabled').className='badge'+(meta.sdkEnabled?'':' off');
+  const fields=[['Java runtime',meta.java],['原始 Feign URL',meta.originalFeignUrl],['Echo mock URL',meta.echoMockUrl],['實際 SDK JAR',meta.sdkJar],['SDK SHA-256',meta.sdkJarSha256],['相同 YAML SHA-256',meta.applicationYamlSha256],['實測 run',meta.proofRun]];
+  const list=document.getElementById('meta');list.replaceChildren();
+  for(const [name,value] of fields){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=name;dd.textContent=value;list.append(dt,dd)}
+  document.getElementById('selected-expect').textContent=meta.sdkEnabled?'預期回到 ECHO；Feign 原始 URL 保持指向原下游。':'對照組僅以 echo.client.enabled=false 停用；預期回到 ORIGINAL。';
+  const calls=[];
+  for(const client of ['selected','unselected']){
+    const requestId='sdk-'+meta.boot.replaceAll('.','-')+'-'+(meta.sdkEnabled?'ON':'OFF')+'-'+client+'-'+crypto.randomUUID();
+    const url='/api/proof/call?client='+client+'&requestId='+requestId;
+    const result=await fetch(url,{cache:'no-store'}).then(async r=>{if(!r.ok)throw Error(await r.text());return r.json()});
+    const payload=JSON.parse(result.responseBody);
+    const expected=client==='selected'&&meta.sdkEnabled?'ECHO':'ORIGINAL';
+    const valid=payload.servedBy===expected && payload.received.requestId===requestId && result.upstreamStatus===200;
+    document.getElementById(client).textContent=JSON.stringify({requestId,upstreamStatus:result.upstreamStatus,response:payload},null,2);
+    const status=document.getElementById(client+'-status');status.textContent=(valid?'PASS':'FAIL')+' · 實際回覆 '+payload.servedBy+' · Request ID 往返一致';status.className='status '+(valid?'ok':'error');
+    calls.push({client,url,result,payload,valid});
+  }
+  const capturedAt=new Date().toISOString();
+  document.getElementById('stamp').textContent='Live capture: '+capturedAt+' · 此頁未直接呼叫 /mock，呼叫由 AP 的既有 Feign interface 執行。';
+  window.proofEvidence={complete:true,meta,calls,capturedAt,passed:calls.every(x=>x.valid)};
+  document.getElementById('again').disabled=false;
+}
+document.getElementById('again').onclick=()=>run().catch(showError);
+function showError(error){document.getElementById('title').textContent='FAIL — '+error.message;window.proofEvidence={complete:true,passed:false,error:String(error)}}
+run().catch(showError);
+</script>
+</html>

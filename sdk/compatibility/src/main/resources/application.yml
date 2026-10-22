@@ -1,0 +1,46 @@
+spring:
+  main:
+    web-application-type: none
+    banner-mode: 'off'
+  cloud:
+    openfeign:
+      httpclient:
+        hc5:
+          enabled: ${probe.hc5:false}
+      okhttp:
+        enabled: ${probe.okhttp:false}
+      client:
+        config:
+          default:
+            connectTimeout: 700
+            readTimeout: 900
+          orders:
+            connectTimeout: 321
+            readTimeout: 654
+            followRedirects: false
+            defaultRequestHeaders:
+              X-Company: present
+            defaultQueryParameters:
+              company: default
+    loadbalancer:
+      retry:
+        enabled: ${probe.lb-retry:false}
+    discovery:
+      client:
+        simple:
+          instances:
+            shipping:
+              - uri: ${probe.original-url}
+
+echo:
+  client:
+    enabled: true
+    server-url: ${probe.echo-url}
+    include-clients:
+      - orders
+      - ledgerPrimary
+      - inventory
+
+logging:
+  level:
+    root: ERROR

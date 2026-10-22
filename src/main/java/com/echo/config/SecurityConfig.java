@@ -67,6 +67,8 @@ public class SecurityConfig {
                 // Built-in account management - ADMIN only
                 .requestMatchers("/api/admin/builtin-users/**").hasRole("ADMIN")
                 .requestMatchers("/api/admin/resources", "/api/admin/resources/**").hasRole("ADMIN")
+                // SDK downloads are available to every signed-in user.
+                .requestMatchers("/api/admin/sdk", "/api/admin/sdk/**").authenticated()
                 // Logged-in users can choose the secure read-only connection DTO; management and testing are still limited to ADMIN
                 .requestMatchers(HttpMethod.GET,
                         "/api/admin/jms-target-connections",

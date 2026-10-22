@@ -47,7 +47,7 @@ jobs:
       - name: Get version from Gradle
         id: version
         run: |
-          VERSION=$(./gradlew properties -q | grep '^version:' | awk '{print $2}')
+          VERSION=$(./gradlew :properties -q | grep '^version:' | awk '{print $2}')
           if [ -z "$VERSION" ]; then
             echo "Failed to extract version from Gradle"
             exit 1

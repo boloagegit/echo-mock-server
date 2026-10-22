@@ -5,6 +5,7 @@
  * Other interface icons still use Bootstrap Icons.
  */
 const UI_ICON_PATHS = {
+  sdk: '<path d="M12 3.5v11m-4-4 4 4 4-4"/><path d="M4.5 14.5v4a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-4"/>',
   rules: '<rect x="3" y="5" width="4.5" height="3" rx="1.5"/><path d="M10.5 6.5H21"/><rect x="3" y="10.5" width="4.5" height="3" rx="1.5"/><path d="M10.5 12H18"/><rect x="3" y="16" width="4.5" height="3" rx="1.5"/><path d="M10.5 17.5H20"/>',
   responses: '<path d="M5.5 4.5h13a2 2 0 0 1 2 2V15a2 2 0 0 1-2 2H11l-4.25 3.25V17H5.5a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2z"/><path d="M10.25 8C9.56 8 9 8.56 9 9.25v.5c0 .55-.45 1-1 1 .55 0 1 .45 1 1v.5c0 .69.56 1.25 1.25 1.25"/><path d="M13.75 8c.69 0 1.25.56 1.25 1.25v.5c0 .55.45 1 1 1-.55 0-1 .45-1 1v.5c0 .69-.56 1.25-1.25 1.25"/>',
   logs: '<path d="M3 12h3.5L9 6l4 12 2.5-6H21"/>',

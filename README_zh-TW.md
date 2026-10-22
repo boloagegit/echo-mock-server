@@ -42,6 +42,8 @@ java -jar build/libs/echo-server-*.jar
 
 > Docker、外部資料庫（PostgreSQL、MySQL、MariaDB、SQL Server、Oracle）、Windows 與多實例部署，見[安裝與部署](docs/zh-TW/install.md)。
 
+使用 Spring Boot／OpenFeign 的應用可在登入後，從左下角帳號選單 → **SDK 中心**（`/#/sdk`）取得內含的 Client SDK。完整 ZIP 包含安裝說明、本機 Maven POM 與設定範例。一般 Echo 建置已將下載檔包進 Server JAR，執行時不需另外放 SDK 檔案或連外下載。詳見 [SDK 說明](sdk/README.md)。
+
 ### 一分鐘做出第一個 Mock
 
 先建立一條規則。可以在管理介面建，也可以像下面這樣用 REST API 建：

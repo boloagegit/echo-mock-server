@@ -31,7 +31,8 @@
     "serviceRunning": "Running",
     "serviceDisabled": "Disabled",
     "roleAdmin": "Administrator",
-    "roleUser": "User"
+    "roleUser": "User",
+    "sdk": "SDK Center"
   },
   "rules": {
     "conflict": {
@@ -2198,6 +2199,31 @@
       "lte": "at most",
       "in": "is one of",
       "equalToJson": "JSON equals"
+    }
+  },
+  "sdk": {
+    "title": "SDK Center",
+    "description": "Choose an SDK to view supported environments, releases, installation instructions and downloads.",
+    "loginRequired": "Sign in to use the SDK Center",
+    "loadFailed": "Could not load the SDK catalog. Please retry.",
+    "downloadFailed": "Download failed. Please retry, or sign in again if your session has expired.",
+    "checksum": "View SHA-256",
+    "recommended": "Recommended",
+    "version": "Version",
+    "versionCount": "Versions: {count}",
+    "viewSdk": "Versions and downloads",
+    "viewNamedSdk": "View {name}",
+    "backToCatalog": "Back to SDK catalog",
+    "selectionMissing": "The requested SDK or release is not available",
+    "downloadArtifact": "Download {name}",
+    "copySnippet": "Copy {name}",
+    "search": "Search SDK names, languages or purposes",
+    "noResults": "No matching SDKs",
+    "empty": "This Echo does not include any SDKs yet",
+    "channel": {
+      "stable": "Stable",
+      "preview": "Preview",
+      "deprecated": "Deprecated"
     }
   }
 }

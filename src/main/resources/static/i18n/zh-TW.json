@@ -31,7 +31,8 @@
     "serviceRunning": "執行中",
     "serviceDisabled": "已停用",
     "roleAdmin": "管理員",
-    "roleUser": "使用者"
+    "roleUser": "使用者",
+    "sdk": "SDK 中心"
   },
   "rules": {
     "conflict": {
@@ -2198,6 +2199,31 @@
       "lte": "小於等於",
       "in": "屬於清單",
       "equalToJson": "JSON 相同"
+    }
+  },
+  "sdk": {
+    "title": "SDK 中心",
+    "description": "選擇適合應用的 SDK，查看支援範圍、版本、接入方式與下載檔。",
+    "loginRequired": "登入後即可使用 SDK 中心",
+    "loadFailed": "無法載入 SDK 清單，請重試。",
+    "downloadFailed": "下載失敗，請重試；若登入已逾時，請重新登入。",
+    "checksum": "查看 SHA-256",
+    "recommended": "推薦版本",
+    "version": "版本",
+    "versionCount": "{count} 個版本",
+    "viewSdk": "查看版本與下載",
+    "viewNamedSdk": "查看 {name}",
+    "backToCatalog": "返回 SDK 清單",
+    "selectionMissing": "找不到指定的 SDK 或版本",
+    "downloadArtifact": "下載 {name}",
+    "copySnippet": "複製{name}",
+    "search": "搜尋 SDK 名稱、語言或用途",
+    "noResults": "沒有符合的 SDK",
+    "empty": "此 Echo 尚未內含 SDK",
+    "channel": {
+      "stable": "穩定版",
+      "preview": "預覽版",
+      "deprecated": "已棄用"
     }
   }
 }

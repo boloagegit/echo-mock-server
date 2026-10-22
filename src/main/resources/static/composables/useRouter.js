@@ -28,9 +28,10 @@ const useRouter = (deps) => {
     const { page, ruleFilter, responseFilter, logFilter, auditFilter, isAdmin, loadRules, loadLogs, loadAudit, loadResponseSummary, loadBackupStatus, loadStatus, loadAccounts, loadIssues } = deps;
     // The page actually on screen. `page` is the target and drives the sidebar right away.
     const shownPage = deps.shownPage || Vue.ref(page.value);
+    const sdkSelection = deps.sdkSelection || Vue.ref({ sdkId: '', version: '' });
 
     // --- Status ---
-    const validPages = ['rules', 'responses', 'stats', 'audit', 'issues', 'accounts', 'settings'];
+    const validPages = ['rules', 'responses', 'stats', 'audit', 'issues', 'sdk', 'accounts', 'settings'];
     const isIssuesEnabled = () => deps.issueReportingEnabled?.value === true && typeof loadIssues === 'function';
 
     /** Starts the data load for a page and returns its promise (or null when there is nothing to wait for). */
@@ -91,6 +92,9 @@ const useRouter = (deps) => {
             if (ruleFilter.value.protocol) params.set('protocol', ruleFilter.value.protocol);
             if (ruleFilter.value.enabled) params.set('enabled', ruleFilter.value.enabled);
             if (ruleFilter.value.keyword) params.set('keyword', ruleFilter.value.keyword);
+        } else if (page.value === 'sdk') {
+            if (sdkSelection.value.sdkId) params.set('sdk', sdkSelection.value.sdkId);
+            if (sdkSelection.value.version) params.set('version', sdkSelection.value.version);
         } else if (page.value === 'responses') {
             if (responseFilter.value) params.set('keyword', responseFilter.value);
         } else if (page.value === 'stats') {
@@ -134,6 +138,8 @@ const useRouter = (deps) => {
             ruleFilter.value.protocol = params.get('protocol') || '';
             ruleFilter.value.enabled = params.get('enabled') || '';
             ruleFilter.value.keyword = params.get('keyword') || '';
+        } else if (page.value === 'sdk') {
+            sdkSelection.value = { sdkId: params.get('sdk') || '', version: params.get('version') || '' };
         } else if (page.value === 'responses') {
             responseFilter.value = params.get('keyword') || '';
         } else if (page.value === 'stats') {
@@ -191,6 +197,7 @@ const useRouter = (deps) => {
         watch(responseFilter, () => { if (page.value === 'responses') updateUrl(); });
         watch(logFilter, () => { if (page.value === 'stats') updateUrl(); }, { deep: true });
         watch(auditFilter, () => { if (page.value === 'audit') updateUrl(); }, { deep: true });
+        watch(sdkSelection, () => { if (page.value === 'sdk') updateUrl(); }, { deep: true });
         // Page switching → Load the corresponding data, and then change to a new page after the data is complete (or wait for a short time)
         watch(page, p => {
             const pending = urlLoad && urlLoad.page === p && p !== 'settings' ? urlLoad.pending : loadPage(p);

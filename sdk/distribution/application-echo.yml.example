@@ -1,0 +1,7 @@
+# Merge into the AP's mock environment, or enable the echo profile.
+echo:
+  client:
+    enabled: ${ECHO_CLIENT_ENABLED:false}
+    server-url: ${ECHO_SERVER_URL:http://localhost:8080/mock}
+    include-clients:
+      - orderClient

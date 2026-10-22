@@ -204,6 +204,9 @@ const SidebarNav = {
               <button type="button" class="user-menu__item" @click="runMenuAction('show-help')">
                 <ui-icon name="help"></ui-icon><span>{{t('sidebar.help')}}</span>
               </button>
+              <button type="button" v-if="isLoggedIn" class="user-menu__item" :aria-current="page==='sdk'?'page':undefined" @click="closeUserMenu(); go('sdk')">
+                <ui-icon name="sdk"></ui-icon><span>{{t('sidebar.sdk')}}</span>
+              </button>
               <button type="button" v-if="isLoggedIn && status?.isBuiltinUser" class="user-menu__item" @click="runMenuAction('change-password')">
                 <ui-icon name="key"></ui-icon><span>{{t('sidebar.changePassword')}}</span>
               </button>
