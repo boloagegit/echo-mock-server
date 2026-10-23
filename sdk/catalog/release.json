@@ -48,8 +48,8 @@
       {
         "id": "install",
         "title": {
-          "zh-TW": "1. 加入應用依賴",
-          "en": "1. Add the application dependency"
+          "zh-TW": "加入應用依賴",
+          "en": "Add the application dependency"
         },
         "paragraphs": [
           {
@@ -61,6 +61,7 @@
           {
             "id": "gradle",
             "label": "Gradle",
+            "artifact": "jar",
             "paragraphs": [
               {
                 "zh-TW": "將 JAR 放入應用的 libs/，在 build.gradle 加入：",
@@ -81,6 +82,7 @@
           {
             "id": "maven",
             "label": "Maven",
+            "artifact": "bundle",
             "paragraphs": [
               {
                 "zh-TW": "解壓完整 ZIP，在該目錄執行本機安裝，再加入下方依賴；不需申請 Maven Central。",
@@ -111,8 +113,8 @@
       {
         "id": "configure",
         "title": {
-          "zh-TW": "2. 設定導向 Echo",
-          "en": "2. Route clients to Echo"
+          "zh-TW": "設定導向 Echo",
+          "en": "Route clients to Echo"
         },
         "paragraphs": [
           {
@@ -162,8 +164,8 @@
       {
         "id": "verify",
         "title": {
-          "zh-TW": "3. 驗證請求與支援範圍",
-          "en": "3. Verify a request and compatibility"
+          "zh-TW": "驗證請求與支援範圍",
+          "en": "Verify a request and compatibility"
         },
         "paragraphs": [
           {

@@ -29,6 +29,7 @@ def main():
         ("duplicate-version", "duplicate SDK/version"),
         ("no-recommended-version", "exactly one recommended release"),
         ("unknown-guide-input", "unknown guide input"),
+        ("unknown-option-artifact", "unknown guide option artifact"),
     ]
     try:
         for name, expected in cases:
@@ -43,6 +44,8 @@ def main():
                     shutil.copytree(fixture, root / "two")
                 elif name == "no-recommended-version":
                     data["recommended"] = False
+                elif name == "unknown-option-artifact":
+                    data["guide"]["sections"][0]["options"] = [{"id": "method", "label": "Method", "artifact": "missing"}]
                 else:
                     data["guide"]["sections"][0]["snippets"][0]["code"] = "{{json:missing}}"
                 descriptor.write_text(json.dumps(data))
