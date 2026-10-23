@@ -31,7 +31,8 @@
     "serviceRunning": "Running",
     "serviceDisabled": "Disabled",
     "roleAdmin": "Administrator",
-    "roleUser": "User"
+    "roleUser": "User",
+    "sdk": "SDK Center"
   },
   "rules": {
     "conflict": {
@@ -2198,6 +2199,55 @@
       "lte": "at most",
       "in": "is one of",
       "equalToJson": "JSON equals"
+    }
+  },
+  "sdk": {
+    "title": "SDK Center",
+    "description": "Route outbound calls from your client application to Echo. Pick an SDK, then download it, add it to your project and configure it step by step.",
+    "loginRequired": "Sign in to use the SDK Center",
+    "loading": "Loading the SDK catalog",
+    "loadFailed": "Could not load the SDK catalog",
+    "loadFailedHint": "Check that Echo is still running, then retry.",
+    "downloadFailed": "Download failed. Please retry, or sign in again if your session has expired.",
+    "checksum": "SHA-256",
+    "copyChecksum": "Copy SHA-256 of {name}",
+    "recommended": "Recommended",
+    "version": "Version",
+    "versionCount": "{count} versions",
+    "sdkCount": "{count} SDKs",
+    "language": "Language",
+    "requirements": "Requirements",
+    "viewSdk": "Set up",
+    "viewNamedSdk": "Set up {name}",
+    "backToCatalog": "Back to SDK catalog",
+    "selectionMissing": "The requested SDK or release is not available",
+    "selectionMissingHint": "This Echo does not include “{name}”. Choose again from the catalog; no other release is substituted.",
+    "download": "Download",
+    "downloading": "Downloading…",
+    "downloadArtifact": "Download {name}",
+    "releasedOn": "Released {date}",
+    "forMethod": "For the {method} setup",
+    "otherFiles": "Other files",
+    "requiresFile": "This method uses",
+    "setupSteps": "Setup steps",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copySnippet": "Copy {name}",
+    "useRecommended": "Use {version}",
+    "notice": {
+      "deprecated": "This release is deprecated. Use the recommended release instead.",
+      "older": "This is not the recommended release. The recommended release is {version}.",
+      "preview": "Preview setup steps may change before a stable release."
+    },
+    "search": "Search SDK names, languages or purposes",
+    "clearSearch": "Clear search",
+    "noResults": "No matching SDKs",
+    "empty": "This Echo does not include any SDKs yet",
+    "emptyHint": "SDKs are packaged with the Echo build. Add one and redeploy to download it here.",
+    "channel": {
+      "stable": "Stable",
+      "preview": "Preview",
+      "deprecated": "Deprecated"
     }
   }
 }

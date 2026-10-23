@@ -42,6 +42,8 @@ Open <http://localhost:8080> and sign in with **admin / admin**. Change this pas
 
 > Docker, external databases (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle), Windows and multi-instance setups are covered in the [installation guide](docs/install.md).
 
+Spring Boot applications using OpenFeign can download the bundled client SDK after signing in: open the account menu at the bottom left and choose **SDK Center** (`/#/sdk`). The full ZIP includes installation instructions, a local Maven POM and a configuration example. The normal Echo build embeds these downloads; no separate SDK files or internet access are needed on the running server. See the [SDK guide](sdk/README.md).
+
 ### Your first mock in one minute
 
 Create a rule. You can do this in the console, or through the REST API as shown here:

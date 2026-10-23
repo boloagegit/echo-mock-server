@@ -1,0 +1,25 @@
+spring:
+  main:
+    banner-mode: 'off'
+  cloud:
+    openfeign:
+      httpclient:
+        hc5:
+          enabled: false
+      client:
+        config:
+          default:
+            connectTimeout: 2000
+            readTimeout: 3000
+    loadbalancer:
+      retry:
+        enabled: false
+echo:
+  client:
+    enabled: true
+    server-url: ${proof.echo-url}/mock
+    include-clients:
+      - routed
+logging:
+  level:
+    root: WARN

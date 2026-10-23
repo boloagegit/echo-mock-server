@@ -2399,6 +2399,132 @@ input[type="checkbox"] {
     .import-format-options { grid-template-columns: 1fr }
 }
 
+/* SDK Center: catalog rows, then one reading column of setup steps beside a download panel */
+.sdk-scroll { padding-bottom: var(--space-xl) }
+.sdk-muted { color: var(--muted) }
+.sdk-version { font-family: var(--font-mono); font-size: var(--font-sm); color: var(--text); overflow-wrap: anywhere }
+.sdk-intro { max-width: 72ch; margin: 0 0 var(--space-lg); color: var(--muted); font-size: var(--font-sm); line-height: 1.7 }
+.sdk-skeleton { display: grid; gap: var(--space-md); max-width: 1180px }
+.sdk-skeleton > div { border-radius: var(--radius-block); background: var(--hover); animation: skeleton-pulse 1.5s ease-in-out infinite }
+.sdk-skeleton-line { height: 14px; width: min(100%, 520px) }
+.sdk-skeleton-row { height: 92px }
+
+.sdk-search { position: relative; display: block; max-width: 420px; margin-bottom: var(--space-md) }
+.sdk-search > i { position: absolute; inset-block: 0; inset-inline-start: var(--space-md); display: flex; align-items: center; color: var(--text-subtle); pointer-events: none }
+.sdk-search .form-control { padding-inline-start: 2.1rem }
+.sdk-catalog-list { max-width: 1180px; margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--card); overflow: hidden }
+.sdk-catalog-list > li + li { border-top: 1px solid var(--separator) }
+.sdk-catalog-card { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr) auto; align-items: center; gap: var(--space-xl); padding: var(--space-lg); cursor: pointer; transition: background-color 150ms ease-out }
+.sdk-catalog-card:hover { background: var(--hover) }
+.sdk-catalog-identity h2 { margin: 0 0 var(--space-xs); font-size: var(--font-base); font-weight: var(--font-weight-semibold); color: var(--text) }
+.sdk-catalog-identity p { margin: 0; color: var(--muted); font-size: var(--font-sm); line-height: 1.6 }
+.sdk-catalog-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-xs) var(--space-md); margin: 0; font-size: var(--font-sm) }
+.sdk-catalog-facts > div { display: contents }
+.sdk-catalog-facts dt { color: var(--text-subtle); font-weight: var(--font-weight-regular) }
+.sdk-catalog-facts dd { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-sm); margin: 0; color: var(--text); min-width: 0 }
+.sdk-catalog-open { white-space: nowrap }
+
+.sdk-release { max-width: 1180px }
+.sdk-back { margin-inline-start: calc(var(--space-sm) * -1) }
+.sdk-release-header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 300px); grid-template-areas: "identity picker" "requirements requirements"; gap: var(--space-md) var(--space-xl); align-items: end; margin-bottom: var(--space-lg) }
+.sdk-release-identity { grid-area: identity; min-width: 0 }
+.sdk-release-identity h1 { margin: 0 0 var(--space-xs); font-size: var(--font-lg); font-weight: var(--font-weight-semibold); line-height: 1.25; letter-spacing: -0.02em; color: var(--text); text-wrap: balance }
+.sdk-release-identity h1:focus:not(:focus-visible) { outline: none }
+.sdk-release-identity p { max-width: 72ch; margin: 0; color: var(--muted); font-size: var(--font-sm); line-height: 1.7 }
+.sdk-version-picker { grid-area: picker; display: grid; gap: var(--space-xs); min-width: 0 }
+.sdk-version-picker label { color: var(--muted); font-size: var(--font-xs); font-weight: var(--font-weight-medium) }
+.sdk-version-picker .form-control { width: 100% }
+.sdk-requirements { grid-area: requirements; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-xs) var(--space-md); padding-top: var(--space-md); border-top: 1px solid var(--separator); font-size: var(--font-sm) }
+.sdk-requirements-label { color: var(--text-subtle) }
+.sdk-requirements ul { display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-lg); margin: 0; padding: 0; list-style: none; color: var(--text) }
+.sdk-requirements li { display: inline-flex; align-items: baseline; gap: var(--space-xs) }
+.sdk-requirements li i { color: var(--success) }
+
+.sdk-notice { display: flex; align-items: center; gap: var(--space-sm) var(--space-md); flex-wrap: wrap; margin-bottom: var(--space-lg); padding: var(--space-sm) var(--space-md); border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface-neutral-soft); font-size: var(--font-sm); color: var(--text) }
+.sdk-notice > i { color: var(--muted) }
+.sdk-notice p { flex: 1 1 260px; margin: 0; line-height: 1.6 }
+.sdk-notice.is-warning { border-color: rgba(var(--warning-rgb), 0.42); background: rgba(var(--warning-rgb), 0.08) }
+.sdk-notice.is-warning > i { color: var(--warning-text) }
+
+.sdk-release-body { display: grid; grid-template-columns: minmax(0, 1fr) 320px; grid-template-areas: "guide download"; gap: var(--space-xl); align-items: start }
+.sdk-guide { grid-area: guide; min-width: 0 }
+.sdk-download { grid-area: download; position: sticky; top: 0; padding: var(--space-lg); border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--card) }
+.sdk-download h2, .sdk-guide-title { margin: 0; font-size: var(--font-base); font-weight: var(--font-weight-semibold); color: var(--text) }
+.sdk-download-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-xs) var(--space-sm) }
+.sdk-download-head > .sdk-muted { display: inline-flex; align-items: center; gap: var(--space-sm); min-width: 0 }
+.sdk-release-date { margin: var(--space-2xs) 0 0; font-size: var(--font-xs); font-variant-numeric: tabular-nums }
+.sdk-file { min-width: 0 }
+.sdk-file.is-primary { margin-top: var(--space-lg); padding-top: var(--space-lg); border-top: 1px solid var(--separator) }
+.sdk-file-title { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm) }
+.sdk-file-title h3, .sdk-file-title h4 { margin: 0; font-size: var(--font-base); font-weight: var(--font-weight-semibold); color: var(--text); min-width: 0; overflow-wrap: anywhere }
+.sdk-file-title h4 { font-size: var(--font-sm); font-weight: var(--font-weight-medium) }
+.sdk-file-title h4 .sdk-muted { margin-inline-start: var(--space-xs); font-size: var(--font-xs); font-weight: var(--font-weight-regular); font-variant-numeric: tabular-nums }
+.sdk-file-title > .sdk-muted { font-size: var(--font-xs); font-variant-numeric: tabular-nums; white-space: nowrap }
+.sdk-file-use { display: flex; align-items: baseline; gap: var(--space-xs); margin: var(--space-xs) 0 0; color: var(--primary); font-size: var(--font-xs); font-weight: var(--font-weight-medium) }
+.sdk-file-description { margin: var(--space-xs) 0 0; color: var(--muted); font-size: var(--font-xs); line-height: 1.6 }
+.sdk-file-download { width: 100%; margin-top: var(--space-md) }
+.sdk-file-name { margin: var(--space-sm) 0 0; color: var(--text-subtle); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5; overflow-wrap: anywhere }
+.sdk-checksum { margin-top: var(--space-xs); font-size: var(--font-xs); color: var(--muted) }
+.sdk-checksum summary { width: fit-content; cursor: pointer; border-radius: var(--radius-control); color: var(--muted) }
+.sdk-checksum summary:hover { color: var(--text) }
+.sdk-checksum summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px }
+.sdk-checksum-value { display: flex; align-items: flex-start; gap: var(--space-xs); margin-top: var(--space-xs); padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-sm); border-radius: var(--radius-control); background: var(--code-bg) }
+.sdk-checksum-value > span { flex: 1; min-width: 0; padding-block: 3px; color: var(--text); font-family: var(--font-mono); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere }
+.sdk-other-title { margin: var(--space-lg) 0 0; padding-top: var(--space-md); border-top: 1px solid var(--separator); color: var(--text-subtle); font-size: var(--font-xs); font-weight: var(--font-weight-medium) }
+.sdk-other-files { margin: 0; padding: 0; list-style: none }
+.sdk-other-files > li { padding-top: var(--space-sm) }
+.sdk-other-files > li + li { margin-top: var(--space-sm); border-top: 1px solid var(--separator) }
+.sdk-other-files .sdk-file-use { color: var(--muted) }
+.sdk-other-files .ui-button { font-variant-numeric: tabular-nums; flex-shrink: 0 }
+.sdk-error { display: flex; align-items: baseline; gap: var(--space-xs); margin: var(--space-md) 0 0; color: var(--danger-text); font-size: var(--font-sm); line-height: 1.6 }
+
+.sdk-steps { margin: var(--space-md) 0 0; padding: 0; list-style: none; counter-reset: sdk-step }
+.sdk-step { position: relative; padding: 0 0 var(--space-xl) 44px; counter-increment: sdk-step; min-width: 0 }
+.sdk-step::before { content: counter(sdk-step); position: absolute; top: 0; left: 0; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border2); border-radius: 50%; background: var(--card); color: var(--text); font-size: var(--font-xs); font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums }
+.sdk-step:not(:last-child)::after { content: ''; position: absolute; top: 30px; bottom: 4px; left: 12.5px; width: 1px; background: var(--border) }
+.sdk-step:last-child { padding-bottom: 0 }
+.sdk-step h3 { margin: 0; min-height: 26px; display: flex; align-items: center; font-size: var(--font-base); font-weight: var(--font-weight-semibold); color: var(--text) }
+.sdk-step-text { max-width: 72ch; margin: var(--space-sm) 0 0; color: var(--text); font-size: var(--font-sm); line-height: 1.7 }
+.sdk-step-options { max-width: 320px; margin-top: var(--space-md) }
+.sdk-step-options + .sdk-step-text { margin-top: var(--space-md) }
+.sdk-step-file { display: flex; align-items: baseline; gap: var(--space-sm); width: fit-content; max-width: 100%; margin-top: var(--space-sm); padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-control); background: var(--surface-neutral-soft); color: var(--muted); font-size: var(--font-xs); line-height: 1.6 }
+.sdk-step-file strong { color: var(--text); font-weight: var(--font-weight-medium) }
+.sdk-step-file .sdk-muted { margin-inline-start: var(--space-xs); font-family: var(--font-mono); font-size: 11px; overflow-wrap: anywhere }
+.sdk-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: var(--space-md) var(--space-lg); margin-top: var(--space-md) }
+.sdk-field { display: grid; gap: var(--space-xs); align-content: start; min-width: 0 }
+.sdk-field label { font-size: var(--font-sm); font-weight: var(--font-weight-medium); color: var(--text) }
+.sdk-field .form-control { font-family: var(--font-mono); font-size: var(--font-sm) }
+.sdk-field small { color: var(--muted); font-size: var(--font-xs); line-height: 1.6 }
+.sdk-snippet { margin: var(--space-md) 0 0; border: 1px solid var(--border); border-radius: var(--radius-block); background: var(--code-bg); overflow: hidden }
+.sdk-snippet-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); min-height: 36px; padding: 2px var(--space-xs) 2px var(--space-md); border-bottom: 1px solid var(--separator); color: var(--muted); font-size: var(--font-xs) }
+.sdk-snippet-head .ui-button { color: var(--muted) }
+.sdk-snippet-head .ui-button:hover:not(:disabled) { color: var(--text) }
+.sdk-code { margin: 0; padding: var(--space-md); overflow-x: auto; color: var(--text); font-family: var(--font-mono); font-size: 12.5px; line-height: 1.7; white-space: pre; tab-size: 4; scrollbar-width: thin; scrollbar-color: var(--border2) transparent }
+.sdk-code:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px }
+.sdk-code code { color: inherit; font: inherit; background: none; padding: 0 }
+
+@media (max-width: 1040px) {
+    .sdk-catalog-card { grid-template-columns: minmax(0, 1fr) auto; }
+    .sdk-catalog-facts { grid-column: 1 / -1; grid-row: 2 }
+    .sdk-catalog-open { grid-column: 2; grid-row: 1 }
+}
+@media (max-width: 900px) {
+    .sdk-release-body { grid-template-columns: minmax(0, 1fr); grid-template-areas: "download" "guide" }
+    .sdk-download { position: static }
+    .sdk-release-header { grid-template-columns: minmax(0, 1fr); grid-template-areas: "identity" "requirements" "picker"; align-items: start }
+    .sdk-requirements { padding-top: 0; border-top: 0 }
+}
+@media (max-width: 560px) {
+    .sdk-catalog-card { grid-template-columns: minmax(0, 1fr); gap: var(--space-md); padding: var(--space-md) }
+    .sdk-catalog-facts, .sdk-catalog-open { grid-column: 1; grid-row: auto }
+    .sdk-catalog-open { width: 100% }
+    .sdk-download { padding: var(--space-md) }
+    .sdk-step { padding-left: 38px }
+    .sdk-step-options { max-width: none }
+    .sdk-snippet-head .ui-button { min-height: 36px }
+}
+@media (prefers-reduced-motion: reduce) { .sdk-skeleton > div { animation: none } .sdk-catalog-card { transition: none } }
+
 /* Settings Page */
 .settings-grid {
     display: grid;

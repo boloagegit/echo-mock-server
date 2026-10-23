@@ -1,0 +1,171 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.security.MessageDigest
+import java.time.LocalDate
+
+// Each producer publishes a directory containing release.json and its artifacts.
+configurations {
+    echoSdkReleases {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+
+def additionalReleases = providers.gradleProperty('sdkCatalogDir')
+        .map { file(it) }.getOrElse(file('sdk/releases'))
+def bundledSdkResources = layout.buildDirectory.dir('generated/resources/sdk')
+
+tasks.register('bundleSdk') {
+    group = 'distribution'
+    description = 'Validate and embed all registered SDK releases, artifacts and guides'
+    dependsOn configurations.echoSdkReleases
+    inputs.files configurations.echoSdkReleases
+    inputs.files fileTree(additionalReleases)
+    inputs.property('additionalReleases', additionalReleases.absolutePath)
+    outputs.dir bundledSdkResources
+    doLast {
+        def fail = { String message -> throw new GradleException('SDK catalog: ' + message) }
+        def token = { value, String pattern, String label ->
+            if (!(value instanceof String) || !(value ==~ pattern)) fail('invalid ' + label + ': ' + value)
+            value
+        }
+        def text = { value, String label ->
+            if (value instanceof String) {
+                if (value.trim().isEmpty()) fail('empty ' + label)
+            } else if (!(value instanceof Map) || value.isEmpty()
+                    || value.values().any { !(it instanceof String) || it.trim().isEmpty() }) {
+                fail('invalid localized text: ' + label)
+            }
+            value
+        }
+        def sha256 = { File source ->
+            def digest = MessageDigest.getInstance('SHA-256')
+            source.withInputStream { input ->
+                byte[] buffer = new byte[65536]
+                int count
+                while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count)
+            }
+            digest.digest().encodeHex().toString()
+        }
+        def guide = { value, Set artifactIds ->
+            if (!(value instanceof Map) || !(value.sections instanceof List) || value.sections.isEmpty()) {
+                fail('each release must provide guide.sections')
+            }
+            def sectionIds = new HashSet()
+            def inputIds = new HashSet()
+            def snippets = []
+            value.sections.each { section ->
+                token(section.id, '[a-z][a-z0-9-]{0,63}', 'guide section id')
+                if (!sectionIds.add(section.id)) fail('duplicate guide section: ' + section.id)
+                text(section.title, 'section title')
+                (section.paragraphs ?: []).each { text(it, 'guide paragraph') }
+                (section.inputs ?: []).each { input ->
+                    token(input.id, '[A-Za-z][A-Za-z0-9_-]{0,63}', 'guide input id')
+                    if (!inputIds.add(input.id)) fail('duplicate guide input: ' + input.id)
+                    if (!(input.type in ['text', 'url'])) fail('unsupported guide input type: ' + input.type)
+                    text(input.label, 'input label')
+                    if (!(input.defaultValue instanceof String)) fail('input defaultValue must be a string')
+                }
+                snippets.addAll(section.snippets ?: [])
+                def optionIds = new HashSet()
+                (section.options ?: []).each { option ->
+                    token(option.id, '[a-z][a-z0-9-]{0,63}', 'guide option id')
+                    if (!optionIds.add(option.id)) fail('duplicate guide option: ' + option.id)
+                    text(option.label, 'option label')
+                    (option.paragraphs ?: []).each { text(it, 'option paragraph') }
+                    if (option.artifact != null && !artifactIds.contains(option.artifact)) {
+                        fail('unknown guide option artifact: ' + option.artifact)
+                    }
+                    snippets.addAll(option.snippets ?: [])
+                }
+            }
+            snippets.each { snippet ->
+                if (!(snippet.code instanceof String) || snippet.code.isEmpty()) fail('empty code snippet')
+                text(snippet.label, 'snippet label')
+                def references = snippet.code =~ /\{\{(?:json:)?([A-Za-z][A-Za-z0-9_-]*)\}\}/
+                references.each { reference ->
+                    if (!inputIds.contains(reference[1])) fail('unknown guide input: ' + reference[1])
+                }
+            }
+            value
+        }
+
+        if (providers.gradleProperty('sdkCatalogDir').isPresent() && !additionalReleases.isDirectory()) {
+            fail('sdkCatalogDir is not a directory: ' + additionalReleases)
+        }
+        def roots = configurations.echoSdkReleases.files + [additionalReleases]
+        def descriptors = roots.collectMany { root ->
+            fileTree(root).matching { include '**/release.json' }.files
+        }.sort { it.absolutePath }
+        def releasesBySdk = [:]
+        def filesToCopy = []
+        descriptors.each { File descriptor ->
+            def entry = new JsonSlurper().parse(descriptor, 'UTF-8')
+            if (entry.schemaVersion != 1 || !(entry.sdk instanceof Map)) fail('unsupported release schema: ' + descriptor)
+            def sdkId = token(entry.sdk.id, '[a-z][a-z0-9-]{0,63}', 'SDK id')
+            text(entry.sdk.name, 'SDK name')
+            text(entry.sdk.description, 'SDK description')
+            text(entry.sdk.language, 'SDK language')
+            def sdkVersion = token(entry.version, '[A-Za-z0-9][A-Za-z0-9._+-]{0,127}', 'SDK version')
+            if (!(entry.channel in ['stable', 'preview', 'deprecated'])) fail('invalid release channel')
+            if (!(entry.recommended instanceof Boolean)) fail('recommended must be true or false')
+            if (entry.channel == 'deprecated' && entry.recommended) fail('a deprecated release cannot be recommended')
+            try { LocalDate.parse(entry.releaseDate as String) } catch (Exception ignored) { fail('invalid releaseDate') }
+            if (!(entry.compatibility instanceof List) || entry.compatibility.isEmpty()) fail('missing compatibility')
+            entry.compatibility.each { text(it, 'compatibility') }
+            if (!(entry.artifacts instanceof List) || entry.artifacts.isEmpty()) fail('a release needs artifacts')
+            def artifactIds = new HashSet()
+            def fileNames = new HashSet()
+            def artifacts = entry.artifacts.collect { artifact ->
+                def artifactId = token(artifact.id, '[a-z][a-z0-9-]{0,63}', 'artifact id')
+                if (!artifactIds.add(artifactId)) fail('duplicate artifact id: ' + artifactId)
+                def fileName = token(artifact.fileName, '[A-Za-z0-9][A-Za-z0-9._+-]{0,254}', 'artifact filename')
+                if (!fileNames.add(fileName)) fail('duplicate artifact filename: ' + fileName)
+                text(artifact.label, 'artifact label')
+                token(artifact.mediaType, '[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+', 'artifact media type')
+                File source = new File(descriptor.parentFile, fileName)
+                if (!source.isFile() || source.canonicalFile.parentFile != descriptor.parentFile.canonicalFile) {
+                    fail('artifact missing or outside its release directory: ' + source)
+                }
+                filesToCopy.add([source: source, target: sdkId + '/' + sdkVersion + '/' + fileName])
+                def versionPath = URLEncoder.encode(sdkVersion, StandardCharsets.UTF_8)
+                [id: artifactId, label: artifact.label, description: artifact.description,
+                 fileName: fileName, mediaType: artifact.mediaType, size: source.length(), sha256: sha256(source),
+                 downloadUrl: '/api/admin/sdk/' + sdkId + '/releases/' + versionPath + '/artifacts/' + artifactId]
+            }
+            guide(entry.guide, artifactIds)
+            def release = [version: sdkVersion, channel: entry.channel, recommended: entry.recommended,
+                           releaseDate: entry.releaseDate, compatibility: entry.compatibility,
+                           artifacts: artifacts, guide: entry.guide]
+            def existing = releasesBySdk.computeIfAbsent(sdkId) { [] }
+            if (existing.any { it.release.version == sdkVersion }) fail('duplicate SDK/version: ' + sdkId + '/' + sdkVersion)
+            existing.add([sdk: entry.sdk, release: release])
+        }
+        def sdks = releasesBySdk.collect { sdkId, entries ->
+            def recommended = entries.findAll { it.release.recommended }
+            if (recommended.size() != 1) fail('SDK must have exactly one recommended release: ' + sdkId)
+            def canonical = recommended.first().sdk
+            def releases = entries.collect { it.release }.sort { a, b ->
+                (b.recommended <=> a.recommended) ?: (b.releaseDate <=> a.releaseDate) ?: (b.version <=> a.version)
+            }
+            [id: sdkId, name: canonical.name, language: canonical.language, description: canonical.description,
+             recommendedVersion: recommended.first().release.version, releases: releases]
+        }.sort { it.id }
+
+        File outputRoot = bundledSdkResources.get().asFile
+        delete outputRoot
+        File resources = new File(outputRoot, 'echo-sdk')
+        resources.mkdirs()
+        filesToCopy.each { item ->
+            File destination = new File(resources, item.target)
+            destination.parentFile.mkdirs()
+            Files.copy(item.source.toPath(), destination.toPath())
+        }
+        new File(resources, 'catalog.json').setText(
+                JsonOutput.prettyPrint(JsonOutput.toJson([schemaVersion: 1, sdks: sdks])) + '\n', 'UTF-8')
+    }
+}
+sourceSets.main.resources.srcDir(bundledSdkResources)
+tasks.named('processResources') { dependsOn tasks.named('bundleSdk') }

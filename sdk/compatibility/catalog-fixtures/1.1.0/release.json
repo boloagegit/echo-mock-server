@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "sdk": {
+    "id": "catalog-test-client",
+    "name": "Catalog test client (TEST FIXTURE)",
+    "language": "Fixture",
+    "description": {
+      "zh-TW": "僅供 SDK 中心驗收的測試資料，不是可使用的 SDK。",
+      "en": "SDK Center verification data only; this is not an application SDK."
+    }
+  },
+  "version": "1.1.0",
+  "channel": "stable",
+  "recommended": true,
+  "releaseDate": "2026-10-22",
+  "compatibility": [
+    {
+      "zh-TW": "僅供測試",
+      "en": "Test fixture only"
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "text",
+      "label": {
+        "zh-TW": "測試文字檔",
+        "en": "Fixture text"
+      },
+      "fileName": "catalog-fixture-1.1.0.txt",
+      "mediaType": "text/plain",
+      "description": {
+        "zh-TW": "驗證非 JAR／ZIP 格式及依版本下載。",
+        "en": "Verifies non-JAR formats and version-specific downloads."
+      }
+    }
+  ],
+  "guide": {
+    "sections": [
+      {
+        "id": "example",
+        "title": {
+          "zh-TW": "測試安裝說明 1.1.0",
+          "en": "Fixture guide 1.1.0"
+        },
+        "paragraphs": [
+          {
+            "zh-TW": "這份說明屬於 1.1.0，用來確認切換版本時說明與檔案一同更新。",
+            "en": "This guide belongs to 1.1.0 and checks that release selection changes both guide and file."
+          }
+        ],
+        "inputs": [
+          {
+            "id": "endpoint",
+            "label": "Endpoint",
+            "hint": {
+              "zh-TW": "測試用欄位",
+              "en": "Fixture field"
+            },
+            "type": "url",
+            "defaultValue": "{{echoMockUrl}}"
+          }
+        ],
+        "snippets": [
+          {
+            "label": {
+              "zh-TW": "測試設定",
+              "en": "Fixture configuration"
+            },
+            "language": "json",
+            "code": "{\"version\":\"1.1.0\",\"endpoint\":{{json:endpoint}}}"
+          }
+        ]
+      }
+    ]
+  }
+}

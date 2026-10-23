@@ -364,6 +364,12 @@ spotbugsTest.enabled = false
 spotbugsH2MigrationTest.enabled = false
 
 // Build Fat Jar
+// SDK producers publish download resources, never server runtime dependencies.
+apply from: 'gradle/sdk-catalog.gradle'
+dependencies {
+    echoSdkReleases project(path: ':sdk', configuration: 'echoSdkRelease')
+}
+
 tasks.named('bootJar') {
     archiveBaseName = 'echo-server'
     archiveVersion = version

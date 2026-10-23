@@ -1,0 +1,104 @@
+plugins {
+    id 'java-library'
+}
+
+group = 'com.echo'
+version = '0.1.0-SNAPSHOT'
+description = 'Echo outbound routing for Spring Cloud OpenFeign (compatibility prototype)'
+
+base { archivesName = 'echo-spring-boot-starter' }
+
+repositories { mavenCentral() }
+
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(17) }
+    withSourcesJar()
+}
+
+// Compile once against the oldest tested generation. The consuming AP owns its
+// Boot/Cloud/Feign/transport versions; none of them are bundled into this JAR.
+dependencies {
+    compileOnly platform('org.springframework.boot:spring-boot-dependencies:3.0.13')
+    compileOnly platform('org.springframework.cloud:spring-cloud-dependencies:2022.0.5')
+    compileOnly 'org.springframework.boot:spring-boot-autoconfigure'
+    compileOnly 'org.springframework.cloud:spring-cloud-openfeign-core'
+    compileOnly 'org.springframework.cloud:spring-cloud-commons'
+    compileOnly 'io.github.openfeign:feign-core'
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor:3.0.13'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 17
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
+def distributionDocs = tasks.register('distributionDocs', Sync) {
+    inputs.property('sdkVersion', version.toString())
+    from('distribution') {
+        filter(org.apache.tools.ant.filters.ReplaceTokens, tokens: [sdkVersion: version.toString()])
+        filteringCharset = 'UTF-8'
+    }
+    into layout.buildDirectory.dir('distribution/docs')
+}
+
+def distributionChecksums = tasks.register('distributionChecksums') {
+    dependsOn tasks.named('jar'), tasks.named('sourcesJar')
+    def artifacts = files(tasks.named('jar'), tasks.named('sourcesJar'))
+    inputs.files artifacts
+    def output = layout.buildDirectory.file('distribution/SHA256SUMS')
+    outputs.file output
+    doLast {
+        def lines = artifacts.files.sort { it.name }.collect {
+            java.security.MessageDigest.getInstance('SHA-256').digest(it.bytes).encodeHex().toString() + '  ' + it.name
+        }
+        output.get().asFile.parentFile.mkdirs()
+        output.get().asFile.setText(lines.join('\n') + '\n', 'UTF-8')
+    }
+}
+
+def distributionZip = tasks.register('distributionZip', Zip) {
+    group = 'distribution'
+    description = 'Build the SDK download with installation instructions, sources and checksums'
+    archiveClassifier = 'download'
+    destinationDirectory = layout.buildDirectory.dir('distributions')
+    from tasks.named('jar')
+    from tasks.named('sourcesJar')
+    from distributionDocs
+    from distributionChecksums
+    from layout.projectDirectory.file('../LICENSE')
+}
+
+def distributionMetadata = tasks.register('distributionMetadata') {
+    inputs.file layout.projectDirectory.file('catalog/release.json')
+    inputs.property('sdkVersion', version.toString())
+    def output = layout.buildDirectory.file('distribution/metadata/release.json')
+    outputs.file output
+    doLast {
+        output.get().asFile.parentFile.mkdirs()
+        output.get().asFile.setText(
+                file('catalog/release.json').getText('UTF-8').replace('@sdkVersion@', version.toString()), 'UTF-8')
+    }
+}
+
+def sdkRelease = tasks.register('sdkRelease', Sync) {
+    from tasks.named('jar')
+    from distributionZip
+    from distributionMetadata
+    into layout.buildDirectory.dir('sdk-release')
+}
+configurations {
+    echoSdkRelease {
+        canBeConsumed = true
+        canBeResolved = false
+    }
+}
+artifacts.add('echoSdkRelease', layout.buildDirectory.dir('sdk-release')) {
+    builtBy sdkRelease
+}
+
+tasks.named('assemble') { dependsOn distributionZip }

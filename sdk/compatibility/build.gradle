@@ -1,0 +1,43 @@
+plugins { id 'java' }
+
+repositories { mavenCentral() }
+
+def bootVersion = providers.gradleProperty('bootVersion').getOrElse('3.5.16')
+def cloudVersion = providers.gradleProperty('cloudVersion').getOrElse('2025.0.3')
+def sdkJar = providers.gradleProperty('sdkJar').getOrElse('../build/libs/echo-spring-boot-starter-0.1.0-SNAPSHOT.jar')
+layout.buildDirectory = file("build/boot-${bootVersion}")
+
+java { toolchain { languageVersion = JavaLanguageVersion.of(17) } }
+tasks.withType(JavaCompile).configureEach { options.release = 17 }
+
+dependencies {
+    // Prevent a Cloud artifact's transitive Boot version from silently upgrading
+    // the requested test row (especially the 3.0/3.1 boundary).
+    implementation enforcedPlatform("org.springframework.boot:spring-boot-dependencies:${bootVersion}")
+    implementation platform("org.springframework.cloud:spring-cloud-dependencies:${cloudVersion}")
+    implementation files(sdkJar)
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
+    implementation 'org.springframework.cloud:spring-cloud-starter-loadbalancer'
+    implementation 'org.springframework.cloud:spring-cloud-starter-circuitbreaker-resilience4j'
+    implementation 'io.github.openfeign:feign-hc5'
+    implementation 'io.github.openfeign:feign-okhttp'
+    implementation 'io.github.openfeign:feign-micrometer'
+    implementation 'io.micrometer:micrometer-observation'
+    // Exercise the retryable load-balancer separately; this is AP-owned, not SDK-owned.
+    implementation 'org.springframework.retry:spring-retry'
+}
+
+tasks.register('prepareProbe') {
+    dependsOn classes
+    doLast {
+        def result = layout.buildDirectory.file('runtime-classpath.txt').get().asFile
+        result.parentFile.mkdirs()
+        result.text = sourceSets.main.runtimeClasspath.asPath
+        def versions = configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts
+                .findAll { it.name in ['spring-boot', 'spring-cloud-openfeign-core', 'feign-core', 'spring-cloud-commons', 'jackson-databind'] }
+                .collect { "${it.moduleVersion.id.group}:${it.name}:${it.moduleVersion.id.version}" }
+        layout.buildDirectory.file('resolved-versions.txt').get().asFile.text = versions.sort().join('\n') + '\n'
+    }
+}

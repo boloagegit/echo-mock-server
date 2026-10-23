@@ -1,0 +1,183 @@
+{
+  "schemaVersion": 1,
+  "sdk": {
+    "id": "spring-openfeign",
+    "name": "Echo Spring Boot Starter",
+    "language": "Java",
+    "description": {
+      "zh-TW": "將選定的 Spring Cloud OpenFeign 呼叫導向 Echo，沿用既有 Feign interface 與下游 URL。",
+      "en": "Route selected Spring Cloud OpenFeign calls to Echo while keeping existing interfaces and downstream URLs."
+    }
+  },
+  "version": "@sdkVersion@",
+  "channel": "preview",
+  "recommended": true,
+  "releaseDate": "2026-10-22",
+  "compatibility": [
+    "Java 17+",
+    "Spring Boot 3 / 4",
+    "Spring Cloud OpenFeign"
+  ],
+  "artifacts": [
+    {
+      "id": "jar",
+      "label": "JAR",
+      "description": {
+        "zh-TW": "安裝到 Client AP 的普通 Starter JAR。",
+        "en": "Standalone starter JAR for your client application."
+      },
+      "fileName": "echo-spring-boot-starter-@sdkVersion@.jar",
+      "mediaType": "application/java-archive"
+    },
+    {
+      "id": "bundle",
+      "label": {
+        "zh-TW": "完整 ZIP",
+        "en": "Full ZIP"
+      },
+      "description": {
+        "zh-TW": "含 JAR、原始碼、README、本機 Maven POM、YAML 範例與校驗碼。",
+        "en": "Includes JAR, sources, README, local Maven POM, YAML example and checksums."
+      },
+      "fileName": "echo-spring-boot-starter-@sdkVersion@-download.zip",
+      "mediaType": "application/zip"
+    }
+  ],
+  "guide": {
+    "sections": [
+      {
+        "id": "install",
+        "title": {
+          "zh-TW": "加入應用依賴",
+          "en": "Add the application dependency"
+        },
+        "paragraphs": [
+          {
+            "zh-TW": "應用需已使用 Spring Cloud OpenFeign，並配對相容的 Boot／Cloud 版本。",
+            "en": "Your application must already use Spring Cloud OpenFeign with compatible Boot and Cloud versions."
+          }
+        ],
+        "options": [
+          {
+            "id": "gradle",
+            "label": "Gradle",
+            "artifact": "jar",
+            "paragraphs": [
+              {
+                "zh-TW": "將 JAR 放入應用的 libs/，在 build.gradle 加入：",
+                "en": "Place the JAR in your application's libs/ directory and add to build.gradle:"
+              }
+            ],
+            "snippets": [
+              {
+                "label": {
+                  "zh-TW": "Gradle 依賴",
+                  "en": "Gradle dependency"
+                },
+                "language": "groovy",
+                "code": "implementation files('libs/echo-spring-boot-starter-@sdkVersion@.jar')"
+              }
+            ]
+          },
+          {
+            "id": "maven",
+            "label": "Maven",
+            "artifact": "bundle",
+            "paragraphs": [
+              {
+                "zh-TW": "解壓完整 ZIP，在該目錄執行本機安裝，再加入下方依賴；不需申請 Maven Central。",
+                "en": "Extract the full ZIP, install from that directory, then add the dependency. No Maven Central account is required."
+              }
+            ],
+            "snippets": [
+              {
+                "label": {
+                  "zh-TW": "本機安裝指令",
+                  "en": "Local install command"
+                },
+                "language": "shell",
+                "code": "mvn install:install-file -Dfile=echo-spring-boot-starter-@sdkVersion@.jar -DpomFile=echo-spring-boot-starter.pom"
+              },
+              {
+                "label": {
+                  "zh-TW": "Maven 依賴",
+                  "en": "Maven dependency"
+                },
+                "language": "xml",
+                "code": "<dependency>\n    <groupId>com.echo</groupId>\n    <artifactId>echo-spring-boot-starter</artifactId>\n    <version>@sdkVersion@</version>\n</dependency>"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "configure",
+        "title": {
+          "zh-TW": "設定導向 Echo",
+          "en": "Route clients to Echo"
+        },
+        "paragraphs": [
+          {
+            "zh-TW": "將設定加入模擬環境，設定 ECHO_CLIENT_ENABLED=true 後重啟應用。停用時改為 false 並重啟；未選定的 client 仍走原後端。",
+            "en": "Add this configuration to your mock environment, set ECHO_CLIENT_ENABLED=true and restart. Set false and restart to disable. Unselected clients still call the original backend."
+          }
+        ],
+        "inputs": [
+          {
+            "id": "echoUrl",
+            "type": "url",
+            "label": {
+              "zh-TW": "Echo mock URL",
+              "en": "Echo mock URL"
+            },
+            "hint": {
+              "zh-TW": "填入應用可連線的 Echo 位址，保留部署路徑與 /mock。",
+              "en": "Use an Echo address reachable from your application, including its context path and /mock."
+            },
+            "defaultValue": "{{echoMockUrl}}"
+          },
+          {
+            "id": "clientId",
+            "type": "text",
+            "label": {
+              "zh-TW": "要導向的 Feign client",
+              "en": "Feign client to route"
+            },
+            "hint": {
+              "zh-TW": "填入 contextId；沒有指定 contextId 時填入 name。保留原本的下游 URL。",
+              "en": "Use contextId, or name if contextId is not specified. Keep the original downstream URL."
+            },
+            "defaultValue": "orderClient"
+          }
+        ],
+        "snippets": [
+          {
+            "label": {
+              "zh-TW": "YAML 設定",
+              "en": "YAML configuration"
+            },
+            "language": "yaml",
+            "code": "echo:\n  client:\n    enabled: ${ECHO_CLIENT_ENABLED:false}\n    server-url: {{json:echoUrl}}\n    include-clients:\n      - {{json:clientId}}"
+          }
+        ]
+      },
+      {
+        "id": "verify",
+        "title": {
+          "zh-TW": "驗證請求與支援範圍",
+          "en": "Verify a request and compatibility"
+        },
+        "paragraphs": [
+          {
+            "zh-TW": "在 Echo 建立對應 path／method 的模擬規則，再呼叫應用原有業務入口，到「請求紀錄」確認命中的規則與回應。匹配路徑不需加 /mock。",
+            "en": "Create an Echo rule for the actual path and method, call your existing business endpoint, then check the matching rule and response in Request Logs. Omit /mock from the matching path."
+          },
+          {
+            "zh-TW": "已測組合的 Boot 3／4 可沿用同一份 SDK 與設定。升級仍需配對 Cloud 版本；OpenFeign 5 已移除 OkHttp 自動整合。詳細版本、必要依賴及公司自訂 codec／認證／TLS／LoadBalancer 接入限制見 ZIP 內 README。",
+            "en": "Tested Boot 3 / 4 combinations use the same SDK and configuration. Upgrade matching Cloud versions as well; OpenFeign 5 removed automatic OkHttp integration. See the ZIP README for tested versions, required dependencies and custom codec, authentication, TLS and LoadBalancer integration limits."
+          }
+        ]
+      }
+    ]
+  }
+}

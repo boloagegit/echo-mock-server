@@ -370,7 +370,10 @@ test('all sidebar buttons have permanent names and current-page semantics', () =
   }
   // Each item pairs a decorative Echo icon with its visible, localized name.
   const menuItems = sidebar.match(/<button[^>]*class="user-menu__item[^"]*"[^>]*>\s*<ui-icon name="\w+"><\/ui-icon><span>\{\{t\('sidebar\.\w+'\)\}\}<\/span>/g);
-  assert.equal(menuItems.length, 4);
+  assert.equal(menuItems.length, 5);
+  const sdkEntry = sidebar.match(/<button[^>]*class="user-menu__item"[^>]*@click="closeUserMenu\(\); go\('sdk'\)"[^>]*>/)[0];
+  assert.ok(sdkEntry.includes('v-if="isLoggedIn"'));
+  assert.ok(sdkEntry.includes(":aria-current=\"page==='sdk'?'page':undefined\""));
   for (const action of ['show-help', 'change-password', 'logout', 'login']) {
     assert.ok(sidebar.includes("runMenuAction('" + action + "')"), action);
   }

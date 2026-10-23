@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="/webjars/bootstrap-icons/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="/webjars/codemirror/lib/codemirror.css">
     <link rel="stylesheet" href="/theme.css?v=20261006.1">
-    <link rel="stylesheet" href="/style.css?v=20261016.1">
+    <link rel="stylesheet" href="/style.css?v=20261023.1">
     <link rel="stylesheet" href="/console.css?v=20261019.1">
     <script src="/ui-boot.js?v=20261007.3"></script>
     <script src="/ui-accent.js?v=20261006.1"></script>
@@ -30,7 +30,7 @@
     <div class="top-loader" v-if="loading.rules||loading.logs||loading.audit||loading.responses||loading.accounts||loading.issues"></div>
     <div class="layout">
         <sidebar-nav
-            :page="page" @update:page="page=$event"
+            :page="page" @update:page="navigatePage($event)"
             :sidebar-collapsed="sidebarCollapsed" @update:sidebar-collapsed="sidebarCollapsed=$event"
             :mobile-menu="mobileMenu" @update:mobile-menu="mobileMenu=$event"
             :env-label="envLabel" :is-admin="isAdmin" :is-logged-in="isLoggedIn"
@@ -219,6 +219,11 @@
             ></responses-page>
 
 
+            <!-- SDK Downloads -->
+            <sdk-page v-if="shownPage==='sdk'" :is-logged-in="isLoggedIn" :locale="locale"
+                :selection="sdkSelection" @update:selection="sdkSelection=$event"
+                @login="login" @clip-copy="clipCopy($event)"></sdk-page>
+
             <!-- Accounts Page -->
             <accounts-page v-if="shownPage==='accounts'"
                 :accounts="accountsCtx" :loading="loading"
@@ -367,7 +372,7 @@
 <script src="/utils.js?v=20261012.2"></script>
 <script src="/sse-events.js?v=20261013.2"></script>
 <!-- Composables (Loading sequence: utils.js → composables → components → app.js) -->
-<script src="/composables/useI18n.js?v=20261016.2"></script>
+<script src="/composables/useI18n.js?v=20261023.1"></script>
 <script src="/composables/useToast.js?v=20261012.2"></script>
 <script src="/composables/useDiscardGuard.js?v=20261001.2"></script>
 <script src="/composables/useAuth.js?v=20261007.5"></script>
@@ -382,7 +387,7 @@
 <script src="/composables/useRuleForm.js?v=20261013.4"></script>
 <script src="/composables/useAccounts.js?v=20260904.1"></script>
 <script src="/composables/useIssues.js?v=20261001.1"></script>
-<script src="/composables/useRouter.js?v=20261016.2"></script>
+<script src="/composables/useRouter.js?v=20261022.3"></script>
 <script src="/components/UiButton.js?v=20260909.4"></script>
 <script src="/components/UiBadge.js?v=20260909.2"></script>
 <script src="/components/UiStatus.js?v=20260909.1"></script>
@@ -394,7 +399,7 @@
 <script src="/components/UiDropdownMenu.js?v=20261007.21"></script>
 <script src="/components/UiRowMenu.js?v=20261007.21"></script>
 <script src="/components/UiDetailDrawer.js?v=20261007.13"></script>
-<script src="/components/UiIcon.js?v=20261007.8"></script>
+<script src="/components/UiIcon.js?v=20261022.1"></script>
 <script src="/components/UiDetailSection.js?v=20261007.13"></script>
 <script src="/components/UiCodeViewer.js?v=20261007.21"></script>
 <script src="/components/UiLoadState.js?v=20260909.1"></script>
@@ -402,7 +407,7 @@
 <script src="/components/UiChoiceGroup.js?v=20260909.1"></script>
 <script src="/components/UiModalTransition.js?v=20260909.1"></script>
 <script src="/components/UiMotionIcon.js?v=20260909.1"></script>
-<script src="/components/SidebarNav.js?v=20261019.1"></script>
+<script src="/components/SidebarNav.js?v=20261022.2"></script>
 <script src="/components/ToastContainer.js?v=20261012.2"></script>
 <script src="/components/WorkspaceSearchField.js?v=20261007.9"></script>
 <script src="/components/WorkspacePagination.js?v=20260909.4"></script>
@@ -424,6 +429,7 @@
 <script src="/components/ResourceMonitoringPanel.js?v=20261018.1"></script>
 <script src="/components/ConnectionTargetsTable.js?v=20261007.5"></script>
 <script src="/components/SettingsPage.js?v=20261013.1"></script>
+<script src="/components/SdkPage.js?v=20261023.1"></script>
 <script src="/components/PriorityHelpModal.js?v=20261007.5"></script>
 <script src="/components/RuleTable.js?v=20261012.2"></script>
 <script src="/components/RuleDetail.js?v=20261013.1"></script>
@@ -435,6 +441,6 @@
 <script src="/components/RuleApplyModal.js?v=20261007.2"></script>
 <script src="/components/OpenApiPreviewModal.js?v=20261007.5"></script>
 <script src="/easter-egg.js?v=20261016.1"></script>
-<script src="/app.js?v=20261016.3"></script>
+<script src="/app.js?v=20261022.3"></script>
 </body>
 </html>
