@@ -82,9 +82,16 @@ bundleSdk 會驗證所有描述及檔案，再產生 catalog.json、實際大小
 
 ## 接入說明
 
-guide.sections 是有順序的章節。每個章節有 id、title，可提供 paragraphs、inputs、snippets，或用 options 提供 Gradle／Maven、npm／pnpm 等不同安裝方式。每個 option 有 id、label、paragraphs 與 snippets。頁面只依資料渲染，不判斷特定 SDK 名稱、語言或 artifact 格式。
+guide.sections 是有順序的章節，頁面依序自動編號，title 不需自帶「1.」等序號。每個章節有 id、title，可提供 paragraphs、inputs、snippets，或用 options 提供 Gradle／Maven、npm／pnpm 等不同安裝方式。每個 option 有 id、label、paragraphs 與 snippets，並可選填 artifact，指向同一版本中該安裝方式需要的 artifact id；建置時會驗證該 id 存在。頁面只依資料渲染，不判斷特定 SDK 名稱、語言或 artifact 格式。
 
 輸入欄位支援 text、url。defaultValue 的 {{echoMockUrl}} 會使用目前瀏覽器開啟的 Echo mock URL，使用者可修改為 AP 可連線的網址。snippet 的 {{fieldId}} 直接替換文字，{{json:fieldId}} 使用 JSON 字串編碼，可安全放入 JSON 或 YAML。所有參照都必須是該版本已宣告的輸入欄位。說明與程式碼使用文字插值顯示，不執行內容或插入原始 HTML。
+
+## 頁面資訊架構
+
+- 清單：每個 SDK 一列，並排名稱與用途、語言、推薦版本的適用環境、推薦版本與通道；多於一個 SDK 時才顯示搜尋。整列與「開始接入」按鈕都會進入該 SDK 的推薦版本。
+- 詳細頁頂端：SDK 名稱、用途與版本選單，下方列出該版本的適用環境，先回答「能不能用」。非推薦、預覽或已棄用版本會顯示提示；非推薦版本提供一鍵改用推薦版本。
+- 下載面板：版本、發布日期與一個主要下載。主要下載是目前所選安裝方式的 option.artifact；沒有對應時使用 artifacts 的第一個檔案。其他檔案、用途、檔名、大小與 SHA-256 收在同一面板，不需另讀文件判斷。桌面版固定在右側，手機版排在步驟之前。
+- 接入步驟：guide.sections 以單欄編號步驟呈現。安裝方式切換會同步更新說明、需要的檔案與程式碼；設定欄位修改後，程式碼範例即時更新並可複製。
 
 ## API 與網址
 

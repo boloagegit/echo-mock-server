@@ -177,8 +177,11 @@ def main():
                             with zipfile.ZipFile(location / bundle["fileName"]) as archive:
                                 assert archive.testzip() is None
                                 assert archive.read(jar["fileName"]) == (location / jar["fileName"]).read_bytes()
+                            primary = page.locator(".sdk-file.is-primary [data-artifact-id]")
+                            assert primary.get_attribute("data-artifact-id") == "jar"
                             page.get_by_text("Maven", exact=True).click()
                             page.locator(".sdk-snippet").filter(has_text="mvn install:install-file").wait_for()
+                            assert primary.get_attribute("data-artifact-id") == "bundle"
                             assert release["version"] in page.locator(".sdk-snippet").first.inner_text()
                             page.get_by_label("要導向的 Feign client", exact=True).fill("companyOrders")
                             assert '"companyOrders"' in page.locator("[data-guide-id=configure] code").inner_text()
@@ -186,6 +189,8 @@ def main():
                             page.get_by_text("Gradle", exact=True).click()
                             page.wait_for_function(
                                 "document.querySelectorAll('[data-guide-id=install] .ui-segmented-control__check').length === 1")
+                            assert primary.get_attribute("data-artifact-id") == "jar"
+                            report["primaryDownloadFollowsInstallMethod"] = True
                         page.screenshot(path=str(screenshots / ("sdk-" + sdk["id"] + "-" + release["version"] + ".png")),
                                         full_page=True, animations="disabled")
                     if len(sdk["releases"]) > 1:

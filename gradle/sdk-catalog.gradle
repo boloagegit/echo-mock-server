@@ -49,7 +49,7 @@ tasks.register('bundleSdk') {
             }
             digest.digest().encodeHex().toString()
         }
-        def guide = { value ->
+        def guide = { value, Set artifactIds ->
             if (!(value instanceof Map) || !(value.sections instanceof List) || value.sections.isEmpty()) {
                 fail('each release must provide guide.sections')
             }
@@ -75,6 +75,9 @@ tasks.register('bundleSdk') {
                     if (!optionIds.add(option.id)) fail('duplicate guide option: ' + option.id)
                     text(option.label, 'option label')
                     (option.paragraphs ?: []).each { text(it, 'option paragraph') }
+                    if (option.artifact != null && !artifactIds.contains(option.artifact)) {
+                        fail('unknown guide option artifact: ' + option.artifact)
+                    }
                     snippets.addAll(option.snippets ?: [])
                 }
             }
@@ -112,7 +115,6 @@ tasks.register('bundleSdk') {
             try { LocalDate.parse(entry.releaseDate as String) } catch (Exception ignored) { fail('invalid releaseDate') }
             if (!(entry.compatibility instanceof List) || entry.compatibility.isEmpty()) fail('missing compatibility')
             entry.compatibility.each { text(it, 'compatibility') }
-            guide(entry.guide)
             if (!(entry.artifacts instanceof List) || entry.artifacts.isEmpty()) fail('a release needs artifacts')
             def artifactIds = new HashSet()
             def fileNames = new HashSet()
@@ -133,6 +135,7 @@ tasks.register('bundleSdk') {
                  fileName: fileName, mediaType: artifact.mediaType, size: source.length(), sha256: sha256(source),
                  downloadUrl: '/api/admin/sdk/' + sdkId + '/releases/' + versionPath + '/artifacts/' + artifactId]
             }
+            guide(entry.guide, artifactIds)
             def release = [version: sdkVersion, channel: entry.channel, recommended: entry.recommended,
                            releaseDate: entry.releaseDate, compatibility: entry.compatibility,
                            artifacts: artifacts, guide: entry.guide]
