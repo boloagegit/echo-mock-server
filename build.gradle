@@ -181,7 +181,7 @@ dependencies {
     testImplementation 'com.unboundid:unboundid-ldapsdk:7.0.5'
     testImplementation 'net.jqwik:jqwik:1.10.1'
     // Architecture boundary rules (see docs/design/engine-extensibility.md)
-    testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.1'
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.5.1'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
     // Offline H2-to-SQLite migration tool (see sourceSets.h2Migration)
