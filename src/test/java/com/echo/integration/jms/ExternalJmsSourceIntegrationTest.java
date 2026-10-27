@@ -76,6 +76,8 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
         registry.add("echo.jms.queue", () -> QUEUE);
         registry.add("echo.jms.port", () -> String.valueOf(UNUSED_EMBEDDED_PORT));
         registry.add("echo.jms.concurrency", () -> "2-2");
+        // Demand-driven delivery keeps slow requests available to both source listeners.
+        registry.add("echo.jms.consumer-window-size", () -> "0");
     }
 
     @AfterAll
@@ -214,7 +216,7 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
         var received = new CountDownLatch(blockedRequests);
         var failure = new AtomicReference<Throwable>();
         var targetIds = new ArrayList<String>();
-        try (var factory = new ActiveMQConnectionFactory(esbUrl());
+        try (var factory = slowTargetFactory();
              var downstream = factory.createConnection()) {
             downstream.start();
             var sessions = new ArrayList<Session>();
@@ -294,6 +296,13 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
             for (String id : targetIds) context.getBean(JmsTargetForwarder.class).evict(Long.valueOf(id));
             context.getBean(JmsTargetConnectionRepository.class).deleteAll();
         }
+    }
+
+    private static ActiveMQConnectionFactory slowTargetFactory() {
+        var factory = new ActiveMQConnectionFactory(esbUrl());
+        // Each blocking fixture callback owns one request, without prefetching another.
+        factory.setConsumerWindowSize(0);
+        return factory;
     }
 
     private static void assertReply(Reply reply, String expected) {

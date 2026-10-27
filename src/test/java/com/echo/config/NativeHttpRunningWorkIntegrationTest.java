@@ -49,11 +49,21 @@ class NativeHttpRunningWorkIntegrationTest extends BaseIntegrationTest {
     void timedOutAsyncCompletionRetainsItsBodyUntilTheListenerActuallyReturns(boolean segmented) throws Exception {
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch downstreamEntered = new CountDownLatch(1);
+        CountDownLatch allowResponse = new CountDownLatch(1);
         HttpServer downstream = HttpServer.create(new InetSocketAddress(
                 InetAddress.getByAddress(new byte[]{127, 0, 0, 1}), 0), 0);
         byte[] body = new byte[65536];
         java.util.Arrays.fill(body, (byte) 'x');
         downstream.createContext("/", exchange -> {
+            downstreamEntered.countDown();
+            try {
+                allowResponse.await();
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+                exchange.close();
+                return;
+            }
             exchange.sendResponseHeaders(200, segmented ? 0 : body.length);
             try (var output = exchange.getResponseBody()) { output.write(body); }
             finally { exchange.close(); }
@@ -76,6 +86,11 @@ class NativeHttpRunningWorkIntegrationTest extends BaseIntegrationTest {
             }));
             var reply = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build()
                     .sendAsync(request("/after-downstream").build(), HttpResponse.BodyHandlers.ofString());
+            assertThat(downstreamEntered.await(3, TimeUnit.SECONDS)).isTrue();
+            // A completed future may invoke its continuation inline on the worker.
+            // Hold the response until that worker has returned, making this path asynchronous.
+            await().atMost(Duration.ofSeconds(1)).until(() -> resources.workers.getActiveCount() == 0);
+            allowResponse.countDown();
             assertThat(entered.await(3, TimeUnit.SECONDS)).isTrue();
             assertThat(reply.get(5, TimeUnit.SECONDS).statusCode()).isEqualTo(504);
             assertThat(resources.workers.getActiveCount()).isZero();
@@ -97,6 +112,7 @@ class NativeHttpRunningWorkIntegrationTest extends BaseIntegrationTest {
                 assertThat(forwarder.resourceMetricsSnapshot()).containsEntry("utf8BodiesActive", 0);
             });
         } finally {
+            allowResponse.countDown();
             release.countDown();
             await().atMost(Duration.ofSeconds(3)).until(() -> resources.active() == 0);
             pipeline.setServeEventListeners(List.of());
