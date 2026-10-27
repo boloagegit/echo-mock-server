@@ -8,8 +8,10 @@ import com.echo.repository.ResponseRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.benmanes.caffeine.cache.Cache;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,7 +45,7 @@ public class RuleService {
 
     private final ProtocolHandlerRegistry protocolHandlerRegistry;
     private final ResponseRepository responseRepository;
-    private final Cache<Long, String> responseBodyCache;
+    private final Cache<Long, VersionedResponseBody> responseBodyCache;
     private final CacheConfig cacheConfig;
     private final Optional<CacheInvalidationService> cacheInvalidationService;
     private final Optional<RuleAuditService> ruleAuditService;
@@ -60,24 +62,39 @@ public class RuleService {
      * Obtain Response body (including cache)
      */
     public Optional<String> findResponseBodyById(Long id) {
-        if (id == null) {
-            return Optional.empty();
-        }
-        
-        String cached = responseBodyCache.getIfPresent(id);
-        if (cached != null) {
-            log.debug("Response body cache hit: id={}", id);
-            return Optional.of(cached);
-        }
-        
-        Optional<String> body = responseRepository.findBodyById(id);
-        body.ifPresent(b -> {
-            if (b.length() <= cacheConfig.getBodyCacheThresholdBytes()) {
-                responseBodyCache.put(id, b);
-                log.debug("Response body cached: id={}, size={}", id, b.length());
-            }
-        });
-        return body;
+        return currentBody(id).map(VersionedResponseBody::body);
+    }
+
+    private Optional<VersionedResponseBody> currentBody(Long id) {
+        if (id == null) return Optional.empty();
+        VersionedResponseBody cached = responseBodyCache.getIfPresent(id);
+        if (cached != null) return Optional.of(cached);
+        var row = responseRepository.findVersionedBodyById(id);
+        row.ifPresent(
+                value -> {
+                    if (value.body() != null
+                            && value.body().length() <= cacheConfig.getBodyCacheThresholdBytes()) {
+                        responseBodyCache.put(id, value);
+                    }
+                });
+        return row;
+    }
+
+    /** A null legacy incarnation deliberately takes the authoritative read path. */
+    public String findResponseBodyById(Long id, ResponseRevision expected) {
+        if (id == null) return "";
+        var value = currentBody(id);
+        if (value.isEmpty() || !value.get().matches(expected)) throw new ResponseRevisionChanged();
+        return value.get().body() == null ? "" : value.get().body();
+    }
+
+    /** Called only inside the authoritative transaction; never consult or populate a global body cache. */
+    public String findUncachedResponseBodyById(Long id) {
+        if (id == null) return "";
+        return responseRepository
+                .findVersionedBodyById(id)
+                .map(VersionedResponseBody::body)
+                .orElse("");
     }
 
     /** Clearing body cache for specified Response */
@@ -204,7 +221,7 @@ public class RuleService {
         if (ids.size() <= MAX_IN_LIST_IDS) {
             return Set.copyOf(responseRepository.findExistingIds(ids));
         }
-        // When there are a large number of ID, read all primary keys and then find the intersection: some databases (such as H2) will linearly compare the IN list column by column (it takes about 2 seconds to rebuild the snapshot when there are 20,000 rules).
+        // Avoid oversized IN lists: read available primary keys once, then intersect locally.
         // And databases such as SQL Server (2,100 parameters) and Oracle (IN list 1,000 entries) have upper limits.
         Set<Long> existing = new HashSet<>(responseRepository.findAllIds());
         existing.retainAll(ids);

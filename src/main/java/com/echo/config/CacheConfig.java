@@ -2,6 +2,7 @@ package com.echo.config;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
@@ -79,10 +80,15 @@ public class CacheConfig {
 
     /** Response body cache - weight-based LRU */
     @Bean
-    public Cache<Long, String> responseBodyCache() {
+    public Cache<Long, com.echo.service.VersionedResponseBody> responseBodyCache() {
         return Caffeine.newBuilder()
                 .maximumWeight((long) Math.max(1, bodyCacheMaxSizeMb) * 1024 * 1024)
-                .weigher((Long id, String body) -> estimateBodyWeight(body))
+                .weigher(
+                        (Long id, com.echo.service.VersionedResponseBody value) ->
+                                (int)
+                                        Math.min(
+                                                Integer.MAX_VALUE,
+                                                160L + estimateBodyWeight(value.body())))
                 .expireAfterAccess(Math.max(1, bodyCacheExpireMinutes), TimeUnit.MINUTES)
                 .expireAfterWrite(Math.max(1, bodyCacheMaxAgeMinutes), TimeUnit.MINUTES)
                 .recordStats()

@@ -95,7 +95,7 @@ class RepeatedActionIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("Response no-ops emit no synchronization event; stale saves return 409 and preserve other edits")
+    @DisplayName("Response revisions are synchronized; exact no-ops stay unchanged and stale saves return 409")
     void responseSaves() {
         Response created = createResponse("repeat-response", "{\"v\":1}");
         Response mine = adminClient().getForObject("/api/admin/responses/" + created.getId(), Response.class);
@@ -104,7 +104,19 @@ class RepeatedActionIntegrationTest extends BaseIntegrationTest {
         ResponseEntity<Map> sameContent = putResponse(created.getId(),
                 Map.of("description", "renamed only", "body", "{\"v\":1}"));
         assertThat(sameContent.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(cacheEvents.count()).as("description-only edit").isEqualTo(events);
+        assertThat(cacheEvents.count()).as("description edits change the captured response revision")
+                .isGreaterThan(events);
+        Response renamed = adminClient().getForObject("/api/admin/responses/" + created.getId(), Response.class);
+        assertThat(renamed.getBody()).isEqualTo(mine.getBody());
+        assertThat(renamed.getVersion()).isEqualTo(mine.getVersion() + 1);
+
+        long afterRename = cacheEvents.count();
+        ResponseEntity<Map> unchanged = putResponse(created.getId(), Map.of(
+                "description", "renamed only", "body", "{\"v\":1}", "version", renamed.getVersion()));
+        assertThat(unchanged.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(cacheEvents.count()).as("an exact no-op does not publish an event").isEqualTo(afterRename);
+        assertThat(adminClient().getForObject("/api/admin/responses/" + created.getId(), Response.class).getVersion())
+                .isEqualTo(renamed.getVersion());
 
         ResponseEntity<Map> stale = putResponse(created.getId(),
                 Map.of("description", "mine", "body", "{\"v\":2}", "version", mine.getVersion()));

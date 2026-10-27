@@ -7,8 +7,10 @@ import com.echo.entity.Protocol;
 import com.echo.protocol.http.HttpProtocolHandler;
 import com.echo.repository.HttpRuleRepository;
 import com.echo.util.CurrentOperator;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationContext;
@@ -36,6 +38,10 @@ public class HttpRuleService {
     private final RuleService ruleService;
     private final HttpRuleRepository httpRuleRepository;
     private final ConditionMatcher conditionMatcher;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private ResponseSnapshotReads responseSnapshotReads;
+
     private final Optional<CacheInvalidationService> cacheInvalidationService;
     private final ApplicationContext applicationContext;
 
@@ -88,6 +94,8 @@ public class HttpRuleService {
 
     /** Create HTTP rule snapshot from database (called by {@link RuleSnapshots} in the background). */
     HttpRuleSnapshot buildHttpRuleSnapshot() {
+        if (responseSnapshotReads == null) {
+
         List<HttpRule> rules = httpRuleRepository.findByEnabledTrueOrderByIdAsc();
         Set<Long> validResponseIds = ruleService.getValidResponseIds(rules.stream()
                 .map(HttpRule::getResponseId).filter(id -> id != null).collect(Collectors.toSet()));
@@ -96,6 +104,26 @@ public class HttpRuleService {
                 .toList();
         log.debug("Building HTTP rule snapshot: {} enabled rules", valid.size());
         return new HttpRuleSnapshot(valid, HTTP_RULE_ORDER, conditionMatcher);
+        }
+        return responseSnapshotReads.snapshot(this::buildFreshHttpRuleSnapshot);
+    }
+
+    private HttpRuleSnapshot buildFreshHttpRuleSnapshot() {
+        List<HttpRule> rules = new java.util.ArrayList<>();
+        Map<Long, ResponseRevision> revisions = new java.util.HashMap<>();
+        for (Object[] row : httpRuleRepository.findSnapshotRows()) {
+            HttpRule rule = (HttpRule) row[0];
+            rules.add(rule);
+            if (rule.getResponseId() != null)
+                revisions.put(
+                        rule.getResponseId(), new ResponseRevision((String) row[1], (Long) row[2]));
+        }
+        return new HttpRuleSnapshot(rules, HTTP_RULE_ORDER, conditionMatcher, revisions);
+    }
+
+    /** Only used in the caller's authoritative read transaction. */
+    public List<HttpRule> freshCandidates(String host, String path, String method) {
+        return buildFreshHttpRuleSnapshot().candidates(host, method, path);
     }
 
     /** Candidate order: exact paths before wildcards, descending priority, explicit host before unspecified host, then newest creation time. */

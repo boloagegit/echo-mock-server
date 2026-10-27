@@ -1,9 +1,5 @@
 package com.echo.service;
 
-import java.util.Collection;
-import javax.xml.stream.XMLStreamException;
-import com.echo.core.match.XmlStreamScan;
-import com.echo.core.match.XmlPath;
 import com.echo.core.match.BodyRequirements;
 import com.echo.core.match.BodyView;
 import com.echo.core.match.CompiledMatcher;
@@ -15,14 +11,20 @@ import com.echo.core.match.MatcherCompiler;
 import com.echo.core.match.MatcherLimits;
 import com.echo.core.match.MatcherRegistry;
 import com.echo.core.match.RequestView;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.echo.core.match.XmlPath;
+import com.echo.core.match.XmlStreamScan;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+
+import jakarta.annotation.PreDestroy;
+
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -30,18 +32,20 @@ import org.w3c.dom.Document;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Optional;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.StringJoiner;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.stream.XMLStreamException;
 
 /**
  * Condition matching service
@@ -167,6 +171,38 @@ public class ConditionMatcher {
         return conditions(null, bodyCondition, queryCondition, headerCondition);
     }
 
+    /**
+     * Reuse a snapshot-owned handle when its compiler and effective condition
+     * inputs still agree. This never publishes aliases into the weak registry.
+     * A nonblank matchSpec owns all matching semantics; legacy fields are ignored.
+     */
+    public RuleConditions conditions(
+            RuleConditions reusable,
+            String matchSpec,
+            String bodyCondition,
+            String queryCondition,
+            String headerCondition) {
+        String spec = hasMatchSpec(matchSpec) ? matchSpec : null;
+        if (reusable != null
+                && reusable.compiler == compiler
+                && Objects.equals(reusable.key.matchSpec(), spec)
+                && (spec != null
+                        || (Objects.equals(reusable.key.body(), bodyCondition)
+                                && Objects.equals(reusable.key.query(), queryCondition)
+                                && Objects.equals(reusable.key.header(), headerCondition)))) {
+            return reusable;
+        }
+        return conditions(matchSpec, bodyCondition, queryCondition, headerCondition);
+    }
+
+    private CompiledMatcher compiled(RuleConditions conditions) {
+        Objects.requireNonNull(conditions, "conditions");
+        if (conditions.compiler == compiler) return conditions.compiled();
+        // A handle from another receiver must not import its matcher limits.
+        ConditionKey key = conditions.key;
+        return conditions(key.matchSpec(), key.body(), key.query(), key.header()).compiled();
+    }
+
     private CompiledMatcher compiled(String matchSpec, String bodyCondition, String queryCondition,
                                      String headerCondition) {
         return conditions(matchSpec, bodyCondition, queryCondition, headerCondition).compiled();
@@ -212,6 +248,10 @@ public class ConditionMatcher {
         private JsonNode jsonNode;
         private final ObjectMapper jsonReader;
         private boolean jsonParsed;
+        private java.util.Set<String> jsonPaths;
+        private BodyRequirements.JsonProjection jsonSelection;
+        private boolean projectionParsed;
+        private JsonNode projection;
         private final BodyType type;
         private final Map<String, Boolean> matchOutcomes = new HashMap<>();
         /** Matching-engine evaluation state; see {@link #evalContext(String, Map)}. */
@@ -272,13 +312,38 @@ public class ConditionMatcher {
             if (jsonReader != null && !jsonParsed) {
                 jsonParsed = true;
                 try {
-                    jsonNode = jsonReader.readTree(raw);
+                    jsonNode = BoundedJsonInputMapper.readTree(jsonReader, raw);
                 } catch (Exception e) {
                     // Retain the existing warning format and the terminal failed result.
                     log.warn("Failed to prepare body: {}", e.getMessage());
                 }
             }
             return jsonNode;
+        }
+
+        private void ensureJsonPlan(BodyRequirements requirement) {
+            if (jsonPaths != null && !BodyRequirements.covers(jsonPaths, requirement.jsonPaths()))
+                jsonPaths = null;
+        }
+
+        private JsonNode matchingJson() {
+            if (jsonPaths == null) return getJsonNode();
+            if (!projectionParsed) {
+                projectionParsed = true;
+                try {
+                    projection = SelectiveJsonProjection.project(jsonReader, raw, jsonSelection);
+                } catch (JsonProcessingException e) {
+                    // The same Jackson parser has already rejected this first root.
+                    // Preserve the terminal failed-tree result without parsing it twice.
+                    jsonPaths = null;
+                    jsonParsed = true;
+                    log.warn("Failed to prepare body: {}", e.getMessage());
+                } catch (IOException | RuntimeException e) {
+                    projection = null;
+                }
+                if (projection == null) jsonPaths = null;
+            }
+            return jsonPaths == null ? getJsonNode() : projection;
         }
 
         /** Get the original body string */
@@ -333,7 +398,7 @@ public class ConditionMatcher {
 
             @Override
             public JsonNode json() {
-                return getJsonNode();
+                return matchingJson();
             }
 
             /** Streaming XML has no DOM; parse one only when needed, such as for matching-chain explanations, and attempt it only once even on failure. */
@@ -409,7 +474,12 @@ public class ConditionMatcher {
                 return new PreparedBody(trimmed, doc, null, PreparedBody.BodyType.XML);
             }
             if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-                return new PreparedBody(trimmed, null, null, PreparedBody.BodyType.JSON, objectMapper);
+                return new PreparedBody(
+                        trimmed,
+                        null,
+                        null,
+                        PreparedBody.BodyType.JSON,
+                        com.echo.core.match.JsonInputReaders.reader(objectMapper, trimmed));
             }
         } catch (Exception e) {
             log.warn("Failed to prepare body: {}", e.getMessage());
@@ -442,6 +512,15 @@ public class ConditionMatcher {
             return PreparedBody.tooLarge();
         }
         String trimmed = body.trim();
+        if (trimmed.startsWith("{")
+                && trimmed.length() > 32768
+                && requirements.jsonPaths() != null
+                && !requirements.jsonPaths().isEmpty()) {
+            PreparedBody prepared = prepareBody(body);
+            prepared.jsonPaths = requirements.jsonPaths();
+            prepared.jsonSelection = requirements.jsonProjection();
+            return prepared;
+        }
         if (!trimmed.startsWith("<") || requirements.needsXmlDom()) {
             return prepareBody(body);
         }
@@ -457,6 +536,14 @@ public class ConditionMatcher {
     /** Rebuilds parsed body state while reusing predicates already evaluated on the request path. */
     public PreparedBody prepareBody(String body, Map<String, Boolean> matchOutcomes) {
         PreparedBody prepared = prepareBody(body);
+        prepared.restoreMatchOutcomes(matchOutcomes);
+        return prepared;
+    }
+
+    /** Prepares historical analysis fields without discarding request-time predicate outcomes. */
+    public PreparedBody prepareBody(String body, Collection<RuleConditions> candidates,
+                                    Map<String, Boolean> matchOutcomes) {
+        PreparedBody prepared = prepareBody(body, candidates);
         prepared.restoreMatchOutcomes(matchOutcomes);
         return prepared;
     }
@@ -480,8 +567,23 @@ public class ConditionMatcher {
     public boolean matchesPrepared(String matchSpec, String bodyCondition, String queryCondition,
                                    String headerCondition, PreparedBody prepared, String queryString,
                                    Map<String, String> headers) {
-        return compiled(matchSpec, bodyCondition, queryCondition, headerCondition)
-                .matches(evalContext(prepared, queryString, headers));
+        CompiledMatcher matcher =
+                compiled(matchSpec, bodyCondition, queryCondition, headerCondition);
+        if (prepared != null && prepared.jsonPaths != null)
+            prepared.ensureJsonPlan(matcher.bodyRequirements());
+        return matcher.matches(evalContext(prepared, queryString, headers));
+    }
+
+    /** Evaluate an existing snapshot handle while preserving request-local state. */
+    public boolean matchesPrepared(
+            RuleConditions conditions,
+            PreparedBody prepared,
+            String queryString,
+            Map<String, String> headers) {
+        CompiledMatcher matcher = compiled(conditions);
+        if (prepared != null && prepared.jsonPaths != null)
+            prepared.ensureJsonPlan(matcher.bodyRequirements());
+        return matcher.matches(evalContext(prepared, queryString, headers));
     }
 
     /**
@@ -510,8 +612,23 @@ public class ConditionMatcher {
     public MatchExplanation explainPrepared(String matchSpec, String bodyCondition, String queryCondition,
                                             String headerCondition, PreparedBody prepared,
                                             String queryString, Map<String, String> headers) {
-        return compiled(matchSpec, bodyCondition, queryCondition, headerCondition)
-                .explain(evalContext(prepared, queryString, headers));
+        CompiledMatcher matcher =
+                compiled(matchSpec, bodyCondition, queryCondition, headerCondition);
+        if (prepared != null && prepared.jsonPaths != null)
+            prepared.ensureJsonPlan(matcher.bodyRequirements());
+        return matcher.explain(evalContext(prepared, queryString, headers));
+    }
+
+    /** Explain through the same compiler-owned handle and request-local state. */
+    public MatchExplanation explainPrepared(
+            RuleConditions conditions,
+            PreparedBody prepared,
+            String queryString,
+            Map<String, String> headers) {
+        CompiledMatcher matcher = compiled(conditions);
+        if (prepared != null && prepared.jsonPaths != null)
+            prepared.ensureJsonPlan(matcher.bodyRequirements());
+        return matcher.explain(evalContext(prepared, queryString, headers));
     }
 
     private static EvalContext evalContext(PreparedBody prepared, String queryString, Map<String, String> headers) {

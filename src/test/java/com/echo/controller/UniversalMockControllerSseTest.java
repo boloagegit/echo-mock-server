@@ -1,7 +1,9 @@
 package com.echo.controller;
 
-import com.echo.service.ServeEvent;
-import com.echo.service.ServeEventCaptor;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
 import com.echo.entity.HttpRule;
 import com.echo.entity.Protocol;
 import com.echo.pipeline.AbstractMockPipeline;
@@ -13,26 +15,26 @@ import com.echo.service.MatchResult;
 import com.echo.service.RequestLogService;
 import com.echo.service.ResponseTemplateService;
 import com.echo.service.RuleService;
+import com.echo.service.ServeEvent;
+import com.echo.service.ServeEventCaptor;
+
+import jakarta.servlet.http.HttpServletResponse;
+
 import net.jqwik.api.*;
-import org.junit.jupiter.api.BeforeEach;
+
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.mockito.ArgumentMatchers;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class UniversalMockControllerSseTest {
@@ -80,19 +82,23 @@ class UniversalMockControllerSseTest {
                 .requiredScenarioState("Started")
                 .newScenarioState("Paid")
                 .build();
-        when(httpRuleService.findPreparedHttpRules("default", "/scenario", "GET"))
-                .thenReturn(List.of(rule));
-        when(pipeline.matchRule(anyList(), any(ConditionMatcher.PreparedBody.class),
-                isNull(), anyMap())).thenReturn(matched(rule));
+        when(pipeline.selectStable(any(), any()))
+                .thenReturn(
+                        new AbstractMockPipeline.StableSelection<>(
+                                List.of(rule),
+                                ConditionMatcher.PreparedBody.empty(),
+                                matched(rule),
+                                "[{\"data\":\"ok\"}]",
+                                true));
         when(pipeline.advanceScenarioState(rule)).thenReturn(
                 new AbstractMockPipeline.ScenarioTransition("checkout", "Started", "Paid", true));
-        when(ruleService.findResponseBodyById(42L)).thenReturn(Optional.of("[{\"data\":\"ok\"}]"));
 
         Object result = scenarioController.handleSseRequest(
                 sseGetRequest("/scenario"), httpServletResponse);
 
         assertThat(result).isInstanceOf(SseEmitter.class);
         verify(pipeline).advanceScenarioState(rule);
+        verify(ruleService, never()).findResponseBodyById(42L);
         ServeEvent served = ServeEventCaptor.single(requestLogService);
         assertThat(served.getRuleId()).isEqualTo("scenario-sse");
         assertThat(served.getProtocol()).isEqualTo(Protocol.HTTP);
@@ -157,10 +163,14 @@ class UniversalMockControllerSseTest {
                 .method("POST").sseEnabled(false).scenarioName("checkout")
                 .requiredScenarioState("Started").newScenarioState("Paid").build();
         String body = "{\"prompt\":\"synthetic\"}";
-        when(httpRuleService.findPreparedHttpRules("default", "/scenario", "POST")).thenReturn(List.of(rule));
-        when(pipeline.prepareBodyForMatching(any(), anyList())).thenReturn(ConditionMatcher.PreparedBody.rawOnly(body));
-        when(pipeline.matchRule(anyList(), any(ConditionMatcher.PreparedBody.class), isNull(), anyMap()))
-                .thenReturn(matched(rule));
+        when(pipeline.selectStable(any(), any()))
+                .thenReturn(
+                        new AbstractMockPipeline.StableSelection<>(
+                                List.of(rule),
+                                ConditionMatcher.PreparedBody.rawOnly(body),
+                                matched(rule),
+                                null,
+                                false));
         when(pipeline.executeAsync(any())).thenReturn(java.util.concurrent.CompletableFuture.completedFuture(
                 com.echo.pipeline.PipelineResult.builder().response(com.echo.pipeline.MockResponse.builder()
                         .status(202).body("{\"ok\":true}").headers(java.util.Map.of("X-Synthetic", "yes"))

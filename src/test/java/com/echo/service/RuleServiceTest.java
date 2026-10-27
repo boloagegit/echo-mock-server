@@ -1,5 +1,9 @@
 package com.echo.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
 import com.echo.config.CacheConfig;
 import com.echo.entity.HttpRule;
 import com.echo.entity.JmsRule;
@@ -7,6 +11,7 @@ import com.echo.protocol.ProtocolHandlerRegistry;
 import com.echo.repository.ResponseRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -14,10 +19,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class RuleServiceTest {
@@ -28,8 +29,7 @@ class RuleServiceTest {
     @Mock
     private ResponseRepository responseRepository;
 
-    @Mock
-    private Cache<Long, String> responseBodyCache;
+    @Mock private Cache<Long, com.echo.service.VersionedResponseBody> responseBodyCache;
 
     @Mock
     private CacheConfig cacheConfig;

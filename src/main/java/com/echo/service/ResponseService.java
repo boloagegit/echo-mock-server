@@ -7,10 +7,12 @@ import com.echo.protocol.ProtocolHandlerRegistry;
 import com.echo.repository.ResponseRepository;
 import com.echo.repository.ResponseSummaryQuery;
 import com.github.benmanes.caffeine.cache.Cache;
+
 import lombok.Builder;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,7 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Objects;
 import java.util.Map;
 import java.util.Optional;
 
@@ -30,7 +31,7 @@ public class ResponseService {
     private final ResponseRepository responseRepository;
     private final ResponseSummaryQuery responseSummaryQuery;
     private final ProtocolHandlerRegistry protocolHandlerRegistry;
-    private final Cache<Long, String> responseBodyCache;
+    private final Cache<Long, ?> responseBodyCache;
     private final CacheManager cacheManager;
     private final Optional<CacheInvalidationService> cacheInvalidationService;
 
@@ -41,6 +42,38 @@ public class ResponseService {
     public long count() {
         return responseRepository.count();
     }
+
+    /** One finite boundary; later legacy inserts remain on the safe fallback path. */
+    public long incarnationBackfillBoundary() {
+        return responseRepository.findMaximumId();
+    }
+
+    /**
+     * Fill only absent internal identities in one bounded transaction. Concurrent
+     * repairs may initialize the identity first; never overwrite that result.
+     * Body, timestamps and public optimistic versions deliberately remain unchanged.
+     */
+    @Transactional
+    public IncarnationBatch initializeMissingIncarnations(long after, long through, int limit) {
+        if (after < 0 || through < after || limit < 1 || limit > 32) {
+            throw new IllegalArgumentException("Invalid response incarnation backfill bounds");
+        }
+        List<Long> ids =
+                responseRepository.findMissingIncarnationIds(
+                        after, through, org.springframework.data.domain.PageRequest.of(0, limit));
+        if (ids.isEmpty()) return new IncarnationBatch(after, 0, true);
+        var changed = new java.util.ArrayList<Long>(ids.size());
+        for (Long id : ids) {
+            if (responseRepository.initializeIncarnation(id, java.util.UUID.randomUUID().toString())
+                    == 1) {
+                changed.add(id);
+            }
+        }
+        if (!changed.isEmpty()) bodiesChanged(changed);
+        return new IncarnationBatch(ids.get(ids.size() - 1), changed.size(), false);
+    }
+
+    public record IncarnationBatch(long lastId, int updated, boolean complete) {}
 
     public Map<String, Object> getBodyCacheStats() {
         Map<String, Object> result = new HashMap<>();
@@ -143,25 +176,18 @@ public class ResponseService {
         validateSseContent(response);
         log.info("Saving response: {}", response.getDescription());
         boolean existing = response.getId() != null;
-        // Detached metadata-only updates can retain the cache. A managed entity may
-        // already have been mutated in this transaction, so its current contents
-        // cannot be used as an old-value snapshot; invalidate conservatively.
-        boolean contentChanged = existing && contentChanged(response);
+        // Every persisted version change invalidates revision-bearing snapshots and bodies,
+        // including metadata-only edits; otherwise an eventual body eviction can force
+        // authoritative reads until the rule snapshot expires.
         Response saved = responseRepository.save(response);
-        if (contentChanged) {
+        if (existing) {
             bodiesChanged(List.of(saved.getId()));
         }
         return saved;
     }
 
-    private boolean contentChanged(Response response) {
-        return responseRepository.findById(response.getId())
-                .map(current -> current == response || !Objects.equals(current.getBody(), response.getBody())
-                        || !Objects.equals(Response.normalizeContentType(current.getContentType()), response.getContentType()))
-                .orElse(true);
-    }
-
-    private void validateSseContent(Response response) {
+    /** Validate unchanged saves too, without advancing versions or publishing events. */
+    public void validateSseContent(Response response) {
         if (Response.isSse(response.getContentType())) SseEventSequence.parse(response.getBody());
         if (response.getId() == null) return;
         for (var rule : protocolHandlerRegistry.findByResponseId(response.getId())) {
@@ -216,6 +242,7 @@ public class ResponseService {
     
     /** Invalidate the local response-body cache, repeat after commit, and notify other instances. */
     private void bodiesChanged(List<Long> ids) {
+        evictRuleCache();
         responseBodyCache.invalidateAll(ids);
         AfterCommit.schedule(new Bodies(responseBodyCache, List.copyOf(ids)),
                 () -> responseBodyCache.invalidateAll(ids));

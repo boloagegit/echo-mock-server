@@ -16,7 +16,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** A large number of ID do not form a single IN list (H2 will O(n²), SQL Server/Oracle have parameter upper limits), and the result must be the same as the original. */
+/** A large number of ID do not form a single IN list (SQL Server/Oracle have parameter upper limits), and the result must be the same as the original. */
 class RuleServiceValidResponseIdsTest {
 
     private final ResponseRepository responses = mock(ResponseRepository.class);

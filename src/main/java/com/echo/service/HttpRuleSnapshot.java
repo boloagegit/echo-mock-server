@@ -4,7 +4,6 @@ import com.echo.entity.HttpRule;
 import com.echo.protocol.http.HttpPathPattern;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -30,14 +29,11 @@ final class HttpRuleSnapshot {
     /** Sentinel host/method absent from every rule; valid hosts and methods cannot contain NUL. */
     private static final String UNLISTED = "\u0000";
 
-    private final List<HttpRule> rules;
+    private final RuleCandidates<HttpRule> rules;
     private final Set<String> hosts;
     /** Distinct original method strings present in rules, usually only a few. */
     private final List<String> methods;
     private final Comparator<HttpRule> order;
-    /** Retain strong references so compiled conditions live as long as the snapshot. */
-    @SuppressWarnings({"unused", "FieldCanBeLocal"})
-    private final List<ConditionMatcher.RuleConditions> pinnedConditions;
     private final Map<Key, Candidates> candidates = new ConcurrentHashMap<>();
 
     /**
@@ -46,29 +42,45 @@ final class HttpRuleSnapshot {
      * @param conditions Resolve and retain each rule's condition object; null disables retention.
      */
     HttpRuleSnapshot(List<HttpRule> rules, Comparator<HttpRule> order, ConditionMatcher conditions) {
-        this.rules = List.copyOf(rules);
+        this(rules, order, conditions, java.util.Map.of());
+    }
+
+    HttpRuleSnapshot(
+            List<HttpRule> rules,
+            Comparator<HttpRule> order,
+            ConditionMatcher conditions,
+            java.util.Map<Long, ResponseRevision> revisions) {
+        List<HttpRule> snapshotRules = List.copyOf(rules);
         this.order = order;
         Set<String> ruleHosts = new HashSet<>();
         Set<String> ruleMethods = new LinkedHashSet<>();
-        List<ConditionMatcher.RuleConditions> pinned = new ArrayList<>(rules.size());
-        for (HttpRule rule : this.rules) {
+        List<RuleCandidates.Entry<HttpRule>> pinned = new ArrayList<>(rules.size());
+        for (HttpRule rule : snapshotRules) {
             if (rule.getTargetHost() != null && !rule.getTargetHost().isEmpty()) {
                 ruleHosts.add(rule.getTargetHost());
             }
             if (rule.getMethod() != null) {
                 ruleMethods.add(rule.getMethod());
             }
-            if (conditions != null) {
-                ConditionMatcher.RuleConditions ruleConditions = conditions.conditions(rule.getMatchSpec(),
-                        rule.getBodyCondition(), rule.getQueryCondition(), rule.getHeaderCondition());
-                if (ruleConditions != null) {
-                    pinned.add(ruleConditions);
-                }
-            }
+            ConditionMatcher.RuleConditions ruleConditions =
+                    conditions == null
+                            ? null
+                            : conditions.conditions(
+                                    rule.getMatchSpec(),
+                                    rule.getBodyCondition(),
+                                    rule.getQueryCondition(),
+                                    rule.getHeaderCondition());
+            pinned.add(
+                    new RuleCandidates.Entry<>(
+                            rule,
+                            ruleConditions,
+                            rule.getResponseId() == null
+                                    ? null
+                                    : revisions.get(rule.getResponseId())));
         }
         this.hosts = Set.copyOf(ruleHosts);
         this.methods = List.copyOf(ruleMethods);
-        this.pinnedConditions = List.copyOf(pinned);
+        this.rules = RuleCandidates.ofEntries(pinned);
     }
 
     /**
@@ -107,18 +119,19 @@ final class HttpRuleSnapshot {
         return candidates.size();
     }
 
-    private List<HttpRule> compute(String host, String method) {
-        List<HttpRule> result = new ArrayList<>();
-        for (HttpRule rule : rules) {
+    private RuleCandidates<HttpRule> compute(String host, String method) {
+        List<RuleCandidates.Entry<HttpRule>> result = new ArrayList<>();
+        for (RuleCandidates.Entry<HttpRule> entry : rules.entries()) {
+            HttpRule rule = entry.rule();
             boolean hostMatches = rule.getTargetHost() == null || rule.getTargetHost().isEmpty()
                     || rule.getTargetHost().equals(host);
             boolean methodMatches = rule.getMethod() == null || rule.getMethod().equalsIgnoreCase(method);
             if (hostMatches && methodMatches) {
-                result.add(rule);
+                result.add(entry);
             }
         }
-        result.sort(order);
-        return List.copyOf(result);
+        result.sort((left, right) -> order.compare(left.rule(), right.rule()));
+        return RuleCandidates.ofEntries(result);
     }
 
     /**
@@ -158,13 +171,14 @@ final class HttpRuleSnapshot {
 
         private static final int[] NONE = new int[0];
 
-        private final List<HttpRule> ordered;
+        private final RuleCandidates<HttpRule> ordered;
+
         /** Exact path to rule positions in {@link #ordered}, in increasing order. */
         private final Map<String, int[]> exact;
         /** Positions of {@code *} and {@code /x/*} rules, in increasing order; omit pathless rules because they cannot match any request. */
         private final int[] patterns;
 
-        Candidates(List<HttpRule> ordered) {
+        Candidates(RuleCandidates<HttpRule> ordered) {
             this.ordered = ordered;
             Map<String, List<Integer>> byPath = new HashMap<>();
             List<Integer> patternPositions = new ArrayList<>();
@@ -188,20 +202,21 @@ final class HttpRuleSnapshot {
 
         List<HttpRule> forPath(String path) {
             int[] exactPositions = path == null ? NONE : exact.getOrDefault(path, NONE);
-            List<HttpRule> result = new ArrayList<>(exactPositions.length + patterns.length);
+            List<RuleCandidates.Entry<HttpRule>> result =
+                    new ArrayList<>(exactPositions.length + patterns.length);
             int e = 0;
             int p = 0;
             while (e < exactPositions.length || p < patterns.length) {
                 if (p == patterns.length || (e < exactPositions.length && exactPositions[e] < patterns[p])) {
-                    result.add(ordered.get(exactPositions[e++]));
+                    result.add(ordered.entry(exactPositions[e++]));
                 } else {
-                    HttpRule rule = ordered.get(patterns[p++]);
-                    if (HttpPathPattern.matches(rule.getMatchKey(), path)) {
-                        result.add(rule);
+                    RuleCandidates.Entry<HttpRule> entry = ordered.entry(patterns[p++]);
+                    if (HttpPathPattern.matches(entry.rule().getMatchKey(), path)) {
+                        result.add(entry);
                     }
                 }
             }
-            return Collections.unmodifiableList(result);
+            return RuleCandidates.ofEntries(result);
         }
 
         private static int[] toArray(List<Integer> positions) {

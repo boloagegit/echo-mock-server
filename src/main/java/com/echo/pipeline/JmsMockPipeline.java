@@ -2,8 +2,8 @@ package com.echo.pipeline;
 
 import com.echo.config.JmsProperties;
 import com.echo.core.engine.RuleSelector;
-import com.echo.entity.JmsRule;
 import com.echo.entity.JmsForwardTargetMode;
+import com.echo.entity.JmsRule;
 import com.echo.entity.JmsRuleAction;
 import com.echo.jms.JmsTargetForwarder;
 import com.echo.service.ConditionMatcher;
@@ -12,7 +12,9 @@ import com.echo.service.MatchChainEntry;
 import com.echo.service.RequestLogService;
 import com.echo.service.RuleService;
 import com.echo.service.ScenarioService;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -62,6 +64,11 @@ public class JmsMockPipeline extends AbstractMockPipeline<JmsRule> {
             return jmsRuleService.findBucketedJmsRules(queueName, endpointValue);
         }
         return jmsRuleService.findPreparedJmsRules(queueName);
+    }
+
+    @Override
+    protected List<JmsRule> findFreshCandidateRules(MockRequest request) {
+        return jmsRuleService.freshCandidates(jmsProperties.getQueue(), request.getEndpointValue());
     }
 
     /** JMS candidate lists come from the rule snapshot's queue and bucket lists; their identity remains stable for the snapshot's lifetime. */
@@ -174,6 +181,23 @@ public class JmsMockPipeline extends AbstractMockPipeline<JmsRule> {
     protected boolean hasCondition(JmsRule rule) {
         return rule.getMatchSpec() != null
                 || (rule.getBodyCondition() != null && !rule.getBodyCondition().isBlank());
+    }
+
+    /** Read current rule fields directly; avoid a temporary ConditionSet in managed matching. */
+    @Override
+    protected ConditionMatcher.RuleConditions resolveMatchConditions(
+            JmsRule rule, ConditionMatcher.RuleConditions reusable) {
+        return resolveMatchConditions(
+                reusable, rule.getMatchSpec(), rule.getBodyCondition(), null, null);
+    }
+
+    @Override
+    protected List<ConditionMatcher.RuleConditions> collectBodyConditions(
+            List<ConditionMatcher.RuleConditions> collected,
+            JmsRule rule,
+            ConditionMatcher.RuleConditions reusable) {
+        return collectBodyConditions(
+                collected, reusable, rule.getMatchSpec(), rule.getBodyCondition(), null, null);
     }
 
     @Override

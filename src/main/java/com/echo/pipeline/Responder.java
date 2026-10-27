@@ -17,4 +17,17 @@ public interface Responder<T extends BaseRule> {
     boolean appliesTo(T rule, MockRequest request);
 
     ResponsePlan respond(T rule, MockRequest request);
+
+    /**
+     * Whether this responder needs the selected rule's stored body captured before side effects.
+     * Diagnostic {@link #mode()} values do not imply this capability.
+     */
+    default boolean requiresResponseBody() {
+        return false;
+    }
+
+    /** Captured content belongs to the same read decision as the selected rule. */
+    default ResponsePlan respondWithBody(T rule, MockRequest request, String rawBody) {
+        return respond(rule, request);
+    }
 }

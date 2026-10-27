@@ -166,7 +166,13 @@ final class CompiledNodes {
                 if (path != null) {
                     return BodyRequirements.streamable(new LeafStreamCheck(path));
                 }
-                return body.needsXmlDom() ? BodyRequirements.FULL : BodyRequirements.BODY_WITHOUT_XML;
+                BodyRequirements requirement =
+                        body.needsXmlDom()
+                                ? BodyRequirements.FULL
+                                : BodyRequirements.BODY_WITHOUT_XML;
+                return body.jsonPath() == null
+                        ? requirement
+                        : requirement.withJsonPath(body.jsonPath());
             }
             return readsBody ? BodyRequirements.FULL : BodyRequirements.NONE;
         }

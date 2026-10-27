@@ -1,11 +1,12 @@
 package com.echo.config;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import org.springframework.cache.caffeine.CaffeineCache;
-import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
-
 import static org.assertj.core.api.Assertions.assertThat;
+
+import com.github.benmanes.caffeine.cache.Cache;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.cache.caffeine.CaffeineCache;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class CacheConfigExtendedTest {
 
@@ -45,11 +46,11 @@ class CacheConfigExtendedTest {
         ReflectionTestUtils.setField(config, "bodyCacheThresholdKb", 500);
         ReflectionTestUtils.setField(config, "bodyCacheExpireMinutes", 30);
 
-        Cache<Long, String> cache = config.responseBodyCache();
+        Cache<Long, com.echo.service.VersionedResponseBody> cache = config.responseBodyCache();
 
         assertThat(cache).isNotNull();
-        cache.put(1L, "test body");
-        assertThat(cache.getIfPresent(1L)).isEqualTo("test body");
+        cache.put(1L, new com.echo.service.VersionedResponseBody("test", 0L, "test body"));
+        assertThat(cache.getIfPresent(1L).body()).isEqualTo("test body");
     }
 
     @Test
@@ -59,12 +60,12 @@ class CacheConfigExtendedTest {
         ReflectionTestUtils.setField(config, "bodyCacheThresholdKb", 500);
         ReflectionTestUtils.setField(config, "bodyCacheExpireMinutes", 30);
 
-        Cache<Long, String> cache = config.responseBodyCache();
+        Cache<Long, com.echo.service.VersionedResponseBody> cache = config.responseBodyCache();
 
         String largeBody = "x".repeat(512 * 1024);
-        cache.put(1L, largeBody);
-        cache.put(2L, largeBody);
-        cache.put(3L, largeBody);
+        cache.put(1L, new com.echo.service.VersionedResponseBody("test", 0L, largeBody));
+        cache.put(2L, new com.echo.service.VersionedResponseBody("test", 0L, largeBody));
+        cache.put(3L, new com.echo.service.VersionedResponseBody("test", 0L, largeBody));
         cache.cleanUp();
 
         assertThat(cache.estimatedSize()).isZero();
@@ -101,10 +102,10 @@ class CacheConfigExtendedTest {
         ReflectionTestUtils.setField(config, "bodyCacheThresholdKb", 500);
         ReflectionTestUtils.setField(config, "bodyCacheExpireMinutes", 30);
 
-        Cache<Long, String> cache = config.responseBodyCache();
+        Cache<Long, com.echo.service.VersionedResponseBody> cache = config.responseBodyCache();
 
-        cache.put(1L, "value");
-        assertThat(cache.getIfPresent(1L)).isEqualTo("value");
+        cache.put(1L, new com.echo.service.VersionedResponseBody("test", 0L, "value"));
+        assertThat(cache.getIfPresent(1L).body()).isEqualTo("value");
         assertThat(cache.getIfPresent(999L)).isNull();
     }
 }

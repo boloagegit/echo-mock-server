@@ -18,16 +18,13 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 final class JmsQueueSnapshot {
 
-    private final List<JmsRule> rules;
+    private final RuleCandidates<JmsRule> rules;
     private final String endpointField;
     /** Corresponding to {@link #rules}: the value of the endpoint field in the rule condition; if not mentioned, it is null. */
     private final List<String> endpointValues;
     private final Set<String> mentionedValues;
-    private final List<JmsRule> unmentioned;
+    private final RuleCandidates<JmsRule> unmentioned;
     private final Map<String, List<JmsRule>> buckets = new ConcurrentHashMap<>();
-    /** Retain strong references so compiled conditions live as long as the snapshot. */
-    @SuppressWarnings({"unused", "FieldCanBeLocal"})
-    private final List<ConditionMatcher.RuleConditions> pinnedConditions;
 
     /**
      * @param rules         Sorted rules with valid responses.
@@ -35,32 +32,43 @@ final class JmsQueueSnapshot {
      * @param conditions    Resolve and retain each rule's condition object; null disables retention.
      */
     JmsQueueSnapshot(List<JmsRule> rules, String endpointField, ConditionMatcher conditions) {
-        this.rules = List.copyOf(rules);
+        this(rules, endpointField, conditions, java.util.Map.of());
+    }
+
+    JmsQueueSnapshot(
+            List<JmsRule> rules,
+            String endpointField,
+            ConditionMatcher conditions,
+            java.util.Map<Long, ResponseRevision> revisions) {
+        List<JmsRule> snapshotRules = List.copyOf(rules);
         this.endpointField = endpointField;
-        List<String> values = new ArrayList<>(this.rules.size());
+        List<String> values = new ArrayList<>(snapshotRules.size());
         Set<String> mentioned = new HashSet<>();
-        List<JmsRule> withoutEndpoint = new ArrayList<>();
-        List<ConditionMatcher.RuleConditions> pinned = new ArrayList<>(this.rules.size());
-        for (JmsRule rule : this.rules) {
+        List<RuleCandidates.Entry<JmsRule>> withoutEndpoint = new ArrayList<>();
+        List<RuleCandidates.Entry<JmsRule>> pinned = new ArrayList<>(snapshotRules.size());
+        for (JmsRule rule : snapshotRules) {
             String value = bucketingEnabled() ? endpointValueOf(rule.getBodyCondition(), endpointField) : null;
             values.add(value);
-            if (value == null) {
-                withoutEndpoint.add(rule);
-            } else {
-                mentioned.add(value);
-            }
-            if (conditions != null) {
-                ConditionMatcher.RuleConditions ruleConditions =
-                        conditions.conditions(rule.getMatchSpec(), rule.getBodyCondition(), null, null);
-                if (ruleConditions != null) {
-                    pinned.add(ruleConditions);
-                }
-            }
+            if (value != null) mentioned.add(value);
+            ConditionMatcher.RuleConditions ruleConditions =
+                    conditions == null
+                            ? null
+                            : conditions.conditions(
+                                    rule.getMatchSpec(), rule.getBodyCondition(), null, null);
+            RuleCandidates.Entry<JmsRule> entry =
+                    new RuleCandidates.Entry<>(
+                            rule,
+                            ruleConditions,
+                            rule.getResponseId() == null
+                                    ? null
+                                    : revisions.get(rule.getResponseId()));
+            pinned.add(entry);
+            if (value == null) withoutEndpoint.add(entry);
         }
         this.endpointValues = values;
         this.mentionedValues = Set.copyOf(mentioned);
-        this.unmentioned = List.copyOf(withoutEndpoint);
-        this.pinnedConditions = List.copyOf(pinned);
+        this.unmentioned = RuleCandidates.ofEntries(withoutEndpoint);
+        this.rules = RuleCandidates.ofEntries(pinned);
     }
 
     List<JmsRule> rules() {
@@ -88,14 +96,14 @@ final class JmsQueueSnapshot {
     }
 
     private List<JmsRule> computeBucket(String endpointValue) {
-        List<JmsRule> bucket = new ArrayList<>();
+        List<RuleCandidates.Entry<JmsRule>> bucket = new ArrayList<>();
         for (int i = 0; i < rules.size(); i++) {
             String value = endpointValues.get(i);
             if (value == null || value.equals(endpointValue)) {
-                bucket.add(rules.get(i));
+                bucket.add(rules.entry(i));
             }
         }
-        return List.copyOf(bucket);
+        return RuleCandidates.ofEntries(bucket);
     }
 
     /**

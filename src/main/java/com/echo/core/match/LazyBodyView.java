@@ -3,16 +3,18 @@ package com.echo.core.match;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.w3c.dom.Document;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
 
+import java.io.IOException;
+import java.io.StringReader;
+
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
-import java.io.IOException;
-import java.io.StringReader;
 
 /**
  * {@link BodyView} of JSON or XML is only parsed for the first time. For use by a single request and a single thread only.
@@ -85,7 +87,7 @@ final class LazyBodyView implements BodyView {
             return null;
         }
         try {
-            return MAPPER.readTree(trimmed);
+            return JsonInputReaders.reader(MAPPER, trimmed).readTree(trimmed);
         } catch (JsonProcessingException e) {
             return null;
         }
