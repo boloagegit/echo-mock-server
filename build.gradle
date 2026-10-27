@@ -60,6 +60,9 @@ java {
     }
 }
 
+// Apply the source-pinned client cleanup consistently to compilation and packaging.
+apply from: 'gradle/artemis-heartbeat-patch.gradle'
+
 configurations {
     compileOnly {
         extendsFrom annotationProcessor

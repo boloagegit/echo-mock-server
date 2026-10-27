@@ -1,0 +1,218 @@
+import org.gradle.api.artifacts.transform.CacheableTransform
+import org.gradle.api.artifacts.transform.InputArtifact
+import org.gradle.api.artifacts.transform.TransformAction
+import org.gradle.api.artifacts.transform.TransformOutputs
+import org.gradle.api.artifacts.transform.TransformParameters
+import org.gradle.api.artifacts.type.ArtifactTypeDefinition
+import org.gradle.api.file.ConfigurableFileCollection
+import org.gradle.api.file.FileSystemLocation
+import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.provider.Provider
+import org.gradle.api.tasks.Classpath
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.security.MessageDigest
+import java.util.concurrent.TimeUnit
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
+
+/**
+ * Temporary, source-level fix for Artemis 2.57's heartbeat lifecycle leaks.
+ * Rebuild only the affected upstream class; preserve all other JAR entries.
+ * A version/source change fails closed until this patch is reviewed or removed.
+ */
+@CacheableTransform
+abstract class ArtemisHeartbeatPatch implements TransformAction<ArtemisHeartbeatPatch.Parameters> {
+    interface Parameters extends TransformParameters {
+        @InputFile @PathSensitive(PathSensitivity.NONE)
+        RegularFileProperty getSourceArchive()
+
+        @Classpath
+        ConfigurableFileCollection getCompilerClasspath()
+
+        @InputFile @PathSensitive(PathSensitivity.NONE)
+        RegularFileProperty getCompilerExecutable()
+
+        @Input
+        Property<String> getCompilerVersion()
+    }
+
+    @InputArtifact @PathSensitive(PathSensitivity.NAME_ONLY)
+    abstract Provider<FileSystemLocation> getInputArtifact()
+
+    private static final String VERSION = '2.57.0'
+    private static final String CLASS_PATH = 'org/apache/activemq/artemis/core/client/impl/ClientSessionFactoryImpl'
+    private static final String SOURCE_SHA = 'f3c23d035ef6c9385285cca7054ce544353c4670d2135ec9a3146e4c89776eb0'
+    private static final String CLASS_SHA = '08fd1dbbcc45101d69c5fe83236f895040806314f1388982fb6695f080618aac'
+
+    @Override
+    void transform(TransformOutputs outputs) {
+        File original = inputArtifact.get().asFile
+        // The optional, locally supplied tibjms.jar may be absent in ordinary builds.
+        if (!original.exists()) {
+            return
+        }
+        if (!original.name.startsWith('artemis-core-client-')) {
+            outputs.file(original)
+            return
+        }
+        if (original.name != "artemis-core-client-${VERSION}.jar") {
+            throw new GradleException('Review/remove the Artemis heartbeat patch before changing the core client version')
+        }
+        byte[] sourceBytes
+        new ZipFile(parameters.sourceArchive.get().asFile).withCloseable { sources ->
+            sourceBytes = sources.getInputStream(sources.getEntry(CLASS_PATH + '.java')).withCloseable { it.readAllBytes() }
+        }
+        if (sha256(sourceBytes) != SOURCE_SHA) {
+            throw new GradleException('Unexpected Artemis source: refusing to apply the heartbeat patch')
+        }
+        String before = '''         } else {
+            RemotingConnection connectionToDestory = connection;'''
+        String after = '''         } else {
+            cancelScheduledTasks();
+            RemotingConnection connectionToDestory = connection;'''
+        String source = new String(sourceBytes, StandardCharsets.UTF_8)
+        if (source.indexOf(before) < 0 || source.indexOf(before) != source.lastIndexOf(before)) {
+            throw new GradleException('Artemis heartbeat patch context does not match exactly once')
+        }
+
+        String closeBefore = """   private void interruptConnectAndCloseAllSessions(boolean close) {
+      //release all threads waiting for topology
+      latchFinalTopology.countDown();
+
+      clientProtocolManager.stop();
+
+      synchronized (createSessionLock) {
+         closeCleanSessions(close);
+         closed = true;
+      }
+   }
+"""
+        String closeAfter
+        int open = closeBefore.indexOf('{')
+        int end = closeBefore.lastIndexOf('}')
+        String closeBody = closeBefore.substring(open + 1, end)
+        closeAfter = (closeBefore.substring(0, open + 1) + '\n      try {'
+                + closeBody.readLines().collect { '\n   ' + it }.join('')
+                + '\n      } finally {\n         cancelScheduledTasks();\n      }\n   }')
+        if (source.indexOf(closeBefore) < 0 || source.indexOf(closeBefore) != source.lastIndexOf(closeBefore)) {
+            throw new GradleException('Artemis close cleanup context does not match exactly once')
+        }
+        source = source.replace(closeBefore, closeAfter)
+
+        File result = outputs.file("artemis-core-client-${VERSION}-echo-heartbeat.jar")
+        File work = new File(result.parentFile, 'compile')
+        File classes = new File(work, 'classes')
+        File sourceFile = new File(work, CLASS_PATH + '.java')
+        Files.createDirectories(sourceFile.parentFile.toPath())
+        Files.createDirectories(classes.toPath())
+        Files.writeString(sourceFile.toPath(), source.replace(before, after), StandardCharsets.UTF_8)
+        List<String> arguments = ['--release', '17', '-encoding', 'UTF-8', '-g', '-proc:none', '-implicit:none',
+                                  '-classpath', parameters.compilerClasspath.asPath, '-d', classes.absolutePath,
+                                  sourceFile.absolutePath]
+        File argumentFile = new File(work, 'javac.args')
+        // javac's argument file avoids Windows command-line limits and preserves spaces/Unicode.
+        Files.writeString(argumentFile.toPath(), arguments.collect { quoteArgument(it) }.join('\n') + '\n', StandardCharsets.UTF_8)
+        File compilerLog = new File(work, 'javac.log')
+        Process compiler = new ProcessBuilder(parameters.compilerExecutable.get().asFile.absolutePath,
+                '-J-Dfile.encoding=UTF-8', '-J-Xmx256m', '@' + argumentFile.absolutePath)
+                .redirectErrorStream(true).redirectOutput(compilerLog).start()
+        if (!compiler.waitFor(120, TimeUnit.SECONDS)) {
+            compiler.destroyForcibly()
+            throw new GradleException('Timed out compiling the Artemis heartbeat patch')
+        }
+        if (compiler.exitValue() != 0) {
+            throw new GradleException('Cannot compile the Artemis heartbeat patch:\n' + compilerLog.getText('UTF-8').take(8000))
+        }
+
+        Map<String, File> replacements = [:]
+        Files.walk(classes.toPath()).withCloseable { paths ->
+            paths.filter { Files.isRegularFile(it) }.forEach { path ->
+                replacements[classes.toPath().relativize(path).toString().replace(File.separatorChar, '/' as char)] = path.toFile()
+            }
+        }
+        new ZipFile(original).withCloseable { upstream ->
+            byte[] originalClass = upstream.getInputStream(upstream.getEntry(CLASS_PATH + '.class')).withCloseable { it.readAllBytes() }
+            if (sha256(originalClass) != CLASS_SHA) {
+                throw new GradleException('Unexpected Artemis bytecode: refusing to replace the client class')
+            }
+            Set<String> originalClasses = upstream.entries().findAll {
+                it.name.endsWith('.class') && (it.name == CLASS_PATH + '.class' || it.name.startsWith(CLASS_PATH + '$'))
+            }.collect { it.name } as Set
+            if (replacements.keySet() != originalClasses) {
+                throw new GradleException('Recompiled Artemis class set differs from the original JAR')
+            }
+            new ZipOutputStream(Files.newOutputStream(result.toPath())).withCloseable { jar ->
+                upstream.entries().each { entry ->
+                    if (entry.name ==~ /META-INF\/.*\.(SF|RSA|DSA)/) {
+                        throw new GradleException('Refusing to modify a signed Artemis JAR')
+                    }
+                    ZipEntry copied = new ZipEntry(entry.name)
+                    copied.time = 0L
+                    jar.putNextEntry(copied)
+                    if (!entry.directory) {
+                        if (replacements.containsKey(entry.name)) {
+                            Files.copy(replacements[entry.name].toPath(), jar)
+                        } else {
+                            upstream.getInputStream(entry).withCloseable { it.transferTo(jar) }
+                        }
+                    }
+                    jar.closeEntry()
+                }
+                ZipEntry marker = new ZipEntry('META-INF/echo/artemis-heartbeat-patch.properties')
+                marker.time = 0L
+                jar.putNextEntry(marker)
+                jar.write(("upstream.version=${VERSION}\nsource.sha256=${SOURCE_SHA}\n"
+                        + 'fix=cancel heartbeat after explicit close and before terminal disconnect cleanup\n').getBytes(StandardCharsets.UTF_8))
+                jar.closeEntry()
+            }
+        }
+    }
+
+    static String sha256(byte[] bytes) {
+        MessageDigest.getInstance('SHA-256').digest(bytes).encodeHex().toString()
+    }
+
+    static String quoteArgument(String value) {
+        '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
+    }
+}
+
+def patchSources = configurations.create('artemisHeartbeatPatchSources') {
+    canBeConsumed = false
+    transitive = false
+}
+def patchCompilerClasspath = configurations.create('artemisHeartbeatPatchCompilerClasspath') {
+    canBeConsumed = false
+}
+dependencies.add(patchSources.name, 'org.apache.artemis:artemis-core-client:2.57.0:sources@jar')
+dependencies.add(patchCompilerClasspath.name, 'org.apache.artemis:artemis-core-client:2.57.0')
+
+def compiler = javaToolchains.compilerFor { languageVersion = JavaLanguageVersion.of(17) }
+def artifactType = ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE
+dependencies.registerTransform(ArtemisHeartbeatPatch) {
+    from.attribute(artifactType, 'jar')
+    to.attribute(artifactType, 'echo-artemis-heartbeat-jar')
+    parameters {
+        sourceArchive.set(layout.file(providers.provider { patchSources.singleFile }))
+        compilerClasspath.from(patchCompilerClasspath)
+        compilerExecutable.set(compiler.map { it.executablePath })
+        compilerVersion.set(compiler.map { "${it.metadata.javaRuntimeVersion}/${it.metadata.jvmVersion}/${it.metadata.vendor}" })
+    }
+}
+// Every normal compile/runtime consumer, including bootJar, bootRun and JavaExec
+// probes, resolves the same patched dependency. Patch inputs stay untransformed.
+configurations.configureEach { configuration ->
+    if (!configuration.name.startsWith('artemisHeartbeatPatch')
+            && (configuration.name.endsWith('CompileClasspath') || configuration.name.endsWith('RuntimeClasspath')
+                || configuration.name in ['compileClasspath', 'runtimeClasspath'])) {
+        configuration.attributes.attribute(artifactType, 'echo-artemis-heartbeat-jar')
+    }
+}

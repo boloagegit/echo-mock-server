@@ -5,6 +5,7 @@ import com.echo.diagnostics.JmsDiagnosticMetadata;
 import com.echo.diagnostics.TransactionDiagnostics.Trace;
 import com.echo.jms.target.JmsTargetFactoryProvider;
 import com.echo.service.JmsTargetConnectionService;
+
 import jakarta.jms.Connection;
 import jakarta.jms.ConnectionFactory;
 import jakarta.jms.JMSException;
@@ -15,9 +16,11 @@ import jakarta.jms.Queue;
 import jakarta.jms.Session;
 import jakarta.jms.TemporaryQueue;
 import jakarta.jms.TextMessage;
+
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -556,10 +559,18 @@ public final class JmsTargetForwarder {
             }
             if (factory == null) {
                 factory = factorySupplier.create();
+                if (factory instanceof CachedJmsConnectionFactory cached) {
+                    // Configure the physical connection listener before Spring creates its proxy.
+                    // Provider callbacks only stop admission; active users own resource cleanup.
+                    cached.setExceptionListener(failure -> stopAccepting());
+                }
             }
             if (connection == null) {
                 Connection created = factory.createConnection();
                 try {
+                    if (!(factory instanceof CachedJmsConnectionFactory)) {
+                        created.setExceptionListener(failure -> stopAccepting());
+                    }
                     created.start();
                     connection = created;
                 } catch (JMSException | RuntimeException e) {
