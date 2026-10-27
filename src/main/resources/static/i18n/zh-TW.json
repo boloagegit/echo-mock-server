@@ -1148,7 +1148,7 @@
     "backupNow": "立即備份",
     "backupList": "備份清單",
     "enableMethod": "啟用方式",
-    "h2OnlyNote": "備份適用於內嵌式 SQLite 與 H2 資料庫",
+    "embeddedDatabaseNote": "備份適用於內嵌式 SQLite 資料庫",
     "agentStatus": "代理程式狀態",
     "agentLogDescription": "非同步批次寫入請求記錄，並分析規則匹配鏈",
     "agentName": "名稱",

@@ -1,3 +1,2 @@
 org.springframework.boot.env.EnvironmentPostProcessor=\
-com.echo.config.LegacyH2Guard,\
 com.echo.config.SqliteRecoveryEnvironmentPostProcessor

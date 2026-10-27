@@ -1148,7 +1148,7 @@
     "backupNow": "Backup Now",
     "backupList": "Backup List",
     "enableMethod": "How to Enable",
-    "h2OnlyNote": "Backups support embedded SQLite and H2 databases",
+    "embeddedDatabaseNote": "Backups support the embedded SQLite database",
     "agentStatus": "Agent Status",
     "agentLogDescription": "Writes request logs asynchronously in batches and analyzes the rule match chain",
     "agentName": "Name",

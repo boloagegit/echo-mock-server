@@ -106,7 +106,6 @@ const SettingsPage = {
     databaseKind() {
       const url = this.status?.datasourceUrl || '';
       if (url.startsWith('jdbc:sqlite:')) return 'SQLite';
-      if (url.startsWith('jdbc:h2:')) return 'H2';
       return this.t('settings.database');
     },
     scenarioEnabled() {
@@ -669,7 +668,7 @@ const SettingsPage = {
     path: ./backups
     retention-days: 7</pre>
             </div>
-            <p class="settings-inline-note"><i class="bi bi-info-circle" aria-hidden="true"></i> {{t('settings.h2OnlyNote')}}</p>
+            <p class="settings-inline-note"><i class="bi bi-info-circle" aria-hidden="true"></i> {{t('settings.embeddedDatabaseNote')}}</p>
           </div>
           <div class="settings-card-body" v-else><p class="settings-inline-note">{{t('monitoring.unavailable')}}</p></div>
         </div>

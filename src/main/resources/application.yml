@@ -37,7 +37,6 @@ spring:
 
   # Database: Default SQLite (WAL), the data file is located at ./data (Docker volume mount point)
   # Select the matching profile for external databases: postgresql, mysql, mariadb, sqlserver, or oracle.
-  # H2 is no longer supported; migrate existing H2 data with scripts/migrate-h2-to-sqlite.py.
   datasource:
     url: jdbc:sqlite:./data/mockdb.sqlite?journal_mode=WAL&busy_timeout=10000&synchronous=NORMAL&foreign_keys=ON
     driver-class-name: org.sqlite.JDBC

@@ -77,19 +77,6 @@ repositories {
     mavenCentral()
 }
 
-// H2 is no longer a supported database. Only the offline H2-to-SQLite migration tool needs its driver, so it has a separate source set:
-// It is excluded from echo-server.jar and the normal test classpath, preventing @DataJpaTest from silently switching to embedded H2.
-sourceSets {
-    h2Migration {
-        java.srcDir 'src/h2Migration/java'
-    }
-    h2MigrationTest {
-        java.srcDir 'src/h2MigrationTest/java'
-        compileClasspath += h2Migration.output
-        runtimeClasspath += h2Migration.output
-    }
-}
-
 dependencies {
     // Spring Boot Web with Undertow (exclude Tomcat)
     implementation 'org.springframework.boot:spring-boot-starter-web'
@@ -184,15 +171,6 @@ dependencies {
     testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.1'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
-    // Offline H2-to-SQLite migration tool (see sourceSets.h2Migration)
-    h2MigrationImplementation 'com.fasterxml.jackson.core:jackson-databind'
-    h2MigrationRuntimeOnly 'com.h2database:h2'
-    h2MigrationRuntimeOnly 'org.xerial:sqlite-jdbc:3.53.2.1'
-    h2MigrationTestImplementation 'org.junit.jupiter:junit-jupiter'
-    h2MigrationTestImplementation 'org.assertj:assertj-core'
-    h2MigrationTestRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-    h2MigrationTestRuntimeOnly 'com.h2database:h2'
-    h2MigrationTestRuntimeOnly 'org.xerial:sqlite-jdbc:3.53.2.1'
 }
 
 tasks.named('test') {
@@ -361,7 +339,6 @@ tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
 }
 // Test code does not require SpotBugs static analysis
 spotbugsTest.enabled = false
-spotbugsH2MigrationTest.enabled = false
 
 // Build Fat Jar
 // SDK producers publish download resources, never server runtime dependencies.
@@ -409,24 +386,4 @@ tasks.register('t') {
 tasks.register('runJmsTest', JavaExec) {
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'com.echo.jms.ManualJmsTest'
-}
-
-// Called by scripts/migrate-h2-to-sqlite.py; all connection settings are passed through environment variables.
-tasks.register('migrateH2ToSqlite', JavaExec) {
-    group = 'application'
-    description = 'Migrate and verify an offline H2 database into a staged SQLite database'
-    classpath = sourceSets.h2Migration.runtimeClasspath
-    mainClass = 'com.echo.migration.H2ToSqliteMigrator'
-}
-
-tasks.register('h2MigrationTest', Test) {
-    group = 'verification'
-    description = 'Tests the offline H2-to-SQLite migration tool'
-    testClassesDirs = sourceSets.h2MigrationTest.output.classesDirs
-    classpath = sourceSets.h2MigrationTest.runtimeClasspath
-    useJUnitPlatform()
-}
-
-tasks.named('check') {
-    dependsOn 'h2MigrationTest'
 }

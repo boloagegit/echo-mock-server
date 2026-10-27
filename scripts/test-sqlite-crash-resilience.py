@@ -2,7 +2,7 @@
 """
 SQLite Crash Resilience Test
 
-Simulate the situation that will damage H2 chunk and verify that SQLite will not happen:
+Exercise SQLite transaction recovery after abrupt process termination:
 1. A large number of writes are forced to terminate midway.
 2. Repeated forced termination + restart to verify data integrity
 3. Forced termination under concurrent write pressure
@@ -221,7 +221,7 @@ def test_kill_during_write():
     """Scenario 1: Large write force terminated midway"""
     print("\n" + "=" * 60)
     print("情境 1：大量寫入中途強制終止")
-    print("  模擬：H2 在寫入 chunk 時被殺，最後一個 chunk 寫一半")
+    print("  模擬：寫入交易中止，檢查已提交資料是否完整")
     print("=" * 60)
 
     # Start server
@@ -308,7 +308,7 @@ def test_repeated_crash_recovery():
     """Scenario 2: Repeated crash + restart (5 times)"""
     print("\n" + "=" * 60)
     print("情境 2：反覆 crash + 重啟 (5 輪)")
-    print("  模擬：H2 反覆非正常關閉後無法啟動")
+    print("  模擬：反覆非正常關閉後重新啟動")
     print("=" * 60)
 
     success = True
@@ -385,7 +385,7 @@ def test_concurrent_write_then_kill():
     """Scenario 3: Multiple threads writing concurrently + forced termination"""
     print("\n" + "=" * 60)
     print("情境 3：多執行緒並發寫入 + 強制終止")
-    print("  模擬：H2 HikariCP 多連線同時寫入時被殺")
+    print("  模擬：多連線同時寫入時中止程序")
     print("=" * 60)
 
     proc = start_server()
@@ -469,7 +469,7 @@ def test_concurrent_write_then_kill():
 if __name__ == "__main__":
     print("╔══════════════════════════════════════════════════════════════╗")
     print("║  SQLite Crash Resilience Test                               ║")
-    print("║  模擬 H2 chunk 損壞的情境，驗證 SQLite 不會發生             ║")
+    print("║  模擬程序中止情境，驗證 SQLite 交易恢復             ║")
     print("╚══════════════════════════════════════════════════════════════╝")
 
     jars = sorted(
