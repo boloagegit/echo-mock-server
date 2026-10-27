@@ -42,20 +42,20 @@ class RequestLogBatchWriterIntegrationTest {
     }
 
     @Test
-    void h2CommitsLogAndCheckpointTogether() {
-        writer.persist("spool-h2", 7L, List.of(validLog("/h2")), 100);
+    void sqliteCommitsLogAndCheckpointTogether() {
+        writer.persist("spool-sqlite", 7L, List.of(validLog("/sqlite")), 100);
 
         assertThat(requestLogs.findAll()).singleElement().satisfies(saved -> {
-            assertThat(saved.getEndpoint()).isEqualTo("/h2");
+            assertThat(saved.getEndpoint()).isEqualTo("/sqlite");
             assertThat(saved.isForwarded()).isTrue();
             assertThat(saved.getForwardTarget())
                     .isEqualTo("Primary HTTP | https://downstream.example");
         });
-        assertThat(writer.findCheckpoint("spool-h2")).isEqualTo(7L);
+        assertThat(writer.findCheckpoint("spool-sqlite")).isEqualTo(7L);
     }
 
     @Test
-    void h2RollsBackCheckpointWhenLogBatchFails() {
+    void sqliteRollsBackCheckpointWhenLogBatchFails() {
         RequestLog invalid = validLog(null);
 
         assertThatThrownBy(() -> writer.persist("spool-rollback", 9L,
@@ -67,7 +67,7 @@ class RequestLogBatchWriterIntegrationTest {
     }
 
     @Test
-    void h2TruncatesOversizedForwardTargetWithoutRollingBackBatch() {
+    void sqliteTruncatesOversizedForwardTargetWithoutRollingBackBatch() {
         RequestLog log = validLog("/long-target");
         log.setForwardTarget("x".repeat(RequestLog.MAX_FORWARD_TARGET_LENGTH + 200));
 

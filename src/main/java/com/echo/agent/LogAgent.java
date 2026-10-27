@@ -406,15 +406,15 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
      *
      * @return The checkpoint after skipping, or the original checkpoint if nothing was skipped
      */
-    private long skipBacklogBeyondRetention(long checkpoint) {
+    private long skipBacklogBeyondRetention(long checkpoint, RequestLogSpool.ConsumerSession consumer) {
         int maxRecords = configService.getRequestLogMaxRecords();
-        long cutoff = durableSpool.sequenceBeforeNewest(maxRecords);
+        long cutoff = consumer.sequenceBeforeNewest(maxRecords);
         if (cutoff <= checkpoint) {
             return checkpoint;
         }
-        long skipped = durableSpool.countBetween(checkpoint, cutoff);
+        long skipped = consumer.countBetween(checkpoint, cutoff);
         durableBatchWriter.persist(durableSpool.getSpoolId(), cutoff, List.of(), maxRecords);
-        durableSpool.deleteThrough(cutoff);
+        consumer.deleteThrough(cutoff);
         if (skipped > 0) {
             recordSkipped(skipped);
             skippedSinceWarning += skipped;
@@ -491,19 +491,25 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
      * cleanup happens only afterwards and is therefore safe to retry after a crash.
      */
     private void durableConsumeLoop() {
+        try (RequestLogSpool.ConsumerSession consumer = durableSpool.openConsumerSession()) {
+            durableConsumeLoop(consumer);
+        }
+    }
+
+    private void durableConsumeLoop(RequestLogSpool.ConsumerSession consumer) {
         Long checkpoint = null;
         long lastCleanedCheckpoint = 0;
         while (durableConsumerRunning.get()) {
             try {
                 if (checkpoint == null) {
                     checkpoint = durableBatchWriter.findCheckpoint(durableSpool.getSpoolId());
-                    durableSpool.deleteThrough(checkpoint);
+                    consumer.deleteThrough(checkpoint);
                     lastCleanedCheckpoint = checkpoint;
                 }
                 long now = System.nanoTime();
                 if (now - nextBacklogCheckNanos >= 0) {
                     nextBacklogCheckNanos = now + BACKLOG_CHECK_INTERVAL_NANOS;
-                    long skippedThrough = skipBacklogBeyondRetention(checkpoint);
+                    long skippedThrough = skipBacklogBeyondRetention(checkpoint, consumer);
                     if (skippedThrough > checkpoint) {
                         checkpoint = skippedThrough;
                         lastCleanedCheckpoint = skippedThrough;
@@ -513,12 +519,12 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 }
 
                 RequestLogSpool.ReadBatch fetchedBatch =
-                        durableSpool.readBatchAfter(checkpoint, durableBatchSize + 1,
+                        consumer.readBatchAfter(checkpoint, durableBatchSize + 1,
                                 durableSpool.statusSnapshot().inFlightByteLimit());
                 List<RequestLogSpool.SpoolEntry> fetched = fetchedBatch.entries();
                 if (fetched.isEmpty()) {
                     if (checkpoint > lastCleanedCheckpoint) {
-                        durableSpool.deleteThrough(checkpoint);
+                        consumer.deleteThrough(checkpoint);
                         lastCleanedCheckpoint = checkpoint;
                     }
                     awaitDurableWork();
@@ -548,7 +554,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
                 checkpoint = lastSequence;
                 lastSuccessfulWriteEpochMillis = System.currentTimeMillis();
                 if (checkpoint - lastCleanedCheckpoint >= DURABLE_CLEANUP_INTERVAL) {
-                    durableSpool.deleteThrough(checkpoint);
+                    consumer.deleteThrough(checkpoint);
                     lastCleanedCheckpoint = checkpoint;
                 }
                 recordProcessed(batch.size());
@@ -648,8 +654,7 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
         }
 
         try {
-            ConditionMatcher.PreparedBody preparedBody =
-                    conditionMatcher.prepareBody(task.getAnalysisBody(), task.getMatchOutcomes());
+            ConditionMatcher.PreparedBody preparedBody = prepareAnalysisBody(task, candidates);
             List<MatchChainEntry> chain = new ArrayList<>();
             String matchedRuleId = task.getRuleId();
             boolean hasNearMiss = false;
@@ -722,6 +727,23 @@ public class LogAgent extends AbstractBatchAgent<LogTask> {
             log.warn("LogAgent match chain analysis failed: {}", e.getMessage());
             return task.getMatchChain();
         }
+    }
+
+    private ConditionMatcher.PreparedBody prepareAnalysisBody(LogTask task, List<CandidateSnapshot> candidates) {
+        String body = task.getAnalysisBody();
+        // Keep the existing small-body/XML path and avoid planning work where JSON
+        // projection is ineligible. Only immutable historical candidates are used.
+        if (body.length() <= 32768 || !body.trim().startsWith("{")) {
+            return conditionMatcher.prepareBody(body, task.getMatchOutcomes());
+        }
+        List<ConditionMatcher.RuleConditions> conditions = new ArrayList<>(candidates.size());
+        for (CandidateSnapshot candidate : candidates) {
+            if (candidate.isEnabled() && hasAnyCondition(candidate)) {
+                conditions.add(conditionMatcher.conditions(candidate.getMatchSpec(), candidate.getBodyCondition(),
+                        candidate.getQueryCondition(), candidate.getHeaderCondition()));
+            }
+        }
+        return conditionMatcher.prepareBody(body, conditions, task.getMatchOutcomes());
     }
 
     /**

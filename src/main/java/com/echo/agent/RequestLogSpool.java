@@ -591,15 +591,107 @@ public class RequestLogSpool {
         }
     }
 
+    /**
+     * One consumer owns this session until its worker exits. Every operation keeps
+     * autocommit and closes all statements/results before returning, so an idle
+     * session never pins a WAL read snapshot. It never shares the writer connection.
+     */
+    public final class ConsumerSession implements AutoCloseable {
+        private final Thread owner = Thread.currentThread();
+        private Connection connection;
+        private boolean closed;
+
+        private ConsumerSession() { }
+
+        public ReadBatch readBatchAfter(long sequence, int limit, long maxBytes) {
+            return execute(c -> RequestLogSpool.this.readBatchAfter(c, sequence, limit, maxBytes));
+        }
+
+        public long sequenceBeforeNewest(int keep) {
+            return execute(c -> RequestLogSpool.this.sequenceBeforeNewest(c, keep));
+        }
+
+        public long countBetween(long afterExclusive, long throughInclusive) {
+            return execute(c -> RequestLogSpool.this.countBetween(c, afterExclusive, throughInclusive));
+        }
+
+        public void deleteThrough(long sequence) {
+            execute(c -> {
+                RequestLogSpool.this.deleteThrough(c, sequence);
+                return null;
+            });
+        }
+
+        private <T> T execute(ConsumerOperation<T> operation) {
+            requireOwner();
+            if (closed) throw new IllegalStateException("Request-log consumer session is closed");
+            try {
+                if (connection == null || connection.isClosed()) connection = openConnection();
+                return operation.apply(connection);
+            } catch (SQLException e) {
+                discardConnection();
+                throw new RequestLogUnavailableException("Cannot open request-log consumer connection", e);
+            } catch (RuntimeException | Error e) {
+                // Keep the original failure classification, including corrupt-head
+                // fail-stop. A subsequent retry obtains a freshly configured handle.
+                discardConnection();
+                throw e;
+            }
+        }
+
+        private void requireOwner() {
+            if (Thread.currentThread() != owner)
+                throw new IllegalStateException("Request-log consumer session belongs to another thread");
+        }
+
+        private void discardConnection() {
+            Connection stale = connection;
+            connection = null;
+            if (stale == null) return;
+            try {
+                stale.close();
+            } catch (SQLException | RuntimeException | Error e) {
+                // Cleanup must not hide the storage/corruption failure or prevent
+                // retries after memory pressure. No caller can reuse this handle.
+                try { log.debug("Request-log consumer connection close failed", e); }
+                catch (Throwable ignored) { /* Preserve the primary failure if diagnostic logging also fails. */ }
+            }
+        }
+
+        @Override
+        public void close() {
+            requireOwner();
+            closed = true;
+            discardConnection();
+        }
+    }
+
+    @FunctionalInterface
+    private interface ConsumerOperation<T> {
+        T apply(Connection connection);
+    }
+
+    /** Creates a lazy, thread-confined session; the consumer must close it on exit. */
+    public ConsumerSession openConsumerSession() {
+        return new ConsumerSession();
+    }
+
     public ReadBatch readBatchAfter(long sequence, int limit, long maxBytes) {
+        try (Connection connection = openConnection()) {
+            return readBatchAfter(connection, sequence, limit, maxBytes);
+        } catch (SQLException e) {
+            throw new RequestLogUnavailableException("Cannot read request-log spool", e);
+        }
+    }
+
+    private ReadBatch readBatchAfter(Connection connection, long sequence, int limit, long maxBytes) {
         String sql = "SELECT spool.sequence_id, spool.candidate_set_id, "
                 + "length(spool.payload), length(candidates.payload) "
                 + "FROM request_log_spool spool "
                 + "LEFT JOIN candidate_snapshot_sets candidates "
                 + "ON candidates.candidate_set_id = spool.candidate_set_id "
                 + "WHERE spool.sequence_id > ? ORDER BY spool.sequence_id LIMIT ?";
-        try (Connection connection = openConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setLong(1, sequence);
             statement.setInt(2, Math.max(1, limit));
             List<SpoolEntry> result = new ArrayList<>();
@@ -735,9 +827,16 @@ public class RequestLogSpool {
      * return 0 if the record count does not exceed {@code keep}.
      */
     public long sequenceBeforeNewest(int keep) {
+        try (Connection connection = openConnection()) {
+            return sequenceBeforeNewest(connection, keep);
+        } catch (SQLException e) {
+            throw new RequestLogUnavailableException("Cannot inspect request-log spool: " + e.getMessage(), e);
+        }
+    }
+
+    private long sequenceBeforeNewest(Connection connection, int keep) {
         String sql = "SELECT sequence_id FROM request_log_spool ORDER BY sequence_id DESC LIMIT 1 OFFSET ?";
-        try (Connection connection = openConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setInt(1, Math.max(0, keep));
             try (ResultSet row = statement.executeQuery()) {
                 return row.next() ? row.getLong(1) : 0;
@@ -750,9 +849,16 @@ public class RequestLogSpool {
 
     /** Number of records with sequences in ({@code afterExclusive}, {@code throughInclusive}]. */
     public long countBetween(long afterExclusive, long throughInclusive) {
+        try (Connection connection = openConnection()) {
+            return countBetween(connection, afterExclusive, throughInclusive);
+        } catch (SQLException e) {
+            throw new RequestLogUnavailableException("Cannot inspect request-log spool: " + e.getMessage(), e);
+        }
+    }
+
+    private long countBetween(Connection connection, long afterExclusive, long throughInclusive) {
         String sql = "SELECT COUNT(*) FROM request_log_spool WHERE sequence_id > ? AND sequence_id <= ?";
-        try (Connection connection = openConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setLong(1, afterExclusive);
             statement.setLong(2, throughInclusive);
             try (ResultSet row = statement.executeQuery()) {
@@ -765,13 +871,22 @@ public class RequestLogSpool {
     }
 
     public void deleteThrough(long sequence) {
+        if (sequence <= 0) return;
+        try (Connection connection = openConnection()) {
+            deleteThrough(connection, sequence);
+        } catch (SQLException e) {
+            throw new RequestLogUnavailableException("Cannot clean request-log spool: " + e.getMessage(), e);
+        }
+    }
+
+    private void deleteThrough(Connection connection, long sequence) {
         if (sequence <= 0) {
             return;
         }
         String sizeSql = "SELECT COALESCE(SUM(length(payload)), 0) FROM request_log_spool "
                 + "WHERE sequence_id <= ?";
         String deleteSql = "DELETE FROM request_log_spool WHERE sequence_id <= ?";
-        try (Connection connection = openConnection()) {
+        try {
             long released = 0;
             // Keep the size read in its own autocommit transaction. Upgrading a WAL
             // read snapshot to a writer after a concurrent append can fail immediately
@@ -791,17 +906,17 @@ public class RequestLogSpool {
                 deletedRows = delete.executeUpdate();
             }
             releaseReservation(released, deletedRows, 0);
-            cleanupUnreferencedCandidateSets();
+            cleanupUnreferencedCandidateSets(connection);
         } catch (SQLException e) {
             throw new RequestLogUnavailableException(
                     "Cannot clean request-log spool: " + e.getMessage(), e);
         }
     }
 
-    private void cleanupUnreferencedCandidateSets() throws SQLException {
+    private void cleanupUnreferencedCandidateSets(Connection connection) throws SQLException {
         candidateSetLifecycleLock.writeLock().lock();
         try {
-            try (Connection connection = openConnection(); Statement statement = connection.createStatement()) {
+            try (Statement statement = connection.createStatement()) {
                 long releasedCount = 0;
                 long releasedBytes = 0;
                 try (ResultSet row = statement.executeQuery(
