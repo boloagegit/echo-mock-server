@@ -142,36 +142,23 @@ final class NativeMockHttpHandler implements HttpHandler {
             return;
         }
         if (exchange.isRequestComplete()) {
-            dispatch(exchange, () -> execute(exchange, null));
+            dispatch(exchange, () -> execute(exchange, null), deadline);
             return;
         }
-        // Undertow's non-blocking receiver waits on channel readiness, not an application
-        // worker. Both declared and chunked bodies use the same finite allocation limit.
-        Receiver receiver = exchange.getRequestReceiver();
-        receiver.setMaxBufferSize(resources.maxBodyBytes);
+        // Read Undertow's framed channel directly into the bounded accumulator, avoiding
+        // the standard partial receiver's temporary byte array for every network read.
         var body = new NativeHttpRequestBody(resources.maxBodyBytes, contentLength);
-        lease.onClose(body::close);
-        receiver.receivePartialBytes((ex, chunk, last) -> {
-            if (!available(ex)) return;
-            try {
-                if (!body.append(chunk)) return;
-            } catch (Receiver.RequestToLargeException tooLarge) {
-                receiver.pause();
-                body.close();
-                NativeHttpObservation.error(ex, tooLarge);
-                fail(ex, 413, "Request body exceeds native HTTP limit");
-                return;
-            }
-            if (last) {
+        var receiver = new NativeHttpBodyReceiver(exchange, body, () -> {
+            if (deadline.checkActive()) {
                 // Match the full receiver's handling of Undertow's decoded-length header.
-                var headers = ex.getRequestHeaders();
+                var headers = exchange.getRequestHeaders();
                 if (headers.contains(Headers.X_CONTENT_LENGTH) && !headers.contains(Headers.CONTENT_LENGTH)) {
                     headers.put(Headers.CONTENT_LENGTH, body.size());
                 }
-                dispatch(ex, () -> {
+                dispatch(exchange, () -> {
                     var received = body.take();
-                    if (received != null) execute(ex, received.decode(bodyCharset));
-                });
+                    if (received != null) execute(exchange, received.decode(bodyCharset));
+                }, deadline);
             }
         },
                 (ex, error) -> {
@@ -183,7 +170,9 @@ final class NativeMockHttpHandler implements HttpHandler {
                     } else {
                         fail(ex, 400, "Invalid request body");
                     }
-                });
+                }, lease::available, deadline::enforceInactive);
+        lease.onClose(receiver::close);
+        receiver.receive(resources.maxBodyBytes);
     }
 
     private static boolean eligible(HttpServerExchange exchange) {
@@ -221,8 +210,8 @@ final class NativeMockHttpHandler implements HttpHandler {
         return true;
     }
 
-    private void dispatch(HttpServerExchange exchange, Runnable work) {
-        if (available(exchange)) {
+    private void dispatch(HttpServerExchange exchange, Runnable work, NativeHttpDeadline deadline) {
+        if (deadline.checkActive()) {
             exchange.dispatch(command -> submit(exchange, command), work);
         }
     }
