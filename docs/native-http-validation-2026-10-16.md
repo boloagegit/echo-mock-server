@@ -10,7 +10,7 @@
 
 預設啟用後的補驗證：不設定 `ECHO_HTTP_TRANSPORT` 執行 186 項 HTTP／原生資源與相容性測試，全部通過，SpotBugs 通過。另以新打包的 JAR 實際啟動，確認未指定 transport 時原生請求計數增加、狀態與 Unicode 本文正確；設定 `ECHO_HTTP_TRANSPORT=servlet` 時回應同樣正確且沒有原生請求計數。兩個既有觀測測試改為等待請求完成後的統計發布，避免客戶端先收到回應造成過早斷言。下列完整回歸與壓測保留改預設前的結果。
 
-最終完整檢查：2,085 項測試中 2,079 項通過、6 項既有外部依賴測試跳過；另有 9 項 H2 遷移測試的有效結果，Error Prone 與 SpotBugs 通過。修正後的日誌／原生 HTTP 聚焦檢查有 63 項全部通過。完整回歸以 native 設定執行；HTTP/2、SSE 與自訂擴充依契約保留 Servlet 處理。
+最終完整檢查：2,085 項測試中 2,079 項通過、6 項既有外部依賴測試跳過，Error Prone 與 SpotBugs 通過。修正後的日誌／原生 HTTP 聚焦檢查有 63 項全部通過。完整回歸以 native 設定執行；HTTP/2、SSE 與自訂擴充依契約保留 Servlet 處理。
 
 量測 jar SHA-256：`61a5cd4dc161eeecc74d7e851fad0d953376291645647cb7b5399eb5b4da9e8a`。相較 WebJars Lite 調整後的正式 Servlet jar，runtime library 集合沒有增加或減少；Brave bridge 只存在於測試依賴。
 

@@ -142,7 +142,7 @@ ECHO_BENCH_WORKERS=8 ECHO_BENCH_IO=2 WM_BENCH_WORKERS=128 \
 
 每個程序先暖機，各情境再暖機 3 秒、量測 10 秒，順序 Echo → WireMock → WireMock → Echo。另以 `WM_ONLY=1 WM_BENCH_WORKERS=32` 與新目錄補測 WireMock 較小工作池。HTTP 測試是最大輸出負載下的吞吐與延遲；不同產品的 P99 並非相同到達率比較。
 
-正式版 `check bootJar` 通過：2,051 個 JUnit 測試中 2,045 通過、6 個外部 fixture／專有 client 相關測試跳過，另有 9 個 H2 遷移測試通過；Error Prone 編譯與 SpotBugs 檢查通過。一般 jar 已檢查不包含 HTTP 實驗類別及移除的 JMS 限流原型。
+正式版 `check bootJar` 通過：2,051 個 JUnit 測試中 2,045 通過、6 個外部 fixture／專有 client 相關測試跳過；Error Prone 編譯與 SpotBugs 檢查通過。一般 jar 已檢查不包含 HTTP 實驗類別及移除的 JMS 限流原型。
 
 自足 Artemis 整合測試驗證多路同時轉發、重複且不帶 correlation ID 的下游回覆、失敗後重連、目標退休與暫存佇列清理。來源交易與 Scenario 的原有回歸測試繼續保留。
 

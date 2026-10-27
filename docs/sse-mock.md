@@ -97,7 +97,7 @@ Every request currently restarts the configured sequence at the first event.
 are provided. Use fetch or explicitly close EventSource after the expected
 sequence when a single playback is required.
 
-Regression tests use synthetic H2 data and random loopback HTTP ports. They
+Regression tests use synthetic SQLite data and random loopback HTTP ports. They
 include scheduler execution/cancellation before future publication, individual
 HTTP event arrival, the 20s + 20s sequence, method/body matching, settings,
 invalid bodies, UTF-8 multiline data, loop cancellation and Last-Event-ID restart.

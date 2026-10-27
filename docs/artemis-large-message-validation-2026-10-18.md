@@ -54,7 +54,7 @@ The isolated longer-warmup control does not reproduce the short HTTP tail increa
 
 Ten separate checks pass: all four 2.40/2.57 TCP client/broker combinations reject an incorrect password and correctly handle a durable, escaped Unicode/emoji TextMessage with rollback/redelivery. They verify body, message ID, correlation, custom property and persistent delivery mode. Additionally, an old broker writes a durable large message, shuts down cleanly, and the new broker reopens that same journal and successfully reads/rolls back/redelivers/commits it. This is not crash/power-loss or cluster validation.
 
-The permanent `ArtemisLargeMessageIntegrationTest` exercises persistent Unicode text across broker restart and rollback using temporary directories and portable NIO. Full local tests: 2,219 main + 9 migration, zero failures, six skips; SpotBugs passes. [CI](https://github.com/boloagegit/echo-mock-server/actions/runs/39140666233) passes Linux JDK 17/21, Windows JDK 17 from a path containing spaces, and Docker deployment checks.
+The permanent `ArtemisLargeMessageIntegrationTest` exercises persistent Unicode text across broker restart and rollback using temporary directories and portable NIO. Full local tests: 2,219 main, zero failures, six skips; SpotBugs passes. [CI](https://github.com/boloagegit/echo-mock-server/actions/runs/39140666233) passes Linux JDK 17/21, Windows JDK 17 from a path containing spaces, and Docker deployment checks.
 
 ## Ten-minute mixed observation
 

@@ -13,7 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Separate anonymous liveness/readiness health probes expose status only. Readiness checks the database, local free space and existing JMS listener state; liveness remains independent of external outages. Probes never open an extra JMS connection. Docker uses readiness, checks the data mount's free space, forwards stop signals directly to Java, and Compose persists backups in a separate named volume and allows 60 seconds for shutdown. CI can be run manually on a branch before opening a PR and tests container recreation with persisted data/backups.
 - ADMIN-only per-GC history and post-GC heap chart in Settings, retaining at most 512 events / 24 hours by default with idle housekeeping and explicit eviction/expiry counts. Reads never force GC. Resource-counter comparisons help narrow possible sources of growth; an isolated Windows/Linux HTTP/JMS observation harness checks heap, native memory, threads and cleanup, with opt-in class histograms for further investigation.
 - Windows development now has a JDK 17 CI build from a checkout path containing spaces, alongside the existing Linux deployment checks. Java source compilation explicitly uses UTF-8; checkout line endings, TLS test tools, SQLite backup paths and symlink test privileges account for Windows. SQLite integration tests close their Spring-managed connection pools before deleting temporary databases. PowerShell development/configuration examples are documented, while deployment performance tools explicitly require Linux.
-- SQLite migration and crash-check scripts explicitly close their database connections, releasing Windows file handles before publishing or cleaning up database files. Migration opens files with the write access Windows requires to flush data to disk before publication.
+- The SQLite crash-check script explicitly closes database connections, releasing Windows file handles before cleaning up temporary database files.
 - SQLite online backups now pass destination paths directly to the driver, so paths containing spaces or apostrophes work without the driver's limited command parser. Snapshot integrity checks and atomic publication remain in place.
 
 ### Fixed
@@ -93,7 +93,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Anomaly-only HTTP/JMS/SSE diagnostics: zero supplemental file bytes for healthy traffic, one bounded error summary, separate 10 MiB/day / 50 MiB retained files, rate limits, expiring opt-in detail, and nullable Request Log correlation IDs
 
 ### Changed
-- Dated benchmark reports and the console-redesign hand-off notes moved to `docs/archive/`. CONTRIBUTING lists all three test suites (Gradle, `node --test`, Python), the current source layout and the tech stack. SECURITY no longer mentions the H2 console, which was removed. The H2 migration hint at startup points to `docs/install.md`.
+- Dated benchmark reports and the console-redesign hand-off notes moved to `docs/archive/`. CONTRIBUTING lists all three test suites (Gradle, `node --test`, Python), the current source layout and the tech stack.
 - Many HTTP rules on the same host and method no longer slow down every request to that host. Before, each request compared its path with every rule of its host and method in turn. Now rules with an exact path are looked up directly, and only `*` and `/x/*` rules are still compared one by one; the order in which rules are tried is unchanged. With 2,000 GET rules on one host and request logging off, requests per second went from 10,008 to 13,178 for a fixed JSON reply (8 connections), from 8,835 to 11,955 for a template, and from 8,986 to 11,616 for one of the 2,000 rules, which is about the same as with 4 rules. Path patterns are now defined in one place (`HttpPathPattern`) shared by matching, the rule snapshot and the rule-order check
 - Mock replies no longer wait for their request log to be written. A log entry now waits in memory and is written to the spool in batches by a background thread. Before, every reply waited for its own entry to be committed to disk, which capped simple mocks at about 2,000 replies per second with 8 connections. Measured on the same machine (requests per second, before → after): fixed JSON 1,170 → 7,700 with 4 connections, 2,170 → 10,960 with 8 and 4,720 → 15,260 with 20; templates 2,050 → 9,200; 100 KB XML 990 → 3,220. After the run the process size is unchanged (about 1.2 GB with a 1 GB heap) and the heap after a full collection is lower (about 58 MB instead of about 175 MB). When logs arrive faster than they can be written, the oldest waiting entries are dropped so the newest are kept: in that benchmark about 4% of the entries were dropped before reaching the spool. The rest reached the spool, and as before only the newest `echo.request-log.max-records` (10,000) end up in the database. A warning gives the number dropped (the first right away, then at most every 30 seconds), and the log agent status counts them. Waiting entries, including the batch being written, are limited by `echo.request-log.buffer.max-entries` (default 20,000) and `echo.request-log.buffer.max-mb` (default 64), so a burst of large bodies cannot exhaust memory. Entries still waiting are lost if the process stops unexpectedly; a normal shutdown writes them out first, for up to 5 seconds. In this mode the spool commits with SQLite `synchronous=NORMAL`: a crash of Echo loses nothing already committed, but a power or operating-system failure can lose the last commits. Set `echo.request-log.wait-for-write=true` to keep the previous behaviour: each reply waits for its log, the spool fsyncs every commit, and a reply fails with 503 (a JMS message is rolled back) when the log cannot be written
 - Changing rules no longer makes mock requests wait. After a rule or response change, the rule list is rebuilt on a background thread while requests keep using the previous list; before, every request arriving during the rebuild waited for it (about 30–80 ms with 2,000 rules, longer with a slow database). The admin request that made the change still answers only once the new list is in use, so a mock request sent right after saving sees the change; a batch import waits once instead of once per rule. If a rebuild fails, the previous rules stay in use and the rebuild is retried. The rule list is also rebuilt every `echo.cache.rules.max-age-minutes` (default 10) in the background, and `echo.cache.rules.change-wait-ms` (default 5000) limits how long a change waits for the new list
@@ -106,11 +106,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Request-log spool records omit empty fields, saving about a hundred bytes per record; existing spool files are read as before
 - Body preparation is decided once from the candidate rules' conditions for HTTP and JMS alike: no parsing when no condition reads the body, a single streaming scan without a DOM when every XML condition uses a simple path (now also for advanced `xpath` conditions and HTTP), otherwise one shared parse. A message that cannot be streamed (for example an undeclared namespace prefix) falls back to normal parsing instead of being treated as plain text
 - Condition matching runs on the new `com.echo.core.match` engine. Existing string conditions (`bodyCondition`, `queryCondition`, `headerCondition`) keep their exact semantics and match-chain details through a compatibility layer verified by differential tests against the original implementation; stored rules need no changes. The one intentional difference: an expected value consisting of a single `"` is compared literally instead of failing the request with HTTP 500
-- **Breaking:** H2 is no longer supported or bundled. SQLite is the default database (`./data/mockdb.sqlite`, inside the Docker `/app/data` volume); the `sqlite` profile keeps `./mockdb.sqlite`. Echo refuses to start with an H2 profile/URL or with unmigrated legacy `mockdb.mv.db` data; convert with `scripts/migrate-h2-to-sqlite.py`, which now runs from its own Gradle source set
+- SQLite is the default database (`./data/mockdb.sqlite`, inside the Docker `/app/data` volume); the `sqlite` profile keeps `./mockdb.sqlite`.
 - HTTP/JMS rule candidates come from immutable per-protocol snapshots invalidated by the existing rule-cache eviction paths; one shared rule selector replaces four copies of the selection loop
 - Request handling is split into pluggable pieces without behaviour changes: responders (fault, forward, mock) produce the response plan, SSE playback lives in `protocol.http.sse` instead of the HTTP controller, and request logging receives a single `ServeEvent` through `ServeEventListener` (additional listeners cannot affect the response; request-log failures still return 503 or redeliver JMS)
 - Rule list queries and multi-instance cache invalidation read per-protocol descriptors from the protocol registry instead of hard-coded HTTP/JMS branches; cache event names are unchanged
-- Tests run on SQLite (one temporary database per Spring context) instead of embedded H2
+- Tests run on SQLite (one temporary database per Spring context)
 - The test suite runs test classes in parallel JVM forks (half the CPU cores; `-PtestForks=1` for one JVM) and no longer waits on BCrypt at production strength, a 30 s JMS reply timeout or a 40 s SSE sequence: `./gradlew test` drops from about 330 s to about 190 s with the same 1,836 tests. Integration-test cleanup now fails the test when deleting data fails instead of leaving it to later tests
 - System Settings now separates overview, resource details, forwarding targets, data/backups, and service configuration; shared target tables and six metric disclosures retain manual-refresh behavior
 
@@ -143,7 +143,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - SSE zero-delay callback ownership race that could cancel the following delayed event; late future registration retains timeout/disconnect cleanup
 - Request-log proxy error values are bounded to the existing 255-character column without altering transport responses
 - `echo.matcher.max-field-value-length` is now applied; Spring previously used the no-argument constructor and ignored it
-- Rule-cache rebuilds no longer send one `IN` list with every response ID (O(n²) on H2; over parameter limits on SQL Server/Oracle); with 20,000 rules the first request after a rule change dropped from 1.3 s to about 0.17 s
+- Rule-cache rebuilds no longer send one `IN` list with every response ID (over parameter limits on SQL Server/Oracle); with 20,000 rules the first request after a rule change dropped from 1.3 s to about 0.17 s
 - Regex timeout protection reads the clock every 256 characters instead of on every character (10k-character values: 717 µs → 74 µs)
 - The default Docker database now lives in the persisted `/app/data` volume
 - Forwarding target dialogs now place and contain keyboard focus, support Escape, and restore the launch control; Settings action menus remain within the viewport
@@ -167,7 +167,6 @@ No changelog entries were recorded for this release. See the [release notes](htt
 - Request logs require authentication because details can include request data and downstream topology
 
 ### Fixed
-- H2 response identity sequences are realigned after restoring an older database snapshot
 - JMS rule previews and request-log rule creation now use protocol-correct forwarding and match fields
 - Updated or deleted JMS forwarding profiles retire their cached connections after active messages finish
 - Request-log candidate snapshots and HTTP forwarding metrics are released when their profiles are no longer referenced
@@ -182,7 +181,6 @@ No changelog entries were recorded for this release. See the [release notes](htt
 - Declarative rule authoring — create or update rules from a validated JSON document while retaining the form editor
 - Selectable HTTP and JMS forwarding profiles with application configuration fallback
 - Durable SQLite WAL request-log spool so transient primary-database failures delay records instead of silently dropping them
-- Verified H2-to-SQLite migration script with row counts, SHA-256 digests, integrity checks, and startup smoke tests
 - One-click maintainer release workflow with validated CalVer tags, release artifacts, checksums, generated notes, and GHCR images
 
 ### Changed
@@ -229,7 +227,6 @@ No changelog entries were recorded for this release. See the [release notes](htt
 - Rule protection — mark rules as protected to prevent automatic cleanup
 - Rule extension — extend retention period for rules/responses
 - Orphan response cleanup with remaining-days display and one-click purge
-- H2 database auto-backup (scheduled, on-shutdown, manual trigger)
 - Excel import — batch import rules via Excel with downloadable template
 - Header condition matching support
 - Dynamic templates — WireMock-style Handlebars engine with JSONPath/XPath
@@ -286,5 +283,4 @@ No changelog entries were recorded for this release. See the [release notes](htt
 - Cache invalidation service for multi-instance sync
 - JMS ESB forwarding (TIBCO EMS support)
 - Feign Mock Interceptor for client-side integration
-- Embedded H2 database, zero external dependencies
 - Intranet-friendly — all frontend assets via WebJars (no CDN)

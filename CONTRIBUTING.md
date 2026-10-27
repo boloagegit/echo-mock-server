@@ -85,6 +85,12 @@ Run the Node.js and Python tests yourself when you change the web console or the
 6. Push to your fork: `git push origin feature/my-feature`
 7. Open a Pull Request
 
+## Artemis Client Lifecycle Patch
+
+`gradle/artemis-heartbeat-patch.gradle` temporarily fixes two heartbeat cleanup paths in Artemis 2.57.0: an unsuccessful CONNECT handshake and a terminal disconnect without reconnection. It recompiles only the affected upstream class and its nested classes from the official sources. Version, source and original bytecode checks fail the build if the expected dependency changes; all other JAR entries remain unchanged. Compilation, tests, `bootRun` and the packaged JAR resolve the same patched dependency. TIBCO client code is not modified.
+
+When upgrading Artemis, first check whether upstream fixes both paths. Remove this transform when the official client passes the failed-handshake, terminal-disconnect, transaction rollback/redelivery and automatic-reconnect tests under `src/test/java/com/echo/jms/`. Otherwise review the updated source and repeat those checks before updating the pins. The transform uses the JDK 17 toolchain and a UTF-8 compiler argument file for Windows paths containing spaces or Unicode; it adds no checked-in third-party source or JAR.
+
 ## Code Style
 
 ### Java
@@ -133,7 +139,7 @@ src/main/java/com/echo/
 src/main/resources/static/   # Web console (Vue 3 via WebJars, no build step)
 src/test/java/               # JUnit tests
 src/test/js/                 # Web console tests (node --test)
-scripts/                     # Benchmarks, migration and validation scripts
+scripts/                     # Benchmarks, validation and validation scripts
 docs/                        # Documentation (docs/README.md is the index)
 ```
 

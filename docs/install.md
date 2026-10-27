@@ -72,22 +72,9 @@ The listed versions are reproducible Docker smoke-test baselines, not a promise 
 
 Use exactly one database profile for each process. `dev` and `test` are non-database profiles and may be combined with one database profile. If no database profile is active, SQLite is selected and the database file is `./data/mockdb.sqlite` (the Docker volume mount point). Startup rejects multiple database profiles and rejects a JDBC URL whose vendor does not match the selected profile.
 
-Every supported path is currently documented and tested as starting with a new empty database. The profiles use Hibernate `ddl-auto=update` for convenience; this is not a general migration system and does not automatically move existing data between SQLite and an external database. The H2-to-SQLite utility (see [Migrating from H2](#migrating-from-h2)) is a separate, SQLite-specific offline tool, not a general multi-database converter. Review its table and version compatibility, take an independent backup, and validate the result before using it. For an existing production database, use a DBA/platform-controlled, versioned migration and then set `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`.
+Every supported path is currently documented and tested as starting with a new empty database. The profiles use Hibernate `ddl-auto=update` for convenience; this is not a general migration system and does not automatically move existing data between SQLite and an external database. For an existing production database, use a DBA/platform-controlled, versioned migration and then set `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`.
 
-## Migrating from H2
-
-H2 is no longer supported and is not bundled in `echo-server.jar`. Echo refuses to start with the `h2` profile or a `jdbc:h2:` URL, and it also refuses to start when the legacy H2 data file `mockdb.mv.db` is present in the working directory but the SQLite database has not been created yet, so an upgrade never silently starts with an empty database.
-
-Convert existing data while Echo is stopped:
-
-```bash
-python3 scripts/migrate-h2-to-sqlite.py --h2-path ./mockdb
-./gradlew bootRun   # SQLite is the default; the migrated file is ./data/mockdb.sqlite
-```
-
-The script never modifies the H2 files, verifies row counts and per-table digests, smoke-tests Echo against the staged database, and only then publishes `./data/mockdb.sqlite`. Keep the original H2 files until the new deployment has run stably. Docker users: the previous H2 default stored data at `/app/mockdb`, outside the `/app/data` volume; copy it out of the container before recreating it. To deliberately start with an empty database despite a leftover `mockdb.mv.db`, set `ECHO_DATABASE_IGNORELEGACYH2=true`.
-
-#### Standard environment variables
+### Standard environment variables
 
 ```bash
 SPRING_PROFILES_ACTIVE=postgresql \
@@ -122,7 +109,7 @@ given SQLite file; use a server database when multiple application instances
 must share storage. See [SQLite recovery](sqlite-recovery.md) for recovery,
 writer metrics, and validation boundaries.
 
-#### Backup and request-log spool boundaries
+### Backup and request-log spool boundaries
 
 The application backup feature is for local SQLite files. External database profiles disable it; PostgreSQL, MySQL/MariaDB, SQL Server, and Oracle backups, point-in-time recovery, retention, and restore drills are owned by the DBA or platform backup service.
 
@@ -150,7 +137,7 @@ python3 scripts/stress-test-rps.py http://localhost:8080 10 20 \
   --request-log-disabled
 ```
 
-`ddl-auto=update` is suitable only for a new empty database or development bootstrap. It is not a versioned migration, and it cannot reliably express renames, backfills, type conversions, index/constraint changes, or vendor-specific identity/LOB/boolean/date/JSON behavior across all seven databases. It also requires DDL privileges and can fail when existing rows conflict with a new non-null column.
+`ddl-auto=update` is suitable only for a new empty database or development bootstrap. It is not a versioned migration, and it cannot reliably express renames, backfills, type conversions, index/constraint changes, or vendor-specific identity/LOB/boolean/date/JSON behavior across all supported databases. It also requires DDL privileges and can fail when existing rows conflict with a new non-null column.
 
 ## Docker RDBMS smoke test
 

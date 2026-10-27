@@ -6,7 +6,7 @@
 
 | Guide | What you'll find |
 |-------|------------------|
-| [Installation and deployment](install.md) | Run the JAR, Windows, Docker, database profiles, migrating from H2, multi-instance setups, and sending traffic to Echo (direct calls, Nginx, outbound HTTPS) |
+| [Installation and deployment](install.md) | Run the JAR, Windows, Docker, database profiles, multi-instance setups, and sending traffic to Echo (direct calls, Nginx, outbound HTTPS) |
 | [Configuration and authentication](configuration.md) | The main `application.yml` settings, auth modes, roles and built-in accounts |
 | [Rules and matching](rules.md) | Priority, tags, HTTP and JMS rules, condition syntax, `matchSpec`, stateful scenarios and response templates |
 | [JMS](jms.md) | The embedded broker, forwarding to TIBCO EMS or Artemis, and receiving from a shared broker |
@@ -47,4 +47,4 @@
 | [Engine extensibility design](design/engine-extensibility.md) | The matching-engine and protocol design (Traditional Chinese) |
 | [Contributing](../CONTRIBUTING.md) | Build, test and pull-request steps |
 | [Changelog](../CHANGELOG.md) | What changed in each release |
-| [Scripts](../scripts/README.md) | Benchmark, migration and validation scripts |
+| [Scripts](../scripts/README.md) | Benchmark and validation scripts |

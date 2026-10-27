@@ -71,22 +71,9 @@ Windows 建置的 Java bytecode 可在相容 Java 版本的 Linux 上執行。�
 
 每個程序只能啟用一個資料庫 profile。`dev` 與 `test` 是非資料庫 profile，可與一個資料庫 profile 一起使用。若未啟用任何資料庫 profile，系統會使用 SQLite，資料檔為 `./data/mockdb.sqlite`（即 Docker volume 掛載點）。啟動時會拒絕多個資料庫 profile，也會拒絕 JDBC URL 廠商與所選 profile 不一致的設定。
 
-目前各 profile 的文件與實測路徑都以「新建空資料庫」啟動為準。Profile 使用 Hibernate `ddl-auto=update` 方便建立結構；這不是通用遷移系統，也不會自動在 SQLite 與外部資料庫之間搬移既有資料。H2-to-SQLite 工具（見[從 H2 遷移](#從-h2-遷移)）是獨立的 SQLite 專用離線工具，不是通用的多資料庫轉換器；使用前應檢查資料表與版本相容性、另行備份並驗證結果。既有正式資料庫請由 DBA／平台以具版本控管的遷移方式處理，再設定 `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`。
+目前各 profile 的文件與實測路徑都以「新建空資料庫」啟動為準。Profile 使用 Hibernate `ddl-auto=update` 方便建立結構；這不是通用遷移系統，也不會自動在 SQLite 與外部資料庫之間搬移既有資料。既有正式資料庫請由 DBA／平台以具版本控管的遷移方式處理，再設定 `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`。
 
-## 從 H2 遷移
-
-H2 已不再支援，也不會打包在 `echo-server.jar` 中。使用 `h2` profile 或 `jdbc:h2:` URL 時 Echo 會拒絕啟動；工作目錄中仍有舊 H2 資料檔 `mockdb.mv.db`、但 SQLite 資料庫尚未建立時也會拒絕啟動，避免升級後以空資料庫啟動、看起來像規則全部消失。
-
-請在 Echo 停止時轉換既有資料：
-
-```bash
-python3 scripts/migrate-h2-to-sqlite.py --h2-path ./mockdb
-./gradlew bootRun   # SQLite 已是預設；轉換後的檔案為 ./data/mockdb.sqlite
-```
-
-腳本不會修改 H2 檔案，會比對每張表的筆數與 digest，並以 staging 資料庫實際啟動 Echo 做 smoke test，全部通過後才發布 `./data/mockdb.sqlite`。新環境穩定運行前請保留原 H2 檔案。Docker 使用者注意：舊版預設的 H2 資料位於 `/app/mockdb`，不在 `/app/data` volume 內，重建容器前請先把它複製出來。確定要在殘留 `mockdb.mv.db` 的情況下以空資料庫啟動時，可設定 `ECHO_DATABASE_IGNORELEGACYH2=true`。
-
-#### 標準環境變數
+### 標準環境變數
 
 ```bash
 SPRING_PROFILES_ACTIVE=postgresql \
@@ -111,7 +98,7 @@ SPRING_JPA_HIBERNATE_DDL_AUTO=validate \
 
 其餘 Hikari timeout 與 lifetime 設定使用 profile 檔案中的 `ECHO_DB_*` 變數。請勿在 `SPRING_PROFILES_ACTIVE` 放入多個資料庫 profile。
 
-#### 備份與 request-log spool 邊界
+### 備份與 request-log spool 邊界
 
 應用程式備份功能只處理本機 SQLite 檔案；外部資料庫 profile 會關閉此功能。PostgreSQL、MySQL／MariaDB、SQL Server 與 Oracle 的備份、PITR、保留政策及還原演練由 DBA 或平台備份服務負責。
 

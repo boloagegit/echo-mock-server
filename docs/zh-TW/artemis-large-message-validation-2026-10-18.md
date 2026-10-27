@@ -54,7 +54,7 @@ P99 是兩輪 percentile 的平均，並非合併所有請求後重算。每版�
 
 另外 10 個檢查通過：2.40／2.57 的四種 TCP client／broker 配對都能拒絕錯誤密碼，並正確處理含跳脫字元、中文／emoji 的持久化大 TextMessage，以及 rollback／重送；核對本文、message ID、correlation、自訂屬性及 persistent delivery mode。此外，舊 broker 寫入持久化大訊息、正常關閉後，由新版直接重開同份 journal，確認能讀取／rollback／重送／commit。這不等於斷電、程序崩潰或 broker 群集驗證。
 
-新增永久測試 `ArtemisLargeMessageIntegrationTest`，使用暫存目錄與跨平台 NIO，驗證大 Unicode 文字在 broker 重啟及 rollback 後完整。本機完整測試：主測試 2,219＋移轉 9，零失敗、6 個跳過，SpotBugs 通過。[CI](https://github.com/boloagegit/echo-mock-server/actions/runs/39140666233) 通過 Linux JDK 17／21、含空白路徑的 Windows JDK 17，以及 Docker 部署檢查。
+新增永久測試 `ArtemisLargeMessageIntegrationTest`，使用暫存目錄與跨平台 NIO，驗證大 Unicode 文字在 broker 重啟及 rollback 後完整。本機完整測試：主測試 2,219，零失敗、6 個跳過，SpotBugs 通過。[CI](https://github.com/boloagegit/echo-mock-server/actions/runs/39140666233) 通過 Linux JDK 17／21、含空白路徑的 Windows JDK 17，以及 Docker 部署檢查。
 
 ## 十分鐘混合觀察
 

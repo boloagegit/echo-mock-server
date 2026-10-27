@@ -1,6 +1,6 @@
 # Benchmark & Test Scripts
 
-Python scripts for performance benchmarking, migration, and regression testing. They require Python 3 and use only the Python standard library.
+Python scripts for performance benchmarking and regression testing. They require Python 3 and use only the Python standard library.
 
 All scripts default to `http://localhost:8080` if no URL is provided.
 Scripts that call the Admin API use the development credentials by default. Override them without editing source:
@@ -26,10 +26,9 @@ export ECHO_TEST_PASSWORD='your-local-password'
 | `stress-test-cache-isolation.py` | Verify HTTP/JMS cache isolation after split |
 | `check-xml-condition-changes.py` | Read-only report of rules whose XML body conditions behave differently after the HTTP/JMS XML unification (relative paths such as `Order/Status`, and `==` on XML); `--json` for machine-readable output |
 | `test-match-scenarios.py` | End-to-end regression — 55 scenarios / 138 assertions covering HTTP, JMS, logs, SSE, fault injection, and Scenario |
-| `migrate-h2-to-sqlite.py` | Offline, staged H2-to-SQLite migration with row/digest/integrity verification and startup smoke test |
 | `test-sqlite-crash-resilience.py` | SQLite WAL crash/restart and request-log durability regression |
 | `test-sqlite-recovery-resilience.py` | Disposable SQLite lock, bounded JVM OOM, corruption fail-fast, verified-backup restore, and post-recovery writes |
-| `test-rdbms-matrix.py` | Disposable Docker Compose matrix for H2, SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle; runs E2E/persistence checks, restart verification, and evidence collection |
+| `test-rdbms-matrix.py` | Disposable Docker Compose matrix for SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle; runs E2E/persistence checks, restart verification, and evidence collection |
 | `test-container-resilience.py` | Disposable Compose JMS XML pressure, fixed-heap, SIGKILL/restart, ID accounting, Artemis paging, and bounded tmpfs high-water/full/recovery validation |
 | `test-container-diagnostics.py` | Short real Echo + SQLite + JMS forwarding matrix under CPU/memory caps; 30s no-reply, non-text reply, correlation, bounded anomaly output and cleanup/recovery checks |
 | `test-container-resource-soak.py` | Finite 10-minute fixed-rate HTTP/JMS forwarding resource probe, with two idle minutes, GC floors, RSS/cgroup/FD/connection/queue measurements and real caller reply verification |
@@ -57,11 +56,11 @@ python3 scripts/test-rdbms-matrix.py
 python3 scripts/test-rdbms-matrix.py --databases oracle --skip-build --keep
 
 # Print the exact per-profile plan without invoking Docker.
-python3 scripts/test-rdbms-matrix.py --databases h2,sqlite --dry-run
+python3 scripts/test-rdbms-matrix.py --databases sqlite --dry-run
 
 # Run the same RPS conditions for every selected database after functional
 # and restart-persistence checks. Results are written into each DB result JSON.
-python3 scripts/test-rdbms-matrix.py --databases h2,postgresql --performance
+python3 scripts/test-rdbms-matrix.py --databases sqlite,postgresql --performance
 
 # The RPS script keeps its original positional form. Add --json for automation
 # (non-2xx responses and request/transport errors return a non-zero exit code).
