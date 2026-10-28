@@ -123,7 +123,7 @@ dependencies {
     implementation 'org.apache.poi:poi-ooxml:5.5.1'
 
     // OpenAPI/Swagger spec parsing
-    implementation 'io.swagger.parser.v3:swagger-parser:2.1.46'
+    implementation 'io.swagger.parser.v3:swagger-parser:2.1.48'
 
     // Security & LDAP
     implementation 'org.springframework.boot:spring-boot-starter-security'
