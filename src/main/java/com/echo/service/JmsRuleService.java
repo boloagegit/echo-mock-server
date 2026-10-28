@@ -8,8 +8,10 @@ import com.echo.entity.Protocol;
 import com.echo.protocol.jms.JmsProtocolHandler;
 import com.echo.repository.JmsRuleRepository;
 import com.echo.util.CurrentOperator;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationContext;
@@ -37,6 +39,10 @@ public class JmsRuleService {
     private final RuleService ruleService;
     private final JmsRuleRepository jmsRuleRepository;
     private final ConditionMatcher conditionMatcher;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private ResponseSnapshotReads responseSnapshotReads;
+
     private final Optional<CacheInvalidationService> cacheInvalidationService;
     private final Optional<JmsProperties> jmsProperties;
     private final ApplicationContext applicationContext;
@@ -102,10 +108,38 @@ public class JmsRuleService {
 
     /** Build a queue's JMS-rule snapshot from the database, called by {@link RuleSnapshots} in the background. */
     JmsQueueSnapshot buildJmsQueueSnapshot(String queueName) {
+        if (responseSnapshotReads == null) {
+
         log.debug("Building JMS rule snapshot: queue={}", queueName);
         List<JmsRule> rules = isJmsEnabled() ? requireJmsHandler().findWithFallback(queueName) : List.of();
         String endpointField = jmsProperties.map(JmsProperties::getEndpointField).orElse(null);
         return new JmsQueueSnapshot(prepareJmsRules(rules), endpointField, conditionMatcher);
+        }
+        return responseSnapshotReads.snapshot(() -> buildFreshJmsQueueSnapshot(queueName));
+    }
+
+    private JmsQueueSnapshot buildFreshJmsQueueSnapshot(String queueName) {
+        List<JmsRule> rules = new java.util.ArrayList<>();
+        java.util.Map<Long, ResponseRevision> revisions = new java.util.HashMap<>();
+        if (isJmsEnabled())
+            for (Object[] row : jmsRuleRepository.findSnapshotRows(queueName)) {
+                JmsRule rule = (JmsRule) row[0];
+                rules.add(rule);
+                if (rule.getResponseId() != null)
+                    revisions.put(
+                            rule.getResponseId(),
+                            new ResponseRevision((String) row[1], (Long) row[2]));
+            }
+        rules.sort(JMS_RULE_ORDER);
+        String endpointField = jmsProperties.map(JmsProperties::getEndpointField).orElse(null);
+        return new JmsQueueSnapshot(rules, endpointField, conditionMatcher, revisions);
+    }
+
+    public List<JmsRule> freshCandidates(String queueName, String endpointValue) {
+        JmsQueueSnapshot snapshot = buildFreshJmsQueueSnapshot(queueName);
+        return endpointValue != null && !endpointValue.isBlank()
+                ? snapshot.bucket(endpointValue)
+                : snapshot.rules();
     }
 
     private List<JmsRule> prepareJmsRules(List<JmsRule> rules) {

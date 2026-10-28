@@ -28,6 +28,9 @@ public class JmsProperties {
     /** Opt in to source rollback after reply delivery failure; false preserves the legacy commit/skip policy. */
     private boolean rollbackOnReplyFailure = false;
 
+    /** Cache committed target settings on SQLite; other databases retain per-exchange resolution. */
+    private boolean targetCatalogEnabled = true;
+
     /** Endpoint-identifying field extracted from the JMS body: XML element name or JSON key. */
     private String endpointField = "ServiceName";
 

@@ -3,6 +3,11 @@ package com.echo.core.match;
 /** The built-in body valuer explains to {@link BodyRequirements} how it needs to parse body. */
 interface BodyExtractor extends ValueExtractor {
 
+    /** Conservative object path, or null for unrestricted body access. */
+    default String jsonPath() {
+        return null;
+    }
+
     /** Streamable XML simple path; not XPath, or null when XPath is not a simple path. */
     XmlPath xmlPath();
 

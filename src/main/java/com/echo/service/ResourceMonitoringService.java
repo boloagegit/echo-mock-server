@@ -54,6 +54,10 @@ public class ResourceMonitoringService {
     private final JmsProperties jmsProperties;
     private TransactionDiagnostics diagnostics;
     private ObjectProvider<NativeHttpResources> nativeHttp;
+    private AdminLogQueryAdmission adminLogQueries;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setAdminLogQueries(AdminLogQueryAdmission admission) { this.adminLogQueries = admission; }
 
     @org.springframework.beans.factory.annotation.Autowired
     public void setNativeHttp(ObjectProvider<NativeHttpResources> nativeHttp) {
@@ -214,6 +218,7 @@ public class ResourceMonitoringService {
 
     protected Map<String, Object> database() {
         Map<String, Object> values = new LinkedHashMap<>();
+        if (adminLogQueries != null) values.put("logQueryAdmission", adminLogQueries.snapshot());
         DataSource source = datasource.getIfAvailable();
         if (source instanceof HikariDataSource hikari && hikari.getHikariPoolMXBean() != null) {
             var pool = hikari.getHikariPoolMXBean();

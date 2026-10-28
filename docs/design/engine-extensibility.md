@@ -382,7 +382,7 @@ v1 與 v2 透過同一個 `RuleDefinition` 雙向轉換；`/rules/schema` 提供
 
 ### 6.2 儲存
 
-- `http_rules`、`jms_rules` 各新增可為空的 `match_spec`（`Length.LONG32`，與現有長文字欄位相同，7 種資料庫都已驗證可用）。
+- `http_rules`、`jms_rules` 各新增可為空的 `match_spec`（`Length.LONG32`，與現有長文字欄位相同，支援的資料庫都已驗證可用）。
 - 讀取：`match_spec` 有值時以它為準；否則由三個舊欄位即時編譯。
 - 寫入：可表達成舊語法時，同時寫入舊欄位（舊版 UI、匯出、Excel 都能繼續使用）與 `match_spec`；不可表達時，舊欄位寫入 `null`，`match_spec` 為唯一來源，並在 DTO 標記 `advancedMatch = true`。
 - 匯出／匯入（JSON、Excel）：JSON 匯出帶 `matchSpec`；Excel 範本維持舊欄位，遇到進階規則時在該列標註「需使用 JSON 匯出」。
@@ -471,7 +471,7 @@ Caffeine 快取（`@Cacheable(sync = true)`）。這樣所有既有的清除路�
   所以快照大小只隨規則數量成長，不會因用戶端送出任意 `X-Original-Host` 或 method 而無限增加（JMS 的 endpoint 分桶同理）。
 - compiled 模式的條件編譯結果改放在 weak-value 快取，由快照持有強參照，快照被淘汰後即可回收。
 - 重建時查詢有效 Response ID：超過 500 筆改為一次讀出所有 ID 再於記憶體取交集，
-  避免 `IN` 清單過長（H2 上為 O(n²)，SQL Server／Oracle 會超過參數上限）。
+  避免 `IN` 清單過長（SQL Server／Oracle 會超過參數上限）。
 
 **驗證**：20,000 條規則下，規則異動後的第一個請求約 0.17 秒；持續修改規則的同時壓測，p99 約 0.17 秒，
 記憶體測試沒有 heap 成長。
@@ -552,7 +552,7 @@ ArchUnit 新增規則：`RuleQueryService` 與 `CacheInvalidationService` 不得
 
 | 項目 | 結果 |
 |------|------|
-| 完整檢查（測試、SpotBugs、H2 轉換工具） | 通過 |
+| 完整檢查（測試、SpotBugs） | 通過 |
 | 全部測試以 compiled 引擎重跑 | 1,836 通過 |
 | 端到端回歸 `test-match-scenarios.py` | 138/138 |
 | 舊規則 RPS（步驟 6 對照，交替兩輪，每情境 15 秒） | 簡單 JSON +0.5%、小型 XML +1%、大型 XML −3%，皆在雜訊內 |
@@ -621,7 +621,7 @@ schema 改讀 v2（v1 的超集合），`spec.match` 與舊版條件同時出現
 
 | 項目 | 步驟 8（legacy） | 步驟 9 |
 |------|------|------|
-| 完整檢查（測試、SpotBugs、H2 轉換工具） | — | 1,835 通過（6 個略過） |
+| 完整檢查（測試、SpotBugs） | — | 1,835 通過（6 個略過） |
 | 端到端回歸 `test-match-scenarios.py` | — | 138/138 |
 | RPS：簡單 JSON（兩輪） | 1,171／1,248 | 1,224／1,230 |
 | RPS：複雜 JSON | 1,317／1,393 | 1,433／1,391 |
@@ -836,7 +836,7 @@ Playwright 檢查規則列表的標記、「輪不到」篩選與判斷順序畫
 | 樹狀評估造成額外配置、降低吞吐量 | fast path 只回傳布林；葉節點與 predicate 預先編譯；效能關卡把關 |
 | JMS 串流 XML 的記憶體特性改變 | `XML_STREAM` 需求由 selector 宣告，維持「全部可串流才串流」的條件；`JmsMessageMemoryBudget` 不變 |
 | 多實例快取一致性 | 沿用 `CacheInvalidationService` 事件，只把「清除 Caffeine」換成「重建快照」 |
-| 7 種資料庫的新欄位 | 可為空的 `LONG32` 欄位；以 `scripts/test-rdbms-matrix.py` 驗證；Phase 1 的 Flyway 完成後改用版控 migration |
+| 支援的資料庫的新欄位 | 可為空的 `LONG32` 欄位；以 `scripts/test-rdbms-matrix.py` 驗證；Phase 1 的 Flyway 完成後改用版控 migration |
 
 ## 8. 待決策事項
 

@@ -1,10 +1,13 @@
 package com.echo.jms;
 
 import com.echo.config.JmsProperties;
+
 import jakarta.jms.ConnectionFactory;
+
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -80,7 +83,7 @@ public class JmsConnectionManager {
     public enum ListenerState { RECEIVING, RECONNECTING, UNKNOWN }
 
     /**
-     * The listener is receiving when its container is running, is not reconnecting, and has at least one consumer.
+     * The listener is receiving when its container is running, is not reconnecting, and has an active worker with a consumer registration when consumer caching is enabled.
      * {@link ListenerState#UNKNOWN} when there is no listener container information.
      */
     public ListenerState listenerState() {
@@ -93,7 +96,13 @@ public class JmsConnectionManager {
                 return ListenerState.RECONNECTING;
             }
             if (container instanceof DefaultMessageListenerContainer dmlc
-                    && (dmlc.isRecovering() || dmlc.getActiveConsumerCount() == 0)) {
+                    && (dmlc.isRecovering()
+                            || dmlc.getActiveConsumerCount() == 0
+                            // A worker may be active while its fixed consumer registration is still
+                            // pending.
+                            || (dmlc.getCacheLevel()
+                                            >= DefaultMessageListenerContainer.CACHE_CONSUMER
+                                    && !dmlc.isRegisteredWithDestination()))) {
                 return ListenerState.RECONNECTING;
             }
         }

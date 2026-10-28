@@ -1,32 +1,34 @@
 package com.echo.pipeline;
 
+import com.echo.entity.HttpForwardTargetMode;
 import com.echo.entity.HttpRule;
 import com.echo.entity.HttpRuleAction;
-import com.echo.entity.HttpForwardTargetMode;
 import com.echo.service.ConditionMatcher;
-import com.echo.service.HttpRuleService;
 import com.echo.service.HttpOutboundForwarder;
+import com.echo.service.HttpRuleService;
 import com.echo.service.MatchChainEntry;
 import com.echo.service.RequestLogService;
 import com.echo.service.RuleService;
-import com.echo.util.CancellableStages;
 import com.echo.service.ScenarioService;
+import com.echo.util.CancellableStages;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Collections;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionStage;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 
 /**
  * MockPipeline implementation of HTTP protocol
@@ -78,6 +80,12 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
     @Override
     protected List<HttpRule> findCandidateRules(MockRequest request) {
         return httpRuleService.findPreparedHttpRules(
+                request.getTargetHost(), request.getPath(), request.getMethod());
+    }
+
+    @Override
+    protected List<HttpRule> findFreshCandidateRules(MockRequest request) {
+        return httpRuleService.freshCandidates(
                 request.getTargetHost(), request.getPath(), request.getMethod());
     }
 
@@ -257,6 +265,32 @@ public class HttpMockPipeline extends AbstractMockPipeline<HttpRule> {
                 || (rule.getBodyCondition() != null && !rule.getBodyCondition().isBlank())
                 || (rule.getQueryCondition() != null && !rule.getQueryCondition().isBlank())
                 || (rule.getHeaderCondition() != null && !rule.getHeaderCondition().isBlank());
+    }
+
+    /** Read current rule fields directly; avoid a temporary ConditionSet in managed matching. */
+    @Override
+    protected ConditionMatcher.RuleConditions resolveMatchConditions(
+            HttpRule rule, ConditionMatcher.RuleConditions reusable) {
+        return resolveMatchConditions(
+                reusable,
+                rule.getMatchSpec(),
+                rule.getBodyCondition(),
+                rule.getQueryCondition(),
+                rule.getHeaderCondition());
+    }
+
+    @Override
+    protected List<ConditionMatcher.RuleConditions> collectBodyConditions(
+            List<ConditionMatcher.RuleConditions> collected,
+            HttpRule rule,
+            ConditionMatcher.RuleConditions reusable) {
+        return collectBodyConditions(
+                collected,
+                reusable,
+                rule.getMatchSpec(),
+                rule.getBodyCondition(),
+                rule.getQueryCondition(),
+                rule.getHeaderCondition());
     }
 
     @Override

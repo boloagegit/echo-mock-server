@@ -1,9 +1,14 @@
 package com.echo.integration.http;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mockingDetails;
+
 import com.echo.dto.RuleDto;
 import com.echo.entity.Protocol;
 import com.echo.integration.base.BaseIntegrationTest;
 import com.echo.repository.HttpRuleRepository;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,10 +27,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mockingDetails;
-
 /**
  * When changing rules, the simulation request does not have to wait for the rule list to be rebuilt: the old list will be used to respond during the rebuilding; the saved request will not be responded to until the new list takes effect.
  * So simulation requests sent immediately after saving must use the new rules.
@@ -42,14 +43,21 @@ class RuleChangeWithoutWaitingIntegrationTest extends BaseIntegrationTest {
 
     @BeforeEach
     void slowRuleListBuilds() {
-        doAnswer(invocation -> {
-            long ms = SLOW_BUILD_MS.get();
-            if (ms > 0) {
-                Thread.sleep(ms);
-            }
-            // repository of Spring Data is the interface: hand over the original default behavior of spy (redirect the call to the real repository)
-            return mockingDetails(httpRuleRepository).getMockCreationSettings().getDefaultAnswer().answer(invocation);
-        }).when(httpRuleRepository).findByEnabledTrueOrderByIdAsc();
+        doAnswer(
+                        invocation -> {
+                            long ms = SLOW_BUILD_MS.get();
+                            if (ms > 0) {
+                                Thread.sleep(ms);
+                            }
+                            // repository of Spring Data is the interface: hand over the original
+                            // default behavior of spy (redirect the call to the real repository)
+                            return mockingDetails(httpRuleRepository)
+                                    .getMockCreationSettings()
+                                    .getDefaultAnswer()
+                                    .answer(invocation);
+                        })
+                .when(httpRuleRepository)
+                .findSnapshotRows();
     }
 
     @AfterEach

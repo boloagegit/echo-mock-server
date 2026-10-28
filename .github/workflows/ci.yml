@@ -107,7 +107,7 @@ jobs:
 
       - name: Web console tests
         run: |
-          $testFiles = @(Get-ChildItem src/test/js/*.test.cjs -File | ForEach-Object { $_.FullName })
+          $testFiles = @(Get-ChildItem -Path src/test -Recurse -File -Include '*.test.cjs','*.test.mjs' | ForEach-Object { $_.FullName })
           if ($testFiles.Count -eq 0) { throw 'No web console tests found' }
           node --test @testFiles
 

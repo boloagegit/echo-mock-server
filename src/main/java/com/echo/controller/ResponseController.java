@@ -5,11 +5,13 @@ import com.echo.entity.Response;
 import com.echo.protocol.ProtocolHandlerRegistry;
 import com.echo.service.ResponseService;
 import com.echo.service.RuleAuditService;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.http.HttpStatus;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -85,33 +88,67 @@ public class ResponseController {
 
     @PutMapping("/responses/{id}")
     public ResponseEntity<?> updateResponse(@PathVariable Long id, @RequestBody Response response) {
-        return responseService.findById(id)
-                .map(existing -> {
-                    // The version sent is different from the current version, which means that the response has been modified during editing: reject to avoid covering up other people's modifications.
-                    // Callers with undelivered versions (old scripts) remain updated with the current version.
-                    if (response.getVersion() != null && !response.getVersion().equals(existing.getVersion())) {
-                        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
-                                "error", "OPTIMISTIC_LOCK_CONFLICT",
-                                "currentVersion", existing.getVersion()));
-                    }
-                    Response before = Response.builder().id(existing.getId()).description(existing.getDescription())
-                            .contentType(existing.getContentType()).body(existing.getBody()).build();
-                    response.setId(id);
-                    response.setVersion(existing.getVersion());
-                    // Unsent fields retain their original values (the description or type will not be cleared when only changing the content)
-                    if (response.getDescription() == null) response.setDescription(existing.getDescription());
-                    if (response.getContentType() == null) response.setContentType(existing.getContentType());
-                    Response saved;
-                    try {
-                        saved = responseService.save(response);
-                    } catch (ObjectOptimisticLockingFailureException e) {
-                        // Another caller saves between reading the version and writing the update.
-                        return ResponseEntity.status(HttpStatus.CONFLICT)
-                                .body(Map.of("error", "OPTIMISTIC_LOCK_CONFLICT"));
-                    }
-                    ruleAuditService.ifPresent(s -> s.logResponseUpdate(before, saved));
-                    return ResponseEntity.ok(saved);
-                })
+        return responseService
+                .findById(id)
+                .map(
+                        existing -> {
+                            // The version sent is different from the current version, which means
+                            // that the response has been modified during editing: reject to avoid
+                            // covering up other people's modifications.
+                            // Callers with undelivered versions (old scripts) remain updated with
+                            // the current version.
+                            if (response.getVersion() != null
+                                    && !response.getVersion().equals(existing.getVersion())) {
+                                return ResponseEntity.status(HttpStatus.CONFLICT)
+                                        .body(
+                                                Map.of(
+                                                        "error",
+                                                        "OPTIMISTIC_LOCK_CONFLICT",
+                                                        "currentVersion",
+                                                        existing.getVersion()));
+                            }
+                            Response before =
+                                    Response.builder()
+                                            .id(existing.getId())
+                                            .description(existing.getDescription())
+                                            .contentType(existing.getContentType())
+                                            .body(existing.getBody())
+                                            .build();
+                            response.setId(id);
+                            response.setVersion(existing.getVersion());
+                            // Unsent fields retain their original values (the description or type
+                            // will not be cleared when only changing the content)
+                            if (response.getDescription() == null)
+                                response.setDescription(existing.getDescription());
+                            if (response.getContentType() == null)
+                                response.setContentType(existing.getContentType());
+                            // Reject stale edits first, then leave an exact repeat at the same
+                            // revision.
+                            if (Objects.equals(response.getBody(), existing.getBody())
+                                    && Objects.equals(
+                                            response.getDescription(), existing.getDescription())
+                                    && Objects.equals(
+                                            response.getContentType(), existing.getContentType())
+                                    && Objects.equals(
+                                            response.getExtendedAt(), existing.getExtendedAt())) {
+                                responseService.validateSseContent(response);
+                                return ResponseEntity.ok(existing);
+                            }
+                            // This internal row identity is deliberately absent from the public
+                            // JSON.
+                            response.setIncarnation(existing.getIncarnation());
+                            Response saved;
+                            try {
+                                saved = responseService.save(response);
+                            } catch (ObjectOptimisticLockingFailureException e) {
+                                // Another caller saves between reading the version and writing the
+                                // update.
+                                return ResponseEntity.status(HttpStatus.CONFLICT)
+                                        .body(Map.of("error", "OPTIMISTIC_LOCK_CONFLICT"));
+                            }
+                            ruleAuditService.ifPresent(s -> s.logResponseUpdate(before, saved));
+                            return ResponseEntity.ok(saved);
+                        })
                 .orElse(ResponseEntity.notFound().build());
     }
 

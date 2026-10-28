@@ -1,6 +1,7 @@
 package com.echo.repository;
 
 import com.echo.entity.HttpRule;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -64,4 +65,9 @@ public interface HttpRuleRepository extends JpaRepository<HttpRule, String> {
     /** Query rule ID based on label pattern (avoid full table loading) */
     @Query("SELECT r.id FROM HttpRule r WHERE r.tags LIKE :pattern ESCAPE '\\'")
     List<String> findIdsByTagPattern(@Param("pattern") String pattern);
+
+    /** One statement obtains rule metadata and its response revision, without body LOBs. */
+    @Query(
+            "SELECT r, p.incarnation, p.version FROM HttpRule r LEFT JOIN Response p ON p.id = r.responseId WHERE r.enabled = true AND (r.responseId IS NULL OR p.id IS NOT NULL) ORDER BY r.id")
+    List<Object[]> findSnapshotRows();
 }

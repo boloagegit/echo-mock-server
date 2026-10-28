@@ -1,8 +1,15 @@
 package com.echo.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
+
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+
 import com.echo.config.CacheConfig;
 import com.echo.config.CommitAwareCaffeineCacheManager;
 import com.echo.entity.CacheEvent;
@@ -15,6 +22,7 @@ import com.echo.protocol.jms.JmsProtocolHandler;
 import com.echo.repository.CacheEventRepository;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,8 +30,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.cache.CacheManager;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.CacheManager;
 import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -34,12 +42,6 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.LongStream;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CacheInvalidationServiceTest {
@@ -191,7 +193,7 @@ class CacheInvalidationServiceTest {
     }
 
     @Test
-    void responseEvent_shouldDropOnlyThatBody() {
+    void responseEvent_shouldDropOnlyThatBodyAndRefreshRevisionSnapshots() {
         fillCaches();
         commit(1, "RESPONSE_CHANGED:1");
 
@@ -199,7 +201,8 @@ class CacheInvalidationServiceTest {
 
         assertThat(bodies.getIfPresent(1L)).isNull();
         assertThat(bodies.getIfPresent(2L)).isNotNull();
-        assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).isTrue();
+        assertThat(cached(CacheConfig.HTTP_RULES_CACHE)).isFalse();
+        assertThat(cached(CacheConfig.JMS_RULES_CACHE)).isFalse();
     }
 
     @Test

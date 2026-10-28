@@ -1,8 +1,8 @@
 package com.echo.pipeline;
 
 import com.echo.core.engine.RuleSelector;
-import com.echo.core.match.RegexStackCapacityException;
 import com.echo.core.match.BodyRequirements;
+import com.echo.core.match.RegexStackCapacityException;
 import com.echo.entity.BaseRule;
 import com.echo.entity.FaultType;
 import com.echo.entity.Protocol;
@@ -11,24 +11,27 @@ import com.echo.service.MatchChainEntry;
 import com.echo.service.MatchDescriptionBuilder;
 import com.echo.service.MatchResult;
 import com.echo.service.RequestLogService;
-import com.echo.service.ResponseTemplateService;
 import com.echo.service.RequestLogUnavailableException;
+import com.echo.service.ResponseTemplateService;
+import com.echo.service.RuleCandidates;
 import com.echo.service.RuleService;
+import com.echo.service.ScenarioService;
 import com.echo.service.ServeEvent;
 import com.echo.service.ServeEventDispatcher;
 import com.echo.service.ServeEventListener;
 import com.echo.util.CancellableStages;
-import com.echo.service.ScenarioService;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ThreadLocalRandom;
@@ -52,6 +55,80 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     private final List<Responder<T>> responders;
     private ServeEventDispatcher serveEvents;
     private ResponseTemplateService templateService;
+
+    @Autowired(required = false)
+    private com.echo.service.ResponseSnapshotReads responseSnapshotReads;
+
+    public record StableSelection<R extends BaseRule>(
+            List<R> candidates,
+            ConditionMatcher.PreparedBody preparedBody,
+            MatchResult<R> match,
+            String rawBody,
+            boolean bodyCaptured) {
+        public StableSelection {
+            // Keep snapshot-owned handles; only caller-supplied collections need a copy.
+            if (candidates != null && !(candidates instanceof com.echo.service.RuleCandidates<?>)) {
+                candidates = List.copyOf(candidates);
+            }
+        }
+    }
+
+    /** No scenario transitions, rendering, forwarding or streaming may run in this selection step. */
+    public StableSelection<T> selectStable(
+            MockRequest request, java.util.function.Predicate<T> readsBody) {
+        request.getWorkContext().checkActive();
+        List<T> candidates = findCandidateRules(request);
+        ConditionMatcher.PreparedBody prepared =
+                request.getPreparedBody() != null
+                        ? request.getPreparedBody()
+                        : prepareBodyForMatching(request, candidates);
+        try {
+            return capture(request, candidates, prepared, readsBody, false);
+        } catch (com.echo.service.ResponseRevisionChanged changed) {
+            if (responseSnapshotReads == null) throw changed;
+            // Exactly one authoritative transaction; never retry until concurrent edits stop.
+            return responseSnapshotReads.fallback(
+                    () -> {
+                        request.getWorkContext().checkActive();
+                        List<T> fresh = findFreshCandidateRules(request);
+                        request.getWorkContext().checkActive();
+                        ConditionMatcher.PreparedBody body = prepareBodyForMatching(request, fresh);
+                        return capture(request, fresh, body, readsBody, true);
+                    });
+        }
+    }
+
+    private StableSelection<T> capture(
+            MockRequest request,
+            List<T> candidates,
+            ConditionMatcher.PreparedBody prepared,
+            java.util.function.Predicate<T> readsBody,
+            boolean authoritative) {
+        request.getWorkContext().checkActive();
+        MatchResult<T> match =
+                matchRule(candidates, prepared, request.getQueryString(), request.getHeaders());
+        String body = null;
+        boolean captured = match.isMatched() && readsBody.test(match.getMatchedRule());
+        if (captured) {
+            T rule = match.getMatchedRule();
+            request.getWorkContext().checkActive();
+            if (rule.getResponseId() == null) body = "";
+            else if (authoritative)
+                body = ruleService.findUncachedResponseBodyById(rule.getResponseId());
+            else if (match.getResponseRevision() != null)
+                body =
+                        ruleService.findResponseBodyById(
+                                rule.getResponseId(), match.getResponseRevision());
+            else body = ruleService.findResponseBodyById(rule.getResponseId()).orElse("");
+        }
+        request.getWorkContext().checkActive();
+        return new StableSelection<>(candidates, prepared, match, body, captured);
+    }
+
+    /** HTTP/JMS implementations bypass published caches inside an authoritative transaction. */
+    protected List<T> findFreshCandidateRules(MockRequest request) {
+        return findCandidateRules(request);
+    }
 
     protected AbstractMockPipeline(ConditionMatcher conditionMatcher,
                                    RuleService ruleService,
@@ -105,22 +182,13 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
 
         try {
             request.getWorkContext().checkActive();
-            // 1. Query candidate rules (counted into matchTimeMs)
             long matchStart = System.currentTimeMillis();
-            List<T> candidates = findCandidateRules(request);
-            request.getWorkContext().checkActive();
-
-            // 2. Prepare body (if MockRequest already has preparedBody, use it directly)
-            ConditionMatcher.PreparedBody preparedBody = request.getPreparedBody();
-            if (preparedBody == null) {
-                preparedBody = prepareBodyForMatching(request, candidates);
-            }
-            request.getWorkContext().checkActive();
-
-            // 3. Matching rules
-            MatchResult<T> matchResult = matchRule(candidates, preparedBody,
-                    request.getQueryString(), request.getHeaders());
-            request.getWorkContext().checkActive();
+            StableSelection<T> selection =
+                    selectStable(
+                            request, rule -> responderFor(rule, request).requiresResponseBody());
+            List<T> candidates = selection.candidates();
+            ConditionMatcher.PreparedBody preparedBody = selection.preparedBody();
+            MatchResult<T> matchResult = selection.match();
             int matchTimeMs = (int) (System.currentTimeMillis() - matchStart);
 
             String matchChainJson = MatchDescriptionBuilder.toMatchChainJson(
@@ -158,7 +226,10 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
 
                 // 4b. Response generated by responder
                 request.getWorkContext().checkActive();
-                ResponsePlan plan = responder.respond(rule, request);
+                ResponsePlan plan =
+                        selection.bodyCaptured()
+                                ? responder.respondWithBody(rule, request, selection.rawBody())
+                                : responder.respond(rule, request);
                 if (plan instanceof ResponsePlan.Content content) {
                     immediateResponse = content.response();
                 } else if (plan instanceof ResponsePlan.Fault fault) {
@@ -375,14 +446,38 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                                     String queryString,
                                     Map<String, String> headers) {
         List<MatchChainEntry> chain = new ArrayList<>();
-        RuleSelector.Selection<T> selection = RuleSelector.select(candidates, fallbackPolicy(), ruleTraits,
-                rule -> passesScenarioGate(rule, chain),
-                rule -> conditionsMatch(rule, prepared, queryString, headers));
-        T matched = selection.selected();
+        RuleCandidates<T> bound = boundCandidates(candidates);
+        T matched;
+        boolean conditionMatched;
+        com.echo.service.ResponseRevision revision = null;
+        if (bound != null) {
+            RuleSelector.Selection<RuleCandidates.Entry<T>> selection =
+                    RuleSelector.select(
+                            bound.entries(),
+                            fallbackPolicy(),
+                            boundRuleTraits,
+                            entry -> passesScenarioGate(entry.rule(), chain),
+                            entry -> conditionsMatch(entry, prepared, queryString, headers));
+            matched = selection.selected() == null ? null : selection.selected().rule();
+            revision =
+                    selection.selected() == null ? null : selection.selected().responseRevision();
+            conditionMatched = selection.conditionMatched();
+        } else {
+            // Tools and direct callers retain the existing string-based route.
+            RuleSelector.Selection<T> selection =
+                    RuleSelector.select(
+                            candidates,
+                            fallbackPolicy(),
+                            ruleTraits,
+                            rule -> passesScenarioGate(rule, chain),
+                            rule -> conditionsMatch(rule, prepared, queryString, headers));
+            matched = selection.selected();
+            conditionMatched = selection.conditionMatched();
+        }
         if (matched != null) {
             chain.add(createMatchChainEntry(matched, "match"));
         }
-        return new MatchResult<>(matched, chain, matched != null && !selection.conditionMatched());
+        return new MatchResult<>(matched, chain, matched != null && !conditionMatched, revision);
     }
 
     /** Select unconditional rules when no conditional rule matches; JMS overrides this to prefer exact queues before wildcards. */
@@ -411,6 +506,29 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
             return isWildcard(rule);
         }
     };
+
+    private final RuleSelector.Traits<RuleCandidates.Entry<T>> boundRuleTraits =
+            new RuleSelector.Traits<>() {
+                @Override
+                public boolean enabled(RuleCandidates.Entry<T> entry) {
+                    return ruleTraits.enabled(entry.rule());
+                }
+
+                @Override
+                public boolean unconditional(RuleCandidates.Entry<T> entry) {
+                    return ruleTraits.unconditional(entry.rule());
+                }
+
+                @Override
+                public boolean wildcard(RuleCandidates.Entry<T> entry) {
+                    return ruleTraits.wildcard(entry.rule());
+                }
+            };
+
+    @SuppressWarnings("unchecked")
+    private RuleCandidates<T> boundCandidates(List<T> candidates) {
+        return candidates instanceof RuleCandidates<?> ? (RuleCandidates<T>) candidates : null;
+    }
 
     /** When the Scenario status does not match, it is recorded in the matching chain and returns false. */
     private boolean passesScenarioGate(T rule, List<MatchChainEntry> chain) {
@@ -445,6 +563,20 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
                 conditions.getQueryCondition(),
                 conditions.getHeaderCondition(),
                 prepared, queryString, headers);
+    }
+
+    private boolean conditionsMatch(
+            RuleCandidates.Entry<T> entry,
+            ConditionMatcher.PreparedBody prepared,
+            String queryString,
+            Map<String, String> headers) {
+        if (entry.conditions() == null)
+            return conditionsMatch(entry.rule(), prepared, queryString, headers);
+        ConditionMatcher.RuleConditions resolved =
+                resolveMatchConditions(entry.rule(), entry.conditions());
+        return resolved == null
+                ? conditionsMatch(entry.rule(), prepared, queryString, headers)
+                : conditionMatcher.matchesPrepared(resolved, prepared, queryString, headers);
     }
 
     /**
@@ -494,23 +626,83 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     /** Can read the enabling rule condition of body; rules with only query/header conditions do not need to query requirements. */
     private List<ConditionMatcher.RuleConditions> bodyConditionsOf(List<T> candidates) {
         List<ConditionMatcher.RuleConditions> conditions = null;
+        RuleCandidates<T> bound = boundCandidates(candidates);
+        int index = 0;
         for (T rule : candidates) {
+            int candidateIndex = index++;
             if (Boolean.FALSE.equals(rule.getEnabled())) {
                 continue;
             }
-            ConditionSet set = extractConditions(rule);
-            String bodyCondition = set.getBodyCondition();
-            // Rules with only query/header conditions do not read body, so there is no need to query their requirements
-            if ((bodyCondition == null || bodyCondition.isBlank()) && set.getMatchSpec() == null) {
-                continue;
-            }
-            if (conditions == null) {
-                conditions = new ArrayList<>();
-            }
-            conditions.add(conditionMatcher.conditions(set.getMatchSpec(), bodyCondition,
-                    set.getQueryCondition(), set.getHeaderCondition()));
+            ConditionMatcher.RuleConditions reusable =
+                    bound == null ? null : bound.entry(candidateIndex).conditions();
+            conditions = collectBodyConditions(conditions, rule, reusable);
         }
         return conditions == null ? List.of() : conditions;
+    }
+
+    /** Compatibility route for custom pipelines that expose conditions as a value object. */
+    protected ConditionMatcher.RuleConditions resolveMatchConditions(
+            T rule, ConditionMatcher.RuleConditions reusable) {
+        ConditionSet set = extractConditions(rule);
+        return resolveMatchConditions(
+                reusable,
+                set.getMatchSpec(),
+                set.getBodyCondition(),
+                set.getQueryCondition(),
+                set.getHeaderCondition());
+    }
+
+    /** Verify the snapshot handle against current fields before reusing compiled conditions. */
+    protected final ConditionMatcher.RuleConditions resolveMatchConditions(
+            ConditionMatcher.RuleConditions reusable,
+            String matchSpec,
+            String body,
+            String query,
+            String header) {
+        // A non-null spec takes precedence during matching, including a blank spec.
+        return matchSpec != null
+                ? conditionMatcher.conditions(reusable, matchSpec, null, null, null)
+                : conditionMatcher.conditions(reusable, null, body, query, header);
+    }
+
+    /** Preserve the original collection semantics for custom pipelines and direct tools. */
+    protected List<ConditionMatcher.RuleConditions> collectBodyConditions(
+            List<ConditionMatcher.RuleConditions> collected,
+            T rule,
+            ConditionMatcher.RuleConditions reusable) {
+        ConditionSet set = extractConditions(rule);
+        return collectBodyConditions(
+                collected,
+                reusable,
+                set.getMatchSpec(),
+                set.getBodyCondition(),
+                set.getQueryCondition(),
+                set.getHeaderCondition());
+    }
+
+    protected final List<ConditionMatcher.RuleConditions> collectBodyConditions(
+            List<ConditionMatcher.RuleConditions> collected,
+            ConditionMatcher.RuleConditions reusable,
+            String matchSpec,
+            String body,
+            String query,
+            String header) {
+        // Preparation retains legacy fields even for a blank spec, as before.
+        if ((body == null || body.isBlank()) && matchSpec == null) {
+            return collected;
+        }
+        if (collected == null) {
+            collected = new ArrayList<>();
+        }
+        ConditionMatcher.RuleConditions resolved =
+                reusable == null
+                        ? null
+                        : conditionMatcher.conditions(reusable, matchSpec, body, query, header);
+        collected.add(
+                resolved != null
+                        ? resolved
+                        : conditionMatcher.conditions(matchSpec, body, query, header));
+        return collected;
     }
 
     // ==================== Shared implementation methods ====================
@@ -580,6 +772,11 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     /** Fault injection: EMPTY_RESPONSE nulled back body; CONNECTION_RESET is closed by protocol on writeback. */
     private final class FaultResponder implements Responder<T> {
         @Override
+        public boolean requiresResponseBody() {
+            return true;
+        }
+
+        @Override
         public String mode() {
             return "FAULT";
         }
@@ -591,7 +788,17 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
 
         @Override
         public ResponsePlan respond(T rule, MockRequest request) {
-            MockResponse response = buildResponse(rule, request, ruleResponseBody(rule, request));
+            return respondWithBody(rule, request, resolveResponseBody(rule.getResponseId()));
+        }
+
+        @Override
+        public ResponsePlan respondWithBody(T rule, MockRequest request, String rawBody) {
+            MockResponse response =
+                    buildResponse(
+                            rule,
+                            request,
+                            ResponseTemplateService.renderIfTemplate(
+                                    templateService, rawBody, request::templateContext));
             if (rule.getFaultType() == FaultType.EMPTY_RESPONSE) {
                 response = MockResponse.builder()
                         .status(response.getStatus())
@@ -625,6 +832,11 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
     /** Return the response content set by the rules (the template has been rendered in the shared step, see {@link #buildResponse} for protocol-specific parts). */
     private final class MockResponder implements Responder<T> {
         @Override
+        public boolean requiresResponseBody() {
+            return true;
+        }
+
+        @Override
         public String mode() {
             return "MOCK";
         }
@@ -636,7 +848,17 @@ public abstract class AbstractMockPipeline<T extends BaseRule> {
 
         @Override
         public ResponsePlan respond(T rule, MockRequest request) {
-            return new ResponsePlan.Content(buildResponse(rule, request, ruleResponseBody(rule, request)));
+            return respondWithBody(rule, request, resolveResponseBody(rule.getResponseId()));
+        }
+
+        @Override
+        public ResponsePlan respondWithBody(T rule, MockRequest request, String rawBody) {
+            return new ResponsePlan.Content(
+                    buildResponse(
+                            rule,
+                            request,
+                            ResponseTemplateService.renderIfTemplate(
+                                    templateService, rawBody, request::templateContext)));
         }
     }
 

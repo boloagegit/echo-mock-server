@@ -20,8 +20,11 @@ import com.echo.service.ServeEventListener;
 import com.echo.service.SseEventSequence;
 import com.echo.service.SseRuleSettings;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import jakarta.servlet.http.HttpServletResponse;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -98,13 +101,31 @@ public class SseMockHandler {
 
         MatchResult<HttpRule> matchResult;
         Integer candidateCount = null;
+        String capturedBody = null;
+        boolean bodyCaptured = false;
         if (httpMockPipeline != null) {
-            List<HttpRule> candidates = httpRuleService.findPreparedHttpRules(request.getTargetHost(), path, method);
-            candidateCount = candidates.size();
-            matchResult = httpMockPipeline.matchRule(candidates,
-                    body == null ? ConditionMatcher.PreparedBody.rawOnly(null)
-                            : httpMockPipeline.prepareBodyForMatching(MockRequest.builder().body(body).build(), candidates),
-                    request.getQueryString(), request.getHeaders());
+            var selected =
+                    httpMockPipeline.selectStable(
+                            request,
+                            rule -> {
+                                int status =
+                                        rule.getHttpStatus() == null ? 200 : rule.getHttpStatus();
+                                FaultType fault =
+                                        rule.getFaultType() == null
+                                                ? FaultType.NONE
+                                                : rule.getFaultType();
+                                return Boolean.TRUE.equals(rule.getSseEnabled())
+                                        && status == 200
+                                        && !"HEAD".equals(method)
+                                        && !"OPTIONS".equals(method)
+                                        && fault != FaultType.CONNECTION_RESET
+                                        && fault != FaultType.EMPTY_RESPONSE
+                                        && rule.getResponseId() != null;
+                            });
+            candidateCount = selected.candidates().size();
+            matchResult = selected.match();
+            capturedBody = selected.rawBody();
+            bodyCaptured = selected.bodyCaptured();
         } else {
             // Compatibility path reserved for legacy unit tests and embedded callers.
             matchResult = httpRuleService.findMatchingHttpRuleWithCandidates(
@@ -187,7 +208,10 @@ public class SseMockHandler {
                     .body("SSE rule has no response body configured (responseId is null).");
         }
 
-        String responseBody = ruleService.findResponseBodyById(rule.getResponseId()).orElse("");
+        String responseBody =
+                bodyCaptured
+                        ? capturedBody
+                        : ruleService.findResponseBodyById(rule.getResponseId()).orElse("");
         List<SsePlayer.SseEvent> events = SsePlayer.parseEvents(responseBody);
 
         // The event list is empty → HTTP 500

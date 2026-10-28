@@ -1,8 +1,11 @@
 package com.echo.entity;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+
 import jakarta.persistence.*;
+
 import lombok.*;
+
 import org.hibernate.Length;
 
 import java.nio.charset.StandardCharsets;
@@ -38,6 +41,11 @@ public class Response {
     /** Optimistic locking version number */
     @Version
     private Long version;
+
+    /** Opaque row incarnation: identity values may be reused after deletion. */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @Column(length = 36, updatable = false)
+    private String incarnation;
 
     /** Response description (for identification and search) */
     private String description;
@@ -110,6 +118,7 @@ public class Response {
 
     @PrePersist
     protected void onCreate() {
+        incarnation = java.util.UUID.randomUUID().toString();
         createdAt = LocalDateTime.now();
         updatedAt = createdAt;
         updateBodySize();

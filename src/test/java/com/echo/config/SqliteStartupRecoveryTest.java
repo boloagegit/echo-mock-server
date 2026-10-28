@@ -152,7 +152,7 @@ class SqliteStartupRecoveryTest {
                 .contains(Path.of("./data/mock.sqlite"));
         assertThat(SqliteRecoveryEnvironmentPostProcessor.databasePath("jdbc:sqlite::memory:"))
                 .isEmpty();
-        assertThat(SqliteRecoveryEnvironmentPostProcessor.databasePath("jdbc:h2:file:./mockdb"))
+        assertThat(SqliteRecoveryEnvironmentPostProcessor.databasePath("jdbc:postgresql://localhost/echo"))
                 .isEmpty();
         assertThat(SqliteRecoveryEnvironmentPostProcessor.databasePath(
                 "jdbc:sqlite:file:shared-test?mode=memory&cache=shared"))

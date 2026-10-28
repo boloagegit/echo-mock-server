@@ -168,7 +168,7 @@ Separately, ten logged-in browser sessions queried log pages/details/traffic dur
 
 | Guide | Covers |
 |-------|--------|
-| [Installation and deployment](docs/install.md) | JAR, Docker, database profiles, H2 migration, multi-instance, Nginx |
+| [Installation and deployment](docs/install.md) | JAR, Docker, database profiles, multi-instance, Nginx |
 | [Configuration and authentication](docs/configuration.md) | `application.yml`, LDAP, built-in accounts, roles |
 | [Rules and responses](docs/rules.md) | Priority, conditions, tags, scenarios, templates |
 | [JMS](docs/jms.md) | Embedded broker, ESB forwarding, shared-broker setup |

@@ -8,8 +8,11 @@ import com.echo.protocol.ProtocolDescriptor;
 import com.echo.protocol.ProtocolHandlerRegistry;
 import com.echo.repository.CacheEventRepository;
 import com.github.benmanes.caffeine.cache.Cache;
+
 import jakarta.annotation.PostConstruct;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.cache.CacheManager;
@@ -84,7 +87,8 @@ public class CacheInvalidationService {
     private final CacheManager cacheManager;
     /** Each {@link ProtocolDescriptor} supplies its protocol's event type and rule-cache name. */
     private final ProtocolHandlerRegistry protocols;
-    private final Cache<Long, String> responseBodyCache;
+
+    private final Cache<Long, ?> responseBodyCache;
     private final LongSupplier nanoTime;
 
     /** Locally emitted event ID to emission time; skip these on readback. Rolled-back IDs never appear and expire from this map. */
@@ -108,14 +112,20 @@ public class CacheInvalidationService {
     private boolean failing;
 
     @Autowired
-    public CacheInvalidationService(CacheEventRepository eventRepository, CacheManager cacheManager,
-                                    ProtocolHandlerRegistry protocols, Cache<Long, String> responseBodyCache) {
+    public CacheInvalidationService(
+            CacheEventRepository eventRepository,
+            CacheManager cacheManager,
+            ProtocolHandlerRegistry protocols,
+            Cache<Long, ?> responseBodyCache) {
         this(eventRepository, cacheManager, protocols, responseBodyCache, System::nanoTime);
     }
 
-    CacheInvalidationService(CacheEventRepository eventRepository, CacheManager cacheManager,
-                             ProtocolHandlerRegistry protocols, Cache<Long, String> responseBodyCache,
-                             LongSupplier nanoTime) {
+    CacheInvalidationService(
+            CacheEventRepository eventRepository,
+            CacheManager cacheManager,
+            ProtocolHandlerRegistry protocols,
+            Cache<Long, ?> responseBodyCache,
+            LongSupplier nanoTime) {
         this.eventRepository = eventRepository;
         this.cacheManager = cacheManager;
         this.protocols = protocols;
@@ -378,6 +388,12 @@ public class CacheInvalidationService {
             var cache = cacheManager.getCache(cacheName);
             if (cache != null) {
                 cache.clear();
+            }
+        }
+        if (changes.allResponses || !changes.responseIds.isEmpty()) {
+            for (var descriptor : protocols.descriptors()) {
+                var cache = cacheManager.getCache(descriptor.rulesCacheName());
+                if (cache != null) cache.clear();
             }
         }
         if (changes.allResponses) {

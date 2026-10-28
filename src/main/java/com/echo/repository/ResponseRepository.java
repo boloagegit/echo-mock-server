@@ -1,8 +1,9 @@
 package com.echo.repository;
 
 import com.echo.entity.Response;
-import org.springframework.data.jpa.repository.JpaRepository;
+
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -45,6 +46,19 @@ public interface ResponseRepository extends JpaRepository<Response, Long> {
     @Query("SELECT COALESCE(MAX(r.id), 0) FROM Response r")
     long findMaximumId();
 
+    /** Scan IDs only within one startup boundary; never materialize response bodies. */
+    @Query(
+            "SELECT r.id FROM Response r WHERE r.id > :after AND r.id <= :through "
+                    + "AND r.incarnation IS NULL ORDER BY r.id")
+    List<Long> findMissingIncarnationIds(
+            @Param("after") long after, @Param("through") long through, Pageable page);
+
+    /** Internal identity initialization does not change content or its optimistic version. */
+    @Modifying
+    @Query(
+            "UPDATE Response r SET r.incarnation = :incarnation WHERE r.id = :id AND r.incarnation IS NULL")
+    int initializeIncarnation(@Param("id") Long id, @Param("incarnation") String incarnation);
+
     /** Keyset page of IDs only; never materializes response bodies. */
     @Query("SELECT r.id FROM Response r WHERE r.id > :after AND r.id <= :through AND " +
             EXPIRED_ORPHAN + " ORDER BY r.id")
@@ -72,4 +86,8 @@ public interface ResponseRepository extends JpaRepository<Response, Long> {
     @Modifying
     @Query("UPDATE Response r SET r.extendedAt = :extendedAt WHERE r.id IN :ids")
     int extendResponses(@Param("ids") List<Long> ids, @Param("extendedAt") LocalDateTime extendedAt);
+
+    @Query(
+            "SELECT new com.echo.service.VersionedResponseBody(r.incarnation, r.version, r.body) FROM Response r WHERE r.id = :id")
+    Optional<com.echo.service.VersionedResponseBody> findVersionedBodyById(@Param("id") Long id);
 }

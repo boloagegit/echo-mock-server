@@ -7,14 +7,10 @@ import com.jayway.jsonpath.InvalidPathException;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.spi.json.JacksonJsonNodeJsonProvider;
 import com.jayway.jsonpath.spi.mapper.JacksonMappingProvider;
+
 import org.w3c.dom.Document;
 import org.w3c.dom.NodeList;
 
-import javax.xml.namespace.QName;
-import javax.xml.xpath.XPath;
-import javax.xml.xpath.XPathConstants;
-import javax.xml.xpath.XPathExpressionException;
-import javax.xml.xpath.XPathFactory;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -23,6 +19,12 @@ import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import javax.xml.namespace.QName;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
 
 /**
  * Built-in value sources: {@code body}, {@code query}, {@code header}, {@code method}, {@code path}.
@@ -104,7 +106,19 @@ public final class BuiltinSources {
         return new BodyExtractor() {
             @Override
             public Extracted extract(RequestView request) {
-                return request.body().tooLarge() ? Extracted.unavailable() : extractor.extract(request);
+                return request.body().tooLarge()
+                        ? Extracted.unavailable()
+                        : extractor.extract(request);
+            }
+
+            @Override
+            public String jsonPath() {
+                if (selector.kind() == Selector.Kind.JSON_PATH)
+                    return BodyRequirements.jsonPath(selector.expression());
+                if (selector.kind() == Selector.Kind.FIELD
+                        && selector.expression().matches("[A-Za-z_][A-Za-z0-9_]*"))
+                    return selector.expression();
+                return null;
             }
 
             @Override

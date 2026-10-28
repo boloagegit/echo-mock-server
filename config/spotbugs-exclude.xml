@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <FindBugsFilter>
+    <!-- ConsumerSession checks its owning thread before every read/write of closed.
+         Cross-thread calls fail before accessing state; the worker closes its own
+         session in try-with-resources. Ownership and shutdown are tested explicitly. -->
+    <Match>
+        <Bug pattern="AT_STALE_THREAD_WRITE_OF_PRIMITIVE"/>
+        <Class name="com.echo.agent.RequestLogSpool$ConsumerSession"/>
+        <Method name="close"/>
+        <Field name="closed"/>
+    </Match>
+
     <!-- Lombok-generated getters and builders for entities and DTOs. -->
     <Match>
         <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
@@ -106,5 +116,12 @@
     <Match>
         <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
         <Class name="com.echo.protocol.http.sse.SsePlayer$RequestContext"/>
+    </Match>
+    <!-- StableSelection keeps final, read-only RuleCandidates to preserve compiled handles;
+         its constructor defensively copies all other candidate collections. -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP"/>
+        <Class name="com.echo.pipeline.AbstractMockPipeline$StableSelection"/>
+        <Method name="candidates"/>
     </Match>
 </FindBugsFilter>

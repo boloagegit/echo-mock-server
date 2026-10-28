@@ -19,6 +19,18 @@ import static org.mockito.Mockito.when;
 
 class NativeHttpCompatibilityTest {
     @Test
+    void builtinAdminOnlyAdmissionFilterPreservesNativeMockHandling() {
+        ServletContext servlet = mock(ServletContext.class);
+        FilterRegistration filter = mock(FilterRegistration.class);
+        when(filter.getClassName()).thenReturn(AdminLogQueryAdmissionConfiguration.AdmissionFilter.class.getName());
+        when(servlet.getFilterRegistrations()).thenAnswer(ignored -> Map.of("adminLogQueryAdmission", filter));
+        try (var context = new GenericApplicationContext()) {
+            context.refresh();
+            assertThat(new NativeHttpCompatibility(context, servlet, new MockEnvironment()).supported()).isTrue();
+        }
+    }
+
+    @Test
     void customFilterMustStayInTheRequestPath() {
         ServletContext servlet = mock(ServletContext.class);
         FilterRegistration filter = mock(FilterRegistration.class);

@@ -1,6 +1,7 @@
 package com.echo.service;
 
 import com.echo.config.JmsProperties;
+import com.echo.config.AfterCommit;
 import com.echo.dto.JmsTargetConnectionDto;
 import com.echo.dto.JmsTargetConnectionRequest;
 import com.echo.entity.JmsTargetConnection;
@@ -9,17 +10,26 @@ import com.echo.repository.JmsTargetConnectionRepository;
 import com.echo.repository.JmsRuleRepository;
 import jakarta.jms.Connection;
 import jakarta.jms.ConnectionFactory;
+import jakarta.persistence.EntityManagerFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.hibernate.community.dialect.SQLiteDialect;
+import org.hibernate.engine.spi.SessionFactoryImplementor;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /** CRUD, validation, default selection, and runtime resolution for outbound JMS profiles. */
 @Service
@@ -36,6 +46,59 @@ public class JmsTargetConnectionService {
     private final JmsCredentialCipher credentialCipher;
     private final JmsProperties jmsProperties;
     private final List<JmsTargetFactoryProvider> factoryProviders;
+
+    private TransactionTemplate readOnlyLookup;
+    private JmsTargetCatalog targetCatalog;
+
+    @Autowired
+    void configureRuntimeLookup(EntityManagerFactory factory, PlatformTransactionManager transactions) {
+        readOnlyLookup = new TransactionTemplate(transactions);
+        readOnlyLookup.setReadOnly(true);
+        // Shared external databases retain their existing cross-instance visibility.
+        boolean sqlite = factory.unwrap(SessionFactoryImplementor.class)
+                .getJdbcServices().getDialect() instanceof SQLiteDialect;
+        targetCatalog = sqlite && jmsProperties.isTargetCatalogEnabled()
+                ? new JmsTargetCatalog(this::loadCatalog) : null;
+    }
+
+    private <T> T readTarget(Supplier<T> lookup) {
+        // Direct-construction tests retain their existing repository seam.
+        return readOnlyLookup == null ? lookup.get() : readOnlyLookup.execute(status -> lookup.get());
+    }
+
+    private JmsTargetCatalog.Snapshot loadCatalog() {
+        return readTarget(() -> {
+            var profiles = new HashMap<Long, JmsTargetCatalog.Profile>();
+            for (JmsTargetConnection entity : repository.findAllByOrderByNameAsc()) {
+                String key = "db:" + entity.getId() + ":" + entity.getVersion();
+                String name = entity.getName();
+                var settings = TargetSettings.from(entity);
+                profiles.put(entity.getId(), new JmsTargetCatalog.Profile(Boolean.TRUE.equals(entity.getEnabled()),
+                        () -> new ResolvedTarget(key, name, settings.target(credentialCipher), false)));
+            }
+            // Preserve the repository's default selection, including legacy data
+            // with multiple defaults, within the same SQLite read transaction.
+            Long defaultId = repository.findFirstByDefaultConnectionTrueAndEnabledTrue()
+                    .map(JmsTargetConnection::getId).orElse(null);
+            return new JmsTargetCatalog.Snapshot(profiles, defaultId);
+        });
+    }
+
+    private boolean canUseCatalog() {
+        // Rule validation and callers inside a DB transaction must read their
+        // own uncommitted changes without ever publishing them to other requests.
+        return targetCatalog != null && !TransactionSynchronizationManager.isActualTransactionActive();
+    }
+
+    void invalidateTargetCatalog() {
+        if (targetCatalog != null) targetCatalog.invalidate();
+    }
+
+    private void targetsChanged() {
+        if (targetCatalog != null && !AfterCommit.schedule(targetCatalog, this::invalidateTargetCatalog)) {
+            invalidateTargetCatalog();
+        }
+    }
 
     @Transactional(readOnly = true)
     public List<JmsTargetConnectionDto> list() {
@@ -73,7 +136,9 @@ public class JmsTargetConnectionService {
                 .enabled(!Boolean.FALSE.equals(request.enabled()))
                 .defaultConnection(makeDefault)
                 .build();
-        return toDto(repository.saveAndFlush(entity));
+        JmsTargetConnectionDto saved = toDto(repository.saveAndFlush(entity));
+        targetsChanged();
+        return saved;
     }
 
     @Transactional
@@ -115,7 +180,9 @@ public class JmsTargetConnectionService {
         } else if (request.password() != null && !request.password().isEmpty()) {
             entity.setEncryptedPassword(credentialCipher.encrypt(request.password()));
         }
-        return toDto(repository.saveAndFlush(entity));
+        JmsTargetConnectionDto saved = toDto(repository.saveAndFlush(entity));
+        targetsChanged();
+        return saved;
     }
 
     @Transactional
@@ -126,7 +193,9 @@ public class JmsTargetConnectionService {
         }
         clearDefaultConnections();
         entity.setDefaultConnection(true);
-        return toDto(repository.saveAndFlush(entity));
+        JmsTargetConnectionDto saved = toDto(repository.saveAndFlush(entity));
+        targetsChanged();
+        return saved;
     }
 
     @Transactional
@@ -139,14 +208,19 @@ public class JmsTargetConnectionService {
             throw new IllegalArgumentException("JMS_CONNECTION_IN_USE");
         }
         repository.delete(entity);
+        targetsChanged();
     }
 
-    @Transactional(readOnly = true)
     public Optional<ResolvedTarget> resolveActive() {
         if (legacyConfigured()) {
             return Optional.of(new ResolvedTarget(
                     LEGACY_ID, legacyName(), copyLegacyTarget(), true));
         }
+        if (canUseCatalog()) return targetCatalog.snapshot().active();
+        return readTarget(this::resolveStoredDefault);
+    }
+
+    private Optional<ResolvedTarget> resolveStoredDefault() {
         Optional<JmsTargetConnection> stored = repository
                 .findFirstByDefaultConnectionTrueAndEnabledTrue();
         if (stored.isPresent()) {
@@ -158,7 +232,6 @@ public class JmsTargetConnectionService {
         return Optional.empty();
     }
 
-    @Transactional(readOnly = true)
     public ResolvedTarget resolveEnabled(String id) {
         if (LEGACY_ID.equals(id)) {
             if (!legacyConfigured()) {
@@ -167,7 +240,13 @@ public class JmsTargetConnectionService {
             return new ResolvedTarget(
                     LEGACY_ID, legacyName(), copyLegacyTarget(), true);
         }
-        JmsTargetConnection entity = findEntity(parseId(id));
+        Long parsedId = parseId(id);
+        if (canUseCatalog()) return targetCatalog.snapshot().enabled(parsedId);
+        return readTarget(() -> resolveStoredTarget(parsedId));
+    }
+
+    private ResolvedTarget resolveStoredTarget(Long id) {
+        JmsTargetConnection entity = findEntity(id);
         if (!Boolean.TRUE.equals(entity.getEnabled())) {
             throw new IllegalArgumentException("JMS_CONNECTION_DISABLED");
         }
@@ -280,15 +359,28 @@ public class JmsTargetConnectionService {
     }
 
     private JmsProperties.Target toTarget(JmsTargetConnection entity) {
-        JmsProperties.Target target = new JmsProperties.Target();
-        target.setEnabled(Boolean.TRUE.equals(entity.getEnabled()));
-        target.setType(entity.getProviderType());
-        target.setServerUrl(entity.getServerUrl());
-        target.setUsername(entity.getUsername());
-        target.setPassword(credentialCipher.decrypt(entity.getEncryptedPassword()));
-        target.setQueue(entity.getQueueName());
-        target.setTimeoutSeconds(entity.getTimeoutSeconds());
-        return target;
+        return TargetSettings.from(entity).target(credentialCipher);
+    }
+
+    private record TargetSettings(boolean enabled, String type, String serverUrl, String username,
+                                  String encryptedPassword, String queue, Integer timeoutSeconds) {
+        static TargetSettings from(JmsTargetConnection entity) {
+            return new TargetSettings(Boolean.TRUE.equals(entity.getEnabled()), entity.getProviderType(),
+                    entity.getServerUrl(), entity.getUsername(), entity.getEncryptedPassword(),
+                    entity.getQueueName(), entity.getTimeoutSeconds());
+        }
+
+        JmsProperties.Target target(JmsCredentialCipher cipher) {
+            JmsProperties.Target target = new JmsProperties.Target();
+            target.setEnabled(enabled);
+            target.setType(type);
+            target.setServerUrl(serverUrl);
+            target.setUsername(username);
+            target.setPassword(cipher.decrypt(encryptedPassword));
+            target.setQueue(queue);
+            target.setTimeoutSeconds(timeoutSeconds);
+            return target;
+        }
     }
 
     private JmsProperties.Target copyLegacyTarget() {

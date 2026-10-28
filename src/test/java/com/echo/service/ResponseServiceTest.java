@@ -1,11 +1,16 @@
 package com.echo.service;
 
-import com.echo.config.CacheConfig;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
+
 import com.echo.entity.Response;
 import com.echo.protocol.ProtocolHandler;
 import com.echo.protocol.ProtocolHandlerRegistry;
 import com.echo.repository.ResponseRepository;
 import com.github.benmanes.caffeine.cache.Cache;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,11 +22,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class ResponseServiceTest {
@@ -204,7 +204,6 @@ class ResponseServiceTest {
     @Test
     void save_sameManagedInstanceCannotUseItsMutatedContentAsTheOldValue() {
         Response managed = Response.builder().id(7L).body("already-mutated").build();
-        when(responseRepository.findById(7L)).thenReturn(Optional.of(managed));
         when(responseRepository.save(managed)).thenReturn(managed);
 
         responseService.save(managed);
@@ -214,15 +213,14 @@ class ResponseServiceTest {
     }
 
     @Test
-    void save_detachedMetadataOnlyUpdatePreservesTheWarmBodyCache() {
-        Response current = Response.builder().id(7L).description("old name").body("same body").build();
+    void save_detachedMetadataOnlyUpdateRefreshesVersionedBodyAndRuleSnapshots() {
         Response update = Response.builder().id(7L).description("new name").body("same body").build();
-        when(responseRepository.findById(7L)).thenReturn(Optional.of(current));
         when(responseRepository.save(update)).thenReturn(update);
 
         responseService.save(update);
 
-        verifyNoInteractions(responseBodyCache, cacheInvalidationService);
+        verify(responseBodyCache).invalidateAll(List.of(7L));
+        verify(cacheInvalidationService).publishResponsesChanged(List.of(7L));
     }
 
     @Test

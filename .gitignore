@@ -31,10 +31,8 @@ ehthumbs.db
 Desktop.ini
 ._*
 
-# H2 Database files
+# Database files
 *.db
-*.trace.db
-*.lock.db
 mockdb.*
 *.sqlite
 *.sqlite-shm

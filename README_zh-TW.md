@@ -168,7 +168,7 @@ Echo 為非同步 SQLite（上限 10,000 筆、預設每秒最多寫入 1,000 �
 
 | 文件 | 內容 |
 |------|------|
-| [安裝與部署](docs/zh-TW/install.md) | JAR、Docker、資料庫 Profile、從 H2 遷移、多實例、Nginx |
+| [安裝與部署](docs/zh-TW/install.md) | JAR、Docker、資料庫 Profile、多實例、Nginx |
 | [設定與認證](docs/zh-TW/configuration.md) | `application.yml`、LDAP、內建帳號、權限 |
 | [規則與回應](docs/zh-TW/rules.md) | 優先順序、條件、標籤、狀態機場景、模板 |
 | [JMS](docs/zh-TW/jms.md) | 內建 broker、ESB 轉發、共用 broker |

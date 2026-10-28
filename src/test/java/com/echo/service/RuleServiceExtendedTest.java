@@ -1,10 +1,15 @@
 package com.echo.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
 import com.echo.config.CacheConfig;
 import com.echo.protocol.ProtocolHandlerRegistry;
 import com.echo.repository.ResponseRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,16 +20,12 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
-
 @ExtendWith(MockitoExtension.class)
 class RuleServiceExtendedTest {
 
     @Mock private ProtocolHandlerRegistry protocolHandlerRegistry;
     @Mock private ResponseRepository responseRepository;
-    @Mock private Cache<Long, String> responseBodyCache;
+    @Mock private Cache<Long, com.echo.service.VersionedResponseBody> responseBodyCache;
     @Mock private CacheConfig cacheConfig;
     @Mock private CacheInvalidationService cacheInvalidationService;
     @Mock private ObjectMapper objectMapper;
@@ -40,37 +41,40 @@ class RuleServiceExtendedTest {
 
     @Test
     void findResponseBodyById_shouldReturnCached() {
-        when(responseBodyCache.getIfPresent(1L)).thenReturn("cached body");
+        when(responseBodyCache.getIfPresent(1L))
+                .thenReturn(new VersionedResponseBody("test", 0L, "cached body"));
 
         Optional<String> result = ruleService.findResponseBodyById(1L);
 
         assertThat(result).contains("cached body");
-        verify(responseRepository, never()).findBodyById(any());
+        verify(responseRepository, never()).findVersionedBodyById(any());
     }
 
     @Test
     void findResponseBodyById_shouldCacheSmallBody() {
         when(responseBodyCache.getIfPresent(1L)).thenReturn(null);
-        when(responseRepository.findBodyById(1L)).thenReturn(Optional.of("small body"));
+        when(responseRepository.findVersionedBodyById(1L))
+                .thenReturn(Optional.of(new VersionedResponseBody("test", 0L, "small body")));
         when(cacheConfig.getBodyCacheThresholdBytes()).thenReturn(1024 * 1024);
 
         Optional<String> result = ruleService.findResponseBodyById(1L);
 
         assertThat(result).contains("small body");
-        verify(responseBodyCache).put(1L, "small body");
+        verify(responseBodyCache).put(1L, new VersionedResponseBody("test", 0L, "small body"));
     }
 
     @Test
     void findResponseBodyById_shouldNotCacheLargeBody() {
         when(responseBodyCache.getIfPresent(1L)).thenReturn(null);
         String largeBody = "x".repeat(1000);
-        when(responseRepository.findBodyById(1L)).thenReturn(Optional.of(largeBody));
+        when(responseRepository.findVersionedBodyById(1L))
+                .thenReturn(Optional.of(new VersionedResponseBody("test", 0L, largeBody)));
         when(cacheConfig.getBodyCacheThresholdBytes()).thenReturn(100);
 
         Optional<String> result = ruleService.findResponseBodyById(1L);
 
         assertThat(result).contains(largeBody);
-        verify(responseBodyCache, never()).put(anyLong(), anyString());
+        verify(responseBodyCache, never()).put(anyLong(), any(VersionedResponseBody.class));
     }
 
     @Test
@@ -83,7 +87,7 @@ class RuleServiceExtendedTest {
     @Test
     void findResponseBodyById_shouldReturnEmpty_whenNotFound() {
         when(responseBodyCache.getIfPresent(999L)).thenReturn(null);
-        when(responseRepository.findBodyById(999L)).thenReturn(Optional.empty());
+        when(responseRepository.findVersionedBodyById(999L)).thenReturn(Optional.empty());
 
         Optional<String> result = ruleService.findResponseBodyById(999L);
 

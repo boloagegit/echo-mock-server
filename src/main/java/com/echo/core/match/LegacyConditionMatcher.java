@@ -3,21 +3,23 @@ package com.echo.core.match;
 import com.echo.core.util.InterruptibleCharSequence;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.jayway.jsonpath.JsonPath;
+
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
-import javax.xml.xpath.XPath;
-import javax.xml.xpath.XPathConstants;
-import javax.xml.xpath.XPathExpression;
-import javax.xml.xpath.XPathExpressionException;
-import javax.xml.xpath.XPathFactory;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpression;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
 
 /**
  * Evaluate legacy string-condition fragments, mirroring each behavior of {@code com.echo.service.ConditionMatcher}
@@ -68,10 +70,19 @@ final class LegacyConditionMatcher implements CompiledMatcher {
             return BodyRequirements.NONE;
         }
         if (condition.startsWith("$.")) {
-            return BodyRequirements.BODY_WITHOUT_XML;
+            String path = jsonPath == null ? null : BodyRequirements.jsonPath(parsed.field);
+            return path == null
+                    ? BodyRequirements.BODY_WITHOUT_XML
+                    : BodyRequirements.BODY_WITHOUT_XML.withJsonPath(path);
         }
         // Use the same condition as an XML path for XML bodies or a JSON dot path for JSON bodies.
-        return xmlPath != null ? BodyRequirements.streamable(new LegacyStreamCheck()) : BodyRequirements.FULL;
+        BodyRequirements result =
+                xmlPath != null
+                        ? BodyRequirements.streamable(new LegacyStreamCheck())
+                        : BodyRequirements.FULL;
+        return parsedWithoutDoubleEquals.field.matches("[A-Za-z_][A-Za-z0-9_]*")
+                ? result.withJsonPath(parsedWithoutDoubleEquals.field)
+                : result;
     }
 
     @Override

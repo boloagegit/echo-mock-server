@@ -52,12 +52,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         ImportExportController.class, ResponseController.class, RequestLogController.class, AuditController.class,
         ScenarioController.class})
 @Import({SecurityConfig.class, LdapConfig.class, RuleApplyContractService.class, RuleEditService.class,
-        com.echo.service.BuildInfoService.class})
-@TestPropertySource(properties = "echo.features.bulk-import-export-enabled=true")
+        com.echo.service.BuildInfoService.class, AdminLogQueryProperties.class,
+        AdminLogQueryAdmissionConfiguration.class, com.echo.service.AdminLogQueryAdmission.class})
+@TestPropertySource(properties = {"echo.features.bulk-import-export-enabled=true",
+        "echo.admin.log-query-admission.enabled=true", "echo.admin.log-query-admission.max-wait-millis=0"})
 class SecurityIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private com.echo.service.AdminLogQueryAdmission logQueryAdmission;
 
     @MockitoBean
     private RuleService ruleService;
@@ -174,6 +179,44 @@ class SecurityIntegrationTest {
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/admin/logs/traffic").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void capacityGateRunsAfterAuthenticationAndDoesNotBlockSummary() throws Exception {
+        var rejectedBefore = logQueryAdmission.snapshot().get("rejected");
+        try (var held = logQueryAdmission.acquire()) {
+            org.assertj.core.api.Assertions.assertThat(held).isNotNull();
+            mockMvc.perform(get("/api/admin/logs").accept(MediaType.APPLICATION_JSON))
+                    .andExpect(status().isUnauthorized());
+            org.assertj.core.api.Assertions.assertThat(logQueryAdmission.snapshot().get("rejected"))
+                    .isEqualTo(rejectedBefore);
+            mockMvc.perform(get("/api/admin/logs").accept(MediaType.APPLICATION_JSON)
+                            .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user("reader")))
+                    .andExpect(status().isTooManyRequests())
+                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Retry-After", "1"));
+            mockMvc.perform(get("/api/admin/logs/summary").accept(MediaType.APPLICATION_JSON)
+                            .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user("reader")))
+                    .andExpect(status().isOk());
+        }
+        org.assertj.core.api.Assertions.assertThat(logQueryAdmission.snapshot()).containsEntry("active", 0);
+    }
+
+    @Test
+    void headRequestsShareListCapacityAndPreserveTheHeadResponseContract() throws Exception {
+        try (var held = logQueryAdmission.acquire()) {
+            org.assertj.core.api.Assertions.assertThat(held).isNotNull();
+            mockMvc.perform(head("/api/admin/logs").accept(MediaType.APPLICATION_JSON)
+                            .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user("reader")))
+                    .andExpect(status().isTooManyRequests())
+                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Retry-After", "1"))
+                    .andExpect(content().string(""));
+        }
+        org.assertj.core.api.Assertions.assertThat(logQueryAdmission.snapshot()).containsEntry("active", 0);
+        mockMvc.perform(head("/api/admin/logs").accept(MediaType.APPLICATION_JSON)
+                        .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user("reader")))
+                .andExpect(status().isOk())
+                .andExpect(content().string(""));
+        org.mockito.Mockito.verify(requestLogService).querySummary(any());
     }
 
     @Test

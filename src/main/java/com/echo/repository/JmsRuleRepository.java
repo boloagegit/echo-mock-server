@@ -1,6 +1,7 @@
 package com.echo.repository;
 
 import com.echo.entity.JmsRule;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -62,4 +63,9 @@ public interface JmsRuleRepository extends JpaRepository<JmsRule, String> {
     /** Query rule ID based on label pattern (avoid full table loading) */
     @Query("SELECT r.id FROM JmsRule r WHERE r.tags LIKE :pattern ESCAPE '\\'")
     List<String> findIdsByTagPattern(@Param("pattern") String pattern);
+
+    /** One statement obtains rule metadata and its response revision, without body LOBs. */
+    @Query(
+            "SELECT r, p.incarnation, p.version FROM JmsRule r LEFT JOIN Response p ON p.id = r.responseId WHERE (r.queueName = :queue OR r.queueName = '*') AND r.enabled = true AND (r.responseId IS NULL OR p.id IS NOT NULL) ORDER BY r.id")
+    List<Object[]> findSnapshotRows(@Param("queue") String queueName);
 }
