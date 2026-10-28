@@ -243,6 +243,31 @@ class JmsTargetConnectionServiceTest {
         verify(connection).close();
     }
 
+    @Test
+    void sharedDatabaseDialectRetainsPerExchangeReadsEvenWhenCatalogIsEnabled() {
+        properties.setTargetCatalogEnabled(true);
+        var entityManager = org.mockito.Mockito.mock(jakarta.persistence.EntityManagerFactory.class);
+        var sessionFactory = org.mockito.Mockito.mock(org.hibernate.engine.spi.SessionFactoryImplementor.class);
+        var jdbc = org.mockito.Mockito.mock(org.hibernate.engine.jdbc.spi.JdbcServices.class);
+        var transactions = org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class);
+        var status = org.mockito.Mockito.mock(org.springframework.transaction.TransactionStatus.class);
+        when(entityManager.unwrap(org.hibernate.engine.spi.SessionFactoryImplementor.class)).thenReturn(sessionFactory);
+        when(sessionFactory.getJdbcServices()).thenReturn(jdbc);
+        when(jdbc.getDialect()).thenReturn(new org.hibernate.dialect.PostgreSQLDialect());
+        when(transactions.getTransaction(any())).thenReturn(status);
+        var first = entity(2L, true, true);
+        var second = entity(2L, true, true);
+        second.setQueueName("CHANGED.BY.OTHER.INSTANCE");
+        when(repository.findById(2L)).thenReturn(Optional.of(first)).thenReturn(Optional.of(second));
+        service.configureRuntimeLookup(entityManager, transactions);
+
+        assertThat(service.resolveEnabled("2").target().getQueue()).isEqualTo("TARGET.REQUEST");
+        assertThat(service.resolveEnabled("2").target().getQueue()).isEqualTo("CHANGED.BY.OTHER.INSTANCE");
+        verify(repository, org.mockito.Mockito.times(2)).findById(2L);
+        verify(repository, never()).findAllByOrderByNameAsc();
+        verify(transactions, org.mockito.Mockito.times(2)).commit(status);
+    }
+
     private static JmsTargetConnectionRequest request(Long version, String name,
                                                        boolean enabled, boolean defaultConnection) {
         return new JmsTargetConnectionRequest(version, name, "artemis",

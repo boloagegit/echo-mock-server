@@ -29,6 +29,8 @@ final class NativeHttpCompatibility {
             "org.springframework.web.filter.ForwardedHeaderFilter",
             "org.springframework.boot.web.servlet.support.ErrorPageFilter",
             "io.undertow.websockets.jsr.JsrWebSocketFilter",
+            // This built-in filter also checks the resolved management route internally.
+            AdminLogQueryAdmissionConfiguration.AdmissionFilter.class.getName(),
             RuleChangeWait.AtRequestEnd.class.getName());
     private static final Set<String> MVC_CONFIGURERS = Set.of(
             WebMvcConfig.class.getName(),

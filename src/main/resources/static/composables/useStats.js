@@ -18,7 +18,7 @@ const useStats = (deps) => {
     // --- Data caching mechanism ---
     const dataLastLoaded = { stats: 0 };
     const DATA_TTL = 30000;
-    const shouldLoad = () => !dataLastLoaded.stats || (Date.now() - dataLastLoaded.stats > DATA_TTL);
+    const shouldLoad = () => deps.loading.value.logsQueryBusy || !dataLastLoaded.stats || (Date.now() - dataLastLoaded.stats > DATA_TTL);
     const markLoaded = () => { dataLastLoaded.stats = Date.now(); };
 
     // --- Status ---
@@ -34,7 +34,13 @@ const useStats = (deps) => {
     const logTotalElements = ref(0);
     const serverTotalPages = ref(0);
     let listRequestSequence = 0;
+    let summaryRequestSequence = 0;
+    let logDataGeneration = 0;
     let listAbortController = null;
+    let pendingList = null;
+    let listRetryAt = 0;
+    let listRetryTimer = null;
+    let statsDisposed = false;
 
     // --- Detail cache: keyed by log.id ---
     const detailCache = {};
@@ -109,52 +115,125 @@ const useStats = (deps) => {
         return '/api/admin/logs?' + params.toString();
     };
 
+    const scheduleListRetry = (delay) => {
+        if (listRetryTimer !== null) { clearTimeout(listRetryTimer); listRetryTimer = null; }
+        if (statsDisposed || (deps.isActive && !deps.isActive())) { return; }
+        listRetryTimer = setTimeout(() => {
+            listRetryTimer = null;
+            if (!statsDisposed && (!deps.isActive || deps.isActive())) { loadLogPage({ showLoading: false }); }
+        }, delay);
+    };
+
     const loadLogPage = async ({ showLoading = true } = {}) => {
+        if (statsDisposed) { return false; }
+        const query = buildLogQuery();
+        // Repeated refreshes share one request; changed filters still supersede stale results.
+        if (pendingList && pendingList.query === query) {
+            pendingList.showLoading ||= showLoading;
+            if (showLoading) { deps.loading.value.logs = true; }
+            return pendingList.promise;
+        }
+        if (Date.now() < listRetryAt) {
+            if (showLoading) {
+                deps.loading.value.logsQueryBusy = true;
+                deps.loading.value.logsError = t('stats.queryBusy');
+            }
+            scheduleListRetry(listRetryAt - Date.now());
+            return false;
+        }
+        if (listRetryTimer !== null) { clearTimeout(listRetryTimer); listRetryTimer = null; }
         const requestId = ++listRequestSequence;
         if (listAbortController) { listAbortController.abort(); }
         const abortController = new AbortController();
         listAbortController = abortController;
         if (showLoading) { deps.loading.value.logs = true; }
-        if (showLoading) { deps.loading.value.logsError = ''; }
-        try {
-            const response = await apiCall(buildLogQuery(), { signal: abortController.signal }, { silent: true });
-            if (requestId !== listRequestSequence) { return false; }
-            if (response && response.ok) {
-                const data = await response.json();
+        if (showLoading) { deps.loading.value.logsError = ''; deps.loading.value.logsQueryBusy = false; }
+        const pending = { query, showLoading, promise: null };
+        pendingList = pending;
+        pending.promise = (async () => {
+            try {
+                const response = await apiCall(query, { signal: abortController.signal }, { silent: true });
                 if (requestId !== listRequestSequence) { return false; }
-                const newResults = hydrateCachedDetails(data.results || []);
-                logs.value = newResults;
-                logTotalElements.value = Number(data.totalElements || 0);
-                serverTotalPages.value = Number(data.totalPages || 0);
-                logSummary.value = { ...logSummary.value, filteredRequests: logTotalElements.value };
-                if (logPage.value > totalPages.value) {
-                    logPage.value = totalPages.value;
+                if (response && response.status === 429) {
+                    const header = response.headers.get('Retry-After') || '';
+                    const delay = /^[0-9]+$/.test(header) ? Number(header) * 1000 : Date.parse(header) - Date.now();
+                    const wait = Number.isFinite(delay) ? Math.min(2147483647, Math.max(1000, delay)) : 1000;
+                    listRetryAt = Date.now() + wait;
+                    deps.loading.value.logsQueryBusy = true;
+                    deps.loading.value.logsError = t('stats.queryBusy');
+                    scheduleListRetry(wait);
+                    return false;
                 }
-                markLoaded();
-                deps.loading.value.logsError = '';
-            } else if (showLoading) {
-                deps.loading.value.logsError = t('stats.loadFailed');
+                if (response && response.ok) {
+                    const data = await response.json();
+                    if (requestId !== listRequestSequence) { return false; }
+                    logs.value = hydrateCachedDetails(data.results || []);
+                    logTotalElements.value = Number(data.totalElements || 0);
+                    serverTotalPages.value = Number(data.totalPages || 0);
+                    logSummary.value = { ...logSummary.value, filteredRequests: logTotalElements.value };
+                    if (logPage.value > totalPages.value) { logPage.value = totalPages.value; }
+                    markLoaded();
+                    listRetryAt = 0;
+                    deps.loading.value.logsQueryBusy = false;
+                    deps.loading.value.logsError = '';
+                } else if (pending.showLoading || deps.loading.value.logsQueryBusy) {
+                    deps.loading.value.logsQueryBusy = false;
+                    deps.loading.value.logsError = t('stats.loadFailed');
+                }
+                return !!(response && response.ok);
+            } catch {
+                if (requestId === listRequestSequence) {
+                    deps.loading.value.logsQueryBusy = false;
+                    deps.loading.value.logsError = t('stats.loadFailed');
+                }
+                return false;
+            } finally {
+                if (requestId === listRequestSequence) {
+                    if (listAbortController === abortController) { listAbortController = null; }
+                    if (pendingList === pending) { pendingList = null; }
+                    deps.loading.value.logs = false;
+                }
             }
-            return !!(response && response.ok);
-        } finally {
-            if (requestId === listRequestSequence) {
-                if (listAbortController === abortController) { listAbortController = null; }
-                if (showLoading) { deps.loading.value.logs = false; }
-            }
-        }
+        })();
+        return pending.promise;
     };
 
     const loadLogSummary = async () => {
+        const requestId = ++summaryRequestSequence;
         const response = await apiCall('/api/admin/logs/summary', {}, { silent: true });
-        if (response && response.ok) {
-            logSummary.value = { ...(await response.json()), filteredRequests: logTotalElements.value };
+        if (response && response.ok && requestId === summaryRequestSequence) {
+            const summary = await response.json();
+            if (requestId === summaryRequestSequence) {
+                logSummary.value = { ...summary, filteredRequests: logTotalElements.value };
+            }
         }
     };
 
     // --- Loading (the list only takes the summary of the current page, and the statistics will be refreshed at a low frequency) ---
     const loadLogs = async (force) => {
+        if (statsDisposed) { return; }
         if (!force && !shouldLoad()) { return; }
         await Promise.all([loadLogPage(), loadLogSummary()]);
+    };
+
+    // An acknowledged deletion must supersede pre-deletion queries and cached details.
+    const invalidateLogs = () => {
+        logDataGeneration++;
+        listRequestSequence++;
+        summaryRequestSequence++;
+        if (listAbortController) { listAbortController.abort(); listAbortController = null; }
+        pendingList = null;
+        if (listRetryTimer !== null) { clearTimeout(listRetryTimer); listRetryTimer = null; }
+        for (const id of Object.keys(detailCache)) { delete detailCache[id]; }
+        detailCacheOrder.length = 0;
+        logDetailExpanded.value = {};
+        logs.value = [];
+        logTotalElements.value = 0;
+        serverTotalPages.value = 0;
+        logSummary.value = {};
+        logPage.value = 1;
+        dataLastLoaded.stats = 0;
+        deps.loading.value.logs = false;
     };
 
     const reloadLogsFromFirstPage = () => {
@@ -177,6 +256,7 @@ const useStats = (deps) => {
 
     // --- Lazy load detail ---
     const loadLogDetail = async (item) => {
+        const generation = logDataGeneration;
         const id = item.log.id;
         if (!id) { return; }
         // Cached → Use directly
@@ -192,8 +272,10 @@ const useStats = (deps) => {
         item._detailError = false;
         try {
             const res = await apiCall('/api/admin/logs/' + id + '/detail', {}, { silent: true });
+            if (generation !== logDataGeneration) { return; }
             if (res && res.ok) {
                 const detail = await res.json();
+                if (generation !== logDataGeneration) { return; }
                 cacheDetail(id, detail);
                 item._detail = detail;
                 if (detail.matchChain) {
@@ -273,7 +355,15 @@ const useStats = (deps) => {
 
     // --- Cleanup function (called by onUnmounted) ---
     const cleanupStats = () => {
+        statsDisposed = true;
+        logDataGeneration++;
+        listRequestSequence++;
+        summaryRequestSequence++;
+        if (listRetryTimer !== null) { clearTimeout(listRetryTimer); listRetryTimer = null; }
         if (listAbortController) { listAbortController.abort(); }
+        pendingList = null;
+        deps.loading.value.logsQueryBusy = false;
+        deps.loading.value.logs = false;
     };
 
     return {
@@ -292,6 +382,7 @@ const useStats = (deps) => {
         sortIcon,
         onPageSizeChange,
         loadLogs,
+        invalidateLogs,
         toggleMatchChain,
         logDetailExpanded,
         toggleLogDetail,

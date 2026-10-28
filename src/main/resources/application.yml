@@ -121,6 +121,12 @@ echo:
     key: ${ECHO_REMEMBER_ME_KEY:change-me-in-production}  # Must be overridden through environment variables
     validity: 180d                # Remember Me cookie validity period, which can be overridden by the environment variable ECHO_REMEMBER_ME_VALIDITY
   admin:
+    log-query-admission:
+      # Bound concurrent list queries; the wait limit excludes query execution and response transfer.
+      enabled: ${ECHO_ADMIN_LOG_QUERY_ADMISSION_ENABLED:true}
+      concurrency: 1
+      queue-capacity: 8
+      max-wait-millis: 5000
     username: admin             # Override with the ECHO_ADMIN_USERNAME environment variable.
     password: "{bcrypt}$2a$10$cGp.LHC3zCORJIgwLvh6qehSMWZV27KbwI0VravTWP51EkxvbkEmm"  # admin, which can be overridden by the environment variable ECHO_ADMIN_PASSWORD
   storage:
@@ -154,6 +160,8 @@ echo:
     queue: ECHO.REQUEST      # Source queue listened to by Echo; external services send messages here.
     # Opt in to source rollback when a reply fails. Redelivery can repeat processing and downstream effects.
     rollback-on-reply-failure: ${ECHO_JMS_ROLLBACK_ON_REPLY_FAILURE:false}
+    # Reuse committed target settings on single-process SQLite; other databases retain per-exchange reads.
+    target-catalog-enabled: ${ECHO_JMS_TARGET_CATALOG_ENABLED:true}
     source:
       # Where to receive JMS: embedded (built-in Artemis, default) | artemis | tibco (external shared broker, such as ESB)
       # When multiple Echo instances share an external queue, the broker delivers each message to just one instance.

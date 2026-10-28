@@ -116,6 +116,14 @@ HTTP target connection tests run asynchronously and have a complete deadline con
 
 The native HTTP/1.1 path is enabled by default. Its configurable limits are 10 MiB per request or response body, 512 active requests and 128 MiB of estimated buffering. Special requests and custom Servlet extensions keep Servlet handling. Set `ECHO_HTTP_TRANSPORT=servlet` and restart to use the original entry point. See [HTTP acceleration](native-http.md) for limits, timeouts, observations and compatibility, and [HTTP I/O tuning](http-io-tuning.md) for the I/O thread setting.
 
+## Management query capacity and JMS target settings
+
+Request-log list queries (`GET` and `HEAD /api/admin/logs`) are protected after authentication: one active query, up to eight queued requests, and at most five seconds waiting for admission. A full queue or expired wait returns HTTP 429 with `Retry-After: 1`. The wait limit does not interrupt a query or response transfer already running. Pagination and the omitted-size default remain unchanged. Other management routes, HTTP mock requests and JMS do not use this queue. The built-in UI coalesces repeated list refreshes and retries capacity responses. Queue counters appear under `database.logQueryAdmission` in the resource snapshot. Set `ECHO_ADMIN_LOG_QUERY_ADMISSION_ENABLED=false` and restart to disable protection.
+
+JMS target settings are cached by default for single-process SQLite deployments. Warm target selection needs no database connection; the first lookup and lookups after a committed configuration change still need the database. Rollbacks do not publish new settings, and in-flight exchanges retain their selected target version. Shared external databases keep per-exchange reads. Update SQLite target settings through Echo's UI/API; direct changes outside Echo are not watched. Set `ECHO_JMS_TARGET_CATALOG_ENABLED=false` and restart to restore per-exchange database resolution. This setting does not change JMS provider connection, ACK or transaction policies.
+
+Concurrent callers waiting for the same cold lookup share its success or original failure, instead of each starting another database timeout in sequence. A failed load is not cached: later requests can try again after database recovery. This may return database errors sooner during a short outage; it does not resend failed business messages. A load invalidated by a committed settings change cannot overwrite a newer snapshot. Database connection/SQL timeouts and provider waits still apply; this is not an overall JMS deadline.
+
 ## Authentication
 
 ### Auth Modes

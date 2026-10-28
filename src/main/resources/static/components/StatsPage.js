@@ -232,7 +232,7 @@ const StatsPage = {
         @clear="$emit('clear-log-filters')"></ui-filter-chip-list>
 
       <div class="card card-table list-card">
-        <ui-load-state v-if="loading.logsError && !loading.logs" kind="error" icon="bi-cloud-slash" :title="t('stats.loadFailed')" has-action>
+        <ui-load-state v-if="loading.logsError && !loading.logs" kind="error" icon="bi-cloud-slash" :title="loading.logsQueryBusy ? t('stats.queryBusy') : t('stats.loadFailed')" has-action>
           <template #action><ui-button type="button" variant="secondary" size="compact" @click="$emit('load-logs', true)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{t('common.retry')}}</ui-button></template>
         </ui-load-state>
         <div v-else class="card-table-body">

@@ -466,6 +466,7 @@
     "clearAll": "清除全部",
     "loadingLogs": "正在載入請求記錄",
     "loadFailed": "無法載入請求記錄，請稍後再試。",
+    "queryBusy": "請求紀錄查詢忙碌中，稍後自動重試。",
     "detailLoadFailed": "無法載入這筆請求的詳細內容。",
     "tableCaption": "HTTP 與 JMS 請求記錄",
     "sortBy": "依{field}排序",
