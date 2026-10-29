@@ -17,6 +17,12 @@ public final class EvalContext {
     private final Map<String, Boolean> outcomes;
     /** Intermediate results that can be reused across conditions within the same request (such as the value of JSONPath) are created only when used for the first time. */
     private Map<Object, Object> values;
+    // This request-local cache stores copied XPath values, never DOM nodes.
+    // Both cardinality and a conservative retained-value estimate are bounded.
+    private static final int MAX_EXTRACTIONS = 128;
+    private static final long MAX_EXTRACTION_WEIGHT = 512 * 1024;
+    private Map<Object, Extracted> extractions;
+    private long extractionWeight;
 
     public EvalContext(RequestView request) {
         this(request, new HashMap<>());
@@ -57,6 +63,38 @@ public final class EvalContext {
             values.put(key, cached);
         }
         return (T) cached;
+    }
+
+    /** Share deterministic built-in values within one request, bypassing the cache at its limits. */
+    Extracted cachedExtraction(Object key, Supplier<Extracted> supplier) {
+        Extracted cached = extractions == null ? null : extractions.get(key);
+        if (cached != null) {
+            return cached;
+        }
+        Extracted extracted = Objects.requireNonNull(supplier.get(), "extracted value");
+        if (extractions != null && extractions.size() >= MAX_EXTRACTIONS) {
+            return extracted;
+        }
+        long weight = 128;
+        for (Value value : extracted.values()) {
+            // JSON graphs are not part of this cache's retained-value estimate.
+            if (value.json() != null) {
+                return extracted;
+            }
+            weight += 64L + (value.text() == null ? 0 : 2L * value.text().length());
+            if (weight > MAX_EXTRACTION_WEIGHT - extractionWeight) {
+                return extracted;
+            }
+        }
+        if (weight > MAX_EXTRACTION_WEIGHT - extractionWeight) {
+            return extracted;
+        }
+        if (extractions == null) {
+            extractions = new HashMap<>();
+        }
+        extractions.put(key, extracted);
+        extractionWeight += weight;
+        return extracted;
     }
 
     /** Number of intermediate results saved (for testing and monitoring). */

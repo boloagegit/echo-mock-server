@@ -133,6 +133,7 @@ final class CompiledNodes {
     static final class Leaf implements CompiledMatcher {
 
         private final ValueExtractor extractor;
+        private final Object extractionCacheKey;
         private final CompiledPredicate predicate;
         private final MatchNode.Quantifier quantifier;
         private final boolean resultWhenMissing;
@@ -150,6 +151,8 @@ final class CompiledNodes {
              boolean resultWhenMissing, int maxFieldValueLength, String description, MatchNode.Leaf spec,
              String cacheKey, boolean readsBody) {
             this.extractor = extractor;
+            this.extractionCacheKey = extractor instanceof BodyExtractor body
+                    ? body.extractionCacheKey() : null;
             this.predicate = predicate;
             this.quantifier = quantifier;
             this.resultWhenMissing = resultWhenMissing;
@@ -240,12 +243,12 @@ final class CompiledNodes {
 
         @Override
         public boolean matches(EvalContext context) {
-            return context.memoized(cacheKey, () -> decide(extractor.extract(context.request())));
+            return context.memoized(cacheKey, () -> decide(extract(context)));
         }
 
         @Override
         public MatchExplanation explain(EvalContext context) {
-            Extracted extracted = extractor.extract(context.request());
+            Extracted extracted = extract(context);
             boolean passed = context.memoized(cacheKey, () -> decide(extracted));
             return new MatchExplanation("leaf", passed, description, summarize(extracted), List.of(), spec);
         }
@@ -258,6 +261,12 @@ final class CompiledNodes {
         @Override
         public BodyRequirements bodyRequirements() {
             return bodyRequirements;
+        }
+
+        private Extracted extract(EvalContext context) {
+            return extractionCacheKey == null
+                    ? extractor.extract(context.request())
+                    : context.cachedExtraction(extractionCacheKey, () -> extractor.extract(context.request()));
         }
 
         private boolean decide(Extracted extracted) {

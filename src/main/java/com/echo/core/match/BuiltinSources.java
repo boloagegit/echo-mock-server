@@ -92,6 +92,8 @@ public final class BuiltinSources {
 
     // ==================== body ====================
 
+    private record XPathValueKey(String expression) { }
+
     private static ValueExtractor body(Selector selector) {
         // A simple path (such as //Order/Status) is compared with local name, DOM is the same as the streaming scan result; other XPath is handed over to the XPath engine
         XmlPath xmlPath = selector.kind() == Selector.Kind.XPATH
@@ -129,6 +131,11 @@ public final class BuiltinSources {
             @Override
             public boolean needsXmlDom() {
                 return needsXmlDom;
+            }
+
+            @Override
+            public Object extractionCacheKey() {
+                return needsXmlDom ? new XPathValueKey(selector.expression()) : null;
             }
         };
     }
