@@ -20,7 +20,7 @@
 - **看得出為什麼命中。** 每筆請求紀錄都有處理流程和完整的比對過程：哪些規則是候選、哪個條件通過或沒通過。
 - **給團隊用的。** 有登入（內建帳號或 LDAP）與管理者／一般使用者權限，也有修訂紀錄。規則可以用標籤批次啟用或停用，也可以保護、設定保留期限。多台實例可以共用同一個資料庫。
 - **適合封閉內網。** 只要一個 JAR，用 `java -jar` 啟動，資料存在 SQLite。前端資源透過 WebJars 打包，不需要 CDN。
-- **HTTP 效能實測。** 最新 Java 17、512／1024 MiB 比較中，固定回應與 JSON 條件在這組設定下的吞吐高於 WireMock 3.13.2；慢下游轉發幾乎持平，RSS 與延遲則依設定而異。完整結果與限制見[效能](#效能)。
+- **HTTP 效能實測。** Java 17、512／1024 MiB 比較中，固定回應與 JSON 條件在這組設定下的吞吐高於 WireMock 3.13.2；慢下游轉發幾乎持平，RSS 與延遲則依設定而異。完整結果與限制見[效能](#效能)。
 
 ## 快速開始
 
@@ -126,7 +126,7 @@ curl http://localhost:8080/mock/users/1 -H 'X-Original-Host: api.example.com'
 
 ## 效能
 
-**2026-10-29 重新驗證**，使用 [Echo 037d2d7](https://github.com/boloagegit/echo-mock-server/commit/037d2d7d82eed1be3330f3e7979518dbf5290fad) 與真正的 **WireMock 3.13.2 standalone**。兩邊在同一 Linux 環境依序執行：Java 17.0.20.1+1、共用四核心 CPU 配額，伺服器固定兩核心、壓測端與下游固定另兩核心，G1、`-Xms=-Xmx` 為 **512／1024 MiB**、direct memory 上限 128 MiB、NMT。Echo 使用預設原生 HTTP 入口，worker 上限設為 80；WireMock 使用 80 container workers 加 80 非同步回應執行緒。HTTP/1.1 keep-alive、每路徑最多 64 連線、監測 agent 均相同；HTTP 比較關閉 JMS、備份與定期清理。這是公開設定下的比較，沒有窮舉兩個產品的最佳調校。
+以下比較使用 [Echo 037d2d7](https://github.com/boloagegit/echo-mock-server/commit/037d2d7d82eed1be3330f3e7979518dbf5290fad) 與真正的 **WireMock 3.13.2 standalone**。兩邊在同一 Linux 環境依序執行：Java 17.0.20.1+1、共用四核心 CPU 配額，伺服器固定兩核心、壓測端與下游固定另兩核心，G1、`-Xms=-Xmx` 為 **512／1024 MiB**、direct memory 上限 128 MiB、NMT。Echo 使用預設原生 HTTP 入口，worker 上限設為 80；WireMock 使用 80 container workers 加 80 非同步回應執行緒。HTTP/1.1 keep-alive、每路徑最多 64 連線、監測 agent 均相同；HTTP 比較關閉 JMS、備份與定期清理。這是公開設定下的比較，沒有窮舉兩個產品的最佳調校。
 
 **短時間吞吐，關閉紀錄。** 全程載入相同的 106 條規則，其中同一路徑有 100 條候選條件。下表為每產品／heap **三個全新 JVM** 的平均每秒筆數；先預熱 20 秒，各情境再預熱 5 秒、量測 8 秒，輪替順序。逐筆核對回應，壓測端 CPU 均有餘裕。這是 64 連線下的觀測容量，**不是絕對最高承載，也不是十分鐘持續峰值**。
 
@@ -162,13 +162,13 @@ curl http://localhost:8080/mock/users/1 -H 'X-Original-Host: api.example.com'
 
 Echo 的 RSS 並非全面較低；延遲依情境而異，也不是全面領先。兩邊紀錄皆關閉或設定保留 10,000 筆。Echo 使用硬碟上的非同步 SQLite 與持久化 spool（預設每秒最多寫 1,000 筆、批次保留 9,000～10,000 筆），WireMock 使用保留 10,000 筆的記憶體 journal。Echo 開紀錄的每組均核對 132,000 筆預熱加正式紀錄，零丟棄，停止後資料庫完整性及本文長度檢查通過。持久化與超載策略不同，峰值回覆能力不代表該流量下能完整記錄；RSS 不含 OS page cache，heap 上限也不是整個程序的記憶體上限。
 
-全新正確性驗證通過 **Java 2,534 項**（略過 6 項人工／外部環境測試）、**JavaScript 183 項**、**Python 67 項**；[CI](https://github.com/boloagegit/echo-mock-server/actions/runs/40803779258) 的 Java 17／21、Windows Java 17 開發檢查與容器建置皆通過。另外以 512 MiB 跑十分鐘，混合 **96,000 筆真正 Artemis JMS、18,000 筆 HTTP 與 8 個並行管理紀錄查詢者**，開啟紀錄，零回應／correlation 錯誤與紀錄丟棄，保存的匹配鏈有效，停止服務及暫存回覆 queue 清理通過。這組 heap 同時包含兩個 broker 與 JMS 呼叫端，不能當成 Echo 單獨的記憶體成績，也不是 TIBCO EMS 相容性驗收。
+正確性驗證通過 **Java 2,534 項**（略過 6 項人工／外部環境測試）、**JavaScript 183 項**、**Python 67 項**；[CI](https://github.com/boloagegit/echo-mock-server/actions/runs/40803779258) 的 Java 17／21、Windows Java 17 開發檢查與容器建置皆通過。另外以 512 MiB 跑十分鐘，混合 **96,000 筆真正 Artemis JMS、18,000 筆 HTTP 與 8 個並行管理紀錄查詢者**，開啟紀錄，零回應／correlation 錯誤與紀錄丟棄，保存的匹配鏈有效，停止服務及暫存回覆 queue 清理通過。這組 heap 同時包含兩個 broker 與 JMS 呼叫端，不能當成 Echo 單獨的記憶體成績，也不是 TIBCO EMS 相容性驗收。
 
 十分鐘是有限的回歸觀察，不能證明永久穩定或沒有記憶體洩漏。原始日誌、profile、資料庫與 JAR 均留在 Git 外。舊數據保留在[歷史效能文件](docs/performance.md)與 [2026-10-16 驗證](docs/native-http-validation-2026-10-16.md)，請勿與本輪混算。設定及較早證據另見 [HTTP 加速說明](docs/native-http.md)、[JMS 正確性與資源重用](docs/jms-performance-and-correctness.md)及[啟動量測](docs/performance-hardening-2026-10-16.md)。
 
 ### XML／XPath：同筆請求共用查詢結果
 
-另一輪 **2026-10-29** 實驗比較[基準 d1f201c](https://github.com/boloagegit/echo-mock-server/commit/d1f201cbaa5e6a4e0513eb1af50f921501f86a34)、[XPath 共用版 80acf0b](https://github.com/boloagegit/echo-mock-server/commit/80acf0b9d875b9e14200b53dd93e5d26287328df) 與真正的 WireMock 3.13.2 standalone。兩個 Echo 版本的產品程式只差這次四個檔案的共用改動。全部在同一 Linux 主機依序執行，使用 Java 17.0.20.1+1、共用四核心配額、G1、512／1024 MiB heap、**64 條 HTTP/1.1 keep-alive 連線**，關閉紀錄。這輪使用預設入口／worker 設定及共用 CPU 排程，與上方固定 CPU 分配、調整 worker 的測試不同，絕對數字請分開判讀。
+XML／XPath 比較使用[基準 d1f201c](https://github.com/boloagegit/echo-mock-server/commit/d1f201cbaa5e6a4e0513eb1af50f921501f86a34)、[XPath 共用版 80acf0b](https://github.com/boloagegit/echo-mock-server/commit/80acf0b9d875b9e14200b53dd93e5d26287328df) 與真正的 WireMock 3.13.2 standalone。兩個 Echo 版本的產品程式只差這次四個檔案的共用改動。全部在同一 Linux 主機依序執行，使用 Java 17.0.20.1+1、共用四核心配額、G1、512／1024 MiB heap、**64 條 HTTP/1.1 keep-alive 連線**，關閉紀錄。這組比較使用預設入口／worker 設定及共用 CPU 排程，與上方固定 CPU 分配、調整 worker 的測試不同，絕對數字請分開判讀。
 
 共載入 29 條規則，等比例送到四條路徑：8 條結構化規則查同一個一般 XPath、單條 XPath、8 條不同 XPath、8 條比較同一個 scalar `count()` 結果的規則。每條路徑也等比例使用小 XML、**64 KiB／900 個 Item** 的密集 XML、長文字及 SOAP，nonce 持續變動，逐筆核對對應的命中／未命中回應。因此 **一半流量可以共用查詢**，scalar 刻意在第 5～8 條規則命中；兩邊規則只在這份語料對應，不代表整套規則語言等價。
 
