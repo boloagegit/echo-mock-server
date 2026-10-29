@@ -166,6 +166,25 @@ Fresh correctness checks passed **2,534 Java tests** (6 manual/external tests sk
 
 Ten minutes is a finite regression observation, not proof of indefinite stability or absence of memory leaks. Raw logs, profiles, databases and JARs are kept outside Git. Older comparisons remain in the [performance history](docs/performance.md) and [2026-10-16 validation](docs/native-http-validation-2026-10-16.md); do not mix their absolute numbers with this run. See the [HTTP acceleration guide](docs/native-http.md), [JMS correctness and resource reuse](docs/jms-performance-and-correctness.md), and [startup measurements](docs/performance-hardening-2026-10-16.md) for configuration and earlier evidence.
 
+### XML/XPath: sharing results within a request
+
+A separate **2026-10-29** experiment compared [baseline d1f201c](https://github.com/boloagegit/echo-mock-server/commit/d1f201cbaa5e6a4e0513eb1af50f921501f86a34), [XPath sharing 80acf0b](https://github.com/boloagegit/echo-mock-server/commit/80acf0b9d875b9e14200b53dd93e5d26287328df) and actual WireMock 3.13.2 standalone. Both Echo versions used the same production code except for the four-file sharing change. All ran sequentially on the same Linux host, Java 17.0.20.1+1, a shared four-CPU quota, G1, 512/1024 MiB heaps and **64 HTTP/1.1 keep-alive connections**, with recording off. This experiment used default transport/worker settings and shared CPU scheduling rather than the CPU partition and worker tuning above; its absolute numbers must be read separately.
+
+The 29-rule fixture dispatched four routes equally: eight structured rules sharing one general XPath, one XPath rule, eight distinct XPath rules, and eight comparisons of the same scalar `count()` result. Each route equally used small XML, dense **64 KiB / 900 Item** XML, long text and SOAP, with changing nonces and corresponding hit/miss replies. Thus **half the traffic could reuse queries**; scalar rules deliberately matched positions 5–8. The rules correspond on this corpus, not across the full rule languages.
+
+After 45 s warmup, the **45 s capacity samples** were:
+
+| Heap MiB | Echo baseline req/s | Echo with sharing req/s | WireMock req/s |
+|---|---:|---:|---:|
+| 512 | 1,316 | 2,452 | 1,253 |
+| 1024 | 1,276 | 2,481 | 1,295 |
+
+Each JVM then ran **five minutes at 200 req/s**. All six cells completed 60,000 correct replies each (**360,000 total**), with zero errors or timeouts and client CPU headroom. Relative to baseline, sharing reduced whole-process CPU/request by **46.7% / 48.7%** and estimated allocation/request by **53.5%** at 512/1024 MiB. Scheduled-arrival P99 fell **15.04 → 9.24 ms / 17.06 → 9.34 ms**; WireMock measured **48.25 / 17.10 ms**. End RSS remained higher than WireMock: **719 / 553 MiB** at 512 MiB and **1,064 / 833 MiB** at 1024 MiB (Echo with sharing / WireMock).
+
+This helps **repeated identical general XPath expressions in structured `matchSpec` rules**. Three-fork microbenchmarks found no stable benefit for one rule, distinct XPath expressions or oversized uncached results. An initial dense/distinct short test regressed 5–12%; that regression did not persist in a longer control, and neither result establishes a universal guarantee. A separate three-fork, 272–274-byte XML microbenchmark improved repeated-query throughput about **4.3×**, with overlapping ranges for single/distinct queries; these are engine operations, not HTTP req/s.
+
+The new cache is request-local, retains text results with limits of **128 entries and an estimated 512 KiB**, and bypasses storage when full; existing entries remain, so later popular queries can miss the benefit. Full XML parsing and existing security checks remain. Legacy rules already had their own reuse. An additional candidate-only recording check verified **6,000 complete, correct saved requests** with the body cap explicitly set to 65,536 characters; it was not a comparative recording-on capacity test. Five minutes does not establish long-term leak freedom, and 2,000-rule HTTP capacity and TIBCO EMS acceptance were not tested. Raw measurements, profiles, databases and experiment reports remain outside Git.
+
 ## Documentation
 
 | Guide | Covers |

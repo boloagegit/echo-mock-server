@@ -3,6 +3,11 @@ package com.echo.core.match;
 /** The built-in body valuer explains to {@link BodyRequirements} how it needs to parse body. */
 interface BodyExtractor extends ValueExtractor {
 
+    /** Request-local key for a deterministic built-in extraction; null means do not share. */
+    default Object extractionCacheKey() {
+        return null;
+    }
+
     /** Conservative object path, or null for unrestricted body access. */
     default String jsonPath() {
         return null;
