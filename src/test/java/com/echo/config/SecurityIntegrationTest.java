@@ -23,6 +23,7 @@ import com.echo.service.RuleApplyMapper;
 import com.echo.service.RuleApplyContractService;
 import com.echo.service.RuleApplyPersistenceSynchronizer;
 import com.echo.service.RuleEditService;
+import com.echo.service.RuleImportService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -127,6 +128,10 @@ class SecurityIntegrationTest {
     @MockitoBean
     @SuppressWarnings("UnusedVariable") // required for Spring context
     private com.echo.service.OpenApiImportService openApiImportService;
+
+    @MockitoBean
+    @SuppressWarnings("UnusedVariable") // required for Spring context
+    private RuleImportService ruleImportService;
 
     @MockitoBean
     @SuppressWarnings("UnusedVariable") // required for Spring context
@@ -303,6 +308,17 @@ class SecurityIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("[]"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void portableRulePreviewAndConfirmation_shouldReturn403_whenNotAdmin() throws Exception {
+        for (String endpoint : List.of("preview", "confirm")) {
+            mockMvc.perform(post("/api/admin/rules/import/" + endpoint)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"rules\":[],\"connectionMappings\":{}}"))
+                    .andExpect(status().isForbidden());
+        }
     }
 
     @Test

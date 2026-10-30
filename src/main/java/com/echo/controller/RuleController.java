@@ -162,7 +162,7 @@ public class RuleController {
 
     @GetMapping("/rules/{id}/json")
     public ResponseEntity<RuleDto> exportRule(@PathVariable String id) {
-        return ruleEditService.findDto(id)
+        return ruleEditService.findExportDto(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }

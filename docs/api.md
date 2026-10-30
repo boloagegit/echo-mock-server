@@ -43,6 +43,8 @@ The full lists `GET /api/admin/rules` and `GET /api/admin/responses`, and the re
 | GET | /api/admin/rules/{id}/json | Export single rule |
 | POST | /api/admin/rules/import | Import single rule (ADMIN) |
 | POST | /api/admin/rules/import-batch | Batch import (ADMIN) |
+| POST | /api/admin/rules/import/preview | Preview portable JSON rules and destination connection choices (ADMIN) |
+| POST | /api/admin/rules/import/confirm | Atomically create new rules/responses with explicit connection mappings (ADMIN) |
 | POST | /api/admin/rules/import-excel | Excel import (ADMIN) |
 | GET | /api/admin/rules/import-template | Download Excel import template |
 | DELETE | /api/admin/rules/batch | Batch delete (ADMIN) |

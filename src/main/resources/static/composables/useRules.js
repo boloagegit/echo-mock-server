@@ -318,7 +318,20 @@ const useRules = (deps) => {
     const importFormat = ref('json');
     const importFile = ref(null);
     const importFileName = ref('');
+    const importPreview = ref(null);
+    const importConnectionMappings = ref({});
+    let importRulesDraft = null;
+    const resetImportPreview = () => {
+        importPreview.value = null;
+        importConnectionMappings.value = {};
+        importRulesDraft = null;
+    };
+    const setImportConnectionMapping = ({ key, selection }) => {
+        importConnectionMappings.value = { ...importConnectionMappings.value, [key]: selection };
+    };
     const handleImportFile = input => {
+        if (deps.loading.value.importRules) { return; }
+        resetImportPreview();
         const file = input instanceof File ? input : input?.target?.files?.[0];
         deps.loading.value.importError = '';
         if (!file) return;
@@ -374,12 +387,40 @@ const useRules = (deps) => {
                 return;
             }
             if (importFormat.value === 'json') {
-                const text = await importFile.value.text();
-                const data = JSON.parse(text);
-                const arr = Array.isArray(data) ? data : [data];
-                const r = await apiCall('/api/admin/rules/import-batch', { method: 'POST', body: JSON.stringify(arr) }, { errorMsg: t('toast.importFailed') });
-                if (r && r.ok) { const d = await r.json(); showToast(t('toast.importSuccess', {count: d.imported}), 'success'); markDirty(); loadRules(true); showImportModal.value = false; }
-                else { deps.loading.value.importError = t('modal.importRequestFailed'); }
+                if (!importPreview.value) {
+                    const data = JSON.parse(await importFile.value.text());
+                    importRulesDraft = Array.isArray(data) ? data : [data];
+                    const r = await apiCall('/api/admin/rules/import/preview', {
+                        method: 'POST', body: JSON.stringify({ rules: importRulesDraft, connectionMappings: {} })
+                    }, { silent: true });
+                    const d = r ? await r.json().catch(() => ({})) : {};
+                    if (r && r.ok) { importPreview.value = d; }
+                    else { deps.loading.value.importError = d.error || t('modal.importRequestFailed'); }
+                    return;
+                }
+                const requirements = importPreview.value.requirements || [];
+                if (requirements.some(item => !importConnectionMappings.value[item.key])) {
+                    deps.loading.value.importError = t('modal.importChooseConnections');
+                    return;
+                }
+                const r = await apiCall('/api/admin/rules/import/confirm', {
+                    method: 'POST', body: JSON.stringify({ rules: importRulesDraft, connectionMappings: importConnectionMappings.value })
+                }, { silent: true });
+                const d = r ? await r.json().catch(() => ({})) : {};
+                if (r && r.ok) {
+                    showToast(t('toast.importSuccess', {count: d.imported}), 'success');
+                    markDirty(); await loadRules(true); showImportModal.value = false;
+                    resetImportPreview();
+                } else if (r && r.status < 500) {
+                    importPreview.value = { ...importPreview.value, errors: d.errors || [] };
+                    deps.loading.value.importError = d.errors?.some(item => item.code === 'CONNECTION_SELECTION_REQUIRED')
+                        ? t('modal.importConnectionChanged') : t('modal.importRequestFailed');
+                } else {
+                    // A lost reply or server error cannot prove whether the transaction committed.
+                    deps.loading.value.importError = t('modal.importResultUnknown');
+                    resetImportPreview();
+                    markDirty(); await loadRules(true);
+                }
             } else {
                 const formData = new FormData();
                 formData.append('file', importFile.value);
@@ -599,6 +640,10 @@ const useRules = (deps) => {
         importFileName,
         handleImportFile,
         doImport,
+        importPreview,
+        importConnectionMappings,
+        resetImportPreview,
+        setImportConnectionMapping,
         // Details drawer
         ruleDetailId,
         rulePreviewCache,

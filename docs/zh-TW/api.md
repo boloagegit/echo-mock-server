@@ -40,6 +40,8 @@
 | GET | /api/admin/rules/{id}/json | 匯出單筆規則 |
 | POST | /api/admin/rules/import | 匯入單筆規則 (ADMIN) |
 | POST | /api/admin/rules/import-batch | 批次匯入 (ADMIN) |
+| POST | /api/admin/rules/import/preview | 預覽 JSON 規則與目的環境連線選項 (ADMIN) |
+| POST | /api/admin/rules/import/confirm | 明確對應連線，整批新增規則與回應 (ADMIN) |
 | POST | /api/admin/rules/import-excel | Excel 匯入 (ADMIN) |
 | GET | /api/admin/rules/import-template | 下載 Excel 匯入範本 |
 | DELETE | /api/admin/rules/batch | 批次刪除 (ADMIN) |
