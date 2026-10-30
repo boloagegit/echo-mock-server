@@ -19,8 +19,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -56,11 +59,80 @@ public class RuleEditService {
                 .map(r -> protocolHandlerRegistry.toDto(r, getResponse(r.getResponseId()), includeBody));
     }
 
-    /** All rules (including response content) are for export. */
+    @Transactional(readOnly = true, isolation = Isolation.SERIALIZABLE)
+    public Optional<RuleDto> findExportDto(String id) {
+        return protocolHandlerRegistry.findById(id)
+                .map(rule -> exportDto(rule, exportConnectionNames()));
+    }
+
+    /** All rules and response content are read from one consistent export transaction. */
+    @Transactional(readOnly = true, isolation = Isolation.SERIALIZABLE)
     public List<RuleDto> findAllDtos() {
+        Map<String, String> names = exportConnectionNames();
         return protocolHandlerRegistry.findAllRules().stream()
-                .map(r -> protocolHandlerRegistry.toDto(r, getResponse(r.getResponseId())))
+                .map(rule -> exportDto(rule, names))
                 .toList();
+    }
+
+    private RuleDto exportDto(BaseRule rule, Map<String, String> names) {
+        Response response = getResponse(rule.getResponseId());
+        if (rule.getResponseId() != null && response == null) {
+            throw new IllegalArgumentException("Cannot export a rule whose response is missing");
+        }
+        RuleDto dto = protocolHandlerRegistry.toDto(rule, response, true);
+        dto.setExportVersion(1);
+        if (response != null) {
+            dto.setResponseDescription(response.getDescription());
+            dto.setResponseContentType(response.getContentType());
+        }
+        dto.setSourceConnectionName(names.get(RuleImportService.connectionKey(dto)));
+        return dto;
+    }
+
+    private Map<String, String> exportConnectionNames() {
+        Map<String, String> names = new HashMap<>();
+        httpTargetConnectionService.ifPresent(service -> service.list().forEach(connection -> {
+            names.put("HTTP:CONNECTION:" + connection.id(), connection.name());
+            if (connection.defaultConnection() && connection.enabled()) {
+                names.put("HTTP:DEFAULT_CONNECTION", connection.name());
+            }
+        }));
+        jmsTargetConnectionService.ifPresent(service -> {
+            service.list().forEach(connection ->
+                    names.put("JMS:CONNECTION:" + connection.id(), connection.name()));
+            service.findActiveSummary().ifPresent(connection ->
+                    names.put("JMS:DEFAULT_CONNECTION", connection.name()));
+        });
+        return names;
+    }
+
+    /** Read-only validation shared by import preview and atomic import. The caller passes a copy. */
+    public void validateImport(RuleDto dto) {
+        requireProtocolEnabled(dto.getProtocol());
+        if (dto.getMatchKey() == null || dto.getMatchKey().isBlank()) {
+            throw new IllegalArgumentException("matchKey is required");
+        }
+        validateRuleFields(dto);
+        applyMatchSpec(dto);
+        ProtocolHandler handler = protocolHandlerRegistry.getHandler(dto.getProtocol()).orElseThrow();
+        handler.fromDto(dto);
+        boolean faulting = dto.getFaultType() != null && !dto.getFaultType().isBlank()
+                && !FaultType.NONE.name().equals(dto.getFaultType());
+        if (faulting) {
+            return;
+        }
+        if ("FORWARD".equalsIgnoreCase(dto.getAction())) {
+            if (dto.getProtocol() == Protocol.HTTP) {
+                httpTargetConnectionService.orElseThrow().validateForwardSelection(
+                        dto.getForwardTargetMode(), dto.getHttpTargetConnectionId());
+            } else {
+                jmsTargetConnectionService.orElseThrow().validateForwardSelection(
+                        dto.getForwardTargetMode(), dto.getJmsTargetConnectionId());
+            }
+        } else {
+            validateSseRule(dto, dto.getResponseBody());
+            validateResponseContent(dto);
+        }
     }
 
     public void requireProtocolEnabled(Protocol protocol) {

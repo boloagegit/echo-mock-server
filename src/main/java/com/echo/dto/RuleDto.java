@@ -21,6 +21,12 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RuleDto {
+    /** Portable export marker: responseBody is complete, including an intentional null body. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Integer exportVersion;
+    /** Display-only source connection name; never used to resolve a destination connection. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String sourceConnectionName;
     private String id;
     private Long version;
     private Protocol protocol;

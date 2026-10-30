@@ -89,7 +89,7 @@ public class SecurityConfig {
                 // User can change password by himself - already logged in
                 .requestMatchers("/api/account/change-password").authenticated()
                 // Batch operation only ADMIN (must precede permitAll)
-                .requestMatchers("/api/admin/rules/export", "/api/admin/rules/import-batch", "/api/admin/rules/import-excel", "/api/admin/rules/batch", "/api/admin/rules/batch/*", "/api/admin/rules/tag/*/*/*", "/api/admin/rules/all", "/api/admin/responses/all", "/api/admin/responses/export", "/api/admin/audit/all", "/api/admin/setup").hasRole("ADMIN")
+                .requestMatchers("/api/admin/rules/export", "/api/admin/rules/import-batch", "/api/admin/rules/import/preview", "/api/admin/rules/import/confirm", "/api/admin/rules/import-excel", "/api/admin/rules/batch", "/api/admin/rules/batch/*", "/api/admin/rules/tag/*/*/*", "/api/admin/rules/all", "/api/admin/responses/all", "/api/admin/responses/export", "/api/admin/audit/all", "/api/admin/setup").hasRole("ADMIN")
                 // Retrieving all rules/all response contents at one time requires logging in: the amount of data increases with rules and responses, and a large number of calls without logging in may exhaust memory.
                 // The screen uses the pagination and summary open below API
                 .requestMatchers(HttpMethod.GET, "/api/admin/rules", "/api/admin/responses").authenticated()

@@ -76,6 +76,31 @@ Tags are used to organize rules by version, feature, or environment:
 
 For JMS rules, `matchKey` is the queue name. `status` is the HTTP status code of the reply.
 
+## Move rules between environments (JSON)
+
+Enable `ECHO_BULK_IMPORT_EXPORT_ENABLED=true` on both servers and sign in as an ADMIN.
+On the source **Rules** page, open the data menu and export JSON. On the destination,
+choose **Import → JSON**, select the file, review the preview, then confirm.
+The single-rule JSON export is also accepted. Enable each protocol whose stored rules you want to export on the source.
+
+- Exports include complete response bodies, structured conditions and SSE settings. They do not include connection credentials, server configuration, request history or runtime scenario/tag state. Treat the file as application data; response bodies and headers can contain secrets.
+- Every import creates **new rule IDs and new local responses**. Existing rules and responses are never overwritten by source IDs. Rules sharing a response in one file share a newly copied response in the destination. Importing the same file again creates another set of copies.
+- Creation/update times and authors are set locally. Old creation and extension times are discarded; retention starts at import time using the **destination's** rule/response retention settings. The protected flag is preserved, so protected rules remain exempt from automatic rule cleanup.
+- Enabled/disabled flags are preserved. Enabled imports participate in matching after the transaction commits, subject to the destination's scenario/tag settings. Overlapping paths, priorities and the newer creation time can change which rule matches; importing does not guarantee identical routing or matching in a different environment.
+- Forwarding rules require an explicit destination connection choice in the preview. Source numeric IDs and names are never used to select a local connection automatically. Existing profiles, defaults and credentials remain unchanged. Configure destination profiles beforehand; choosing its default connection follows future changes to that default. HTTP `X-Original-Host` is an explicit dynamic-target option.
+- For JMS defaults, an enabled YAML target takes precedence over a database default, matching runtime forwarding. Select the database profile explicitly to use it instead.
+- Preview performs no writes or connection tests. Confirmation revalidates destination choices; if a selected profile/default has changed, preview again. Invalid/disabled protocols, incomplete response data or a save failure reject/roll back the entire JSON batch.
+- Review environment-dependent fields such as HTTP `targetHost`/paths and JMS `matchKey` (queue name); these are copied literally. Different destination queue names require rule changes.
+- Use separate databases/schemas and separate JMS source queues/brokers for independent environments. Instances sharing a database share imported data; consumers sharing a broker queue compete for its messages. Export/import uses database and application resources; it is not a zero-load operation.
+
+Old metadata-only exports that contain a `responseId` without the response body are rejected;
+re-export them from the updated source. Do not add `exportVersion` by hand to bypass this check.
+If the confirmation reply is lost, check the destination rule list before retrying: the transaction
+may already have committed, and another import creates new copies.
+
+JSON is the round-trip format for this workflow. Excel and OpenAPI imports create rules from their
+own formats; they are not complete backups of existing rules or environment configuration.
+
 ## Condition Matching Syntax
 
 ### HTTP Body Conditions (JSON)

@@ -2,6 +2,7 @@ package com.echo.controller;
 
 import com.echo.config.CacheConfig;
 import com.echo.dto.RuleDto;
+import com.echo.dto.RuleImportRequest;
 import com.echo.entity.HttpRule;
 import com.echo.entity.Protocol;
 import com.echo.entity.ResponseContentType;
@@ -121,7 +122,8 @@ class AdminControllersTest {
                 Optional.of(ruleAuditService));
         ruleState = new RuleStateController(ruleService, ruleEditService);
         importExport = new ImportExportController(protocolHandlerRegistry, ruleEditService, responseService,
-                Optional.of(ruleAuditService), excelImportService, openApiImportService);
+                Optional.of(ruleAuditService), excelImportService, openApiImportService,
+                new com.echo.service.RuleImportService(ruleEditService, responseService, protocolHandlerRegistry, Optional.empty(), Optional.empty()));
         ReflectionTestUtils.setField(importExport, "bulkImportExportEnabled", true);
         logs = new RequestLogController(requestLogService, mock(RequestLogTrafficService.class));
         audit = new AuditController(Optional.of(ruleAuditService));
@@ -208,6 +210,8 @@ class AdminControllersTest {
 
         assertThat(importExport.exportAllRules().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(importExport.importRules(List.of()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(importExport.previewRules(new RuleImportRequest(List.of(), Map.of())).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(importExport.confirmRules(new RuleImportRequest(List.of(), Map.of())).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(importExport.previewOpenApiImport(new MockMultipartFile(
                 "file", "api.yaml", "application/yaml", "openapi: 3.0.0".getBytes()))
                 .getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
@@ -643,6 +647,8 @@ class AdminControllersTest {
 
     @Test
     void exportAllRules_shouldReturnAllRules() {
+        when(protocolHandlerRegistry.toDto(any(), isNull(), eq(true)))
+                .thenAnswer(invocation -> RuleDto.builder().protocol(Protocol.HTTP).build());
         when(protocolHandlerRegistry.findAllRules()).thenReturn(List.of(new HttpRule(), new HttpRule()));
         
         var response = importExport.exportAllRules();
@@ -654,6 +660,7 @@ class AdminControllersTest {
     @Test
     @SuppressWarnings("unchecked")
     void importRules_shouldImportMultipleRules() {
+        when(responseService.findById(1L)).thenReturn(Optional.of(com.echo.entity.Response.builder().id(1L).build()));
         when(responseService.save(any())).thenReturn(com.echo.entity.Response.builder().id(1L).build());
         var handler = mock(com.echo.protocol.ProtocolHandler.class);
         when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
@@ -668,28 +675,21 @@ class AdminControllersTest {
         var response = importExport.importRules(rules);
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(((java.util.Map<String, Object>) response.getBody()).get("imported")).isEqualTo(2);
+        assertThat(((com.echo.service.RuleImportService.Result) response.getBody()).imported()).isEqualTo(2);
         verify(handler, times(2)).save(any());
     }
 
     @Test
-    @SuppressWarnings("unchecked")
-    void importRules_shouldSkipJmsRules_whenJmsDisabled() {
-        when(responseService.save(any())).thenReturn(com.echo.entity.Response.builder().id(1L).build());
+    void importRules_shouldRejectTheWholeBatch_whenJmsDisabled() {
         var handler = mock(com.echo.protocol.ProtocolHandler.class);
         when(protocolHandlerRegistry.getHandler(Protocol.HTTP)).thenReturn(Optional.of(handler));
-        when(handler.fromDto(any())).thenAnswer(i -> com.echo.entity.HttpRule.builder()
-                .matchKey(((RuleDto) i.getArgument(0)).getMatchKey()).build());
-        when(handler.save(any())).thenAnswer(i -> i.getArgument(0));
-        List<RuleDto> rules = List.of(
-            RuleDto.builder().protocol(Protocol.HTTP).matchKey("/a").build(),
-            RuleDto.builder().protocol(Protocol.JMS).matchKey("QUEUE").build()
-        );
-        
-        var response = importExport.importRules(rules);
-        
-        assertThat(((java.util.Map<String, Object>) response.getBody()).get("imported")).isEqualTo(1);
-        verify(handler, times(1)).save(any());
+        List<RuleDto> incoming = List.of(
+                RuleDto.builder().protocol(Protocol.HTTP).matchKey("/a").build(),
+                RuleDto.builder().protocol(Protocol.JMS).matchKey("QUEUE").build());
+        assertThatThrownBy(() -> importExport.importRules(incoming))
+                .isInstanceOf(com.echo.service.RuleImportValidationException.class);
+        verify(handler, never()).save(any());
+        verify(responseService, never()).save(any());
     }
 
     @Test

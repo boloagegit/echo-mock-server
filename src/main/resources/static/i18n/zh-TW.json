@@ -1531,7 +1531,21 @@
     "jmsReplyHint": "CorrelationID 帶入請求的 MessageID",
     "replyQueueFromRequest": "依請求訊息指定的佇列回覆",
     "expandContent": "放大回應內容",
-    "collapseContent": "還原版面"
+    "collapseContent": "還原版面",
+    "importPreviewTitle": "匯入預覽",
+    "importNewRulesHint": "將建立 {count} 筆新規則，不會覆寫既有規則與回應。",
+    "importActivationHint": "啟用 {enabled} 筆、停用 {disabled} 筆；啟用規則會立即參與比對，可能改變既有路徑的命中結果。",
+    "importRetentionHint": "建立時間與保留期限將依本環境重新計算。",
+    "importSourceConnection": "{protocol} 來源連線：{name}（{count} 條規則）",
+    "importSelectConnection": "請選擇本環境的轉發連線",
+    "importOriginalHostChoice": "使用呼叫者的 X-Original-Host（動態目的地）",
+    "importDefaultConnectionChoice": "本環境預設連線：{name}",
+    "importConfirmNew": "確認新增 {count} 筆規則",
+    "importResetPreview": "重新預覽",
+    "importChooseConnections": "請為所有轉發規則選擇目的環境連線。",
+    "importConnectionChanged": "目的環境的連線可能已變更，請重新預覽後再選擇。",
+    "importResultUnknown": "無法確認匯入是否完成。請先重新整理並核對規則清單，再決定是否重試，以免重複新增。",
+    "importProblem": "第 {row} 筆：{message}"
   },
   "confirm": {
     "discardRuleTitle": "放棄規則修改？",

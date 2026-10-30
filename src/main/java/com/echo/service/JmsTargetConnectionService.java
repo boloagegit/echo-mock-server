@@ -110,6 +110,15 @@ public class JmsTargetConnectionService {
         return List.copyOf(result);
     }
 
+    /** Metadata for the actual default, with the same YAML-first precedence as resolveActive(). */
+    @Transactional(readOnly = true)
+    public Optional<JmsTargetConnectionDto> findActiveSummary() {
+        if (legacyConfigured()) {
+            return Optional.of(legacyDto());
+        }
+        return repository.findFirstByDefaultConnectionTrueAndEnabledTrue().map(this::toDto);
+    }
+
     @Transactional
     public JmsTargetConnectionDto create(JmsTargetConnectionRequest request) {
         validate(request);
