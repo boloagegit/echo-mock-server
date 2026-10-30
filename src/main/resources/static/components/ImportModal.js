@@ -162,7 +162,8 @@ const ImportModal = {
           </fieldset>
 
           <input ref="fileInput" id="rule-import-file" class="visually-hidden" type="file" :disabled="loading" :accept="fileAccept" :aria-label="t('modal.uploadFile')" @change="$emit('handle-file',$event)">
-          <div v-if="importFile" class="import-file-card">
+          <div v-if="importFile" class="import-file-card" :class="{'is-dragging':dragActive}"
+            @dragenter.prevent="dragActive=true" @dragover.prevent="dragActive=true" @dragleave.prevent="dragActive=false" @drop.prevent="handleDrop">
             <i class="bi bi-file-earmark-check" aria-hidden="true"></i>
             <div class="import-file-copy"><strong :title="importFileName">{{importFileName}}</strong><small>{{selectedFormat.label}}<template v-if="fileSizeLabel"> · {{fileSizeLabel}}</template></small></div>
             <ui-button type="button" variant="quiet" size="compact" :disabled="loading" @click="chooseFile">{{t('modal.importChangeFile')}}</ui-button>

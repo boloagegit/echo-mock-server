@@ -2369,6 +2369,7 @@ input[type="checkbox"] {
 .import-file-empty { display: grid; gap: var(--space-xs); min-width: 0; max-width: 100% }
 .import-file-empty small { color: var(--muted); font-size: var(--font-sm) }
 .import-file-card { display: flex; align-items: center; gap: var(--space-md); min-width: 0; padding-bottom: var(--space-lg); border-bottom: 1px solid var(--border) }
+.import-file-card.is-dragging { background: var(--surface-primary-soft); border-bottom-color: var(--primary) }
 .import-file-card > .bi { flex-shrink: 0; color: var(--primary); font-size: 24px }
 .import-file-copy { min-width: 0; flex: 1; display: grid; gap: var(--space-2xs) }
 .import-file-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-sm) }
