@@ -127,3 +127,20 @@ test('a server error after confirmation is treated as an uncertain result before
   assert.equal(f.rules.importPreview.value, null);
   assert.ok(f.calls.some(call => call.url.includes('/rules/page?')));
 });
+
+test('a failed list refresh cannot re-enable an already confirmed import', async () => {
+  const f = fixture(async url => {
+    if (url.endsWith('/preview')) return response(preview);
+    if (url.endsWith('/confirm')) return response({imported: 1});
+    if (url.includes('/rules/page?')) return {...response({}), json: async () => { throw new SyntaxError('truncated list JSON'); }};
+  });
+  f.rules.showImportModal.value = true;
+  f.rules.handleImportFile(new ImportFile('rules.json', portable));
+  await f.rules.doImport(); await f.rules.doImport();
+  assert.equal(f.rules.showImportModal.value, false);
+  assert.equal(f.rules.importPreview.value, null);
+  assert.equal(f.rules.importFile.value, null);
+  assert.ok(!f.toasts.some(([message]) => message === 'toast.fileFormatError'));
+  await f.rules.doImport();
+  assert.equal(f.calls.filter(call => call.url.endsWith('/confirm')).length, 1);
+});

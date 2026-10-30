@@ -176,7 +176,7 @@ public class RuleImportService {
                                     number,
                                     "RESPONSE_BODY_MISSING",
                                     "The file contains only a source response ID. Re-export it with"
-                                        + " complete response content."));
+                                            + " complete response content."));
                     continue;
                 }
                 if (source.getResponseId() != null) {
@@ -193,7 +193,7 @@ public class RuleImportService {
                                         number,
                                         "SHARED_RESPONSE_MISMATCH",
                                         "Rules referring to the same source response contain"
-                                            + " different content or metadata."));
+                                                + " different content or metadata."));
                         continue;
                     }
                 }
@@ -217,7 +217,7 @@ public class RuleImportService {
                                     number,
                                     "CONNECTION_SELECTION_REQUIRED",
                                     "Choose a current destination connection for this forwarding"
-                                        + " rule."));
+                                            + " rule."));
                     continue;
                 }
                 dto.setForwardTargetMode(choice.mode());
@@ -300,38 +300,28 @@ public class RuleImportService {
         if (jms) {
             jmsConnections.ifPresent(
                     service -> {
-                        var connections = service.list();
-                        boolean databaseDefault =
-                                connections.stream()
-                                        .anyMatch(
-                                                connection ->
-                                                        !connection.legacy()
-                                                                && connection.enabled()
-                                                                && connection.defaultConnection());
-                        connections.stream()
-                                .filter(connection -> connection.enabled())
+                        service.list().stream()
+                                .filter(connection -> connection.enabled() && !connection.legacy())
                                 .forEach(
                                         connection -> {
-                                            if (!connection.legacy()) {
-                                                options.add(
-                                                        option(
-                                                                Protocol.JMS,
-                                                                "CONNECTION",
-                                                                connection.id(),
-                                                                connection.name(),
-                                                                connection.version()));
-                                            }
-                                            if (connection.defaultConnection()
-                                                    && (!connection.legacy() || !databaseDefault)) {
+                                            options.add(
+                                                    option(
+                                                            Protocol.JMS,
+                                                            "CONNECTION",
+                                                            connection.id(),
+                                                            connection.name(),
+                                                            connection.version()));
+                                        });
+                        service.findActiveSummary()
+                                .ifPresent(
+                                        connection ->
                                                 options.add(
                                                         option(
                                                                 Protocol.JMS,
                                                                 "DEFAULT_CONNECTION",
                                                                 connection.id(),
                                                                 connection.name(),
-                                                                connection.version()));
-                                            }
-                                        });
+                                                                connection.version())));
                     });
         }
         return List.copyOf(options);

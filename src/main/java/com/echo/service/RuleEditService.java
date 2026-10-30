@@ -98,16 +98,10 @@ public class RuleEditService {
             }
         }));
         jmsTargetConnectionService.ifPresent(service -> {
-            var connections = service.list();
-            boolean databaseDefault = connections.stream().anyMatch(connection -> !connection.legacy()
-                    && connection.enabled() && connection.defaultConnection());
-            connections.forEach(connection -> {
-                names.put("JMS:CONNECTION:" + connection.id(), connection.name());
-                if (connection.defaultConnection() && connection.enabled()
-                        && (!connection.legacy() || !databaseDefault)) {
-                    names.put("JMS:DEFAULT_CONNECTION", connection.name());
-                }
-            });
+            service.list().forEach(connection ->
+                    names.put("JMS:CONNECTION:" + connection.id(), connection.name()));
+            service.findActiveSummary().ifPresent(connection ->
+                    names.put("JMS:DEFAULT_CONNECTION", connection.name()));
         });
         return names;
     }

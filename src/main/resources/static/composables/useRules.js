@@ -362,6 +362,15 @@ const useRules = (deps) => {
     const openApiPreviewRules = ref([]);
     const openApiImporting = ref(false);
 
+    const refreshAfterImport = async () => {
+        markDirty();
+        try { await loadRules(true); }
+        catch (err) {
+            loading.value.rulesError = t('rules.loadFailed');
+            showToast(t('toast.ruleLoadFailed'), 'error');
+        }
+    };
+
     const doImport = async () => {
         if (!importFile.value || deps.loading.value.importRules) return;
         deps.loading.value.importRules = true;
@@ -408,9 +417,12 @@ const useRules = (deps) => {
                 }, { silent: true });
                 const d = r ? await r.json().catch(() => ({})) : {};
                 if (r && r.ok) {
-                    showToast(t('toast.importSuccess', {count: d.imported}), 'success');
-                    markDirty(); await loadRules(true); showImportModal.value = false;
+                    showImportModal.value = false;
                     resetImportPreview();
+                    importFile.value = null;
+                    importFileName.value = '';
+                    showToast(t('toast.importSuccess', {count: d.imported}), 'success');
+                    await refreshAfterImport();
                 } else if (r && r.status < 500) {
                     importPreview.value = { ...importPreview.value, errors: d.errors || [] };
                     deps.loading.value.importError = d.errors?.some(item => item.code === 'CONNECTION_SELECTION_REQUIRED')
@@ -419,7 +431,7 @@ const useRules = (deps) => {
                     // A lost reply or server error cannot prove whether the transaction committed.
                     deps.loading.value.importError = t('modal.importResultUnknown');
                     resetImportPreview();
-                    markDirty(); await loadRules(true);
+                    await refreshAfterImport();
                 }
             } else {
                 const formData = new FormData();
