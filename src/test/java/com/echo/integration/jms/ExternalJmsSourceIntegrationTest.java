@@ -280,8 +280,10 @@ class ExternalJmsSourceIntegrationTest extends BaseIntegrationTest {
                 for (var reply : slowReplies) assertReply(reply.get(10, TimeUnit.SECONDS), "slow-reply");
                 assertReply(healthy.get(10, TimeUnit.SECONDS), "healthy-reply");
                 assertThat(failure.get()).isNull();
+                // Listener metrics exit before the container commits and the broker confirms delivery.
                 waitUntil(() -> ((Number) context.getBean(JmsRuntimeMetrics.class).snapshot().get("listenerActive"))
-                        .intValue() == 0, 5_000);
+                        .intValue() == 0
+                        && esb.getActiveMQServer().locateQueue(QUEUE).getMessageCount() == 0, 5_000);
                 assertThat(esb.getActiveMQServer().locateQueue(QUEUE).getMessageCount()).isZero();
             } finally {
                 release.countDown();

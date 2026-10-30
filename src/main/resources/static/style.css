@@ -2338,70 +2338,92 @@ input[type="checkbox"] {
 /* Table responsive helpers */
 
 /* Import Modal */
-.import-modal { max-width: 520px }
-.import-modal-body { display: grid; gap: var(--space-xl) }
+.import-modal { max-width: 640px }
+.import-modal-body { display: grid; gap: var(--space-lg) }
+.import-steps { display: flex; align-items: center; gap: var(--space-lg); list-style: none; margin: 0; padding: 0 0 var(--space-lg); border-bottom: 1px solid var(--border) }
+.import-steps li { display: flex; align-items: center; gap: var(--space-sm); color: var(--muted); font-size: var(--font-sm) }
+.import-steps li + li::before { content: ''; width: 32px; height: 1px; margin-inline-end: var(--space-sm); background: var(--border2) }
+.import-step-number { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid var(--border2); border-radius: 50%; font-size: var(--font-xs); flex-shrink: 0 }
+.import-steps .is-current { color: var(--text); font-weight: var(--font-weight-semibold) }
+.import-steps .is-current .import-step-number { border-color: var(--primary); background: var(--surface-primary-soft); color: var(--primary) }
+.import-steps .is-complete .import-step-number { border-color: transparent; color: var(--primary); background: var(--surface-primary-soft) }
 .import-format-fieldset { min-width: 0; margin: 0; padding: 0; border: 0 }
 .import-format-fieldset > legend { width: auto; margin-bottom: var(--space-sm); float: none }
-.import-format-options { display: grid; grid-template-columns: 1fr; gap: var(--space-sm) }
-.import-format-option {
-    display: grid;
-    grid-template-columns: 24px minmax(0, 1fr) 16px;
-    align-items: center;
-    gap: var(--space-sm);
-    min-height: 56px;
-    padding: var(--space-md);
-    border: 0;
-    border-radius: var(--radius-panel);
-    background: var(--surface-control);
-    color: var(--text);
-    text-align: start;
-    cursor: pointer;
-}
-.import-format-option:hover { background: rgba(var(--muted-rgb), 0.12) }
-.import-format-option.active { color: var(--primary); background: var(--surface-primary-strong) }
-.import-format-option:focus-visible { outline: 0; box-shadow: var(--focus-ring) }
-.import-format-option > .bi:first-child { font-size: 18px }
-.import-format-option > span { display: grid; min-width: 0; gap: var(--space-2xs) }
-.import-format-option strong { font-size: var(--font-base); font-weight: var(--font-weight-semibold) }
-.import-format-option small { color: var(--muted); font-size: var(--font-xs); line-height: 1.4 }
+.import-format-options.ui-choice-group { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-sm) }
+.import-format-options.ui-choice-group .import-format-option { display: flex; align-items: center; justify-content: center; gap: var(--space-sm); min-height: 44px; padding: var(--space-sm); border: 1px solid var(--border2); border-radius: var(--radius-control); background: var(--surface-control); color: var(--muted); cursor: pointer; font-size: var(--font-sm) }
+.import-format-options.ui-choice-group .import-format-option:hover { color: var(--text); background: var(--surface-neutral-soft) }
+.import-format-options.ui-choice-group .import-format-option.active { border-color: var(--primary); color: var(--primary); background: var(--surface-primary-soft) }
+.import-format-options.ui-choice-group .import-format-option:focus-visible { outline: 0; box-shadow: var(--focus-ring) }
+.import-format-options.ui-choice-group .import-format-option:disabled { cursor: not-allowed; opacity: .55 }
+.import-format-option .ui-choice-group__icon { font-size: 16px }
+.import-format-option .ui-choice-group__copy { display: block; font-weight: var(--font-weight-semibold) }
+.import-format-hint { margin: var(--space-sm) 0 0; color: var(--muted); font-size: var(--font-xs); line-height: 1.5 }
 .import-upload-field { min-width: 0 }
-.import-dropzone {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-sm);
-    min-height: 156px;
-    padding: var(--space-xl);
-    border: 1px dashed var(--border2);
-    border-radius: var(--radius-panel);
-    background: var(--bg);
-    cursor: pointer;
-    color: var(--muted);
-    text-align: center;
-}
+.import-dropzone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-sm); min-height: 136px; padding: var(--space-xl); border: 1px dashed var(--border2); border-radius: var(--radius-panel); background: var(--bg); cursor: pointer; color: var(--muted); text-align: center }
 .import-dropzone:hover,
 .import-dropzone.is-dragging { background: var(--surface-primary-soft); color: var(--text) }
-.import-dropzone:focus-within { box-shadow: var(--focus-ring) }
-.import-dropzone.hasFile { border-style: solid; color: var(--text) }
+#rule-import-file:focus-visible ~ .import-upload-field .import-dropzone,
+#rule-import-file:focus-visible ~ .import-file-card { box-shadow: var(--focus-ring) }
 .import-dropzone.is-invalid { border-color: var(--danger) }
 .import-dropzone > i { color: var(--primary); font-size: 24px }
-.import-dropzone.hasFile > i { color: var(--success) }
-.import-file-selected,
 .import-file-empty { display: grid; gap: var(--space-xs); min-width: 0; max-width: 100% }
-.import-file-selected strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.import-file-selected small,
 .import-file-empty small { color: var(--muted); font-size: var(--font-sm) }
-.import-error { display: flex; align-items: flex-start; gap: var(--space-xs); margin-top: var(--space-sm); color: var(--danger); font-size: var(--font-sm); line-height: 1.5 }
-.import-template-link { display: inline-flex; align-items: center; gap: var(--space-xs); margin-top: var(--space-md); color: var(--muted); font-size: var(--font-sm); }
-.import-template-link:hover { color: var(--primary); }
-.import-preview { display: grid; gap: var(--space-sm); padding-top: var(--space-lg); border-top: 1px solid var(--border); }
-.import-preview h3 { margin: 0; font-size: var(--font-base); }
-.import-preview p { margin: 0; color: var(--muted); font-size: var(--font-sm); line-height: 1.5; }
-.import-problems { margin: 0; padding-left: var(--space-lg); color: var(--danger); font-size: var(--font-sm); overflow-wrap: anywhere; }
-
+.import-file-card { display: flex; align-items: center; gap: var(--space-md); min-width: 0; padding-bottom: var(--space-lg); border-bottom: 1px solid var(--border) }
+.import-file-card.is-dragging { background: var(--surface-primary-soft); border-bottom-color: var(--primary) }
+.import-file-card > .bi { flex-shrink: 0; color: var(--primary); font-size: 24px }
+.import-file-copy { min-width: 0; flex: 1; display: grid; gap: var(--space-2xs) }
+.import-file-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-sm) }
+.import-file-copy small { color: var(--muted); font-size: var(--font-xs) }
+.import-file-card > button { flex-shrink: 0 }
+.import-error { display: flex; align-items: flex-start; gap: var(--space-sm); color: var(--danger); font-size: var(--font-sm); line-height: 1.5 }
+.import-template-link { display: inline-flex; align-items: center; gap: var(--space-xs); color: var(--muted); font-size: var(--font-sm) }
+.import-template-link:hover { color: var(--primary) }
+.import-preview { display: grid; gap: var(--space-md) }
+.import-preview h3,
+.import-preview h4 { margin: 0; font-size: var(--font-base); font-weight: var(--font-weight-semibold) }
+.import-preview h3[tabindex="-1"] { outline: 0 }
+.import-preview p { margin: 0; color: var(--muted); font-size: var(--font-sm); line-height: 1.6 }
+.import-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; padding: var(--space-lg) 0; background: var(--surface-neutral-soft); border: 1px solid var(--border); border-radius: var(--radius-panel); font-variant-numeric: tabular-nums }
+.import-summary > div { display: flex; flex-direction: column; align-items: center; gap: var(--space-xs); min-width: 0 }
+.import-summary > div + div { border-inline-start: 1px solid var(--border2) }
+.import-summary dt { color: var(--muted); font-size: var(--font-xs); font-weight: var(--font-weight-regular) }
+.import-summary dd { order: -1; margin: 0; color: var(--text); font-size: 28px; font-weight: var(--font-weight-semibold); line-height: 1.2 }
+.import-summary .import-summary-enabled dd { color: var(--primary) }
+.import-behavior { display: grid; gap: var(--space-xs) }
+.import-behavior p,
+.import-preview .import-activation-note { display: flex; align-items: flex-start; gap: var(--space-sm) }
+.import-behavior .bi { color: var(--muted); flex-shrink: 0 }
+.import-preview .import-activation-note { padding: var(--space-sm) var(--space-md); border-radius: var(--radius-control); background: rgba(var(--warning-rgb), 0.08); color: var(--warning) }
+.import-activation-note > .bi { flex-shrink: 0 }
+.import-connections { display: grid; gap: var(--space-sm); margin-top: var(--space-sm); padding-top: var(--space-lg); border-top: 1px solid var(--border) }
+.import-section-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-sm) }
+.import-mapping-status { font-size: var(--font-xs); color: var(--warning) }
+.import-mapping-status.is-ready { color: var(--primary) }
+.import-mapping-row { display: grid; grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1.25fr); align-items: center; gap: var(--space-md); padding: var(--space-md); border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface-neutral-soft) }
+.import-mapping-source { display: grid; gap: var(--space-xs); min-width: 0 }
+.import-mapping-source strong { color: var(--text); font-size: var(--font-sm); font-weight: var(--font-weight-semibold); overflow-wrap: anywhere }
+.import-mapping-source small { color: var(--muted); font-size: var(--font-xs) }
+.import-field-label { display: block; margin: 0 0 var(--space-xs); color: var(--muted); font-size: var(--font-xs); font-weight: var(--font-weight-regular) }
+.import-mapping-arrow { color: var(--muted) }
+.import-mapping-target { min-width: 0 }
+.import-select-wrap { position: relative }
+.import-select-wrap > .bi { position: absolute; inset-inline-end: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--muted); font-size: 12px }
+.import-target-select { appearance: none; width: 100%; min-height: 42px; padding: 9px 34px 9px 12px; border: 1px solid var(--border2); border-radius: var(--radius-control); background: var(--card); color: var(--text); font: inherit; font-size: var(--font-sm); cursor: pointer; color-scheme: inherit }
+.import-target-select:hover { border-color: var(--muted) }
+.import-target-select:focus-visible { outline: 0; box-shadow: var(--focus-ring); border-color: var(--primary) }
+.import-target-select:disabled { cursor: wait; opacity: .6 }
+.import-target-select option { background: var(--card); color: var(--text) }
+.import-problems { margin: 0; padding-left: var(--space-lg); color: var(--danger); font-size: var(--font-sm); line-height: 1.6; overflow-wrap: anywhere }
+.import-modal-footer .import-submit { margin-inline-start: auto }
 @media (max-width: 560px) {
-    .import-format-options { grid-template-columns: 1fr }
+    .import-steps { gap: var(--space-md) }
+    .import-steps li + li::before { width: 16px; margin-inline-end: 0 }
+    .import-mapping-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-sm) }
+    .import-mapping-arrow { display: none }
+    .import-mapping-source { grid-template-columns: minmax(0, 1fr) auto; align-items: center }
+    .import-mapping-source .import-field-label { grid-column: 1 / -1 }
+    .import-mapping-source small { text-align: end }
+    .import-modal-footer { gap: var(--space-xs) }
 }
 
 /* SDK Center: catalog rows, then one reading column of setup steps beside a download panel */
