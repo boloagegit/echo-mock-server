@@ -1563,7 +1563,7 @@
     "importConnectionsReady": "All mapped",
     "importSourceLabel": "Source",
     "importDestinationLabel": "Destination connection",
-    "importSourceDetails": "{protocol} · {count} rules",
+    "importSourceDetails": "{protocol} · Rules: {count}",
     "importUnknownConnection": "Unnamed connection",
     "importBack": "Back",
     "importSourceDefault": "Source default connection"
