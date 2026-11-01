@@ -82,7 +82,10 @@ Enable `ECHO_BULK_IMPORT_EXPORT_ENABLED=true` on both servers and sign in as an 
 is hidden for other users, and every bulk import/export endpoint returns 403 for them.
 
 On the source **Rules** page, open the data menu and choose **Export rules…**. Pick the scope:
-every rule, the current filter result, or the rules checked with **Batch select**. Enable each
+every rule, the current filter result, or the rules checked with **Batch select**. In the search
+box, words separated by spaces must all match and `|` separates alternatives: `payment | order | crm`
+finds rules containing any of the three, and `payment uat | crm` finds rules containing both
+`payment` and `uat`, or `crm`. Enable each
 protocol whose stored rules you want to export on the source.
 
 On the destination, choose **Import rules…**. The dialog keeps one size through three steps:

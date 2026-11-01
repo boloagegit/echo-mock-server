@@ -73,6 +73,39 @@ class RuleQueryServiceTest {
     }
 
     @Test
+    void query_shouldTreatPipeSeparatedGroupsAsAlternatives() {
+        httpRepository.saveAll(List.of(
+                http("pay", "/payments/charge", "payment uat", null, null, true, false, 10),
+                http("pay-sit", "/payments/refund", "payment sit", null, null, true, false, 20),
+                http("order", "/orders/sync", "order sync", null, null, true, false, 30),
+                http("crm", "/crm/customers", "crm lookup", null, null, true, false, 40),
+                http("other", "/inventory", "stock", null, null, true, false, 50)
+        ));
+        httpRepository.flush();
+        entityManager.clear();
+
+        RuleQueryService.RuleQueryResult any = service.query(new RuleQueryService.RuleQuery(
+                Protocol.HTTP, null, null, "payment | ORDER |crm", 0, 20, "priority", "asc"));
+        assertThat(any.rules()).extracting(BaseRule::getId).containsExactly("pay", "pay-sit", "order", "crm");
+
+        RuleQueryService.RuleQueryResult grouped = service.query(new RuleQueryService.RuleQuery(
+                Protocol.HTTP, null, null, "payment uat | crm", 0, 20, "priority", "asc"));
+        assertThat(grouped.rules()).extracting(BaseRule::getId).containsExactly("pay", "crm");
+
+        // The filtered export uses the same matching.
+        assertThat(service.findIds(new RuleQueryService.RuleQuery(
+                Protocol.HTTP, null, null, "order|crm", 0, 20, "priority", "asc")))
+                .containsExactlyInAnyOrder("order", "crm");
+    }
+
+    @Test
+    void tokenize_shouldIgnoreEmptyAlternatives() {
+        assertThat(RuleQueryService.tokenize(" | a  b ||c | ")).containsExactly(List.of("a", "b"), List.of("c"));
+        assertThat(RuleQueryService.tokenize("|")).isEmpty();
+        assertThat(RuleQueryService.tokenize(null)).isEmpty();
+    }
+
+    @Test
     void query_shouldBoundDatabaseWorkForLargeCrossProtocolFirstPage() {
         List<HttpRule> httpRules = new ArrayList<>();
         for (int i = 0; i < 250; i++) {

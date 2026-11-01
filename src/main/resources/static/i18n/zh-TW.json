@@ -121,7 +121,7 @@
     "mode_FAULT": "故障注入",
     "filterExpiring": "即將到期",
     "filterExpiringHint": "顯示 7 天內到期的未保護規則",
-    "searchPlaceholder": "搜尋 ID、端點、描述、主機、條件、標籤",
+    "searchPlaceholder": "搜尋 ID、端點、描述、主機、條件、標籤；用 | 分隔可找符合任一個",
     "clearSearch": "清除搜尋",
     "listView": "列表檢視",
     "groupView": "分組檢視",

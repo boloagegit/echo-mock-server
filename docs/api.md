@@ -39,7 +39,7 @@ The full lists `GET /api/admin/rules` and `GET /api/admin/responses`, and the re
 | PUT | /api/admin/rules/batch/extend | Batch extend |
 | PUT | /api/admin/rules/tag/{key}/{value}/enable | Enable by tag (ADMIN) |
 | PUT | /api/admin/rules/tag/{key}/{value}/disable | Disable by tag (ADMIN) |
-| GET | /api/admin/rules/export | Export rules (ADMIN). Without parameters every rule; the list filters `protocol`, `enabled`, `isProtected`, `mode`, `expiring`, `unreachable` and `keyword` limit it to the filtered result |
+| GET | /api/admin/rules/export | Export rules (ADMIN). Without parameters every rule; the list filters `protocol`, `enabled`, `isProtected`, `mode`, `expiring`, `unreachable` and `keyword` limit it to the filtered result (`keyword`: space-separated words must all match, `|` separates alternatives) |
 | POST | /api/admin/rules/export | Export the rules whose IDs are in `{"ids": [...]}` (ADMIN) |
 | GET | /api/admin/rules/{id}/json | Export single rule |
 | POST | /api/admin/rules/import | Import single rule (ADMIN) |

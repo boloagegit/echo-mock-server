@@ -57,7 +57,7 @@ public class RuleQueryService {
         int pageSize = Math.max(1, Math.min(query.size(), MAX_PAGE_SIZE));
         String sortField = normalizeSortField(query.sortField());
         boolean ascending = "asc".equalsIgnoreCase(query.direction());
-        List<String> keywords = tokenize(query.keyword());
+        List<List<String>> keywords = tokenize(query.keyword());
         LocalDateTime expiringCutoff = Boolean.TRUE.equals(query.expiring())
                 ? LocalDateTime.now().minusDays(Math.max(0, ruleRetentionDays - 7L)) : null;
         Set<String> onlyIds = onlyIds(query);
@@ -148,7 +148,7 @@ public class RuleQueryService {
     }
 
     private List<TagRow> findTagRows(RuleQuery query) {
-        List<String> keywords = tokenize(query.keyword());
+        List<List<String>> keywords = tokenize(query.keyword());
         LocalDateTime expiringCutoff = Boolean.TRUE.equals(query.expiring())
                 ? LocalDateTime.now().minusDays(Math.max(0, ruleRetentionDays - 7L)) : null;
         Set<String> onlyIds = onlyIds(query);
@@ -178,7 +178,7 @@ public class RuleQueryService {
     private <T extends BaseRule> List<TagRow> findTagRows(Class<T> entityType, Protocol protocol,
                                                            Boolean enabled, Boolean isProtected,
                                                            RuleMode mode, LocalDateTime expiringCutoff,
-                                                           Set<String> onlyIds, List<String> keywords,
+                                                           Set<String> onlyIds, List<List<String>> keywords,
                                                            List<String> searchFields) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Object[]> criteria = cb.createQuery(Object[].class);
@@ -215,7 +215,7 @@ public class RuleQueryService {
     private <T extends BaseRule> long count(Class<T> entityType, Boolean enabled,
                                              Boolean isProtected, RuleMode mode,
                                              LocalDateTime expiringCutoff, Set<String> onlyIds,
-                                             List<String> keywords, List<String> searchFields) {
+                                             List<List<String>> keywords, List<String> searchFields) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Long> criteria = cb.createQuery(Long.class);
         Root<T> root = criteria.from(entityType);
@@ -228,7 +228,7 @@ public class RuleQueryService {
     private <T extends BaseRule> List<T> fetch(Class<T> entityType, Boolean enabled,
                                                 Boolean isProtected, RuleMode mode,
                                                 LocalDateTime expiringCutoff, Set<String> onlyIds,
-                                                List<String> keywords, List<String> searchFields,
+                                                List<List<String>> keywords, List<String> searchFields,
                                                 String sortField, boolean ascending, int limit) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<T> criteria = cb.createQuery(entityType);
@@ -248,7 +248,7 @@ public class RuleQueryService {
     private Predicate[] predicates(CriteriaBuilder cb, Root<?> root, Class<?> entityType,
                                    Boolean enabled, Boolean isProtected, RuleMode mode,
                                    LocalDateTime expiringCutoff, Set<String> onlyIds,
-                                   List<String> keywords, List<String> searchFields) {
+                                   List<List<String>> keywords, List<String> searchFields) {
         List<Predicate> result = new ArrayList<>();
         if (onlyIds != null) {
             result.add(idIn(cb, root, onlyIds));
@@ -280,17 +280,17 @@ public class RuleQueryService {
             result.add(cb.isFalse(root.get("isProtected")));
             result.add(cb.lessThanOrEqualTo(retentionBase, expiringCutoff));
         }
-        for (String keyword : keywords) {
-            String pattern = "%" + escapeLike(keyword) + "%";
-            List<Predicate> matches = new ArrayList<>();
-            for (String field : searchFields) {
-                // SQL NULL never matches LIKE, so COALESCE is unnecessary here. Avoiding it is
-                // also important for databases which correctly reject mixing CLOB and VARCHAR
-                // operands (for example, a queryable long-text condition with an empty literal).
-                Expression<String> text = cb.lower(root.get(field).as(String.class));
-                matches.add(cb.like(text, pattern, '\\'));
+        if (!keywords.isEmpty()) {
+            // Groups separated by "|" are alternatives; words inside a group must all match.
+            List<Predicate> alternatives = new ArrayList<>();
+            for (List<String> group : keywords) {
+                List<Predicate> words = new ArrayList<>();
+                for (String keyword : group) {
+                    words.add(anyFieldContains(cb, root, keyword, searchFields));
+                }
+                alternatives.add(cb.and(words.toArray(Predicate[]::new)));
             }
-            result.add(cb.or(matches.toArray(Predicate[]::new)));
+            result.add(alternatives.size() == 1 ? alternatives.get(0) : cb.or(alternatives.toArray(Predicate[]::new)));
         }
         return result.toArray(Predicate[]::new);
     }
@@ -338,11 +338,35 @@ public class RuleQueryService {
         return field != null && ALLOWED_SORT_FIELDS.contains(field) ? field : "updatedAt";
     }
 
-    private List<String> tokenize(String keyword) {
+    private Predicate anyFieldContains(CriteriaBuilder cb, Root<?> root, String keyword, List<String> searchFields) {
+        String pattern = "%" + escapeLike(keyword) + "%";
+        List<Predicate> matches = new ArrayList<>();
+        for (String field : searchFields) {
+            // SQL NULL never matches LIKE, so COALESCE is unnecessary here. Avoiding it is
+            // also important for databases which correctly reject mixing CLOB and VARCHAR
+            // operands (for example, a queryable long-text condition with an empty literal).
+            Expression<String> text = cb.lower(root.get(field).as(String.class));
+            matches.add(cb.like(text, pattern, '\\'));
+        }
+        return cb.or(matches.toArray(Predicate[]::new));
+    }
+
+    /**
+     * Splits a search into alternatives: "a b | c" matches rules containing both a and b, or c.
+     * Empty alternatives (a leading, trailing or doubled "|") are ignored.
+     */
+    static List<List<String>> tokenize(String keyword) {
         if (keyword == null || keyword.isBlank()) {
             return List.of();
         }
-        return List.of(keyword.toLowerCase(Locale.ROOT).trim().split("\\s+"));
+        List<List<String>> groups = new ArrayList<>();
+        for (String alternative : keyword.toLowerCase(Locale.ROOT).split("\\|")) {
+            String trimmed = alternative.trim();
+            if (!trimmed.isEmpty()) {
+                groups.add(List.of(trimmed.split("\\s+")));
+            }
+        }
+        return List.copyOf(groups);
     }
 
     private String escapeLike(String value) {

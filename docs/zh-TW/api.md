@@ -36,7 +36,7 @@
 | PUT | /api/admin/rules/batch/extend | 批次展延 |
 | PUT | /api/admin/rules/tag/{key}/{value}/enable | 依標籤啟用 (ADMIN) |
 | PUT | /api/admin/rules/tag/{key}/{value}/disable | 依標籤停用 (ADMIN) |
-| GET | /api/admin/rules/export | 匯出規則 (ADMIN)。不帶參數時匯出全部；帶清單篩選參數 `protocol`、`enabled`、`isProtected`、`mode`、`expiring`、`unreachable`、`keyword` 時只匯出篩選結果 |
+| GET | /api/admin/rules/export | 匯出規則 (ADMIN)。不帶參數時匯出全部；帶清單篩選參數 `protocol`、`enabled`、`isProtected`、`mode`、`expiring`、`unreachable`、`keyword` 時只匯出篩選結果（`keyword` 以空白分隔需全部符合，`|` 分隔「或」） |
 | POST | /api/admin/rules/export | 匯出 `{"ids": [...]}` 指定的規則 (ADMIN) |
 | GET | /api/admin/rules/{id}/json | 匯出單筆規則 |
 | POST | /api/admin/rules/import | 匯入單筆規則 (ADMIN) |

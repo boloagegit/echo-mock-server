@@ -121,7 +121,7 @@
     "mode_FAULT": "Fault",
     "filterExpiring": "Expiring soon",
     "filterExpiringHint": "Show unprotected rules that expire within 7 days",
-    "searchPlaceholder": "Search ID, endpoint, description, host, condition, tags",
+    "searchPlaceholder": "Search ID, endpoint, description, host, condition, tags; separate with | to match any",
     "clearSearch": "Clear Search",
     "listView": "List View",
     "groupView": "Group View",
