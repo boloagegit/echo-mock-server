@@ -286,3 +286,27 @@ HTTP 轉發預設維持**內網相容模式**：不驗證憑證鏈與主機名�
 
 此預設只適合受信任的內部網路。若下游服務會經過不受信任的網路，請建立已儲存
 的 HTTP 連線並開啟嚴格憑證驗證。
+
+### 限制 `X-Original-Host` 目的地
+
+預設（`LEGACY`）下，任何能呼叫 `/mock` 的人都能用 `X-Original-Host` 指定轉發目的地，
+下游回傳的重導也會被跟隨。這樣既有的內網部署不受影響，Echo 啟動時會記錄一則警告。
+若呼叫端不完全可信，可以加上限制：
+
+```bash
+# 只轉發到這些目的地；沒寫 port 視為 443。3xx 回應會直接回傳，不會跟隨。
+ECHO_HTTP_ORIGINAL_HOST_MODE=ALLOWLIST
+ECHO_HTTP_ORIGINAL_HOST_ALLOWED_HOSTS=api.example.com,payments.internal:8443
+
+# 或完全關閉 X-Original-Host 轉發
+ECHO_HTTP_ORIGINAL_HOST_MODE=DISABLED
+```
+
+清單項目須與標頭完全相符，格式為 `host` 或 `host:port`（不分大小寫）；不支援萬用字元或
+CIDR 範圍，帶有 scheme、路徑或 `user@` 的值一律拒絕。被拒絕的請求回傳 `403`，且不會送出。
+已儲存的 HTTP 連線與 Mock 回應不受影響。對應的設定屬性為
+`echo.http.original-host.mode` 與 `echo.http.original-host.allowed-hosts`。
+
+重導到其他主機或 port 時，Reactor Netty 已會移除 `Authorization`、`Cookie` 與
+`Proxy-Authorization`，但其他標頭（例如 `X-Api-Key`）仍會再次送出。`ALLOWLIST` 不跟隨重導，
+因此 `X-Original-Host` 轉發不會有這個情況。
