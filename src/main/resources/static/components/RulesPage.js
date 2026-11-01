@@ -31,6 +31,8 @@ const RulesPage = {
     rulePreviewCache: Object,
     showDataDropdown: Boolean,
     bulkImportExportEnabled: Boolean,
+    /** Bulk export and import are ADMIN-only on the server, so other users never see the menu. */
+    isAdmin: Boolean,
     expandedTagGroups: Array,
     expandedTagSubgroups: Array,
     tagKeys: Object,
@@ -218,7 +220,7 @@ const RulesPage = {
             <ui-button variant="secondary" @click="$emit('load-rules', true)" :disabled="loading.rules"><i class="bi bi-arrow-clockwise" :class="{'spin':loading.rules}" aria-hidden="true"></i>{{t('rules.refresh')}}</ui-button>
             <ui-button variant="secondary" :class="{'is-toggled':batchSelectMode}" :aria-pressed="batchSelectMode ? 'true' : 'false'" @click="$emit('toggle-batch-select')" :disabled="!isLoggedIn" :title="!isLoggedIn?t('rules.loginRequired'):t('rules.batchSelect')"><i class="bi bi-check2-square" aria-hidden="true"></i>{{t('rules.batchSelect')}}</ui-button>
             <ui-button variant="primary" @click="$emit('open-create')" :disabled="!isLoggedIn" :title="!isLoggedIn?t('rules.loginRequired'):t('rules.addRule')"><i class="bi bi-plus-lg" aria-hidden="true"></i>{{t('rules.addRule')}}</ui-button>
-            <ui-dropdown-menu v-if="isLoggedIn && bulkImportExportEnabled"
+            <ui-dropdown-menu v-if="isAdmin && bulkImportExportEnabled"
                 :open="showDataDropdown" :items="dataMenuItems" :trigger-label="t('rules.exportImport')"
                 @toggle="$emit('toggle-data-dropdown')" @close="$emit('toggle-data-dropdown')"
                 @select="handleDataMenuAction"></ui-dropdown-menu>

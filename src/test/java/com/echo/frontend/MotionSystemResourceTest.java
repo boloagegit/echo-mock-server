@@ -29,7 +29,7 @@ class MotionSystemResourceTest {
     void usesSharedTransitionsForModalModeAndExpandedRowContextChanges() throws IOException {
         for (String modal : new String[]{
                 "ImportModal", "ConfirmModal", "PriorityHelpModal", "ResponseEditModal",
-                "OpenApiPreviewModal", "RuleEditModal", "ChangePasswordModal",
+                "RuleExportModal", "RuleEditModal", "ChangePasswordModal",
                 "AccountsPage", "IssuesPage", "SettingsPage"}) {
             assertThat(resourceText("static/components/" + modal + ".js"))
                     .contains("<ui-modal-transition>")

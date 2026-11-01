@@ -3,24 +3,22 @@ package com.echo.controller;
 import com.echo.dto.RuleDto;
 import com.echo.dto.RuleImportRequest;
 import com.echo.dto.RuleImportPreview;
-import com.echo.entity.BaseRule;
 import com.echo.entity.Protocol;
 import com.echo.entity.Response;
 import com.echo.protocol.ProtocolHandlerRegistry;
 import com.echo.service.ExcelImportService;
 import com.echo.service.OpenApiImportService;
 import com.echo.service.ResponseService;
-import com.echo.service.RuleAuditService;
 import com.echo.service.RuleEditService;
 import com.echo.service.RuleImportService;
 import com.echo.service.RuleImportValidationException;
+import com.echo.service.RuleQueryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -33,7 +31,6 @@ import org.springframework.web.multipart.MultipartFile;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * Batch import/export of rules and responses (JSON, Excel, OpenAPI).
@@ -48,10 +45,10 @@ public class ImportExportController {
     private final ProtocolHandlerRegistry protocolHandlerRegistry;
     private final RuleEditService ruleEditService;
     private final ResponseService responseService;
-    private final Optional<RuleAuditService> ruleAuditService;
     private final ExcelImportService excelImportService;
     private final OpenApiImportService openApiImportService;
     private final RuleImportService ruleImportService;
+    private final RuleQueryService ruleQueryService;
 
     @Value("${echo.features.bulk-import-export-enabled:false}")
     private boolean bulkImportExportEnabled;
@@ -62,12 +59,44 @@ public class ImportExportController {
 
     // ========== Rules ==========
 
+    /** Exports every rule, or only the rules matching the same filters as {@code /rules/page}. */
     @GetMapping("/rules/export")
-    public ResponseEntity<List<RuleDto>> exportAllRules() {
+    public ResponseEntity<List<RuleDto>> exportAllRules(
+            @RequestParam(required = false) Protocol protocol,
+            @RequestParam(required = false) Boolean enabled,
+            @RequestParam(required = false) Boolean isProtected,
+            @RequestParam(required = false) RuleQueryService.RuleMode mode,
+            @RequestParam(required = false) Boolean expiring,
+            @RequestParam(required = false) Boolean unreachable,
+            @RequestParam(required = false) String keyword) {
         if (!bulkImportExportEnabled) {
             return featureUnavailable();
         }
-        return ResponseEntity.ok(ruleEditService.findAllDtos());
+        boolean filtered = protocol != null || enabled != null || isProtected != null || mode != null
+                || expiring != null || unreachable != null || (keyword != null && !keyword.isBlank());
+        if (!filtered) {
+            return ResponseEntity.ok(ruleEditService.findAllDtos());
+        }
+        List<String> ids = ruleQueryService.findIds(new RuleQueryService.RuleQuery(
+                protocol, enabled, isProtected, keyword, 0, 1, null, null, mode, expiring, unreachable));
+        return ResponseEntity.ok(ruleEditService.findExportDtos(ids));
+    }
+
+    /** IDs of the rules to export; null is treated as an empty selection. */
+    public record RuleExportRequest(List<String> ids) {
+        public RuleExportRequest {
+            ids = ids == null ? List.of() : List.copyOf(ids.stream().filter(java.util.Objects::nonNull).toList());
+        }
+    }
+
+    /** Exports the selected rules; unknown IDs are ignored. */
+    @PostMapping("/rules/export")
+    public ResponseEntity<List<RuleDto>> exportSelectedRules(@RequestBody RuleExportRequest request) {
+        if (!bulkImportExportEnabled) {
+            return featureUnavailable();
+        }
+        List<String> ids = request == null || request.ids() == null ? List.of() : request.ids();
+        return ResponseEntity.ok(ruleEditService.findExportDtos(ids));
     }
 
     @PostMapping("/rules/import")
@@ -119,33 +148,46 @@ public class ImportExportController {
                 .body(template);
     }
 
+    /** Parses an Excel sheet without writing; the client reviews it through the JSON preview. */
+    @PostMapping(value = "/rules/import-excel/parse", consumes = "multipart/form-data")
+    public ResponseEntity<?> parseExcel(@RequestParam("file") MultipartFile file) {
+        if (!bulkImportExportEnabled) {
+            return featureUnavailable();
+        }
+        try {
+            return ResponseEntity.ok(Map.of("rules", excelImportService.parseRules(file)));
+        } catch (Exception e) {
+            log.warn("Excel parse failed: {}", e.getMessage());
+            return excelParseFailed(e);
+        }
+    }
+
+    /** One-step Excel import kept for API clients; like JSON, the whole sheet commits or none of it. */
     @PostMapping("/rules/import-excel")
     public ResponseEntity<?> importExcel(@RequestParam("file") MultipartFile file) {
         if (!bulkImportExportEnabled) {
             return featureUnavailable();
         }
+        List<RuleDto> parsedRules;
         try {
-            List<Object> parsedRules = excelImportService.parseExcel(file);
-            int imported = 0;
-            for (Object rule : parsedRules) {
-                if (rule instanceof BaseRule baseRule) {
-                    if (!protocolHandlerRegistry.isEnabled(baseRule.getProtocol())) {
-                        continue;
-                    }
-                    ruleEditService.stampForSave(baseRule);
-                    protocolHandlerRegistry.getHandler(baseRule.getProtocol())
-                            .ifPresent(h -> h.save(baseRule));
-                    imported++;
-                }
-            }
-            if (imported > 0) {
-                ruleEditService.allRulesChanged();
-            }
-            return ResponseEntity.ok(Map.of("imported", imported, "total", parsedRules.size()));
+            parsedRules = excelImportService.parseRules(file);
         } catch (Exception e) {
-            log.error("Excel import failed", e);
-            return ResponseEntity.badRequest().body(Map.of("error", "Excel 解析失敗: " + e.getMessage()));
+            log.warn("Excel import failed: {}", e.getMessage());
+            return excelParseFailed(e);
         }
+        // Rows for a disabled protocol were always skipped by this endpoint.
+        List<RuleDto> importable = parsedRules.stream()
+                .filter(rule -> rule.getProtocol() != null && protocolHandlerRegistry.isEnabled(rule.getProtocol()))
+                .toList();
+        int imported = importable.isEmpty() ? 0
+                : ruleImportService.importRules(new RuleImportRequest(importable, Map.of())).imported();
+        return ResponseEntity.ok(Map.of("imported", imported, "total", parsedRules.size()));
+    }
+
+    private static ResponseEntity<?> excelParseFailed(Exception e) {
+        return ResponseEntity.badRequest().body(Map.of(
+                "code", "EXCEL_PARSE_FAILED",
+                "error", "Excel parse failed: " + e.getMessage()));
     }
 
     @PostMapping(value = "/rules/import-openapi/preview", consumes = "multipart/form-data")
@@ -161,6 +203,11 @@ public class ImportExportController {
                         "success", false,
                         "errors", result.getErrors()));
             }
+            result.getRules().forEach(rule -> {
+                if (rule.getProtocol() == null) {
+                    rule.setProtocol(Protocol.HTTP);
+                }
+            });
             return ResponseEntity.ok(Map.of(
                     "success", true,
                     "title", result.getTitle() != null ? result.getTitle() : "",
@@ -175,26 +222,22 @@ public class ImportExportController {
         }
     }
 
+    /** Imports reviewed OpenAPI rules atomically; rules for a disabled protocol are skipped. */
     @PostMapping("/rules/import-openapi/confirm")
-    @Transactional
     public ResponseEntity<?> confirmOpenApiImport(@RequestBody List<RuleDto> rules) {
         if (!bulkImportExportEnabled) {
             return featureUnavailable();
         }
-        int imported = 0;
-        for (RuleDto dto : rules) {
+        rules.forEach(dto -> {
             if (dto.getProtocol() == null) {
                 dto.setProtocol(Protocol.HTTP);
             }
-            if (!protocolHandlerRegistry.isEnabled(dto.getProtocol())) {
-                continue;
-            }
-            dto.setId(null);
-            dto.setVersion(null);
-            RuleEditService.Saved result = ruleEditService.save(dto);
-            ruleAuditService.ifPresent(s -> s.logCreate(result.rule()));
-            imported++;
-        }
+        });
+        List<RuleDto> importable = rules.stream()
+                .filter(dto -> protocolHandlerRegistry.isEnabled(dto.getProtocol()))
+                .toList();
+        int imported = importable.isEmpty() ? 0
+                : ruleImportService.importRules(new RuleImportRequest(importable, Map.of())).imported();
         return ResponseEntity.ok(Map.of("imported", imported));
     }
 

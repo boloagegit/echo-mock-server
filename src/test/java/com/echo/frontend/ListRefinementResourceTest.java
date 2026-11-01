@@ -111,7 +111,7 @@ class ListRefinementResourceTest {
         Pattern directLegacyButton = Pattern.compile("<button\\b[^>]*class=\\\"(?:btn(?:\\s|\\\")|[^\\\"]+\\sbtn(?:\\s|\\\"))");
         for (String page : new String[]{
                 "AccountsPage", "AuditPage", "ChangePasswordModal", "ConfirmModal", "ImportModal",
-                "IssuesPage", "OpenApiPreviewModal", "PriorityHelpModal", "ResponseEditModal",
+                "IssuesPage", "RuleExportModal", "PriorityHelpModal", "ResponseEditModal",
                 "ResponsesPage", "RuleApplyModal", "RuleEditModal", "RuleTable", "RuleDetail",
                 "RulesPage", "SettingsPage", "StatsPage", "TourOverlay", "WorkspacePagination", "UiDetailDrawer"
         }) {
@@ -619,7 +619,7 @@ class ListRefinementResourceTest {
     @Test
     void dialogTitlesAndInspectorSectionsKeepASequentialHeadingOutline() throws IOException {
         for (String component : new String[]{"AccountsPage", "ChangePasswordModal", "ConfirmModal", "ImportModal",
-                "IssuesPage", "OpenApiPreviewModal", "PriorityHelpModal", "RuleEditModal", "SettingsPage"}) {
+                "IssuesPage", "RuleExportModal", "PriorityHelpModal", "RuleEditModal", "SettingsPage"}) {
             assertThat(text("components/" + component + ".js"))
                     .as(component + " dialog title")
                     .doesNotContain("<h3 id=\"");
@@ -732,7 +732,7 @@ class ListRefinementResourceTest {
     void unconditionalRulesArePresentedAsIntentionalDefaultMatches() throws IOException {
         assertThat(text("i18n/zh-TW.json")).contains("\"noCondition\": \"預設匹配\"");
         assertThat(text("i18n/en.json")).contains("\"noCondition\": \"Default match\"");
-        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261030.2");
+        assertThat(text("composables/useI18n.js")).contains("/i18n/${lang}.json?v=20261101.2");
     }
 
     @Test

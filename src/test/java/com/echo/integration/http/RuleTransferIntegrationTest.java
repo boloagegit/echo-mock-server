@@ -493,4 +493,185 @@ class RuleTransferIntegrationTest extends BaseIntegrationTest {
         assertThat(httpRules.count()).isZero();
         assertThat(responses.count()).isZero();
     }
+
+    @Test
+    void previewListsEveryRowAndFlagsRulesThatMatchExistingOnes() {
+        createHttpRule("/already-here", "GET", "LOCAL");
+        var duplicate = incoming("/already-here", "COPY");
+        var fresh = incoming("/brand-new", "NEW");
+        fresh.setEnabled(false);
+        var invalid = incoming("", "BROKEN");
+
+        fresh.setResponseId(9002L);
+        invalid.setResponseId(9003L);
+        var view = preview(List.of(duplicate, fresh, invalid));
+
+        assertThat(view.path("rows")).hasSize(3);
+        assertThat(view.path("rows").get(0).path("duplicate").asBoolean()).isTrue();
+        assertThat(view.path("rows").get(0).path("matchKey").asText()).isEqualTo("/already-here");
+        assertThat(view.path("rows").get(1).path("duplicate").asBoolean()).isFalse();
+        assertThat(view.path("rows").get(1).path("enabled").asBoolean()).isFalse();
+        // Counts describe only rules a confirmation could create.
+        assertThat(view.path("enabled").asInt()).isEqualTo(1);
+        assertThat(view.path("disabled").asInt()).isEqualTo(1);
+        assertThat(view.path("errors")).hasSize(1);
+        assertThat(view.path("errors").get(0).path("row").asInt()).isEqualTo(3);
+        assertThat(view.path("errors").get(0).path("code").asText()).isEqualTo("INVALID_RULE");
+    }
+
+    @Test
+    void rulesGatedOnAnotherScenarioStateAreNotDuplicates() {
+        createHttpRule("/checkout-step", "GET", "LOCAL");
+        var laterStep = incoming("/checkout-step", "PAID");
+        laterStep.setScenarioName("checkout");
+        laterStep.setRequiredScenarioState("paid");
+
+        var view = preview(List.of(laterStep, incoming("/checkout-step", "SAME")));
+
+        assertThat(view.path("rows").get(0).path("duplicate").asBoolean()).isFalse();
+        assertThat(view.path("rows").get(1).path("duplicate").asBoolean()).isTrue();
+    }
+
+    @Test
+    void previewWithExclusionsRevalidatesTheRemainingRowsAndStillListsEveryRow() {
+        var first = incoming("/shared-a", "FIRST");
+        var second = incoming("/shared-b", "DIFFERENT");
+
+        var conflict = preview(List.of(first, second));
+        assertThat(conflict.path("errors").get(0).path("code").asText()).isEqualTo("SHARED_RESPONSE_MISMATCH");
+        assertThat(conflict.path("errors").get(0).path("row").asInt()).isEqualTo(2);
+
+        var resolved =
+                post(
+                                "/api/admin/rules/import/preview",
+                                Map.of("rules", List.of(first, second), "connectionMappings", Map.of(),
+                                        "excludedRows", List.of(1)))
+                        .getBody();
+        assertThat(resolved.path("errors")).isEmpty();
+        assertThat(resolved.path("rows")).hasSize(2);
+
+        var nothing =
+                post(
+                                "/api/admin/rules/import/preview",
+                                Map.of("rules", List.of(first, second), "connectionMappings", Map.of(),
+                                        "excludedRows", List.of(1, 2)))
+                        .getBody();
+        assertThat(nothing.path("errors").get(0).path("code").asText()).isEqualTo("RULES_REQUIRED");
+        // The review table keeps every row so they can be checked again.
+        assertThat(nothing.path("rows")).hasSize(2);
+    }
+
+    @Test
+    void excludedRowsAreNeitherValidatedNorImported() {
+        var keep = incoming("/kept", "KEPT");
+        var invalid = incoming("", "BROKEN");
+        var skipped = incoming("/skipped", "SKIPPED");
+
+        var r =
+                post(
+                        "/api/admin/rules/import/confirm",
+                        Map.of(
+                                "rules", List.of(keep, invalid, skipped),
+                                "connectionMappings", Map.of(),
+                                "excludedRows", List.of(2, 3)));
+
+        assertThat(r.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(r.getBody().path("imported").asInt()).isEqualTo(1);
+        assertThat(r.getBody().path("rules").get(0).path("row").asInt()).isEqualTo(1);
+        assertThat(httpRules.count()).isEqualTo(1);
+        assertReply("/kept", "KEPT");
+    }
+
+    @Test
+    void previewSuggestsDestinationsButConfirmationStillNeedsTheChoice() {
+        var payments = connection("payments");
+        connection("other");
+        var named = incoming("/named", null);
+        named.setAction("FORWARD");
+        named.setForwardTargetMode("CONNECTION");
+        named.setHttpTargetConnectionId(42L);
+        named.setSourceConnectionName("payments");
+        var host = incoming("/host", null);
+        host.setAction("FORWARD");
+        host.setForwardTargetMode("ORIGINAL_HOST");
+
+        var view = preview(List.of(named, host));
+
+        var requirements = view.path("requirements");
+        assertThat(requirements).hasSize(2);
+        assertThat(requirements.get(0).path("mode").asText()).isEqualTo("CONNECTION");
+        assertThat(requirements.get(0).path("rows").get(0).asInt()).isEqualTo(1);
+        assertThat(requirements.get(0).path("suggestion").asText())
+                .isEqualTo(choice(view, "CONNECTION", payments.path("id").asText()));
+        assertThat(requirements.get(1).path("suggestion").asText()).isEqualTo("HTTP:ORIGINAL_HOST");
+        assertThat(view.path("errors"))
+                .allMatch(error -> error.path("code").asText().equals("CONNECTION_SELECTION_REQUIRED"));
+    }
+
+    @Test
+    void exportCanBeLimitedToFilteredOrSelectedRules() {
+        var first = createHttpRule("/export-alpha", "GET", "A");
+        createHttpRule("/export-beta", "GET", "B");
+
+        var filtered = get("/api/admin/rules/export?keyword=alpha");
+        assertThat(filtered).hasSize(1);
+        assertThat(filtered.get(0).path("matchKey").asText()).isEqualTo("/export-alpha");
+
+        var selected = post("/api/admin/rules/export", Map.of("ids", List.of(first.getId())));
+        assertThat(selected.getBody()).hasSize(1);
+        assertThat(selected.getBody().get(0).path("id").asText()).isEqualTo(first.getId());
+        assertThat(get("/api/admin/rules/export")).hasSize(2);
+    }
+
+    byte[] sheet(String... matchKeys) throws Exception {
+        try (var workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
+            var rules = workbook.createSheet("Rules");
+            var header = rules.createRow(0);
+            header.createCell(0).setCellValue("protocol");
+            header.createCell(1).setCellValue("matchKey");
+            header.createCell(2).setCellValue("responseBody");
+            for (int i = 0; i < matchKeys.length; i++) {
+                var row = rules.createRow(i + 1);
+                row.createCell(0).setCellValue("HTTP");
+                row.createCell(1).setCellValue(matchKeys[i]);
+                row.createCell(2).setCellValue("BODY-" + i);
+            }
+            var out = new java.io.ByteArrayOutputStream();
+            workbook.write(out);
+            return out.toByteArray();
+        }
+    }
+
+    ResponseEntity<JsonNode> upload(String path, byte[] content) {
+        var body = new org.springframework.util.LinkedMultiValueMap<String, Object>();
+        body.add(
+                "file",
+                new org.springframework.core.io.ByteArrayResource(content) {
+                    @Override
+                    public String getFilename() {
+                        return "rules.xlsx";
+                    }
+                });
+        var headers = new HttpHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        return adminClient().postForEntity(path, new HttpEntity<>(body, headers), JsonNode.class);
+    }
+
+    @Test
+    void excelParsingWritesNothingAndExcelImportIsAtomic() throws Exception {
+        var parsed = upload("/api/admin/rules/import-excel/parse", sheet("/excel-one", ""));
+        assertThat(parsed.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(parsed.getBody().path("rules")).hasSize(2);
+        assertThat(responses.count()).isZero();
+
+        var rejected = upload("/api/admin/rules/import-excel", sheet("/excel-one", ""));
+        assertThat(rejected.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(httpRules.count()).isZero();
+        assertThat(responses.count()).isZero();
+
+        var imported = upload("/api/admin/rules/import-excel", sheet("/excel-one", "/excel-two"));
+        assertThat(imported.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(imported.getBody().path("imported").asInt()).isEqualTo(2);
+        assertReply("/excel-two", "BODY-1");
+    }
 }

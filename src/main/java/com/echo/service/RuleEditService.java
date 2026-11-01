@@ -21,11 +21,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Isolation;
 
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Read and store rules shared by all API in the management background: check fields, process response content and forwarding settings, write rules, and clear the rule cache.
@@ -68,8 +71,19 @@ public class RuleEditService {
     /** All rules and response content are read from one consistent export transaction. */
     @Transactional(readOnly = true, isolation = Isolation.SERIALIZABLE)
     public List<RuleDto> findAllDtos() {
+        return findExportDtos(null);
+    }
+
+    /**
+     * Portable copies of the given rules in list order; {@code null} exports every rule. Rules and
+     * response content are read from one consistent export transaction.
+     */
+    @Transactional(readOnly = true, isolation = Isolation.SERIALIZABLE)
+    public List<RuleDto> findExportDtos(Collection<String> ids) {
         Map<String, String> names = exportConnectionNames();
+        Set<String> wanted = ids == null ? null : new HashSet<>(ids);
         return protocolHandlerRegistry.findAllRules().stream()
+                .filter(rule -> wanted == null || wanted.contains(rule.getId()))
                 .map(rule -> exportDto(rule, names))
                 .toList();
     }
@@ -108,6 +122,15 @@ public class RuleEditService {
 
     /** Read-only validation shared by import preview and atomic import. The caller passes a copy. */
     public void validateImport(RuleDto dto) {
+        validateImport(dto, true);
+    }
+
+    /**
+     * Validates an import copy.
+     *
+     * @param checkForwardTarget false while a forwarding rule's destination is not chosen yet
+     */
+    public void validateImport(RuleDto dto, boolean checkForwardTarget) {
         requireProtocolEnabled(dto.getProtocol());
         if (dto.getMatchKey() == null || dto.getMatchKey().isBlank()) {
             throw new IllegalArgumentException("matchKey is required");
@@ -122,6 +145,9 @@ public class RuleEditService {
             return;
         }
         if ("FORWARD".equalsIgnoreCase(dto.getAction())) {
+            if (!checkForwardTarget) {
+                return;
+            }
             if (dto.getProtocol() == Protocol.HTTP) {
                 httpTargetConnectionService.orElseThrow().validateForwardSelection(
                         dto.getForwardTargetMode(), dto.getHttpTargetConnectionId());

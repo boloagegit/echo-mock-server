@@ -1,11 +1,8 @@
 package com.echo.service;
 
-import com.echo.entity.HttpRule;
+import com.echo.dto.RuleDto;
 import com.echo.entity.FaultType;
-import com.echo.entity.JmsRule;
-import com.echo.entity.Response;
-import com.echo.repository.ResponseRepository;
-import lombok.RequiredArgsConstructor;
+import com.echo.entity.Protocol;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -18,10 +15,7 @@ import java.util.*;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ExcelImportService {
-
-    private final ResponseRepository responseRepository;
 
     private static final String[] RULE_HEADERS = {
         "protocol", "targetHost", "matchKey", "method", "status", "delayMs", "maxDelayMs",
@@ -102,8 +96,12 @@ public class ExcelImportService {
         }
     }
 
-    public List<Object> parseExcel(MultipartFile file) throws Exception {
-        List<Object> rules = new ArrayList<>();
+    /**
+     * Reads rules without touching the database; the shared import preview validates them and the
+     * confirmation creates rules and responses in one transaction.
+     */
+    public List<RuleDto> parseRules(MultipartFile file) throws Exception {
+        List<RuleDto> rules = new ArrayList<>();
 
         try (InputStream is = file.getInputStream(); Workbook workbook = WorkbookFactory.create(is)) {
             Sheet sheet = workbook.getSheetAt(0);
@@ -124,6 +122,12 @@ public class ExcelImportService {
                     rules.add(parseHttpRule(row, headerMap));
                 } else if ("JMS".equals(protocol)) {
                     rules.add(parseJmsRule(row, headerMap));
+                } else {
+                    // Kept so the preview reports the row instead of silently dropping it.
+                    rules.add(RuleDto.builder()
+                            .matchKey(getCellString(row, headerMap.get("matchkey")))
+                            .description(getCellString(row, headerMap.get("description")))
+                            .build());
                 }
             }
         }
@@ -158,86 +162,54 @@ public class ExcelImportService {
         return true;
     }
 
-    private HttpRule parseHttpRule(Row row, Map<String, Integer> headerMap) {
-        HttpRule rule = new HttpRule();
+    private RuleDto parseHttpRule(Row row, Map<String, Integer> headerMap) {
+        RuleDto rule = parseCommon(row, headerMap);
+        rule.setProtocol(Protocol.HTTP);
         rule.setTargetHost(getCellString(row, headerMap.get("targethost")));
         rule.setMatchKey(getCellString(row, headerMap.get("matchkey")));
         rule.setMethod(getCellString(row, headerMap.get("method"), "GET"));
-        rule.setHttpStatus(getCellInt(row, headerMap.get("status"), 200));
-        rule.setDelayMs(getCellLong(row, headerMap.get("delayms"), 0L));
-        long httpMaxDelay = getCellLong(row, headerMap.get("maxdelayms"), 0L);
-        if (httpMaxDelay > 0) {
-            rule.setMaxDelayMs(httpMaxDelay);
-        }
-        rule.setBodyCondition(getCellString(row, headerMap.get("bodycondition")));
+        rule.setStatus(getCellInt(row, headerMap.get("status"), 200));
         rule.setQueryCondition(getCellString(row, headerMap.get("querycondition")));
         rule.setHeaderCondition(getCellString(row, headerMap.get("headercondition")));
-        String desc = getCellString(row, headerMap.get("description"));
-        rule.setDescription(desc.isEmpty() ? "[Excel匯入]" : "[Excel匯入] " + desc);
-        rule.setEnabled(getCellBoolean(row, headerMap.get("enabled"), true));
-        
-        // Parse faultType
-        String ft = getCellString(row, headerMap.get("faulttype"));
-        if (!ft.isEmpty()) {
-            try {
-                rule.setFaultType(FaultType.valueOf(ft.toUpperCase(Locale.ROOT)));
-            } catch (IllegalArgumentException e) {
-                log.warn("Invalid faultType '{}' in Excel row, using NONE", ft);
-                rule.setFaultType(FaultType.NONE);
-            }
-        }
-
-        // Parse scenario fields
-        String scenarioName = getCellString(row, headerMap.get("scenarioname"));
-        if (!scenarioName.isEmpty()) {
-            rule.setScenarioName(scenarioName);
-        }
-        String requiredState = getCellString(row, headerMap.get("requiredscenariostate"));
-        if (!requiredState.isEmpty()) {
-            rule.setRequiredScenarioState(requiredState);
-        }
-        String newState = getCellString(row, headerMap.get("newscenariostate"));
-        if (!newState.isEmpty()) {
-            rule.setNewScenarioState(newState);
-        }
-
-        // Create Response
-        String responseBody = getCellString(row, headerMap.get("responsebody"));
-        if (!responseBody.isEmpty()) {
-            Response response = responseRepository.save(Response.builder()
-                    .description("[Excel匯入] " + rule.getMethod() + " " + rule.getMatchKey())
-                    .body(responseBody)
-                    .build());
-            rule.setResponseId(response.getId());
+        if (rule.getResponseBody() != null) {
+            rule.setResponseDescription("[Excel匯入] " + rule.getMethod() + " " + rule.getMatchKey());
         }
         return rule;
     }
 
-    private JmsRule parseJmsRule(Row row, Map<String, Integer> headerMap) {
-        JmsRule rule = new JmsRule();
-        rule.setQueueName(getCellString(row, headerMap.get("matchkey"), "*"));
+    private RuleDto parseJmsRule(Row row, Map<String, Integer> headerMap) {
+        RuleDto rule = parseCommon(row, headerMap);
+        rule.setProtocol(Protocol.JMS);
+        rule.setMatchKey(getCellString(row, headerMap.get("matchkey"), "*"));
+        if (rule.getResponseBody() != null) {
+            rule.setResponseDescription("[Excel匯入] JMS " + rule.getMatchKey());
+        }
+        return rule;
+    }
+
+    private RuleDto parseCommon(Row row, Map<String, Integer> headerMap) {
+        RuleDto rule = new RuleDto();
+        rule.setAction("MOCK");
         rule.setDelayMs(getCellLong(row, headerMap.get("delayms"), 0L));
-        long jmsMaxDelay = getCellLong(row, headerMap.get("maxdelayms"), 0L);
-        if (jmsMaxDelay > 0) {
-            rule.setMaxDelayMs(jmsMaxDelay);
+        long maxDelay = getCellLong(row, headerMap.get("maxdelayms"), 0L);
+        if (maxDelay > 0) {
+            rule.setMaxDelayMs(maxDelay);
         }
         rule.setBodyCondition(getCellString(row, headerMap.get("bodycondition")));
         String desc = getCellString(row, headerMap.get("description"));
         rule.setDescription(desc.isEmpty() ? "[Excel匯入]" : "[Excel匯入] " + desc);
         rule.setEnabled(getCellBoolean(row, headerMap.get("enabled"), true));
-        
-        // Parse faultType
+
         String ft = getCellString(row, headerMap.get("faulttype"));
         if (!ft.isEmpty()) {
             try {
-                rule.setFaultType(FaultType.valueOf(ft.toUpperCase(Locale.ROOT)));
+                rule.setFaultType(FaultType.valueOf(ft.toUpperCase(Locale.ROOT)).name());
             } catch (IllegalArgumentException e) {
                 log.warn("Invalid faultType '{}' in Excel row, using NONE", ft);
-                rule.setFaultType(FaultType.NONE);
+                rule.setFaultType(FaultType.NONE.name());
             }
         }
 
-        // Parse scenario fields
         String scenarioName = getCellString(row, headerMap.get("scenarioname"));
         if (!scenarioName.isEmpty()) {
             rule.setScenarioName(scenarioName);
@@ -251,15 +223,9 @@ public class ExcelImportService {
             rule.setNewScenarioState(newState);
         }
 
-        // Create Response
+        // An empty cell leaves the body empty; the import creates the response with the rule.
         String responseBody = getCellString(row, headerMap.get("responsebody"));
-        if (!responseBody.isEmpty()) {
-            Response response = responseRepository.save(Response.builder()
-                    .description("[Excel匯入] JMS " + rule.getQueueName())
-                    .body(responseBody)
-                    .build());
-            rule.setResponseId(response.getId());
-        }
+        rule.setResponseBody(responseBody.isEmpty() ? null : responseBody);
         return rule;
     }
 

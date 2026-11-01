@@ -47,7 +47,7 @@ class RuleImportServiceTest {
         targets = new JmsTargetConnectionService(connections, rules, cipher, properties, List.of());
         imports =
                 new RuleImportService(
-                        edits, responses, protocols, Optional.empty(), Optional.of(targets));
+                        edits, responses, protocols, Optional.empty(), Optional.of(targets), Optional.empty());
         when(protocols.isEnabled(Protocol.JMS)).thenReturn(true);
     }
 

@@ -122,8 +122,10 @@ class AdminControllersTest {
                 Optional.of(ruleAuditService));
         ruleState = new RuleStateController(ruleService, ruleEditService);
         importExport = new ImportExportController(protocolHandlerRegistry, ruleEditService, responseService,
-                Optional.of(ruleAuditService), excelImportService, openApiImportService,
-                new com.echo.service.RuleImportService(ruleEditService, responseService, protocolHandlerRegistry, Optional.empty(), Optional.empty()));
+                excelImportService, openApiImportService,
+                new com.echo.service.RuleImportService(ruleEditService, responseService, protocolHandlerRegistry,
+                        Optional.empty(), Optional.empty(), Optional.of(ruleAuditService)),
+                ruleQueryService);
         ReflectionTestUtils.setField(importExport, "bulkImportExportEnabled", true);
         logs = new RequestLogController(requestLogService, mock(RequestLogTrafficService.class));
         audit = new AuditController(Optional.of(ruleAuditService));
@@ -208,7 +210,7 @@ class AdminControllersTest {
     void bulkImportExport_shouldBeUnavailableWhenFeatureIsDisabled() {
         ReflectionTestUtils.setField(importExport, "bulkImportExportEnabled", false);
 
-        assertThat(importExport.exportAllRules().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(importExport.exportAllRules(null, null, null, null, null, null, null).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(importExport.importRules(List.of()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(importExport.previewRules(new RuleImportRequest(List.of(), Map.of())).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(importExport.confirmRules(new RuleImportRequest(List.of(), Map.of())).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
@@ -651,7 +653,7 @@ class AdminControllersTest {
                 .thenAnswer(invocation -> RuleDto.builder().protocol(Protocol.HTTP).build());
         when(protocolHandlerRegistry.findAllRules()).thenReturn(List.of(new HttpRule(), new HttpRule()));
         
-        var response = importExport.exportAllRules();
+        var response = importExport.exportAllRules(null, null, null, null, null, null, null);
         
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).hasSize(2);

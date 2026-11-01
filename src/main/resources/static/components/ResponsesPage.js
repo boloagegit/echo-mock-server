@@ -19,6 +19,8 @@ const ResponsesPage = {
     selectedResponses: Array,
     showResponseDataDropdown: Boolean,
     bulkImportExportEnabled: Boolean,
+    /** Bulk export and import are ADMIN-only on the server, so other users never see the menu. */
+    isAdmin: Boolean,
     status: Object,
     responsePage: Number,
     responsePageSize: Number,
@@ -144,7 +146,7 @@ const ResponsesPage = {
           <ui-button variant="secondary" @click="$emit('load-responses', true)" :disabled="loading.responses"><i class="bi bi-arrow-clockwise" :class="{'spin':loading.responses}" aria-hidden="true"></i>{{t('responses.refresh')}}</ui-button>
           <ui-button variant="secondary" :class="{'is-toggled':batchSelectResponseMode}" :aria-pressed="batchSelectResponseMode ? 'true' : 'false'" @click="toggleBatch" :disabled="!isLoggedIn" :title="!isLoggedIn?t('rules.loginRequired'):t('responses.batchSelect')"><i class="bi bi-check2-square" aria-hidden="true"></i>{{t('responses.batchSelect')}}</ui-button>
           <ui-button variant="primary" @click="$emit('open-response-modal', null)" :disabled="!isLoggedIn" :title="!isLoggedIn?t('rules.loginRequired'):t('responses.addResponse')"><i class="bi bi-plus-lg" aria-hidden="true"></i>{{t('responses.addResponse')}}</ui-button>
-          <ui-dropdown-menu v-if="isLoggedIn && bulkImportExportEnabled" class="resp-data-dropdown-wrapper"
+          <ui-dropdown-menu v-if="isAdmin && bulkImportExportEnabled" class="resp-data-dropdown-wrapper"
             :open="showResponseDataDropdown" :items="dataMenuItems" :trigger-label="t('responses.exportImport')"
             @toggle="$emit('toggle-response-data-dropdown')" @close="$emit('toggle-response-data-dropdown')"
             @select="handleDataMenuAction"></ui-dropdown-menu>

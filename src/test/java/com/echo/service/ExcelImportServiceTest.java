@@ -1,44 +1,26 @@
 package com.echo.service;
 
-import com.echo.entity.HttpRule;
-import com.echo.entity.JmsRule;
-import com.echo.entity.Response;
-import com.echo.repository.ResponseRepository;
+import com.echo.dto.RuleDto;
+import com.echo.entity.Protocol;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
-@org.mockito.junit.jupiter.MockitoSettings(strictness = org.mockito.quality.Strictness.LENIENT)
 class ExcelImportServiceTest {
-
-    @Mock
-    private ResponseRepository responseRepository;
 
     private ExcelImportService service;
 
     @BeforeEach
     void setUp() {
-        service = new ExcelImportService(responseRepository);
-        AtomicLong responseIdCounter = new AtomicLong(1);
-        when(responseRepository.save(any(Response.class))).thenAnswer(inv -> {
-            Response r = inv.getArgument(0);
-            return Response.builder().id(responseIdCounter.getAndIncrement()).description(r.getDescription()).body(r.getBody()).build();
-        });
+        service = new ExcelImportService();
     }
 
     @Test
@@ -78,20 +60,20 @@ class ExcelImportServiceTest {
         MockMultipartFile file = new MockMultipartFile("file", "test.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", excelData);
 
-        List<Object> rules = service.parseExcel(file);
+        List<RuleDto> rules = service.parseRules(file);
 
         assertEquals(1, rules.size());
-        assertTrue(rules.get(0) instanceof HttpRule);
-
-        HttpRule rule = (HttpRule) rules.get(0);
+        RuleDto rule = rules.get(0);
+        assertEquals(Protocol.HTTP, rule.getProtocol());
         assertEquals("api.test.com", rule.getTargetHost());
         assertEquals("/api/test", rule.getMatchKey());
         assertEquals("POST", rule.getMethod());
-        assertEquals(201, rule.getHttpStatus());
+        assertEquals(201, rule.getStatus());
         assertEquals(100L, rule.getDelayMs());
         assertEquals("userId=1", rule.getBodyCondition());
         assertEquals("status=active", rule.getQueryCondition());
-        assertNotNull(rule.getResponseId()); // Response created via responseId
+        assertEquals("{\"result\":\"ok\"}", rule.getResponseBody());
+        assertEquals("[Excel匯入] POST /api/test", rule.getResponseDescription());
         assertEquals("[Excel匯入] Test HTTP Rule", rule.getDescription());
         assertTrue(rule.getEnabled());
     }
@@ -104,16 +86,15 @@ class ExcelImportServiceTest {
         MockMultipartFile file = new MockMultipartFile("file", "test.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", excelData);
 
-        List<Object> rules = service.parseExcel(file);
+        List<RuleDto> rules = service.parseRules(file);
 
         assertEquals(1, rules.size());
-        assertTrue(rules.get(0) instanceof JmsRule);
-
-        JmsRule rule = (JmsRule) rules.get(0);
-        assertEquals("*", rule.getQueueName());
+        RuleDto rule = rules.get(0);
+        assertEquals(Protocol.JMS, rule.getProtocol());
+        assertEquals("*", rule.getMatchKey());
         assertEquals(50L, rule.getDelayMs());
         assertEquals("//OrderType=VIP", rule.getBodyCondition());
-        assertNotNull(rule.getResponseId()); // Response created via responseId
+        assertEquals("<response>OK</response>", rule.getResponseBody());
         assertEquals("[Excel匯入] Test JMS Rule", rule.getDescription());
         assertTrue(rule.getEnabled());
     }
@@ -125,7 +106,7 @@ class ExcelImportServiceTest {
         MockMultipartFile file = new MockMultipartFile("file", "test.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", excelData);
 
-        List<Object> rules = service.parseExcel(file);
+        List<RuleDto> rules = service.parseRules(file);
 
         assertEquals(1, rules.size());
     }
@@ -152,13 +133,14 @@ class ExcelImportServiceTest {
             MockMultipartFile file = new MockMultipartFile("file", "test.xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", out.toByteArray());
 
-            List<Object> rules = service.parseExcel(file);
+            List<RuleDto> rules = service.parseRules(file);
 
             assertEquals(1, rules.size());
-            HttpRule rule = (HttpRule) rules.get(0);
+            RuleDto rule = rules.get(0);
             assertEquals("/api/minimal", rule.getMatchKey());
             assertEquals("GET", rule.getMethod()); // default
-            assertEquals(200, rule.getHttpStatus()); // default
+            assertEquals(200, rule.getStatus()); // default
+            assertNull(rule.getResponseBody()); // no response without a body
             assertEquals(0L, rule.getDelayMs()); // default
             assertTrue(rule.getEnabled()); // default
         }
@@ -193,11 +175,11 @@ class ExcelImportServiceTest {
             MockMultipartFile file = new MockMultipartFile("file", "test.xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", out.toByteArray());
 
-            List<Object> rules = service.parseExcel(file);
+            List<RuleDto> rules = service.parseRules(file);
 
             assertEquals(2, rules.size());
-            assertFalse(((HttpRule) rules.get(0)).getEnabled());
-            assertTrue(((HttpRule) rules.get(1)).getEnabled());
+            assertFalse(rules.get(0).getEnabled());
+            assertTrue(rules.get(1).getEnabled());
         }
     }
 

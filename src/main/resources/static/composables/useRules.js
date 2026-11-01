@@ -303,16 +303,57 @@ const useRules = (deps) => {
     const toggleSelectAll = e => { selectedRules.value = e.target.checked ? pagedRules.value.map(r => r.id) : [] };
 
     // --- Export and import ---
-    const exportRules = async () => {
-        const r = await apiCall('/api/admin/rules/export', {}, { errorMsg: t('toast.exportFailed') });
-        if (r && r.ok) {
-            const data = await r.json();
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-            a.download = `echo-rules-${new Date().toISOString().slice(0, 10)}.json`; a.click();
-            showToast(t('toast.exportSuccess', {count: data.length}), 'success');
+    const ruleFilterParams = () => {
+        const params = new URLSearchParams();
+        if (ruleFilter.value.protocol) { params.set('protocol', ruleFilter.value.protocol); }
+        if (ruleFilter.value.enabled !== '') { params.set('enabled', ruleFilter.value.enabled); }
+        if (ruleFilter.value.isProtected !== '') { params.set('isProtected', ruleFilter.value.isProtected); }
+        if (ruleFilter.value.mode) { params.set('mode', ruleFilter.value.mode); }
+        if (ruleFilter.value.expiring !== '') { params.set('expiring', ruleFilter.value.expiring); }
+        if (ruleFilter.value.unreachable) { params.set('unreachable', ruleFilter.value.unreachable); }
+        const keyword = (ruleFilter.value.keyword || '').trim();
+        if (keyword) { params.set('keyword', keyword); }
+        return params;
+    };
+    const showExportModal = ref(false);
+    const exportScope = ref('all');
+    const exportCounts = ref({ all: null, filtered: 0, selected: 0, filterActive: false });
+    const exporting = ref(false);
+    const openExportModal = async () => {
+        showDataDropdown.value = false;
+        const filterActive = ruleFilterParams().toString() !== '';
+        const selected = selectedRules.value.length;
+        exportCounts.value = { all: filterActive ? null : ruleTotalElements.value, filtered: ruleTotalElements.value, selected, filterActive };
+        exportScope.value = selected ? 'selected' : filterActive ? 'filtered' : 'all';
+        showExportModal.value = true;
+        if (filterActive) {
+            const r = await apiCall('/api/admin/rules/page?page=0&size=1', {}, { silent: true });
+            if (r && r.ok) {
+                const d = await r.json().catch(() => null);
+                if (d && Number.isFinite(d.totalElements)) { exportCounts.value = { ...exportCounts.value, all: d.totalElements }; }
+            }
         }
     };
+    const exportRules = async (scope = exportScope.value) => {
+        if (exporting.value) { return; }
+        exporting.value = true;
+        try {
+            const r = scope === 'selected'
+                ? await apiCall('/api/admin/rules/export', { method: 'POST', body: JSON.stringify({ ids: selectedRules.value }) }, { errorMsg: t('toast.exportFailed') })
+                : await apiCall('/api/admin/rules/export' + (scope === 'filtered' ? '?' + ruleFilterParams().toString() : ''), {}, { errorMsg: t('toast.exportFailed') });
+            if (r && r.ok) {
+                const data = await r.json();
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+                a.download = exportFileName(scope); a.click();
+                showExportModal.value = false;
+                showToast(t('toast.exportSuccess', {count: data.length}), 'success');
+            }
+        } finally {
+            exporting.value = false;
+        }
+    };
+    const exportFileName = scope => `echo-rules-${new Date().toISOString().slice(0, 10)}${scope === 'all' ? '' : '-' + scope}.json`;
 
     const showImportModal = ref(false);
     const importFormat = ref('json');
@@ -320,14 +361,54 @@ const useRules = (deps) => {
     const importFileName = ref('');
     const importPreview = ref(null);
     const importConnectionMappings = ref({});
+    /** Row numbers the user unchecked; rules matching existing ones start unchecked. */
+    const importExcluded = ref([]);
+    /** file → review → connections (only when an included rule forwards). */
+    const importStep = ref('file');
+    const importSourceInfo = ref({ title: '', version: '' });
     let importRulesDraft = null;
+    /** Bumped for every preview request and reset, so a late reply cannot restore a discarded preview. */
+    let importPreviewSequence = 0;
     const resetImportPreview = () => {
+        importPreviewSequence++;
         importPreview.value = null;
         importConnectionMappings.value = {};
+        importExcluded.value = [];
+        importStep.value = 'file';
+        importSourceInfo.value = { title: '', version: '' };
         importRulesDraft = null;
     };
     const setImportConnectionMapping = ({ key, selection }) => {
         importConnectionMappings.value = { ...importConnectionMappings.value, [key]: selection };
+    };
+    const normalizeExcluded = rows => [...new Set(rows)].sort((x, y) => x - y);
+    /** Unchecking a row can resolve another row's problem (e.g. a shared-response conflict), so re-validate. */
+    const setImportExcluded = async rows => {
+        const next = normalizeExcluded(rows);
+        if (next.join() === importExcluded.value.join()) { return; }
+        importExcluded.value = next;
+        // A request in flight notices the changed selection when it returns and asks again.
+        if (importPreview.value && importRulesDraft && !deps.loading.value.importRules && !importRevalidating.value) {
+            await revalidateImportPreview();
+        }
+    };
+    const toggleImportRow = row => setImportExcluded(importExcluded.value.includes(row)
+        ? importExcluded.value.filter(item => item !== row) : [...importExcluded.value, row]);
+    /** Requirements still used by at least one checked rule. */
+    const activeImportRequirements = () => (importPreview.value?.requirements || []).filter(item =>
+        !Array.isArray(item.rows) || item.rows.some(row => !importExcluded.value.includes(row)));
+    const importMappingValid = item => (importPreview.value?.connections || []).some(option =>
+        option.protocol === item.protocol && option.selection === importConnectionMappings.value[item.key]);
+    const applyImportPreview = (preview, previousMappings = {}) => {
+        importPreview.value = preview;
+        const mappings = {};
+        for (const item of preview.requirements || []) {
+            const previous = previousMappings[item.key];
+            const stillOffered = (preview.connections || []).some(option => option.protocol === item.protocol && option.selection === previous);
+            const choice = stillOffered ? previous : item.suggestion;
+            if (choice) { mappings[item.key] = choice; }
+        }
+        importConnectionMappings.value = mappings;
     };
     const handleImportFile = input => {
         if (deps.loading.value.importRules) { return; }
@@ -355,12 +436,6 @@ const useRules = (deps) => {
         importFile.value = file;
         importFileName.value = file.name;
     };
-    // --- OpenAPI Preview ---
-    const showOpenApiPreview = ref(false);
-    const openApiPreviewTitle = ref('');
-    const openApiPreviewVersion = ref('');
-    const openApiPreviewRules = ref([]);
-    const openApiImporting = ref(false);
 
     const refreshAfterImport = async () => {
         markDirty();
@@ -371,85 +446,143 @@ const useRules = (deps) => {
         }
     };
 
+    /** Reads the chosen file into portable rules; every format then shares one review. */
+    const readImportRules = async () => {
+        if (importFormat.value === 'json') {
+            let data;
+            try { data = JSON.parse(await importFile.value.text()); }
+            catch { throw new Error(t('modal.importFileFormatError')); }
+            return Array.isArray(data) ? data : [data];
+        }
+        const formData = new FormData();
+        formData.append('file', importFile.value);
+        const url = importFormat.value === 'openapi' ? '/api/admin/rules/import-openapi/preview' : '/api/admin/rules/import-excel/parse';
+        const r = await apiCall(url, { method: 'POST', body: formData }, { silent: true });
+        if (!r) { throw new Error(t('toast.networkError')); }
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || (importFormat.value === 'openapi' && !d.success)) {
+            throw new Error(importFormat.value === 'openapi'
+                ? t('modal.importOpenApiParseFailed', { detail: (d.errors && d.errors[0]) || d.error || '' })
+                : t('modal.importExcelParseFailed'));
+        }
+        if (importFormat.value === 'openapi') { importSourceInfo.value = { title: d.title || '', version: d.version || '' }; }
+        return d.rules || [];
+    };
+
+    const requestImportPreview = async (previousMappings = {}) => {
+        const sequence = ++importPreviewSequence;
+        const excludedRows = importExcluded.value;
+        const r = await apiCall('/api/admin/rules/import/preview', {
+            method: 'POST', body: JSON.stringify({ rules: importRulesDraft, connectionMappings: {}, excludedRows })
+        }, { silent: true });
+        const d = r ? await r.json().catch(() => ({})) : {};
+        // A newer selection already asked again; this answer describes an outdated one.
+        if (sequence !== importPreviewSequence) { return false; }
+        if (!r || !r.ok) {
+            deps.loading.value.importError = r ? (d.error || t('modal.importRequestFailed')) : t('toast.networkError');
+            return false;
+        }
+        applyImportPreview(d, previousMappings);
+        return true;
+    };
+
+    /** Asks the server to validate the current selection again, keeping the connection choices. */
+    const importRevalidating = ref(false);
+    const revalidateImportPreview = async () => {
+        importRevalidating.value = true;
+        try {
+            const selection = importExcluded.value;
+            await requestImportPreview(importConnectionMappings.value);
+            if (importExcluded.value.join() !== selection.join() && importPreview.value) {
+                await revalidateImportPreview();
+            }
+        } finally {
+            importRevalidating.value = false;
+        }
+    };
+
+    const confirmImport = async () => {
+        if (activeImportRequirements().some(item => !importMappingValid(item))) {
+            deps.loading.value.importError = t('modal.importChooseConnections');
+            importStep.value = 'connections';
+            return;
+        }
+        const connectionMappings = {};
+        for (const item of activeImportRequirements()) { connectionMappings[item.key] = importConnectionMappings.value[item.key]; }
+        let r;
+        try {
+            r = await apiCall('/api/admin/rules/import/confirm', {
+                method: 'POST', body: JSON.stringify({ rules: importRulesDraft, connectionMappings, excludedRows: importExcluded.value })
+            }, { silent: true });
+        } catch { r = null; }
+        const d = r ? await r.json().catch(() => ({})) : {};
+        if (r && r.ok) {
+            showImportModal.value = false;
+            resetImportPreview();
+            importFile.value = null;
+            importFileName.value = '';
+            showToast(t('toast.importSuccess', {count: d.imported}), 'success');
+            await refreshAfterImport();
+        } else if (r && r.status < 500) {
+            const errors = d.errors || [];
+            if (errors.some(item => item.code === 'CONNECTION_SELECTION_REQUIRED')) {
+                // A destination changed after the preview: refresh the choices and keep those still offered.
+                const excluded = importExcluded.value;
+                await requestImportPreview(importConnectionMappings.value);
+                importExcluded.value = excluded;
+                importStep.value = 'connections';
+                deps.loading.value.importError = t('modal.importConnectionChanged');
+            } else {
+                importPreview.value = { ...importPreview.value, errors };
+                importStep.value = 'review';
+                deps.loading.value.importError = t('modal.importRequestFailed');
+            }
+        } else {
+            // A lost reply or server error cannot prove whether the transaction committed.
+            deps.loading.value.importError = t('modal.importResultUnknown');
+            resetImportPreview();
+            await refreshAfterImport();
+        }
+    };
+
+    /** The dialog's primary action for the current step. */
     const doImport = async () => {
-        if (!importFile.value || deps.loading.value.importRules) return;
+        if (!importFile.value || deps.loading.value.importRules || importRevalidating.value) return;
         deps.loading.value.importRules = true;
         deps.loading.value.importError = '';
         try {
-            if (importFormat.value === 'openapi') {
-                // OpenAPI: Preview first
-                const formData = new FormData();
-                formData.append('file', importFile.value);
-                const r = await apiCall('/api/admin/rules/import-openapi/preview', { method: 'POST', body: formData }, { silent: true });
-                const d = r ? await r.json().catch(() => ({})) : {};
-                if (r && r.ok && d.success) {
-                    openApiPreviewTitle.value = d.title || '';
-                    openApiPreviewVersion.value = d.version || '';
-                    openApiPreviewRules.value = d.rules || [];
-                    showOpenApiPreview.value = true;
-                    showImportModal.value = false;
-                    importFile.value = null;
-                    importFileName.value = '';
-                } else {
-                    deps.loading.value.importError = (d.errors && d.errors[0]) || d.error || t('toast.openApiParseFailed');
+            if (!importPreview.value) {
+                importRulesDraft = await readImportRules();
+                if (!importRulesDraft.length) {
+                    deps.loading.value.importError = t('modal.importNoRules');
+                    importRulesDraft = null;
+                    return;
+                }
+                if (await requestImportPreview()) {
+                    const duplicates = normalizeExcluded((importPreview.value.rows || []).filter(row => row.duplicate).map(row => row.row));
+                    if (duplicates.length) {
+                        importExcluded.value = duplicates;
+                        await requestImportPreview();
+                    }
+                    importStep.value = 'review';
                 }
                 return;
             }
-            if (importFormat.value === 'json') {
-                if (!importPreview.value) {
-                    const data = JSON.parse(await importFile.value.text());
-                    importRulesDraft = Array.isArray(data) ? data : [data];
-                    const r = await apiCall('/api/admin/rules/import/preview', {
-                        method: 'POST', body: JSON.stringify({ rules: importRulesDraft, connectionMappings: {} })
-                    }, { silent: true });
-                    const d = r ? await r.json().catch(() => ({})) : {};
-                    if (r && r.ok) { importPreview.value = d; }
-                    else { deps.loading.value.importError = d.error || t('modal.importRequestFailed'); }
-                    return;
-                }
-                const requirements = importPreview.value.requirements || [];
-                if (requirements.some(item => !importConnectionMappings.value[item.key])) {
-                    deps.loading.value.importError = t('modal.importChooseConnections');
-                    return;
-                }
-                const r = await apiCall('/api/admin/rules/import/confirm', {
-                    method: 'POST', body: JSON.stringify({ rules: importRulesDraft, connectionMappings: importConnectionMappings.value })
-                }, { silent: true });
-                const d = r ? await r.json().catch(() => ({})) : {};
-                if (r && r.ok) {
-                    showImportModal.value = false;
-                    resetImportPreview();
-                    importFile.value = null;
-                    importFileName.value = '';
-                    showToast(t('toast.importSuccess', {count: d.imported}), 'success');
-                    await refreshAfterImport();
-                } else if (r && r.status < 500) {
-                    importPreview.value = { ...importPreview.value, errors: d.errors || [] };
-                    deps.loading.value.importError = d.errors?.some(item => item.code === 'CONNECTION_SELECTION_REQUIRED')
-                        ? t('modal.importConnectionChanged') : t('modal.importRequestFailed');
-                } else {
-                    // A lost reply or server error cannot prove whether the transaction committed.
-                    deps.loading.value.importError = t('modal.importResultUnknown');
-                    resetImportPreview();
-                    await refreshAfterImport();
-                }
-            } else {
-                const formData = new FormData();
-                formData.append('file', importFile.value);
-                const r = await apiCall('/api/admin/rules/import-excel', { method: 'POST', body: formData }, { silent: true });
-                if (r && r.ok) { const d = await r.json(); showToast(t('toast.importSuccess', {count: d.imported}), 'success'); markDirty(); loadRules(true); showImportModal.value = false; }
-                else {
-                    deps.loading.value.importError = r ? t('modal.importRequestFailed') : t('toast.networkError');
-                    showToast(deps.loading.value.importError, 'error');
-                }
+            if (importStep.value === 'review' && activeImportRequirements().length) {
+                importStep.value = 'connections';
+                return;
             }
+            await confirmImport();
         } catch (err) {
-            deps.loading.value.importError = t('modal.importFileFormatError');
-            showToast(t('toast.fileFormatError'), 'error');
+            deps.loading.value.importError = err?.message || t('modal.importFileFormatError');
         } finally {
             deps.loading.value.importRules = false;
         }
-        if (!deps.loading.value.importError) { importFile.value = null; importFileName.value = ''; }
+    };
+    const importBack = () => {
+        deps.loading.value.importError = '';
+        if (importStep.value === 'connections') { importStep.value = 'review'; return; }
+        resetImportPreview();
     };
 
     // --- Batch operation ---
@@ -586,29 +719,6 @@ const useRules = (deps) => {
     const closeDataDropdown = e => { if (!e.target.closest('.data-dropdown-wrapper')) showDataDropdown.value = false; };
     const triggerResponseImport = () => { showDataDropdown.value = false; document.getElementById('responseImportInput')?.click(); };
 
-    const confirmOpenApiImport = async (selectedRules) => {
-        if (openApiImporting.value || !selectedRules?.length) return;
-        openApiImporting.value = true;
-        try {
-            const r = await apiCall('/api/admin/rules/import-openapi/confirm', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(selectedRules)
-            });
-            if (r && r.ok) {
-                const d = await r.json();
-                showToast(t('toast.importSuccess', { count: d.imported }), 'success');
-                showOpenApiPreview.value = false;
-                markDirty();
-                loadRules(true);
-            }
-        } catch (e) {
-            showToast(t('toast.importFailed'), 'error');
-        } finally {
-            openApiImporting.value = false;
-        }
-    };
-
     return {
         rules,
         ruleFilter,
@@ -643,6 +753,11 @@ const useRules = (deps) => {
         extendRule,
         toggleEnabled,
         exportRules,
+        showExportModal,
+        exportScope,
+        exportCounts,
+        exporting,
+        openExportModal,
         batchProtect,
         deleteSelectedRules,
         deleteAllRules,
@@ -656,6 +771,13 @@ const useRules = (deps) => {
         importConnectionMappings,
         resetImportPreview,
         setImportConnectionMapping,
+        importExcluded,
+        importStep,
+        importRevalidating,
+        importSourceInfo,
+        setImportExcluded,
+        toggleImportRow,
+        importBack,
         // Details drawer
         ruleDetailId,
         rulePreviewCache,
@@ -679,13 +801,6 @@ const useRules = (deps) => {
         toggleDataDropdown,
         closeDataDropdown,
         triggerResponseImport,
-        // OpenAPI Preview
-        showOpenApiPreview,
-        openApiPreviewTitle,
-        openApiPreviewVersion,
-        openApiPreviewRules,
-        openApiImporting,
-        confirmOpenApiImport,
         // Cache control (for external use)
         markDirty
     };
