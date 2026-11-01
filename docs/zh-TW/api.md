@@ -36,13 +36,17 @@
 | PUT | /api/admin/rules/batch/extend | 批次展延 |
 | PUT | /api/admin/rules/tag/{key}/{value}/enable | 依標籤啟用 (ADMIN) |
 | PUT | /api/admin/rules/tag/{key}/{value}/disable | 依標籤停用 (ADMIN) |
-| GET | /api/admin/rules/export | 匯出全部規則 (ADMIN) |
+| GET | /api/admin/rules/export | 匯出規則 (ADMIN)。不帶參數時匯出全部；帶清單篩選參數 `protocol`、`enabled`、`isProtected`、`mode`、`expiring`、`unreachable`、`keyword` 時只匯出篩選結果 |
+| POST | /api/admin/rules/export | 匯出 `{"ids": [...]}` 指定的規則 (ADMIN) |
 | GET | /api/admin/rules/{id}/json | 匯出單筆規則 |
 | POST | /api/admin/rules/import | 匯入單筆規則 (ADMIN) |
 | POST | /api/admin/rules/import-batch | 批次匯入 (ADMIN) |
-| POST | /api/admin/rules/import/preview | 預覽 JSON 規則與目的環境連線選項 (ADMIN) |
-| POST | /api/admin/rules/import/confirm | 明確對應連線，整批新增規則與回應 (ADMIN) |
-| POST | /api/admin/rules/import-excel | Excel 匯入 (ADMIN) |
+| POST | /api/admin/rules/import/preview | 預覽可攜 JSON 規則：逐列摘要（`rows`，與現有規則相同時 `duplicate` 為 true）、帶代碼的問題清單，以及目的連線選項與建議值 `suggestion`（ADMIN，不寫入） |
+| POST | /api/admin/rules/import/confirm | 以明確的連線對應在單一交易中建立新規則與回應；`excludedRows` 依列號略過 (ADMIN) |
+| POST | /api/admin/rules/import-excel/parse | 將 Excel 解析為可攜規則，不寫入任何資料 (ADMIN) |
+| POST | /api/admin/rules/import-excel | Excel 匯入，單一交易 (ADMIN) |
+| POST | /api/admin/rules/import-openapi/preview | 將 OpenAPI 3.x / Swagger 2.x 解析為可攜規則（ADMIN，不寫入） |
+| POST | /api/admin/rules/import-openapi/confirm | 以單一交易建立解析出的 OpenAPI 規則 (ADMIN) |
 | GET | /api/admin/rules/import-template | 下載 Excel 匯入範本 |
 | DELETE | /api/admin/rules/batch | 批次刪除 (ADMIN) |
 | DELETE | /api/admin/rules/all | 全部刪除 (ADMIN) |

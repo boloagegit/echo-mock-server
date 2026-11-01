@@ -322,6 +322,28 @@ class SecurityIntegrationTest {
     }
 
     @Test
+    @WithMockUser(roles = "USER")
+    void everyBulkTransferPath_shouldReturn403_whenNotAdmin() throws Exception {
+        mockMvc.perform(post("/api/admin/rules/export")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"ids\":[]}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/admin/rules/import")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"protocol\":\"HTTP\",\"matchKey\":\"/x\"}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/admin/rules/import-openapi/confirm")
+                        .contentType(MediaType.APPLICATION_JSON).content("[]"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/admin/responses/import-batch")
+                        .contentType(MediaType.APPLICATION_JSON).content("[]"))
+                .andExpect(status().isForbidden());
+        for (String path : List.of("/api/admin/rules/import-openapi/preview", "/api/admin/rules/import-excel/parse",
+                "/api/admin/rules/import-excel")) {
+            mockMvc.perform(multipart(path).file("file", new byte[] {1}))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    @Test
     @WithMockUser(roles = "ADMIN")
     void importBatch_shouldReturn200_whenAdmin() throws Exception {
         mockMvc.perform(post("/api/admin/rules/import-batch")

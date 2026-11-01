@@ -39,13 +39,17 @@ The full lists `GET /api/admin/rules` and `GET /api/admin/responses`, and the re
 | PUT | /api/admin/rules/batch/extend | Batch extend |
 | PUT | /api/admin/rules/tag/{key}/{value}/enable | Enable by tag (ADMIN) |
 | PUT | /api/admin/rules/tag/{key}/{value}/disable | Disable by tag (ADMIN) |
-| GET | /api/admin/rules/export | Export all rules (ADMIN) |
+| GET | /api/admin/rules/export | Export rules (ADMIN). Without parameters every rule; the list filters `protocol`, `enabled`, `isProtected`, `mode`, `expiring`, `unreachable` and `keyword` limit it to the filtered result |
+| POST | /api/admin/rules/export | Export the rules whose IDs are in `{"ids": [...]}` (ADMIN) |
 | GET | /api/admin/rules/{id}/json | Export single rule |
 | POST | /api/admin/rules/import | Import single rule (ADMIN) |
 | POST | /api/admin/rules/import-batch | Batch import (ADMIN) |
-| POST | /api/admin/rules/import/preview | Preview portable JSON rules and destination connection choices (ADMIN) |
-| POST | /api/admin/rules/import/confirm | Atomically create new rules/responses with explicit connection mappings (ADMIN) |
-| POST | /api/admin/rules/import-excel | Excel import (ADMIN) |
+| POST | /api/admin/rules/import/preview | Preview portable JSON rules: one summary per row (`rows`, with `duplicate` when it matches an existing rule), problems with codes, and destination connection choices with an optional `suggestion` (ADMIN, no writes) |
+| POST | /api/admin/rules/import/confirm | Atomically create new rules/responses with explicit connection mappings; `excludedRows` skips rows by number (ADMIN) |
+| POST | /api/admin/rules/import-excel/parse | Parse an Excel file into portable rules without writing anything (ADMIN) |
+| POST | /api/admin/rules/import-excel | Excel import in one transaction (ADMIN) |
+| POST | /api/admin/rules/import-openapi/preview | Parse an OpenAPI 3.x / Swagger 2.x file into portable rules (ADMIN, no writes) |
+| POST | /api/admin/rules/import-openapi/confirm | Create rules from parsed OpenAPI rules in one transaction (ADMIN) |
 | GET | /api/admin/rules/import-template | Download Excel import template |
 | DELETE | /api/admin/rules/batch | Batch delete (ADMIN) |
 | DELETE | /api/admin/rules/all | Delete all (ADMIN) |

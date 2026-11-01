@@ -5,7 +5,9 @@ import com.echo.dto.RuleImportPreview;
 import com.echo.dto.RuleImportPreview.ConnectionOption;
 import com.echo.dto.RuleImportPreview.ConnectionRequirement;
 import com.echo.dto.RuleImportPreview.Problem;
+import com.echo.dto.RuleImportPreview.RowSummary;
 import com.echo.dto.RuleImportRequest;
+import com.echo.entity.BaseRule;
 import com.echo.entity.Protocol;
 import com.echo.entity.Response;
 import com.echo.protocol.ProtocolHandlerRegistry;
@@ -19,12 +21,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /** Copies portable rules without treating source database identities as destination references. */
 @Service
@@ -35,6 +39,7 @@ public class RuleImportService {
     private final ProtocolHandlerRegistry protocols;
     private final Optional<HttpTargetConnectionService> httpConnections;
     private final Optional<JmsTargetConnectionService> jmsConnections;
+    private final Optional<RuleAuditService> audits;
 
     public record ImportedRule(int row, String sourceId, String id, Protocol protocol) {}
 
@@ -52,13 +57,13 @@ public class RuleImportService {
 
     @Transactional(readOnly = true)
     public RuleImportPreview preview(RuleImportRequest request) {
-        return plan(request).preview();
+        return plan(request, true).preview();
     }
 
     /** Revalidate inside the write transaction; any failure rolls back the entire batch. */
     @Transactional(isolation = Isolation.SERIALIZABLE)
     public Result importRules(RuleImportRequest request) {
-        Plan plan = plan(request);
+        Plan plan = plan(request, false);
         if (!plan.preview().errors().isEmpty()) {
             throw new RuleImportValidationException(plan.preview().errors());
         }
@@ -67,8 +72,8 @@ public class RuleImportService {
         int responsesCreated = 0;
         for (Row row : plan.rows()) {
             RuleDto dto = row.copy();
+            Long originalResponseId = row.source().getResponseId();
             if (needsResponse(dto)) {
-                Long originalResponseId = row.source().getResponseId();
                 Long responseId =
                         originalResponseId == null ? null : copiedResponses.get(originalResponseId);
                 if (responseId == null) {
@@ -94,6 +99,7 @@ public class RuleImportService {
                 dto.setResponseBody(null);
             }
             RuleEditService.Saved saved = ruleEditService.save(dto);
+            audits.ifPresent(audit -> audit.logCreate(saved.rule()));
             imported.add(
                     new ImportedRule(
                             row.number(),
@@ -104,26 +110,56 @@ public class RuleImportService {
         return new Result(imported.size(), responsesCreated, List.copyOf(imported));
     }
 
-    private Plan plan(RuleImportRequest request) {
+    private Plan plan(RuleImportRequest request, boolean review) {
         List<Problem> errors = new ArrayList<>();
         List<Row> rows = new ArrayList<>();
-        if (request == null || request.rules() == null || request.rules().isEmpty()) {
+        List<RowSummary> summaries = new ArrayList<>();
+        Set<Integer> excluded =
+                request == null || request.excludedRows() == null
+                        ? Set.of()
+                        : request.excludedRows();
+        List<RuleDto> included = new ArrayList<>();
+        if (request != null && request.rules() != null) {
+            for (int index = 0; index < request.rules().size(); index++) {
+                if (!excluded.contains(index + 1)) {
+                    included.add(request.rules().get(index));
+                }
+            }
+        }
+        if (included.isEmpty()) {
             errors.add(new Problem(0, "RULES_REQUIRED", "Select at least one rule to import."));
             return new Plan(
-                    new RuleImportPreview(0, 0, 0, List.of(), List.of(), List.copyOf(errors)),
+                    new RuleImportPreview(
+                            request == null || request.rules() == null
+                                    ? 0
+                                    : request.rules().size(),
+                            0,
+                            0,
+                            List.of(),
+                            List.of(),
+                            List.copyOf(errors),
+                            List.of()),
                     rows);
         }
         Map<String, String> mappings =
                 request.connectionMappings() == null ? Map.of() : request.connectionMappings();
-        List<ConnectionOption> options = connectionOptions(request.rules());
+        List<ConnectionOption> options = connectionOptions(included);
         Map<String, ConnectionOption> selections = new HashMap<>();
         options.forEach(option -> selections.put(option.selection(), option));
-        Map<String, ConnectionRequirement> requirements = new LinkedHashMap<>();
+        Map<String, Requirement> requirements = new LinkedHashMap<>();
         Map<Long, ResponseContent> sourceResponses = new HashMap<>();
+        Set<String> existing = review ? existingSignatures() : Set.of();
         int enabled = 0;
+        int disabled = 0;
         for (int index = 0; index < request.rules().size(); index++) {
             int number = index + 1;
             RuleDto source = request.rules().get(index);
+            if (review) {
+                summaries.add(summary(number, source, existing));
+            }
+            if (excluded.contains(number)) {
+                continue;
+            }
             if (source == null
                     || source.getProtocol() == null
                     || !protocols.isEnabled(source.getProtocol())) {
@@ -164,9 +200,6 @@ public class RuleImportService {
             dto.setUpdateExistingResponse(false);
             dto.setExportVersion(null);
             dto.setSourceConnectionName(null);
-            if (!Boolean.FALSE.equals(dto.getEnabled())) {
-                enabled++;
-            }
             if (needsResponse(dto)) {
                 if (source.getResponseId() != null
                         && source.getResponseBody() == null
@@ -198,55 +231,161 @@ public class RuleImportService {
                     }
                 }
             }
+            boolean connectionChosen = true;
             String key = connectionKey(source);
             if (key != null) {
-                ConnectionRequirement previous = requirements.get(key);
-                requirements.put(
-                        key,
-                        new ConnectionRequirement(
+                requirements
+                        .computeIfAbsent(
                                 key,
-                                source.getProtocol(),
-                                source.getSourceConnectionName() == null
-                                        ? source.getForwardTargetMode()
-                                        : source.getSourceConnectionName(),
-                                previous == null ? 1 : previous.rules() + 1));
+                                ignored ->
+                                        new Requirement(
+                                                key,
+                                                source.getProtocol(),
+                                                modeOf(key),
+                                                source.getSourceConnectionName(),
+                                                new ArrayList<>()))
+                        .rows()
+                        .add(number);
                 ConnectionOption choice = selections.get(mappings.get(key));
-                if (choice == null || choice.protocol() != source.getProtocol()) {
-                    errors.add(
-                            new Problem(
-                                    number,
-                                    "CONNECTION_SELECTION_REQUIRED",
-                                    "Choose a current destination connection for this forwarding"
-                                            + " rule."));
-                    continue;
-                }
-                dto.setForwardTargetMode(choice.mode());
                 dto.setHttpTargetConnectionId(null);
                 dto.setJmsTargetConnectionId(null);
-                if ("CONNECTION".equals(choice.mode())) {
-                    if (dto.getProtocol() == Protocol.HTTP) {
-                        dto.setHttpTargetConnectionId(Long.valueOf(choice.id()));
-                    } else {
-                        dto.setJmsTargetConnectionId(choice.id());
+                if (choice == null || choice.protocol() != source.getProtocol()) {
+                    connectionChosen = false;
+                } else {
+                    dto.setForwardTargetMode(choice.mode());
+                    if ("CONNECTION".equals(choice.mode())) {
+                        if (dto.getProtocol() == Protocol.HTTP) {
+                            dto.setHttpTargetConnectionId(Long.valueOf(choice.id()));
+                        } else {
+                            dto.setJmsTargetConnectionId(choice.id());
+                        }
                     }
                 }
             }
             try {
-                ruleEditService.validateImport(dto);
-                rows.add(new Row(number, source, dto));
+                // Without a chosen destination the rule's own content is still checked for review.
+                ruleEditService.validateImport(dto, connectionChosen);
             } catch (IllegalArgumentException e) {
                 errors.add(new Problem(number, "INVALID_RULE", e.getMessage()));
+                continue;
             }
+            if (Boolean.FALSE.equals(dto.getEnabled())) {
+                disabled++;
+            } else {
+                enabled++;
+            }
+            if (!connectionChosen) {
+                errors.add(
+                        new Problem(
+                                number,
+                                "CONNECTION_SELECTION_REQUIRED",
+                                "Choose a current destination connection for this forwarding"
+                                        + " rule."));
+                continue;
+            }
+            rows.add(new Row(number, source, dto));
         }
+        List<ConnectionRequirement> requirementList =
+                requirements.values().stream()
+                        .map(requirement -> requirement.toPreview(suggest(requirement, options)))
+                        .toList();
         return new Plan(
                 new RuleImportPreview(
                         request.rules().size(),
                         enabled,
-                        request.rules().size() - enabled,
-                        List.copyOf(requirements.values()),
+                        disabled,
+                        requirementList,
                         options,
-                        List.copyOf(errors)),
+                        List.copyOf(errors),
+                        List.copyOf(summaries)),
                 rows);
+    }
+
+    private record Requirement(
+            String key, Protocol protocol, String mode, String sourceName, List<Integer> rows) {
+        ConnectionRequirement toPreview(String suggestion) {
+            return new ConnectionRequirement(
+                    key, protocol, mode, sourceName, rows.size(), List.copyOf(rows), suggestion);
+        }
+    }
+
+    private static String modeOf(String key) {
+        return key.split(":", 3)[1];
+    }
+
+    /**
+     * A preselection the user still confirms: X-Original-Host stays dynamic, a source default
+     * follows this environment's default, and a named connection matches exactly one destination
+     * connection with the same name.
+     */
+    private static String suggest(Requirement requirement, List<ConnectionOption> options) {
+        List<ConnectionOption> candidates =
+                options.stream()
+                        .filter(option -> option.protocol() == requirement.protocol())
+                        .filter(
+                                option ->
+                                        "CONNECTION".equals(requirement.mode())
+                                                ? "CONNECTION".equals(option.mode())
+                                                        && requirement.sourceName() != null
+                                                        && requirement
+                                                                .sourceName()
+                                                                .equals(option.name())
+                                                : requirement.mode().equals(option.mode()))
+                        .toList();
+        return candidates.size() == 1 ? candidates.get(0).selection() : null;
+    }
+
+    private Set<String> existingSignatures() {
+        Set<String> signatures = new HashSet<>();
+        for (BaseRule rule : protocols.findAllRules()) {
+            if (protocols.isEnabled(rule.getProtocol())) {
+                signatures.add(signature(protocols.toDto(rule, null, false)));
+            }
+        }
+        return signatures;
+    }
+
+    private static RowSummary summary(int number, RuleDto source, Set<String> existing) {
+        if (source == null) {
+            return new RowSummary(number, null, null, null, null, null, false, "MOCK", null, false);
+        }
+        String action =
+                isFaulting(source)
+                        ? "FAULT"
+                        : "FORWARD".equalsIgnoreCase(source.getAction()) ? "FORWARD" : "MOCK";
+        return new RowSummary(
+                number,
+                source.getProtocol(),
+                source.getProtocol() == Protocol.HTTP ? source.getMethod() : null,
+                source.getMatchKey(),
+                source.getTargetHost(),
+                source.getDescription(),
+                !Boolean.FALSE.equals(source.getEnabled()),
+                action,
+                source.getProtocol() == null ? null : connectionKey(source),
+                source.getProtocol() != null && existing.contains(signature(source)));
+    }
+
+    /** Rules with the same signature match the same requests, whatever their responses. */
+    private static String signature(RuleDto rule) {
+        return String.join(
+                "\u0001",
+                String.valueOf(rule.getProtocol()),
+                normalized(rule.getTargetHost()),
+                normalized(rule.getMatchKey()),
+                rule.getProtocol() == Protocol.HTTP
+                        ? normalized(rule.getMethod()).toUpperCase(Locale.ROOT)
+                        : "",
+                normalized(rule.getBodyCondition()),
+                normalized(rule.getQueryCondition()),
+                normalized(rule.getHeaderCondition()),
+                rule.getMatchSpec() == null || rule.getMatchSpec().isNull()
+                        ? ""
+                        : rule.getMatchSpec().toString());
+    }
+
+    private static String normalized(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private List<ConnectionOption> connectionOptions(List<RuleDto> rules) {

@@ -78,16 +78,30 @@ For JMS rules, `matchKey` is the queue name. `status` is the HTTP status code of
 
 ## Move rules between environments (JSON)
 
-Enable `ECHO_BULK_IMPORT_EXPORT_ENABLED=true` on both servers and sign in as an ADMIN.
-On the source **Rules** page, open the data menu and export JSON. On the destination,
-choose **Import → JSON**, select the file, review the preview, then confirm.
-The single-rule JSON export is also accepted. Enable each protocol whose stored rules you want to export on the source.
+Enable `ECHO_BULK_IMPORT_EXPORT_ENABLED=true` on both servers and sign in as an ADMIN; the data menu
+is hidden for other users, and every bulk import/export endpoint returns 403 for them.
+
+On the source **Rules** page, open the data menu and choose **Export rules…**. Pick the scope:
+every rule, the current filter result, or the rules checked with **Batch select**. Enable each
+protocol whose stored rules you want to export on the source.
+
+On the destination, choose **Import rules…**. The dialog keeps one size through three steps:
+
+1. **Choose file** — JSON, Excel or OpenAPI. Nothing is written yet.
+2. **Review rules** — every rule in the file is listed with its row number. Rules whose protocol,
+   host, method, path and conditions match an existing rule are flagged and start unchecked;
+   checking one creates another copy, it never overwrites. Rules that cannot be imported are
+   flagged with the reason; uncheck them or fix the file. Only checked rules are imported.
+3. **Map connections** — shown only when a checked rule forwards. Each source connection lists its
+   name, source ID and the rules that use it. Choose where those rules forward to here.
+
+The single-rule JSON export is also accepted.
 
 - Exports include complete response bodies, structured conditions and SSE settings. They do not include connection credentials, server configuration, request history or runtime scenario/tag state. Treat the file as application data; response bodies and headers can contain secrets.
 - Every import creates **new rule IDs and new local responses**. Existing rules and responses are never overwritten by source IDs. Rules sharing a response in one file share a newly copied response in the destination. Importing the same file again creates another set of copies.
 - Creation/update times and authors are set locally. Old creation and extension times are discarded; retention starts at import time using the **destination's** rule/response retention settings. The protected flag is preserved, so protected rules remain exempt from automatic rule cleanup.
 - Enabled/disabled flags are preserved. Enabled imports participate in matching after the transaction commits, subject to the destination's scenario/tag settings. Overlapping paths, priorities and the newer creation time can change which rule matches; importing does not guarantee identical routing or matching in a different environment.
-- Forwarding rules require an explicit destination connection choice in the preview. Source numeric IDs and names are never used to select a local connection automatically. Existing profiles, defaults and credentials remain unchanged. Configure destination profiles beforehand; choosing its default connection follows future changes to that default. HTTP `X-Original-Host` is an explicit dynamic-target option.
+- Forwarding rules need a destination connection for every source connection still used by a checked rule. The dialog preselects a suggestion only when it is unambiguous: `X-Original-Host` for rules that used it, this environment's default for rules that used the source default, or the one local connection with the same name. You still confirm each choice, and the server never resolves a connection from a source ID or name on its own. Existing profiles, defaults and credentials remain unchanged. Configure destination profiles beforehand; choosing its default connection follows future changes to that default. HTTP `X-Original-Host` is an explicit dynamic-target option.
 - For JMS defaults, an enabled YAML target takes precedence over a database default, matching runtime forwarding. Select the database profile explicitly to use it instead.
 - Preview performs no writes or connection tests. Confirmation revalidates destination choices; if a selected profile/default has changed, preview again. Invalid/disabled protocols, incomplete response data or a save failure reject/roll back the entire JSON batch.
 - Review environment-dependent fields such as HTTP `targetHost`/paths and JMS `matchKey` (queue name); these are copied literally. Different destination queue names require rule changes.
@@ -100,6 +114,8 @@ may already have committed, and another import creates new copies.
 
 JSON is the round-trip format for this workflow. Excel and OpenAPI imports create rules from their
 own formats; they are not complete backups of existing rules or environment configuration.
+They go through the same review: the file is parsed without writing anything, and the checked
+rules are created in one transaction, so a failure leaves no partial batch.
 
 ## Condition Matching Syntax
 

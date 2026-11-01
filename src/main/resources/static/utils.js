@@ -228,7 +228,8 @@ const apiCall = async (url, opt = {}, config = {}) => {
         const r = await fetch(url, { ...opt, headers });
         if (quietStatuses.includes(r.status)) { return r; }
         if (r.status === 401 || r.status === 403) {
-            if (!silent) { _showToast(_t('toast.loginRequired'), 'error'); }
+            // 403 means signed in without the required role, so asking to log in again would mislead.
+            if (!silent) { _showToast(_t(r.status === 403 ? 'toast.permissionDenied' : 'toast.loginRequired'), 'error'); }
             return r;
         }
         if (r.status === 409) {

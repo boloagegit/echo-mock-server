@@ -45,7 +45,7 @@ class DialogAndSettingsConsistencyResourceTest {
     @Test
     void dialogsCarryNoDecorativeHeaderIconsAndShareTheFooterLanguage() throws IOException {
         for (String dialog : new String[]{"AccountsPage", "ChangePasswordModal", "ImportModal", "IssuesPage",
-                "PriorityHelpModal", "OpenApiPreviewModal", "ResponseEditModal", "RuleEditModal", "SettingsPage"}) {
+                "PriorityHelpModal", "RuleExportModal", "ResponseEditModal", "RuleEditModal", "SettingsPage"}) {
             assertThat(text("components/" + dialog + ".js")).as(dialog).doesNotContain("modal-heading-icon");
         }
         // The confirm dialog keeps its icon: it tells a destructive confirmation apart.

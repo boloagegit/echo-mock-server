@@ -94,6 +94,12 @@ public class RuleQueryService {
                 page, pageSize, totalElements, totalPages);
     }
 
+    /** IDs of every rule matching the filters, without paging; used to export a filtered list. */
+    @Transactional(readOnly = true)
+    public List<String> findIds(RuleQuery query) {
+        return findTagRows(query).stream().map(TagRow::id).toList();
+    }
+
     /** Returns group counts without materializing rule entities. */
     @Transactional(readOnly = true)
     public RuleGroupSummary queryGroupSummary(RuleQuery query) {
