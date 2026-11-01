@@ -294,7 +294,7 @@ HTTP 轉發預設維持**內網相容模式**：不驗證憑證鏈與主機名�
 若呼叫端不完全可信，可以加上限制：
 
 ```bash
-# 只轉發到這些目的地；沒寫 port 視為 443。3xx 回應會直接回傳，不會跟隨。
+# 只轉發到這些目的地；沒寫 port 視為 443。3xx 回應（含 `Location`）會直接回傳，不會跟隨。
 ECHO_HTTP_ORIGINAL_HOST_MODE=ALLOWLIST
 ECHO_HTTP_ORIGINAL_HOST_ALLOWED_HOSTS=api.example.com,payments.internal:8443
 

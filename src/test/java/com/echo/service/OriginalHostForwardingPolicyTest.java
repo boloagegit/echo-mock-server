@@ -84,6 +84,7 @@ class OriginalHostForwardingPolicyTest {
         MockResponse response = forwarder.forwardOriginalHost(request(authority()), true);
 
         assertThat(response.getStatus()).isEqualTo(302);
+        assertThat(response.getHeaders()).containsEntry("Location", "/landed");
         assertThat(response.isForwarded()).isTrue();
         assertThat(paths).containsExactly("/start");
     }

@@ -477,6 +477,8 @@ public final class HttpOutboundForwarder {
                 .doOnNext(response -> request.getTrace().event("HTTP_TARGET_RESPONSE", "status", response.status()))
                 .map(response -> MockResponse.builder()
                         .status(response.status())
+                        .headers(response.location() == null ? null
+                                : Map.of(HttpHeaders.LOCATION, response.location()))
                         .body(response.body())
                         .utf8Body(response.utf8Body())
                         .matched(matched)
@@ -521,6 +523,8 @@ public final class HttpOutboundForwarder {
                         : request.send(Mono.fromSupplier(() -> Unpooled.wrappedBuffer(payload)));
                 return prepared.response((response, responseBody) -> {
                     int status = response.status().code();
+                    String location = status >= 300 && status < 400
+                            ? response.responseHeaders().get(HttpHeaderNames.LOCATION) : null;
                     String declaredLength = response.responseHeaders().get(HttpHeaderNames.CONTENT_LENGTH);
                     if (declaredLength != null && exceedsResponseLimit(declaredLength)) {
                         return Mono.error(new ResponseBodyTooLargeException(maxResponseBodyBytes));
@@ -529,8 +533,8 @@ public final class HttpOutboundForwarder {
                                     response.responseHeaders().get(HttpHeaderNames.CONTENT_TYPE)),
                                     smallResponseLength(declaredLength), bodyMemory, workContext,
                                     useUtf8Body && status >= 200 && status != 204 && status != 304)
-                            .map(value -> new ForwardResponse(status, value.text(), value.bytes()))
-                            .switchIfEmpty(Mono.just(new ForwardResponse(status, null, null)));
+                            .map(value -> new ForwardResponse(status, value.text(), value.bytes(), location))
+                            .switchIfEmpty(Mono.just(new ForwardResponse(status, null, null, location)));
                 }).single();
             }
         });
@@ -1210,7 +1214,8 @@ public final class HttpOutboundForwarder {
     private record PoolSnapshot(int acquired, int pending, int idle, int capacity) {
     }
 
-    private record ForwardResponse(int status, String body, Utf8ForwardBody utf8Body) {
+    /** {@code location} is kept only for 3xx responses, which are followed unless redirects are disabled. */
+    private record ForwardResponse(int status, String body, Utf8ForwardBody utf8Body, String location) {
     }
 
     private enum FailureKind {

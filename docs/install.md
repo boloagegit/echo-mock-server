@@ -322,7 +322,7 @@ intranet deployments working, and Echo logs a warning at startup. If callers are
 fully trusted, restrict it:
 
 ```bash
-# Forward only to these targets; no port means 443. 3xx responses are returned, not followed.
+# Forward only to these targets; no port means 443. 3xx responses are returned (with `Location`), not followed.
 ECHO_HTTP_ORIGINAL_HOST_MODE=ALLOWLIST
 ECHO_HTTP_ORIGINAL_HOST_ALLOWED_HOSTS=api.example.com,payments.internal:8443
 
