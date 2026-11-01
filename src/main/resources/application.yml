@@ -203,6 +203,13 @@ echo:
       max-forwarding-bodies: ${ECHO_HTTP_NATIVE_MAX_FORWARDING_BODIES:8}
       # Retire only idle worker threads, leaving busy workers alone; 0 preserves the previous behavior of keeping idle threads.
       worker-idle-timeout-seconds: ${ECHO_HTTP_NATIVE_WORKER_IDLE_TIMEOUT_SECONDS:60}
+    # X-Original-Host forwarding. LEGACY (default) keeps the historical behavior: any host, redirects followed.
+    # ALLOWLIST forwards only to allowed-hosts entries (host or host:port, comma separated; no port means 443)
+    # and returns 3xx responses instead of following them. DISABLED rejects every X-Original-Host forward.
+    # Rejected requests get 403. Saved HTTP connections and mock rules are not affected.
+    original-host:
+      mode: ${ECHO_HTTP_ORIGINAL_HOST_MODE:LEGACY}
+      allowed-hosts: ${ECHO_HTTP_ORIGINAL_HOST_ALLOWED_HOSTS:}
     # Total HTTP request budget; connection settings for pool wait + connect + read must sum to less than this value.
     request-timeout-ms: ${ECHO_HTTP_REQUEST_TIMEOUT_MS:40000}
     forward:

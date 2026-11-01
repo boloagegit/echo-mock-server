@@ -109,6 +109,7 @@ public final class HttpOutboundForwarder {
     private final ReactiveConnectionLimiter utf8BodyLimiter;
     private final int maxUtf8Bodies;
     private final ClientHolder originalHostClient;
+    private volatile OriginalHostPolicy originalHostPolicy = OriginalHostPolicy.legacy();
     private final int maxConnections;
     private final int maxPendingRequests;
     private final int maxResponseBodyBytes;
@@ -250,6 +251,12 @@ public final class HttpOutboundForwarder {
                 legacyConnectTimeoutSeconds, legacyReadTimeoutSeconds, false);
     }
 
+    @Autowired(required = false)
+    void setOriginalHostPolicy(OriginalHostPolicy originalHostPolicy) {
+        this.originalHostPolicy = originalHostPolicy == null
+                ? OriginalHostPolicy.legacy() : originalHostPolicy;
+    }
+
     public MockResponse forward(MockRequest request, Long connectionId, boolean useDefault) {
         return forwardAsync(request, connectionId, useDefault).toCompletableFuture().join();
     }
@@ -312,8 +319,22 @@ public final class HttpOutboundForwarder {
                     new IllegalArgumentException("X-Original-Host is required for this forwarding rule"),
                     matched));
         }
+        OriginalHostPolicy policy = originalHostPolicy;
+        String rejection = policy.rejectionReason(targetHost);
+        if (rejection != null) {
+            request.getTrace().event("ORIGINAL_HOST_REJECTED", "mode", policy.mode().name());
+            return CompletableFuture.completedFuture(MockResponse.builder()
+                    .status(403)
+                    .body("Proxy error: " + rejection)
+                    .matched(matched)
+                    .forwarded(true)
+                    .forwardTarget(sanitizeOriginalHost(targetHost))
+                    .proxyError(rejection)
+                    .build());
+        }
         TargetMetrics metrics = metricsFor("original-host", "X-Original-Host");
-        return submit(() -> exchangeOriginalHost(request, targetHost, matched),
+        boolean followRedirects = policy.followRedirects();
+        return submit(() -> exchangeOriginalHost(request, targetHost, matched, followRedirects),
                 matched, metrics, sanitizeOriginalHost(targetHost), request.getTrace());
     }
 
@@ -437,7 +458,8 @@ public final class HttpOutboundForwarder {
 
     private Mono<MockResponse> exchangeOriginalHost(MockRequest request,
                                                     String targetHost,
-                                                    boolean matched) {
+                                                    boolean matched,
+                                                    boolean followRedirects) {
         request.getTrace().stage("HTTP_EXCHANGE");
         request.getTrace().event("FORWARD_BEGIN", "source", "ORIGINAL_HOST",
                 "readTimeoutMs", legacyReadTimeoutSeconds * 1000L);
@@ -446,7 +468,7 @@ public final class HttpOutboundForwarder {
         log.debug("X-Original-Host forwarding to: {} {}", request.getMethod(), url);
         HttpHeaders headers = copyHeaders(request.getHeaders(), false);
         HttpMethod method = HttpMethod.valueOf(request.getMethod().toUpperCase(Locale.ROOT));
-        ClientUse client = originalHostClient.tryUse();
+        ClientUse client = originalHostClient.tryUse(followRedirects);
         if (client == null) {
             return Mono.error(new IllegalStateException("HTTP_CLIENT_CLOSED"));
         }
@@ -455,6 +477,8 @@ public final class HttpOutboundForwarder {
                 .doOnNext(response -> request.getTrace().event("HTTP_TARGET_RESPONSE", "status", response.status()))
                 .map(response -> MockResponse.builder()
                         .status(response.status())
+                        .headers(response.location() == null ? null
+                                : Map.of(HttpHeaders.LOCATION, response.location()))
                         .body(response.body())
                         .utf8Body(response.utf8Body())
                         .matched(matched)
@@ -499,6 +523,8 @@ public final class HttpOutboundForwarder {
                         : request.send(Mono.fromSupplier(() -> Unpooled.wrappedBuffer(payload)));
                 return prepared.response((response, responseBody) -> {
                     int status = response.status().code();
+                    String location = status >= 300 && status < 400
+                            ? response.responseHeaders().get(HttpHeaderNames.LOCATION) : null;
                     String declaredLength = response.responseHeaders().get(HttpHeaderNames.CONTENT_LENGTH);
                     if (declaredLength != null && exceedsResponseLimit(declaredLength)) {
                         return Mono.error(new ResponseBodyTooLargeException(maxResponseBodyBytes));
@@ -507,8 +533,8 @@ public final class HttpOutboundForwarder {
                                     response.responseHeaders().get(HttpHeaderNames.CONTENT_TYPE)),
                                     smallResponseLength(declaredLength), bodyMemory, workContext,
                                     useUtf8Body && status >= 200 && status != 204 && status != 304)
-                            .map(value -> new ForwardResponse(status, value.text(), value.bytes()))
-                            .switchIfEmpty(Mono.just(new ForwardResponse(status, null, null)));
+                            .map(value -> new ForwardResponse(status, value.text(), value.bytes(), location))
+                            .switchIfEmpty(Mono.just(new ForwardResponse(status, null, null, location)));
                 }).single();
             }
         });
@@ -1060,6 +1086,8 @@ public final class HttpOutboundForwarder {
 
     private static final class ClientHolder {
         private final HttpClient httpClient;
+        // Same pool and settings, but 3xx responses are returned instead of followed.
+        private final HttpClient noRedirectHttpClient;
         private final ConnectionProvider connectionProvider;
         private final PoolMetricsCollector metricsCollector;
         private final Consumer<ClientHolder> closeListener;
@@ -1072,15 +1100,20 @@ public final class HttpOutboundForwarder {
                              PoolMetricsCollector metricsCollector,
                              Consumer<ClientHolder> closeListener) {
             this.httpClient = httpClient;
+            this.noRedirectHttpClient = httpClient.followRedirect(false);
             this.connectionProvider = connectionProvider;
             this.metricsCollector = metricsCollector;
             this.closeListener = closeListener;
         }
 
-        private synchronized ClientUse tryUse() {
+        private ClientUse tryUse() {
+            return tryUse(true);
+        }
+
+        private synchronized ClientUse tryUse(boolean followRedirects) {
             if (retired || closed) return null;
             users++;
-            return new ClientUse(this);
+            return new ClientUse(this, followRedirects);
         }
 
         private synchronized void release() {
@@ -1120,14 +1153,16 @@ public final class HttpOutboundForwarder {
 
     private static final class ClientUse implements AutoCloseable {
         private final ClientHolder owner;
+        private final boolean followRedirects;
         private final AtomicBoolean closed = new AtomicBoolean();
 
-        private ClientUse(ClientHolder owner) {
+        private ClientUse(ClientHolder owner, boolean followRedirects) {
             this.owner = owner;
+            this.followRedirects = followRedirects;
         }
 
         private HttpClient httpClient() {
-            return owner.httpClient;
+            return followRedirects ? owner.httpClient : owner.noRedirectHttpClient;
         }
 
         @Override
@@ -1179,7 +1214,8 @@ public final class HttpOutboundForwarder {
     private record PoolSnapshot(int acquired, int pending, int idle, int capacity) {
     }
 
-    private record ForwardResponse(int status, String body, Utf8ForwardBody utf8Body) {
+    /** {@code location} is kept only for 3xx responses, which are followed unless redirects are disabled. */
+    private record ForwardResponse(int status, String body, Utf8ForwardBody utf8Body, String location) {
     }
 
     private enum FailureKind {

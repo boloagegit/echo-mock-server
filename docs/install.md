@@ -313,3 +313,30 @@ intranet-compatible mode.
 Use the default only on a trusted internal network. For downstream services reached
 through an untrusted network, create a saved HTTP connection and enable strict
 verification.
+
+### Restricting `X-Original-Host` targets
+
+By default (`LEGACY`), any caller that can reach `/mock` can choose the
+`X-Original-Host` target, and downstream redirects are followed. This keeps existing
+intranet deployments working, and Echo logs a warning at startup. If callers are not
+fully trusted, restrict it:
+
+```bash
+# Forward only to these targets; no port means 443. 3xx responses are returned (with `Location`), not followed.
+ECHO_HTTP_ORIGINAL_HOST_MODE=ALLOWLIST
+ECHO_HTTP_ORIGINAL_HOST_ALLOWED_HOSTS=api.example.com,payments.internal:8443
+
+# Or turn X-Original-Host forwarding off entirely
+ECHO_HTTP_ORIGINAL_HOST_MODE=DISABLED
+```
+
+Entries must match the header exactly as `host` or `host:port` (case-insensitive); there
+are no wildcards or CIDR ranges, and values with a scheme, path or `user@` are
+rejected. Rejected requests get `403` and are not sent anywhere. Saved HTTP connections
+and mock responses are unaffected. The equivalent properties are
+`echo.http.original-host.mode` and `echo.http.original-host.allowed-hosts`.
+
+Reactor Netty already drops `Authorization`, `Cookie` and `Proxy-Authorization` when a
+redirect leads to another host or port, but other headers (for example `X-Api-Key`) are
+sent again. `ALLOWLIST` avoids this for `X-Original-Host` because it does not follow
+redirects.
