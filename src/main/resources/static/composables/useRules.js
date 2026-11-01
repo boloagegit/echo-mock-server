@@ -367,7 +367,10 @@ const useRules = (deps) => {
     const importStep = ref('file');
     const importSourceInfo = ref({ title: '', version: '' });
     let importRulesDraft = null;
+    /** Bumped for every preview request and reset, so a late reply cannot restore a discarded preview. */
+    let importPreviewSequence = 0;
     const resetImportPreview = () => {
+        importPreviewSequence++;
         importPreview.value = null;
         importConnectionMappings.value = {};
         importExcluded.value = [];
@@ -378,11 +381,19 @@ const useRules = (deps) => {
     const setImportConnectionMapping = ({ key, selection }) => {
         importConnectionMappings.value = { ...importConnectionMappings.value, [key]: selection };
     };
-    const setImportExcluded = rows => { importExcluded.value = [...new Set(rows)].sort((x, y) => x - y); };
-    const toggleImportRow = row => {
-        setImportExcluded(importExcluded.value.includes(row)
-            ? importExcluded.value.filter(item => item !== row) : [...importExcluded.value, row]);
+    const normalizeExcluded = rows => [...new Set(rows)].sort((x, y) => x - y);
+    /** Unchecking a row can resolve another row's problem (e.g. a shared-response conflict), so re-validate. */
+    const setImportExcluded = async rows => {
+        const next = normalizeExcluded(rows);
+        if (next.join() === importExcluded.value.join()) { return; }
+        importExcluded.value = next;
+        // A request in flight notices the changed selection when it returns and asks again.
+        if (importPreview.value && importRulesDraft && !deps.loading.value.importRules && !importRevalidating.value) {
+            await revalidateImportPreview();
+        }
     };
+    const toggleImportRow = row => setImportExcluded(importExcluded.value.includes(row)
+        ? importExcluded.value.filter(item => item !== row) : [...importExcluded.value, row]);
     /** Requirements still used by at least one checked rule. */
     const activeImportRequirements = () => (importPreview.value?.requirements || []).filter(item =>
         !Array.isArray(item.rows) || item.rows.some(row => !importExcluded.value.includes(row)));
@@ -459,16 +470,35 @@ const useRules = (deps) => {
     };
 
     const requestImportPreview = async (previousMappings = {}) => {
+        const sequence = ++importPreviewSequence;
+        const excludedRows = importExcluded.value;
         const r = await apiCall('/api/admin/rules/import/preview', {
-            method: 'POST', body: JSON.stringify({ rules: importRulesDraft, connectionMappings: {} })
+            method: 'POST', body: JSON.stringify({ rules: importRulesDraft, connectionMappings: {}, excludedRows })
         }, { silent: true });
         const d = r ? await r.json().catch(() => ({})) : {};
+        // A newer selection already asked again; this answer describes an outdated one.
+        if (sequence !== importPreviewSequence) { return false; }
         if (!r || !r.ok) {
             deps.loading.value.importError = r ? (d.error || t('modal.importRequestFailed')) : t('toast.networkError');
             return false;
         }
         applyImportPreview(d, previousMappings);
         return true;
+    };
+
+    /** Asks the server to validate the current selection again, keeping the connection choices. */
+    const importRevalidating = ref(false);
+    const revalidateImportPreview = async () => {
+        importRevalidating.value = true;
+        try {
+            const selection = importExcluded.value;
+            await requestImportPreview(importConnectionMappings.value);
+            if (importExcluded.value.join() !== selection.join() && importPreview.value) {
+                await revalidateImportPreview();
+            }
+        } finally {
+            importRevalidating.value = false;
+        }
     };
 
     const confirmImport = async () => {
@@ -517,7 +547,7 @@ const useRules = (deps) => {
 
     /** The dialog's primary action for the current step. */
     const doImport = async () => {
-        if (!importFile.value || deps.loading.value.importRules) return;
+        if (!importFile.value || deps.loading.value.importRules || importRevalidating.value) return;
         deps.loading.value.importRules = true;
         deps.loading.value.importError = '';
         try {
@@ -529,7 +559,11 @@ const useRules = (deps) => {
                     return;
                 }
                 if (await requestImportPreview()) {
-                    setImportExcluded((importPreview.value.rows || []).filter(row => row.duplicate).map(row => row.row));
+                    const duplicates = normalizeExcluded((importPreview.value.rows || []).filter(row => row.duplicate).map(row => row.row));
+                    if (duplicates.length) {
+                        importExcluded.value = duplicates;
+                        await requestImportPreview();
+                    }
                     importStep.value = 'review';
                 }
                 return;
@@ -739,6 +773,7 @@ const useRules = (deps) => {
         setImportConnectionMapping,
         importExcluded,
         importStep,
+        importRevalidating,
         importSourceInfo,
         setImportExcluded,
         toggleImportRow,

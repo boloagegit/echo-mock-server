@@ -73,6 +73,24 @@ test('rules matching existing ones start unchecked and unchecked rows are sent a
   assert.deepEqual(confirmations(f)[0].payload.excludedRows, [2]);
 });
 
+test('unchecking a row asks the server again so problems that depended on it clear', async () => {
+  const conflict = { row: 2, code: 'SHARED_RESPONSE_MISMATCH', message: 'different content' };
+  const f = fixture(async (url, payload) => {
+    if (!url.endsWith('/preview')) return null;
+    const excluded = payload.excludedRows || [];
+    return response({ ...preview, total: 2, rows: [row(1), row(2)], errors: excluded.includes(1) ? [] : [conflict] });
+  });
+  f.rules.handleImportFile(new ImportFile('rules.json', [portable[0], portable[0]]));
+  await f.rules.doImport();
+  assert.equal(f.rules.importPreview.value.errors.length, 1);
+  await f.rules.toggleImportRow(1);
+  const previews = f.calls.filter(call => call.url.endsWith('/preview'));
+  assert.equal(previews.length, 2);
+  assert.deepEqual([...previews[1].payload.excludedRows], [1]);
+  assert.equal(f.rules.importPreview.value.errors.length, 0);
+  assert.equal(f.rules.importStep.value, 'review');
+});
+
 test('forwarding rules go through the connection step and confirmation sends the chosen destination once', async () => {
   let release;
   const f = fixture(async url => {
@@ -112,7 +130,7 @@ test('unchecking every forwarding rule skips the connection step and its mapping
   });
   f.rules.handleImportFile(new ImportFile('rules.json', [portable[0], portable[0]]));
   await f.rules.doImport();
-  f.rules.toggleImportRow(2);
+  await f.rules.toggleImportRow(2);
   await f.rules.doImport();
   assert.equal(confirmations(f).length, 1);
   assert.deepEqual({ ...confirmations(f)[0].payload.connectionMappings }, {});

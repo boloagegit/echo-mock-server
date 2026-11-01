@@ -126,7 +126,13 @@ public class RuleImportService {
                 }
             }
         }
+        Set<String> existing = review ? existingSignatures() : Set.of();
         if (included.isEmpty()) {
+            if (review && request != null && request.rules() != null) {
+                for (int index = 0; index < request.rules().size(); index++) {
+                    summaries.add(summary(index + 1, request.rules().get(index), existing));
+                }
+            }
             errors.add(new Problem(0, "RULES_REQUIRED", "Select at least one rule to import."));
             return new Plan(
                     new RuleImportPreview(
@@ -138,7 +144,7 @@ public class RuleImportService {
                             List.of(),
                             List.of(),
                             List.copyOf(errors),
-                            List.of()),
+                            List.copyOf(summaries)),
                     rows);
         }
         Map<String, String> mappings =
@@ -148,7 +154,6 @@ public class RuleImportService {
         options.forEach(option -> selections.put(option.selection(), option));
         Map<String, Requirement> requirements = new LinkedHashMap<>();
         Map<Long, ResponseContent> sourceResponses = new HashMap<>();
-        Set<String> existing = review ? existingSignatures() : Set.of();
         int enabled = 0;
         int disabled = 0;
         for (int index = 0; index < request.rules().size(); index++) {
@@ -366,7 +371,7 @@ public class RuleImportService {
                 source.getProtocol() != null && existing.contains(signature(source)));
     }
 
-    /** Rules with the same signature match the same requests, whatever their responses. */
+    /** Rules with the same signature match the same requests in the same scenario state, whatever their responses. */
     private static String signature(RuleDto rule) {
         return String.join(
                 "\u0001",
@@ -381,7 +386,10 @@ public class RuleImportService {
                 normalized(rule.getHeaderCondition()),
                 rule.getMatchSpec() == null || rule.getMatchSpec().isNull()
                         ? ""
-                        : rule.getMatchSpec().toString());
+                        : rule.getMatchSpec().toString(),
+                // Rules gated on different scenario states are eligible at different times.
+                normalized(rule.getScenarioName()),
+                normalized(rule.getRequiredScenarioState()));
     }
 
     private static String normalized(String value) {

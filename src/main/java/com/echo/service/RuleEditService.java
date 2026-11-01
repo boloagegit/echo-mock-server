@@ -74,7 +74,11 @@ public class RuleEditService {
         return findExportDtos(null);
     }
 
-    /** Portable copies of the given rules in list order; {@code null} exports every rule. */
+    /**
+     * Portable copies of the given rules in list order; {@code null} exports every rule. Rules and
+     * response content are read from one consistent export transaction.
+     */
+    @Transactional(readOnly = true, isolation = Isolation.SERIALIZABLE)
     public List<RuleDto> findExportDtos(Collection<String> ids) {
         Map<String, String> names = exportConnectionNames();
         Set<String> wanted = ids == null ? null : new HashSet<>(ids);

@@ -82,7 +82,12 @@ public class ImportExportController {
         return ResponseEntity.ok(ruleEditService.findExportDtos(ids));
     }
 
-    public record RuleExportRequest(List<String> ids) {}
+    /** IDs of the rules to export; null is treated as an empty selection. */
+    public record RuleExportRequest(List<String> ids) {
+        public RuleExportRequest {
+            ids = ids == null ? List.of() : List.copyOf(ids.stream().filter(java.util.Objects::nonNull).toList());
+        }
+    }
 
     /** Exports the selected rules; unknown IDs are ignored. */
     @PostMapping("/rules/export")

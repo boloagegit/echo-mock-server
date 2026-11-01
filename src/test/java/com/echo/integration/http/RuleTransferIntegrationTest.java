@@ -520,6 +520,48 @@ class RuleTransferIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    void rulesGatedOnAnotherScenarioStateAreNotDuplicates() {
+        createHttpRule("/checkout-step", "GET", "LOCAL");
+        var laterStep = incoming("/checkout-step", "PAID");
+        laterStep.setScenarioName("checkout");
+        laterStep.setRequiredScenarioState("paid");
+
+        var view = preview(List.of(laterStep, incoming("/checkout-step", "SAME")));
+
+        assertThat(view.path("rows").get(0).path("duplicate").asBoolean()).isFalse();
+        assertThat(view.path("rows").get(1).path("duplicate").asBoolean()).isTrue();
+    }
+
+    @Test
+    void previewWithExclusionsRevalidatesTheRemainingRowsAndStillListsEveryRow() {
+        var first = incoming("/shared-a", "FIRST");
+        var second = incoming("/shared-b", "DIFFERENT");
+
+        var conflict = preview(List.of(first, second));
+        assertThat(conflict.path("errors").get(0).path("code").asText()).isEqualTo("SHARED_RESPONSE_MISMATCH");
+        assertThat(conflict.path("errors").get(0).path("row").asInt()).isEqualTo(2);
+
+        var resolved =
+                post(
+                                "/api/admin/rules/import/preview",
+                                Map.of("rules", List.of(first, second), "connectionMappings", Map.of(),
+                                        "excludedRows", List.of(1)))
+                        .getBody();
+        assertThat(resolved.path("errors")).isEmpty();
+        assertThat(resolved.path("rows")).hasSize(2);
+
+        var nothing =
+                post(
+                                "/api/admin/rules/import/preview",
+                                Map.of("rules", List.of(first, second), "connectionMappings", Map.of(),
+                                        "excludedRows", List.of(1, 2)))
+                        .getBody();
+        assertThat(nothing.path("errors").get(0).path("code").asText()).isEqualTo("RULES_REQUIRED");
+        // The review table keeps every row so they can be checked again.
+        assertThat(nothing.path("rows")).hasSize(2);
+    }
+
+    @Test
     void excludedRowsAreNeitherValidatedNorImported() {
         var keep = incoming("/kept", "KEPT");
         var invalid = incoming("", "BROKEN");

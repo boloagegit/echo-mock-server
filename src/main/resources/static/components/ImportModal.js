@@ -19,6 +19,8 @@ const ImportModal = {
     preview: Object,
     connectionMappings: Object,
     step: { type: String, default: 'file' },
+    /** The server is re-checking the current selection; only submitting waits for it. */
+    revalidating: Boolean,
     excluded: { type: Array, default: () => [] },
     sourceInfo: { type: Object, default: () => ({}) },
     httpLabel: String,
@@ -103,7 +105,7 @@ const ImportModal = {
       return parts.join(' · ');
     },
     canSubmit() {
-      if (!this.importFile || this.loading) { return false; }
+      if (!this.importFile || this.loading || this.revalidating) { return false; }
       if (!this.reviewing) { return true; }
       if (!this.includedRows.length || this.blockingRows.length || this.fileProblems.length) { return false; }
       return this.step !== 'connections' || this.pendingConnections === 0;
