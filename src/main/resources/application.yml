@@ -230,6 +230,9 @@ echo:
       pool-acquire-timeout-ms: ${ECHO_HTTP_FORWARD_POOL_ACQUIRE_TIMEOUT_MS:3000}
       # Overall admin connection-test deadline, including pool wait, redirects and a continuously dripping body.
       test-timeout-seconds: ${ECHO_HTTP_FORWARD_TEST_TIMEOUT_SECONDS:30}
+  openapi:
+    # Opt in to document-local references; false preserves the existing import behavior.
+    local-references-only: ${ECHO_OPENAPI_LOCAL_REFERENCES_ONLY:false}
   stats:
     retention-days: 7  # Number of days to retain statistical data
   request-log:

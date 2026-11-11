@@ -21,6 +21,7 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -40,6 +41,9 @@ public class OpenApiImportService {
 
     private final ObjectMapper objectMapper;
 
+    @Value("${echo.openapi.local-references-only:false}")
+    private boolean localReferencesOnly;
+
     @Data
     @Builder
     public static class OpenApiParseResult {
@@ -56,6 +60,12 @@ public class OpenApiImportService {
      * Supports OpenAPI 3.x and Swagger 2.x (automatic detection and conversion)
      */
     public OpenApiParseResult parse(String content) {
+        if (localReferencesOnly) {
+            String error = OpenApiLocalReferenceGuard.validate(content);
+            if (error != null) {
+                return OpenApiParseResult.builder().success(false).errors(List.of(error)).rules(List.of()).build();
+            }
+        }
         ParseOptions options = new ParseOptions();
         options.setResolve(true);
         options.setResolveFully(true);
