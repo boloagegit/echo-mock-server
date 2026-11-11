@@ -301,10 +301,45 @@ location /api/ {
 
 HTTP 轉發預設維持**內網相容模式**：不驗證憑證鏈與主機名稱，讓內部網路中的
 私有或自簽憑證仍可正常使用。已儲存的 HTTP 連線可在「系統設定」中個別切換為
-**嚴格憑證驗證**；舊有的 `X-Original-Host` 轉發則維持內網相容模式。
+**嚴格憑證驗證**。既有連線設定與新連線的預設值保持不變。舊有的
+`X-Original-Host` 轉發仍維持相容模式；管理員可設定
+`ECHO_HTTP_TLS_LEGACY_VERIFICATION_ENABLED=true` 並重啟，啟用憑證鏈與主機名稱驗證。
+此開關也涵蓋舊式 Servlet 轉發用戶端，不會更改已儲存連線的驗證設定。
 
 此預設只適合受信任的內部網路。若下游服務會經過不受信任的網路，請建立已儲存
 的 HTTP 連線並開啟嚴格憑證驗證。
+
+需要信任公司 CA 時，可設定 HTTP 專用的 Spring SSL 信任組合：
+
+```yaml
+echo:
+  http:
+    tls:
+      legacy-verification-enabled: true # 選用；預設 false
+      trust-bundle: company-http         # 預設空白；開啟驗證時沿用 JVM 的信任根
+spring:
+  ssl:
+    bundle:
+      jks:
+        company-http:
+          truststore:
+            location: "file:/opt/echo/certs/company-ca.p12"
+            password: "${ECHO_HTTP_CA_PASSWORD}"
+            type: PKCS12
+```
+
+Windows 可使用 `"file:C:/Echo Config/company-ca.p12"` 這類路徑；也可透過
+`ECHO_HTTP_TLS_TRUST_BUNDLE=company-http` 選取組合。HTTP 只使用其中的信任庫，
+不使用用戶端私鑰、通訊協定或 cipher 設定。指定的信任根會取代 HTTP 原本的信任根，
+因此需放入所有已啟用驗證之 HTTP 下游需要的 CA。
+
+指定 CA 不會自動開啟驗證，仍須勾選個別連線的驗證選項，或開啟舊式轉發專用開關。
+名稱不存在、拼錯或沒有信任庫時會拒絕啟動，不會靜默改用其他信任設定。
+這些設定不修改 JVM 全域 SSL 屬性，也不更改 JMS 的信任設定。
+
+信任資料在啟動時載入；修改設定或憑證檔案後須重啟 Echo，即使 Spring 設定了檔案監看也一樣。
+回復時，還原原本的個別連線驗證選項、移除這兩項 HTTP TLS 設定與不再使用的信任組合定義，再重啟即可；
+不需要資料庫遷移，也不會重寫已儲存的連線。
 
 ### 限制 `X-Original-Host` 目的地
 
