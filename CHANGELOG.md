@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Security
+- Update Handlebars.java to 4.5.8, removing the obsolete bundled Handlebars.js 4.7.9 resource while retaining the Java template engine and upstream classpath-loader compatibility fix.
+
 ## [v2026.11.11] — 2026-11-11
 
 ### Security
