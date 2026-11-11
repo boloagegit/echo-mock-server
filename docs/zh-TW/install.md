@@ -200,6 +200,25 @@ Windows／PowerShell 可使用 `Invoke-RestMethod http://localhost:8080/actuator
 修改後須重新啟動 Echo。關閉時隱藏導覽入口，直接進入 `#/issues` 會返回規則列表，
 已登入使用者呼叫問題回報 API 會得到 404；不刪除既有資料，開啟後沿用原本權限。
 
+### OpenAPI 引用安全模式
+
+OpenAPI 匯入預設維持既有行為。管理員可設定
+`ECHO_OPENAPI_LOCAL_REFERENCES_ONLY=true`，或
+`echo.openapi.local-references-only: true`，重啟後只允許同一份文件內的引用。
+批次匯入功能仍須另行開啟，原本的 ADMIN 權限要求也保持不變。
+
+開啟後，指向其他網址、檔案或 classpath 資源的引用會在完整解析前被拒絕；
+透過檔內指標間接藏入的外部引用也會檢查。被拒絕的預覽回傳 HTTP 400，
+不會匯入部分規則。錯誤代碼包括 `OPENAPI_EXTERNAL_REFERENCE_DISABLED`、
+`OPENAPI_INVALID_LOCAL_REFERENCE` 與 `OPENAPI_REFERENCE_INSPECTION_FAILED`。
+一般檔內引用仍沿用原本解析器的解析與錯誤回報；範例資料中的 `$ref` 欄位不會
+直接被視為引用，除非該資料本身被當成真正的引用目標。
+JSON／YAML、Swagger 2 與 OpenAPI 3 都套用同一政策；JSON／Excel 規則匯入不受影響。
+
+啟用後，OpenAPI 匯入會多一道檢查；不會重寫已儲存規則，也不更改 HTTP／JMS 比對。
+若規格依賴其他檔案中的共用定義，需先整合成單一文件，或由受信任的管理員使用
+原本的相容模式匯入。設回 `false` 並重啟即可恢復原行為，不需要資料庫遷移。
+
 ## 存取服務
 
 | 服務 | URL | 說明 |

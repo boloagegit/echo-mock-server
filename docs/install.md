@@ -224,6 +224,29 @@ the navigation entry is hidden, direct `#/issues` links return to the rule list,
 and authenticated issue API requests return 404. Existing data and enabled-mode
 permissions are unchanged.
 
+### OpenAPI reference safety
+
+OpenAPI imports retain their existing behavior by default. Administrators can opt
+into document-local references by setting `ECHO_OPENAPI_LOCAL_REFERENCES_ONLY=true`
+or `echo.openapi.local-references-only: true`, then restarting Echo. Bulk imports
+must still be enabled separately, and the existing ADMIN permissions remain required.
+
+In this mode, references to other URLs, files or classpath resources are rejected
+before full resolution. An external reference hidden behind a local pointer is
+checked as well. A rejected preview returns HTTP 400 without importing partial
+rules; errors include `OPENAPI_EXTERNAL_REFERENCE_DISABLED`,
+`OPENAPI_INVALID_LOCAL_REFERENCE` or `OPENAPI_REFERENCE_INSPECTION_FAILED`.
+Normal in-document references retain the existing parser's resolution and diagnostics.
+Literal example data containing a `$ref` field is allowed unless it is itself used
+as an actual reference target. JSON and YAML, Swagger 2 and OpenAPI 3 imports use
+the same policy; JSON/Excel rule imports are unchanged.
+
+Enabling this mode adds a validation pass to OpenAPI imports. It does not rewrite
+stored rules or change HTTP/JMS matching. Specifications that share definitions in
+other files must be bundled into one document, or imported using the existing
+compatible mode by a trusted administrator. Set the option back to `false` and
+restart to restore that behavior; no database migration is needed.
+
 ## Access the Service
 
 | Service | URL | Description |
