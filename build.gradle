@@ -45,6 +45,15 @@ ext['commons-lang3.version'] = '3.20.0'
 // Keep the Netty 4.1 modules aligned; 4.1.139 fixes compressed response truncation
 // and the subsequent decompression-buffer-limit regression.
 ext['netty.version'] = '4.1.139.Final'
+// Align security patches within each existing dependency family.
+ext['undertow.version'] = '2.3.25.Final'
+ext['jackson-bom.version'] = '2.21.7'
+ext['httpclient5.version'] = '5.6.3'
+ext['httpcore5.version'] = '5.4.3'
+ext['mariadb.version'] = '3.5.11'
+ext['postgresql.version'] = '42.7.12'
+ext['log4j2.version'] = '2.25.5'
+
 
 // Artemis moved its Maven group in 2.50. Keep the client and embedded broker
 // together; 2.54+ fixes byte-at-a-time copies when reading large messages.
@@ -81,6 +90,11 @@ repositories {
 }
 
 dependencies {
+    constraints {
+        implementation('com.google.guava:guava:33.7.2-jre') {
+            because 'Avoid the older deserialization allocation path in transitive Guava dependencies'
+        }
+    }
     // Spring Boot Web with Undertow (exclude Tomcat)
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-undertow'
@@ -117,7 +131,7 @@ dependencies {
     implementation 'com.jayway.jsonpath:json-path:3.0.0'
 
     // Handlebars for Response Templating
-    implementation 'com.github.jknack:handlebars:4.5.4'
+    implementation 'com.github.jknack:handlebars:4.5.6'
 
     // Excel parsing with Apache POI
     implementation 'org.apache.poi:poi-ooxml:5.5.1'
@@ -158,6 +172,9 @@ dependencies {
     // Lombok
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
+
+    // Preserve Hibernate/Byte Buddy annotation resolution after Guava removes this transitive dependency.
+    implementation 'org.checkerframework:checker-qual:3.37.0'
 
     // Error Prone (compile-time only, does NOT affect runtime)
     // 2.42.0 is the newest Error Prone release that can run on the Java 17 toolchain.

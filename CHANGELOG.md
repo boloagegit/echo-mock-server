@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [v2026.11.11] — 2026-11-11
+
+### Security
+- Separate local password authentication from LDAP remember-me identity lookup while preserving normal local and LDAP sign-in, roles and remembered sessions.
+- Replace public default remember-me signing keys with a persistent, random installation key. Existing non-placeholder `ECHO_REMEMBER_ME_KEY` values are preserved. Deployments using the old public defaults must sign in once after upgrading; persist `ECHO_REMEMBER_ME_KEY_FILE` (default `./data/remember-me.key`), or configure an explicit secret for read-only deployments. Instances sharing cookies must share their protected key.
+- Update Undertow to 2.3.25.Final, Jackson to 2.21.7, Apache HttpClient/HttpCore to 5.6.3/5.4.3, MariaDB/PostgreSQL drivers to 3.5.11/42.7.12, Guava to 33.7.2-jre, Log4j API to 2.25.5 and Handlebars.java to 4.5.6. Retain the existing Checker annotations runtime dependency for Hibernate/Byte Buddy compatibility. Normal HTTP, JMS, templates and database behavior are covered by regression and live-service checks; this update does not claim that every security advisory is resolved.
+
 ### Added
 - A client-side Spring Boot Starter redirects selected Spring Cloud OpenFeign calls to Echo, with the same Java 17 SDK binary verified across Spring Boot 3 and 4. It is disabled by default and preserves existing downstream URLs.
 - An authenticated SDK Center in the account menu lists packaged SDKs and versions, exact-version downloads, checksums and installation guides. SDK artifacts are embedded when building Echo, with additional SDKs and historical versions supplied through release metadata.

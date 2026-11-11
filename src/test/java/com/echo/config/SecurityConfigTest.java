@@ -85,13 +85,24 @@ class SecurityConfigTest {
     }
 
     @Test
-    void inMemoryUserDetailsService_shouldFallbackForLdapUser() {
+    void passwordLookupRejectsUnknownUsersButRememberMeRetainsLdapIdentity() {
         when(builtinUserRepository.findByUsername("ldap-user")).thenReturn(Optional.empty());
         UserDetailsService service = config.inMemoryUserDetailsService(passwordEncoder, builtinUserRepository);
-        var user = service.loadUserByUsername("ldap-user");
-        
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.loadUserByUsername("ldap-user"))
+                .isInstanceOf(org.springframework.security.core.userdetails.UsernameNotFoundException.class);
+        var user = config.rememberMeUserDetailsService(service).loadUserByUsername("ldap-user");
         assertThat(user.getUsername()).isEqualTo("ldap-user");
         assertThat(user.getAuthorities()).anyMatch(a -> a.getAuthority().equals("ROLE_USER"));
+    }
+
+    @Test
+    void daoAuthenticationProvider_shouldRejectUnknownUserWithEmptyPassword() {
+        when(builtinUserRepository.findByUsername(anyString())).thenReturn(Optional.empty());
+        var service = config.inMemoryUserDetailsService(passwordEncoder, builtinUserRepository);
+        var provider = config.daoAuthenticationProvider(service, passwordEncoder);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> provider.authenticate(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken("missing-user", "")))
+                .isInstanceOf(org.springframework.security.core.AuthenticationException.class);
     }
 
     @Test

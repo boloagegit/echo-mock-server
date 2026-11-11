@@ -175,6 +175,14 @@ class SecurityIntegrationTest {
     }
 
     @Test
+    void unknownUsernameWithEmptyBasicPasswordMustRemainUnauthorized() throws Exception {
+        mockMvc.perform(get("/api/admin/logs").accept(MediaType.APPLICATION_JSON)
+                        .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors
+                                .httpBasic("missing-user", "")))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void requestLogs_shouldReturn401_whenNotAuthenticated() throws Exception {
         mockMvc.perform(get("/api/admin/logs").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized());

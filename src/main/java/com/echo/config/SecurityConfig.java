@@ -3,6 +3,8 @@ package com.echo.config;
 import com.echo.entity.BuiltinUser;
 import com.echo.repository.BuiltinUserRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -14,18 +16,17 @@ import org.springframework.security.config.annotation.web.configuration.WebSecur
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
 import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 
 import jakarta.servlet.http.HttpServletResponse;
 import java.time.Duration;
+import java.nio.file.Path;
 import java.util.Optional;
 
 @Configuration
@@ -44,6 +45,9 @@ public class SecurityConfig {
     @Value("${echo.remember-me.validity:${server.servlet.session.timeout:30m}}")
     private Duration rememberMeValidity;
 
+    @Value("${echo.remember-me.key-file:./data/remember-me.key}")
+    private Path rememberMeKeyFile = Path.of("./data/remember-me.key");
+
     /**
      * Open for reading only, you need to log in to modify
      */
@@ -51,7 +55,8 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http, 
             AuthenticationProvider ldapAuthenticationProvider,
             AuthenticationProvider daoAuthenticationProvider,
-            UserDetailsService inMemoryUserDetailsService) throws Exception {
+            @Qualifier("rememberMeUserDetailsService") UserDetailsService rememberMeUserDetailsService) throws Exception {
+        String signingKey = RememberMeSigningKey.resolve(rememberMeKey, rememberMeKeyFile);
         http
             .csrf(AbstractHttpConfigurer::disable)
             .headers(h -> h.frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin))
@@ -113,9 +118,9 @@ public class SecurityConfig {
                 .permitAll()
             )
             .rememberMe(rm -> rm
-                .key(rememberMeKey)
+                .key(signingKey)
                 .tokenValiditySeconds((int) rememberMeValidity.toSeconds())
-                .userDetailsService(inMemoryUserDetailsService)
+                .userDetailsService(rememberMeUserDetailsService)
                 .useSecureCookie(false)
             )
             .logout(logout -> logout
@@ -135,6 +140,7 @@ public class SecurityConfig {
     }
 
     @Bean
+    @Primary
     public UserDetailsService inMemoryUserDetailsService(PasswordEncoder passwordEncoder,
                                                          BuiltinUserRepository builtinUserRepository) {
         // Supports {bcrypt} or {noop} prefix, if there is no prefix, it will be regarded as clear code
@@ -154,7 +160,7 @@ public class SecurityConfig {
 
         InMemoryUserDetailsManager inMemory = new InMemoryUserDetailsManager(admin, user);
 
-        // Combined UserDetailsService: BuiltinUserRepository → InMemory admin → LDAP Default
+        // Password authentication must only resolve an existing local account.
         return username -> {
             // 1. Check BuiltinUserRepository first
             Optional<BuiltinUser> builtinUser = builtinUserRepository.findByUsername(username);
@@ -173,21 +179,31 @@ public class SecurityConfig {
             }
 
             // 2. Check InMemory (admin account number, etc.)
+            return inMemory.loadUserByUsername(username);
+        };
+    }
+
+    /**
+     * LDAP remember-me identities are authenticated by the signed cookie, not by
+     * their placeholder password. Never supply this adapter to the DAO provider.
+     * Preserve the existing LDAP cookie identity and local password-change binding.
+     */
+    @Bean
+    public UserDetailsService rememberMeUserDetailsService(
+            @Qualifier("inMemoryUserDetailsService") UserDetailsService localUsers) {
+        return username -> {
             try {
-                return inMemory.loadUserByUsername(username);
-            } catch (UsernameNotFoundException e) {
-                // 3. LDAP user: Create UserDetails with default permissions (for remember-me)
-                return User.builder()
-                        .username(username)
-                        .password("{noop}")
-                        .roles("USER")
-                        .build();
+                return localUsers.loadUserByUsername(username);
+            } catch (UsernameNotFoundException missingLocalUser) {
+                return User.builder().username(username).password("{noop}").roles("USER").build();
             }
         };
     }
 
     @Bean
-    public AuthenticationProvider daoAuthenticationProvider(UserDetailsService userDetailsService, PasswordEncoder passwordEncoder) {
+    public AuthenticationProvider daoAuthenticationProvider(
+            @Qualifier("inMemoryUserDetailsService") UserDetailsService userDetailsService,
+            PasswordEncoder passwordEncoder) {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
         provider.setUserDetailsService(userDetailsService);
         provider.setPasswordEncoder(passwordEncoder);
