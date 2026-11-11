@@ -1,15 +1,18 @@
 package com.echo.config;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
 import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
+import org.apache.hc.client5.http.ssl.DefaultHostnameVerifier;
 import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactoryBuilder;
 import org.apache.hc.client5.http.ssl.TrustAllStrategy;
 import org.apache.hc.core5.ssl.SSLContextBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.core.Ordered;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
@@ -27,7 +30,18 @@ import java.util.List;
  * Configures static resource handling and view controllers.
  */
 @Configuration
+@Import(HttpTlsPolicy.class)
 public class WebMvcConfig implements WebMvcConfigurer {
+    private final HttpTlsPolicy tlsPolicy;
+
+    public WebMvcConfig() {
+        this(HttpTlsPolicy.compatible());
+    }
+
+    @Autowired
+    public WebMvcConfig(HttpTlsPolicy tlsPolicy) {
+        this.tlsPolicy = tlsPolicy;
+    }
     private static final List<MediaType> PROBE_DEFAULT_MEDIA_TYPES = List.of(MediaType.APPLICATION_JSON);
     private static final List<MediaType> BINARY_DEFAULT_MEDIA_TYPES = List.of(MediaType.APPLICATION_OCTET_STREAM);
 
@@ -80,10 +94,11 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .setMaxConnTotal(30)
                 .setMaxConnPerRoute(10)
                 .setSSLSocketFactory(SSLConnectionSocketFactoryBuilder.create()
-                        .setSslContext(SSLContextBuilder.create()
-                                .loadTrustMaterial(null, TrustAllStrategy.INSTANCE)
-                                .build())
-                        .setHostnameVerifier(NoopHostnameVerifier.INSTANCE)
+                        .setSslContext(tlsPolicy.legacyVerificationEnabled()
+                                ? tlsPolicy.verifiedContext()
+                                : SSLContextBuilder.create().loadTrustMaterial(null, TrustAllStrategy.INSTANCE).build())
+                        .setHostnameVerifier(tlsPolicy.legacyVerificationEnabled()
+                                ? new DefaultHostnameVerifier() : NoopHostnameVerifier.INSTANCE)
                         .build())
                 .build();
         CloseableHttpClient httpClient = HttpClients.custom()

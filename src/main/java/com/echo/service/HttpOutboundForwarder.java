@@ -1,5 +1,6 @@
 package com.echo.service;
 
+import com.echo.config.HttpTlsPolicy;
 import com.echo.dto.HttpForwardMetricsDto;
 import com.echo.pipeline.MockRequest;
 import com.echo.pipeline.MockResponse;
@@ -10,8 +11,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelOption;
 import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.ssl.SslContextBuilder;
-import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.hc.client5.http.ConnectTimeoutException;
@@ -97,6 +96,7 @@ public final class HttpOutboundForwarder {
             "te", "trailer", "transfer-encoding", "upgrade");
 
     private final HttpTargetConnectionService connectionService;
+    private final HttpTlsPolicy tlsPolicy;
     private final Map<String, ClientHolder> clients = new ConcurrentHashMap<>();
     private final Set<ClientHolder> retiredClients = ConcurrentHashMap.newKeySet();
     private final Map<String, TargetMetrics> targetMetrics = new ConcurrentHashMap<>();
@@ -195,6 +195,25 @@ public final class HttpOutboundForwarder {
                 idleConnectionTimeoutSeconds, DEFAULT_MAX_UTF8_BODIES);
     }
 
+    public HttpOutboundForwarder(
+            HttpTargetConnectionService connectionService,
+            int maxConcurrent,
+            int maxConnections,
+            int maxPendingRequests,
+            int maxResponseBodyBytes,
+            int maxBufferedResponseBytes,
+            int poolAcquireTimeoutMs,
+            int legacyConnectTimeoutSeconds,
+            int legacyReadTimeoutSeconds,
+            int overloadBackoffMs,
+            int idleConnectionTimeoutSeconds,
+            int maxUtf8Bodies) {
+        this(connectionService, maxConcurrent, maxConnections, maxPendingRequests, maxResponseBodyBytes,
+                maxBufferedResponseBytes, poolAcquireTimeoutMs, legacyConnectTimeoutSeconds,
+                legacyReadTimeoutSeconds, overloadBackoffMs, idleConnectionTimeoutSeconds,
+                maxUtf8Bodies, HttpTlsPolicy.compatible());
+    }
+
     @Autowired
     public HttpOutboundForwarder(
             HttpTargetConnectionService connectionService,
@@ -208,7 +227,8 @@ public final class HttpOutboundForwarder {
             @Value("${echo.http.forward.legacy-read-timeout-seconds:30}") int legacyReadTimeoutSeconds,
             @Value("${echo.http.forward.overload-backoff-ms:50}") int overloadBackoffMs,
             @Value("${echo.http.forward.idle-connection-timeout-seconds:30}") int idleConnectionTimeoutSeconds,
-            @Value("${echo.http.native.max-forwarding-bodies:8}") int maxUtf8Bodies) {
+            @Value("${echo.http.native.max-forwarding-bodies:8}") int maxUtf8Bodies,
+            HttpTlsPolicy tlsPolicy) {
         if (maxConcurrent < 0) {
             throw new IllegalArgumentException("maxConcurrent must not be negative");
         }
@@ -225,6 +245,7 @@ public final class HttpOutboundForwarder {
             throw new IllegalArgumentException("overloadBackoffMs must not be negative");
         }
         this.connectionService = connectionService;
+        this.tlsPolicy = java.util.Objects.requireNonNull(tlsPolicy);
         this.maxConnections = maxConnections;
         this.maxPendingRequests = maxPendingRequests;
         this.maxUtf8Bodies = maxUtf8Bodies;
@@ -248,7 +269,7 @@ public final class HttpOutboundForwarder {
                 maxConnections, maxPendingRequests, forwardScheduler);
         this.utf8BodyLimiter = new ReactiveConnectionLimiter(maxUtf8Bodies, maxPendingRequests, forwardScheduler);
         this.originalHostClient = createClient(
-                legacyConnectTimeoutSeconds, legacyReadTimeoutSeconds, false);
+                legacyConnectTimeoutSeconds, legacyReadTimeoutSeconds, tlsPolicy.legacyVerificationEnabled());
     }
 
     @Autowired(required = false)
@@ -414,6 +435,7 @@ public final class HttpOutboundForwarder {
                                       int readTimeoutSeconds,
                                       boolean tlsVerificationEnabled) {
         try {
+            var sslContext = tlsPolicy.nettyContext(tlsVerificationEnabled);
             PoolMetricsCollector metricsCollector = new PoolMetricsCollector();
             ConnectionProvider connectionProvider = ConnectionProvider.builder(
                             "echo-http-" + CLIENT_SEQUENCE.incrementAndGet())
@@ -437,15 +459,12 @@ public final class HttpOutboundForwarder {
                     .responseTimeout(Duration.ofSeconds(readTimeoutSeconds))
                     .compress(true)
                     .followRedirect(true);
-            if (!tlsVerificationEnabled) {
-                var sslContext = SslContextBuilder.forClient()
-                        .trustManager(InsecureTrustManagerFactory.INSTANCE)
-                        .build();
+            if (sslContext != null) {
                 httpClient = httpClient.secure(spec -> spec
                         .sslContext(sslContext)
                         .handlerConfigurator(handler -> {
                             var parameters = handler.engine().getSSLParameters();
-                            parameters.setEndpointIdentificationAlgorithm(null);
+                            parameters.setEndpointIdentificationAlgorithm(tlsVerificationEnabled ? "HTTPS" : null);
                             handler.engine().setSSLParameters(parameters);
                         }));
             }

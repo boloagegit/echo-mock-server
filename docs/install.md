@@ -307,12 +307,47 @@ location /api/ {
 HTTP forwarding keeps **intranet-compatible TLS behavior by default**: certificate-chain
 and hostname verification are disabled so private or self-signed downstream services
 continue to work. Saved HTTP connection profiles can opt into **Strict Certificate
-Verification** in System Settings. Legacy `X-Original-Host` forwarding remains in
-intranet-compatible mode.
+Verification** in System Settings. These saved flags and new-profile defaults are unchanged.
+Legacy `X-Original-Host` forwarding remains compatible unless the administrator sets
+`ECHO_HTTP_TLS_LEGACY_VERIFICATION_ENABLED=true` and restarts Echo. This switch also
+covers the legacy Servlet forwarding client; it does not change saved profiles.
 
 Use the default only on a trusted internal network. For downstream services reached
 through an untrusted network, create a saved HTTP connection and enable strict
 verification.
+
+For a private CA, configure a named Spring SSL trust bundle and select it for HTTP:
+
+```yaml
+echo:
+  http:
+    tls:
+      legacy-verification-enabled: true # optional; default false
+      trust-bundle: company-http         # default empty: use JVM trust roots when verification is on
+spring:
+  ssl:
+    bundle:
+      jks:
+        company-http:
+          truststore:
+            location: "file:/opt/echo/certs/company-ca.p12"
+            password: "${ECHO_HTTP_CA_PASSWORD}"
+            type: PKCS12
+```
+
+On Windows, a location such as `"file:C:/Echo Config/company-ca.p12"` is supported.
+`ECHO_HTTP_TLS_TRUST_BUNDLE=company-http` also selects the bundle. HTTP reads only its
+truststore, not client keys, protocol or cipher options. The selected roots replace
+HTTP's default roots, so include every CA needed by verified HTTP destinations.
+Setting a bundle does not turn verification on: enable the saved profile's checkbox
+or the separate legacy switch. An absent/misspelled bundle or a bundle without a
+truststore fails startup rather than silently changing trust.
+
+This configuration never sets JVM-wide SSL properties or changes JMS trust.
+Trust material is captured at startup; restart Echo after changing the bundle or
+its certificate files, even if Spring bundle file watching is configured. To revert,
+restore the previous profile flags, remove the two optional HTTP TLS settings and
+any unused bundle definition, then restart. No database migration or stored-profile rewrite is performed.
 
 ### Restricting `X-Original-Host` targets
 

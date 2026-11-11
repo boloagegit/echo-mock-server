@@ -211,6 +211,11 @@ echo:
     original-host:
       mode: ${ECHO_HTTP_ORIGINAL_HOST_MODE:LEGACY}
       allowed-hosts: ${ECHO_HTTP_ORIGINAL_HOST_ALLOWED_HOSTS:}
+    tls:
+      # Saved profiles keep their own verification flags. Legacy forwarding remains compatible by default.
+      legacy-verification-enabled: ${ECHO_HTTP_TLS_LEGACY_VERIFICATION_ENABLED:false}
+      # Optional Spring SSL bundle supplying HTTP trust material only; requires restart after changes.
+      trust-bundle: ${ECHO_HTTP_TLS_TRUST_BUNDLE:}
     # Total HTTP request budget; connection settings for pool wait + connect + read must sum to less than this value.
     request-timeout-ms: ${ECHO_HTTP_REQUEST_TIMEOUT_MS:40000}
     forward:

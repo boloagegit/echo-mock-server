@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+- Add optional HTTP-only CA trust bundles and legacy forwarding certificate verification; existing profile flags and all TLS defaults remain unchanged.
+
 ### Security
 - Update Handlebars.java to 4.5.8, removing the obsolete bundled Handlebars.js 4.7.9 resource while retaining the Java template engine and upstream classpath-loader compatibility fix.
 
