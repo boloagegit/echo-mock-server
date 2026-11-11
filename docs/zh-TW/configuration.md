@@ -19,7 +19,8 @@ echo:
     accent: teal                # 介面主色：teal 或 blue（ECHO_UI_ACCENT）
     easter-egg: true            # 介面彩蛋小遊戲（ECHO_UI_EASTER_EGG）
   remember-me:
-    key: echo-remember-me-secret  # Remember Me 加密金鑰
+    key: ${ECHO_REMEMBER_ME_KEY:} # 自訂共用簽章金鑰；空白時使用 key-file
+    key-file: ./data/remember-me.key # 自動產生並保存的安裝環境金鑰
     validity: 180d                # Remember Me cookie 有效期
   admin:
     username: admin             # 管理員帳號
@@ -143,3 +144,9 @@ ADMIN 可透過管理介面管理內建帳號：
 - 使用者可自行修改密碼（`PUT /api/account/change-password`）
 - 忘記密碼請求（公開端點，含速率限制）
 - 自助註冊（需啟用 `echo.builtin-account.self-registration`）
+
+## 記住登入的金鑰保存
+
+若 `ECHO_REMEMBER_ME_KEY` 已設定為非範例金鑰，簽章行為保持不變。否則 Echo 在 `ECHO_REMEMBER_ME_KEY_FILE`（預設 `./data/remember-me.key`）產生安裝環境專屬的隨機金鑰，重啟後沿用。此檔案不是請求紀錄，不會累積歷史版本。請私密保存並保留於持久磁碟；Linux 限擁有者讀寫，Windows 應限制資料夾 ACL 為服務帳號。Windows 路徑可設定為 `C:/Echo/data/remember-me.key`。
+
+唯讀部署須明確提供金鑰，或指定可寫入的持久路徑。需要共用登入 cookie 的多個實例，必須共用設定金鑰或受保護的金鑰檔案。金鑰不可加入 Git。檔案無法讀取或內容損壞時，啟動會失敗，不會退回公開金鑰。原本使用公開範例金鑰者，升級後需重新登入一次；自行設定非範例金鑰者保留原 cookie。變更本機帳號密碼或停用帳號後，該帳號的記住登入仍會失效。

@@ -19,7 +19,8 @@ echo:
     accent: teal                # UI accent: teal or blue (ECHO_UI_ACCENT)
     easter-egg: true            # Hidden easter egg game (ECHO_UI_EASTER_EGG)
   remember-me:
-    key: echo-remember-me-secret  # Remember Me encryption key
+    key: ${ECHO_REMEMBER_ME_KEY:} # Explicit shared signing key; empty uses key-file
+    key-file: ./data/remember-me.key # Generated installation key; persist across restarts
     validity: 180d                # Remember Me cookie validity
   admin:
     username: admin             # Admin username
@@ -151,3 +152,9 @@ ADMIN can manage built-in accounts via the admin UI:
 - Users can change their own password (`PUT /api/account/change-password`)
 - Forgot password request (public endpoint, rate-limited)
 - Self-registration (requires `echo.builtin-account.self-registration=true`)
+
+## Remember-me key storage
+
+If `ECHO_REMEMBER_ME_KEY` is set to an existing non-placeholder secret, cookie signing stays unchanged. Otherwise Echo creates a random installation key in `ECHO_REMEMBER_ME_KEY_FILE` (default `./data/remember-me.key`) and reuses it across restarts. Keep this file private and persistent; it is not a request log and has no rotating history. Linux permissions are restricted to the owner; on Windows restrict the data directory ACL to the service account. A path such as `C:/Echo/data/remember-me.key` can be configured.
+
+Read-only deployments must supply a secret explicitly or a writable persistent key path. Instances that share remember-me cookies must share the same configured key or protected key file. Do not commit the key. An unreadable or corrupt key file fails startup rather than silently reverting to a public key. Deployments using the previous public placeholders must sign in once after upgrading; explicitly configured non-placeholder keys retain their existing cookies. Changing a local password or disabling its account still invalidates that account's remembered sign-in.
